@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { ALL_STATES, PT_STATES, getDistricts } from '../../../lib/states-districts'
+import { saveGroup, saveCompany, saveLocation, saveRegistration, saveBankAccount, saveLicense } from '../../../lib/supabase-admin'
 
 // ── Types ─────────────────────────────────────────────────
 interface Location {
@@ -74,6 +75,10 @@ export default function AdminSetup() {
   const [uploadPreview, setUploadPreview] = useState<any[] | null>(null)
   const [mapModal, setMapModal] = useState<{ locIndex: number } | null>(null)
   const [savedGroup, setSavedGroup] = useState('')
+  const [groupId, setGroupId] = useState('')
+  const [companyId, setCompanyId] = useState('')
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState('')
   const [companyCount, setCompanyCount] = useState(1)
   const [done, setDone] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -145,13 +150,131 @@ export default function AdminSetup() {
     return Object.keys(errs).length === 0
   }
 
-  const goNext = () => {
+  const goNext = async () => {
     if (!validate()) return
-    if (step === 0) setSavedGroup(groupName)
-    if (step < STEPS.length - 1) setStep(s => s + 1)
-    else {
-      setDone(true)
+    setIsSaving(true)
+    setSaveError('')
+    try {
+      // ── STEP 0: Save Group ─────────────────────────────────
+      if (step === 0) {
+        const groupCode = groupName.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,4) || 'GRP'
+        const grp = await saveGroup({ group_code: groupCode, group_name: groupName, country: 'India' })
+        setGroupId(grp.id)
+        setSavedGroup(groupName)
+      }
+
+      // ── STEP 1: Save Company ───────────────────────────────
+      if (step === 1 && groupId) {
+        const coCode = companyName.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,4) || 'CO01'
+        const co = await saveCompany({
+          group_id: groupId,
+          company_code: coCode,
+          company_name: companyName,
+          short_name: employerName || companyName.split(' ')[0],
+          company_type: companyType,
+          industry: industry,
+          pan: pan,
+          tan: tan,
+          cin: cin,
+          date_of_inc: doi,
+          reg_office: '',
+          corp_office: '',
+          letterhead_header: headerText,
+          letterhead_footer: footerText,
+        })
+        setCompanyId(co.id)
+      }
+
+      // ── STEP 2: Save Locations ─────────────────────────────
+      if (step === 2 && companyId) {
+        for (let i = 0; i < locations.length; i++) {
+          const loc = locations[i]
+          if (!loc.name) continue
+          const locCode = `${companyName.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,4)}-LOC-${String(i+1).padStart(3,'0')}`
+          await saveLocation({
+            company_id: companyId,
+            location_code: locCode,
+            location_name: loc.name,
+            location_type: loc.type,
+            address_line1: loc.address,
+            city: loc.name.split(' ')[0],
+            district: loc.district,
+            state: loc.state,
+            pin_code: loc.pincode,
+            latitude: loc.lat ? parseFloat(loc.lat) : null,
+            longitude: loc.lng ? parseFloat(loc.lng) : null,
+          })
+        }
+      }
+
+      // ── STEP 3: Save GST Registrations ────────────────────
+      if (step === 3 && companyId) {
+        for (const gst of gstList) {
+          if (!gst.number) continue
+          await saveRegistration({ company_id: companyId, reg_type: 'GST', reg_number: gst.number, state: gst.state })
+        }
+      }
+
+      // ── STEP 4: Save EPF/ESIC/PT/LWF Registrations ────────
+      if (step === 4 && companyId) {
+        for (const epf of epfList) {
+          if (!epf.code) continue
+          await saveRegistration({ company_id: companyId, reg_type: 'EPF', reg_number: epf.code, state: '' })
+        }
+        for (const esic of esicList) {
+          if (!esic.code) continue
+          await saveRegistration({ company_id: companyId, reg_type: 'ESIC', reg_number: esic.code, state: esic.state, district: esic.district })
+        }
+        for (const pt of ptList) {
+          if (!pt.regNumber) continue
+          await saveRegistration({ company_id: companyId, reg_type: 'PT', reg_number: pt.regNumber, state: pt.state, district: pt.district })
+        }
+      }
+
+      // ── STEP 5: Save Bank Accounts ─────────────────────────
+      if (step === 5 && companyId) {
+        for (const bank of bankAccounts) {
+          if (!bank.bankName || !bank.accountNumber) continue
+          await saveBankAccount({
+            company_id: companyId,
+            account_type: bank.accountType,
+            bank_name: bank.bankName,
+            account_number: bank.accountNumber,
+            ifsc_code: bank.ifsc,
+            branch_name: '',
+            is_primary: bank.accountType === 'Salary',
+          })
+        }
+      }
+
+      // ── STEP 6: Save License ───────────────────────────────
+      if (step === 6 && companyId) {
+        const planMap: Record<string, {emp: number; loc: number; price: number}> = {
+          'Starter':    { emp: 50,   loc: 2,  price: 4999 },
+          'Growth':     { emp: 200,  loc: 10, price: 12999 },
+          'Enterprise': { emp: 9999, loc: 99, price: 29999 },
+        }
+        const p = planMap[licensePlan.plan] || planMap['Starter']
+        await saveLicense({
+          company_id: companyId,
+          plan_name: licensePlan.plan,
+          max_employees: parseInt(licensePlan.maxEmployees) || p.emp,
+          max_locations: parseInt(licensePlan.maxLocations) || p.loc,
+          price_monthly: parseInt(licensePlan.annualCost) || p.price,
+          valid_from: licensePlan.validFrom || new Date().toISOString().split('T')[0],
+          valid_till: licensePlan.validTill || new Date(Date.now() + 365*24*60*60*1000).toISOString().split('T')[0],
+        })
+      }
+
+    } catch (err: any) {
+      setSaveError(err?.message || 'Save failed — check Supabase connection')
+      setIsSaving(false)
+      return
     }
+
+    setIsSaving(false)
+    if (step < STEPS.length - 1) setStep(s => s + 1)
+    else setDone(true)
   }
 
   // ── Location helpers ─────────────────────────────────────
@@ -952,9 +1075,14 @@ export default function AdminSetup() {
 
         {/* Navigation */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+          {saveError && (
+            <div style={{ padding: '8px 14px', background: '#FEE2E2', borderRadius: '7px', fontSize: '12px', color: '#DC2626', flex: 1 }}>
+              ⚠️ {saveError}
+            </div>
+          )}
           <button style={{ ...C.secBtn, opacity: step === 0 ? 0.4 : 1 }} onClick={() => step > 0 && setStep(s => s - 1)} disabled={step === 0}>← Back</button>
           <span style={{ fontSize: '11px', color: '#94A3B8' }}>Step {step + 1} of {STEPS.length} {Object.keys(errors).length > 0 ? '— ⚠️ Fix errors above' : ''}</span>
-          <button style={C.priBtn} onClick={goNext}>{step === STEPS.length - 1 ? '✓ Complete Setup' : 'Next →'}</button>
+          <button style={C.priBtn} onClick={goNext} disabled={isSaving}>{step === STEPS.length - 1 ? '✓ Complete Setup' : 'Next →'}</button>
         </div>
       </div>
     </div>
