@@ -1,289 +1,237 @@
 'use client'
 import { useState } from 'react'
 
-// ── Types ─────────────────────────────────────────────────
-type Tab = 'dashboard' | 'mrf' | 'jobs' | 'pipeline' | 'interviews' | 'offers' | 'analytics'
-type MRFStatus = 'Pending' | 'Approved' | 'Rejected'
+// ── Types ─────────────────────────────────────────────────────────
+type MainTab = 'dashboard' | 'mrf' | 'jobs' | 'pipeline' | 'interviews' | 'offers' | 'ai' | 'analytics'
+type MRFTab = 'full' | 'quick'
+type MRFStatus = 'Draft' | 'Submitted' | 'HR Review' | 'Approved' | 'Rejected' | 'On Hold'
 type JobStatus = 'Open' | 'On Hold' | 'Closed' | 'Draft'
-type CandidateStage = 'Applied' | 'AI Screened' | 'HR Round' | 'L1 Interview' | 'L2 Interview' | 'Final Round' | 'Offer' | 'Joined' | 'Rejected'
-type AITag = 'Strong Match' | 'Partial Match' | 'Not Suitable' | 'Pending'
+type CandidateStage = 'Applied' | 'AI Screened' | 'Telephonic' | 'L1 Interview' | 'L2 Interview' | 'Optional' | 'MD Final' | 'Offer Sent' | 'Joined' | 'Rejected'
+type AITag = 'Strong Match' | 'Partial Match' | 'Not Suitable'
+type OfferStatus = 'Draft' | 'Pending Approval' | 'MD Approved' | 'Sent' | 'Accepted' | 'Rejected' | 'Negotiating'
 
-// ── Sample Data ───────────────────────────────────────────
-const mrfData = [
-  { id: 'MRF-001', position: 'Senior Production Engineer', department: 'Manufacturing', location: 'Panipat Factory', openings: 2, urgency: 'High', reason: 'Expansion', status: 'Approved' as MRFStatus, requestedBy: 'Suresh Verma', date: '10 May 2026' },
-  { id: 'MRF-002', position: 'HR Executive', department: 'Human Resources', location: 'Delhi HQ', openings: 1, urgency: 'Medium', reason: 'Replacement', status: 'Pending' as MRFStatus, requestedBy: 'Priya Malhotra', date: '13 May 2026' },
-  { id: 'MRF-003', position: 'Sales Manager', department: 'Sales', location: 'Mumbai Office', openings: 3, urgency: 'High', reason: 'New Position', status: 'Approved' as MRFStatus, requestedBy: 'Rahul Gupta', date: '08 May 2026' },
-  { id: 'MRF-004', position: 'Accounts Executive', department: 'Finance', location: 'Delhi HQ', openings: 1, urgency: 'Low', reason: 'Replacement', status: 'Rejected' as MRFStatus, requestedBy: 'Anita Sharma', date: '05 May 2026' },
+// ── Dummy Data ────────────────────────────────────────────────────
+const MRF_DATA = [
+  { id: 1, mrfNo: 'MRF/SSM/2026/001', position: 'Senior Executive — Accounts', dept: 'Finance & Accounts', location: 'Delhi Head Office', grade: 'E3', type: 'Full MRF', count: 2, urgency: 'Urgent', reason: 'Replacement', status: 'Approved' as MRFStatus, requestedBy: 'Rohit Modi', date: '05-May-2026', ctcMin: 700000, ctcMax: 1000000, empType: 'Permanent' },
+  { id: 2, mrfNo: 'MRF/SSM/2026/002', position: 'IT Manager', dept: 'IT', location: 'Gurugram Branch', grade: 'M1', type: 'Full MRF', count: 1, urgency: 'Normal', reason: 'New Position', status: 'HR Review' as MRFStatus, requestedBy: 'Sunil Singh', date: '08-May-2026', ctcMin: 1000000, ctcMax: 1400000, empType: 'Permanent' },
+  { id: 3, mrfNo: 'MRF/STC/2026/001', position: 'Sales Executive', dept: 'Sales & Marketing', location: 'Mumbai Head Office', grade: 'E2', type: 'Full MRF', count: 5, urgency: 'Immediate', reason: 'Expansion', status: 'Approved' as MRFStatus, requestedBy: 'Neha Agarwal', date: '01-May-2026', ctcMin: 600000, ctcMax: 750000, empType: 'Permanent' },
+  { id: 4, mrfNo: 'QH/SSM/2026/001', position: 'Helper', dept: 'Production', location: 'Panipat Factory', grade: 'W1', type: 'Quick Hire', count: 10, urgency: 'Immediate', reason: 'Seasonal', status: 'Approved' as MRFStatus, requestedBy: 'Site HR — Panipat', date: '10-May-2026', ctcMin: 72000, ctcMax: 90000, empType: 'Contract' },
+  { id: 5, mrfNo: 'QH/SSM/2026/002', position: 'NAPS Apprentice — Fitter', dept: 'Manufacturing', location: 'Ludhiana Factory', grade: 'NAPS', type: 'Quick Hire', count: 3, urgency: 'Normal', reason: 'NAPS Scheme', status: 'Submitted' as MRFStatus, requestedBy: 'Plant Head — Ludhiana', date: '12-May-2026', ctcMin: 60000, ctcMax: 72000, empType: 'NAPS' },
 ]
 
-const jobsData = [
-  { id: 'JOB-001', title: 'Senior Production Engineer', dept: 'Manufacturing', location: 'Panipat Factory', expMin: 5, expMax: 10, salMin: 50000, salMax: 80000, applicants: 24, status: 'Open' as JobStatus, daysOpen: 7, skills: ['AutoCAD', 'PLC', 'Six Sigma'], stage: { applied: 24, screened: 18, interview: 6, offer: 2 } },
-  { id: 'JOB-002', title: 'HR Executive', dept: 'Human Resources', location: 'Delhi HQ', expMin: 2, expMax: 5, salMin: 25000, salMax: 40000, applicants: 41, status: 'Open' as JobStatus, daysOpen: 4, skills: ['Payroll', 'Recruitment', 'HRMS'], stage: { applied: 41, screened: 30, interview: 8, offer: 0 } },
-  { id: 'JOB-003', title: 'Sales Manager', dept: 'Sales', location: 'Mumbai Office', expMin: 7, expMax: 15, salMin: 80000, salMax: 150000, applicants: 15, status: 'Open' as JobStatus, daysOpen: 9, skills: ['B2B Sales', 'Team Management', 'CRM'], stage: { applied: 15, screened: 10, interview: 4, offer: 1 } },
-  { id: 'JOB-004', title: 'React Developer', dept: 'IT', location: 'Delhi HQ', expMin: 3, expMax: 6, salMin: 60000, salMax: 100000, applicants: 38, status: 'On Hold' as JobStatus, daysOpen: 15, skills: ['React', 'TypeScript', 'Node.js'], stage: { applied: 38, screened: 25, interview: 0, offer: 0 } },
+const JOB_DATA = [
+  { id: 1, title: 'Senior Executive — Accounts', dept: 'Finance & Accounts', location: 'Delhi Head Office', company: 'SSM', grade: 'E3', expMin: 4, expMax: 8, ctcMin: 700000, ctcMax: 1000000, openings: 2, applied: 18, shortlisted: 5, status: 'Open' as JobStatus, postedDate: '06-May-2026', mrfNo: 'MRF/SSM/2026/001' },
+  { id: 2, title: 'Sales Executive', dept: 'Sales & Marketing', location: 'Mumbai Head Office', company: 'STC', grade: 'E2', expMin: 2, expMax: 5, ctcMin: 600000, ctcMax: 750000, openings: 5, applied: 42, shortlisted: 12, status: 'Open' as JobStatus, postedDate: '02-May-2026', mrfNo: 'MRF/STC/2026/001' },
+  { id: 3, title: 'IT Manager', dept: 'IT', location: 'Gurugram Branch', company: 'SSM', grade: 'M1', expMin: 8, expMax: 12, ctcMin: 1000000, ctcMax: 1400000, openings: 1, applied: 9, shortlisted: 3, status: 'Open' as JobStatus, postedDate: '09-May-2026', mrfNo: 'MRF/SSM/2026/002' },
 ]
 
-const candidatesData = [
-  { id: 'C001', name: 'Amit Kumar Singh', job: 'JOB-001', jobTitle: 'Senior Production Engineer', email: 'amit.singh@email.com', phone: '9876543210', exp: 7, currentCo: 'Tata Steel', currentCTC: 65000, expectedCTC: 75000, notice: 60, source: 'Naukri', stage: 'AI Screened' as CandidateStage, aiScore: 87, aiTag: 'Strong Match' as AITag, aiReason: 'Strong match — 7 yrs manufacturing, AutoCAD & PLC certified. Salary within range. Minor concern: no Six Sigma certification.', applied: '11 May 2026' },
-  { id: 'C002', name: 'Priya Sharma', job: 'JOB-001', jobTitle: 'Senior Production Engineer', email: 'priya.s@email.com', phone: '9812345678', exp: 5, currentCo: 'Maruti Suzuki', currentCTC: 52000, expectedCTC: 68000, notice: 30, source: 'LinkedIn', stage: 'L1 Interview' as CandidateStage, aiScore: 79, aiTag: 'Strong Match' as AITag, aiReason: 'Good profile — 5 yrs relevant experience, PLC skills match. Salary fit. Expected CTC slightly above budget.', applied: '10 May 2026' },
-  { id: 'C003', name: 'Rohit Verma', job: 'JOB-002', jobTitle: 'HR Executive', email: 'rohit.v@email.com', phone: '9998887776', exp: 3, currentCo: 'InfoEdge', currentCTC: 28000, expectedCTC: 35000, notice: 30, source: 'Reference', stage: 'HR Round' as CandidateStage, aiScore: 92, aiTag: 'Strong Match' as AITag, aiReason: 'Excellent match — HRMS experience, payroll knowledge, recruitment background. All skills match. Salary fit perfectly.', applied: '14 May 2026' },
-  { id: 'C004', name: 'Sunita Devi', job: 'JOB-002', jobTitle: 'HR Executive', email: 'sunita.d@email.com', phone: '9876512345', exp: 2, currentCo: 'Freelance', currentCTC: 18000, expectedCTC: 28000, notice: 15, source: 'Walk-in', stage: 'Applied' as CandidateStage, aiScore: 45, aiTag: 'Not Suitable' as AITag, aiReason: 'Partial skills match — basic HR knowledge. Missing payroll & HRMS experience. Salary fit but experience below requirement.', applied: '15 May 2026' },
-  { id: 'C005', name: 'Vikram Malhotra', job: 'JOB-003', jobTitle: 'Sales Manager', email: 'vikram.m@email.com', phone: '9111222333', exp: 10, currentCo: 'Hindustan Unilever', currentCTC: 120000, expectedCTC: 145000, notice: 90, source: 'LinkedIn', stage: 'Final Round' as CandidateStage, aiScore: 95, aiTag: 'Strong Match' as AITag, aiReason: 'Excellent profile — 10 yrs B2B sales, managed 15-person team, CRM expert. Premium brand experience. Salary at upper range.', applied: '09 May 2026' },
-  { id: 'C006', name: 'Deepak Joshi', job: 'JOB-001', jobTitle: 'Senior Production Engineer', email: 'deepak.j@email.com', phone: '9444555666', exp: 4, currentCo: 'Bharat Electronics', currentCTC: 45000, expectedCTC: 60000, notice: 45, source: 'Naukri', stage: 'Rejected' as CandidateStage, aiScore: 38, aiTag: 'Not Suitable' as AITag, aiReason: 'Experience below requirement. Missing key skills — no PLC or AutoCAD experience. Salary fit but role mismatch.', applied: '11 May 2026' },
-  { id: 'C007', name: 'Kavya Reddy', job: 'JOB-003', jobTitle: 'Sales Manager', email: 'kavya.r@email.com', phone: '9777888999', exp: 8, currentCo: 'Asian Paints', currentCTC: 95000, expectedCTC: 130000, notice: 60, source: 'Consultant', stage: 'Offer' as CandidateStage, aiScore: 88, aiTag: 'Strong Match' as AITag, aiReason: 'Strong profile — 8 yrs sales leadership, B2B experience, team of 10. Good cultural fit. Notice period is concern.', applied: '09 May 2026' },
+const CANDIDATE_DATA = [
+  { id: 1, name: 'Vikram Malhotra', jobId: 1, jobTitle: 'Sr Executive — Accounts', company: 'SSM', currentCo: 'ABC Ltd', exp: 5, currentCTC: 650000, expectedCTC: 800000, notice: 30, aiScore: 88, aiTag: 'Strong Match' as AITag, source: 'Naukri', stage: 'MD Final' as CandidateStage, mobile: '9111222333', email: 'vikram.m@gmail.com', location: 'Delhi', daysInStage: 2 },
+  { id: 2, name: 'Priya Sharma', jobId: 1, jobTitle: 'Sr Executive — Accounts', company: 'SSM', currentCo: 'XYZ Corp', exp: 6, currentCTC: 720000, expectedCTC: 900000, notice: 60, aiScore: 79, aiTag: 'Strong Match' as AITag, source: 'LinkedIn', stage: 'L2 Interview' as CandidateStage, mobile: '9222333444', email: 'priya.s@gmail.com', location: 'Noida', daysInStage: 4 },
+  { id: 3, name: 'Rahul Gupta', jobId: 1, jobTitle: 'Sr Executive — Accounts', company: 'SSM', currentCo: 'PQR Industries', exp: 3, currentCTC: 480000, expectedCTC: 700000, notice: 15, aiScore: 62, aiTag: 'Partial Match' as AITag, source: 'Reference', stage: 'L1 Interview' as CandidateStage, mobile: '9333444555', email: 'rahul.g@gmail.com', location: 'Delhi', daysInStage: 1 },
+  { id: 4, name: 'Anita Verma', jobId: 2, jobTitle: 'Sales Executive', company: 'STC', currentCo: 'Fresh Graduate', exp: 0, currentCTC: 0, expectedCTC: 650000, notice: 0, aiScore: 71, aiTag: 'Partial Match' as AITag, source: 'Campus', stage: 'Telephonic' as CandidateStage, mobile: '9444555666', email: 'anita.v@gmail.com', location: 'Mumbai', daysInStage: 1 },
+  { id: 5, name: 'Suresh Patel', jobId: 2, jobTitle: 'Sales Executive', company: 'STC', currentCo: 'DEF Sales', exp: 3, currentCTC: 550000, expectedCTC: 700000, notice: 30, aiScore: 91, aiTag: 'Strong Match' as AITag, source: 'Naukri', stage: 'Offer Sent' as CandidateStage, mobile: '9555666777', email: 'suresh.p@gmail.com', location: 'Mumbai', daysInStage: 3 },
+  { id: 6, name: 'Deepak Yadav', jobId: 1, jobTitle: 'Sr Executive — Accounts', company: 'SSM', currentCo: 'GHI Ltd', exp: 7, currentCTC: 850000, expectedCTC: 1000000, notice: 90, aiScore: 35, aiTag: 'Not Suitable' as AITag, source: 'Naukri', stage: 'Rejected' as CandidateStage, mobile: '9666777888', email: 'deepak.y@gmail.com', location: 'Gurgaon', daysInStage: 0 },
+  { id: 7, name: 'Neha Singh', jobId: 2, jobTitle: 'Sales Executive', company: 'STC', currentCo: 'JKL Corp', exp: 2, currentCTC: 480000, expectedCTC: 620000, notice: 30, aiScore: 84, aiTag: 'Strong Match' as AITag, source: 'Reference', stage: 'AI Screened' as CandidateStage, mobile: '9777888999', email: 'neha.s@gmail.com', location: 'Mumbai', daysInStage: 0 },
+  { id: 8, name: 'Amit Chauhan', jobId: 2, jobTitle: 'Sales Executive', company: 'STC', currentCo: 'MNO Industries', exp: 4, currentCTC: 600000, expectedCTC: 720000, notice: 45, aiScore: 76, aiTag: 'Strong Match' as AITag, source: 'LinkedIn', stage: 'Applied' as CandidateStage, mobile: '9888999000', email: 'amit.c@gmail.com', location: 'Pune', daysInStage: 0 },
 ]
 
-const interviewsData = [
-  { id: 'I001', candidate: 'Priya Sharma', job: 'Senior Production Engineer', round: 'L1 Interview', interviewer: 'Suresh Verma', date: '17 May 2026', time: '11:00 AM', mode: 'In-person', status: 'Today', feedback: null },
-  { id: 'I002', candidate: 'Rohit Verma', job: 'HR Executive', round: 'HR Round', interviewer: 'Priya Malhotra', date: '17 May 2026', time: '3:00 PM', mode: 'Video', status: 'Today', feedback: null },
-  { id: 'I003', candidate: 'Vikram Malhotra', job: 'Sales Manager', round: 'Final Round', interviewer: 'MD - Ramesh Sharma', date: '18 May 2026', time: '10:00 AM', mode: 'In-person', status: 'Tomorrow', feedback: null },
-  { id: 'I004', candidate: 'Amit Kumar Singh', job: 'Senior Production Engineer', round: 'HR Round', interviewer: 'Priya Malhotra', date: '15 May 2026', time: '2:00 PM', mode: 'Video', status: 'Done', feedback: { rating: 4, notes: 'Good communication, technical knowledge solid.', recommendation: 'Proceed' } },
+const INTERVIEW_DATA = [
+  { id: 1, candidateName: 'Vikram Malhotra', position: 'Sr Executive — Accounts', stage: 'MD Final', interviewer: 'MD — Tarun Kapoor', date: '2026-05-22', time: '11:00 AM', mode: 'In-person', status: 'Scheduled', company: 'SSM' },
+  { id: 2, candidateName: 'Priya Sharma', position: 'Sr Executive — Accounts', stage: 'L2 Interview', interviewer: 'Mahesh Srivastava', date: '2026-05-22', time: '3:00 PM', mode: 'Video', status: 'Scheduled', company: 'SSM' },
+  { id: 3, candidateName: 'Rahul Gupta', position: 'Sr Executive — Accounts', stage: 'L1 Interview', interviewer: 'Naresh Joshi', date: '2026-05-21', time: '2:00 PM', mode: 'In-person', status: 'Completed', company: 'SSM' },
 ]
 
-const offersData = [
-  { id: 'OFF-001', candidate: 'Kavya Reddy', job: 'Sales Manager', ctc: 130000, doj: '01 Jun 2026', status: 'Accepted', sentDate: '14 May 2026', respondedDate: '16 May 2026' },
-  { id: 'OFF-002', candidate: 'Vikram Malhotra', job: 'Sales Manager', ctc: 145000, doj: '15 Jun 2026', status: 'Pending', sentDate: '16 May 2026', respondedDate: null },
+const OFFER_DATA = [
+  { id: 1, offerNo: 'OFR/2026/001', candidateName: 'Suresh Patel', position: 'Sales Executive', company: 'STC', grade: 'E2', annualCTC: 680000, netTH: 47800, joiningDate: '2026-06-15', status: 'Sent' as OfferStatus, sentDate: '2026-05-18', mdApproved: true },
+  { id: 2, offerNo: 'OFR/2026/002', candidateName: 'Vikram Malhotra', position: 'Sr Executive — Accounts', company: 'SSM', grade: 'E3', annualCTC: 850000, netTH: 58200, joiningDate: '2026-06-01', status: 'MD Approved' as OfferStatus, sentDate: '', mdApproved: true },
 ]
 
-// ── Constants ─────────────────────────────────────────────
-const STAGES: CandidateStage[] = ['Applied', 'AI Screened', 'HR Round', 'L1 Interview', 'L2 Interview', 'Final Round', 'Offer', 'Joined', 'Rejected']
+// ── Styles ────────────────────────────────────────────────────────
+const C = {
+  page: { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:'#F0F4F8', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' },
+  topbar: { background:'#fff', padding:'11px 20px', borderBottom:'1px solid #E2E8F0', display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const },
+  nav: { background:'#fff', borderBottom:'1px solid #E2E8F0', padding:'0 20px', display:'flex' as const, overflowX:'auto' as const },
+  navBtn: (active: boolean) => ({ padding:'12px 16px', border:'none', background:'transparent', cursor:'pointer', fontSize:'13px', fontWeight:active?600:400, color:active?'#7C3AED':'#64748B', borderBottom:active?'2px solid #7C3AED':'2px solid transparent', whiteSpace:'nowrap' as const }),
+  body: { flex:1, padding:'16px 20px', overflowY:'auto' as const },
+  card: { background:'#fff', borderRadius:'10px', border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:'10px' },
+  priBtn: { padding:'9px 18px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
+  secBtn: { padding:'9px 14px', background:'#fff', color:'#374151', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'12px', fontWeight:500 as const, cursor:'pointer' },
+  inp: { width:'100%', padding:'8px 11px', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'13px', outline:'none', background:'#F8FAFC', boxSizing:'border-box' as const, color:'#0F172A' },
+  sel: { width:'100%', padding:'8px 11px', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'13px', outline:'none', background:'#F8FAFC', boxSizing:'border-box' as const, color:'#0F172A' },
+}
+
 const STAGE_COLORS: Record<CandidateStage, { bg: string; color: string }> = {
-  'Applied': { bg: '#F1F5F9', color: '#64748B' },
-  'AI Screened': { bg: '#EDE9FE', color: '#7C3AED' },
-  'HR Round': { bg: '#DBEAFE', color: '#1D4ED8' },
-  'L1 Interview': { bg: '#FEF3C7', color: '#D97706' },
-  'L2 Interview': { bg: '#FED7AA', color: '#C2410C' },
-  'Final Round': { bg: '#FCE7F3', color: '#BE185D' },
-  'Offer': { bg: '#D1FAE5', color: '#065F46' },
-  'Joined': { bg: '#DCFCE7', color: '#16A34A' },
-  'Rejected': { bg: '#FEE2E2', color: '#DC2626' },
-}
-const AI_TAG_CONFIG: Record<AITag, { bg: string; color: string; icon: string }> = {
-  'Strong Match': { bg: '#DCFCE7', color: '#16A34A', icon: '✅' },
-  'Partial Match': { bg: '#FEF3C7', color: '#D97706', icon: '⚠️' },
-  'Not Suitable': { bg: '#FEE2E2', color: '#DC2626', icon: '❌' },
-  'Pending': { bg: '#F1F5F9', color: '#64748B', icon: '⏳' },
-}
-const URGENCY_COLORS: Record<string, { bg: string; color: string }> = {
-  High: { bg: '#FEE2E2', color: '#DC2626' },
-  Medium: { bg: '#FEF3C7', color: '#D97706' },
-  Low: { bg: '#DCFCE7', color: '#16A34A' },
-}
-const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  Approved: { bg: '#DCFCE7', color: '#16A34A' },
-  Pending: { bg: '#FEF3C7', color: '#D97706' },
-  Rejected: { bg: '#FEE2E2', color: '#DC2626' },
-  Open: { bg: '#DCFCE7', color: '#16A34A' },
-  'On Hold': { bg: '#FEF3C7', color: '#D97706' },
-  Closed: { bg: '#FEE2E2', color: '#DC2626' },
-  Draft: { bg: '#F1F5F9', color: '#64748B' },
-  Accepted: { bg: '#DCFCE7', color: '#16A34A' },
-  'Pending Acceptance': { bg: '#FEF3C7', color: '#D97706' },
+  'Applied':      { bg:'#F1F5F9', color:'#374151' },
+  'AI Screened':  { bg:'#EDE9FE', color:'#7C3AED' },
+  'Telephonic':   { bg:'#DBEAFE', color:'#1D4ED8' },
+  'L1 Interview': { bg:'#CCFBF1', color:'#0D9488' },
+  'L2 Interview': { bg:'#FEF3C7', color:'#D97706' },
+  'Optional':     { bg:'#FEE2E2', color:'#DC2626' },
+  'MD Final':     { bg:'#F5F3FF', color:'#9333EA' },
+  'Offer Sent':   { bg:'#DCFCE7', color:'#16A34A' },
+  'Joined':       { bg:'#BBF7D0', color:'#059669' },
+  'Rejected':     { bg:'#FEE2E2', color:'#DC2626' },
 }
 
-const TAB_ITEMS: { id: Tab; label: string; icon: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-  { id: 'mrf', label: 'Requisitions', icon: '📋' },
-  { id: 'jobs', label: 'Job Openings', icon: '💼' },
-  { id: 'pipeline', label: 'Pipeline', icon: '👥' },
-  { id: 'interviews', label: 'Interviews', icon: '📅' },
-  { id: 'offers', label: 'Offers', icon: '📄' },
-  { id: 'analytics', label: 'Analytics', icon: '📈' },
-]
+const AI_COLORS: Record<AITag, { bg: string; color: string }> = {
+  'Strong Match':  { bg:'#DCFCE7', color:'#16A34A' },
+  'Partial Match': { bg:'#FEF3C7', color:'#D97706' },
+  'Not Suitable':  { bg:'#FEE2E2', color:'#DC2626' },
+}
 
-const inp: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', outline: 'none', background: '#F8FAFC', boxSizing: 'border-box' as any, color: '#0F172A' }
-const sel: React.CSSProperties = { ...inp, appearance: 'auto' as any }
-const priBtn: React.CSSProperties = { padding: '9px 20px', background: '#7C3AED', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }
-const secBtn: React.CSSProperties = { padding: '9px 16px', background: '#fff', color: '#374151', border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '12px', fontWeight: 500, cursor: 'pointer' }
-const card: React.CSSProperties = { background: '#fff', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '16px' }
+const MRF_STATUS_COLORS: Record<MRFStatus, { bg: string; color: string }> = {
+  'Draft':      { bg:'#F1F5F9', color:'#374151' },
+  'Submitted':  { bg:'#DBEAFE', color:'#1D4ED8' },
+  'HR Review':  { bg:'#FEF3C7', color:'#D97706' },
+  'Approved':   { bg:'#DCFCE7', color:'#16A34A' },
+  'Rejected':   { bg:'#FEE2E2', color:'#DC2626' },
+  'On Hold':    { bg:'#F1F5F9', color:'#374151' },
+}
 
-export default function Recruitment() {
-  const [tab, setTab] = useState<Tab>('dashboard')
-  const [selectedJob, setSelectedJob] = useState<string>('JOB-001')
+const PIPELINE_STAGES: CandidateStage[] = ['Applied','AI Screened','Telephonic','L1 Interview','L2 Interview','Optional','MD Final','Offer Sent','Joined','Rejected']
+
+// ── Stat Card ─────────────────────────────────────────────────────
+const StatCard = ({ label, value, color, sub }: { label: string; value: number | string; color: string; sub?: string }) => (
+  <div style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:'10px', padding:'12px 14px', borderTop:`3px solid ${color}` }}>
+    <div style={{ fontSize:'10px', color:'#94A3B8', fontWeight:500, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:'3px' }}>{label}</div>
+    <div style={{ fontSize:'24px', fontWeight:700, color }}>{value}</div>
+    {sub && <div style={{ fontSize:'10px', color:'#94A3B8', marginTop:'2px' }}>{sub}</div>}
+  </div>
+)
+
+// ── Main Component ────────────────────────────────────────────────
+export default function RecruitmentModule() {
+  const [tab, setTab] = useState<MainTab>('dashboard')
+  const [mrfTab, setMrfTab] = useState<MRFTab>('full')
   const [showMRFForm, setShowMRFForm] = useState(false)
+  const [showQuickForm, setShowQuickForm] = useState(false)
   const [showJobForm, setShowJobForm] = useState(false)
-  const [showAddCandidate, setShowAddCandidate] = useState(false)
-  const [selectedCandidate, setSelectedCandidate] = useState<string | null>(null)
-  const [showAIResult, setShowAIResult] = useState<string | null>(null)
-  const [candidates, setCandidates] = useState(candidatesData)
-  const [dragOver, setDragOver] = useState<CandidateStage | null>(null)
-  const [dragging, setDragging] = useState<string | null>(null)
+  const [selectedCandidate, setSelectedCandidate] = useState<typeof CANDIDATE_DATA[0] | null>(null)
+  const [pipelineFilter, setPipelineFilter] = useState('All')
 
-  const pipelineCandidates = candidates.filter(c => c.job === selectedJob && c.stage !== 'Rejected')
-  const selectedCandidateData = candidates.find(c => c.id === selectedCandidate)
-
-  const moveCandidate = (candidateId: string, newStage: CandidateStage) => {
-    setCandidates(prev => prev.map(c => c.id === candidateId ? { ...c, stage: newStage } : c))
-  }
+  const tabs = [
+    { id: 'dashboard', label: '📊 Dashboard' },
+    { id: 'mrf',       label: '📋 Requisitions' },
+    { id: 'jobs',      label: '💼 Job Openings' },
+    { id: 'pipeline',  label: '👥 Pipeline' },
+    { id: 'interviews',label: '📅 Interviews' },
+    { id: 'offers',    label: '📄 Offers' },
+    { id: 'ai',        label: '🤖 AI Screening' },
+    { id: 'analytics', label: '📈 Analytics' },
+  ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#F0F4F8', fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: '13px' }}>
+    <div style={C.page}>
 
       {/* Topbar */}
-      <div style={{ background: '#fff', padding: '11px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: '12px', color: '#64748B' }}>
-          Sharma Group &nbsp;›&nbsp; <span style={{ color: '#7C3AED', fontWeight: 500 }}>Recruitment</span>
+      <div style={C.topbar}>
+        <div style={{ fontSize:'12px', color:'#64748B' }}>
+          Sharma Group &nbsp;›&nbsp; <span style={{ color:'#7C3AED', fontWeight:500 }}>Recruitment</span>
+          {tab === 'pipeline' && <span style={{ color:'#64748B' }}> &nbsp;›&nbsp; Candidate Pipeline</span>}
         </div>
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          <button style={secBtn} onClick={() => setShowMRFForm(true)}>+ New Requisition</button>
-          <button style={priBtn} onClick={() => setShowJobForm(true)}>+ Post Job</button>
-          <div style={{ width: '30px', height: '30px', background: '#7C3AED', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '11px', fontWeight: 600 }}>KS</div>
+        <div style={{ display:'flex', gap:'8px' }}>
+          {tab === 'mrf' && <button style={C.secBtn} onClick={() => setShowQuickForm(true)}>⚡ Quick Hire</button>}
+          {tab === 'mrf' && <button style={C.priBtn} onClick={() => setShowMRFForm(true)}>+ New MRF</button>}
+          {tab === 'jobs' && <button style={C.priBtn} onClick={() => setShowJobForm(true)}>+ New Job Opening</button>}
+          {tab === 'pipeline' && <button style={C.secBtn}>📥 Bulk Upload</button>}
+          {tab === 'pipeline' && <button style={C.secBtn}>📷 QR Code</button>}
+          {tab === 'pipeline' && <button style={C.priBtn}>+ Add Candidate</button>}
         </div>
       </div>
 
-      {/* Sub Navigation */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #E2E8F0', padding: '0 20px', display: 'flex', gap: '0', overflowX: 'auto' }}>
-        {TAB_ITEMS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: '12px 16px', border: 'none', background: 'transparent', cursor: 'pointer', fontSize: '13px', fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? '#7C3AED' : '#64748B', borderBottom: tab === t.id ? '2px solid #7C3AED' : '2px solid transparent', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
-            {t.icon} {t.label}
+      {/* Sub Nav */}
+      <div style={C.nav}>
+        {tabs.map(t => (
+          <button key={t.id} style={C.navBtn(tab === t.id)} onClick={() => setTab(t.id as MainTab)}>
+            {t.label}
           </button>
         ))}
       </div>
 
-      <div style={{ flex: 1, padding: '16px 20px', overflowY: 'auto' }}>
+      <div style={C.body}>
 
-        {/* ── DASHBOARD ── */}
+        {/* ═══ DASHBOARD ═══ */}
         {tab === 'dashboard' && (
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '10px', marginBottom: '16px' }}>
-              {[
-                { label: 'Open Positions', value: '4', sub: '8 total openings', color: '#7C3AED' },
-                { label: 'Total Applicants', value: '118', sub: '▲ 23 this week', color: '#16A34A' },
-                { label: 'Interviews Today', value: '2', sub: 'Priya & Rohit', color: '#3B82F6' },
-                { label: 'Offers Pending', value: '1', sub: 'Vikram Malhotra', color: '#F97316' },
-                { label: 'Avg. Time to Hire', value: '18d', sub: 'Industry avg: 30d', color: '#EF4444' },
-              ].map((s, i) => (
-                <div key={i} style={{ ...card, borderTop: `3px solid ${s.color}`, padding: '12px 14px' }}>
-                  <div style={{ fontSize: '10px', color: '#94A3B8', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: '4px' }}>{s.label}</div>
-                  <div style={{ fontSize: '22px', fontWeight: 700, color: '#0F172A', marginBottom: '2px' }}>{s.value}</div>
-                  <div style={{ fontSize: '10px', color: '#64748B' }}>{s.sub}</div>
-                </div>
-              ))}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'10px', marginBottom:'14px' }}>
+              <StatCard label="Open Positions" value={8} color="#7C3AED" />
+              <StatCard label="Active Candidates" value={42} color="#1D4ED8" />
+              <StatCard label="Interviews Today" value={3} color="#D97706" />
+              <StatCard label="Offers Pending" value={2} color="#0D9488" />
+              <StatCard label="Joined This Month" value={4} color="#16A34A" />
+              <StatCard label="Avg Time to Hire" value="18d" color="#374151" />
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-              {/* Active Jobs */}
-              <div style={card}>
-                <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                  💼 Active Job Openings
-                  <span style={{ fontSize: '11px', color: '#7C3AED', cursor: 'pointer' }} onClick={() => setTab('jobs')}>View All →</span>
-                </div>
-                {jobsData.filter(j => j.status === 'Open').map((j, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 0', borderBottom: i < 2 ? '1px solid #F1F5F9' : 'none' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>💼</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '12px', fontWeight: 500, color: '#0F172A' }}>{j.title}</div>
-                      <div style={{ fontSize: '10px', color: '#94A3B8' }}>{j.dept} · {j.location} · {j.daysOpen} days open</div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <div style={{ fontSize: '14px', fontWeight: 700, color: '#7C3AED' }}>{j.applicants}</div>
-                      <div style={{ fontSize: '10px', color: '#94A3B8' }}>applicants</div>
+            <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'12px' }}>
+              {/* Pipeline Funnel */}
+              <div style={C.card}>
+                <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'12px' }}>Pipeline Funnel</div>
+                {[
+                  { stage:'Applied', count:67, color:'#94A3B8' },
+                  { stage:'AI Screened', count:42, color:'#7C3AED' },
+                  { stage:'Telephonic', count:24, color:'#1D4ED8' },
+                  { stage:'L1 Interview', count:14, color:'#0D9488' },
+                  { stage:'L2 Interview', count:8, color:'#D97706' },
+                  { stage:'MD Final', count:4, color:'#9333EA' },
+                  { stage:'Offer Sent', count:3, color:'#16A34A' },
+                ].map((s, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
+                    <div style={{ fontSize:'11px', color:'#64748B', width:'100px', flexShrink:0 }}>{s.stage}</div>
+                    <div style={{ flex:1, background:'#F1F5F9', borderRadius:'4px', height:'20px', overflow:'hidden' }}>
+                      <div style={{ width:`${(s.count/67)*100}%`, background:s.color, height:'100%', borderRadius:'4px', display:'flex', alignItems:'center', paddingLeft:'6px' }}>
+                        <span style={{ fontSize:'10px', color:'#fff', fontWeight:600 }}>{s.count}</span>
+                      </div>
                     </div>
                   </div>
                 ))}
               </div>
 
-              {/* Today's Interviews */}
-              <div style={card}>
-                <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                  📅 Today's Schedule
-                  <span style={{ fontSize: '11px', color: '#7C3AED', cursor: 'pointer' }} onClick={() => setTab('interviews')}>View All →</span>
-                </div>
-                {interviewsData.filter(i => i.status === 'Today' || i.status === 'Tomorrow').map((iv, i) => (
-                  <div key={i} style={{ display: 'flex', gap: '10px', padding: '8px 0', borderBottom: i < 2 ? '1px solid #F1F5F9' : 'none', alignItems: 'flex-start' }}>
-                    <div style={{ width: '36px', height: '36px', borderRadius: '8px', background: iv.status === 'Today' ? '#DBEAFE' : '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>📅</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: '12px', fontWeight: 500 }}>{iv.candidate}</div>
-                      <div style={{ fontSize: '10px', color: '#94A3B8' }}>{iv.round} · {iv.time} · {iv.mode}</div>
-                      <div style={{ fontSize: '10px', color: '#64748B' }}>Interviewer: {iv.interviewer}</div>
+              {/* Recent Activity */}
+              <div style={C.card}>
+                <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'12px' }}>Recent Activity</div>
+                {[
+                  { text:'Vikram Malhotra → MD Final', time:'2h ago', color:'#7C3AED' },
+                  { text:'Offer sent to Suresh Patel', time:'5h ago', color:'#16A34A' },
+                  { text:'L1 completed — Rahul Gupta', time:'Yesterday', color:'#0D9488' },
+                  { text:'5 new candidates — Sales Executive', time:'Yesterday', color:'#1D4ED8' },
+                  { text:'MRF/SSM/2026/002 approved', time:'2 days ago', color:'#D97706' },
+                ].map((a, i) => (
+                  <div key={i} style={{ display:'flex', gap:'8px', padding:'6px 0', borderBottom:'1px solid #F1F5F9' }}>
+                    <div style={{ width:'6px', height:'6px', borderRadius:'50%', background:a.color, marginTop:'5px', flexShrink:0 }} />
+                    <div>
+                      <div style={{ fontSize:'11px', color:'#374151' }}>{a.text}</div>
+                      <div style={{ fontSize:'10px', color:'#94A3B8' }}>{a.time}</div>
                     </div>
-                    <span style={{ padding: '2px 7px', borderRadius: '8px', fontSize: '10px', fontWeight: 500, background: iv.status === 'Today' ? '#DBEAFE' : '#F1F5F9', color: iv.status === 'Today' ? '#1D4ED8' : '#64748B' }}>{iv.status}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Pipeline Overview */}
-            <div style={card}>
-              <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>🔄 Pipeline Overview — All Jobs</div>
-              <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '4px' }}>
-                {['Applied', 'AI Screened', 'HR Round', 'Interview', 'Offer', 'Joined'].map((stage, i) => {
-                  const counts = [118, 83, 24, 10, 2, 1]
-                  const colors = ['#64748B', '#7C3AED', '#3B82F6', '#F97316', '#16A34A', '#16A34A']
-                  return (
-                    <div key={i} style={{ flex: '0 0 130px', background: '#F8FAFC', borderRadius: '8px', padding: '12px', border: '1px solid #E2E8F0', textAlign: 'center' }}>
-                      <div style={{ fontSize: '22px', fontWeight: 700, color: colors[i] }}>{counts[i]}</div>
-                      <div style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>{stage}</div>
-                      {i < 5 && <div style={{ fontSize: '10px', color: '#94A3B8', marginTop: '2px' }}>→ {Math.round(counts[i + 1] / counts[i] * 100)}% conversion</div>}
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── MRF ── */}
-        {tab === 'mrf' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A' }}>Manpower Requisitions</div>
-                <div style={{ fontSize: '12px', color: '#64748B' }}>Department head requests for new hiring</div>
-              </div>
-              <button style={priBtn} onClick={() => setShowMRFForm(true)}>+ New Requisition</button>
-            </div>
-
-            {/* Stats */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
-              {[
-                { label: 'Pending Approval', value: mrfData.filter(m => m.status === 'Pending').length, color: '#D97706', bg: '#FEF3C7' },
-                { label: 'Approved', value: mrfData.filter(m => m.status === 'Approved').length, color: '#16A34A', bg: '#DCFCE7' },
-                { label: 'Total Openings', value: mrfData.filter(m => m.status === 'Approved').reduce((sum, m) => sum + m.openings, 0), color: '#7C3AED', bg: '#EDE9FE' },
-              ].map((s, i) => (
-                <div key={i} style={{ ...card, display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px' }}>
-                  <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 700, color: s.color }}>{s.value}</div>
-                  <div style={{ fontSize: '12px', color: '#64748B' }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* MRF Table */}
-            <div style={card}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            {/* Open Positions Summary */}
+            <div style={C.card}>
+              <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'12px' }}>Open Positions</div>
+              <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:'12px' }}>
                 <thead>
-                  <tr style={{ background: '#F8FAFC' }}>
-                    {['MRF ID', 'Position', 'Department', 'Location', 'Openings', 'Urgency', 'Reason', 'Requested By', 'Date', 'Status', 'Action'].map(h => (
-                      <th key={h} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 600, color: '#374151', borderBottom: '1px solid #E2E8F0', whiteSpace: 'nowrap' }}>{h}</th>
+                  <tr style={{ background:'#F8FAFC' }}>
+                    {['Position','Company','Grade','Openings','Applied','Shortlisted','Status'].map(h => (
+                      <th key={h} style={{ padding:'8px 10px', textAlign:'left' as const, fontWeight:600, color:'#374151', borderBottom:'1px solid #E2E8F0' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {mrfData.map((m, i) => (
-                    <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                      <td style={{ padding: '10px 12px', color: '#7C3AED', fontWeight: 500 }}>{m.id}</td>
-                      <td style={{ padding: '10px 12px', fontWeight: 500, color: '#0F172A' }}>{m.position}</td>
-                      <td style={{ padding: '10px 12px', color: '#64748B' }}>{m.department}</td>
-                      <td style={{ padding: '10px 12px', color: '#64748B' }}>{m.location}</td>
-                      <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 600 }}>{m.openings}</td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 500, background: URGENCY_COLORS[m.urgency].bg, color: URGENCY_COLORS[m.urgency].color }}>{m.urgency}</span>
+                  {JOB_DATA.map((j, i) => (
+                    <tr key={j.id} style={{ borderBottom:'1px solid #F1F5F9' }}>
+                      <td style={{ padding:'9px 10px', fontWeight:500 }}>{j.title}</td>
+                      <td style={{ padding:'9px 10px', color:'#64748B' }}>{j.company}</td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <span style={{ padding:'2px 7px', background:'#EDE9FE', color:'#7C3AED', borderRadius:'6px', fontSize:'10px', fontWeight:600 }}>{j.grade}</span>
                       </td>
-                      <td style={{ padding: '10px 12px', color: '#64748B' }}>{m.reason}</td>
-                      <td style={{ padding: '10px 12px', color: '#64748B' }}>{m.requestedBy}</td>
-                      <td style={{ padding: '10px 12px', color: '#64748B', whiteSpace: 'nowrap' }}>{m.date}</td>
-                      <td style={{ padding: '10px 12px' }}>
-                        <span style={{ padding: '2px 8px', borderRadius: '8px', fontSize: '10px', fontWeight: 500, background: STATUS_COLORS[m.status]?.bg, color: STATUS_COLORS[m.status]?.color }}>{m.status}</span>
-                      </td>
-                      <td style={{ padding: '10px 12px' }}>
-                        {m.status === 'Pending' && (
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            <button style={{ padding: '3px 8px', background: '#DCFCE7', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '10px', color: '#16A34A', fontWeight: 500 }}>Approve</button>
-                            <button style={{ padding: '3px 8px', background: '#FEE2E2', border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '10px', color: '#DC2626', fontWeight: 500 }}>Reject</button>
-                          </div>
-                        )}
-                        {m.status === 'Approved' && <span style={{ fontSize: '11px', color: '#16A34A' }}>✓ Done</span>}
-                        {m.status === 'Rejected' && <span style={{ fontSize: '11px', color: '#DC2626' }}>✗ Closed</span>}
+                      <td style={{ padding:'9px 10px' }}>{j.openings}</td>
+                      <td style={{ padding:'9px 10px', color:'#1D4ED8', fontWeight:500 }}>{j.applied}</td>
+                      <td style={{ padding:'9px 10px', color:'#16A34A', fontWeight:500 }}>{j.shortlisted}</td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <span style={{ padding:'2px 8px', background:'#DCFCE7', color:'#16A34A', borderRadius:'6px', fontSize:'10px', fontWeight:500 }}>Open</span>
                       </td>
                     </tr>
                   ))}
@@ -293,461 +241,621 @@ export default function Recruitment() {
           </div>
         )}
 
-        {/* ── JOB OPENINGS ── */}
-        {tab === 'jobs' && (
+        {/* ═══ MRF ═══ */}
+        {tab === 'mrf' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A' }}>Job Openings</div>
-                <div style={{ fontSize: '12px', color: '#64748B' }}>{jobsData.filter(j => j.status === 'Open').length} active positions</div>
+            {/* MRF Sub tabs */}
+            <div style={{ display:'flex', gap:'8px', marginBottom:'14px', background:'#fff', padding:'10px 14px', borderRadius:'10px', border:'1px solid #E2E8F0', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ display:'flex', gap:'6px' }}>
+                {[{ id:'full', label:'📋 Full MRF' }, { id:'quick', label:'⚡ Quick Hire' }].map(t => (
+                  <button key={t.id} onClick={() => setMrfTab(t.id as MRFTab)} style={{ padding:'7px 16px', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:mrfTab===t.id?600:400, background:mrfTab===t.id?'#7C3AED':'#F8FAFC', color:mrfTab===t.id?'#fff':'#64748B' }}>
+                    {t.label}
+                  </button>
+                ))}
               </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <select style={{ ...sel, width: 'auto', padding: '7px 12px' }}>
-                  <option>All Departments</option>
-                  <option>Manufacturing</option>
-                  <option>Sales</option>
-                  <option>HR</option>
-                </select>
-                <button style={priBtn} onClick={() => setShowJobForm(true)}>+ Post Job</button>
+              <div style={{ fontSize:'11px', color:'#94A3B8' }}>
+                {mrfTab==='full' ? 'CTC ≥ ₹6L · MD Approval Required' : 'CTC < ₹6L · Site HR Approve · W1/W2/NAPS/Intern'}
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }}>
-              {jobsData.map((j, i) => (
-                <div key={i} style={{ ...card, cursor: 'pointer' }} onClick={() => { setSelectedJob(j.id); setTab('pipeline') }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+            {/* MRF List */}
+            <div style={C.card}>
+              <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'12px' }}>
+                {mrfTab==='full' ? 'Manpower Requisitions' : 'Quick Hire Requests'}
+              </div>
+              <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:'12px' }}>
+                <thead>
+                  <tr style={{ background:'#1E1B4B' }}>
+                    {['MRF No.','Position','Dept','Location','Grade','Count','Type','Urgency','Status','Requested By','Date','Action'].map(h => (
+                      <th key={h} style={{ padding:'9px 10px', color:'#fff', fontWeight:600, textAlign:'left' as const, whiteSpace:'nowrap' as const, fontSize:'11px' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {MRF_DATA.filter(m => mrfTab==='full' ? m.type==='Full MRF' : m.type==='Quick Hire').map((m, i) => (
+                    <tr key={m.id} style={{ background:i%2===0?'#F8FAFC':'#fff', borderBottom:'1px solid #E2E8F0' }}>
+                      <td style={{ padding:'9px 10px', color:'#7C3AED', fontWeight:600, fontSize:'11px' }}>{m.mrfNo}</td>
+                      <td style={{ padding:'9px 10px', fontWeight:500 }}>{m.position}</td>
+                      <td style={{ padding:'9px 10px', color:'#64748B' }}>{m.dept}</td>
+                      <td style={{ padding:'9px 10px', color:'#64748B', fontSize:'11px' }}>{m.location}</td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <span style={{ padding:'2px 6px', background:'#EDE9FE', color:'#7C3AED', borderRadius:'5px', fontSize:'10px', fontWeight:600 }}>{m.grade}</span>
+                      </td>
+                      <td style={{ padding:'9px 10px', textAlign:'center' as const, fontWeight:600 }}>{m.count}</td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <span style={{ padding:'2px 6px', background:m.type==='Quick Hire'?'#FEF3C7':'#DBEAFE', color:m.type==='Quick Hire'?'#D97706':'#1D4ED8', borderRadius:'5px', fontSize:'10px' }}>{m.type}</span>
+                      </td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <span style={{ padding:'2px 6px', background:m.urgency==='Immediate'?'#FEE2E2':m.urgency==='Urgent'?'#FEF3C7':'#F1F5F9', color:m.urgency==='Immediate'?'#DC2626':m.urgency==='Urgent'?'#D97706':'#374151', borderRadius:'5px', fontSize:'10px' }}>{m.urgency}</span>
+                      </td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <span style={{ padding:'2px 8px', borderRadius:'8px', fontSize:'10px', fontWeight:500, ...MRF_STATUS_COLORS[m.status] }}>{m.status}</span>
+                      </td>
+                      <td style={{ padding:'9px 10px', color:'#64748B', fontSize:'11px' }}>{m.requestedBy}</td>
+                      <td style={{ padding:'9px 10px', color:'#64748B', fontSize:'11px' }}>{m.date}</td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <button style={{ padding:'3px 8px', background:'#EDE9FE', border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:'#7C3AED' }}>View</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Quick Hire Form Modal */}
+            {showQuickForm && (
+              <div style={{ position:'fixed' as const, inset:0, background:'rgba(0,0,0,0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
+                <div style={{ background:'#fff', borderRadius:'12px', padding:'24px', width:'480px', maxHeight:'90vh', overflowY:'auto' as const }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'16px' }}>
                     <div>
-                      <div style={{ fontSize: '14px', fontWeight: 600, color: '#0F172A', marginBottom: '3px' }}>{j.title}</div>
-                      <div style={{ fontSize: '11px', color: '#64748B' }}>{j.dept} · {j.location}</div>
+                      <div style={{ fontSize:'15px', fontWeight:600 }}>⚡ Quick Hire</div>
+                      <div style={{ fontSize:'11px', color:'#94A3B8', marginTop:'2px' }}>CTC &lt; ₹6L · Site HR / Plant Head</div>
                     </div>
-                    <span style={{ padding: '3px 9px', borderRadius: '8px', fontSize: '10px', fontWeight: 500, background: STATUS_COLORS[j.status]?.bg, color: STATUS_COLORS[j.status]?.color }}>{j.status}</span>
+                    <button onClick={() => setShowQuickForm(false)} style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer', color:'#94A3B8' }}>✕</button>
+                  </div>
+                  <div style={{ background:'#FEF3C7', borderRadius:'8px', padding:'8px 12px', fontSize:'11px', color:'#92400E', marginBottom:'14px' }}>
+                    ⚡ System auto-check: CTC ceiling · Grade · Location auth · Headcount · MD notification auto-send
+                  </div>
+                  {[
+                    { label:'1. Position Type', type:'select', opts:['Helper / Unskilled Worker (W1)','Skilled Worker / Operator (W2)','NAPS Apprentice','NATS Graduate Trainee','Intern','Contract Worker'] },
+                    { label:'2. Location', type:'select', opts:['Panipat Factory','Ludhiana Factory','Delhi Head Office','Gurugram Branch'] },
+                    { label:'3. Number of Positions', type:'number', placeholder:'e.g. 5' },
+                    { label:'4. Expected Joining Date', type:'date', placeholder:'' },
+                    { label:'5. Reason', type:'select', opts:['New Requirement','Replacement (someone left)','Seasonal / Peak Load','Project Based','NAPS Government Scheme'] },
+                  ].map((f, i) => (
+                    <div key={i} style={{ marginBottom:'12px' }}>
+                      <label style={{ fontSize:'11px', fontWeight:500, color:'#374151', display:'block', marginBottom:'4px' }}>{f.label} <span style={{ color:'#DC2626' }}>*</span></label>
+                      {f.type==='select' ? (
+                        <select style={C.sel}><option value="">Select...</option>{f.opts?.map(o => <option key={o}>{o}</option>)}</select>
+                      ) : (
+                        <input type={f.type} style={C.inp} placeholder={f.placeholder} />
+                      )}
+                    </div>
+                  ))}
+                  <div style={{ background:'#F8FAFC', borderRadius:'8px', padding:'10px 12px', marginBottom:'14px', fontSize:'11px', color:'#64748B' }}>
+                    <div style={{ fontWeight:500, marginBottom:'4px' }}>Auto-filled:</div>
+                    Requested By: Site HR (login) · Company: SSM · Quick Hire ID: QH/SSM/2026/003
+                  </div>
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    <button style={{ ...C.priBtn, flex:1, background:'#16A34A' }}>✅ Approve & Create Opening</button>
+                    <button style={C.secBtn} onClick={() => setShowQuickForm(false)}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Full MRF Form Modal */}
+            {showMRFForm && (
+              <div style={{ position:'fixed' as const, inset:0, background:'rgba(0,0,0,0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
+                <div style={{ background:'#fff', borderRadius:'12px', padding:'24px', width:'680px', maxHeight:'90vh', overflowY:'auto' as const }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'16px' }}>
+                    <div>
+                      <div style={{ fontSize:'15px', fontWeight:600 }}>📋 New Manpower Requisition</div>
+                      <div style={{ fontSize:'11px', color:'#94A3B8', marginTop:'2px' }}>MRF/SSM/2026/003 · Auto-generated</div>
+                    </div>
+                    <button onClick={() => setShowMRFForm(false)} style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer', color:'#94A3B8' }}>✕</button>
                   </div>
 
-                  <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', fontSize: '11px', color: '#64748B' }}>
-                    <span>💰 ₹{(j.salMin / 1000).toFixed(0)}K–{(j.salMax / 1000).toFixed(0)}K</span>
-                    <span>📅 {j.expMin}–{j.expMax} yrs exp</span>
-                    <span>⏱ {j.daysOpen} days open</span>
-                  </div>
-
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '12px' }}>
-                    {j.skills.map(s => <span key={s} style={{ padding: '2px 7px', background: '#EDE9FE', color: '#7C3AED', borderRadius: '6px', fontSize: '10px' }}>{s}</span>)}
-                  </div>
-
-                  {/* Pipeline mini */}
-                  <div style={{ display: 'flex', gap: '4px' }}>
+                  {/* Section A */}
+                  <div style={{ fontSize:'11px', fontWeight:600, color:'#7C3AED', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:'8px', paddingBottom:'5px', borderBottom:'2px solid #EDE9FE' }}>A. Position Details</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'14px' }}>
                     {[
-                      { label: 'Applied', count: j.stage.applied, color: '#64748B' },
-                      { label: 'Screened', count: j.stage.screened, color: '#7C3AED' },
-                      { label: 'Interview', count: j.stage.interview, color: '#F97316' },
-                      { label: 'Offer', count: j.stage.offer, color: '#16A34A' },
-                    ].map((s, si) => (
-                      <div key={si} style={{ flex: 1, textAlign: 'center', padding: '6px 4px', background: '#F8FAFC', borderRadius: '6px', border: '1px solid #E2E8F0' }}>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: s.color }}>{s.count}</div>
-                        <div style={{ fontSize: '9px', color: '#94A3B8' }}>{s.label}</div>
+                      { l:'Company', t:'select', o:['Sharma Sons Manufacturing (SSM)','Sharma Trading Corporation (STC)','Sharma Retail Solutions (SRS)'] },
+                      { l:'Department', t:'select', o:['Manufacturing','Quality Control','Finance & Accounts','HR & Admin','Sales & Marketing','IT','Logistics','Procurement'] },
+                      { l:'Location', t:'select', o:['Delhi Head Office','Panipat Factory','Ludhiana Factory','Gurugram Branch','Mumbai HO','Ahmedabad','Jaipur'] },
+                      { l:'Position Title', t:'text', p:'e.g. Senior Executive — Accounts' },
+                      { l:'Grade Required', t:'select', o:['L2','L1','M3','M2','M1','E3','E2','E1','W2','W1'] },
+                      { l:'No. of Positions', t:'number', p:'e.g. 2' },
+                      { l:'Employment Type', t:'select', o:['Permanent','Contract','Trainee','Intern','NAPS','NATS'] },
+                      { l:'Collar Type', t:'select', o:['White Collar (WC)','Blue Collar (BC)'] },
+                    ].map((f, i) => (
+                      <div key={i}>
+                        <label style={{ fontSize:'11px', fontWeight:500, color:'#374151', display:'block', marginBottom:'4px' }}>{f.l} <span style={{ color:'#DC2626' }}>*</span></label>
+                        {f.t==='select' ? <select style={C.sel}><option>Select...</option>{f.o?.map(o => <option key={o}>{o}</option>)}</select> : <input type={f.t} style={C.inp} placeholder={f.p} />}
                       </div>
                     ))}
                   </div>
+
+                  {/* Section B */}
+                  <div style={{ fontSize:'11px', fontWeight:600, color:'#1D4ED8', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:'8px', paddingBottom:'5px', borderBottom:'2px solid #DBEAFE' }}>B. Requirement Type</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'14px' }}>
+                    {[
+                      { l:'Reason', t:'select', o:['New Position','Replacement','Expansion','Seasonal'] },
+                      { l:'Urgency', t:'select', o:['Immediate (0-15 days)','Urgent (15-30 days)','Normal (30-60 days)'] },
+                      { l:'Expected Joining Date', t:'date' },
+                    ].map((f, i) => (
+                      <div key={i}>
+                        <label style={{ fontSize:'11px', fontWeight:500, color:'#374151', display:'block', marginBottom:'4px' }}>{f.l} <span style={{ color:'#DC2626' }}>*</span></label>
+                        {f.t==='select' ? <select style={C.sel}><option>Select...</option>{f.o?.map(o => <option key={o}>{o}</option>)}</select> : <input type={f.t} style={C.inp} />}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Section C */}
+                  <div style={{ fontSize:'11px', fontWeight:600, color:'#16A34A', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:'8px', paddingBottom:'5px', borderBottom:'2px solid #DCFCE7' }}>C. Candidate Profile</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'14px' }}>
+                    {[
+                      { l:'Min Experience (yrs)', t:'number', p:'e.g. 4' },
+                      { l:'Max Experience (yrs)', t:'number', p:'e.g. 8' },
+                      { l:'Education', t:'select', o:['10th','12th','Diploma','Graduate','Post Graduate','CA','MBA'] },
+                      { l:'Preferred Industry', t:'select', o:['Manufacturing','Trading','Retail','Any'] },
+                      { l:'L1 Interviewer', t:'text', p:'Search employee...' },
+                      { l:'L2 Interviewer', t:'text', p:'Search employee...' },
+                    ].map((f, i) => (
+                      <div key={i}>
+                        <label style={{ fontSize:'11px', fontWeight:500, color:'#374151', display:'block', marginBottom:'4px' }}>{f.l}</label>
+                        {f.t==='select' ? <select style={C.sel}><option>Select...</option>{f.o?.map(o => <option key={o}>{o}</option>)}</select> : <input type={f.t} style={C.inp} placeholder={f.p} />}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Section D */}
+                  <div style={{ fontSize:'11px', fontWeight:600, color:'#D97706', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:'8px', paddingBottom:'5px', borderBottom:'2px solid #FEF3C7' }}>D. Business Justification</div>
+                  <textarea style={{ ...C.inp, height:'70px', resize:'none' as const, marginBottom:'14px' }} placeholder="Why this position is needed — business impact, current workload gap..." />
+
+                  <div style={{ background:'#EDE9FE', borderRadius:'8px', padding:'8px 12px', fontSize:'11px', color:'#7C3AED', marginBottom:'14px' }}>
+                    💜 Final interview by MD is mandatory · CTC to be approved by MD before offer
+                  </div>
+
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    <button style={{ ...C.secBtn }}>Save as Draft</button>
+                    <button style={{ ...C.priBtn, flex:1 }}>Submit for HR Review →</button>
+                    <button style={C.secBtn} onClick={() => setShowMRFForm(false)}>Cancel</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ═══ JOB OPENINGS ═══ */}
+        {tab === 'jobs' && (
+          <div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px', marginBottom:'14px' }}>
+              <StatCard label="Open Jobs" value={3} color="#7C3AED" />
+              <StatCard label="Total Openings" value={8} color="#1D4ED8" />
+              <StatCard label="Total Applied" value={67} color="#D97706" />
+              <StatCard label="Shortlisted" value={20} color="#16A34A" />
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(340px,1fr))', gap:'12px' }}>
+              {JOB_DATA.map(j => (
+                <div key={j.id} style={{ ...C.card, cursor:'pointer', borderTop:'3px solid #7C3AED' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'8px' }}>
+                    <div>
+                      <div style={{ fontSize:'13px', fontWeight:600, color:'#0F172A' }}>{j.title}</div>
+                      <div style={{ fontSize:'11px', color:'#64748B', marginTop:'2px' }}>{j.dept} · {j.location}</div>
+                    </div>
+                    <span style={{ padding:'3px 8px', background:'#DCFCE7', color:'#16A34A', borderRadius:'6px', fontSize:'10px', fontWeight:500 }}>{j.status}</span>
+                  </div>
+                  <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' as const, marginBottom:'10px' }}>
+                    <span style={{ padding:'2px 7px', background:'#EDE9FE', color:'#7C3AED', borderRadius:'5px', fontSize:'10px', fontWeight:600 }}>{j.grade}</span>
+                    <span style={{ padding:'2px 7px', background:'#F1F5F9', color:'#374151', borderRadius:'5px', fontSize:'10px' }}>{j.company}</span>
+                    <span style={{ padding:'2px 7px', background:'#F1F5F9', color:'#374151', borderRadius:'5px', fontSize:'10px' }}>{j.expMin}-{j.expMax} yrs</span>
+                    <span style={{ padding:'2px 7px', background:'#F1F5F9', color:'#374151', borderRadius:'5px', fontSize:'10px' }}>₹{(j.ctcMin/100000).toFixed(1)}L-₹{(j.ctcMax/100000).toFixed(1)}L</span>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'8px', padding:'8px', background:'#F8FAFC', borderRadius:'8px', marginBottom:'10px' }}>
+                    <div style={{ textAlign:'center' as const }}>
+                      <div style={{ fontSize:'18px', fontWeight:700, color:'#1D4ED8' }}>{j.applied}</div>
+                      <div style={{ fontSize:'10px', color:'#94A3B8' }}>Applied</div>
+                    </div>
+                    <div style={{ textAlign:'center' as const }}>
+                      <div style={{ fontSize:'18px', fontWeight:700, color:'#16A34A' }}>{j.shortlisted}</div>
+                      <div style={{ fontSize:'10px', color:'#94A3B8' }}>Shortlisted</div>
+                    </div>
+                    <div style={{ textAlign:'center' as const }}>
+                      <div style={{ fontSize:'18px', fontWeight:700, color:'#7C3AED' }}>{j.openings}</div>
+                      <div style={{ fontSize:'10px', color:'#94A3B8' }}>Openings</div>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:'6px' }}>
+                    <button style={{ flex:1, ...C.priBtn, fontSize:'11px', padding:'7px' }}>View Pipeline</button>
+                    <button style={{ ...C.secBtn, fontSize:'11px', padding:'7px' }}>🤖 AI Screen</button>
+                    <button style={{ ...C.secBtn, fontSize:'11px', padding:'7px' }}>Edit</button>
+                  </div>
+                  <div style={{ fontSize:'10px', color:'#94A3B8', marginTop:'8px' }}>Posted: {j.postedDate} · MRF: {j.mrfNo}</div>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* ── PIPELINE (KANBAN) ── */}
+        {/* ═══ PIPELINE ═══ */}
         {tab === 'pipeline' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div>
-                <div style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A' }}>Candidate Pipeline</div>
-                <select style={{ ...sel, width: 'auto', fontSize: '12px', padding: '5px 10px', marginTop: '4px' }} value={selectedJob} onChange={e => setSelectedJob(e.target.value)}>
-                  {jobsData.map(j => <option key={j.id} value={j.id}>{j.title}</option>)}
-                </select>
-              </div>
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <div style={{ background: '#EDE9FE', borderRadius: '8px', padding: '7px 12px', fontSize: '12px', color: '#7C3AED', fontWeight: 500 }}>
-                  🤖 AI Screening Active
-                </div>
-                <button style={priBtn} onClick={() => setShowAddCandidate(true)}>+ Add Candidate</button>
-              </div>
+            {/* Filter bar */}
+            <div style={{ ...C.card, display:'flex', gap:'8px', alignItems:'center', marginBottom:'12px' }}>
+              <span style={{ fontSize:'12px', color:'#64748B', flexShrink:0 }}>Job Opening:</span>
+              <select style={{ ...C.sel, width:'auto', flex:1 }}>
+                <option>All Openings</option>
+                {JOB_DATA.map(j => <option key={j.id}>{j.title} — {j.company}</option>)}
+              </select>
+              <select style={{ ...C.sel, width:'160px' }}>
+                <option>All Companies</option>
+                <option>SSM</option><option>STC</option><option>SRS</option>
+              </select>
+              <select style={{ ...C.sel, width:'160px' }}>
+                <option>All Sources</option>
+                <option>Naukri</option><option>LinkedIn</option><option>Reference</option><option>Campus</option>
+              </select>
             </div>
 
-            {/* Kanban */}
-            <div style={{ display: 'flex', gap: '8px', overflowX: 'auto', paddingBottom: '12px', minHeight: '500px' }}>
-              {STAGES.filter(s => s !== 'Joined').map(stage => {
-                const stageCandidates = pipelineCandidates.filter(c => c.stage === stage)
+            {/* Kanban Board */}
+            <div style={{ display:'flex', gap:'10px', overflowX:'auto' as const, paddingBottom:'8px' }}>
+              {PIPELINE_STAGES.map(stage => {
+                const stageCandidates = CANDIDATE_DATA.filter(c => c.stage === stage)
                 return (
-                  <div
-                    key={stage}
-                    onDragOver={e => { e.preventDefault(); setDragOver(stage) }}
-                    onDrop={() => { if (dragging) { moveCandidate(dragging, stage); setDragging(null); setDragOver(null) } }}
-                    style={{ flex: '0 0 180px', background: dragOver === stage ? '#EDE9FE' : '#F8FAFC', borderRadius: '10px', border: `2px solid ${dragOver === stage ? '#7C3AED' : '#E2E8F0'}`, padding: '10px', transition: 'all .15s' }}
-                  >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <div style={{ fontSize: '11px', fontWeight: 600, color: STAGE_COLORS[stage].color }}>{stage}</div>
-                      <span style={{ width: '20px', height: '20px', borderRadius: '50%', background: STAGE_COLORS[stage].bg, color: STAGE_COLORS[stage].color, fontSize: '10px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{stageCandidates.length}</span>
+                  <div key={stage} style={{ minWidth:'200px', maxWidth:'200px', flexShrink:0 }}>
+                    {/* Stage header */}
+                    <div style={{ padding:'8px 10px', borderRadius:'8px', marginBottom:'8px', background:STAGE_COLORS[stage].bg, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                      <span style={{ fontSize:'11px', fontWeight:600, color:STAGE_COLORS[stage].color }}>{stage}</span>
+                      <span style={{ fontSize:'11px', fontWeight:700, color:STAGE_COLORS[stage].color, background:'#fff', width:'20px', height:'20px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center' }}>{stageCandidates.length}</span>
                     </div>
-
+                    {/* Cards */}
                     {stageCandidates.map(c => (
-                      <div
-                        key={c.id}
-                        draggable
-                        onDragStart={() => setDragging(c.id)}
-                        onDragEnd={() => { setDragging(null); setDragOver(null) }}
-                        onClick={() => setSelectedCandidate(c.id)}
-                        style={{ background: '#fff', borderRadius: '8px', border: `1px solid ${dragging === c.id ? '#7C3AED' : '#E2E8F0'}`, padding: '10px', marginBottom: '6px', cursor: 'grab', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', transition: 'transform .1s', opacity: dragging === c.id ? 0.7 : 1 }}
-                      >
-                        <div style={{ fontSize: '12px', fontWeight: 500, color: '#0F172A', marginBottom: '3px' }}>{c.name}</div>
-                        <div style={{ fontSize: '10px', color: '#64748B', marginBottom: '5px' }}>{c.exp}y exp · {c.currentCo}</div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '6px', background: AI_TAG_CONFIG[c.aiTag].bg, color: AI_TAG_CONFIG[c.aiTag].color, fontWeight: 500 }}>
-                            {AI_TAG_CONFIG[c.aiTag].icon} {c.aiScore}%
-                          </span>
-                          <span style={{ fontSize: '9px', color: '#94A3B8' }}>{c.source}</span>
+                      <div key={c.id} onClick={() => setSelectedCandidate(c)} style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:'8px', padding:'10px', marginBottom:'8px', cursor:'pointer', borderLeft:`3px solid ${STAGE_COLORS[c.stage].color}` }}>
+                        <div style={{ fontSize:'12px', fontWeight:600, color:'#0F172A', marginBottom:'3px' }}>{c.name}</div>
+                        <div style={{ fontSize:'10px', color:'#64748B', marginBottom:'6px' }}>{c.currentCo} · {c.exp}y exp</div>
+                        {/* AI Score */}
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px' }}>
+                          <span style={{ padding:'1px 6px', borderRadius:'4px', fontSize:'9px', fontWeight:600, ...AI_COLORS[c.aiTag] }}>{c.aiTag}</span>
+                          <span style={{ fontSize:'10px', fontWeight:700, color:c.aiScore>=75?'#16A34A':c.aiScore>=50?'#D97706':'#DC2626' }}>{c.aiScore}%</span>
                         </div>
+                        {/* Source + Notice */}
+                        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' as const }}>
+                          <span style={{ fontSize:'9px', padding:'1px 5px', background:'#F1F5F9', color:'#64748B', borderRadius:'4px' }}>{c.source}</span>
+                          <span style={{ fontSize:'9px', padding:'1px 5px', background:'#F1F5F9', color:'#64748B', borderRadius:'4px' }}>{c.notice}d notice</span>
+                          <span style={{ fontSize:'9px', padding:'1px 5px', background:'#F1F5F9', color:'#64748B', borderRadius:'4px' }}>₹{(c.expectedCTC/100000).toFixed(1)}L exp</span>
+                        </div>
+                        {c.daysInStage > 0 && (
+                          <div style={{ fontSize:'9px', color:'#D97706', marginTop:'4px' }}>⏱ {c.daysInStage}d in stage</div>
+                        )}
                       </div>
                     ))}
-
-                    {stageCandidates.length === 0 && (
-                      <div style={{ textAlign: 'center', padding: '20px 10px', color: '#CBD5E1', fontSize: '11px' }}>
-                        Drop here
-                      </div>
-                    )}
+                    {/* Add button */}
+                    <button style={{ width:'100%', padding:'7px', background:'transparent', border:'1px dashed #E2E8F0', borderRadius:'8px', cursor:'pointer', fontSize:'11px', color:'#94A3B8' }}>+ Add</button>
                   </div>
                 )
               })}
             </div>
+
+            {/* Candidate Drawer */}
+            {selectedCandidate && (
+              <div style={{ position:'fixed' as const, inset:0, background:'rgba(0,0,0,0.3)', zIndex:1000 }} onClick={() => setSelectedCandidate(null)}>
+                <div style={{ position:'absolute' as const, right:0, top:0, bottom:0, width:'400px', background:'#fff', padding:'20px', overflowY:'auto' as const }} onClick={e => e.stopPropagation()}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'16px' }}>
+                    <div style={{ fontSize:'15px', fontWeight:600 }}>{selectedCandidate.name}</div>
+                    <button onClick={() => setSelectedCandidate(null)} style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer' }}>✕</button>
+                  </div>
+                  <div style={{ fontSize:'12px', color:'#64748B', marginBottom:'12px' }}>{selectedCandidate.currentCo} · {selectedCandidate.exp} yrs · {selectedCandidate.location}</div>
+                  
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'14px' }}>
+                    {[
+                      { l:'AI Score', v:`${selectedCandidate.aiScore}%`, c:selectedCandidate.aiScore>=75?'#16A34A':selectedCandidate.aiScore>=50?'#D97706':'#DC2626' },
+                      { l:'AI Tag', v:selectedCandidate.aiTag, c:'#7C3AED' },
+                      { l:'Current CTC', v:`₹${(selectedCandidate.currentCTC/100000).toFixed(1)}L`, c:'#374151' },
+                      { l:'Expected CTC', v:`₹${(selectedCandidate.expectedCTC/100000).toFixed(1)}L`, c:'#374151' },
+                      { l:'Notice Period', v:`${selectedCandidate.notice} days`, c:'#374151' },
+                      { l:'Source', v:selectedCandidate.source, c:'#374151' },
+                      { l:'Mobile', v:selectedCandidate.mobile, c:'#1D4ED8' },
+                      { l:'Email', v:selectedCandidate.email, c:'#1D4ED8' },
+                    ].map((f, i) => (
+                      <div key={i} style={{ padding:'8px 10px', background:'#F8FAFC', borderRadius:'8px' }}>
+                        <div style={{ fontSize:'10px', color:'#94A3B8' }}>{f.l}</div>
+                        <div style={{ fontSize:'12px', fontWeight:500, color:f.c, marginTop:'2px' }}>{f.v}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ marginBottom:'12px' }}>
+                    <div style={{ fontSize:'11px', fontWeight:600, color:'#374151', marginBottom:'6px' }}>Move Stage</div>
+                    <select style={C.sel}>
+                      {PIPELINE_STAGES.map(s => <option key={s} selected={s===selectedCandidate.stage}>{s}</option>)}
+                    </select>
+                  </div>
+
+                  <div style={{ display:'flex', flexDirection:'column' as const, gap:'8px' }}>
+                    <button style={{ ...C.priBtn, width:'100%' }}>📅 Schedule Interview</button>
+                    <button style={{ ...C.secBtn, width:'100%' }}>📄 Generate Offer</button>
+                    <button style={{ ...C.secBtn, width:'100%' }}>💬 WhatsApp Contact</button>
+                    <button style={{ ...C.secBtn, color:'#DC2626', borderColor:'#FECACA', width:'100%' }}>❌ Reject Candidate</button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* ── INTERVIEWS ── */}
+        {/* ═══ INTERVIEWS ═══ */}
         {tab === 'interviews' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div>
-                <div style={{ fontSize: '15px', fontWeight: 600 }}>Interviews</div>
-                <div style={{ fontSize: '12px', color: '#64748B' }}>2 scheduled today</div>
-              </div>
-              <button style={priBtn}>+ Schedule Interview</button>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px', marginBottom:'14px' }}>
+              <StatCard label="Today" value={2} color="#7C3AED" sub="interviews scheduled" />
+              <StatCard label="Tomorrow" value={3} color="#1D4ED8" sub="interviews" />
+              <StatCard label="This Week" value={8} color="#D97706" sub="total" />
+              <StatCard label="Feedback Pending" value={1} color="#DC2626" sub="overdue" />
             </div>
 
-            {/* Today */}
-            <div style={{ fontSize: '11px', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '8px' }}>Today — 17 May 2026</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '14px' }}>
-              {interviewsData.filter(i => i.status === 'Today').map((iv, i) => (
-                <div key={i} style={{ ...card, borderLeft: '4px solid #3B82F6' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
-                    <div>
-                      <div style={{ fontSize: '13px', fontWeight: 600 }}>{iv.candidate}</div>
-                      <div style={{ fontSize: '11px', color: '#64748B' }}>{iv.job}</div>
-                    </div>
-                    <span style={{ padding: '3px 9px', borderRadius: '8px', fontSize: '10px', fontWeight: 600, background: '#DBEAFE', color: '#1D4ED8' }}>{iv.round}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: '#64748B', marginBottom: '10px' }}>
-                    <span>🕐 {iv.time}</span>
-                    <span>📱 {iv.mode}</span>
-                    <span>👤 {iv.interviewer}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button style={{ ...priBtn, fontSize: '11px', padding: '6px 12px', flex: 1 }}>Submit Feedback</button>
-                    <button style={{ ...secBtn, fontSize: '11px', padding: '6px 10px' }}>Reschedule</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Upcoming */}
-            <div style={{ fontSize: '11px', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: '8px' }}>Upcoming</div>
-            {interviewsData.filter(i => i.status === 'Tomorrow').map((iv, i) => (
-              <div key={i} style={{ ...card, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '40px', height: '40px', borderRadius: '8px', background: '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', flexShrink: 0 }}>📅</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '13px', fontWeight: 500 }}>{iv.candidate} — {iv.round}</div>
-                  <div style={{ fontSize: '11px', color: '#64748B' }}>{iv.job} · {iv.date} at {iv.time} · {iv.mode}</div>
-                  <div style={{ fontSize: '11px', color: '#64748B' }}>Interviewer: {iv.interviewer}</div>
-                </div>
-                <span style={{ padding: '3px 9px', borderRadius: '8px', fontSize: '10px', background: '#F1F5F9', color: '#64748B' }}>{iv.status}</span>
-              </div>
-            ))}
-
-            {/* Completed */}
-            <div style={{ fontSize: '11px', fontWeight: 600, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '.05em', margin: '14px 0 8px' }}>Completed</div>
-            {interviewsData.filter(i => i.status === 'Done').map((iv, i) => (
-              <div key={i} style={{ ...card, marginBottom: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: 500 }}>{iv.candidate} — {iv.round}</div>
-                    <div style={{ fontSize: '11px', color: '#64748B' }}>{iv.date} · {iv.interviewer}</div>
-                  </div>
-                  {iv.feedback && (
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {[1,2,3,4,5].map(s => <span key={s} style={{ fontSize: '14px' }}>{s <= iv.feedback!.rating ? '⭐' : '☆'}</span>)}
-                    </div>
-                  )}
-                </div>
-                {iv.feedback && (
-                  <div style={{ background: '#F8FAFC', borderRadius: '7px', padding: '8px 10px', fontSize: '11px', color: '#374151' }}>
-                    <div style={{ marginBottom: '4px' }}>"{iv.feedback.notes}"</div>
-                    <div style={{ fontSize: '10px', color: iv.feedback.recommendation === 'Proceed' ? '#16A34A' : '#DC2626', fontWeight: 500 }}>
-                      Recommendation: {iv.feedback.recommendation}
-                    </div>
-                  </div>
-                )}
+            {['Today — 22 May 2026', 'Yesterday — 21 May 2026'].map((day, di) => (
+              <div key={di} style={C.card}>
+                <div style={{ fontSize:'12px', fontWeight:600, color:'#64748B', marginBottom:'10px' }}>{day}</div>
+                <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:'12px' }}>
+                  <thead>
+                    <tr style={{ background:'#F8FAFC' }}>
+                      {['Candidate','Position','Round','Interviewer','Time','Mode','Status','Action'].map(h => (
+                        <th key={h} style={{ padding:'8px 10px', textAlign:'left' as const, fontWeight:600, color:'#374151', borderBottom:'1px solid #E2E8F0', fontSize:'11px' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {INTERVIEW_DATA.filter((_, i) => di === 0 ? i < 2 : i === 2).map((iv, i) => (
+                      <tr key={iv.id} style={{ borderBottom:'1px solid #F1F5F9' }}>
+                        <td style={{ padding:'9px 10px', fontWeight:500 }}>{iv.candidateName}</td>
+                        <td style={{ padding:'9px 10px', color:'#64748B', fontSize:'11px' }}>{iv.position}</td>
+                        <td style={{ padding:'9px 10px' }}>
+                          <span style={{ padding:'2px 7px', borderRadius:'6px', fontSize:'10px', fontWeight:600, ...STAGE_COLORS[iv.stage as CandidateStage] }}>{iv.stage}</span>
+                        </td>
+                        <td style={{ padding:'9px 10px', color:'#374151', fontSize:'11px' }}>{iv.interviewer}</td>
+                        <td style={{ padding:'9px 10px', fontWeight:500 }}>{iv.time}</td>
+                        <td style={{ padding:'9px 10px' }}>
+                          <span style={{ padding:'2px 6px', background:'#F1F5F9', color:'#374151', borderRadius:'5px', fontSize:'10px' }}>{iv.mode}</span>
+                        </td>
+                        <td style={{ padding:'9px 10px' }}>
+                          <span style={{ padding:'2px 8px', borderRadius:'6px', fontSize:'10px', fontWeight:500, background:iv.status==='Scheduled'?'#DBEAFE':'#DCFCE7', color:iv.status==='Scheduled'?'#1D4ED8':'#16A34A' }}>{iv.status}</span>
+                        </td>
+                        <td style={{ padding:'9px 10px' }}>
+                          <div style={{ display:'flex', gap:'4px' }}>
+                            {iv.status==='Completed' ? (
+                              <button style={{ padding:'3px 8px', background:'#FEF3C7', border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:'#D97706' }}>Add Feedback</button>
+                            ) : (
+                              <button style={{ padding:'3px 8px', background:'#EDE9FE', border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:'#7C3AED' }}>Reschedule</button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             ))}
           </div>
         )}
 
-        {/* ── OFFERS ── */}
+        {/* ═══ OFFERS ═══ */}
         {tab === 'offers' && (
           <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px', marginBottom:'14px' }}>
+              <StatCard label="Offers Sent" value={3} color="#7C3AED" />
+              <StatCard label="Pending MD Approval" value={1} color="#D97706" />
+              <StatCard label="Accepted" value={1} color="#16A34A" />
+              <StatCard label="Acceptance Rate" value="67%" color="#0D9488" />
+            </div>
+
+            {/* New Offer Button */}
+            <div style={{ ...C.card, background:'#EDE9FE', borderColor:'#C4B5FD', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
-                <div style={{ fontSize: '15px', fontWeight: 600 }}>Offer Management</div>
-                <div style={{ fontSize: '12px', color: '#64748B' }}>Generate and track candidate offers</div>
+                <div style={{ fontSize:'13px', fontWeight:600, color:'#7C3AED' }}>Generate New Offer Letter</div>
+                <div style={{ fontSize:'11px', color:'#6D28D9', marginTop:'2px' }}>Candidate select karo → CTC Calculator → MD Approve → Send via Email + WhatsApp</div>
               </div>
-              <button style={priBtn}>+ Generate Offer</button>
+              <button style={{ ...C.priBtn, whiteSpace:'nowrap' as const }}>+ New Offer</button>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
-              {[
-                { label: 'Offers Sent', value: offersData.length, color: '#3B82F6', bg: '#DBEAFE' },
-                { label: 'Accepted', value: offersData.filter(o => o.status === 'Accepted').length, color: '#16A34A', bg: '#DCFCE7' },
-                { label: 'Acceptance Rate', value: '75%', color: '#7C3AED', bg: '#EDE9FE' },
-              ].map((s, i) => (
-                <div key={i} style={{ ...card, display: 'flex', alignItems: 'center', gap: '12px', padding: '14px' }}>
-                  <div style={{ width: '44px', height: '44px', borderRadius: '10px', background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: 700, color: s.color }}>{s.value}</div>
-                  <div style={{ fontSize: '12px', color: '#64748B' }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
-
-            {offersData.map((o, i) => (
-              <div key={i} style={{ ...card, marginBottom: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600 }}>{o.candidate}</div>
-                    <div style={{ fontSize: '12px', color: '#64748B' }}>{o.job} · DOJ: {o.doj}</div>
-                  </div>
-                  <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 500, background: o.status === 'Accepted' ? '#DCFCE7' : '#FEF3C7', color: o.status === 'Accepted' ? '#16A34A' : '#D97706' }}>{o.status}</span>
-                </div>
-                <div style={{ display: 'flex', gap: '16px', fontSize: '12px', color: '#374151', marginBottom: '12px' }}>
-                  <span>💰 CTC: ₹{(o.ctc / 1000).toFixed(0)}K/month (₹{(o.ctc * 12 / 100000).toFixed(1)}L p.a.)</span>
-                  <span>📤 Sent: {o.sentDate}</span>
-                  {o.respondedDate && <span>✅ Responded: {o.respondedDate}</span>}
-                </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <button style={{ ...secBtn, fontSize: '11px', padding: '6px 12px' }}>📄 View Letter</button>
-                  <button style={{ ...secBtn, fontSize: '11px', padding: '6px 12px' }}>📧 Resend</button>
-                  {o.status !== 'Accepted' && <button style={{ ...priBtn, fontSize: '11px', padding: '6px 12px' }}>✓ Mark Accepted</button>}
-                  {o.status === 'Accepted' && <button style={{ ...priBtn, fontSize: '11px', padding: '6px 12px', background: '#16A34A' }}>👤 Convert to Employee</button>}
-                </div>
-              </div>
-            ))}
-
-            {/* AI Offer Letter Generator */}
-            <div style={{ ...card, background: 'linear-gradient(135deg,#EDE9FE,#E0F2FE)', border: '1px solid #C4B5FD', marginTop: '12px' }}>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: '#7C3AED', marginBottom: '6px' }}>🤖 AI Offer Letter Generator</div>
-              <div style={{ fontSize: '12px', color: '#64748B', marginBottom: '12px' }}>Enter CTC details → Claude generates professional offer letter with company letterhead in 30 seconds</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                <div><label style={{ fontSize: '11px', color: '#374151', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Candidate Name</label><input style={inp} placeholder="Vikram Malhotra" /></div>
-                <div><label style={{ fontSize: '11px', color: '#374151', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Designation</label><input style={inp} placeholder="Sales Manager" /></div>
-                <div><label style={{ fontSize: '11px', color: '#374151', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Date of Joining</label><input style={{ ...inp }} type="date" /></div>
-                <div><label style={{ fontSize: '11px', color: '#374151', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Basic (₹/month)</label><input style={inp} placeholder="72000" /></div>
-                <div><label style={{ fontSize: '11px', color: '#374151', fontWeight: 500, display: 'block', marginBottom: '4px' }}>HRA (₹/month)</label><input style={inp} placeholder="36000" /></div>
-                <div><label style={{ fontSize: '11px', color: '#374151', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Special Allowance</label><input style={inp} placeholder="37000" /></div>
-              </div>
-              <button style={{ ...priBtn, background: '#7C3AED' }}>🤖 Generate Offer Letter with AI</button>
+            {/* Offers Table */}
+            <div style={C.card}>
+              <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'12px' }}>Offer Tracker</div>
+              <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:'12px' }}>
+                <thead>
+                  <tr style={{ background:'#1E1B4B' }}>
+                    {['Offer No.','Candidate','Position','Company','Grade','Annual CTC','Net/Month','Joining Date','MD Approved','Status','Action'].map(h => (
+                      <th key={h} style={{ padding:'9px 10px', color:'#fff', fontWeight:600, textAlign:'left' as const, fontSize:'11px', whiteSpace:'nowrap' as const }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {OFFER_DATA.map((o, i) => (
+                    <tr key={o.id} style={{ background:i%2===0?'#F8FAFC':'#fff', borderBottom:'1px solid #E2E8F0' }}>
+                      <td style={{ padding:'9px 10px', color:'#7C3AED', fontWeight:600, fontSize:'11px' }}>{o.offerNo}</td>
+                      <td style={{ padding:'9px 10px', fontWeight:500 }}>{o.candidateName}</td>
+                      <td style={{ padding:'9px 10px', color:'#64748B' }}>{o.position}</td>
+                      <td style={{ padding:'9px 10px' }}>{o.company}</td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <span style={{ padding:'2px 6px', background:'#EDE9FE', color:'#7C3AED', borderRadius:'5px', fontSize:'10px', fontWeight:600 }}>{o.grade}</span>
+                      </td>
+                      <td style={{ padding:'9px 10px', fontWeight:600, color:'#7C3AED' }}>₹{(o.annualCTC/100000).toFixed(2)}L</td>
+                      <td style={{ padding:'9px 10px', color:'#16A34A', fontWeight:500 }}>₹{o.netTH.toLocaleString('en-IN')}</td>
+                      <td style={{ padding:'9px 10px', color:'#374151' }}>{o.joiningDate}</td>
+                      <td style={{ padding:'9px 10px', textAlign:'center' as const }}>
+                        {o.mdApproved ? <span style={{ color:'#16A34A', fontWeight:600 }}>✅ Yes</span> : <span style={{ color:'#D97706' }}>⏳ Pending</span>}
+                      </td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <span style={{ padding:'2px 8px', borderRadius:'6px', fontSize:'10px', fontWeight:500, background:o.status==='Sent'?'#DCFCE7':o.status==='MD Approved'?'#FEF3C7':'#EDE9FE', color:o.status==='Sent'?'#16A34A':o.status==='MD Approved'?'#D97706':'#7C3AED' }}>{o.status}</span>
+                      </td>
+                      <td style={{ padding:'9px 10px' }}>
+                        <div style={{ display:'flex', gap:'4px' }}>
+                          <button style={{ padding:'3px 8px', background:'#EDE9FE', border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:'#7C3AED' }}>View PDF</button>
+                          {o.status==='MD Approved' && <button style={{ padding:'3px 8px', background:'#DCFCE7', border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:'#16A34A' }}>Send</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* ── ANALYTICS ── */}
-        {tab === 'analytics' && (
+        {/* ═══ AI SCREENING ═══ */}
+        {tab === 'ai' && (
           <div>
-            <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '14px' }}>Recruitment Analytics</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px', marginBottom:'14px' }}>
+              <StatCard label="Screened Today" value={12} color="#7C3AED" />
+              <StatCard label="Strong Match" value={4} color="#16A34A" sub="≥75% score" />
+              <StatCard label="Partial Match" value={5} color="#D97706" sub="50-74% score" />
+              <StatCard label="Not Suitable" value={3} color="#DC2626" sub="<50% score" />
+            </div>
 
-              {/* Source effectiveness */}
-              <div style={card}>
-                <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Source Effectiveness</div>
-                {[
-                  { source: 'Naukri', candidates: 45, hired: 3, color: '#7C3AED' },
-                  { source: 'LinkedIn', candidates: 32, hired: 2, color: '#3B82F6' },
-                  { source: 'Reference', candidates: 18, hired: 4, color: '#16A34A' },
-                  { source: 'Walk-in', candidates: 14, hired: 1, color: '#F97316' },
-                  { source: 'Consultant', candidates: 9, hired: 2, color: '#EF4444' },
-                ].map((s, i) => (
-                  <div key={i} style={{ marginBottom: '10px' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '3px', fontSize: '12px' }}>
-                      <span style={{ fontWeight: 500 }}>{s.source}</span>
-                      <span style={{ color: '#64748B' }}>{s.candidates} candidates · {s.hired} hired · {Math.round(s.hired / s.candidates * 100)}% conversion</span>
-                    </div>
-                    <div style={{ height: '8px', background: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.round(s.candidates / 45 * 100)}%`, background: s.color, borderRadius: '4px' }} />
-                    </div>
-                  </div>
-                ))}
-                <div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '10px', fontSize: '11px', color: '#374151', marginTop: '8px' }}>
-                  🏆 Best source: <strong>Reference</strong> — 22% conversion rate (3x better than Naukri)
-                </div>
+            {/* Upload Zone */}
+            <div style={{ ...C.card, border:'2px dashed #C4B5FD', background:'#F5F3FF', textAlign:'center' as const, padding:'28px' }}>
+              <div style={{ fontSize:'28px', marginBottom:'8px' }}>🤖</div>
+              <div style={{ fontSize:'14px', fontWeight:600, color:'#7C3AED', marginBottom:'4px' }}>AI Resume Screener</div>
+              <div style={{ fontSize:'12px', color:'#6D28D9', marginBottom:'16px' }}>Resume upload karo → Claude API → JD match → Score + reasoning auto-generate</div>
+              <div style={{ display:'flex', gap:'8px', justifyContent:'center' }}>
+                <button style={C.priBtn}>📎 Upload Resume(s)</button>
+                <select style={{ ...C.sel, width:'250px' }}>
+                  <option>Select Job Opening for matching...</option>
+                  {JOB_DATA.map(j => <option key={j.id}>{j.title} — {j.company}</option>)}
+                </select>
               </div>
+            </div>
 
-              {/* Time to hire */}
-              <div style={card}>
-                <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>Time to Hire (Days)</div>
-                {[
-                  { stage: 'MRF to Job Post', days: 2, max: 7 },
-                  { stage: 'Job Post to First Apply', days: 1, max: 7 },
-                  { stage: 'AI Screening', days: 0.5, max: 7 },
-                  { stage: 'HR Round', days: 3, max: 7 },
-                  { stage: 'Technical Interviews', days: 5, max: 7 },
-                  { stage: 'Offer to Acceptance', days: 4, max: 7 },
-                  { stage: 'Acceptance to Joining', days: 30, max: 90 },
-                ].map((s, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px', fontSize: '11px' }}>
-                    <div style={{ width: '140px', color: '#64748B', flexShrink: 0 }}>{s.stage}</div>
-                    <div style={{ flex: 1, height: '8px', background: '#F1F5F9', borderRadius: '4px', overflow: 'hidden' }}>
-                      <div style={{ height: '100%', width: `${Math.round(s.days / s.max * 100)}%`, background: '#7C3AED', borderRadius: '4px' }} />
-                    </div>
-                    <div style={{ width: '30px', textAlign: 'right', fontWeight: 500, color: '#374151' }}>{s.days}d</div>
-                  </div>
-                ))}
-                <div style={{ background: '#EDE9FE', borderRadius: '8px', padding: '10px', fontSize: '11px', color: '#7C3AED', marginTop: '8px', fontWeight: 500 }}>
-                  Total avg: 18 days · Industry avg: 30 days · Ezer saves 40% time!
-                </div>
-              </div>
-
-              {/* AI Screening stats */}
-              <div style={{ ...card, gridColumn: '1 / -1' }}>
-                <div style={{ fontSize: '13px', fontWeight: 600, marginBottom: '12px' }}>🤖 AI Screening Performance</div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
-                  {[
-                    { label: 'Resumes Screened', value: '118', icon: '📄', sub: 'This month', color: '#7C3AED', bg: '#EDE9FE' },
-                    { label: 'Strong Matches', value: '31', icon: '✅', sub: '26% of total', color: '#16A34A', bg: '#DCFCE7' },
-                    { label: 'AI Accuracy', value: '89%', icon: '🎯', sub: 'HR override rate: 11%', color: '#3B82F6', bg: '#DBEAFE' },
-                    { label: 'Time Saved', value: '47 hrs', icon: '⏱', sub: 'vs manual screening', color: '#F97316', bg: '#FEF3C7' },
-                  ].map((s, i) => (
-                    <div key={i} style={{ background: s.bg, borderRadius: '10px', padding: '14px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '24px', marginBottom: '4px' }}>{s.icon}</div>
-                      <div style={{ fontSize: '22px', fontWeight: 700, color: s.color }}>{s.value}</div>
-                      <div style={{ fontSize: '11px', fontWeight: 500, color: '#374151', marginTop: '2px' }}>{s.label}</div>
-                      <div style={{ fontSize: '10px', color: '#64748B', marginTop: '2px' }}>{s.sub}</div>
-                    </div>
+            {/* Screened Candidates */}
+            <div style={C.card}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+                <div style={{ fontSize:'13px', fontWeight:600 }}>Screened Candidates</div>
+                <div style={{ display:'flex', gap:'6px' }}>
+                  {['All','Strong Match','Partial Match','Not Suitable'].map(f => (
+                    <button key={f} style={{ padding:'4px 10px', background:'#F8FAFC', border:'1px solid #E2E8F0', borderRadius:'6px', fontSize:'11px', cursor:'pointer', color:'#64748B' }}>{f}</button>
                   ))}
                 </div>
               </div>
+
+              {CANDIDATE_DATA.map(c => (
+                <div key={c.id} style={{ display:'flex', gap:'12px', alignItems:'center', padding:'10px 12px', borderRadius:'8px', border:'1px solid #E2E8F0', marginBottom:'8px', background:'#F8FAFC' }}>
+                  {/* Score Circle */}
+                  <div style={{ width:'48px', height:'48px', borderRadius:'50%', background:c.aiScore>=75?'#DCFCE7':c.aiScore>=50?'#FEF3C7':'#FEE2E2', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, border:`2px solid ${c.aiScore>=75?'#16A34A':c.aiScore>=50?'#D97706':'#DC2626'}` }}>
+                    <span style={{ fontSize:'13px', fontWeight:700, color:c.aiScore>=75?'#16A34A':c.aiScore>=50?'#D97706':'#DC2626' }}>{c.aiScore}%</span>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ display:'flex', gap:'8px', alignItems:'center', marginBottom:'3px' }}>
+                      <span style={{ fontSize:'13px', fontWeight:600 }}>{c.name}</span>
+                      <span style={{ padding:'1px 7px', borderRadius:'5px', fontSize:'10px', fontWeight:600, ...AI_COLORS[c.aiTag] }}>{c.aiTag}</span>
+                    </div>
+                    <div style={{ fontSize:'11px', color:'#64748B' }}>{c.currentCo} · {c.exp}y · Expected ₹{(c.expectedCTC/100000).toFixed(1)}L · {c.notice}d notice · {c.source}</div>
+                    <div style={{ fontSize:'11px', color:'#7C3AED', marginTop:'3px' }}>Applied: {c.jobTitle}</div>
+                  </div>
+                  <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+                    <button style={{ padding:'5px 10px', background:'#EDE9FE', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', color:'#7C3AED' }}>View Reasoning</button>
+                    <button style={{ padding:'5px 10px', background:'#DCFCE7', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', color:'#16A34A' }}>✓ Shortlist</button>
+                    <button style={{ padding:'5px 10px', background:'#FEE2E2', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', color:'#DC2626' }}>✗ Reject</button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
-      </div>
 
-      {/* ── CANDIDATE DETAIL MODAL ── */}
-      {selectedCandidate && selectedCandidateData && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
-          <div style={{ background: '#fff', width: '480px', height: '100vh', overflowY: 'auto', padding: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ fontSize: '15px', fontWeight: 600 }}>Candidate Profile</div>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: '#64748B' }} onClick={() => setSelectedCandidate(null)}>✕</button>
+        {/* ═══ ANALYTICS ═══ */}
+        {tab === 'analytics' && (
+          <div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px', marginBottom:'14px' }}>
+              <StatCard label="Avg Time to Hire" value="18d" color="#7C3AED" />
+              <StatCard label="Offer Accept Rate" value="67%" color="#16A34A" />
+              <StatCard label="AI Shortlist Accuracy" value="82%" color="#1D4ED8" />
+              <StatCard label="Cost Per Hire" value="₹0" color="#D97706" sub="(Consultant fees pending)" />
             </div>
 
-            {/* Profile */}
-            <div style={{ background: '#F8FAFC', borderRadius: '10px', padding: '14px', marginBottom: '14px' }}>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', marginBottom: '10px' }}>
-                <div style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#EDE9FE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 600, color: '#7C3AED', flexShrink: 0 }}>
-                  {selectedCandidateData.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                </div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '2px' }}>{selectedCandidateData.name}</div>
-                  <div style={{ fontSize: '12px', color: '#64748B' }}>{selectedCandidateData.exp} yrs exp · {selectedCandidateData.currentCo}</div>
-                  <div style={{ fontSize: '11px', color: '#64748B' }}>{selectedCandidateData.email} · {selectedCandidateData.phone}</div>
-                </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+              {/* Source Effectiveness */}
+              <div style={C.card}>
+                <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'12px' }}>Source Effectiveness</div>
+                {[
+                  { source:'Naukri', applied:32, shortlisted:12, joined:3, color:'#7C3AED' },
+                  { source:'LinkedIn', applied:18, shortlisted:6, joined:1, color:'#1D4ED8' },
+                  { source:'Reference', applied:8, shortlisted:5, joined:2, color:'#16A34A' },
+                  { source:'Campus', applied:6, shortlisted:4, joined:1, color:'#D97706' },
+                  { source:'Walk-in', applied:3, shortlisted:1, joined:0, color:'#DC2626' },
+                ].map((s, i) => (
+                  <div key={i} style={{ marginBottom:'10px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'3px' }}>
+                      <span style={{ fontSize:'12px', fontWeight:500 }}>{s.source}</span>
+                      <span style={{ fontSize:'11px', color:'#64748B' }}>{s.applied} → {s.shortlisted} → {s.joined} joined</span>
+                    </div>
+                    <div style={{ background:'#F1F5F9', borderRadius:'4px', height:'8px', overflow:'hidden' }}>
+                      <div style={{ width:`${(s.applied/32)*100}%`, background:s.color, height:'100%', borderRadius:'4px' }} />
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11px' }}>
-                <div><span style={{ color: '#94A3B8' }}>Current CTC:</span> <strong>₹{(selectedCandidateData.currentCTC / 1000).toFixed(0)}K</strong></div>
-                <div><span style={{ color: '#94A3B8' }}>Expected:</span> <strong>₹{(selectedCandidateData.expectedCTC / 1000).toFixed(0)}K</strong></div>
-                <div><span style={{ color: '#94A3B8' }}>Notice:</span> <strong>{selectedCandidateData.notice} days</strong></div>
-                <div><span style={{ color: '#94A3B8' }}>Source:</span> <strong>{selectedCandidateData.source}</strong></div>
-              </div>
-            </div>
 
-            {/* Current Stage */}
-            <div style={{ marginBottom: '14px' }}>
-              <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px' }}>Current Stage</div>
-              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                {STAGES.filter(s => s !== 'Joined').map(s => (
-                  <button key={s} onClick={() => moveCandidate(selectedCandidateData.id, s)} style={{ padding: '4px 10px', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '10px', fontWeight: s === selectedCandidateData.stage ? 600 : 400, background: s === selectedCandidateData.stage ? STAGE_COLORS[s].bg : '#F1F5F9', color: s === selectedCandidateData.stage ? STAGE_COLORS[s].color : '#64748B' }}>{s}</button>
+              {/* Time to Hire by Grade */}
+              <div style={C.card}>
+                <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'12px' }}>Time to Hire by Grade</div>
+                {[
+                  { grade:'L1/L2', days:45, color:'#7C3AED' },
+                  { grade:'M3/M2', days:32, color:'#1D4ED8' },
+                  { grade:'M1', days:24, color:'#0D9488' },
+                  { grade:'E3/E2', days:18, color:'#16A34A' },
+                  { grade:'E1', days:12, color:'#D97706' },
+                  { grade:'W1/W2', days:5, color:'#DC2626' },
+                ].map((g, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
+                    <div style={{ fontSize:'11px', width:'60px', fontWeight:500, color:g.color }}>{g.grade}</div>
+                    <div style={{ flex:1, background:'#F1F5F9', borderRadius:'4px', height:'20px', overflow:'hidden' }}>
+                      <div style={{ width:`${(g.days/45)*100}%`, background:g.color, height:'100%', borderRadius:'4px', display:'flex', alignItems:'center', paddingLeft:'6px' }}>
+                        <span style={{ fontSize:'10px', color:'#fff', fontWeight:600 }}>{g.days}d</span>
+                      </div>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
 
-            {/* AI Analysis */}
-            <div style={{ background: 'linear-gradient(135deg,#EDE9FE,#E0F2FE)', borderRadius: '10px', padding: '14px', marginBottom: '14px', border: '1px solid #C4B5FD' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: '#7C3AED' }}>🤖 AI Analysis</div>
-                <div style={{ display: 'flex', align: 'center', gap: '6px' }}>
-                  <span style={{ fontSize: '18px', fontWeight: 700, color: '#7C3AED' }}>{selectedCandidateData.aiScore}%</span>
-                  <span style={{ padding: '2px 7px', borderRadius: '6px', fontSize: '10px', fontWeight: 500, background: AI_TAG_CONFIG[selectedCandidateData.aiTag].bg, color: AI_TAG_CONFIG[selectedCandidateData.aiTag].color }}>{selectedCandidateData.aiTag}</span>
-                </div>
-              </div>
-              <div style={{ fontSize: '11px', color: '#374151', lineHeight: 1.6 }}>{selectedCandidateData.aiReason}</div>
-              <button style={{ marginTop: '8px', padding: '4px 10px', background: 'rgba(124,58,237,0.1)', border: '1px solid #C4B5FD', borderRadius: '6px', cursor: 'pointer', fontSize: '10px', color: '#7C3AED', fontWeight: 500 }}>Override AI Decision</button>
-            </div>
-
-            {/* Actions */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <button style={{ ...priBtn, width: '100%' }}>📅 Schedule Interview</button>
-              <button style={{ ...secBtn, width: '100%' }}>📄 View Resume</button>
-              <button style={{ ...secBtn, width: '100%' }}>📨 Send Email</button>
-              {selectedCandidateData.stage === 'Final Round' && <button style={{ ...priBtn, width: '100%', background: '#16A34A' }}>📋 Generate Offer Letter</button>}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── ADD CANDIDATE MODAL ── */}
-      {showAddCandidate && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', maxWidth: '560px', width: '100%', maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
-              <div style={{ fontSize: '15px', fontWeight: 600 }}>Add Candidate</div>
-              <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px' }} onClick={() => setShowAddCandidate(false)}>✕</button>
-            </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-              <div><label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Full Name *</label><input style={inp} placeholder="Rahul Kumar" /></div>
-              <div><label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Phone *</label><input style={inp} placeholder="9876543210" /></div>
-              <div><label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Email *</label><input style={inp} placeholder="rahul@email.com" /></div>
-              <div><label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Experience (years)</label><input style={inp} placeholder="5" /></div>
-              <div><label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Current Company</label><input style={inp} placeholder="ABC Ltd" /></div>
-              <div><label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Current CTC (₹/month)</label><input style={inp} placeholder="50000" /></div>
-              <div><label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Expected CTC</label><input style={inp} placeholder="65000" /></div>
-              <div><label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Notice Period (days)</label><input style={inp} placeholder="30" /></div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Source</label>
-                <select style={sel}>
-                  {['Naukri', 'LinkedIn', 'Reference', 'Walk-in', 'Consultant', 'Campus', 'Other'].map(s => <option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div style={{ gridColumn: '1 / -1' }}>
-                <label style={{ fontSize: '12px', fontWeight: 500, display: 'block', marginBottom: '4px' }}>Resume Upload</label>
-                <label style={{ cursor: 'pointer' }}>
-                  <input type="file" accept=".pdf,.doc,.docx" style={{ display: 'none' }} />
-                  <div style={{ border: '2px dashed #E2E8F0', borderRadius: '8px', padding: '16px', textAlign: 'center', color: '#94A3B8', fontSize: '12px' }}>
-                    📄 Click to upload resume (PDF/DOC)
-                  </div>
-                </label>
-              </div>
-            </div>
-            <div style={{ background: '#EDE9FE', borderRadius: '8px', padding: '10px 12px', fontSize: '11px', color: '#7C3AED', marginBottom: '12px' }}>
-              🤖 Resume upload hone ke baad AI automatically screen karega aur match score dega
-            </div>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <button style={secBtn} onClick={() => setShowAddCandidate(false)}>Cancel</button>
-              <button style={priBtn} onClick={() => setShowAddCandidate(false)}>Add & Screen with AI</button>
+            {/* AI vs HR Decision */}
+            <div style={C.card}>
+              <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'12px' }}>AI vs HR Decision Comparison</div>
+              <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:'12px' }}>
+                <thead>
+                  <tr style={{ background:'#F8FAFC' }}>
+                    {['Candidate','Job','AI Tag','AI Score','HR Decision','Outcome','Match?'].map(h => (
+                      <th key={h} style={{ padding:'8px 10px', textAlign:'left' as const, fontWeight:600, color:'#374151', borderBottom:'1px solid #E2E8F0', fontSize:'11px' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {CANDIDATE_DATA.filter(c => c.stage !== 'Applied').slice(0,5).map((c, i) => (
+                    <tr key={c.id} style={{ borderBottom:'1px solid #F1F5F9', background:i%2===0?'#F8FAFC':'#fff' }}>
+                      <td style={{ padding:'8px 10px', fontWeight:500 }}>{c.name}</td>
+                      <td style={{ padding:'8px 10px', color:'#64748B', fontSize:'11px' }}>{c.jobTitle}</td>
+                      <td style={{ padding:'8px 10px' }}>
+                        <span style={{ padding:'2px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:500, ...AI_COLORS[c.aiTag] }}>{c.aiTag}</span>
+                      </td>
+                      <td style={{ padding:'8px 10px', fontWeight:600, color:c.aiScore>=75?'#16A34A':c.aiScore>=50?'#D97706':'#DC2626' }}>{c.aiScore}%</td>
+                      <td style={{ padding:'8px 10px', color:'#374151' }}>{c.stage==='Rejected'?'Rejected':'Proceeding'}</td>
+                      <td style={{ padding:'8px 10px' }}>
+                        <span style={{ padding:'2px 6px', borderRadius:'5px', fontSize:'10px', background:c.stage==='Joined'?'#DCFCE7':c.stage==='Rejected'?'#FEE2E2':'#F1F5F9', color:c.stage==='Joined'?'#16A34A':c.stage==='Rejected'?'#DC2626':'#374151' }}>{c.stage}</span>
+                      </td>
+                      <td style={{ padding:'8px 10px', textAlign:'center' as const }}>
+                        {c.aiTag==='Strong Match' && c.stage!=='Rejected' ? '✅' : c.aiTag==='Not Suitable' && c.stage==='Rejected' ? '✅' : '⚠️'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
+      </div>
     </div>
   )
 }
