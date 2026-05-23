@@ -1,0 +1,46 @@
+
+> ezer-hrms@0.1.0 build
+> next build
+
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of /Users/khushalsharma/package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * /Users/khushalsharma/ezer-hrms/package-lock.json
+
+▲ Next.js 16.2.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+(node:4701) [DEP0205] DeprecationWarning: `module.register()` is deprecated. Use `module.registerHooks()` instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+> Build error occurred
+Error: Turbopack build failed with 1 errors:
+./ezer-hrms/app/dashboard/admin/page.tsx:4:1
+Module not found: Can't resolve './master/page'
+  [90m2 |[0m [36mimport[0m { useState } [36mfrom[0m [32m'react'[0m
+  [90m3 |[0m [36mimport[0m [33mCompanySetup[0m [36mfrom[0m [32m'./CompanySetup'[0m
+[31m[1m>[0m [90m4 |[0m [36mimport[0m [33mMasterSetup[0m [36mfrom[0m [32m'./master/page'[0m
+  [90m  |[0m [31m[1m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m
+  [90m5 |[0m
+  [90m6 |[0m [36mtype[0m [33mTab[0m = [32m'company'[0m | [32m'master'[0m
+  [90m7 |[0m
+
+
+
+Import traces:
+  Client Component Browser:
+    ./ezer-hrms/app/dashboard/admin/page.tsx [Client Component Browser]
+    ./ezer-hrms/app/dashboard/admin/page.tsx [Server Component]
+
+  Client Component SSR:
+    ./ezer-hrms/app/dashboard/admin/page.tsx [Client Component SSR]
+    ./ezer-hrms/app/dashboard/admin/page.tsx [Server Component]
+
+https://nextjs.org/docs/messages/module-not-found
+
+
+    at <unknown> (./ezer-hrms/app/dashboard/admin/page.tsx:4:1)
+    at <unknown> (https://nextjs.org/docs/messages/module-not-found)
