@@ -629,11 +629,11 @@ export default function RecruitmentModule() {
         <Modal title="📋 New Manpower Requisition" sub="MRF number auto-generate hoga" onClose={()=>setShowMRFForm(false)} onSave={saveMRF} saveLabel={saving?'Saving...':'Submit for HR Review →'}>
           <SecHead label="A. Position Details" color="#7C3AED"/>
           <FldRow>
-            <Fld label="Company" req><select style={C.sel} value={mrf.company_id} onChange={e=>setMrf(m=>({...m,company_id:e.target.value}))}><option value="">Select...</option>{companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></Fld>
-            <Fld label="Department"><select style={C.sel} value={mrf.department_id} onChange={e=>setMrf(m=>({...m,department_id:e.target.value}))}><option value="">Select...</option>{departments.map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></Fld>
+            <Fld label="Company" req><select style={C.sel} value={mrf.company_id} onChange={e=>setMrf(m=>({...m,company_id:e.target.value,department_id:'',location_id:''}))}><option value="">Select...</option>{companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></Fld>
+            <Fld label="Department"><select style={C.sel} value={mrf.department_id} onChange={e=>setMrf(m=>({...m,department_id:e.target.value}))}><option value="">Select...</option>{departments.filter((d:any)=>!mrf.company_id||d.company_id===mrf.company_id).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></Fld>
           </FldRow>
           <FldRow>
-            <Fld label="Location"><select style={C.sel} value={mrf.location_id} onChange={e=>setMrf(m=>({...m,location_id:e.target.value}))}><option value="">Select...</option>{locations.filter((l:any)=>!mrf.company_id || l.company_id === mrf.company_id).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}</select></Fld>
+            <Fld label="Location"><select style={C.sel} value={mrf.location_id} onChange={e=>setMrf(m=>({...m,location_id:e.target.value}))}><option value="">Select...</option>{locations.filter((l:any)=>!mrf.company_id||l.company_id===mrf.company_id).map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}</option>)}</select></Fld>
             <Fld label="Position Title" req><input style={C.inp} placeholder="e.g. Senior Executive — Accounts" value={mrf.position} onChange={e=>setMrf(m=>({...m,position:e.target.value}))}/></Fld>
           </FldRow>
           <FldRow>
@@ -662,7 +662,7 @@ export default function RecruitmentModule() {
           <div style={{padding:'8px 12px',background:'#FEF3C7',borderRadius:'8px',fontSize:'11px',color:'#92400E',marginBottom:'14px'}}>
             ⚡ System auto-check: CTC ceiling · Grade · Location auth · MD notification auto-send
           </div>
-          <Fld label="1. Company" req><select style={C.sel} value={qh.company_id} onChange={e=>setQh(q=>({...q,company_id:e.target.value}))}><option value="">Select...</option>{companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></Fld>
+          <Fld label="1. Company" req><select style={C.sel} value={qh.company_id} onChange={e=>setQh(q=>({...q,company_id:e.target.value,location_id:''}))}><option value="">Select...</option>{companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></Fld>
           <div style={{marginBottom:'10px'}}/>
           <Fld label="2. Position Type" req><select style={C.sel} value={qh.position_type} onChange={e=>setQh(q=>({...q,position_type:e.target.value}))}>{['Helper / Unskilled Worker (W1)','Skilled Worker / Operator (W2)','NAPS Apprentice','NATS Graduate Trainee','Intern','Contract Worker'].map(p=><option key={p}>{p}</option>)}</select></Fld>
           <div style={{marginBottom:'10px'}}/>
@@ -683,15 +683,15 @@ export default function RecruitmentModule() {
       {showJobForm&&(
         <Modal title="💼 New Job Opening" sub="MRF se link karo ya directly create karo" onClose={()=>setShowJobForm(false)} onSave={saveJob} saveLabel="Create Job Opening">
           <FldRow>
-            <Fld label="Company" req><select style={C.sel} value={job.company_id} onChange={e=>setJob(j=>({...j,company_id:e.target.value}))}><option value="">Select...</option>{companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></Fld>
+            <Fld label="Company" req><select style={C.sel} value={job.company_id} onChange={e=>setJob(j=>({...j,company_id:e.target.value,department_id:'',location_id:''}))}><option value="">Select...</option>{companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></Fld>
             <Fld label="Link to MRF"><select style={C.sel} value={job.mrf_id} onChange={e=>setJob(j=>({...j,mrf_id:e.target.value}))}><option value="">None (Direct)</option>{mrfs.filter((m:any)=>m.status==='Approved').map((m:any)=><option key={m.id} value={m.id}>{m.mrf_number} — {m.position}</option>)}</select></Fld>
           </FldRow>
           <div style={{marginBottom:'10px'}}>
             <Fld label="Job Title" req><input style={C.inp} placeholder="e.g. Senior Executive — Accounts" value={job.job_title} onChange={e=>setJob(j=>({...j,job_title:e.target.value}))}/></Fld>
           </div>
           <FldRow>
-            <Fld label="Department"><select style={C.sel} value={job.department_id} onChange={e=>setJob(j=>({...j,department_id:e.target.value}))}><option value="">Select...</option>{departments.map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></Fld>
-            <Fld label="Location"><select style={C.sel} value={job.location_id} onChange={e=>setJob(j=>({...j,location_id:e.target.value}))}><option value="">Select...</option>{locations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}</select></Fld>
+            <Fld label="Department"><select style={C.sel} value={job.department_id} onChange={e=>setJob(j=>({...j,department_id:e.target.value}))}><option value="">Select...</option>{departments.filter((d:any)=>!job.company_id||d.company_id===job.company_id).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></Fld>
+            <Fld label="Location"><select style={C.sel} value={job.location_id} onChange={e=>setJob(j=>({...j,location_id:e.target.value}))}><option value="">Select...</option>{locations.filter((l:any)=>!job.company_id||l.company_id===job.company_id).map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}</option>)}</select></Fld>
           </FldRow>
           <FldRow>
             <Fld label="Min Experience (yrs)"><input type="number" style={C.inp} value={job.exp_min} onChange={e=>setJob(j=>({...j,exp_min:+e.target.value}))}/></Fld>
