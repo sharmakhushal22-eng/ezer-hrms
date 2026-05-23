@@ -633,7 +633,7 @@ export default function RecruitmentModule() {
             <Fld label="Department"><select style={C.sel} value={mrf.department_id} onChange={e=>setMrf(m=>({...m,department_id:e.target.value}))}><option value="">Select...</option>{departments.map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></Fld>
           </FldRow>
           <FldRow>
-            <Fld label="Location"><select style={C.sel} value={mrf.location_id} onChange={e=>setMrf(m=>({...m,location_id:e.target.value}))}><option value="">Select...</option>{locations.filter((l:any)=>!mrf.company_id||true).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}</select></Fld>
+            <Fld label="Location"><select style={C.sel} value={mrf.location_id} onChange={e=>setMrf(m=>({...m,location_id:e.target.value}))}><option value="">Select...</option>{locations.filter((l:any)=>!mrf.company_id || l.company_id === mrf.company_id).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}</select></Fld>
             <Fld label="Position Title" req><input style={C.inp} placeholder="e.g. Senior Executive — Accounts" value={mrf.position} onChange={e=>setMrf(m=>({...m,position:e.target.value}))}/></Fld>
           </FldRow>
           <FldRow>
