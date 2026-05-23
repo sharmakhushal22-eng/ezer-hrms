@@ -65,12 +65,8 @@ export async function getCompanies() {
   return data
 }
 
-// getLocations function mein yeh change karo:
 export async function getLocations(company_id?: string) {
-  let q = supabase
-    .from('locations')
-    .select('id, location_code, location_name, location_type, city, state, company_id') // ← company_id add karo
-    .eq('status', 'Active')
+  let q = supabase.from('locations').select('id, location_code, location_name, location_type, city, state, company_id').eq('status', 'Active')
   if (company_id) q = q.eq('company_id', company_id)
   const { data, error } = await q.order('location_name')
   if (error) throw error
