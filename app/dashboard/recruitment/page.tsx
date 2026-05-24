@@ -44,6 +44,7 @@ const STATUS_COLORS: Record<string,{bg:string;color:string}> = {
 }
 const PIPELINE_STAGES: CandidateStage[] = ['Applied','AI Screened','Telephonic','L1 Interview','L2 Interview','Optional','MD Final','Offer Sent','Joined','Rejected']
 
+// ── Sub-components OUTSIDE main function (fixes focus/re-render issue) ──
 const StatCard = ({label,value,color,sub}:{label:string;value:any;color:string;sub?:string}) => (
   <div style={{background:'#fff',border:'1px solid #E2E8F0',borderRadius:'10px',padding:'12px 14px',borderTop:`3px solid ${color}`}}>
     <div style={{fontSize:'10px',color:'#94A3B8',fontWeight:500,textTransform:'uppercase' as const,letterSpacing:'.05em',marginBottom:'3px'}}>{label}</div>
@@ -51,8 +52,49 @@ const StatCard = ({label,value,color,sub}:{label:string;value:any;color:string;s
     {sub && <div style={{fontSize:'10px',color:'#94A3B8',marginTop:'2px'}}>{sub}</div>}
   </div>
 )
-const Spinner = () => <div style={{display:'flex',justifyContent:'center',padding:'40px',color:'#94A3B8',fontSize:'13px'}}>Loading...</div>
 
+const Spinner = () => (
+  <div style={{display:'flex',justifyContent:'center',padding:'40px',color:'#94A3B8',fontSize:'13px'}}>Loading...</div>
+)
+
+const FldRow = ({children}:{children:React.ReactNode}) => (
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px'}}>{children}</div>
+)
+
+const Fld = ({label,req,children}:{label:string;req?:boolean;children:React.ReactNode}) => (
+  <div>
+    <label style={C.lbl}>{label}{req&&<span style={{color:'#DC2626'}}> *</span>}</label>
+    {children}
+  </div>
+)
+
+const SecHead = ({label,color}:{label:string;color:string}) => (
+  <div style={{fontSize:'11px',fontWeight:600 as const,color,textTransform:'uppercase' as const,letterSpacing:'.05em',marginBottom:'8px',paddingBottom:'5px',borderBottom:`2px solid ${color}22`}}>{label}</div>
+)
+
+const Modal = ({title,sub,onClose,children,onSave,saveLabel='Save',saving=false,error=''}:{title:string;sub?:string;onClose:()=>void;children:React.ReactNode;onSave?:()=>void;saveLabel?:string;saving?:boolean;error?:string}) => (
+  <div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+    <div style={{background:'#fff',borderRadius:'14px',padding:'24px',width:'620px',maxHeight:'88vh',overflowY:'auto' as const,boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',marginBottom:'16px'}}>
+        <div>
+          <div style={{fontSize:'15px',fontWeight:600}}>{title}</div>
+          {sub && <div style={{fontSize:'11px',color:'#94A3B8',marginTop:'2px'}}>{sub}</div>}
+        </div>
+        <button onClick={onClose} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'#94A3B8'}}>✕</button>
+      </div>
+      {error && <div style={{padding:'8px 12px',background:'#FEE2E2',borderRadius:'8px',fontSize:'12px',color:'#DC2626',marginBottom:'12px'}}>⚠️ {error}</div>}
+      {children}
+      {onSave && (
+        <div style={{display:'flex',gap:'8px',marginTop:'16px'}}>
+          <button style={{...C.priBtn,flex:1,opacity:saving?0.7:1}} onClick={onSave} disabled={saving}>{saving?'Saving...':saveLabel}</button>
+          <button style={C.secBtn} onClick={onClose}>Cancel</button>
+        </div>
+      )}
+    </div>
+  </div>
+)
+
+// ── Main Component ────────────────────────────────────────────────
 export default function RecruitmentModule() {
   const [tab, setTab] = useState<MainTab>('dashboard')
   const [mrfTab, setMrfTab] = useState<MRFTab>('full')
@@ -73,6 +115,7 @@ export default function RecruitmentModule() {
   const [showCandidateForm, setShowCandidateForm] = useState(false)
   const [selectedCandidate, setSelectedCandidate] = useState<any>(null)
   const [selectedJobId, setSelectedJobId] = useState('')
+
   const [mrf, setMrf] = useState({ company_id:'', position:'', department_id:'', location_id:'', openings:1, urgency:'Normal', reason:'New Position', remarks:'' })
   const [qh, setQh] = useState({ company_id:'', position_type:'Helper / Unskilled Worker (W1)', location_id:'', openings:1, joining_date:'', reason:'New Requirement' })
   const [job, setJob] = useState({ company_id:'', mrf_id:'', job_title:'', department_id:'', location_id:'', exp_min:0, exp_max:5, sal_min:600000, sal_max:1000000, employment_type:'Permanent', skills:'', jd_text:'', openings_count:1 })
@@ -80,9 +123,11 @@ export default function RecruitmentModule() {
 
   const fetchFormData = async (company_id: string) => {
     if (!company_id) { setFormLocations([]); setFormDepts([]); return }
-    const [lo, de] = await Promise.all([getLocations(company_id), getDepartments(company_id)])
-    setFormLocations(lo || [])
-    setFormDepts(de || [])
+    try {
+      const [lo, de] = await Promise.all([getLocations(company_id), getDepartments(company_id)])
+      setFormLocations(lo || [])
+      setFormDepts(de || [])
+    } catch(e) { console.error('fetchFormData error:', e) }
   }
 
   const loadDashboard = useCallback(async () => {
@@ -90,20 +135,24 @@ export default function RecruitmentModule() {
     try { const [s,p] = await Promise.all([getRecruitmentStats(), getPipelineCounts()]); setStats(s); setPipelineCounts(p) }
     catch { setError('Dashboard load failed') } finally { setLoading(false) }
   }, [])
+
   const loadMRFs = useCallback(async () => {
     setLoading(true)
     try { setMrfs(await getMRFs()) } catch { setError('MRF load failed') } finally { setLoading(false) }
   }, [])
+
   const loadJobs = useCallback(async () => {
     setLoading(true)
     try { setJobs(await getJobOpenings()) } catch { setError('Jobs load failed') } finally { setLoading(false) }
   }, [])
+
   const loadCandidates = useCallback(async () => {
     setLoading(true)
     try { setCandidates(await getCandidates()) } catch { setError('Candidates load failed') } finally { setLoading(false) }
   }, [])
+
   const loadMeta = useCallback(async () => {
-    try { const [co] = await Promise.all([getCompanies()]); setCompanies(co || []) } catch {}
+    try { const co = await getCompanies(); setCompanies(co || []) } catch {}
   }, [])
 
   useEffect(() => { loadMeta() }, [])
@@ -119,25 +168,37 @@ export default function RecruitmentModule() {
     setSaving(true); setError('')
     try {
       await createMRF({ company_id:mrf.company_id, position:mrf.position, department_id:mrf.department_id||undefined, location_id:mrf.location_id||undefined, openings:mrf.openings, urgency:mrf.urgency, reason:mrf.reason, remarks:mrf.remarks })
-      setShowMRFForm(false); setMrf({company_id:'',position:'',department_id:'',location_id:'',openings:1,urgency:'Normal',reason:'New Position',remarks:''}); setFormLocations([]); setFormDepts([]); loadMRFs()
+      setShowMRFForm(false)
+      setMrf({company_id:'',position:'',department_id:'',location_id:'',openings:1,urgency:'Normal',reason:'New Position',remarks:''})
+      setFormLocations([]); setFormDepts([])
+      loadMRFs()
     } catch(e:any) { setError(e.message || 'MRF save failed') } finally { setSaving(false) }
   }
+
   const saveQuickHire = async () => {
     if(!qh.company_id || !qh.location_id) { setError('Company and Location are required'); return }
     setSaving(true); setError('')
     try {
       await createMRF({ company_id:qh.company_id, position:qh.position_type, location_id:qh.location_id, openings:qh.openings, urgency:'Immediate', reason:qh.reason, remarks:`Quick Hire · Joining: ${qh.joining_date}` }, true)
-      setShowQuickForm(false); setQh({company_id:'',position_type:'Helper / Unskilled Worker (W1)',location_id:'',openings:1,joining_date:'',reason:'New Requirement'}); setFormLocations([]); setFormDepts([]); loadMRFs()
+      setShowQuickForm(false)
+      setQh({company_id:'',position_type:'Helper / Unskilled Worker (W1)',location_id:'',openings:1,joining_date:'',reason:'New Requirement'})
+      setFormLocations([]); setFormDepts([])
+      loadMRFs()
     } catch(e:any) { setError(e.message || 'Quick Hire save failed') } finally { setSaving(false) }
   }
+
   const saveJob = async () => {
     if(!job.company_id || !job.job_title) { setError('Company and Job Title are required'); return }
     setSaving(true); setError('')
     try {
       await createJobOpening({ company_id:job.company_id, mrf_id:job.mrf_id||undefined, job_title:job.job_title, department_id:job.department_id||undefined, location_id:job.location_id||undefined, experience_min:job.exp_min, experience_max:job.exp_max, salary_min:job.sal_min, salary_max:job.sal_max, employment_type:job.employment_type, skills_required:job.skills.split(',').map(s=>s.trim()).filter(Boolean), jd_text:job.jd_text, openings_count:job.openings_count })
-      setShowJobForm(false); setJob({company_id:'',mrf_id:'',job_title:'',department_id:'',location_id:'',exp_min:0,exp_max:5,sal_min:600000,sal_max:1000000,employment_type:'Permanent',skills:'',jd_text:'',openings_count:1}); setFormLocations([]); setFormDepts([]); loadJobs()
+      setShowJobForm(false)
+      setJob({company_id:'',mrf_id:'',job_title:'',department_id:'',location_id:'',exp_min:0,exp_max:5,sal_min:600000,sal_max:1000000,employment_type:'Permanent',skills:'',jd_text:'',openings_count:1})
+      setFormLocations([]); setFormDepts([])
+      loadJobs()
     } catch(e:any) { setError(e.message || 'Job save failed') } finally { setSaving(false) }
   }
+
   const saveCandidate = async () => {
     if(!cand.full_name || !cand.phone || !cand.job_id) { setError('Name, Phone and Job are required'); return }
     setSaving(true); setError('')
@@ -145,12 +206,16 @@ export default function RecruitmentModule() {
       const dups = await checkDuplicate(cand.phone, cand.email)
       if(dups.length > 0) { if(!confirm(`⚠️ ${cand.phone} has already applied. Add anyway?`)) { setSaving(false); return } }
       await addCandidate({ job_id:cand.job_id, company_id:cand.company_id, full_name:cand.full_name, email:cand.email, phone:cand.phone, source:cand.source, current_company:cand.current_company, current_ctc:cand.current_ctc, expected_ctc:cand.expected_ctc, notice_period:cand.notice_period, experience_years:cand.experience_years })
-      setShowCandidateForm(false); setCand({job_id:'',company_id:'',full_name:'',email:'',phone:'',source:'Naukri',current_company:'',current_ctc:0,expected_ctc:0,notice_period:30,experience_years:0}); loadCandidates()
+      setShowCandidateForm(false)
+      setCand({job_id:'',company_id:'',full_name:'',email:'',phone:'',source:'Naukri',current_company:'',current_ctc:0,expected_ctc:0,notice_period:30,experience_years:0})
+      loadCandidates()
     } catch(e:any) { setError(e.message || 'Candidate add failed') } finally { setSaving(false) }
   }
+
   const moveStage = async (id:string, stage:string) => {
     try { await updateCandidateStage(id, stage); loadCandidates() } catch { setError('Stage update failed') }
   }
+
   const approveMRF = async (id:string, status:string) => {
     try { await updateMRFStatus(id, status); loadMRFs() } catch { setError('Status update failed') }
   }
@@ -161,35 +226,6 @@ export default function RecruitmentModule() {
     {id:'interviews',label:'📅 Interviews'},{id:'offers',label:'📄 Offers'},
     {id:'ai',label:'🤖 AI Screening'},{id:'analytics',label:'📈 Analytics'},
   ]
-
-  const Modal = ({title,sub,onClose,children,onSave,saveLabel='Save'}:{title:string;sub?:string;onClose:()=>void;children:any;onSave?:()=>void;saveLabel?:string}) => (
-    <div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
-      <div style={{background:'#fff',borderRadius:'14px',padding:'24px',width:'620px',maxHeight:'88vh',overflowY:'auto' as const,boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
-        <div style={{display:'flex',justifyContent:'space-between',marginBottom:'16px'}}>
-          <div>
-            <div style={{fontSize:'15px',fontWeight:600}}>{title}</div>
-            {sub && <div style={{fontSize:'11px',color:'#94A3B8',marginTop:'2px'}}>{sub}</div>}
-          </div>
-          <button onClick={onClose} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'#94A3B8'}}>✕</button>
-        </div>
-        {error && <div style={{padding:'8px 12px',background:'#FEE2E2',borderRadius:'8px',fontSize:'12px',color:'#DC2626',marginBottom:'12px'}}>⚠️ {error}</div>}
-        {children}
-        {onSave && (
-          <div style={{display:'flex',gap:'8px',marginTop:'16px'}}>
-            <button style={{...C.priBtn,flex:1,opacity:saving?0.7:1}} onClick={onSave} disabled={saving}>{saving?'Saving...':saveLabel}</button>
-            <button style={C.secBtn} onClick={onClose}>Cancel</button>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-  const FldRow = ({children}:{children:any}) => <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px'}}>{children}</div>
-  const Fld = ({label,req,children}:{label:string;req?:boolean;children:any}) => (
-    <div><label style={C.lbl}>{label}{req&&<span style={{color:'#DC2626'}}> *</span>}</label>{children}</div>
-  )
-  const SecHead = ({label,color}:{label:string;color:string}) => (
-    <div style={{fontSize:'11px',fontWeight:600,color,textTransform:'uppercase' as const,letterSpacing:'.05em',marginBottom:'8px',paddingBottom:'5px',borderBottom:`2px solid ${color}22`}}>{label}</div>
-  )
 
   return (
     <div style={C.page}>
@@ -202,7 +238,10 @@ export default function RecruitmentModule() {
           {tab==='pipeline' && <button style={C.priBtn} onClick={()=>{setError('');setShowCandidateForm(true)}}>+ Add Candidate</button>}
         </div>
       </div>
-      <div style={C.nav}>{tabs.map(t=>(<button key={t.id} style={C.navBtn(tab===t.id)} onClick={()=>setTab(t.id as MainTab)}>{t.label}</button>))}</div>
+
+      <div style={C.nav}>
+        {tabs.map(t=>(<button key={t.id} style={C.navBtn(tab===t.id)} onClick={()=>setTab(t.id as MainTab)}>{t.label}</button>))}
+      </div>
 
       <div style={C.body}>
         {error && tab!=='mrf' && (
@@ -211,55 +250,55 @@ export default function RecruitmentModule() {
           </div>
         )}
 
+        {/* DASHBOARD */}
         {tab==='dashboard' && (
-          loading ? <Spinner/> : (
-            <>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'10px',marginBottom:'14px'}}>
-                <StatCard label="Open Positions" value={stats.openJobs||0} color="#7C3AED"/>
-                <StatCard label="Total Openings" value={stats.totalOpenings||0} color="#1D4ED8"/>
-                <StatCard label="Active Candidates" value={stats.totalCandidates||0} color="#D97706"/>
-                <StatCard label="Offers Sent" value={stats.offers||0} color="#0D9488"/>
-                <StatCard label="Joined This Month" value={stats.joined||0} color="#16A34A"/>
-              </div>
+          loading ? <Spinner/> : <>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'10px',marginBottom:'14px'}}>
+              <StatCard label="Open Positions" value={stats.openJobs||0} color="#7C3AED"/>
+              <StatCard label="Total Openings" value={stats.totalOpenings||0} color="#1D4ED8"/>
+              <StatCard label="Active Candidates" value={stats.totalCandidates||0} color="#D97706"/>
+              <StatCard label="Offers Sent" value={stats.offers||0} color="#0D9488"/>
+              <StatCard label="Joined This Month" value={stats.joined||0} color="#16A34A"/>
+            </div>
+            <div style={C.card}>
+              <div style={{fontSize:'13px',fontWeight:600,marginBottom:'12px'}}>Candidate Pipeline</div>
+              {PIPELINE_STAGES.map(stage=>(
+                <div key={stage} style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'8px'}}>
+                  <div style={{fontSize:'11px',color:'#64748B',width:'110px',flexShrink:0}}>{stage}</div>
+                  <div style={{flex:1,background:'#F1F5F9',borderRadius:'4px',height:'22px',overflow:'hidden'}}>
+                    {(pipelineCounts[stage]||0)>0
+                      ? <div style={{width:`${Math.min(((pipelineCounts[stage]||0)/Math.max(...Object.values(pipelineCounts),1))*100,100)}%`,background:STAGE_COLORS[stage]?.color||'#7C3AED',height:'100%',borderRadius:'4px',display:'flex',alignItems:'center',paddingLeft:'8px',minWidth:'30px'}}>
+                          <span style={{fontSize:'10px',color:'#fff',fontWeight:600}}>{pipelineCounts[stage]}</span>
+                        </div>
+                      : <div style={{padding:'3px 8px',fontSize:'10px',color:'#94A3B8'}}>0</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
               <div style={C.card}>
-                <div style={{fontSize:'13px',fontWeight:600,marginBottom:'12px'}}>Candidate Pipeline</div>
-                {PIPELINE_STAGES.map(stage=>(
-                  <div key={stage} style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'8px'}}>
-                    <div style={{fontSize:'11px',color:'#64748B',width:'110px',flexShrink:0}}>{stage}</div>
-                    <div style={{flex:1,background:'#F1F5F9',borderRadius:'4px',height:'22px',overflow:'hidden'}}>
-                      {(pipelineCounts[stage]||0)>0
-                        ? <div style={{width:`${Math.min(((pipelineCounts[stage]||0)/Math.max(...Object.values(pipelineCounts),1))*100,100)}%`,background:STAGE_COLORS[stage]?.color||'#7C3AED',height:'100%',borderRadius:'4px',display:'flex',alignItems:'center',paddingLeft:'8px',minWidth:'30px'}}><span style={{fontSize:'10px',color:'#fff',fontWeight:600}}>{pipelineCounts[stage]}</span></div>
-                        : <div style={{padding:'3px 8px',fontSize:'10px',color:'#94A3B8'}}>0</div>}
-                    </div>
+                <div style={{fontSize:'13px',fontWeight:600,marginBottom:'10px'}}>Open MRFs</div>
+                {mrfs.filter(m=>m.status==='Approved').slice(0,4).map((m:any)=>(
+                  <div key={m.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #F1F5F9',fontSize:'12px'}}>
+                    <span>{m.position}</span><span style={{color:'#7C3AED',fontSize:'11px'}}>{m.mrf_number}</span>
                   </div>
                 ))}
+                {!mrfs.filter(m=>m.status==='Approved').length && <div style={{fontSize:'12px',color:'#94A3B8'}}>No approved MRFs yet</div>}
               </div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
-                <div style={C.card}>
-                  <div style={{fontSize:'13px',fontWeight:600,marginBottom:'10px'}}>Open MRFs</div>
-                  {mrfs.filter(m=>m.status==='Approved').slice(0,4).map((m:any)=>(
-                    <div key={m.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #F1F5F9',fontSize:'12px'}}>
-                      <span style={{color:'#374151'}}>{m.position}</span>
-                      <span style={{color:'#7C3AED',fontSize:'11px'}}>{m.mrf_number}</span>
-                    </div>
-                  ))}
-                  {mrfs.filter(m=>m.status==='Approved').length===0 && <div style={{fontSize:'12px',color:'#94A3B8'}}>No approved MRFs yet</div>}
-                </div>
-                <div style={C.card}>
-                  <div style={{fontSize:'13px',fontWeight:600,marginBottom:'10px'}}>Recent Jobs</div>
-                  {jobs.slice(0,4).map((j:any)=>(
-                    <div key={j.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #F1F5F9',fontSize:'12px'}}>
-                      <span style={{color:'#374151'}}>{j.job_title}</span>
-                      <span style={{padding:'1px 6px',background:'#DCFCE7',color:'#16A34A',borderRadius:'4px',fontSize:'10px'}}>{j.status}</span>
-                    </div>
-                  ))}
-                  {jobs.length===0 && <div style={{fontSize:'12px',color:'#94A3B8'}}>No job openings yet</div>}
-                </div>
+              <div style={C.card}>
+                <div style={{fontSize:'13px',fontWeight:600,marginBottom:'10px'}}>Recent Jobs</div>
+                {jobs.slice(0,4).map((j:any)=>(
+                  <div key={j.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #F1F5F9',fontSize:'12px'}}>
+                    <span>{j.job_title}</span><span style={{padding:'1px 6px',background:'#DCFCE7',color:'#16A34A',borderRadius:'4px',fontSize:'10px'}}>{j.status}</span>
+                  </div>
+                ))}
+                {!jobs.length && <div style={{fontSize:'12px',color:'#94A3B8'}}>No job openings yet</div>}
               </div>
-            </>
-          )
+            </div>
+          </>
         )}
 
+        {/* MRF */}
         {tab==='mrf' && (
           <div>
             <div style={{...C.card,display:'flex',gap:'8px',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
@@ -268,7 +307,7 @@ export default function RecruitmentModule() {
                   <button key={t.id} onClick={()=>setMrfTab(t.id as MRFTab)} style={{padding:'7px 16px',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:mrfTab===t.id?600:400,background:mrfTab===t.id?'#7C3AED':'#F8FAFC',color:mrfTab===t.id?'#fff':'#64748B'}}>{t.label}</button>
                 ))}
               </div>
-              <div style={{fontSize:'11px',color:'#94A3B8'}}>{mrfTab==='full'?'CTC ≥ ₹6L · MD Approval':'CTC < ₹6L · Site HR Approve · W1/W2/NAPS'}</div>
+              <div style={{fontSize:'11px',color:'#94A3B8'}}>{mrfTab==='full'?'CTC ≥ ₹6L · MD Approval':'CTC < ₹6L · Site HR · W1/W2/NAPS'}</div>
             </div>
             {loading?<Spinner/>:(
               <div style={C.card}>
@@ -304,7 +343,7 @@ export default function RecruitmentModule() {
                           </td>
                         </tr>
                       ))}
-                      {mrfs.filter(m=>mrfTab==='full'?!m.mrf_number?.startsWith('QH'):m.mrf_number?.startsWith('QH')).length===0&&(
+                      {!mrfs.filter(m=>mrfTab==='full'?!m.mrf_number?.startsWith('QH'):m.mrf_number?.startsWith('QH')).length&&(
                         <tr><td colSpan={8} style={{padding:'24px',textAlign:'center' as const,color:'#94A3B8',fontSize:'12px'}}>No {mrfTab==='full'?'MRFs':'Quick Hire requests'} yet</td></tr>
                       )}
                     </tbody>
@@ -315,51 +354,51 @@ export default function RecruitmentModule() {
           </div>
         )}
 
+        {/* JOBS */}
         {tab==='jobs' && (
-          loading?<Spinner/>:(
-            <>
-              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'14px'}}>
-                <StatCard label="Open Jobs" value={jobs.filter((j:any)=>j.status==='Open').length} color="#7C3AED"/>
-                <StatCard label="Total Openings" value={jobs.reduce((s:number,j:any)=>s+(j.openings_count||1),0)} color="#1D4ED8"/>
-                <StatCard label="Total Candidates" value={candidates.length} color="#16A34A"/>
+          loading?<Spinner/>:<>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'14px'}}>
+              <StatCard label="Open Jobs" value={jobs.filter((j:any)=>j.status==='Open').length} color="#7C3AED"/>
+              <StatCard label="Total Openings" value={jobs.reduce((s:number,j:any)=>s+(j.openings_count||1),0)} color="#1D4ED8"/>
+              <StatCard label="Total Candidates" value={candidates.length} color="#16A34A"/>
+            </div>
+            {!jobs.length?(
+              <div style={{...C.card,textAlign:'center' as const,padding:'40px'}}>
+                <div style={{fontSize:'28px',marginBottom:'8px'}}>💼</div>
+                <div style={{fontSize:'14px',fontWeight:500,marginBottom:'4px'}}>No Job Openings Yet</div>
+                <div style={{fontSize:'12px',color:'#94A3B8',marginBottom:'16px'}}>Create a Job Opening after MRF is approved</div>
+                <button style={C.priBtn} onClick={()=>setShowJobForm(true)}>+ Create Job Opening</button>
               </div>
-              {jobs.length===0?(
-                <div style={{...C.card,textAlign:'center' as const,padding:'40px'}}>
-                  <div style={{fontSize:'28px',marginBottom:'8px'}}>💼</div>
-                  <div style={{fontSize:'14px',fontWeight:500,marginBottom:'4px'}}>No Job Openings Yet</div>
-                  <div style={{fontSize:'12px',color:'#94A3B8',marginBottom:'16px'}}>Create a Job Opening after MRF is approved</div>
-                  <button style={C.priBtn} onClick={()=>setShowJobForm(true)}>+ Create Job Opening</button>
-                </div>
-              ):(
-                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:'12px'}}>
-                  {jobs.map((j:any)=>(
-                    <div key={j.id} style={{...C.card,borderTop:'3px solid #7C3AED',cursor:'pointer'}}>
-                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:'8px'}}>
-                        <div>
-                          <div style={{fontSize:'13px',fontWeight:600}}>{j.job_title}</div>
-                          <div style={{fontSize:'11px',color:'#64748B',marginTop:'2px'}}>{j.departments?.dept_name||'—'} · {j.locations?.location_name||'—'}</div>
-                        </div>
-                        <span style={{padding:'3px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:500,...(STATUS_COLORS[j.status]||{bg:'#F1F5F9',color:'#374151'})}}>{j.status}</span>
+            ):(
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:'12px'}}>
+                {jobs.map((j:any)=>(
+                  <div key={j.id} style={{...C.card,borderTop:'3px solid #7C3AED'}}>
+                    <div style={{display:'flex',justifyContent:'space-between',marginBottom:'8px'}}>
+                      <div>
+                        <div style={{fontSize:'13px',fontWeight:600}}>{j.job_title}</div>
+                        <div style={{fontSize:'11px',color:'#64748B',marginTop:'2px'}}>{j.departments?.dept_name||'—'} · {j.locations?.location_name||'—'}</div>
                       </div>
-                      <div style={{display:'flex',gap:'6px',flexWrap:'wrap' as const,marginBottom:'10px'}}>
-                        <span style={{padding:'2px 7px',background:'#EDE9FE',color:'#7C3AED',borderRadius:'5px',fontSize:'10px'}}>{j.companies?.company_code}</span>
-                        <span style={{padding:'2px 7px',background:'#F1F5F9',color:'#374151',borderRadius:'5px',fontSize:'10px'}}>{j.experience_min}-{j.experience_max}y</span>
-                        <span style={{padding:'2px 7px',background:'#F1F5F9',color:'#374151',borderRadius:'5px',fontSize:'10px'}}>₹{((j.salary_min||0)/100000).toFixed(1)}L-₹{((j.salary_max||0)/100000).toFixed(1)}L</span>
-                        <span style={{padding:'2px 7px',background:'#F1F5F9',color:'#374151',borderRadius:'5px',fontSize:'10px'}}>{j.openings_count} openings</span>
-                      </div>
-                      <div style={{display:'flex',gap:'6px'}}>
-                        <button onClick={()=>{setSelectedJobId(j.id);setTab('pipeline')}} style={{flex:1,padding:'7px',background:'#EDE9FE',border:'none',borderRadius:'7px',cursor:'pointer',fontSize:'11px',color:'#7C3AED',fontWeight:500}}>View Pipeline</button>
-                        {j.status==='Open'&&<button onClick={()=>updateJobStatus(j.id,'Closed').then(loadJobs)} style={{padding:'7px 12px',background:'#FEE2E2',border:'none',borderRadius:'7px',cursor:'pointer',fontSize:'11px',color:'#DC2626'}}>Close</button>}
-                      </div>
-                      <div style={{fontSize:'10px',color:'#94A3B8',marginTop:'8px'}}>Posted: {j.posted_date||'—'}</div>
+                      <span style={{padding:'3px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:500,...(STATUS_COLORS[j.status]||{bg:'#F1F5F9',color:'#374151'})}}>{j.status}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )
+                    <div style={{display:'flex',gap:'6px',flexWrap:'wrap' as const,marginBottom:'10px'}}>
+                      <span style={{padding:'2px 7px',background:'#EDE9FE',color:'#7C3AED',borderRadius:'5px',fontSize:'10px'}}>{j.companies?.company_code}</span>
+                      <span style={{padding:'2px 7px',background:'#F1F5F9',color:'#374151',borderRadius:'5px',fontSize:'10px'}}>{j.experience_min}-{j.experience_max}y</span>
+                      <span style={{padding:'2px 7px',background:'#F1F5F9',color:'#374151',borderRadius:'5px',fontSize:'10px'}}>₹{((j.salary_min||0)/100000).toFixed(1)}L-₹{((j.salary_max||0)/100000).toFixed(1)}L</span>
+                      <span style={{padding:'2px 7px',background:'#F1F5F9',color:'#374151',borderRadius:'5px',fontSize:'10px'}}>{j.openings_count} openings</span>
+                    </div>
+                    <div style={{display:'flex',gap:'6px'}}>
+                      <button onClick={()=>{setSelectedJobId(j.id);setTab('pipeline')}} style={{flex:1,padding:'7px',background:'#EDE9FE',border:'none',borderRadius:'7px',cursor:'pointer',fontSize:'11px',color:'#7C3AED',fontWeight:500}}>View Pipeline</button>
+                      {j.status==='Open'&&<button onClick={()=>updateJobStatus(j.id,'Closed').then(loadJobs)} style={{padding:'7px 12px',background:'#FEE2E2',border:'none',borderRadius:'7px',cursor:'pointer',fontSize:'11px',color:'#DC2626'}}>Close</button>}
+                    </div>
+                    <div style={{fontSize:'10px',color:'#94A3B8',marginTop:'8px'}}>Posted: {j.posted_date||'—'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
 
+        {/* PIPELINE */}
         {tab==='pipeline' && (
           <div>
             <div style={{...C.card,display:'flex',gap:'8px',alignItems:'center',marginBottom:'12px'}}>
@@ -385,8 +424,7 @@ export default function RecruitmentModule() {
                           <div style={{fontSize:'12px',fontWeight:600,marginBottom:'2px'}}>{c.full_name}</div>
                           <div style={{fontSize:'10px',color:'#64748B',marginBottom:'5px'}}>{c.current_company||'—'} · {c.experience_years}y</div>
                           {c.ai_tag&&<span style={{padding:'1px 6px',borderRadius:'4px',fontSize:'9px',fontWeight:600,...(AI_COLORS[c.ai_tag]||{bg:'#F1F5F9',color:'#374151'})}}>{c.ai_tag}</span>}
-                          {c.ai_score&&<span style={{marginLeft:'4px',fontSize:'10px',fontWeight:700,color:c.ai_score>=75?'#16A34A':c.ai_score>=50?'#D97706':'#DC2626'}}>{c.ai_score}%</span>}
-                          <div style={{fontSize:'9px',color:'#94A3B8',marginTop:'4px'}}>{c.source} · ₹{((c.expected_ctc||0)/100000).toFixed(1)}L exp</div>
+                          <div style={{fontSize:'9px',color:'#94A3B8',marginTop:'4px'}}>{c.source} · ₹{((c.expected_ctc||0)/100000).toFixed(1)}L</div>
                         </div>
                       ))}
                       <button style={{width:'100%',padding:'6px',background:'transparent',border:'1px dashed #E2E8F0',borderRadius:'8px',cursor:'pointer',fontSize:'10px',color:'#94A3B8'}}>+ Add</button>
@@ -436,6 +474,7 @@ export default function RecruitmentModule() {
           </div>
         )}
 
+        {/* COMING SOON TABS */}
         {['interviews','offers','ai','analytics'].includes(tab) && (
           <div style={{...C.card,textAlign:'center' as const,padding:'48px'}}>
             <div style={{fontSize:'32px',marginBottom:'12px'}}>{tab==='interviews'?'📅':tab==='offers'?'📄':tab==='ai'?'🤖':'📈'}</div>
@@ -451,8 +490,9 @@ export default function RecruitmentModule() {
         )}
       </div>
 
+      {/* FULL MRF MODAL */}
       {showMRFForm&&(
-        <Modal title="📋 New Manpower Requisition" sub="MRF number will be auto-generated" onClose={()=>setShowMRFForm(false)} onSave={saveMRF} saveLabel={saving?'Saving...':'Submit for HR Review →'}>
+        <Modal title="📋 New Manpower Requisition" sub="MRF number will be auto-generated" onClose={()=>setShowMRFForm(false)} onSave={saveMRF} saveLabel="Submit for HR Review →" saving={saving} error={error}>
           <SecHead label="A. Position Details" color="#7C3AED"/>
           <FldRow>
             <Fld label="Company" req>
@@ -472,18 +512,34 @@ export default function RecruitmentModule() {
             <Fld label="Location">
               <select style={C.sel} value={mrf.location_id} onChange={e=>setMrf(m=>({...m,location_id:e.target.value}))}>
                 <option value="">{mrf.company_id?'Select location...':'Select company first'}</option>
-                {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}, {l.state}</option>)}
+                {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}</option>)}
               </select>
             </Fld>
-            <Fld label="Position Title" req><input style={C.inp} autoComplete="off" placeholder="e.g. Senior Executive — Accounts" value={mrf.position} onChange={e=>setMrf(m=>({...m,position:e.target.value}))}/></Fld>
+            <Fld label="Position Title" req>
+              <input
+                style={C.inp}
+                autoComplete="off"
+                placeholder="e.g. Senior Executive — Accounts"
+                value={mrf.position}
+                onChange={e=>setMrf(m=>({...m,position:e.target.value}))}
+              />
+            </Fld>
           </FldRow>
           <FldRow>
-            <Fld label="No. of Positions" req><input type="number" style={C.inp} min="1" value={mrf.openings} onChange={e=>setMrf(m=>({...m,openings:parseInt(e.target.value)||1}))}/></Fld>
-            <Fld label="Urgency" req><select style={C.sel} value={mrf.urgency} onChange={e=>setMrf(m=>({...m,urgency:e.target.value}))}>{['Immediate','Urgent','Normal'].map(u=><option key={u}>{u}</option>)}</select></Fld>
+            <Fld label="No. of Positions" req>
+              <input type="number" style={C.inp} min="1" value={mrf.openings} onChange={e=>setMrf(m=>({...m,openings:parseInt(e.target.value)||1}))}/>
+            </Fld>
+            <Fld label="Urgency" req>
+              <select style={C.sel} value={mrf.urgency} onChange={e=>setMrf(m=>({...m,urgency:e.target.value}))}>
+                {['Immediate','Urgent','Normal'].map(u=><option key={u}>{u}</option>)}
+              </select>
+            </Fld>
           </FldRow>
           <div style={{marginBottom:'10px'}}>
             <SecHead label="B. Reason" color="#1D4ED8"/>
-            <select style={C.sel} value={mrf.reason} onChange={e=>setMrf(m=>({...m,reason:e.target.value}))}>{['New Position','Replacement','Expansion','Seasonal'].map(r=><option key={r}>{r}</option>)}</select>
+            <select style={C.sel} value={mrf.reason} onChange={e=>setMrf(m=>({...m,reason:e.target.value}))}>
+              {['New Position','Replacement','Expansion','Seasonal'].map(r=><option key={r}>{r}</option>)}
+            </select>
           </div>
           <div style={{marginBottom:'10px'}}>
             <SecHead label="C. Remarks / Justification" color="#16A34A"/>
@@ -493,8 +549,9 @@ export default function RecruitmentModule() {
         </Modal>
       )}
 
+      {/* QUICK HIRE MODAL */}
       {showQuickForm&&(
-        <Modal title="⚡ Quick Hire" sub="CTC < ₹6L · Site HR / Plant Head · 5 fields only" onClose={()=>setShowQuickForm(false)} onSave={saveQuickHire} saveLabel="✅ Approve & Create Opening">
+        <Modal title="⚡ Quick Hire" sub="CTC < ₹6L · Site HR / Plant Head · 5 fields only" onClose={()=>setShowQuickForm(false)} onSave={saveQuickHire} saveLabel="✅ Approve & Create Opening" saving={saving} error={error}>
           <div style={{padding:'8px 12px',background:'#FEF3C7',borderRadius:'8px',fontSize:'11px',color:'#92400E',marginBottom:'14px'}}>⚡ Select company → Only that company's locations will appear</div>
           <Fld label="1. Company" req>
             <select style={C.sel} value={qh.company_id} onChange={e=>{const cid=e.target.value;setQh(q=>({...q,company_id:cid,location_id:''}));fetchFormData(cid)}}>
@@ -517,8 +574,12 @@ export default function RecruitmentModule() {
           </Fld>
           <div style={{marginBottom:'10px'}}/>
           <FldRow>
-            <Fld label="4. No. of Positions" req><input type="number" style={C.inp} min="1" max="50" value={qh.openings} onChange={e=>setQh(q=>({...q,openings:parseInt(e.target.value)||1}))}/></Fld>
-            <Fld label="5. Expected Joining Date"><input type="date" style={C.inp} value={qh.joining_date} onChange={e=>setQh(q=>({...q,joining_date:e.target.value}))}/></Fld>
+            <Fld label="4. No. of Positions" req>
+              <input type="number" style={C.inp} min="1" max="50" value={qh.openings} onChange={e=>setQh(q=>({...q,openings:parseInt(e.target.value)||1}))}/>
+            </Fld>
+            <Fld label="5. Expected Joining Date">
+              <input type="date" style={C.inp} value={qh.joining_date} onChange={e=>setQh(q=>({...q,joining_date:e.target.value}))}/>
+            </Fld>
           </FldRow>
           <Fld label="Reason">
             <select style={C.sel} value={qh.reason} onChange={e=>setQh(q=>({...q,reason:e.target.value}))}>
@@ -528,8 +589,9 @@ export default function RecruitmentModule() {
         </Modal>
       )}
 
+      {/* JOB OPENING MODAL */}
       {showJobForm&&(
-        <Modal title="💼 New Job Opening" sub="Link to MRF or create directly" onClose={()=>setShowJobForm(false)} onSave={saveJob} saveLabel="Create Job Opening">
+        <Modal title="💼 New Job Opening" sub="Link to MRF or create directly" onClose={()=>setShowJobForm(false)} onSave={saveJob} saveLabel="Create Job Opening" saving={saving} error={error}>
           <FldRow>
             <Fld label="Company" req>
               <select style={C.sel} value={job.company_id} onChange={e=>{const cid=e.target.value;setJob(j=>({...j,company_id:cid,department_id:'',location_id:''}));fetchFormData(cid)}}>
@@ -545,7 +607,9 @@ export default function RecruitmentModule() {
             </Fld>
           </FldRow>
           <div style={{marginBottom:'10px'}}>
-            <Fld label="Job Title" req><input style={C.inp} placeholder="e.g. Senior Executive — Accounts" value={job.job_title} onChange={e=>setJob(j=>({...j,job_title:e.target.value}))}/></Fld>
+            <Fld label="Job Title" req>
+              <input style={C.inp} autoComplete="off" placeholder="e.g. Senior Executive — Accounts" value={job.job_title} onChange={e=>setJob(j=>({...j,job_title:e.target.value}))}/>
+            </Fld>
           </div>
           <FldRow>
             <Fld label="Department">
@@ -557,7 +621,7 @@ export default function RecruitmentModule() {
             <Fld label="Location">
               <select style={C.sel} value={job.location_id} onChange={e=>setJob(j=>({...j,location_id:e.target.value}))}>
                 <option value="">{job.company_id?'Select location...':'Select company first'}</option>
-                {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}, {l.state}</option>)}
+                {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}</option>)}
               </select>
             </Fld>
           </FldRow>
@@ -570,18 +634,27 @@ export default function RecruitmentModule() {
             <Fld label="CTC Max (₹)"><input type="number" style={C.inp} value={job.sal_max} onChange={e=>setJob(j=>({...j,sal_max:+e.target.value}))}/></Fld>
           </FldRow>
           <FldRow>
-            <Fld label="Employment Type"><select style={C.sel} value={job.employment_type} onChange={e=>setJob(j=>({...j,employment_type:e.target.value}))}>{['Permanent','Contract','Intern','NAPS','NATS'].map(t=><option key={t}>{t}</option>)}</select></Fld>
+            <Fld label="Employment Type">
+              <select style={C.sel} value={job.employment_type} onChange={e=>setJob(j=>({...j,employment_type:e.target.value}))}>
+                {['Permanent','Contract','Intern','NAPS','NATS'].map(t=><option key={t}>{t}</option>)}
+              </select>
+            </Fld>
             <Fld label="No. of Openings"><input type="number" style={C.inp} value={job.openings_count} onChange={e=>setJob(j=>({...j,openings_count:+e.target.value}))}/></Fld>
           </FldRow>
           <div style={{marginBottom:'10px'}}>
-            <Fld label="Required Skills (comma separated)"><input style={C.inp} placeholder="e.g. Tally, GST, MS Excel" value={job.skills} onChange={e=>setJob(j=>({...j,skills:e.target.value}))}/></Fld>
+            <Fld label="Required Skills (comma separated)">
+              <input style={C.inp} autoComplete="off" placeholder="e.g. Tally, GST, MS Excel" value={job.skills} onChange={e=>setJob(j=>({...j,skills:e.target.value}))}/>
+            </Fld>
           </div>
-          <Fld label="Job Description"><textarea style={{...C.inp,height:'80px',resize:'none' as const}} placeholder="Role overview, responsibilities, requirements..." value={job.jd_text} onChange={e=>setJob(j=>({...j,jd_text:e.target.value}))}/></Fld>
+          <Fld label="Job Description">
+            <textarea style={{...C.inp,height:'80px',resize:'none' as const}} placeholder="Role overview, responsibilities, requirements..." value={job.jd_text} onChange={e=>setJob(j=>({...j,jd_text:e.target.value}))}/>
+          </Fld>
         </Modal>
       )}
 
+      {/* CANDIDATE MODAL */}
       {showCandidateForm&&(
-        <Modal title="👤 Add Candidate" sub="Duplicate check will run automatically" onClose={()=>setShowCandidateForm(false)} onSave={saveCandidate} saveLabel="Add to Pipeline">
+        <Modal title="👤 Add Candidate" sub="Duplicate check will run automatically" onClose={()=>setShowCandidateForm(false)} onSave={saveCandidate} saveLabel="Add to Pipeline" saving={saving} error={error}>
           <FldRow>
             <Fld label="Job Opening" req>
               <select style={C.sel} value={cand.job_id} onChange={e=>{const j=jobs.find((j:any)=>j.id===e.target.value);setCand(c=>({...c,job_id:e.target.value,company_id:j?.company_id||''}))}}>
@@ -589,15 +662,19 @@ export default function RecruitmentModule() {
                 {jobs.filter((j:any)=>j.status==='Open').map((j:any)=><option key={j.id} value={j.id}>{j.job_title} — {j.companies?.company_code}</option>)}
               </select>
             </Fld>
-            <Fld label="Source"><select style={C.sel} value={cand.source} onChange={e=>setCand(c=>({...c,source:e.target.value}))}>{['Naukri','LinkedIn','Reference','Walk-in','Campus','Consultant','Internal'].map(s=><option key={s}>{s}</option>)}</select></Fld>
+            <Fld label="Source">
+              <select style={C.sel} value={cand.source} onChange={e=>setCand(c=>({...c,source:e.target.value}))}>
+                {['Naukri','LinkedIn','Reference','Walk-in','Campus','Consultant','Internal'].map(s=><option key={s}>{s}</option>)}
+              </select>
+            </Fld>
           </FldRow>
           <FldRow>
-            <Fld label="Full Name" req><input style={C.inp} placeholder="Ramesh Kumar" value={cand.full_name} onChange={e=>setCand(c=>({...c,full_name:e.target.value}))}/></Fld>
-            <Fld label="Mobile" req><input style={C.inp} placeholder="9876543210" value={cand.phone} onChange={e=>setCand(c=>({...c,phone:e.target.value}))}/></Fld>
+            <Fld label="Full Name" req><input style={C.inp} autoComplete="off" placeholder="Ramesh Kumar" value={cand.full_name} onChange={e=>setCand(c=>({...c,full_name:e.target.value}))}/></Fld>
+            <Fld label="Mobile" req><input style={C.inp} autoComplete="off" placeholder="9876543210" value={cand.phone} onChange={e=>setCand(c=>({...c,phone:e.target.value}))}/></Fld>
           </FldRow>
           <FldRow>
-            <Fld label="Email"><input style={C.inp} placeholder="email@gmail.com" value={cand.email} onChange={e=>setCand(c=>({...c,email:e.target.value}))}/></Fld>
-            <Fld label="Current Company"><input style={C.inp} placeholder="ABC Ltd" value={cand.current_company} onChange={e=>setCand(c=>({...c,current_company:e.target.value}))}/></Fld>
+            <Fld label="Email"><input style={C.inp} autoComplete="off" placeholder="email@gmail.com" value={cand.email} onChange={e=>setCand(c=>({...c,email:e.target.value}))}/></Fld>
+            <Fld label="Current Company"><input style={C.inp} autoComplete="off" placeholder="ABC Ltd" value={cand.current_company} onChange={e=>setCand(c=>({...c,current_company:e.target.value}))}/></Fld>
           </FldRow>
           <FldRow>
             <Fld label="Experience (years)"><input type="number" style={C.inp} value={cand.experience_years} onChange={e=>setCand(c=>({...c,experience_years:+e.target.value}))}/></Fld>
