@@ -66,7 +66,10 @@ export async function getCompanies() {
 }
 
 export async function getLocations(company_id?: string) {
-  let q = supabase.from('locations').select('id, location_code, location_name, location_type, city, state, company_id').eq('status', 'Active')
+  let q = supabase
+    .from('locations')
+    .select('id, location_code, location_name, location_type, city, state, company_id')
+    .eq('status', 'Active')
   if (company_id) q = q.eq('company_id', company_id)
   const { data, error } = await q.order('location_name')
   if (error) throw error
@@ -74,7 +77,10 @@ export async function getLocations(company_id?: string) {
 }
 
 export async function getDepartments(company_id?: string) {
-  let q = supabase.from('departments').select('id, dept_code, dept_name').eq('status', 'Active')
+  let q = supabase
+    .from('departments')
+    .select('id, dept_code, dept_name')
+    .eq('status', 'Active')
   if (company_id) q = q.eq('company_id', company_id)
   const { data, error } = await q.order('dept_name')
   if (error) throw error
@@ -83,10 +89,12 @@ export async function getDepartments(company_id?: string) {
 
 // ── MRF CRUD ──────────────────────────────────────────────────────
 export async function createMRF(data: MRFData, isQuickHire = false) {
-  // Get company code for MRF number
-  const { data: co } = await supabase.from('companies').select('company_code').eq('id', data.company_id).single()
+  const { data: co } = await supabase
+    .from('companies')
+    .select('company_code')
+    .eq('id', data.company_id)
+    .single()
   const mrf_number = await genMRFNumber(co?.company_code || 'GRP', isQuickHire ? 'QH' : 'MRF')
-
   const { data: result, error } = await supabase
     .from('manpower_requisitions')
     .insert({
@@ -103,7 +111,6 @@ export async function createMRF(data: MRFData, isQuickHire = false) {
     })
     .select()
     .single()
-
   if (error) throw error
   return result
 }
@@ -111,14 +118,8 @@ export async function createMRF(data: MRFData, isQuickHire = false) {
 export async function getMRFs(company_id?: string) {
   let q = supabase
     .from('manpower_requisitions')
-    .select(`
-      *,
-      companies(company_code, company_name),
-      locations(location_name, city),
-      departments(dept_name)
-    `)
+    .select(`*, companies(company_code, company_name), locations(location_name, city), departments(dept_name)`)
     .order('created_at', { ascending: false })
-
   if (company_id) q = q.eq('company_id', company_id)
   const { data, error } = await q
   if (error) throw error
@@ -128,11 +129,7 @@ export async function getMRFs(company_id?: string) {
 export async function updateMRFStatus(id: string, status: string, remarks?: string) {
   const { data, error } = await supabase
     .from('manpower_requisitions')
-    .update({
-      status,
-      approved_at: status === 'Approved' ? new Date().toISOString() : null,
-      remarks: remarks || null,
-    })
+    .update({ status, approved_at: status === 'Approved' ? new Date().toISOString() : null, remarks: remarks || null })
     .eq('id', id)
     .select()
     .single()
@@ -170,15 +167,8 @@ export async function createJobOpening(data: JobOpeningData) {
 export async function getJobOpenings(company_id?: string, status?: string) {
   let q = supabase
     .from('job_openings')
-    .select(`
-      *,
-      companies(company_code, company_name),
-      locations(location_name, city),
-      departments(dept_name),
-      manpower_requisitions(mrf_number)
-    `)
+    .select(`*, companies(company_code, company_name), locations(location_name, city), departments(dept_name), manpower_requisitions(mrf_number)`)
     .order('created_at', { ascending: false })
-
   if (company_id) q = q.eq('company_id', company_id)
   if (status) q = q.eq('status', status)
   const { data, error } = await q
@@ -228,7 +218,6 @@ export async function getCandidates(job_id?: string, company_id?: string, stage?
     .from('candidates')
     .select(`*, job_openings(job_title, companies(company_code))`)
     .order('created_at', { ascending: false })
-
   if (job_id) q = q.eq('job_id', job_id)
   if (company_id) q = q.eq('company_id', company_id)
   if (stage) q = q.eq('stage', stage)
@@ -237,63 +226,16 @@ export async function getCandidates(job_id?: string, company_id?: string, stage?
   return data
 }
 
-export async function updateCandidateStage(
-  id: string,
-  stage: string,
-  ai_score?: number,
-  ai_tag?: string,
-  ai_reasoning?: string
-) {
+export async function updateCandidateStage(id: string, stage: string, ai_score?: number, ai_tag?: string, ai_reasoning?: string) {
   const update: any = { stage }
   if (ai_score !== undefined) update.ai_score = ai_score
   if (ai_tag) update.ai_tag = ai_tag
   if (ai_reasoning) update.ai_reasoning = ai_reasoning
-
-  const { data, error } = await supabase
-    .from('candidates')
-    .update(update)
-    .eq('id', id)
-    .select()
-    .single()
+  const { data, error } = await supabase.from('candidates').update(update).eq('id', id).select().single()
   if (error) throw error
   return data
 }
 
-export async function rejectCandidate(id: string, reason: string) {
-  const { data, error } = await supabase
-    .from('candidates')
-    .update({ stage: 'Rejected', status: 'Rejected', remarks: reason } as any)
-    .eq('id', id)
-    .select()
-    .single()
-  if (error) throw error
-  return data
-}
-
-// ── DASHBOARD STATS ───────────────────────────────────────────────
-export async function getRecruitmentStats(company_id?: string) {
-  const [mrfs, jobs, candidates] = await Promise.all([
-    supabase.from('manpower_requisitions')
-      .select('status', { count: 'exact' })
-      .eq(company_id ? 'company_id' : 'status', company_id || 'Approved'),
-    supabase.from('job_openings')
-      .select('status, openings_count')
-      .eq('status', 'Open'),
-    supabase.from('candidates')
-      .select('stage, status')
-      .eq('status', 'Active'),
-  ])
-
-  const openJobs = jobs.data?.length || 0
-  const totalOpenings = jobs.data?.reduce((s, j) => s + (j.openings_count || 1), 0) || 0
-  const totalCandidates = candidates.data?.length || 0
-  const offers = candidates.data?.filter(c => c.stage === 'Offer Sent').length || 0
-  const joined = candidates.data?.filter(c => c.stage === 'Joined').length || 0
-
-  return { openJobs, totalOpenings, totalCandidates, offers, joined }
-}
-
-// ── DUPLICATE CHECK ───────────────────────────────────────────────
 export async function checkDuplicate(phone: string, email: string) {
   const { data } = await supabase
     .from('candidates')
@@ -302,7 +244,21 @@ export async function checkDuplicate(phone: string, email: string) {
   return data || []
 }
 
-// ── PIPELINE COUNTS ───────────────────────────────────────────────
+export async function getRecruitmentStats(company_id?: string) {
+  const [mrfs, jobs, candidates] = await Promise.all([
+    supabase.from('manpower_requisitions').select('status', { count: 'exact' }).eq(company_id ? 'company_id' : 'status', company_id || 'Approved'),
+    supabase.from('job_openings').select('status, openings_count').eq('status', 'Open'),
+    supabase.from('candidates').select('stage, status').eq('status', 'Active'),
+  ])
+  return {
+    openJobs: jobs.data?.length || 0,
+    totalOpenings: jobs.data?.reduce((s, j) => s + (j.openings_count || 1), 0) || 0,
+    totalCandidates: candidates.data?.length || 0,
+    offers: candidates.data?.filter(c => c.stage === 'Offer Sent').length || 0,
+    joined: candidates.data?.filter(c => c.stage === 'Joined').length || 0,
+  }
+}
+
 export async function getPipelineCounts(company_id?: string) {
   const stages = ['Applied','AI Screened','Telephonic','L1 Interview','L2 Interview','Optional','MD Final','Offer Sent','Joined','Rejected']
   let q = supabase.from('candidates').select('stage').eq('status', 'Active')
