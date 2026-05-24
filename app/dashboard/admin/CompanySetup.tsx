@@ -2,7 +2,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { ALL_STATES, PT_STATES, getDistricts } from '../../../lib/states-districts'
-
 // ── Types ─────────────────────────────────────────────────
 interface Location {
   id: string; name: string; type: string; address: string
@@ -15,14 +14,11 @@ interface PTReg { id: string; regNumber: string; state: string; district: string
 interface GSTReg { id: string; number: string; state: string; certificate: string }
 interface BankAccount { bankName: string; accountNumber: string; ifsc: string; accountType: string; cheque: string }
 interface LicensePlan { plan: string; maxEmployees: string; maxLocations: string; validFrom: string; validTill: string; annualCost: string; billingCycle: string }
-
 const uid = () => Math.random().toString(36).slice(2, 9)
-
 const LOC_TYPES = ['Head Office','Registered Office','Corporate Office','Branch','Factory','Warehouse','Shop','Refinery','Depot','Construction Site','Other']
 const CO_TYPES = ['Private Limited (Pvt Ltd)','Public Limited (Ltd)','LLP','Partnership Firm','Sole Proprietorship','OPC (One Person Company)','Section 8 / NGO']
 const INDUSTRIES = ['Manufacturing','Trading','IT / Software','ITES / BPO','Retail','Hospitality','Healthcare','Construction','Transport & Logistics','Education','Finance / Banking','Petroleum / Energy','Agriculture','Other']
 const PLANS = ['Starter','Growth','Enterprise']
-
 const STEPS = [
   { label: 'Group', icon: '🏛️' },
   { label: 'Company', icon: '🏢' },
@@ -32,8 +28,6 @@ const STEPS = [
   { label: 'Bank', icon: '🏦' },
   { label: 'License', icon: '📋' },
 ]
-
-// ── Styles ─────────────────────────────────────────────────
 const C = {
   wrap: { minHeight: '100vh', background: '#F0F4F8', fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: '13px' } as React.CSSProperties,
   top: { background: '#fff', padding: '11px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 } as React.CSSProperties,
@@ -52,23 +46,18 @@ const C = {
   xlsBtn: { padding: '7px 14px', background: '#16A34A', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
   upBtn: { padding: '7px 14px', background: '#0EA5E9', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
 }
-
 const inp = (err?: boolean): React.CSSProperties => ({
   width: '100%', padding: '9px 11px', border: `1.5px solid ${err ? '#DC2626' : '#E2E8F0'}`,
   borderRadius: '8px', fontSize: '13px', outline: 'none', background: err ? '#FFF5F5' : '#F8FAFC',
   boxSizing: 'border-box', color: '#0F172A'
 })
-
-const sel = (err?: boolean): React.CSSProperties => ({
-  ...inp(err), appearance: 'auto' as any
-})
-
+const sel = (err?: boolean): React.CSSProperties => ({ ...inp(err), appearance: 'auto' as any })
 const uploadBox: React.CSSProperties = {
   border: '2px dashed #E2E8F0', borderRadius: '8px', padding: '10px',
   textAlign: 'center', cursor: 'pointer', color: '#94A3B8', fontSize: '11px'
 }
 
-export default function AdminSetup() {
+export default function CompanySetup() {
   const [step, setStep] = useState(0)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [uploadPreview, setUploadPreview] = useState<any[] | null>(null)
@@ -81,10 +70,7 @@ export default function AdminSetup() {
   const mapInstance = useRef<any>(null)
   const markerRef = useRef<any>(null)
 
-  // Group
   const [groupName, setGroupName] = useState('')
-
-  // Company Basic
   const [companyName, setCompanyName] = useState('')
   const [employerName, setEmployerName] = useState('')
   const [companyType, setCompanyType] = useState('')
@@ -96,32 +82,25 @@ export default function AdminSetup() {
   const [headerText, setHeaderText] = useState('')
   const [footerText, setFooterText] = useState('')
 
-  // Locations
   const [locations, setLocations] = useState<Location[]>([
     { id: uid(), name: '', type: 'Head Office', address: '', state: '', district: '', pincode: '', lat: '', lng: '', licenseNumber: '', certificate: '' }
   ])
-
-  // Tax
   const [gstList, setGstList] = useState<GSTReg[]>([{ id: uid(), number: '', state: '', certificate: '' }])
-
-  // Labour
   const [epfList, setEpfList] = useState<EPFReg[]>([{ id: uid(), code: '', scope: 'all', locations: [], deptAddress: '', certificate: '' }])
   const [esicList, setEsicList] = useState<ESICReg[]>([{ id: uid(), code: '', type: 'main', state: '', district: '', locations: [], deptAddress: '', certificate: '' }])
   const [ptList, setPtList] = useState<PTReg[]>([{ id: uid(), regNumber: '', state: '', district: '', coveredLocations: [], deptAddress: '', certificate: '' }])
   const [lwf, setLwf] = useState(false)
   const [lwfStates, setLwfStates] = useState<string[]>([])
 
-  // Bank
+  // ✅ FIX: accountNumber correctly used in both bank objects
   const [opBank, setOpBank] = useState<BankAccount>({ bankName: '', accountNumber: '', ifsc: '', accountType: 'Current', cheque: '' })
   const [salBank, setSalBank] = useState<BankAccount>({ bankName: '', accountNumber: '', ifsc: '', accountType: 'Current', cheque: '' })
   const [sameBank, setSameBank] = useState(false)
 
-  // License
   const [license, setLicense] = useState<LicensePlan>({ plan: 'Growth', maxEmployees: '200', maxLocations: '20', validFrom: '', validTill: '', annualCost: '', billingCycle: 'Annual' })
 
   const namedLocs = locations.filter(l => l.name)
 
-  // ── Validation ─────────────────────────────────────────
   const validate = (): boolean => {
     const errs: Record<string, string> = {}
     if (step === 0 && !groupName.trim()) errs.groupName = 'Group name is required'
@@ -149,24 +128,19 @@ export default function AdminSetup() {
     if (!validate()) return
     if (step === 0) setSavedGroup(groupName)
     if (step < STEPS.length - 1) setStep(s => s + 1)
-    else {
-      setDone(true)
-    }
+    else setDone(true)
   }
 
-  // ── Location helpers ─────────────────────────────────────
   const updateLoc = (i: number, f: keyof Location, v: string) => {
     setLocations(p => p.map((l, idx) => idx === i ? { ...l, [f]: v, ...(f === 'state' ? { district: '' } : {}) } : l))
   }
 
-  // ── EPF helpers ──────────────────────────────────────────
   const toggleEpfLoc = (i: number, locName: string) => {
     setEpfList(p => p.map((e, idx) => idx === i ? {
       ...e, locations: e.locations.includes(locName) ? e.locations.filter(l => l !== locName) : [...e.locations, locName]
     } : e))
   }
 
-  // ── ESIC helpers ─────────────────────────────────────────
   const updateEsic = (i: number, f: keyof ESICReg, v: string) => {
     setEsicList(p => p.map((e, idx) => idx === i ? {
       ...e, [f]: v,
@@ -175,7 +149,6 @@ export default function AdminSetup() {
     } : e))
   }
 
-  // ── PT helpers ───────────────────────────────────────────
   const updatePT = (i: number, f: keyof PTReg, v: string) => {
     setPtList(p => p.map((pt, idx) => idx === i ? {
       ...pt, [f]: v,
@@ -184,13 +157,10 @@ export default function AdminSetup() {
     } : pt))
   }
 
-  // ── Google Maps ──────────────────────────────────────────
   const initMap = useCallback(async (locIndex: number) => {
     if (!mapRef.current) return
     const key = process.env.NEXT_PUBLIC_GOOGLE_MAPS_KEY
     if (!key) return
-
-    // Load Google Maps
     const script = document.createElement('script')
     script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places`
     script.async = true
@@ -204,12 +174,9 @@ export default function AdminSetup() {
         mapTypeControl: false, streetViewControl: false,
       })
       mapInstance.current = map
-
       if (locations[locIndex].lat) {
         markerRef.current = new G.maps.Marker({ position: { lat: defaultLat, lng: defaultLng }, map })
       }
-
-      // Search box
       const input = document.getElementById('map-search') as HTMLInputElement
       const searchBox = new G.maps.places.SearchBox(input)
       map.addListener('bounds_changed', () => searchBox.setBounds(map.getBounds()!))
@@ -228,7 +195,6 @@ export default function AdminSetup() {
           updateLoc(locIndex, 'address', place.formatted_address)
         }
       })
-
       map.addListener('click', (e: any) => {
         const lat = e.latLng.lat().toFixed(6)
         const lng = e.latLng.lng().toFixed(6)
@@ -246,12 +212,9 @@ export default function AdminSetup() {
   }, [locations])
 
   useEffect(() => {
-    if (mapModal !== null) {
-      setTimeout(() => initMap(mapModal.locIndex), 100)
-    }
+    if (mapModal !== null) setTimeout(() => initMap(mapModal.locIndex), 100)
   }, [mapModal, initMap])
 
-  // ── Excel Template ───────────────────────────────────────
   const downloadTemplate = () => {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
@@ -271,7 +234,6 @@ export default function AdminSetup() {
       ['Type *','Reg Number *','State *','District','Scope/Locations','Dept Address for Filing'],
       ['EPF','MHBAN1234567000','Maharashtra','','All Locations','Nariman Point Floor 12 Mumbai'],
       ['ESIC','41000001234567890','Maharashtra','Mumbai City','Mumbai Office','Nariman Point Floor 12 Mumbai'],
-      ['ESIC-SUB','41000009876543210','Haryana','Panipat','Panipat Factory','NH-1 Industrial Area Panipat'],
       ['PT','MH/PT/MUM/001','Maharashtra','Mumbai City','Mumbai Office','Nariman Point Mumbai'],
       ['GST','27AAAPL1234C1Z5','Maharashtra','','All MH Locations',''],
     ]), 'Labour Law')
@@ -288,13 +250,12 @@ export default function AdminSetup() {
       ['3. Location Types: Head Office, Registered Office, Corporate Office, Branch, Factory, Warehouse, Shop, Refinery, Depot, Construction Site, Other'],
       ['4. Labour Law Types: EPF, ESIC, ESIC-SUB, PT, GST, LWF'],
       ['5. PT is STATE + DISTRICT level — one PT covers all locations in same district'],
-      ['6. EPF Scope: "All Locations" OR specific names comma separated'],
+      ['6. EPF Scope: All Locations OR specific names comma separated'],
       ['7. Save as .xlsx before uploading'],
     ]), 'Instructions')
     XLSX.writeFile(wb, 'Ezer_Company_Setup_Template.xlsx')
   }
 
-  // ── Excel Upload ─────────────────────────────────────────
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -320,32 +281,33 @@ export default function AdminSetup() {
     setUploadPreview(null)
   }
 
-  // ── Done screen ──────────────────────────────────────────
+  const resetCompany = () => {
+    setCompanyName(''); setEmployerName(''); setCompanyType(''); setIndustry('')
+    setPan(''); setTan(''); setCin(''); setDoi(''); setHeaderText(''); setFooterText('')
+    setLocations([{ id: uid(), name: '', type: 'Head Office', address: '', state: '', district: '', pincode: '', lat: '', lng: '', licenseNumber: '', certificate: '' }])
+    setGstList([{ id: uid(), number: '', state: '', certificate: '' }])
+    setEpfList([{ id: uid(), code: '', scope: 'all', locations: [], deptAddress: '', certificate: '' }])
+    setEsicList([{ id: uid(), code: '', type: 'main', state: '', district: '', locations: [], deptAddress: '', certificate: '' }])
+    setPtList([{ id: uid(), regNumber: '', state: '', district: '', coveredLocations: [], deptAddress: '', certificate: '' }])
+    setOpBank({ bankName: '', accountNumber: '', ifsc: '', accountType: 'Current', cheque: '' })
+    setSalBank({ bankName: '', accountNumber: '', ifsc: '', accountType: 'Current', cheque: '' })
+    setSameBank(false)
+    setLicense({ plan: 'Growth', maxEmployees: '200', maxLocations: '20', validFrom: '', validTill: '', annualCost: '', billingCycle: 'Annual' })
+    setStep(1); setDone(false)
+  }
+
   if (done) return (
     <div style={{ ...C.wrap, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center', padding: '48px', background: '#fff', borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: '480px', width: '100%', margin: '20px' }}>
         <div style={{ fontSize: '56px', marginBottom: '16px' }}>🎉</div>
         <h2 style={{ fontSize: '22px', fontWeight: 700, color: '#0F172A', marginBottom: '8px' }}>Setup Complete!</h2>
-        <p style={{ fontSize: '14px', color: '#64748B', marginBottom: '4px' }}>{groupName} → {companyName}</p>
+        <p style={{ fontSize: '14px', color: '#64748B', marginBottom: '4px' }}>{savedGroup} → {companyName}</p>
         <p style={{ fontSize: '12px', color: '#94A3B8', marginBottom: '4px' }}>Auto Code: GRP-001-COM-00{companyCount}</p>
-        <p style={{ fontSize: '12px', color: '#94A3B8', marginBottom: '24px' }}>{locations.length} location(s) | {license.plan} Plan | Valid till {license.validTill || 'Not set'}</p>
+        <p style={{ fontSize: '12px', color: '#94A3B8', marginBottom: '24px' }}>
+          {locations.length} location(s) | {license.plan} Plan | {license.maxEmployees} employees | Valid till {license.validTill || 'Not set'}
+        </p>
         <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button style={C.priBtn} onClick={() => {
-            setCompanyCount(c => c + 1)
-            setCompanyName(''); setEmployerName(''); setCompanyType(''); setIndustry('')
-            setPan(''); setTan(''); setCin(''); setDoi('')
-            setLocations([{ id: uid(), name: '', type: 'Head Office', address: '', state: '', district: '', pincode: '', lat: '', lng: '', licenseNumber: '', certificate: '' }])
-            setGstList([{ id: uid(), number: '', state: '', certificate: '' }])
-            setEpfList([{ id: uid(), code: '', scope: 'all', locations: [], deptAddress: '', certificate: '' }])
-            setEsicList([{ id: uid(), code: '', type: 'main', state: '', district: '', locations: [], deptAddress: '', certificate: '' }])
-            setPtList([{ id: uid(), regNumber: '', state: '', district: '', coveredLocations: [], deptAddress: '', certificate: '' }])
-            setOpBank({ bankName: '', accountNumber: '', ifsc: '', accountType: 'Current', cheque: '' })
-            setSalBank({ bankName: '', accountNumber: '', ifsc: '', accountType: 'Current', cheque: '' })
-            setSameBank(false)
-            setLicense({ plan: 'Growth', maxEmployees: '200', maxLocations: '20', validFrom: '', validTill: '', annualCost: '', billingCycle: 'Annual' })
-            setStep(1)
-            setDone(false)
-          }}>+ Add Another Company</button>
+          <button style={C.priBtn} onClick={() => { setCompanyCount(c => c + 1); resetCompany() }}>+ Add Another Company</button>
           <button style={C.secBtn}>👥 Setup Employees</button>
         </div>
       </div>
@@ -370,7 +332,7 @@ export default function AdminSetup() {
         </div>
       </div>
 
-      {/* Upload Preview */}
+      {/* Upload Preview Modal */}
       {uploadPreview && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
           <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', maxWidth: '820px', width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
@@ -424,32 +386,32 @@ export default function AdminSetup() {
       )}
 
       <div style={C.body}>
-        {/* Progress */}
+        {/* Progress Bar */}
         <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '14px 18px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             {STEPS.map((st, i) => {
-              const done2 = i < step, active = i === step
+              const isDone = i < step, isActive = i === step
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
-                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', cursor: done2 ? 'pointer' : 'default' }} onClick={() => done2 && setStep(i)}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', background: done2 ? '#7C3AED' : active ? '#EDE9FE' : '#F1F5F9', border: active ? '2px solid #7C3AED' : 'none', color: done2 ? '#fff' : '#374151' }}>
-                      {done2 ? '✓' : st.icon}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', cursor: isDone ? 'pointer' : 'default' }} onClick={() => isDone && setStep(i)}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', background: isDone ? '#7C3AED' : isActive ? '#EDE9FE' : '#F1F5F9', border: isActive ? '2px solid #7C3AED' : 'none', color: isDone ? '#fff' : '#374151' }}>
+                      {isDone ? '✓' : st.icon}
                     </div>
-                    <span style={{ fontSize: '9px', color: active ? '#7C3AED' : done2 ? '#7C3AED' : '#94A3B8', fontWeight: active ? 600 : 400, whiteSpace: 'nowrap' }}>{st.label}</span>
+                    <span style={{ fontSize: '9px', color: isActive ? '#7C3AED' : isDone ? '#7C3AED' : '#94A3B8', fontWeight: isActive ? 600 : 400, whiteSpace: 'nowrap' }}>{st.label}</span>
                   </div>
-                  {i < STEPS.length - 1 && <div style={{ flex: 1, height: '2px', background: done2 ? '#7C3AED' : '#E2E8F0', margin: '0 4px', marginBottom: '14px' }} />}
+                  {i < STEPS.length - 1 && <div style={{ flex: 1, height: '2px', background: isDone ? '#7C3AED' : '#E2E8F0', margin: '0 4px', marginBottom: '14px' }} />}
                 </div>
               )
             })}
           </div>
         </div>
 
-        {/* ── STEP 0: GROUP ── */}
+        {/* STEP 0: GROUP */}
         {step === 0 && (
           <div style={C.card}>
             <div style={C.secTitle}>🏛️ Group Setup</div>
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '8px', padding: '10px 12px', marginBottom: '16px', fontSize: '12px', color: '#1D4ED8' }}>
-              💡 Single company? Set Group Name = Company Name. You can consolidate multiple companies under one group anytime later.
+              💡 Single company? Set Group Name = Company Name. Multiple companies can be consolidated under one group anytime.
             </div>
             <div style={C.g2}>
               <div>
@@ -464,12 +426,15 @@ export default function AdminSetup() {
             </div>
             <div style={{ marginTop: '14px' }}>
               <label style={C.lbl}>Group Logo (optional)</label>
-              <label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📁 Click to upload (PNG, JPG — max 2MB)</div></label>
+              <label style={{ cursor: 'pointer' }}>
+                <input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} />
+                <div style={uploadBox}>📁 Click to upload (PNG, JPG — max 2MB)</div>
+              </label>
             </div>
           </div>
         )}
 
-        {/* ── STEP 1: COMPANY ── */}
+        {/* STEP 1: COMPANY */}
         {step === 1 && (
           <div style={C.card}>
             <div style={C.secTitle}>🏢 Company Details — <span style={{ color: '#7C3AED', fontSize: '12px' }}>{savedGroup}</span></div>
@@ -519,25 +484,22 @@ export default function AdminSetup() {
                 <input style={inp()} type="date" value={doi} onChange={e => setDoi(e.target.value)} />
               </div>
             </div>
-
-            {/* Letterhead */}
             <div style={{ marginTop: '16px', borderTop: '1px solid #F1F5F9', paddingTop: '14px' }}>
               <div style={{ fontSize: '12px', fontWeight: 600, color: '#374151', marginBottom: '10px' }}>Letterhead Setup</div>
               <div style={C.g2}>
                 <div>
                   <label style={C.lbl}>Header — Upload Image</label>
-                  <label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📄 Upload Header Image (Logo + Company Name)</div></label>
+                  <label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>📄 Upload Header Image</div></label>
                   <label style={{ ...C.lbl, marginTop: '8px' }}>Or Header Text</label>
                   <textarea style={{ ...inp(), height: '60px', resize: 'none' as any }} value={headerText} onChange={e => setHeaderText(e.target.value)} placeholder="Company Name&#10;Address | Phone | Email" />
                 </div>
                 <div>
                   <label style={C.lbl}>Footer — Upload Image</label>
-                  <label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📄 Upload Footer Image</div></label>
+                  <label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>📄 Upload Footer Image</div></label>
                   <label style={{ ...C.lbl, marginTop: '8px' }}>Or Footer Text</label>
-                  <textarea style={{ ...inp(), height: '60px', resize: 'none' as any }} value={footerText} onChange={e => setFooterText(e.target.value)} placeholder="CIN: XXXXX | PAN: XXXXX | www.company.com&#10;This is a computer generated document" />
+                  <textarea style={{ ...inp(), height: '60px', resize: 'none' as any }} value={footerText} onChange={e => setFooterText(e.target.value)} placeholder="CIN: XXXXX | PAN: XXXXX | www.company.com" />
                 </div>
               </div>
-              {/* Preview */}
               {(headerText || footerText) && (
                 <div style={{ marginTop: '12px', border: '1px solid #E2E8F0', borderRadius: '8px', overflow: 'hidden' }}>
                   {headerText && <div style={{ background: '#F8FAFC', borderBottom: '1px solid #E2E8F0', padding: '8px 14px', fontSize: '11px', color: '#374151', whiteSpace: 'pre-line' }}>{headerText}</div>}
@@ -546,15 +508,14 @@ export default function AdminSetup() {
                 </div>
               )}
             </div>
-
             <div style={{ marginTop: '12px' }}>
               <label style={C.lbl}>Certificate of Incorporation</label>
-              <label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📄 Upload PDF</div></label>
+              <label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>📄 Upload PDF</div></label>
             </div>
           </div>
         )}
 
-        {/* ── STEP 2: LOCATIONS ── */}
+        {/* STEP 2: LOCATIONS */}
         {step === 2 && (
           <div style={C.card}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9' }}>
@@ -565,9 +526,8 @@ export default function AdminSetup() {
               </div>
             </div>
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '8px', padding: '9px 12px', marginBottom: '14px', fontSize: '11px', color: '#1D4ED8' }}>
-              ✦ State + District is used to auto-link PT, ESIC & Shops Act registrations. Google Maps pin captures geo-coordinates for attendance geo-fencing.
+              ✦ State + District auto-links PT, ESIC & Shops Act. Google Maps pin captures geo-coordinates for attendance geo-fencing.
             </div>
-
             {locations.map((loc, i) => (
               <div key={loc.id} style={C.sub}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
@@ -587,7 +547,7 @@ export default function AdminSetup() {
                     </select>
                   </div>
                   <div>
-                    <label style={C.lbl}>PIN Code<span style={C.req}>*</span></label>
+                    <label style={C.lbl}>PIN Code</label>
                     <input style={inp()} value={loc.pincode} onChange={e => updateLoc(i, 'pincode', e.target.value)} placeholder="110001" maxLength={6} />
                   </div>
                 </div>
@@ -622,33 +582,23 @@ export default function AdminSetup() {
                   <div>
                     <label style={C.lbl}>Pin on Map</label>
                     <button onClick={() => setMapModal({ locIndex: i })} style={{ ...inp(), background: '#EDE9FE', color: '#7C3AED', cursor: 'pointer', border: '1.5px solid #C4B5FD', textAlign: 'center' as any, fontWeight: 500 }}>
-                      📍 {loc.lat ? `Pinned ✓` : 'Open Google Maps'}
+                      📍 {loc.lat ? 'Pinned ✓' : 'Open Google Maps'}
                     </button>
                   </div>
                   <div>
                     <label style={C.lbl}>Registration Certificate</label>
-                    <div style={{ ...uploadBox, padding: '9px' }}>📄 Upload</div>
+                    <label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={{ ...uploadBox, padding: '9px' }}>📄 Upload</div></label>
                   </div>
                 </div>
-                {loc.lat && (
-                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#16A34A', background: '#DCFCE7', padding: '5px 10px', borderRadius: '5px' }}>
-                    ✓ Geo-tagged: {loc.lat}, {loc.lng}
-                  </div>
-                )}
-                {loc.state && loc.district && (
-                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#1D4ED8', background: '#EFF6FF', padding: '5px 10px', borderRadius: '5px' }}>
-                    ✦ {loc.state} › {loc.district} — PT & ESIC will auto-link here
-                  </div>
-                )}
+                {loc.lat && <div style={{ marginTop: '6px', fontSize: '11px', color: '#16A34A', background: '#DCFCE7', padding: '5px 10px', borderRadius: '5px' }}>✓ Geo-tagged: {loc.lat}, {loc.lng}</div>}
+                {loc.state && loc.district && <div style={{ marginTop: '6px', fontSize: '11px', color: '#1D4ED8', background: '#EFF6FF', padding: '5px 10px', borderRadius: '5px' }}>✦ {loc.state} › {loc.district} — PT & ESIC will auto-link here</div>}
               </div>
             ))}
-            <button style={C.addBtn} onClick={() => setLocations(p => [...p, { id: uid(), name: '', type: 'Branch', address: '', state: '', district: '', pincode: '', lat: '', lng: '', licenseNumber: '', certificate: '' }])}>
-              ＋ Add Location / Branch
-            </button>
+            <button style={C.addBtn} onClick={() => setLocations(p => [...p, { id: uid(), name: '', type: 'Branch', address: '', state: '', district: '', pincode: '', lat: '', lng: '', licenseNumber: '', certificate: '' }])}>＋ Add Location / Branch</button>
           </div>
         )}
 
-        {/* ── STEP 3: TAX ── */}
+        {/* STEP 3: TAX */}
         {step === 3 && (
           <div style={C.card}>
             <div style={C.secTitle}>🧾 Tax Registrations</div>
@@ -669,19 +619,17 @@ export default function AdminSetup() {
                     </select>
                   </div>
                 </div>
-                <div style={{ marginTop: '8px' }}><label style={C.lbl}>GST Certificate</label><label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📄 Upload</div></label></div>
+                <div style={{ marginTop: '8px' }}><label style={C.lbl}>GST Certificate</label><label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>📄 Upload</div></label></div>
               </div>
             ))}
             <button style={C.addBtn} onClick={() => setGstList(p => [...p, { id: uid(), number: '', state: '', certificate: '' }])}>＋ Add GST</button>
           </div>
         )}
 
-        {/* ── STEP 4: LABOUR LAW ── */}
+        {/* STEP 4: LABOUR LAW */}
         {step === 4 && (
           <div style={C.card}>
             <div style={C.secTitle}>⚖️ Labour Law Registrations</div>
-
-            {/* EPF */}
             <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '8px', color: '#374151' }}>EPF — Employee Provident Fund</div>
             {epfList.map((epf, i) => (
               <div key={epf.id} style={C.sub}>
@@ -706,7 +654,7 @@ export default function AdminSetup() {
                       {namedLocs.map(loc => (
                         <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'pointer', padding: '5px 9px', borderRadius: '6px', background: epf.locations.includes(loc.name) ? '#EDE9FE' : '#F1F5F9', border: `1px solid ${epf.locations.includes(loc.name) ? '#C4B5FD' : '#E2E8F0'}` }}>
                           <input type="checkbox" checked={epf.locations.includes(loc.name)} onChange={() => toggleEpfLoc(i, loc.name)} style={{ width: '13px', height: '13px' }} />
-                          {loc.name} <span style={{ fontSize: '9px', color: '#94A3B8' }}>({loc.type})</span>
+                          {loc.name}
                         </label>
                       ))}
                     </div>
@@ -716,12 +664,11 @@ export default function AdminSetup() {
                   <label style={C.lbl}>Department Address for Filing</label>
                   <input style={inp()} value={epf.deptAddress} onChange={e => setEpfList(p => p.map((x, idx) => idx === i ? { ...x, deptAddress: e.target.value } : x))} placeholder="Address used in EPF returns and challans" />
                 </div>
-                <div style={{ marginTop: '8px' }}><label style={C.lbl}>EPF Certificate</label><label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📄 Upload</div></label></div>
+                <div style={{ marginTop: '8px' }}><label style={C.lbl}>EPF Certificate</label><label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>📄 Upload</div></label></div>
               </div>
             ))}
             <button style={C.addBtn} onClick={() => setEpfList(p => [...p, { id: uid(), code: '', scope: 'all', locations: [], deptAddress: '', certificate: '' }])}>＋ Add EPF Code</button>
 
-            {/* ESIC */}
             <div style={{ fontSize: '12px', fontWeight: 600, margin: '16px 0 6px', color: '#374151' }}>ESIC — Employee State Insurance</div>
             <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '7px', padding: '8px 11px', marginBottom: '10px', fontSize: '11px', color: '#92400E' }}>
               ⚠️ ESIC is State + District specific. Select district — locations auto-link. Add main code first, then sub-codes.
@@ -749,12 +696,7 @@ export default function AdminSetup() {
                     </select>
                   </div>
                 </div>
-                {esic.locations.length > 0 && (
-                  <div style={{ marginTop: '6px', fontSize: '11px', color: '#16A34A', background: '#DCFCE7', padding: '5px 10px', borderRadius: '5px' }}>
-                    ✓ Auto-linked: {esic.locations.join(', ')}
-                  </div>
-                )}
-                {/* Manual location override */}
+                {esic.locations.length > 0 && <div style={{ marginTop: '6px', fontSize: '11px', color: '#16A34A', background: '#DCFCE7', padding: '5px 10px', borderRadius: '5px' }}>✓ Auto-linked: {esic.locations.join(', ')}</div>}
                 {namedLocs.length > 0 && (
                   <div style={{ marginTop: '8px' }}>
                     <label style={C.lbl}>Override — Select Specific Locations</label>
@@ -772,12 +714,11 @@ export default function AdminSetup() {
                   <label style={C.lbl}>Department Address for Filing</label>
                   <input style={inp()} value={esic.deptAddress} onChange={e => setEsicList(p => p.map((x, idx) => idx === i ? { ...x, deptAddress: e.target.value } : x))} placeholder="Address used in ESIC returns" />
                 </div>
-                <div style={{ marginTop: '8px' }}><label style={C.lbl}>ESIC Certificate</label><label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📄 Upload</div></label></div>
+                <div style={{ marginTop: '8px' }}><label style={C.lbl}>ESIC Certificate</label><label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>📄 Upload</div></label></div>
               </div>
             ))}
             <button style={C.addBtn} onClick={() => setEsicList(p => [...p, { id: uid(), code: '', type: 'sub', state: '', district: '', locations: [], deptAddress: '', certificate: '' }])}>＋ Add ESIC Code</button>
 
-            {/* PT */}
             <div style={{ fontSize: '12px', fontWeight: 600, margin: '16px 0 6px', color: '#374151' }}>Professional Tax (PT)</div>
             <div style={{ background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '7px', padding: '8px 11px', marginBottom: '10px', fontSize: '11px', color: '#1D4ED8' }}>
               ℹ️ PT is State + District level. One registration covers ALL locations in the same district. Applicable in 22 states only.
@@ -807,19 +748,18 @@ export default function AdminSetup() {
                 </div>
                 {pt.state && pt.district && (
                   <div style={{ marginTop: '6px', fontSize: '11px', padding: '5px 10px', borderRadius: '5px', background: pt.coveredLocations.length ? '#DCFCE7' : '#FEF3C7', color: pt.coveredLocations.length ? '#16A34A' : '#92400E' }}>
-                    {pt.coveredLocations.length ? `✓ Auto-covers: ${pt.coveredLocations.join(', ')}` : `⚠️ No locations in ${pt.district}, ${pt.state} — add locations in Step 2 first`}
+                    {pt.coveredLocations.length ? `✓ Auto-covers: ${pt.coveredLocations.join(', ')}` : `⚠️ No locations in ${pt.district}, ${pt.state}`}
                   </div>
                 )}
                 <div style={{ marginTop: '8px' }}>
                   <label style={C.lbl}>Department Address for Filing</label>
                   <input style={inp()} value={pt.deptAddress} onChange={e => setPtList(p => p.map((x, idx) => idx === i ? { ...x, deptAddress: e.target.value } : x))} placeholder="Address used in PT returns and challans" />
                 </div>
-                <div style={{ marginTop: '8px' }}><label style={C.lbl}>PT Certificate</label><label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📄 Upload</div></label></div>
+                <div style={{ marginTop: '8px' }}><label style={C.lbl}>PT Certificate</label><label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>📄 Upload</div></label></div>
               </div>
             ))}
             <button style={C.addBtn} onClick={() => setPtList(p => [...p, { id: uid(), regNumber: '', state: '', district: '', coveredLocations: [], deptAddress: '', certificate: '' }])}>＋ Add PT Registration</button>
 
-            {/* LWF */}
             <div style={{ marginTop: '16px', borderTop: '1px solid #F1F5F9', paddingTop: '12px' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: 600, color: '#374151' }}>
                 <input type="checkbox" checked={lwf} onChange={e => setLwf(e.target.checked)} style={{ width: '14px', height: '14px' }} />
@@ -842,11 +782,10 @@ export default function AdminSetup() {
           </div>
         )}
 
-        {/* ── STEP 5: BANK ── */}
+        {/* STEP 5: BANK */}
         {step === 5 && (
           <div style={C.card}>
             <div style={C.secTitle}>🏦 Bank Accounts</div>
-
             <div style={{ fontSize: '12px', fontWeight: 600, marginBottom: '10px', color: '#374151' }}>Operating / General Account</div>
             <div style={C.sub}>
               <div style={C.g2}>
@@ -855,7 +794,7 @@ export default function AdminSetup() {
                 <div><label style={C.lbl}>Account Number</label><input style={inp()} value={opBank.accountNumber} onChange={e => setOpBank({ ...opBank, accountNumber: e.target.value })} placeholder="1234567890123456" /></div>
                 <div><label style={C.lbl}>IFSC Code</label><input style={inp()} value={opBank.ifsc} onChange={e => setOpBank({ ...opBank, ifsc: e.target.value.toUpperCase() })} placeholder="HDFC0001234" maxLength={11} /></div>
               </div>
-              <div style={{ marginTop: '10px' }}><label style={C.lbl}>Cancelled Cheque</label><label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📷 Upload</div></label></div>
+              <div style={{ marginTop: '10px' }}><label style={C.lbl}>Cancelled Cheque</label><label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>📷 Upload</div></label></div>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '14px 0 10px' }}>
@@ -874,10 +813,11 @@ export default function AdminSetup() {
                 <div style={C.g2}>
                   <div><label style={C.lbl}>Bank Name</label><input style={inp()} value={salBank.bankName} onChange={e => setSalBank({ ...salBank, bankName: e.target.value })} placeholder="ICICI Bank" /></div>
                   <div><label style={C.lbl}>Account Type</label><select style={sel()} value={salBank.accountType} onChange={e => setSalBank({ ...salBank, accountType: e.target.value })}><option>Current</option><option>Savings</option></select></div>
-                  <div><label style={C.lbl}>Account Number</label><input style={inp()} value={salBank.account} onChange={e => setSalBank({ ...salBank, accountNumber: e.target.value })} placeholder="9876543210987654" /></div>
+                  {/* ✅ BUG FIXED: accountNumber (not account) */}
+                  <div><label style={C.lbl}>Account Number</label><input style={inp()} value={salBank.accountNumber} onChange={e => setSalBank({ ...salBank, accountNumber: e.target.value })} placeholder="9876543210987654" /></div>
                   <div><label style={C.lbl}>IFSC Code</label><input style={inp()} value={salBank.ifsc} onChange={e => setSalBank({ ...salBank, ifsc: e.target.value.toUpperCase() })} placeholder="ICIC0001234" maxLength={11} /></div>
                 </div>
-                <div style={{ marginTop: '10px' }}><label style={C.lbl}>Cancelled Cheque</label><label style={{cursor:'pointer'}}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{display:'none'}} onChange={e => console.log(e.target.files?.[0]?.name)} /><div style={uploadBox}>📷 Upload</div></label></div>
+                <div style={{ marginTop: '10px' }}><label style={C.lbl}>Cancelled Cheque</label><label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>📷 Upload</div></label></div>
               </div>
             ) : (
               <div style={{ background: '#DCFCE7', borderRadius: '8px', padding: '10px 12px', fontSize: '12px', color: '#16A34A' }}>
@@ -887,15 +827,13 @@ export default function AdminSetup() {
           </div>
         )}
 
-        {/* ── STEP 6: LICENSE ── */}
+        {/* STEP 6: LICENSE */}
         {step === 6 && (
           <div style={C.card}>
             <div style={C.secTitle}>📋 License & Billing Plan</div>
             <div style={{ background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px', color: '#92400E' }}>
               ⚠️ Set this as per client agreement. Employee & location limits will be enforced. If limit is exceeded, system will alert and block further additions.
             </div>
-
-            {/* Plan selector */}
             <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
               {PLANS.map(p => (
                 <div key={p} onClick={() => setLicense(prev => ({
@@ -910,41 +848,17 @@ export default function AdminSetup() {
                 </div>
               ))}
             </div>
-
             <div style={C.g2}>
-              <div>
-                <label style={C.lbl}>Max Employees<span style={C.req}>*</span></label>
-                <input style={inp()} value={license.maxEmployees} onChange={e => setLicense(prev => ({ ...prev, maxEmployees: e.target.value }))} placeholder="e.g. 200" />
-              </div>
-              <div>
-                <label style={C.lbl}>Max Locations<span style={C.req}>*</span></label>
-                <input style={inp()} value={license.maxLocations} onChange={e => setLicense(prev => ({ ...prev, maxLocations: e.target.value }))} placeholder="e.g. 20" />
-              </div>
-              <div>
-                <label style={C.lbl}>License Valid From<span style={C.req}>*</span></label>
-                <input style={inp()} type="date" value={license.validFrom} onChange={e => setLicense(prev => ({ ...prev, validFrom: e.target.value }))} />
-              </div>
-              <div>
-                <label style={C.lbl}>License Valid Till<span style={C.req}>*</span></label>
-                <input style={inp()} type="date" value={license.validTill} onChange={e => setLicense(prev => ({ ...prev, validTill: e.target.value }))} />
-              </div>
-              <div>
-                <label style={C.lbl}>Annual Cost (₹)<span style={C.req}>*</span></label>
-                <input style={inp()} value={license.annualCost} onChange={e => setLicense(prev => ({ ...prev, annualCost: e.target.value }))} placeholder="e.g. 60000" />
-              </div>
-              <div>
-                <label style={C.lbl}>Billing Cycle</label>
-                <select style={sel()} value={license.billingCycle} onChange={e => setLicense(prev => ({ ...prev, billingCycle: e.target.value }))}>
-                  <option>Monthly</option>
-                  <option>Quarterly</option>
-                  <option>Annual</option>
-                </select>
-              </div>
+              <div><label style={C.lbl}>Max Employees<span style={C.req}>*</span></label><input style={inp()} value={license.maxEmployees} onChange={e => setLicense(prev => ({ ...prev, maxEmployees: e.target.value }))} placeholder="e.g. 200" /></div>
+              <div><label style={C.lbl}>Max Locations<span style={C.req}>*</span></label><input style={inp()} value={license.maxLocations} onChange={e => setLicense(prev => ({ ...prev, maxLocations: e.target.value }))} placeholder="e.g. 20" /></div>
+              <div><label style={C.lbl}>License Valid From<span style={C.req}>*</span></label><input style={inp()} type="date" value={license.validFrom} onChange={e => setLicense(prev => ({ ...prev, validFrom: e.target.value }))} /></div>
+              <div><label style={C.lbl}>License Valid Till<span style={C.req}>*</span></label><input style={inp()} type="date" value={license.validTill} onChange={e => setLicense(prev => ({ ...prev, validTill: e.target.value }))} /></div>
+              <div><label style={C.lbl}>Annual Cost (₹)<span style={C.req}>*</span></label><input style={inp()} value={license.annualCost} onChange={e => setLicense(prev => ({ ...prev, annualCost: e.target.value }))} placeholder="e.g. 155988" /></div>
+              <div><label style={C.lbl}>Billing Cycle</label><select style={sel()} value={license.billingCycle} onChange={e => setLicense(prev => ({ ...prev, billingCycle: e.target.value }))}><option>Monthly</option><option>Quarterly</option><option>Annual</option></select></div>
             </div>
-
             {license.validFrom && license.validTill && license.annualCost && (
               <div style={{ marginTop: '14px', background: '#DCFCE7', borderRadius: '8px', padding: '12px 14px', fontSize: '12px', color: '#16A34A' }}>
-                ✓ Summary: {license.plan} Plan | {license.maxEmployees} employees | {license.maxLocations} locations | ₹{Number(license.annualCost).toLocaleString('en-IN')}/year | Valid: {license.validFrom} to {license.validTill}
+                ✓ {license.plan} Plan | {license.maxEmployees} employees | {license.maxLocations} locations | ₹{Number(license.annualCost).toLocaleString('en-IN')}/year | Valid: {license.validFrom} to {license.validTill}
               </div>
             )}
           </div>
