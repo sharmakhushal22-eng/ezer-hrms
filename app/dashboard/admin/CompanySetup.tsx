@@ -1086,5 +1086,5 @@ export default function CompanySetup() {
         </div>
       </div>
     </div>
-  )
+  ) 
 }
