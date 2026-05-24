@@ -60,7 +60,6 @@ const STATUS_COLORS: Record<string,{bg:string;color:string}> = {
 
 const PIPELINE_STAGES: CandidateStage[] = ['Applied','AI Screened','Telephonic','L1 Interview','L2 Interview','Optional','MD Final','Offer Sent','Joined','Rejected']
 
-// ── Stat Card ─────────────────────────────────────────────────────
 const StatCard = ({label,value,color,sub}:{label:string;value:any;color:string;sub?:string}) => (
   <div style={{background:'#fff',border:'1px solid #E2E8F0',borderRadius:'10px',padding:'12px 14px',borderTop:`3px solid ${color}`}}>
     <div style={{fontSize:'10px',color:'#94A3B8',fontWeight:500,textTransform:'uppercase' as const,letterSpacing:'.05em',marginBottom:'3px'}}>{label}</div>
@@ -69,14 +68,12 @@ const StatCard = ({label,value,color,sub}:{label:string;value:any;color:string;s
   </div>
 )
 
-// ── Loading Spinner ───────────────────────────────────────────────
 const Spinner = () => (
   <div style={{display:'flex',justifyContent:'center',padding:'40px',color:'#94A3B8',fontSize:'13px'}}>
     ⏳ Loading...
   </div>
 )
 
-// ── Main Component ────────────────────────────────────────────────
 export default function RecruitmentModule() {
   const [tab, setTab] = useState<MainTab>('dashboard')
   const [mrfTab, setMrfTab] = useState<MRFTab>('full')
@@ -84,7 +81,6 @@ export default function RecruitmentModule() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  // Data states
   const [stats, setStats] = useState<any>({})
   const [pipelineCounts, setPipelineCounts] = useState<Record<string,number>>({})
   const [mrfs, setMrfs] = useState<any[]>([])
@@ -94,7 +90,20 @@ export default function RecruitmentModule() {
   const [locations, setLocations] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
 
-  // Modal states
+  // ✅ FIX: Separate state for form locations/depts — refetch on company change
+  const [formLocations, setFormLocations] = useState<any[]>([])
+  const [formDepts, setFormDepts] = useState<any[]>([])
+
+  const fetchFormData = async (company_id: string) => {
+    if (!company_id) { setFormLocations([]); setFormDepts([]); return }
+    const [lo, de] = await Promise.all([
+      getLocations(company_id),
+      getDepartments(company_id)
+    ])
+    setFormLocations(lo || [])
+    setFormDepts(de || [])
+  }
+
   const [showMRFForm, setShowMRFForm] = useState(false)
   const [showQuickForm, setShowQuickForm] = useState(false)
   const [showJobForm, setShowJobForm] = useState(false)
@@ -102,30 +111,25 @@ export default function RecruitmentModule() {
   const [selectedCandidate, setSelectedCandidate] = useState<any>(null)
   const [selectedJobId, setSelectedJobId] = useState('')
 
-  // Form states — MRF
   const [mrf, setMrf] = useState({
     company_id:'', position:'', department_id:'', location_id:'',
     openings:1, urgency:'Normal', reason:'New Position', remarks:''
   })
-  // Form states — Quick Hire
   const [qh, setQh] = useState({
     company_id:'', position_type:'Helper / Unskilled Worker (W1)',
     location_id:'', openings:1, joining_date:'', reason:'New Requirement'
   })
-  // Form states — Job Opening
   const [job, setJob] = useState({
     company_id:'', mrf_id:'', job_title:'', department_id:'',
     location_id:'', exp_min:0, exp_max:5, sal_min:600000, sal_max:1000000,
     employment_type:'Permanent', skills:'', jd_text:'', openings_count:1
   })
-  // Form states — Candidate
   const [cand, setCand] = useState({
     job_id:'', company_id:'', full_name:'', email:'', phone:'',
     source:'Naukri', current_company:'', current_ctc:0,
     expected_ctc:0, notice_period:30, experience_years:0
   })
 
-  // ── Load Data ─────────────────────────────────────────────────
   const loadDashboard = useCallback(async () => {
     setLoading(true)
     try {
@@ -171,7 +175,6 @@ export default function RecruitmentModule() {
     if(tab==='pipeline') loadCandidates()
   }, [tab])
 
-  // ── Save MRF ─────────────────────────────────────────────────
   const saveMRF = async () => {
     if(!mrf.company_id || !mrf.position) { setError('Company aur Position required hai'); return }
     setSaving(true); setError('')
@@ -185,12 +188,12 @@ export default function RecruitmentModule() {
       })
       setShowMRFForm(false)
       setMrf({company_id:'',position:'',department_id:'',location_id:'',openings:1,urgency:'Normal',reason:'New Position',remarks:''})
+      setFormLocations([]); setFormDepts([])
       loadMRFs()
     } catch(e:any) { setError(e.message || 'MRF save failed') }
     finally { setSaving(false) }
   }
 
-  // ── Save Quick Hire ───────────────────────────────────────────
   const saveQuickHire = async () => {
     if(!qh.company_id || !qh.location_id) { setError('Company aur Location required'); return }
     setSaving(true); setError('')
@@ -203,12 +206,12 @@ export default function RecruitmentModule() {
       }, true)
       setShowQuickForm(false)
       setQh({company_id:'',position_type:'Helper / Unskilled Worker (W1)',location_id:'',openings:1,joining_date:'',reason:'New Requirement'})
+      setFormLocations([]); setFormDepts([])
       loadMRFs()
     } catch(e:any) { setError(e.message || 'Quick Hire save failed') }
     finally { setSaving(false) }
   }
 
-  // ── Save Job Opening ──────────────────────────────────────────
   const saveJob = async () => {
     if(!job.company_id || !job.job_title) { setError('Company aur Job Title required'); return }
     setSaving(true); setError('')
@@ -226,17 +229,16 @@ export default function RecruitmentModule() {
       })
       setShowJobForm(false)
       setJob({company_id:'',mrf_id:'',job_title:'',department_id:'',location_id:'',exp_min:0,exp_max:5,sal_min:600000,sal_max:1000000,employment_type:'Permanent',skills:'',jd_text:'',openings_count:1})
+      setFormLocations([]); setFormDepts([])
       loadJobs()
     } catch(e:any) { setError(e.message || 'Job save failed') }
     finally { setSaving(false) }
   }
 
-  // ── Add Candidate ─────────────────────────────────────────────
   const saveCandidate = async () => {
     if(!cand.full_name || !cand.phone || !cand.job_id) { setError('Name, Phone aur Job required'); return }
     setSaving(true); setError('')
     try {
-      // Duplicate check
       const dups = await checkDuplicate(cand.phone, cand.email)
       if(dups.length > 0) {
         if(!confirm(`⚠️ ${cand.phone} ya ${cand.email} pehle se apply kar chuka hai. Phir bhi add karo?`)) { setSaving(false); return }
@@ -255,13 +257,11 @@ export default function RecruitmentModule() {
     finally { setSaving(false) }
   }
 
-  // ── Update Stage ──────────────────────────────────────────────
   const moveStage = async (id:string, stage:string) => {
     try { await updateCandidateStage(id, stage); loadCandidates() }
     catch(e) { setError('Stage update failed') }
   }
 
-  // ── Approve/Reject MRF ────────────────────────────────────────
   const approveMRF = async (id:string, status:string) => {
     try { await updateMRFStatus(id, status); loadMRFs() }
     catch(e) { setError('Status update failed') }
@@ -278,7 +278,6 @@ export default function RecruitmentModule() {
     {id:'analytics',label:'📈 Analytics'},
   ]
 
-  // ── Modal Base ────────────────────────────────────────────────
   const Modal = ({title,sub,onClose,children,onSave,saveLabel='Save'}:{title:string;sub?:string;onClose:()=>void;children:any;onSave?:()=>void;saveLabel?:string}) => (
     <div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
       <div style={{background:'#fff',borderRadius:'14px',padding:'24px',width:'620px',maxHeight:'88vh',overflowY:'auto' as const,boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
@@ -316,8 +315,6 @@ export default function RecruitmentModule() {
 
   return (
     <div style={C.page}>
-
-      {/* Topbar */}
       <div style={C.topbar}>
         <div style={{fontSize:'12px',color:'#64748B'}}>
           Sharma Group &nbsp;›&nbsp; <span style={{color:'#7C3AED',fontWeight:500}}>Recruitment</span>
@@ -330,7 +327,6 @@ export default function RecruitmentModule() {
         </div>
       </div>
 
-      {/* Sub Nav */}
       <div style={C.nav}>
         {tabs.map(t=>(
           <button key={t.id} style={C.navBtn(tab===t.id)} onClick={()=>setTab(t.id as MainTab)}>{t.label}</button>
@@ -342,7 +338,6 @@ export default function RecruitmentModule() {
           <div style={{padding:'8px 14px',background:'#FEE2E2',borderRadius:'8px',fontSize:'12px',color:'#DC2626',marginBottom:'12px'}}>⚠️ {error} <button onClick={()=>setError('')} style={{marginLeft:'8px',background:'none',border:'none',cursor:'pointer',color:'#DC2626'}}>✕</button></div>
         )}
 
-        {/* ═══ DASHBOARD ═══ */}
         {tab==='dashboard' && (
           <div>
             {loading ? <Spinner/> : (
@@ -354,8 +349,6 @@ export default function RecruitmentModule() {
                   <StatCard label="Offers Sent" value={stats.offers||0} color="#0D9488"/>
                   <StatCard label="Joined This Month" value={stats.joined||0} color="#16A34A"/>
                 </div>
-
-                {/* Pipeline Funnel */}
                 <div style={C.card}>
                   <div style={{fontSize:'13px',fontWeight:600,marginBottom:'12px'}}>Candidate Pipeline</div>
                   {PIPELINE_STAGES.map(stage=>(
@@ -372,8 +365,6 @@ export default function RecruitmentModule() {
                     </div>
                   ))}
                 </div>
-
-                {/* Quick links */}
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
                   <div style={C.card}>
                     <div style={{fontSize:'13px',fontWeight:600,marginBottom:'10px'}}>Open MRFs</div>
@@ -401,10 +392,8 @@ export default function RecruitmentModule() {
           </div>
         )}
 
-        {/* ═══ MRF ═══ */}
         {tab==='mrf' && (
           <div>
-            {/* Toggle */}
             <div style={{...C.card,display:'flex',gap:'8px',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
               <div style={{display:'flex',gap:'6px'}}>
                 {[{id:'full',label:'📋 Full MRF'},{id:'quick',label:'⚡ Quick Hire'}].map(t=>(
@@ -417,7 +406,6 @@ export default function RecruitmentModule() {
                 {mrfTab==='full'?'CTC ≥ ₹6L · MD Approval':'CTC < ₹6L · Site HR Approve · W1/W2/NAPS'}
               </div>
             </div>
-
             {loading?<Spinner/>:(
               <div style={C.card}>
                 <div style={{display:'flex',justifyContent:'space-between',marginBottom:'12px'}}>
@@ -471,7 +459,6 @@ export default function RecruitmentModule() {
           </div>
         )}
 
-        {/* ═══ JOB OPENINGS ═══ */}
         {tab==='jobs' && (
           <div>
             {loading?<Spinner/>:(
@@ -481,7 +468,6 @@ export default function RecruitmentModule() {
                   <StatCard label="Total Openings" value={jobs.reduce((s:number,j:any)=>s+(j.openings_count||1),0)} color="#1D4ED8"/>
                   <StatCard label="Total Candidates" value={candidates.length} color="#16A34A"/>
                 </div>
-
                 {jobs.length===0?(
                   <div style={{...C.card,textAlign:'center' as const,padding:'40px'}}>
                     <div style={{fontSize:'28px',marginBottom:'8px'}}>💼</div>
@@ -522,10 +508,8 @@ export default function RecruitmentModule() {
           </div>
         )}
 
-        {/* ═══ PIPELINE ═══ */}
         {tab==='pipeline' && (
           <div>
-            {/* Filter */}
             <div style={{...C.card,display:'flex',gap:'8px',alignItems:'center',marginBottom:'12px'}}>
               <span style={{fontSize:'12px',color:'#64748B',flexShrink:0}}>Job:</span>
               <select style={{...C.sel,flex:1}} value={selectedJobId} onChange={e=>setSelectedJobId(e.target.value)}>
@@ -533,7 +517,6 @@ export default function RecruitmentModule() {
                 {jobs.map((j:any)=><option key={j.id} value={j.id}>{j.job_title}</option>)}
               </select>
             </div>
-
             {loading?<Spinner/>:(
               <div style={{display:'flex',gap:'10px',overflowX:'auto' as const,paddingBottom:'8px'}}>
                 {PIPELINE_STAGES.map(stage=>{
@@ -560,8 +543,6 @@ export default function RecruitmentModule() {
                 })}
               </div>
             )}
-
-            {/* Candidate Drawer */}
             {selectedCandidate&&(
               <div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.3)',zIndex:1000}} onClick={()=>setSelectedCandidate(null)}>
                 <div style={{position:'absolute' as const,right:0,top:0,bottom:0,width:'380px',background:'#fff',padding:'20px',overflowY:'auto' as const,boxShadow:'-4px 0 20px rgba(0,0,0,0.1)'}} onClick={e=>e.stopPropagation()}>
@@ -603,7 +584,6 @@ export default function RecruitmentModule() {
           </div>
         )}
 
-        {/* ═══ INTERVIEWS / OFFERS / AI / ANALYTICS ═══ */}
         {['interviews','offers','ai','analytics'].includes(tab) && (
           <div style={{...C.card,textAlign:'center' as const,padding:'48px'}}>
             <div style={{fontSize:'32px',marginBottom:'12px'}}>
@@ -619,21 +599,35 @@ export default function RecruitmentModule() {
             <span style={{padding:'6px 16px',background:'#EDE9FE',color:'#7C3AED',borderRadius:'8px',fontSize:'12px',fontWeight:500}}>Under Development</span>
           </div>
         )}
-
       </div>
 
-      {/* ═══ MODALS ═══ */}
+      {/* MODALS */}
 
-      {/* Full MRF Form */}
+      {/* ✅ Full MRF — fetchFormData on company change */}
       {showMRFForm&&(
         <Modal title="📋 New Manpower Requisition" sub="MRF number auto-generate hoga" onClose={()=>setShowMRFForm(false)} onSave={saveMRF} saveLabel={saving?'Saving...':'Submit for HR Review →'}>
           <SecHead label="A. Position Details" color="#7C3AED"/>
           <FldRow>
-            <Fld label="Company" req><select style={C.sel} value={mrf.company_id} onChange={e=>setMrf(m=>({...m,company_id:e.target.value,department_id:'',location_id:''}))}><option value="">Select...</option>{companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></Fld>
-            <Fld label="Department"><select style={C.sel} value={mrf.department_id} onChange={e=>setMrf(m=>({...m,department_id:e.target.value}))}><option value="">Select...</option>{departments.filter((d:any)=>!mrf.company_id||d.company_id===mrf.company_id).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></Fld>
+            <Fld label="Company" req>
+              <select style={C.sel} value={mrf.company_id} onChange={e=>{const cid=e.target.value;setMrf(m=>({...m,company_id:cid,department_id:'',location_id:''}));fetchFormData(cid)}}>
+                <option value="">Select...</option>
+                {companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}
+              </select>
+            </Fld>
+            <Fld label="Department">
+              <select style={C.sel} value={mrf.department_id} onChange={e=>setMrf(m=>({...m,department_id:e.target.value}))}>
+                <option value="">{mrf.company_id?'Select...':'Pehle company select karo'}</option>
+                {formDepts.map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+              </select>
+            </Fld>
           </FldRow>
           <FldRow>
-            <Fld label="Location"><select style={C.sel} value={mrf.location_id} onChange={e=>setMrf(m=>({...m,location_id:e.target.value}))}><option value="">Select...</option>{locations.filter((l:any)=>!mrf.company_id||l.company_id===mrf.company_id).map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}</option>)}</select></Fld>
+            <Fld label="Location">
+              <select style={C.sel} value={mrf.location_id} onChange={e=>setMrf(m=>({...m,location_id:e.target.value}))}>
+                <option value="">{mrf.company_id?'Select...':'Pehle company select karo'}</option>
+                {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}, {l.state}</option>)}
+              </select>
+            </Fld>
             <Fld label="Position Title" req><input style={C.inp} placeholder="e.g. Senior Executive — Accounts" value={mrf.position} onChange={e=>setMrf(m=>({...m,position:e.target.value}))}/></Fld>
           </FldRow>
           <FldRow>
@@ -648,7 +642,7 @@ export default function RecruitmentModule() {
           </div>
           <div style={{marginBottom:'10px'}}>
             <SecHead label="C. Remarks / Justification" color="#16A34A"/>
-            <textarea style={{...C.inp,height:'70px',resize:'none' as const}} placeholder="Business justification — why this hire is needed..." value={mrf.remarks} onChange={e=>setMrf(m=>({...m,remarks:e.target.value}))}/>
+            <textarea style={{...C.inp,height:'70px',resize:'none' as const}} placeholder="Business justification..." value={mrf.remarks} onChange={e=>setMrf(m=>({...m,remarks:e.target.value}))}/>
           </div>
           <div style={{padding:'8px 12px',background:'#EDE9FE',borderRadius:'8px',fontSize:'11px',color:'#7C3AED'}}>
             💜 MD final interview mandatory · CTC MD approve karega
@@ -656,42 +650,77 @@ export default function RecruitmentModule() {
         </Modal>
       )}
 
-      {/* Quick Hire Form */}
+      {/* ✅ Quick Hire — fetchFormData on company change, formLocations for location */}
       {showQuickForm&&(
         <Modal title="⚡ Quick Hire" sub="CTC < ₹6L · Site HR / Plant Head · 5 fields only" onClose={()=>setShowQuickForm(false)} onSave={saveQuickHire} saveLabel="✅ Approve & Create Opening">
           <div style={{padding:'8px 12px',background:'#FEF3C7',borderRadius:'8px',fontSize:'11px',color:'#92400E',marginBottom:'14px'}}>
-            ⚡ System auto-check: CTC ceiling · Grade · Location auth · MD notification auto-send
+            ⚡ Company select karo → Sirf us company ki locations dikhegi
           </div>
-          <Fld label="1. Company" req><select style={C.sel} value={qh.company_id} onChange={e=>setQh(q=>({...q,company_id:e.target.value,location_id:''}))}><option value="">Select...</option>{companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></Fld>
+          <Fld label="1. Company" req>
+            <select style={C.sel} value={qh.company_id} onChange={e=>{const cid=e.target.value;setQh(q=>({...q,company_id:cid,location_id:''}));fetchFormData(cid)}}>
+              <option value="">Select...</option>
+              {companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}
+            </select>
+          </Fld>
           <div style={{marginBottom:'10px'}}/>
-          <Fld label="2. Position Type" req><select style={C.sel} value={qh.position_type} onChange={e=>setQh(q=>({...q,position_type:e.target.value}))}>{['Helper / Unskilled Worker (W1)','Skilled Worker / Operator (W2)','NAPS Apprentice','NATS Graduate Trainee','Intern','Contract Worker'].map(p=><option key={p}>{p}</option>)}</select></Fld>
+          <Fld label="2. Position Type" req>
+            <select style={C.sel} value={qh.position_type} onChange={e=>setQh(q=>({...q,position_type:e.target.value}))}>
+              {['Helper / Unskilled Worker (W1)','Skilled Worker / Operator (W2)','NAPS Apprentice','NATS Graduate Trainee','Intern','Contract Worker'].map(p=><option key={p}>{p}</option>)}
+            </select>
+          </Fld>
           <div style={{marginBottom:'10px'}}/>
-          <Fld label="3. Location" req><select style={C.sel} value={qh.location_id} onChange={e=>setQh(q=>({...q,location_id:e.target.value}))}><option value="">Select...</option>{locations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}</select></Fld>
+          <Fld label="3. Location" req>
+            <select style={C.sel} value={qh.location_id} onChange={e=>setQh(q=>({...q,location_id:e.target.value}))} disabled={!qh.company_id}>
+              <option value="">{qh.company_id ? (formLocations.length===0?'Loading...':'Select Location') : 'Pehle company select karo'}</option>
+              {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}</option>)}
+            </select>
+          </Fld>
           <div style={{marginBottom:'10px'}}/>
           <FldRow>
             <Fld label="4. No. of Positions" req><input type="number" style={C.inp} min="1" max="50" value={qh.openings} onChange={e=>setQh(q=>({...q,openings:parseInt(e.target.value)||1}))}/></Fld>
             <Fld label="5. Expected Joining Date"><input type="date" style={C.inp} value={qh.joining_date} onChange={e=>setQh(q=>({...q,joining_date:e.target.value}))}/></Fld>
           </FldRow>
-          <Fld label="Reason"><select style={C.sel} value={qh.reason} onChange={e=>setQh(q=>({...q,reason:e.target.value}))}>{['New Requirement','Replacement','Seasonal / Peak Load','Project Based','NAPS Government Scheme'].map(r=><option key={r}>{r}</option>)}</select></Fld>
-          <div style={{marginTop:'12px',padding:'8px 12px',background:'#F8FAFC',borderRadius:'8px',fontSize:'11px',color:'#64748B'}}>
-            Auto-filled: Quick Hire ID auto-generate · Status: Approved · MD ko notification
-          </div>
+          <Fld label="Reason">
+            <select style={C.sel} value={qh.reason} onChange={e=>setQh(q=>({...q,reason:e.target.value}))}>
+              {['New Requirement','Replacement','Seasonal / Peak Load','Project Based','NAPS Government Scheme'].map(r=><option key={r}>{r}</option>)}
+            </select>
+          </Fld>
         </Modal>
       )}
 
-      {/* Job Opening Form */}
+      {/* ✅ Job Opening — fetchFormData on company change */}
       {showJobForm&&(
         <Modal title="💼 New Job Opening" sub="MRF se link karo ya directly create karo" onClose={()=>setShowJobForm(false)} onSave={saveJob} saveLabel="Create Job Opening">
           <FldRow>
-            <Fld label="Company" req><select style={C.sel} value={job.company_id} onChange={e=>setJob(j=>({...j,company_id:e.target.value,department_id:'',location_id:''}))}><option value="">Select...</option>{companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}</select></Fld>
-            <Fld label="Link to MRF"><select style={C.sel} value={job.mrf_id} onChange={e=>setJob(j=>({...j,mrf_id:e.target.value}))}><option value="">None (Direct)</option>{mrfs.filter((m:any)=>m.status==='Approved').map((m:any)=><option key={m.id} value={m.id}>{m.mrf_number} — {m.position}</option>)}</select></Fld>
+            <Fld label="Company" req>
+              <select style={C.sel} value={job.company_id} onChange={e=>{const cid=e.target.value;setJob(j=>({...j,company_id:cid,department_id:'',location_id:''}));fetchFormData(cid)}}>
+                <option value="">Select...</option>
+                {companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}
+              </select>
+            </Fld>
+            <Fld label="Link to MRF">
+              <select style={C.sel} value={job.mrf_id} onChange={e=>setJob(j=>({...j,mrf_id:e.target.value}))}>
+                <option value="">None (Direct)</option>
+                {mrfs.filter((m:any)=>m.status==='Approved').map((m:any)=><option key={m.id} value={m.id}>{m.mrf_number} — {m.position}</option>)}
+              </select>
+            </Fld>
           </FldRow>
           <div style={{marginBottom:'10px'}}>
             <Fld label="Job Title" req><input style={C.inp} placeholder="e.g. Senior Executive — Accounts" value={job.job_title} onChange={e=>setJob(j=>({...j,job_title:e.target.value}))}/></Fld>
           </div>
           <FldRow>
-            <Fld label="Department"><select style={C.sel} value={job.department_id} onChange={e=>setJob(j=>({...j,department_id:e.target.value}))}><option value="">Select...</option>{departments.filter((d:any)=>!job.company_id||d.company_id===job.company_id).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></Fld>
-            <Fld label="Location"><select style={C.sel} value={job.location_id} onChange={e=>setJob(j=>({...j,location_id:e.target.value}))}><option value="">Select...</option>{locations.filter((l:any)=>!job.company_id||l.company_id===job.company_id).map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}</option>)}</select></Fld>
+            <Fld label="Department">
+              <select style={C.sel} value={job.department_id} onChange={e=>setJob(j=>({...j,department_id:e.target.value}))}>
+                <option value="">{job.company_id?'Select...':'Pehle company select karo'}</option>
+                {formDepts.map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+              </select>
+            </Fld>
+            <Fld label="Location">
+              <select style={C.sel} value={job.location_id} onChange={e=>setJob(j=>({...j,location_id:e.target.value}))}>
+                <option value="">{job.company_id?'Select...':'Pehle company select karo'}</option>
+                {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}, {l.state}</option>)}
+              </select>
+            </Fld>
           </FldRow>
           <FldRow>
             <Fld label="Min Experience (yrs)"><input type="number" style={C.inp} value={job.exp_min} onChange={e=>setJob(j=>({...j,exp_min:+e.target.value}))}/></Fld>
@@ -712,14 +741,15 @@ export default function RecruitmentModule() {
         </Modal>
       )}
 
-      {/* Add Candidate Form */}
       {showCandidateForm&&(
         <Modal title="👤 Add Candidate" sub="Duplicate auto-check hoga" onClose={()=>setShowCandidateForm(false)} onSave={saveCandidate} saveLabel="Add to Pipeline">
           <FldRow>
-            <Fld label="Job Opening" req><select style={C.sel} value={cand.job_id} onChange={e=>{const j=jobs.find((j:any)=>j.id===e.target.value);setCand(c=>({...c,job_id:e.target.value,company_id:j?.company_id||''}))}}>
-              <option value="">Select Job...</option>
-              {jobs.filter((j:any)=>j.status==='Open').map((j:any)=><option key={j.id} value={j.id}>{j.job_title} — {j.companies?.company_code}</option>)}
-            </select></Fld>
+            <Fld label="Job Opening" req>
+              <select style={C.sel} value={cand.job_id} onChange={e=>{const j=jobs.find((j:any)=>j.id===e.target.value);setCand(c=>({...c,job_id:e.target.value,company_id:j?.company_id||''}))}}>
+                <option value="">Select Job...</option>
+                {jobs.filter((j:any)=>j.status==='Open').map((j:any)=><option key={j.id} value={j.id}>{j.job_title} — {j.companies?.company_code}</option>)}
+              </select>
+            </Fld>
             <Fld label="Source"><select style={C.sel} value={cand.source} onChange={e=>setCand(c=>({...c,source:e.target.value}))}>{['Naukri','LinkedIn','Reference','Walk-in','Campus','Consultant','Internal'].map(s=><option key={s}>{s}</option>)}</select></Fld>
           </FldRow>
           <FldRow>
