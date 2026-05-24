@@ -475,7 +475,7 @@ export default function RecruitmentModule() {
                 {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}, {l.state}</option>)}
               </select>
             </Fld>
-            <Fld label="Position Title" req><input style={C.inp} placeholder="e.g. Senior Executive — Accounts" value={mrf.position} onChange={e=>setMrf(m=>({...m,position:e.target.value}))}/></Fld>
+            <Fld label="Position Title" req><<input style={C.inp} autoComplete="off" placeholder="e.g. Senior Executive — Accounts" value={mrf.position} onChange={e=>setMrf(m=>({...m,position:e.target.value}))}/></Fld>
           </FldRow>
           <FldRow>
             <Fld label="No. of Positions" req><input type="number" style={C.inp} min="1" value={mrf.openings} onChange={e=>setMrf(m=>({...m,openings:parseInt(e.target.value)||1}))}/></Fld>
