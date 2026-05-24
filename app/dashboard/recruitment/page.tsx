@@ -1,271 +1,614 @@
-import { supabase } from './supabase'
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import {
+  getMRFs, createMRF, updateMRFStatus,
+  getJobOpenings, createJobOpening, updateJobStatus,
+  getCandidates, addCandidate, updateCandidateStage, checkDuplicate,
+  getRecruitmentStats, getPipelineCounts,
+  getCompanies, getLocations, getDepartments,
+} from '../../../lib/supabase-recruitment'
 
-// ── Types ─────────────────────────────────────────────────────────
-export interface MRFData {
-  company_id: string
-  position: string
-  department_id?: string
-  location_id?: string
-  openings: number
-  urgency: string
-  reason: string
-  remarks?: string
+type MainTab = 'dashboard' | 'mrf' | 'jobs' | 'pipeline' | 'interviews' | 'offers' | 'ai' | 'analytics'
+type MRFTab = 'full' | 'quick'
+type CandidateStage = 'Applied'|'AI Screened'|'Telephonic'|'L1 Interview'|'L2 Interview'|'Optional'|'MD Final'|'Offer Sent'|'Joined'|'Rejected'
+
+const C = {
+  page: { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:'#F0F4F8', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' },
+  topbar: { background:'#fff', padding:'11px 20px', borderBottom:'1px solid #E2E8F0', display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const },
+  nav: { background:'#fff', borderBottom:'1px solid #E2E8F0', padding:'0 20px', display:'flex' as const, overflowX:'auto' as const },
+  navBtn: (a:boolean) => ({ padding:'12px 16px', border:'none', background:'transparent', cursor:'pointer', fontSize:'13px', fontWeight:a?600:400, color:a?'#7C3AED':'#64748B', borderBottom:a?'2px solid #7C3AED':'2px solid transparent', whiteSpace:'nowrap' as const }),
+  body: { flex:1, padding:'16px 20px', overflowY:'auto' as const },
+  card: { background:'#fff', borderRadius:'10px', border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:'10px' },
+  priBtn: { padding:'9px 18px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
+  secBtn: { padding:'9px 14px', background:'#fff', color:'#374151', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
+  inp: { width:'100%', padding:'8px 11px', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'13px', outline:'none', background:'#F8FAFC', boxSizing:'border-box' as const, color:'#0F172A' },
+  sel: { width:'100%', padding:'8px 11px', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'13px', outline:'none', background:'#F8FAFC', boxSizing:'border-box' as const, color:'#0F172A' },
+  lbl: { fontSize:'11px', fontWeight:500 as const, color:'#374151', display:'block' as const, marginBottom:'4px' },
 }
 
-export interface JobOpeningData {
-  company_id: string
-  mrf_id?: string
-  job_title: string
-  department_id?: string
-  location_id?: string
-  experience_min: number
-  experience_max: number
-  salary_min: number
-  salary_max: number
-  employment_type: string
-  skills_required: string[]
-  jd_text: string
-  openings_count: number
+const STAGE_COLORS: Record<string,{bg:string;color:string}> = {
+  'Applied':{bg:'#F1F5F9',color:'#374151'},'AI Screened':{bg:'#EDE9FE',color:'#7C3AED'},
+  'Telephonic':{bg:'#DBEAFE',color:'#1D4ED8'},'L1 Interview':{bg:'#CCFBF1',color:'#0D9488'},
+  'L2 Interview':{bg:'#FEF3C7',color:'#D97706'},'Optional':{bg:'#FEE2E2',color:'#DC2626'},
+  'MD Final':{bg:'#F5F3FF',color:'#9333EA'},'Offer Sent':{bg:'#DCFCE7',color:'#16A34A'},
+  'Joined':{bg:'#BBF7D0',color:'#059669'},'Rejected':{bg:'#FEE2E2',color:'#DC2626'},
 }
-
-export interface CandidateData {
-  job_id: string
-  company_id: string
-  full_name: string
-  email: string
-  phone: string
-  source: string
-  current_company: string
-  current_ctc: number
-  expected_ctc: number
-  notice_period: number
-  experience_years: number
+const AI_COLORS: Record<string,{bg:string;color:string}> = {
+  'Strong Match':{bg:'#DCFCE7',color:'#16A34A'},'Partial Match':{bg:'#FEF3C7',color:'#D97706'},'Not Suitable':{bg:'#FEE2E2',color:'#DC2626'},
 }
-
-// ── MRF Number Generator ──────────────────────────────────────────
-async function genMRFNumber(company_code: string, type: 'MRF' | 'QH' = 'MRF') {
-  const year = new Date().getFullYear()
-  const prefix = `${type}/${company_code}/${year}/`
-  const { count } = await supabase
-    .from('manpower_requisitions')
-    .select('*', { count: 'exact', head: true })
-    .like('mrf_number', `${prefix}%`)
-  const seq = String((count || 0) + 1).padStart(3, '0')
-  return `${prefix}${seq}`
+const STATUS_COLORS: Record<string,{bg:string;color:string}> = {
+  'Draft':{bg:'#F1F5F9',color:'#374151'},'Submitted':{bg:'#DBEAFE',color:'#1D4ED8'},
+  'HR Review':{bg:'#FEF3C7',color:'#D97706'},'Approved':{bg:'#DCFCE7',color:'#16A34A'},
+  'Rejected':{bg:'#FEE2E2',color:'#DC2626'},'On Hold':{bg:'#F1F5F9',color:'#64748B'},
+  'Open':{bg:'#DCFCE7',color:'#16A34A'},'Closed':{bg:'#FEE2E2',color:'#DC2626'},
 }
+const PIPELINE_STAGES: CandidateStage[] = ['Applied','AI Screened','Telephonic','L1 Interview','L2 Interview','Optional','MD Final','Offer Sent','Joined','Rejected']
 
-// ── COMPANY / LOCATION HELPERS ────────────────────────────────────
-export async function getCompanies() {
-  const { data, error } = await supabase
-    .from('companies')
-    .select('id, company_code, company_name, short_name')
-    .eq('status', 'Active')
-    .order('company_name')
-  if (error) throw error
-  return data
-}
+const StatCard = ({label,value,color,sub}:{label:string;value:any;color:string;sub?:string}) => (
+  <div style={{background:'#fff',border:'1px solid #E2E8F0',borderRadius:'10px',padding:'12px 14px',borderTop:`3px solid ${color}`}}>
+    <div style={{fontSize:'10px',color:'#94A3B8',fontWeight:500,textTransform:'uppercase' as const,letterSpacing:'.05em',marginBottom:'3px'}}>{label}</div>
+    <div style={{fontSize:'24px',fontWeight:700,color}}>{value}</div>
+    {sub && <div style={{fontSize:'10px',color:'#94A3B8',marginTop:'2px'}}>{sub}</div>}
+  </div>
+)
+const Spinner = () => <div style={{display:'flex',justifyContent:'center',padding:'40px',color:'#94A3B8',fontSize:'13px'}}>Loading...</div>
 
-export async function getLocations(company_id?: string) {
-  let q = supabase
-    .from('locations')
-    .select('id, location_code, location_name, location_type, city, state, company_id')
-    .eq('status', 'Active')
-  if (company_id) q = q.eq('company_id', company_id)
-  const { data, error } = await q.order('location_name')
-  if (error) throw error
-  return data
-}
+export default function RecruitmentModule() {
+  const [tab, setTab] = useState<MainTab>('dashboard')
+  const [mrfTab, setMrfTab] = useState<MRFTab>('full')
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [stats, setStats] = useState<any>({})
+  const [pipelineCounts, setPipelineCounts] = useState<Record<string,number>>({})
+  const [mrfs, setMrfs] = useState<any[]>([])
+  const [jobs, setJobs] = useState<any[]>([])
+  const [candidates, setCandidates] = useState<any[]>([])
+  const [companies, setCompanies] = useState<any[]>([])
+  const [formLocations, setFormLocations] = useState<any[]>([])
+  const [formDepts, setFormDepts] = useState<any[]>([])
+  const [showMRFForm, setShowMRFForm] = useState(false)
+  const [showQuickForm, setShowQuickForm] = useState(false)
+  const [showJobForm, setShowJobForm] = useState(false)
+  const [showCandidateForm, setShowCandidateForm] = useState(false)
+  const [selectedCandidate, setSelectedCandidate] = useState<any>(null)
+  const [selectedJobId, setSelectedJobId] = useState('')
+  const [mrf, setMrf] = useState({ company_id:'', position:'', department_id:'', location_id:'', openings:1, urgency:'Normal', reason:'New Position', remarks:'' })
+  const [qh, setQh] = useState({ company_id:'', position_type:'Helper / Unskilled Worker (W1)', location_id:'', openings:1, joining_date:'', reason:'New Requirement' })
+  const [job, setJob] = useState({ company_id:'', mrf_id:'', job_title:'', department_id:'', location_id:'', exp_min:0, exp_max:5, sal_min:600000, sal_max:1000000, employment_type:'Permanent', skills:'', jd_text:'', openings_count:1 })
+  const [cand, setCand] = useState({ job_id:'', company_id:'', full_name:'', email:'', phone:'', source:'Naukri', current_company:'', current_ctc:0, expected_ctc:0, notice_period:30, experience_years:0 })
 
-export async function getDepartments(company_id?: string) {
-  let q = supabase
-    .from('departments')
-    .select('id, dept_code, dept_name')
-    .eq('status', 'Active')
-  if (company_id) q = q.eq('company_id', company_id)
-  const { data, error } = await q.order('dept_name')
-  if (error) throw error
-  return data
-}
-
-// ── MRF CRUD ──────────────────────────────────────────────────────
-export async function createMRF(data: MRFData, isQuickHire = false) {
-  const { data: co } = await supabase
-    .from('companies')
-    .select('company_code')
-    .eq('id', data.company_id)
-    .single()
-  const mrf_number = await genMRFNumber(co?.company_code || 'GRP', isQuickHire ? 'QH' : 'MRF')
-  const { data: result, error } = await supabase
-    .from('manpower_requisitions')
-    .insert({
-      company_id: data.company_id,
-      mrf_number,
-      position: data.position,
-      department_id: data.department_id || null,
-      location_id: data.location_id || null,
-      openings: data.openings,
-      urgency: data.urgency,
-      reason: data.reason,
-      status: isQuickHire ? 'Approved' : 'Submitted',
-      remarks: data.remarks || null,
-    })
-    .select()
-    .single()
-  if (error) throw error
-  return result
-}
-
-export async function getMRFs(company_id?: string) {
-  let q = supabase
-    .from('manpower_requisitions')
-    .select(`*, companies(company_code, company_name), locations(location_name, city), departments(dept_name)`)
-    .order('created_at', { ascending: false })
-  if (company_id) q = q.eq('company_id', company_id)
-  const { data, error } = await q
-  if (error) throw error
-  return data
-}
-
-export async function updateMRFStatus(id: string, status: string, remarks?: string) {
-  const { data, error } = await supabase
-    .from('manpower_requisitions')
-    .update({ status, approved_at: status === 'Approved' ? new Date().toISOString() : null, remarks: remarks || null })
-    .eq('id', id)
-    .select()
-    .single()
-  if (error) throw error
-  return data
-}
-
-// ── JOB OPENINGS CRUD ─────────────────────────────────────────────
-export async function createJobOpening(data: JobOpeningData) {
-  const { data: result, error } = await supabase
-    .from('job_openings')
-    .insert({
-      company_id: data.company_id,
-      mrf_id: data.mrf_id || null,
-      job_title: data.job_title,
-      department_id: data.department_id || null,
-      location_id: data.location_id || null,
-      experience_min: data.experience_min,
-      experience_max: data.experience_max,
-      salary_min: data.salary_min,
-      salary_max: data.salary_max,
-      employment_type: data.employment_type,
-      skills_required: data.skills_required,
-      jd_text: data.jd_text,
-      openings_count: data.openings_count,
-      status: 'Open',
-      posted_date: new Date().toISOString().split('T')[0],
-    })
-    .select()
-    .single()
-  if (error) throw error
-  return result
-}
-
-export async function getJobOpenings(company_id?: string, status?: string) {
-  let q = supabase
-    .from('job_openings')
-    .select(`*, companies(company_code, company_name), locations(location_name, city), departments(dept_name), manpower_requisitions(mrf_number)`)
-    .order('created_at', { ascending: false })
-  if (company_id) q = q.eq('company_id', company_id)
-  if (status) q = q.eq('status', status)
-  const { data, error } = await q
-  if (error) throw error
-  return data
-}
-
-export async function updateJobStatus(id: string, status: string) {
-  const { data, error } = await supabase
-    .from('job_openings')
-    .update({ status })
-    .eq('id', id)
-    .select()
-    .single()
-  if (error) throw error
-  return data
-}
-
-// ── CANDIDATES CRUD ───────────────────────────────────────────────
-export async function addCandidate(data: CandidateData) {
-  const { data: result, error } = await supabase
-    .from('candidates')
-    .insert({
-      job_id: data.job_id,
-      company_id: data.company_id,
-      full_name: data.full_name,
-      email: data.email,
-      phone: data.phone,
-      source: data.source,
-      current_company: data.current_company,
-      current_ctc: data.current_ctc,
-      expected_ctc: data.expected_ctc,
-      notice_period: data.notice_period,
-      experience_years: data.experience_years,
-      stage: 'Applied',
-      status: 'Active',
-      applied_date: new Date().toISOString().split('T')[0],
-    })
-    .select()
-    .single()
-  if (error) throw error
-  return result
-}
-
-export async function getCandidates(job_id?: string, company_id?: string, stage?: string) {
-  let q = supabase
-    .from('candidates')
-    .select(`*, job_openings(job_title, companies(company_code))`)
-    .order('created_at', { ascending: false })
-  if (job_id) q = q.eq('job_id', job_id)
-  if (company_id) q = q.eq('company_id', company_id)
-  if (stage) q = q.eq('stage', stage)
-  const { data, error } = await q
-  if (error) throw error
-  return data
-}
-
-export async function updateCandidateStage(id: string, stage: string, ai_score?: number, ai_tag?: string, ai_reasoning?: string) {
-  const update: any = { stage }
-  if (ai_score !== undefined) update.ai_score = ai_score
-  if (ai_tag) update.ai_tag = ai_tag
-  if (ai_reasoning) update.ai_reasoning = ai_reasoning
-  const { data, error } = await supabase.from('candidates').update(update).eq('id', id).select().single()
-  if (error) throw error
-  return data
-}
-
-export async function checkDuplicate(phone: string, email: string) {
-  const { data } = await supabase
-    .from('candidates')
-    .select('id, full_name, job_id, stage, applied_date')
-    .or(`phone.eq.${phone},email.eq.${email}`)
-  return data || []
-}
-
-export async function getRecruitmentStats(company_id?: string) {
-  const [mrfs, jobs, candidates] = await Promise.all([
-    supabase.from('manpower_requisitions').select('status', { count: 'exact' }).eq(company_id ? 'company_id' : 'status', company_id || 'Approved'),
-    supabase.from('job_openings').select('status, openings_count').eq('status', 'Open'),
-    supabase.from('candidates').select('stage, status').eq('status', 'Active'),
-  ])
-  return {
-    openJobs: jobs.data?.length || 0,
-    totalOpenings: jobs.data?.reduce((s, j) => s + (j.openings_count || 1), 0) || 0,
-    totalCandidates: candidates.data?.length || 0,
-    offers: candidates.data?.filter(c => c.stage === 'Offer Sent').length || 0,
-    joined: candidates.data?.filter(c => c.stage === 'Joined').length || 0,
+  const fetchFormData = async (company_id: string) => {
+    if (!company_id) { setFormLocations([]); setFormDepts([]); return }
+    const [lo, de] = await Promise.all([getLocations(company_id), getDepartments(company_id)])
+    setFormLocations(lo || [])
+    setFormDepts(de || [])
   }
-}
 
-export async function getPipelineCounts(company_id?: string) {
-  const stages = ['Applied','AI Screened','Telephonic','L1 Interview','L2 Interview','Optional','MD Final','Offer Sent','Joined','Rejected']
-  let q = supabase.from('candidates').select('stage').eq('status', 'Active')
-  if (company_id) q = q.eq('company_id', company_id)
-  const { data } = await q
-  const counts: Record<string, number> = {}
-  stages.forEach(s => counts[s] = 0)
-  data?.forEach(c => { if (counts[c.stage] !== undefined) counts[c.stage]++ })
-  return counts
+  const loadDashboard = useCallback(async () => {
+    setLoading(true)
+    try { const [s,p] = await Promise.all([getRecruitmentStats(), getPipelineCounts()]); setStats(s); setPipelineCounts(p) }
+    catch { setError('Dashboard load failed') } finally { setLoading(false) }
+  }, [])
+  const loadMRFs = useCallback(async () => {
+    setLoading(true)
+    try { setMrfs(await getMRFs()) } catch { setError('MRF load failed') } finally { setLoading(false) }
+  }, [])
+  const loadJobs = useCallback(async () => {
+    setLoading(true)
+    try { setJobs(await getJobOpenings()) } catch { setError('Jobs load failed') } finally { setLoading(false) }
+  }, [])
+  const loadCandidates = useCallback(async () => {
+    setLoading(true)
+    try { setCandidates(await getCandidates()) } catch { setError('Candidates load failed') } finally { setLoading(false) }
+  }, [])
+  const loadMeta = useCallback(async () => {
+    try { const [co] = await Promise.all([getCompanies()]); setCompanies(co || []) } catch {}
+  }, [])
+
+  useEffect(() => { loadMeta() }, [])
+  useEffect(() => {
+    if(tab==='dashboard') loadDashboard()
+    if(tab==='mrf') loadMRFs()
+    if(tab==='jobs') loadJobs()
+    if(tab==='pipeline') loadCandidates()
+  }, [tab])
+
+  const saveMRF = async () => {
+    if(!mrf.company_id || !mrf.position) { setError('Company and Position are required'); return }
+    setSaving(true); setError('')
+    try {
+      await createMRF({ company_id:mrf.company_id, position:mrf.position, department_id:mrf.department_id||undefined, location_id:mrf.location_id||undefined, openings:mrf.openings, urgency:mrf.urgency, reason:mrf.reason, remarks:mrf.remarks })
+      setShowMRFForm(false); setMrf({company_id:'',position:'',department_id:'',location_id:'',openings:1,urgency:'Normal',reason:'New Position',remarks:''}); setFormLocations([]); setFormDepts([]); loadMRFs()
+    } catch(e:any) { setError(e.message || 'MRF save failed') } finally { setSaving(false) }
+  }
+  const saveQuickHire = async () => {
+    if(!qh.company_id || !qh.location_id) { setError('Company and Location are required'); return }
+    setSaving(true); setError('')
+    try {
+      await createMRF({ company_id:qh.company_id, position:qh.position_type, location_id:qh.location_id, openings:qh.openings, urgency:'Immediate', reason:qh.reason, remarks:`Quick Hire · Joining: ${qh.joining_date}` }, true)
+      setShowQuickForm(false); setQh({company_id:'',position_type:'Helper / Unskilled Worker (W1)',location_id:'',openings:1,joining_date:'',reason:'New Requirement'}); setFormLocations([]); setFormDepts([]); loadMRFs()
+    } catch(e:any) { setError(e.message || 'Quick Hire save failed') } finally { setSaving(false) }
+  }
+  const saveJob = async () => {
+    if(!job.company_id || !job.job_title) { setError('Company and Job Title are required'); return }
+    setSaving(true); setError('')
+    try {
+      await createJobOpening({ company_id:job.company_id, mrf_id:job.mrf_id||undefined, job_title:job.job_title, department_id:job.department_id||undefined, location_id:job.location_id||undefined, experience_min:job.exp_min, experience_max:job.exp_max, salary_min:job.sal_min, salary_max:job.sal_max, employment_type:job.employment_type, skills_required:job.skills.split(',').map(s=>s.trim()).filter(Boolean), jd_text:job.jd_text, openings_count:job.openings_count })
+      setShowJobForm(false); setJob({company_id:'',mrf_id:'',job_title:'',department_id:'',location_id:'',exp_min:0,exp_max:5,sal_min:600000,sal_max:1000000,employment_type:'Permanent',skills:'',jd_text:'',openings_count:1}); setFormLocations([]); setFormDepts([]); loadJobs()
+    } catch(e:any) { setError(e.message || 'Job save failed') } finally { setSaving(false) }
+  }
+  const saveCandidate = async () => {
+    if(!cand.full_name || !cand.phone || !cand.job_id) { setError('Name, Phone and Job are required'); return }
+    setSaving(true); setError('')
+    try {
+      const dups = await checkDuplicate(cand.phone, cand.email)
+      if(dups.length > 0) { if(!confirm(`⚠️ ${cand.phone} has already applied. Add anyway?`)) { setSaving(false); return } }
+      await addCandidate({ job_id:cand.job_id, company_id:cand.company_id, full_name:cand.full_name, email:cand.email, phone:cand.phone, source:cand.source, current_company:cand.current_company, current_ctc:cand.current_ctc, expected_ctc:cand.expected_ctc, notice_period:cand.notice_period, experience_years:cand.experience_years })
+      setShowCandidateForm(false); setCand({job_id:'',company_id:'',full_name:'',email:'',phone:'',source:'Naukri',current_company:'',current_ctc:0,expected_ctc:0,notice_period:30,experience_years:0}); loadCandidates()
+    } catch(e:any) { setError(e.message || 'Candidate add failed') } finally { setSaving(false) }
+  }
+  const moveStage = async (id:string, stage:string) => {
+    try { await updateCandidateStage(id, stage); loadCandidates() } catch { setError('Stage update failed') }
+  }
+  const approveMRF = async (id:string, status:string) => {
+    try { await updateMRFStatus(id, status); loadMRFs() } catch { setError('Status update failed') }
+  }
+
+  const tabs = [
+    {id:'dashboard',label:'📊 Dashboard'},{id:'mrf',label:'📋 Requisitions'},
+    {id:'jobs',label:'💼 Job Openings'},{id:'pipeline',label:'👥 Pipeline'},
+    {id:'interviews',label:'📅 Interviews'},{id:'offers',label:'📄 Offers'},
+    {id:'ai',label:'🤖 AI Screening'},{id:'analytics',label:'📈 Analytics'},
+  ]
+
+  const Modal = ({title,sub,onClose,children,onSave,saveLabel='Save'}:{title:string;sub?:string;onClose:()=>void;children:any;onSave?:()=>void;saveLabel?:string}) => (
+    <div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000}}>
+      <div style={{background:'#fff',borderRadius:'14px',padding:'24px',width:'620px',maxHeight:'88vh',overflowY:'auto' as const,boxShadow:'0 20px 60px rgba(0,0,0,0.2)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:'16px'}}>
+          <div>
+            <div style={{fontSize:'15px',fontWeight:600}}>{title}</div>
+            {sub && <div style={{fontSize:'11px',color:'#94A3B8',marginTop:'2px'}}>{sub}</div>}
+          </div>
+          <button onClick={onClose} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'#94A3B8'}}>✕</button>
+        </div>
+        {error && <div style={{padding:'8px 12px',background:'#FEE2E2',borderRadius:'8px',fontSize:'12px',color:'#DC2626',marginBottom:'12px'}}>⚠️ {error}</div>}
+        {children}
+        {onSave && (
+          <div style={{display:'flex',gap:'8px',marginTop:'16px'}}>
+            <button style={{...C.priBtn,flex:1,opacity:saving?0.7:1}} onClick={onSave} disabled={saving}>{saving?'Saving...':saveLabel}</button>
+            <button style={C.secBtn} onClick={onClose}>Cancel</button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+  const FldRow = ({children}:{children:any}) => <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px',marginBottom:'10px'}}>{children}</div>
+  const Fld = ({label,req,children}:{label:string;req?:boolean;children:any}) => (
+    <div><label style={C.lbl}>{label}{req&&<span style={{color:'#DC2626'}}> *</span>}</label>{children}</div>
+  )
+  const SecHead = ({label,color}:{label:string;color:string}) => (
+    <div style={{fontSize:'11px',fontWeight:600,color,textTransform:'uppercase' as const,letterSpacing:'.05em',marginBottom:'8px',paddingBottom:'5px',borderBottom:`2px solid ${color}22`}}>{label}</div>
+  )
+
+  return (
+    <div style={C.page}>
+      <div style={C.topbar}>
+        <div style={{fontSize:'12px',color:'#64748B'}}>Sharma Group &nbsp;›&nbsp; <span style={{color:'#7C3AED',fontWeight:500}}>Recruitment</span></div>
+        <div style={{display:'flex',gap:'8px'}}>
+          {tab==='mrf' && <button style={C.secBtn} onClick={()=>{setError('');setShowQuickForm(true)}}>⚡ Quick Hire</button>}
+          {tab==='mrf' && <button style={C.priBtn} onClick={()=>{setError('');setShowMRFForm(true)}}>+ New MRF</button>}
+          {tab==='jobs' && <button style={C.priBtn} onClick={()=>{setError('');setShowJobForm(true)}}>+ New Job Opening</button>}
+          {tab==='pipeline' && <button style={C.priBtn} onClick={()=>{setError('');setShowCandidateForm(true)}}>+ Add Candidate</button>}
+        </div>
+      </div>
+      <div style={C.nav}>{tabs.map(t=>(<button key={t.id} style={C.navBtn(tab===t.id)} onClick={()=>setTab(t.id as MainTab)}>{t.label}</button>))}</div>
+
+      <div style={C.body}>
+        {error && tab!=='mrf' && (
+          <div style={{padding:'8px 14px',background:'#FEE2E2',borderRadius:'8px',fontSize:'12px',color:'#DC2626',marginBottom:'12px'}}>
+            ⚠️ {error} <button onClick={()=>setError('')} style={{marginLeft:'8px',background:'none',border:'none',cursor:'pointer',color:'#DC2626'}}>✕</button>
+          </div>
+        )}
+
+        {tab==='dashboard' && (
+          loading ? <Spinner/> : (
+            <>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:'10px',marginBottom:'14px'}}>
+                <StatCard label="Open Positions" value={stats.openJobs||0} color="#7C3AED"/>
+                <StatCard label="Total Openings" value={stats.totalOpenings||0} color="#1D4ED8"/>
+                <StatCard label="Active Candidates" value={stats.totalCandidates||0} color="#D97706"/>
+                <StatCard label="Offers Sent" value={stats.offers||0} color="#0D9488"/>
+                <StatCard label="Joined This Month" value={stats.joined||0} color="#16A34A"/>
+              </div>
+              <div style={C.card}>
+                <div style={{fontSize:'13px',fontWeight:600,marginBottom:'12px'}}>Candidate Pipeline</div>
+                {PIPELINE_STAGES.map(stage=>(
+                  <div key={stage} style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'8px'}}>
+                    <div style={{fontSize:'11px',color:'#64748B',width:'110px',flexShrink:0}}>{stage}</div>
+                    <div style={{flex:1,background:'#F1F5F9',borderRadius:'4px',height:'22px',overflow:'hidden'}}>
+                      {(pipelineCounts[stage]||0)>0
+                        ? <div style={{width:`${Math.min(((pipelineCounts[stage]||0)/Math.max(...Object.values(pipelineCounts),1))*100,100)}%`,background:STAGE_COLORS[stage]?.color||'#7C3AED',height:'100%',borderRadius:'4px',display:'flex',alignItems:'center',paddingLeft:'8px',minWidth:'30px'}}><span style={{fontSize:'10px',color:'#fff',fontWeight:600}}>{pipelineCounts[stage]}</span></div>
+                        : <div style={{padding:'3px 8px',fontSize:'10px',color:'#94A3B8'}}>0</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px'}}>
+                <div style={C.card}>
+                  <div style={{fontSize:'13px',fontWeight:600,marginBottom:'10px'}}>Open MRFs</div>
+                  {mrfs.filter(m=>m.status==='Approved').slice(0,4).map((m:any)=>(
+                    <div key={m.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #F1F5F9',fontSize:'12px'}}>
+                      <span style={{color:'#374151'}}>{m.position}</span>
+                      <span style={{color:'#7C3AED',fontSize:'11px'}}>{m.mrf_number}</span>
+                    </div>
+                  ))}
+                  {mrfs.filter(m=>m.status==='Approved').length===0 && <div style={{fontSize:'12px',color:'#94A3B8'}}>No approved MRFs yet</div>}
+                </div>
+                <div style={C.card}>
+                  <div style={{fontSize:'13px',fontWeight:600,marginBottom:'10px'}}>Recent Jobs</div>
+                  {jobs.slice(0,4).map((j:any)=>(
+                    <div key={j.id} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #F1F5F9',fontSize:'12px'}}>
+                      <span style={{color:'#374151'}}>{j.job_title}</span>
+                      <span style={{padding:'1px 6px',background:'#DCFCE7',color:'#16A34A',borderRadius:'4px',fontSize:'10px'}}>{j.status}</span>
+                    </div>
+                  ))}
+                  {jobs.length===0 && <div style={{fontSize:'12px',color:'#94A3B8'}}>No job openings yet</div>}
+                </div>
+              </div>
+            </>
+          )
+        )}
+
+        {tab==='mrf' && (
+          <div>
+            <div style={{...C.card,display:'flex',gap:'8px',alignItems:'center',justifyContent:'space-between',marginBottom:'12px'}}>
+              <div style={{display:'flex',gap:'6px'}}>
+                {[{id:'full',label:'📋 Full MRF'},{id:'quick',label:'⚡ Quick Hire'}].map(t=>(
+                  <button key={t.id} onClick={()=>setMrfTab(t.id as MRFTab)} style={{padding:'7px 16px',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:mrfTab===t.id?600:400,background:mrfTab===t.id?'#7C3AED':'#F8FAFC',color:mrfTab===t.id?'#fff':'#64748B'}}>{t.label}</button>
+                ))}
+              </div>
+              <div style={{fontSize:'11px',color:'#94A3B8'}}>{mrfTab==='full'?'CTC ≥ ₹6L · MD Approval':'CTC < ₹6L · Site HR Approve · W1/W2/NAPS'}</div>
+            </div>
+            {loading?<Spinner/>:(
+              <div style={C.card}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:'12px'}}>
+                  <div style={{fontSize:'13px',fontWeight:600}}>{mrfTab==='full'?'Manpower Requisitions':'Quick Hire Requests'}</div>
+                  <span style={{fontSize:'12px',color:'#64748B'}}>{mrfs.filter(m=>mrfTab==='full'?!m.mrf_number?.startsWith('QH'):m.mrf_number?.startsWith('QH')).length} records</span>
+                </div>
+                <div style={{overflowX:'auto' as const}}>
+                  <table style={{width:'100%',borderCollapse:'collapse' as const,fontSize:'12px'}}>
+                    <thead>
+                      <tr style={{background:'#1E1B4B'}}>
+                        {['MRF No.','Position','Location','Count','Urgency','Status','Date','Action'].map(h=>(
+                          <th key={h} style={{padding:'9px 10px',color:'#fff',fontWeight:600,textAlign:'left' as const,fontSize:'11px',whiteSpace:'nowrap' as const}}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {mrfs.filter(m=>mrfTab==='full'?!m.mrf_number?.startsWith('QH'):m.mrf_number?.startsWith('QH')).map((m:any,i:number)=>(
+                        <tr key={m.id} style={{background:i%2===0?'#F8FAFC':'#fff',borderBottom:'1px solid #E2E8F0'}}>
+                          <td style={{padding:'9px 10px',color:'#7C3AED',fontWeight:600,fontSize:'11px'}}>{m.mrf_number}</td>
+                          <td style={{padding:'9px 10px',fontWeight:500}}>{m.position}</td>
+                          <td style={{padding:'9px 10px',color:'#64748B',fontSize:'11px'}}>{m.locations?.location_name||'—'}</td>
+                          <td style={{padding:'9px 10px',textAlign:'center' as const,fontWeight:600}}>{m.openings}</td>
+                          <td style={{padding:'9px 10px'}}><span style={{padding:'2px 7px',borderRadius:'5px',fontSize:'10px',background:m.urgency==='Immediate'?'#FEE2E2':m.urgency==='Urgent'?'#FEF3C7':'#F1F5F9',color:m.urgency==='Immediate'?'#DC2626':m.urgency==='Urgent'?'#D97706':'#374151'}}>{m.urgency}</span></td>
+                          <td style={{padding:'9px 10px'}}><span style={{padding:'2px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:500,...(STATUS_COLORS[m.status]||{bg:'#F1F5F9',color:'#374151'})}}>{m.status}</span></td>
+                          <td style={{padding:'9px 10px',color:'#64748B',fontSize:'11px'}}>{m.created_at?.split('T')[0]}</td>
+                          <td style={{padding:'9px 10px'}}>
+                            <div style={{display:'flex',gap:'4px'}}>
+                              {m.status==='Submitted'&&<button onClick={()=>approveMRF(m.id,'Approved')} style={{padding:'3px 8px',background:'#DCFCE7',border:'none',borderRadius:'5px',cursor:'pointer',fontSize:'10px',color:'#16A34A'}}>✓ Approve</button>}
+                              {m.status==='Submitted'&&<button onClick={()=>approveMRF(m.id,'Rejected')} style={{padding:'3px 8px',background:'#FEE2E2',border:'none',borderRadius:'5px',cursor:'pointer',fontSize:'10px',color:'#DC2626'}}>✗ Reject</button>}
+                              {m.status==='Approved'&&<button onClick={()=>{setJob(j=>({...j,mrf_id:m.id,company_id:m.company_id||'',job_title:m.position}));setShowJobForm(true)}} style={{padding:'3px 8px',background:'#EDE9FE',border:'none',borderRadius:'5px',cursor:'pointer',fontSize:'10px',color:'#7C3AED'}}>+ Job</button>}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {mrfs.filter(m=>mrfTab==='full'?!m.mrf_number?.startsWith('QH'):m.mrf_number?.startsWith('QH')).length===0&&(
+                        <tr><td colSpan={8} style={{padding:'24px',textAlign:'center' as const,color:'#94A3B8',fontSize:'12px'}}>No {mrfTab==='full'?'MRFs':'Quick Hire requests'} yet</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab==='jobs' && (
+          loading?<Spinner/>:(
+            <>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:'10px',marginBottom:'14px'}}>
+                <StatCard label="Open Jobs" value={jobs.filter((j:any)=>j.status==='Open').length} color="#7C3AED"/>
+                <StatCard label="Total Openings" value={jobs.reduce((s:number,j:any)=>s+(j.openings_count||1),0)} color="#1D4ED8"/>
+                <StatCard label="Total Candidates" value={candidates.length} color="#16A34A"/>
+              </div>
+              {jobs.length===0?(
+                <div style={{...C.card,textAlign:'center' as const,padding:'40px'}}>
+                  <div style={{fontSize:'28px',marginBottom:'8px'}}>💼</div>
+                  <div style={{fontSize:'14px',fontWeight:500,marginBottom:'4px'}}>No Job Openings Yet</div>
+                  <div style={{fontSize:'12px',color:'#94A3B8',marginBottom:'16px'}}>Create a Job Opening after MRF is approved</div>
+                  <button style={C.priBtn} onClick={()=>setShowJobForm(true)}>+ Create Job Opening</button>
+                </div>
+              ):(
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:'12px'}}>
+                  {jobs.map((j:any)=>(
+                    <div key={j.id} style={{...C.card,borderTop:'3px solid #7C3AED',cursor:'pointer'}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:'8px'}}>
+                        <div>
+                          <div style={{fontSize:'13px',fontWeight:600}}>{j.job_title}</div>
+                          <div style={{fontSize:'11px',color:'#64748B',marginTop:'2px'}}>{j.departments?.dept_name||'—'} · {j.locations?.location_name||'—'}</div>
+                        </div>
+                        <span style={{padding:'3px 8px',borderRadius:'6px',fontSize:'10px',fontWeight:500,...(STATUS_COLORS[j.status]||{bg:'#F1F5F9',color:'#374151'})}}>{j.status}</span>
+                      </div>
+                      <div style={{display:'flex',gap:'6px',flexWrap:'wrap' as const,marginBottom:'10px'}}>
+                        <span style={{padding:'2px 7px',background:'#EDE9FE',color:'#7C3AED',borderRadius:'5px',fontSize:'10px'}}>{j.companies?.company_code}</span>
+                        <span style={{padding:'2px 7px',background:'#F1F5F9',color:'#374151',borderRadius:'5px',fontSize:'10px'}}>{j.experience_min}-{j.experience_max}y</span>
+                        <span style={{padding:'2px 7px',background:'#F1F5F9',color:'#374151',borderRadius:'5px',fontSize:'10px'}}>₹{((j.salary_min||0)/100000).toFixed(1)}L-₹{((j.salary_max||0)/100000).toFixed(1)}L</span>
+                        <span style={{padding:'2px 7px',background:'#F1F5F9',color:'#374151',borderRadius:'5px',fontSize:'10px'}}>{j.openings_count} openings</span>
+                      </div>
+                      <div style={{display:'flex',gap:'6px'}}>
+                        <button onClick={()=>{setSelectedJobId(j.id);setTab('pipeline')}} style={{flex:1,padding:'7px',background:'#EDE9FE',border:'none',borderRadius:'7px',cursor:'pointer',fontSize:'11px',color:'#7C3AED',fontWeight:500}}>View Pipeline</button>
+                        {j.status==='Open'&&<button onClick={()=>updateJobStatus(j.id,'Closed').then(loadJobs)} style={{padding:'7px 12px',background:'#FEE2E2',border:'none',borderRadius:'7px',cursor:'pointer',fontSize:'11px',color:'#DC2626'}}>Close</button>}
+                      </div>
+                      <div style={{fontSize:'10px',color:'#94A3B8',marginTop:'8px'}}>Posted: {j.posted_date||'—'}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )
+        )}
+
+        {tab==='pipeline' && (
+          <div>
+            <div style={{...C.card,display:'flex',gap:'8px',alignItems:'center',marginBottom:'12px'}}>
+              <span style={{fontSize:'12px',color:'#64748B',flexShrink:0}}>Job:</span>
+              <select style={{...C.sel,flex:1}} value={selectedJobId} onChange={e=>setSelectedJobId(e.target.value)}>
+                <option value="">All Jobs</option>
+                {jobs.map((j:any)=><option key={j.id} value={j.id}>{j.job_title}</option>)}
+              </select>
+            </div>
+            {loading?<Spinner/>:(
+              <div style={{display:'flex',gap:'10px',overflowX:'auto' as const,paddingBottom:'8px'}}>
+                {PIPELINE_STAGES.map(stage=>{
+                  const sc = candidates.filter((c:any)=>c.stage===stage&&(selectedJobId?c.job_id===selectedJobId:true))
+                  const col = STAGE_COLORS[stage]||{bg:'#F1F5F9',color:'#374151'}
+                  return (
+                    <div key={stage} style={{minWidth:'190px',maxWidth:'190px',flexShrink:0}}>
+                      <div style={{padding:'7px 10px',borderRadius:'8px',marginBottom:'8px',background:col.bg,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                        <span style={{fontSize:'10px',fontWeight:600,color:col.color}}>{stage}</span>
+                        <span style={{fontSize:'11px',fontWeight:700,color:col.color,background:'#fff',width:'20px',height:'20px',borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center'}}>{sc.length}</span>
+                      </div>
+                      {sc.map((c:any)=>(
+                        <div key={c.id} onClick={()=>setSelectedCandidate(c)} style={{background:'#fff',border:'1px solid #E2E8F0',borderRadius:'8px',padding:'10px',marginBottom:'8px',cursor:'pointer',borderLeft:`3px solid ${col.color}`}}>
+                          <div style={{fontSize:'12px',fontWeight:600,marginBottom:'2px'}}>{c.full_name}</div>
+                          <div style={{fontSize:'10px',color:'#64748B',marginBottom:'5px'}}>{c.current_company||'—'} · {c.experience_years}y</div>
+                          {c.ai_tag&&<span style={{padding:'1px 6px',borderRadius:'4px',fontSize:'9px',fontWeight:600,...(AI_COLORS[c.ai_tag]||{bg:'#F1F5F9',color:'#374151'})}}>{c.ai_tag}</span>}
+                          {c.ai_score&&<span style={{marginLeft:'4px',fontSize:'10px',fontWeight:700,color:c.ai_score>=75?'#16A34A':c.ai_score>=50?'#D97706':'#DC2626'}}>{c.ai_score}%</span>}
+                          <div style={{fontSize:'9px',color:'#94A3B8',marginTop:'4px'}}>{c.source} · ₹{((c.expected_ctc||0)/100000).toFixed(1)}L exp</div>
+                        </div>
+                      ))}
+                      <button style={{width:'100%',padding:'6px',background:'transparent',border:'1px dashed #E2E8F0',borderRadius:'8px',cursor:'pointer',fontSize:'10px',color:'#94A3B8'}}>+ Add</button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {selectedCandidate&&(
+              <div style={{position:'fixed' as const,inset:0,background:'rgba(0,0,0,0.3)',zIndex:1000}} onClick={()=>setSelectedCandidate(null)}>
+                <div style={{position:'absolute' as const,right:0,top:0,bottom:0,width:'380px',background:'#fff',padding:'20px',overflowY:'auto' as const,boxShadow:'-4px 0 20px rgba(0,0,0,0.1)'}} onClick={e=>e.stopPropagation()}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:'14px'}}>
+                    <div style={{fontSize:'15px',fontWeight:600}}>{selectedCandidate.full_name}</div>
+                    <button onClick={()=>setSelectedCandidate(null)} style={{background:'none',border:'none',fontSize:'20px',cursor:'pointer',color:'#94A3B8'}}>✕</button>
+                  </div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'8px',marginBottom:'14px'}}>
+                    {[
+                      {l:'Current Company',v:selectedCandidate.current_company||'—'},
+                      {l:'Experience',v:`${selectedCandidate.experience_years} years`},
+                      {l:'Current CTC',v:`₹${((selectedCandidate.current_ctc||0)/100000).toFixed(1)}L`},
+                      {l:'Expected CTC',v:`₹${((selectedCandidate.expected_ctc||0)/100000).toFixed(1)}L`},
+                      {l:'Notice Period',v:`${selectedCandidate.notice_period} days`},
+                      {l:'Source',v:selectedCandidate.source},
+                      {l:'Phone',v:selectedCandidate.phone},
+                      {l:'Email',v:selectedCandidate.email||'—'},
+                    ].map((f,i)=>(
+                      <div key={i} style={{padding:'8px',background:'#F8FAFC',borderRadius:'8px'}}>
+                        <div style={{fontSize:'10px',color:'#94A3B8'}}>{f.l}</div>
+                        <div style={{fontSize:'12px',fontWeight:500,marginTop:'2px'}}>{f.v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{marginBottom:'12px'}}>
+                    <label style={C.lbl}>Move to Stage</label>
+                    <select style={C.sel} value={selectedCandidate.stage} onChange={e=>{moveStage(selectedCandidate.id,e.target.value);setSelectedCandidate({...selectedCandidate,stage:e.target.value})}}>
+                      {PIPELINE_STAGES.map(s=><option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div style={{display:'flex',flexDirection:'column' as const,gap:'8px'}}>
+                    <button style={{...C.priBtn,width:'100%'}}>📅 Schedule Interview</button>
+                    <button style={{...C.secBtn,width:'100%'}}>📄 Generate Offer</button>
+                    <button onClick={()=>{moveStage(selectedCandidate.id,'Rejected');setSelectedCandidate(null)}} style={{...C.secBtn,color:'#DC2626',borderColor:'#FECACA',width:'100%'}}>❌ Reject</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {['interviews','offers','ai','analytics'].includes(tab) && (
+          <div style={{...C.card,textAlign:'center' as const,padding:'48px'}}>
+            <div style={{fontSize:'32px',marginBottom:'12px'}}>{tab==='interviews'?'📅':tab==='offers'?'📄':tab==='ai'?'🤖':'📈'}</div>
+            <div style={{fontSize:'16px',fontWeight:600,marginBottom:'6px',textTransform:'capitalize' as const}}>{tab} Module</div>
+            <div style={{fontSize:'13px',color:'#94A3B8',marginBottom:'20px'}}>
+              {tab==='interviews'&&'Interview scheduling and feedback — coming soon'}
+              {tab==='offers'&&'CTC Calculator and Offer Letter Generator — coming soon'}
+              {tab==='ai'&&'Claude API integration — Resume screening coming soon'}
+              {tab==='analytics'&&'Source effectiveness and hiring analytics — coming soon'}
+            </div>
+            <span style={{padding:'6px 16px',background:'#EDE9FE',color:'#7C3AED',borderRadius:'8px',fontSize:'12px',fontWeight:500}}>Under Development</span>
+          </div>
+        )}
+      </div>
+
+      {showMRFForm&&(
+        <Modal title="📋 New Manpower Requisition" sub="MRF number will be auto-generated" onClose={()=>setShowMRFForm(false)} onSave={saveMRF} saveLabel={saving?'Saving...':'Submit for HR Review →'}>
+          <SecHead label="A. Position Details" color="#7C3AED"/>
+          <FldRow>
+            <Fld label="Company" req>
+              <select style={C.sel} value={mrf.company_id} onChange={e=>{const cid=e.target.value;setMrf(m=>({...m,company_id:cid,department_id:'',location_id:''}));fetchFormData(cid)}}>
+                <option value="">Select...</option>
+                {companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}
+              </select>
+            </Fld>
+            <Fld label="Department">
+              <select style={C.sel} value={mrf.department_id} onChange={e=>setMrf(m=>({...m,department_id:e.target.value}))}>
+                <option value="">{mrf.company_id?'Select department...':'Select company first'}</option>
+                {formDepts.map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+              </select>
+            </Fld>
+          </FldRow>
+          <FldRow>
+            <Fld label="Location">
+              <select style={C.sel} value={mrf.location_id} onChange={e=>setMrf(m=>({...m,location_id:e.target.value}))}>
+                <option value="">{mrf.company_id?'Select location...':'Select company first'}</option>
+                {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}, {l.state}</option>)}
+              </select>
+            </Fld>
+            <Fld label="Position Title" req><input style={C.inp} placeholder="e.g. Senior Executive — Accounts" value={mrf.position} onChange={e=>setMrf(m=>({...m,position:e.target.value}))}/></Fld>
+          </FldRow>
+          <FldRow>
+            <Fld label="No. of Positions" req><input type="number" style={C.inp} min="1" value={mrf.openings} onChange={e=>setMrf(m=>({...m,openings:parseInt(e.target.value)||1}))}/></Fld>
+            <Fld label="Urgency" req><select style={C.sel} value={mrf.urgency} onChange={e=>setMrf(m=>({...m,urgency:e.target.value}))}>{['Immediate','Urgent','Normal'].map(u=><option key={u}>{u}</option>)}</select></Fld>
+          </FldRow>
+          <div style={{marginBottom:'10px'}}>
+            <SecHead label="B. Reason" color="#1D4ED8"/>
+            <select style={C.sel} value={mrf.reason} onChange={e=>setMrf(m=>({...m,reason:e.target.value}))}>{['New Position','Replacement','Expansion','Seasonal'].map(r=><option key={r}>{r}</option>)}</select>
+          </div>
+          <div style={{marginBottom:'10px'}}>
+            <SecHead label="C. Remarks / Justification" color="#16A34A"/>
+            <textarea style={{...C.inp,height:'70px',resize:'none' as const}} placeholder="Business justification..." value={mrf.remarks} onChange={e=>setMrf(m=>({...m,remarks:e.target.value}))}/>
+          </div>
+          <div style={{padding:'8px 12px',background:'#EDE9FE',borderRadius:'8px',fontSize:'11px',color:'#7C3AED'}}>💜 MD final interview mandatory · CTC approved by MD</div>
+        </Modal>
+      )}
+
+      {showQuickForm&&(
+        <Modal title="⚡ Quick Hire" sub="CTC < ₹6L · Site HR / Plant Head · 5 fields only" onClose={()=>setShowQuickForm(false)} onSave={saveQuickHire} saveLabel="✅ Approve & Create Opening">
+          <div style={{padding:'8px 12px',background:'#FEF3C7',borderRadius:'8px',fontSize:'11px',color:'#92400E',marginBottom:'14px'}}>⚡ Select company → Only that company's locations will appear</div>
+          <Fld label="1. Company" req>
+            <select style={C.sel} value={qh.company_id} onChange={e=>{const cid=e.target.value;setQh(q=>({...q,company_id:cid,location_id:''}));fetchFormData(cid)}}>
+              <option value="">Select...</option>
+              {companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}
+            </select>
+          </Fld>
+          <div style={{marginBottom:'10px'}}/>
+          <Fld label="2. Position Type" req>
+            <select style={C.sel} value={qh.position_type} onChange={e=>setQh(q=>({...q,position_type:e.target.value}))}>
+              {['Helper / Unskilled Worker (W1)','Skilled Worker / Operator (W2)','NAPS Apprentice','NATS Graduate Trainee','Intern','Contract Worker'].map(p=><option key={p}>{p}</option>)}
+            </select>
+          </Fld>
+          <div style={{marginBottom:'10px'}}/>
+          <Fld label="3. Location" req>
+            <select style={C.sel} value={qh.location_id} onChange={e=>setQh(q=>({...q,location_id:e.target.value}))} disabled={!qh.company_id}>
+              <option value="">{qh.company_id?(formLocations.length===0?'Loading...':'Select location'):'Select company first'}</option>
+              {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}</option>)}
+            </select>
+          </Fld>
+          <div style={{marginBottom:'10px'}}/>
+          <FldRow>
+            <Fld label="4. No. of Positions" req><input type="number" style={C.inp} min="1" max="50" value={qh.openings} onChange={e=>setQh(q=>({...q,openings:parseInt(e.target.value)||1}))}/></Fld>
+            <Fld label="5. Expected Joining Date"><input type="date" style={C.inp} value={qh.joining_date} onChange={e=>setQh(q=>({...q,joining_date:e.target.value}))}/></Fld>
+          </FldRow>
+          <Fld label="Reason">
+            <select style={C.sel} value={qh.reason} onChange={e=>setQh(q=>({...q,reason:e.target.value}))}>
+              {['New Requirement','Replacement','Seasonal / Peak Load','Project Based','NAPS Government Scheme'].map(r=><option key={r}>{r}</option>)}
+            </select>
+          </Fld>
+        </Modal>
+      )}
+
+      {showJobForm&&(
+        <Modal title="💼 New Job Opening" sub="Link to MRF or create directly" onClose={()=>setShowJobForm(false)} onSave={saveJob} saveLabel="Create Job Opening">
+          <FldRow>
+            <Fld label="Company" req>
+              <select style={C.sel} value={job.company_id} onChange={e=>{const cid=e.target.value;setJob(j=>({...j,company_id:cid,department_id:'',location_id:''}));fetchFormData(cid)}}>
+                <option value="">Select...</option>
+                {companies.map((c:any)=><option key={c.id} value={c.id}>{c.company_name}</option>)}
+              </select>
+            </Fld>
+            <Fld label="Link to MRF">
+              <select style={C.sel} value={job.mrf_id} onChange={e=>setJob(j=>({...j,mrf_id:e.target.value}))}>
+                <option value="">None (Direct)</option>
+                {mrfs.filter((m:any)=>m.status==='Approved').map((m:any)=><option key={m.id} value={m.id}>{m.mrf_number} — {m.position}</option>)}
+              </select>
+            </Fld>
+          </FldRow>
+          <div style={{marginBottom:'10px'}}>
+            <Fld label="Job Title" req><input style={C.inp} placeholder="e.g. Senior Executive — Accounts" value={job.job_title} onChange={e=>setJob(j=>({...j,job_title:e.target.value}))}/></Fld>
+          </div>
+          <FldRow>
+            <Fld label="Department">
+              <select style={C.sel} value={job.department_id} onChange={e=>setJob(j=>({...j,department_id:e.target.value}))}>
+                <option value="">{job.company_id?'Select department...':'Select company first'}</option>
+                {formDepts.map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+              </select>
+            </Fld>
+            <Fld label="Location">
+              <select style={C.sel} value={job.location_id} onChange={e=>setJob(j=>({...j,location_id:e.target.value}))}>
+                <option value="">{job.company_id?'Select location...':'Select company first'}</option>
+                {formLocations.map((l:any)=><option key={l.id} value={l.id}>{l.location_name} — {l.city}, {l.state}</option>)}
+              </select>
+            </Fld>
+          </FldRow>
+          <FldRow>
+            <Fld label="Min Experience (yrs)"><input type="number" style={C.inp} value={job.exp_min} onChange={e=>setJob(j=>({...j,exp_min:+e.target.value}))}/></Fld>
+            <Fld label="Max Experience (yrs)"><input type="number" style={C.inp} value={job.exp_max} onChange={e=>setJob(j=>({...j,exp_max:+e.target.value}))}/></Fld>
+          </FldRow>
+          <FldRow>
+            <Fld label="CTC Min (₹)"><input type="number" style={C.inp} value={job.sal_min} onChange={e=>setJob(j=>({...j,sal_min:+e.target.value}))}/></Fld>
+            <Fld label="CTC Max (₹)"><input type="number" style={C.inp} value={job.sal_max} onChange={e=>setJob(j=>({...j,sal_max:+e.target.value}))}/></Fld>
+          </FldRow>
+          <FldRow>
+            <Fld label="Employment Type"><select style={C.sel} value={job.employment_type} onChange={e=>setJob(j=>({...j,employment_type:e.target.value}))}>{['Permanent','Contract','Intern','NAPS','NATS'].map(t=><option key={t}>{t}</option>)}</select></Fld>
+            <Fld label="No. of Openings"><input type="number" style={C.inp} value={job.openings_count} onChange={e=>setJob(j=>({...j,openings_count:+e.target.value}))}/></Fld>
+          </FldRow>
+          <div style={{marginBottom:'10px'}}>
+            <Fld label="Required Skills (comma separated)"><input style={C.inp} placeholder="e.g. Tally, GST, MS Excel" value={job.skills} onChange={e=>setJob(j=>({...j,skills:e.target.value}))}/></Fld>
+          </div>
+          <Fld label="Job Description"><textarea style={{...C.inp,height:'80px',resize:'none' as const}} placeholder="Role overview, responsibilities, requirements..." value={job.jd_text} onChange={e=>setJob(j=>({...j,jd_text:e.target.value}))}/></Fld>
+        </Modal>
+      )}
+
+      {showCandidateForm&&(
+        <Modal title="👤 Add Candidate" sub="Duplicate check will run automatically" onClose={()=>setShowCandidateForm(false)} onSave={saveCandidate} saveLabel="Add to Pipeline">
+          <FldRow>
+            <Fld label="Job Opening" req>
+              <select style={C.sel} value={cand.job_id} onChange={e=>{const j=jobs.find((j:any)=>j.id===e.target.value);setCand(c=>({...c,job_id:e.target.value,company_id:j?.company_id||''}))}}>
+                <option value="">Select Job...</option>
+                {jobs.filter((j:any)=>j.status==='Open').map((j:any)=><option key={j.id} value={j.id}>{j.job_title} — {j.companies?.company_code}</option>)}
+              </select>
+            </Fld>
+            <Fld label="Source"><select style={C.sel} value={cand.source} onChange={e=>setCand(c=>({...c,source:e.target.value}))}>{['Naukri','LinkedIn','Reference','Walk-in','Campus','Consultant','Internal'].map(s=><option key={s}>{s}</option>)}</select></Fld>
+          </FldRow>
+          <FldRow>
+            <Fld label="Full Name" req><input style={C.inp} placeholder="Ramesh Kumar" value={cand.full_name} onChange={e=>setCand(c=>({...c,full_name:e.target.value}))}/></Fld>
+            <Fld label="Mobile" req><input style={C.inp} placeholder="9876543210" value={cand.phone} onChange={e=>setCand(c=>({...c,phone:e.target.value}))}/></Fld>
+          </FldRow>
+          <FldRow>
+            <Fld label="Email"><input style={C.inp} placeholder="email@gmail.com" value={cand.email} onChange={e=>setCand(c=>({...c,email:e.target.value}))}/></Fld>
+            <Fld label="Current Company"><input style={C.inp} placeholder="ABC Ltd" value={cand.current_company} onChange={e=>setCand(c=>({...c,current_company:e.target.value}))}/></Fld>
+          </FldRow>
+          <FldRow>
+            <Fld label="Experience (years)"><input type="number" style={C.inp} value={cand.experience_years} onChange={e=>setCand(c=>({...c,experience_years:+e.target.value}))}/></Fld>
+            <Fld label="Notice Period (days)"><input type="number" style={C.inp} value={cand.notice_period} onChange={e=>setCand(c=>({...c,notice_period:+e.target.value}))}/></Fld>
+          </FldRow>
+          <FldRow>
+            <Fld label="Current CTC (₹/year)"><input type="number" style={C.inp} value={cand.current_ctc} onChange={e=>setCand(c=>({...c,current_ctc:+e.target.value}))}/></Fld>
+            <Fld label="Expected CTC (₹/year)"><input type="number" style={C.inp} value={cand.expected_ctc} onChange={e=>setCand(c=>({...c,expected_ctc:+e.target.value}))}/></Fld>
+          </FldRow>
+        </Modal>
+      )}
+    </div>
+  )
 }
