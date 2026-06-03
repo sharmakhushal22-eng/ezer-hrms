@@ -1,0 +1,649 @@
+================================================================
+  EZER HRMS — COMPLETE APPLICATION GUIDE
+  India's Intelligent HR Platform
+================================================================
+
+WHAT IS THIS APP?
+-----------------
+Ezer HRMS is a web-based Human Resource Management System built
+for Indian companies. It is designed to manage the entire
+employee lifecycle — from hiring to retirement — including
+payroll, compliance with Indian labour laws (EPF, ESIC, PT, LWF),
+attendance, letters, and reporting.
+
+The app is built for large business groups that own multiple
+companies (e.g. "Sharma Group" owns Sharma Sons, Sharma Petro,
+Sharma Rail, etc.). All companies are managed from one platform.
+
+================================================================
+TECHNOLOGY STACK (How it is built)
+================================================================
+- Framework:     Next.js 16 (React-based web framework)
+- Language:      TypeScript
+- Database:      Supabase (PostgreSQL in the cloud)
+- Auth:          Supabase Auth (email + password login)
+- Styling:       Inline CSS + TailwindCSS
+- File Exports:  XLSX library (Excel downloads)
+- Maps:          Google Maps API (for location pinning)
+- Hosting:       Runs locally on http://localhost:3000
+
+================================================================
+HOW TO ACCESS THE APP
+================================================================
+1. Open browser → go to http://localhost:3000
+2. You see the LOGIN PAGE
+3. Enter your work email and password (managed in Supabase)
+4. Click "Sign In →"
+5. On success → you are taken to the DASHBOARD
+
+================================================================
+PAGE 1: LOGIN PAGE (http://localhost:3000)
+================================================================
+WHAT YOU SEE:
+Left side (dark purple panel):
+  - Ezer HRMS logo
+  - E = Empower Employees (Self-service, ESS)
+  - Z = Zero Compliance Risk (EPF, ESIC, PT, Factory Act)
+  - E = Efficient Payroll (AI-powered, zero errors)
+  - R = Retain Top Talent (Hire to retire)
+  - Security badges: SOC 2, Data in India, DPDPA 2023
+
+Right side (login form):
+  - Work Email field
+  - Password field (with show/hide toggle)
+  - Forgot password link
+  - Sign In button
+  - "Contact your admin" button
+  - Theme switcher (Light / Dark / Auto) top-right corner
+
+WHAT HAPPENS WHEN YOU LOGIN:
+  - App calls Supabase Auth with email + password
+  - If valid → redirects to /dashboard
+  - If invalid → shows error message in red
+
+================================================================
+NAVIGATION SIDEBAR (Visible on all dashboard pages)
+================================================================
+A collapsible sidebar on the LEFT side with these menu items:
+
+  🏠 Home          → /dashboard
+  🎯 Recruitment   → /dashboard/recruitment
+  🚀 Onboarding    → /dashboard/onboarding    [Coming Soon]
+  👥 Employees     → /dashboard/employees
+  📅 Attendance    → /dashboard/attendance    [Coming Soon]
+  💰 Payroll       → /dashboard/payroll       [Coming Soon]
+  ⚖️  Compliance   → /dashboard/compliance    [Coming Soon]
+  📝 HR Letters    → /dashboard/letters       [Coming Soon]
+  📱 ESS & Access  → /dashboard/ess           [Coming Soon]
+  🔧 Admin Setup   → /dashboard/admin
+  📊 Reports       → /dashboard/reports       [Coming Soon]
+  🤖 Ezer AI       → /dashboard/ai            [Coming Soon]
+  🎧 Support       → /dashboard/support       [Coming Soon]
+
+The sidebar shows only icons when collapsed. Click "Ez" button
+to expand it and show labels. Active page is highlighted purple.
+
+================================================================
+PAGE 2: DASHBOARD HOME (/dashboard)
+================================================================
+This is the main overview page. It shows:
+
+TOP STATS BAR (5 cards):
+  - Total Employees: 1,247
+  - Active: 1,198 (96.1% active)
+  - On Leave Today: 34
+  - Payroll (May): ₹24.5 Lakh
+  - Compliance Due: 3 (action needed)
+
+MAP PANEL — "Branch Locations — India":
+  - Shows dots on an India map for each office/factory
+  - 8 locations shown: Delhi HQ, Panipat Factory, Gurgaon,
+    Jaipur, Mathura Refinery, Agra, Ahmedabad, Mumbai
+  - Hover on a dot to see location name + employee count
+  - Color legend: Purple=HQ/Factory, Blue=Branch, Green=Warehouse
+
+COMPANY HEADCOUNT PANEL:
+  - Bar chart showing employees per company:
+    Sharma Sons:  412 employees
+    Sharma Petro: 315 employees
+    Sharma Rail:  243 employees
+    Sharma Bros:  189 employees
+    Sharma Trans:  88 employees
+  - Donut chart showing total 1,247 split by company
+
+COMPLIANCE THIS MONTH:
+  - PT Return Maharashtra → OVERDUE (was due 30 Apr) — File Now
+  - PF Challan All locations → DUE SOON (Due 15 May)
+  - ESI Return Monthly → DUE SOON (Due 21 May)
+  - TDS Return Q4 Form 26Q → FILED ✓
+  - Factory License Renewal → FILED ✓ Valid till Dec 2026
+
+RECENT ACTIVITY:
+  - Rahul Sharma joined Sharma Sons — Delhi HQ (Today 9:30 AM)
+  - Payroll approved — Sharma Rail 243 employees (Yesterday)
+  - F&F settled — Priya Singh ₹1,24,500 (2 days ago)
+  - PF challan pending — Sharma Petro Mathura (3 days ago)
+  - Experience letter generated — 3 employees (4 days ago)
+
+BIRTHDAYS & ANNIVERSARIES:
+  - Today section with 🎂 Birthday and 🌟 Work Anniversary
+  - "Wish" button to send a wish (turns green ✓ after clicking)
+  - This Week upcoming section
+
+NOTE: Dashboard data is currently STATIC (hardcoded for demo).
+Real data comes from the Employee Master and Compliance modules.
+
+================================================================
+PAGE 3: EMPLOYEES (/dashboard/employees)
+================================================================
+This is a FULLY WORKING page connected to the database.
+
+PURPOSE: View and manage all employees across all companies.
+
+TOP STATS (8 clickable cards — clicking filters the list):
+  Total | Active | Resigned | Employee | Intern | NAPS |
+  Consultant | Contract
+
+FILTERS BAR:
+  - Search box: search by Name, Code, Designation, Mobile
+  - Company dropdown
+  - Location dropdown (depends on company selected)
+  - Department dropdown (depends on company selected)
+  - Employment Type: Employee/Intern/NAPS/NATS/Consultant/Contract
+  - Status: Active/Resigned/Terminated/Absconding
+  - Grade: L2/L1/M3/M2/M1/E3/E2/E1/W2/W1
+  - "✕ Clear" button to reset all filters
+  Default filter: Status = Active (shows active employees only)
+
+EMPLOYEE TABLE COLUMNS:
+  1. Emp Code — unique code (e.g. EMP001) + Common Code
+  2. Name — initials avatar (purple=male, pink=female) + gender/blood group
+  3. Type — Employee/Intern/NAPS etc. (color-coded badge)
+  4. Designation + Collar type (Blue Collar / White Collar)
+  5. Department name
+  6. Location name + Company code
+  7. Grade (color-coded: L2=purple, M3=blue, E1=yellow, W1=red etc.)
+  8. Status (green=Active, red=Resigned/Terminated)
+  9. Date of Joining (company + group DOJ)
+  10. Mobile number
+  11. Action — "View" button + "Edit" button
+
+PAGINATION: 20 employees per page, numbered page buttons.
+
+EMPLOYEE PROFILE DRAWER:
+Click any row or "View" button → a panel slides in from the RIGHT.
+Shows 4 tabs:
+
+  👤 Personal Tab:
+     Full Name, Common Code, Gender, Date of Birth, Blood Group,
+     Marital Status, Mobile, Personal Email, Office Email,
+     Aadhaar Last 4 digits (masked), PAN number
+
+  💼 Employment Tab:
+     Employment Type, Department, Designation, Grade,
+     Collar Type (Blue/White), Function, Category,
+     Company, Location, Group DOJ, Company DOJ,
+     Confirmation Status, Notice Period,
+     (If resigned: Date of Resignation, Last Working Day)
+     Rehire Eligible (Yes/No), Blacklisted (Yes/No)
+
+  🏛️ Statutory Tab:
+     4 boxes showing if applicable:
+       PF (Provident Fund): Yes/No
+       ESIC (Employee State Insurance): Yes/No
+       PT (Professional Tax): Yes/No
+       LWF (Labour Welfare Fund): Yes/No
+     UAN Number, PAN Number
+
+  🏦 Bank Tab:
+     Bank Name, Account Number (masked XXXX XXXX 1234),
+     IFSC Code, Account Type
+
+Bottom buttons: Edit Profile | Documents | Salary
+
+TOP RIGHT BUTTONS:
+  - Export Excel → downloads employee list
+  - + Add Employee → (form to add new employee — UI present)
+
+DATA SOURCE: Supabase table "employees" with joins to
+"companies", "locations", "departments" tables.
+
+EMPLOYEE RECORD FIELDS STORED IN DATABASE:
+  id, emp_code, common_code, employment_type, full_name,
+  first_name, last_name, gender, date_of_birth, blood_group,
+  marital_status, employment_status, collar_type,
+  employee_function, employee_category, designation, grade,
+  group_doj, company_doj, confirmation_status, mobile,
+  personal_email, office_email, pan_number, aadhar_last4,
+  uan_number, pf_applicable, esic_applicable, pt_applicable,
+  lwf_applicable, bank_name, bank_account_last4, ifsc_code,
+  account_type, l1_manager_id, l2_manager_id, hr_manager_id,
+  notice_period_days, date_of_resignation, last_working_date,
+  blacklisted, rehire_eligible, company_id, location_id,
+  department_id
+
+GRADE SYSTEM:
+  L2, L1 = Leadership (Senior Management)
+  M3, M2, M1 = Management / Executive
+  E3, E2, E1 = Entry / Junior / Staff
+  W2, W1 = Workers (Blue Collar)
+
+================================================================
+PAGE 4: RECRUITMENT (/dashboard/recruitment)
+================================================================
+This is a FULLY WORKING page connected to the database.
+
+PURPOSE: Manage hiring — from raising a requirement to
+candidate joining.
+
+SUB-NAVIGATION TABS:
+  📊 Dashboard | 📋 Requisitions | 💼 Job Openings |
+  👥 Pipeline | 📅 Interviews* | 📄 Offers* |
+  🤖 AI Screening* | 📈 Analytics*
+  (* = Coming Soon / Under Development)
+
+---- TAB: DASHBOARD ----
+Stats (5 cards):
+  - Open Positions (count of open job openings)
+  - Total Openings (sum of seats across all open jobs)
+  - Active Candidates (in pipeline)
+  - Offers Sent
+  - Joined This Month
+
+Candidate Pipeline bar chart showing count at each stage:
+  Applied → AI Screened → Telephonic → L1 Interview →
+  L2 Interview → Optional → MD Final → Offer Sent →
+  Joined → Rejected
+
+Also shows: Open MRFs list + Recent Jobs list
+
+---- TAB: REQUISITIONS (MRF) ----
+MRF = Manpower Requisition Form — official request to hire.
+
+Two sub-views:
+  📋 Full MRF → For positions with CTC ≥ ₹6 Lakh (needs MD approval)
+  ⚡ Quick Hire → For positions with CTC < ₹6 Lakh (site HR approves)
+
+TABLE COLUMNS: MRF No. | Position | Location | Count |
+               Urgency | Status | Date | Action
+
+MRF STATUSES: Draft → Submitted → HR Review → Approved / Rejected
+
+ACTION BUTTONS per row:
+  - "✓ Approve" (if Submitted)
+  - "✗ Reject" (if Submitted)
+  - "+ Job" (if Approved → create Job Opening from this MRF)
+
+MRF NUMBER FORMAT:
+  Full MRF:   MRF/COMPANYCODE/YEAR/001 (e.g. MRF/SS/2026/001)
+  Quick Hire: QH/COMPANYCODE/YEAR/001
+
+BUTTON TOP-RIGHT:
+  + New MRF → opens a modal form with:
+    A. Position Details:
+       Company* | Department | Location | Position Title* |
+       No. of Positions* | Urgency (Immediate/Urgent/Normal)*
+    B. Reason: New Position/Replacement/Expansion/Seasonal
+    C. Remarks/Justification (text box)
+    Note: "MD final interview mandatory · CTC approved by MD"
+
+  ⚡ Quick Hire → simplified 5-field form:
+    1. Company*
+    2. Position Type* (Helper/Skilled Worker/NAPS/NATS/Intern/Contract)
+    3. Location*
+    4. No. of Positions*
+    5. Expected Joining Date
+    + Reason dropdown
+
+---- TAB: JOB OPENINGS ----
+After an MRF is approved, a Job Opening is created.
+Shows as cards (not table):
+
+Each card shows:
+  - Job Title (bold)
+  - Department · Location
+  - Company code badge
+  - Experience range (e.g. 2-5 yrs)
+  - Salary range (e.g. ₹6L-₹10L)
+  - Number of openings
+  - Status badge (Open / Closed)
+  - "View Pipeline" button → goes to Pipeline tab for that job
+  - "Close" button (closes the job opening)
+  - Posted date
+
+Top stats: Open Jobs | Total Openings | Total Candidates
+
++ New Job Opening form:
+  Company* | Link to MRF | Job Title* | Department | Location
+  Min Experience | Max Experience | CTC Min | CTC Max
+  Employment Type | No. of Openings | Required Skills (comma-sep)
+  Job Description (text area)
+
+---- TAB: PIPELINE ----
+Kanban-style board showing candidates at each stage.
+Filter by Job at the top.
+
+10 COLUMNS (stages):
+  Applied | AI Screened | Telephonic | L1 Interview |
+  L2 Interview | Optional | MD Final | Offer Sent |
+  Joined | Rejected
+
+Each candidate CARD shows:
+  - Full Name
+  - Current Company + Years of Experience
+  - AI Tag (Strong Match / Partial Match / Not Suitable)
+  - Source (Naukri/LinkedIn/etc.) + Expected CTC
+
+Click a candidate card → RIGHT PANEL slides in:
+  - Current Company, Experience, Current CTC, Expected CTC
+  - Notice Period, Source, Phone, Email
+  - "Move to Stage" dropdown (instantly moves them in pipeline)
+  - Schedule Interview button
+  - Generate Offer button
+  - ❌ Reject button
+
++ Add Candidate form:
+  Job Opening* | Source | Full Name* | Mobile* | Email |
+  Current Company | Experience | Notice Period |
+  Current CTC | Expected CTC
+  → Automatic DUPLICATE CHECK: if same phone/email already
+    applied, shows a warning before adding
+
+CANDIDATE DATA STORED:
+  job_id, company_id, full_name, email, phone, source,
+  current_company, current_ctc, expected_ctc, notice_period,
+  experience_years, stage, status, applied_date,
+  ai_score, ai_tag, ai_reasoning
+
+---- TABS: Interviews, Offers, AI Screening, Analytics ----
+All show "Under Development" placeholder. Planned features:
+  - Interviews: Schedule and record interview feedback
+  - Offers: CTC Calculator + Offer Letter Generator
+  - AI Screening: Claude API for resume screening
+  - Analytics: Source effectiveness, time-to-hire reports
+
+================================================================
+PAGE 5: ADMIN SETUP (/dashboard/admin)
+================================================================
+This is the most detailed SETUP page. It has 2 sections:
+
+SECTION A: COMPANY SETUP (7-step wizard)
+Used to configure a company in the system.
+
+Step 1 — GROUP:
+  Enter the Group Name (e.g. "Sharma Group")
+  A Group can contain multiple companies.
+  Upload group logo (optional)
+
+Step 2 — COMPANY:
+  Name of Establishment, Employer/Director Name,
+  Company Type (Pvt Ltd / LLP / OPC / NGO etc.),
+  Industry (Manufacturing / IT / Retail / Healthcare etc.),
+  PAN Number*, TAN Number*, CIN, Date of Incorporation
+  Letterhead Setup:
+    Header image or text (shown at top of HR letters)
+    Footer image or text
+    Live preview of letterhead
+  Upload Certificate of Incorporation
+
+Step 3 — LOCATIONS:
+  Add all offices, factories, warehouses, branches.
+  Each location needs:
+    Name*, Type (Head Office/Factory/Branch/etc.)*,
+    PIN Code, State*, District*, Full Address*,
+    License/Registration Number (Factory Lic / S&E),
+    Google Maps pin (for geo-fencing attendance),
+    Registration Certificate upload
+  Can upload bulk locations via Excel template.
+  Each State+District auto-links PT and ESIC registrations.
+
+Step 4 — TAX (GST):
+  Add GST registrations (one per state where business operates)
+  Each GST entry: GSTIN number, State, Certificate upload
+
+Step 5 — LABOUR LAW:
+  EPF (Employee Provident Fund):
+    Registration number (format: MHBAN1234567000)
+    Coverage: All Locations OR Specific locations (checkbox)
+    Department address for filing
+    EPF Certificate upload
+
+  ESIC (Employee State Insurance):
+    State + District specific registration
+    Main code + Sub codes
+    Covered locations auto-link based on state+district
+    Department address for filing
+
+  PT (Professional Tax):
+    State + District level (covers all locations in same district)
+    Applicable in only 22 states in India
+    Registration number, certificate
+
+  LWF (Labour Welfare Fund):
+    Toggle on/off
+    Select applicable states
+
+Step 6 — BANK:
+  Operating Account (for company expenses)
+  Salary Account (for employee salary payments)
+  Both: Bank Name, Account Number, IFSC, Account Type
+
+Step 7 — LICENSE:
+  Ezer HRMS subscription plan:
+    Plan: Starter / Growth / Enterprise
+    Max Employees, Max Locations
+    Valid From / Valid Till dates
+    Annual Cost, Billing Cycle
+
+On completion → "Setup Complete!" success screen shows:
+  Group → Company name | Auto Code | Location count | Plan
+
+"+ Add Another Company" button to repeat for next company.
+
+SECTION B: MASTER SETUP
+Configures dropdown values used across the system.
+Categories → Types → Values hierarchy.
+
+Examples:
+  Category: Employment → Types: Designation, Grade, Department
+  Category: Payroll → Types: Allowances, Deductions
+  Each Type has Values with optional color and parent linking.
+
+Data stored in:
+  master_categories, master_types, master_values tables
+
+================================================================
+DATABASE TABLES (Supabase / PostgreSQL)
+================================================================
+Core tables identified from the code:
+
+ORGANISATIONAL:
+  groups              → Group of companies (e.g. Sharma Group)
+  companies           → Individual companies in a group
+  locations           → Offices, factories, branches
+  departments         → Departments within companies
+  registrations       → EPF/ESIC/GST/PT/LWF registrations
+  company_bank_accounts → Bank accounts per company
+  license_plans       → HRMS subscription plan per company
+
+MASTER DATA:
+  master_categories   → Top-level categories for dropdowns
+  master_types        → Sub-categories (designation types etc.)
+  master_values       → Actual dropdown values
+
+EMPLOYEES:
+  employees           → All employee records (the main table)
+
+RECRUITMENT:
+  manpower_requisitions → MRF / Quick Hire requests
+  job_openings          → Published job positions
+  candidates            → Candidate pipeline records
+
+(Additional tables expected for future modules):
+  attendance_records, leave_requests, payroll_runs,
+  salary_structures, compliance_filings, hr_letters,
+  interview_schedules, offer_letters
+
+================================================================
+MODULE STATUS SUMMARY
+================================================================
+FULLY BUILT (live, real data):
+  ✅ Login / Authentication
+  ✅ Employee Master (view, filter, profile)
+  ✅ Recruitment (MRF, Jobs, Candidate Pipeline)
+  ✅ Admin Setup (Company/Location/Compliance wizard)
+
+UI SHELL ONLY (placeholder "Coming Soon"):
+  🔧 Onboarding
+  🔧 Attendance & Leave
+  🔧 Payroll
+  🔧 Compliance Engine
+  🔧 HR Letters
+  🔧 ESS & Access (Employee Self-Service)
+  🔧 Reports
+  🔧 Ezer AI
+  🔧 Support
+
+PARTIALLY BUILT (tabs exist, some under development):
+  ⚠️  Recruitment → Interviews, Offers, AI Screening, Analytics
+
+================================================================
+COLOUR CODES USED IN THE APP
+================================================================
+Purple (#7C3AED)  → Primary brand colour, active items, buttons
+Dark Navy (#1E1B4B) → Sidebar background, table headers
+Green (#16A34A)   → Active status, success, positive indicators
+Red (#DC2626)     → Errors, resigned/terminated, overdue
+Orange (#F97316)  → Payroll, warnings
+Blue (#1D4ED8)    → Intern type, secondary info
+Yellow (#D97706)  → Due-soon warnings, W-grade workers
+
+GRADE COLOUR SYSTEM:
+  L2 = Dark Purple (Leadership Senior)
+  L1 = Medium Purple (Leadership)
+  M3 = Dark Blue (Senior Manager)
+  M2 = Sky Blue (Manager)
+  M1 = Teal (Assistant Manager)
+  E3 = Green (Executive Senior)
+  E2 = Lime (Executive)
+  E1 = Yellow (Junior Executive)
+  W2 = Red (Skilled Worker)
+  W1 = Pink-Red (Helper / Unskilled)
+
+================================================================
+KEY CONCEPTS TO UNDERSTAND
+================================================================
+
+GROUP vs COMPANY:
+  A "Group" is the parent entity (e.g. Sharma Group).
+  A Group has multiple Companies (Sharma Sons, Sharma Petro).
+  Each Company has multiple Locations.
+  Employees belong to a specific Company + Location.
+
+MRF vs QUICK HIRE:
+  MRF (Full) = formal process for white-collar roles (CTC ≥6L).
+    Needs HR review → MD approval before hiring.
+  Quick Hire = fast process for blue-collar/shop floor workers.
+    Site HR can directly approve. Only 5 fields to fill.
+
+COLLAR TYPE:
+  White Collar (WC) = office/management staff
+  Blue Collar (BC) = factory/shop floor workers
+
+EMPLOYMENT TYPE:
+  Employee   = permanent full-time staff
+  Intern     = temporary intern
+  NAPS       = National Apprenticeship Promotion Scheme
+               (government apprentice, lower cost to company)
+  NATS       = National Apprenticeship Training Scheme
+               (graduate trainee, similar to NAPS)
+  Consultant = hired on contract/consultancy basis
+  Contract   = contractual worker via contractor
+
+STATUTORY COMPLIANCE (Indian Labour Law):
+  PF  = Provident Fund — 12% employee + 12% employer
+        mandatory for salary < ₹15,000/month
+  ESIC = Employee State Insurance — medical insurance
+         mandatory for salary < ₹21,000/month
+  PT  = Professional Tax — state tax on salaried employees
+        varies by state (max ₹2,500/year)
+  LWF = Labour Welfare Fund — small monthly contribution
+        applicable in select states only
+
+================================================================
+HOW DATA FLOWS (End to End)
+================================================================
+1. Admin sets up Company + Locations + Registrations (Admin Setup)
+2. HR raises MRF for a new position (Recruitment → Requisitions)
+3. MRF gets approved by manager/MD
+4. Job Opening is created and published (Recruitment → Jobs)
+5. Candidates apply / are added manually (Recruitment → Pipeline)
+6. Candidates move through interview stages in Kanban board
+7. Selected candidate gets Offer (Offers tab — coming soon)
+8. Candidate joins → Employee record created (Employee Master)
+9. Employee goes through Onboarding (coming soon)
+10. Monthly: Payroll processed, Compliance filings done (coming soon)
+11. Employee self-service via ESS portal (coming soon)
+12. Reports generated for management (coming soon)
+
+================================================================
+FILES AND FOLDER STRUCTURE
+================================================================
+ezer-hrms/
+  app/
+    page.tsx              → Login page
+    layout.tsx            → Root HTML layout
+    globals.css           → Global CSS styles
+    dashboard/
+      layout.tsx          → Sidebar navigation (all pages share this)
+      page.tsx            → Dashboard home (stats, map, compliance)
+      employees/page.tsx  → Employee Master
+      recruitment/page.tsx→ Recruitment module (full)
+      admin/page.tsx      → Admin Setup wizard (full)
+      attendance/page.tsx → Coming soon placeholder
+      payroll/page.tsx    → Coming soon placeholder
+      compliance/page.tsx → Coming soon placeholder
+      onboarding/page.tsx → Coming soon placeholder
+      letters/page.tsx    → Coming soon placeholder
+      ess/page.tsx        → Coming soon placeholder
+      reports/page.tsx    → Coming soon placeholder
+      ai/page.tsx         → Coming soon placeholder
+      support/page.tsx    → Coming soon placeholder
+  lib/
+    supabase.ts           → Database connection (URL + Key)
+    supabase-admin.ts     → Functions for Admin Setup data
+    supabase-recruitment.ts → Functions for Recruitment data
+    states-districts.ts   → All Indian states + districts data
+  public/                 → Static files (favicon etc.)
+  .env.local              → Secret keys (NOT committed to git)
+  package.json            → Project dependencies
+  next.config.ts          → Next.js configuration
+
+================================================================
+ENVIRONMENT VARIABLES (SECRETS)
+================================================================
+These are stored in .env.local file:
+  NEXT_PUBLIC_SUPABASE_URL   = your Supabase project URL
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = your Supabase anon/publishable key
+  NEXT_PUBLIC_GOOGLE_MAPS_KEY   = Google Maps API key (for map pin)
+
+Without these, the app will crash on startup.
+
+================================================================
+HOW TO START THE APP
+================================================================
+Open terminal in the project folder and run:
+
+  export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh"
+  nvm use 22
+  npm run dev -- --hostname 0.0.0.0
+
+Then open: http://localhost:3000
+
+The app will be accessible on your local network at:
+  http://YOUR_LOCAL_IP:3000
+  (e.g. http://192.168.100.139:3000 for mobile access)
+
+================================================================
+END OF GUIDE
+================================================================
