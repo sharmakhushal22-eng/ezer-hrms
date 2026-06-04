@@ -207,11 +207,23 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, onRefresh }
     setAiLoading(false)
   }
 
+  async function genMRFNumber(company_id: string) {
+    const code = companies.find((c:any) => c.id === company_id)?.company_code || 'GRP'
+    const year = new Date().getFullYear()
+    const prefix = `MRF/${code}/${year}/`
+    const { count } = await supabase
+      .from('manpower_requisitions')
+      .select('*', { count: 'exact', head: true })
+      .like('mrf_number', `${prefix}%`)
+    return `${prefix}${String((count || 0) + 1).padStart(3, '0')}`
+  }
+
   async function saveMRF(status: 'DRAFT'|'SUBMITTED') {
     if (!form.company_id || !form.designation || !form.no_of_openings) { alert('Company, Designation aur Openings zaroori hain'); return }
     setLoading(true)
+    const mrf_number = await genMRFNumber(form.company_id)
     const { data, error } = await supabase.from('manpower_requisitions').insert({
-      company_id: form.company_id, location_id: form.location_id || null,
+      mrf_number, company_id: form.company_id, location_id: form.location_id || null,
       department_id: form.department_id || null, designation: form.designation,
       no_of_openings: Number(form.no_of_openings), experience_required: form.experience_required,
       budget_min: Number(form.budget_min) || null, budget_max: Number(form.budget_max) || null,
@@ -624,15 +636,34 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh }: any) {
   const [screening, setScreening] = useState(false)
   const [results, setResults] = useState<any[]>([])
   const [progress, setProgress] = useState(0)
+  const [added, setAdded] = useState<Record<string, boolean>>({})
+  const [addingAll, setAddingAll] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  async function extractTextFromFile(file: File): Promise<string> {
-    // Simple text extraction for txt/csv; for PDF/docx returns filename as placeholder
-    if (file.type === 'text/plain') {
-      return await file.text()
+  // Push a screened resume into the candidate pipeline at the "AI Screened" stage,
+  // mapping the screening API's field names onto the candidates table.
+  async function addToPipeline(r: any) {
+    const mrf = mrfs.find((m:any) => m.id === selectedMRF)
+    if (!mrf) return
+    const { error } = await supabase.from('candidates').insert({
+      mrf_id: mrf.id, company_id: mrf.company_id,
+      full_name: r.candidate_name || r.file_name || 'Unknown',
+      designation: mrf.designation, source: 'Resume Upload', stage: 'AI Screened',
+      ai_score: r.score ?? null, ai_match_tag: r.match_tag ?? null,
+      ai_reasoning: r.reasoning ?? null, ai_questions: r.interview_questions ?? null,
+    })
+    if (error) { alert('Error: ' + error.message); return }
+    setAdded(a => ({ ...a, [r.file_name || r.candidate_name]: true }))
+    onRefresh()
+  }
+
+  async function addAllToPipeline() {
+    setAddingAll(true)
+    for (const r of results) {
+      const key = r.file_name || r.candidate_name
+      if (!added[key]) await addToPipeline(r)
     }
-    // For PDF/Word: return file name + size as basic info (full extraction needs server-side)
-    return `Resume: ${file.name}, Size: ${(file.size/1024).toFixed(0)}KB, Type: ${file.type}`
+    setAddingAll(false)
   }
 
   async function runScreening() {
@@ -646,14 +677,15 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh }: any) {
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
-      const resumeText = await extractTextFromFile(file)
       setProgress(Math.round(((i+1)/files.length)*100))
 
       try {
-        const res = await fetch('/api/recruitment/screen-resumes', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ resume_text: resumeText, jd_text: mrf.job_description, candidate_name: file.name.replace(/\.[^.]+$/, '') })
-        })
+        // Upload the actual file — server extracts text (PDF natively, DOCX via mammoth)
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('jd_text', mrf.job_description)
+        fd.append('candidate_name', file.name.replace(/\.[^.]+$/, ''))
+        const res = await fetch('/api/recruitment/screen-resumes', { method:'POST', body: fd })
         const result = await res.json()
         newResults.push({ ...result, file_name: file.name })
         setResults([...newResults])
@@ -731,10 +763,17 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh }: any) {
               <span style={{ color:'#F59E0B' }}>🟡 Partial: {partial.length}</span>
               <span style={{ color:'#EF4444' }}>🔴 Not Suitable: {notSuitable.length}</span>
             </div>
-            <button onClick={downloadExcel} style={{ ...S.btn, background:'#22C55E', color:'#fff' }}>📥 Download Excel</button>
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={addAllToPipeline} disabled={addingAll} style={{ ...S.btn, background:'#7C3AED', color:'#fff' }}>
+                {addingAll ? '⏳ Adding...' : '➕ Add All to Pipeline'}
+              </button>
+              <button onClick={downloadExcel} style={{ ...S.btn, background:'#22C55E', color:'#fff' }}>📥 Download Excel</button>
+            </div>
           </div>
 
-          {[...strong, ...partial, ...notSuitable].map((r, i) => (
+          {[...strong, ...partial, ...notSuitable].map((r, i) => {
+            const key = r.file_name || r.candidate_name
+            return (
             <div key={i} style={{ ...S.card, display:'flex', gap:12, alignItems:'flex-start' }}>
               <div style={{ width:50, height:50, borderRadius:99, background: r.match_tag==='STRONG'?'rgba(34,197,94,0.15)':r.match_tag==='PARTIAL'?'rgba(245,158,11,0.15)':'rgba(239,68,68,0.15)', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, fontSize:18, fontWeight:700, color: r.match_tag==='STRONG'?'#22C55E':r.match_tag==='PARTIAL'?'#F59E0B':'#EF4444' }}>
                 {r.score}
@@ -752,8 +791,12 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh }: any) {
                   </details>
                 )}
               </div>
+              <button onClick={() => addToPipeline(r)} disabled={!!added[key]}
+                style={{ ...S.btn, flexShrink:0, fontSize:12, background: added[key] ? 'rgba(34,197,94,0.15)' : 'rgba(124,58,237,0.2)', color: added[key] ? '#86EFAC' : '#A78BFA' }}>
+                {added[key] ? '✓ Added' : '➕ Pipeline'}
+              </button>
             </div>
-          ))}
+          )})}
         </div>
       )}
     </div>
@@ -941,14 +984,17 @@ function PreonboardingTab({ supabase, candidates, onRefresh }: any) {
 
   async function createLink(candidate_id: string, doj: string) {
     setLoading(true)
-    const { data, error } = await supabase.from('preonboarding_links').insert({
+    // Generate a unique token so the link is shareable immediately (DB also has a
+    // default as a fallback). crypto.randomUUID is available in modern browsers.
+    const link_token = (globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`).replace(/-/g, '')
+    const { error } = await supabase.from('preonboarding_links').insert({
       candidate_id, company_id: candidates.find((c:any) => c.id === candidate_id)?.company_id,
-      doj: doj || null, status:'CREATED', sent_at: new Date().toISOString()
+      doj: doj || null, status:'CREATED', sent_at: new Date().toISOString(), link_token
     }).select()
     if (!error) {
       await supabase.from('candidates').update({ doj }).eq('id', candidate_id)
       loadLinks(); onRefresh()
-    }
+    } else alert('Error: ' + error.message)
     setLoading(false)
   }
 
@@ -971,7 +1017,15 @@ function PreonboardingTab({ supabase, candidates, onRefresh }: any) {
                 <div>
                   <div style={{ fontSize:14, fontWeight:600 }}>{l.candidates?.full_name}</div>
                   <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)', marginTop:2 }}>DOJ: {l.doj || 'Not set'} · {l.candidates?.mobile}</div>
-                  <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', marginTop:3, fontFamily:'monospace' }}>Token: {l.link_token}</div>
+                  {l.link_token && (
+                    <div style={{ display:'flex', gap:6, alignItems:'center', marginTop:4 }}>
+                      <span style={{ fontSize:11, color:'rgba(255,255,255,0.35)', fontFamily:'monospace', maxWidth:240, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        /onboarding/{l.link_token}
+                      </span>
+                      <button onClick={() => navigator.clipboard?.writeText(`${window.location.origin}/onboarding/${l.link_token}`)}
+                        style={{ ...S.btn, fontSize:10, padding:'2px 8px', background:'rgba(255,255,255,0.06)', color:'#A78BFA' }}>📋 Copy</button>
+                    </div>
+                  )}
                 </div>
                 <div style={{ textAlign:'right' as const }}>
                   <StatusBadge status={l.status} />
@@ -1034,7 +1088,6 @@ function StatusBadge({ status }: { status: string }) {
     'CREATED': ['rgba(245,158,11,0.15)', '#FCD34D'],
     'SENT': ['rgba(59,130,246,0.15)', '#93C5FD'],
     'OPENED': ['rgba(124,58,237,0.15)', '#A78BFA'],
-    'SUBMITTED': ['rgba(34,197,94,0.15)', '#86EFAC'],
   }
   const [bg, color] = configs[status] || ['rgba(148,163,184,0.1)', '#94A3B8']
   return <span style={{ fontSize:11, padding:'2px 9px', borderRadius:99, background:bg, color, fontWeight:500 }}>{status}</span>
