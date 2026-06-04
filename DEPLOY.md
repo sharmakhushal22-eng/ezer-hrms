@@ -33,18 +33,31 @@ npm run dev         # open http://localhost:3000
 
 ---
 
-## B. Ship a change (auto-deploy)
+## B. Ship a change — one command ⭐
 
+```bash
+./scripts/deploy.sh "describe what changed"
+```
+
+This does it all: **commit → pull (rebase) → push → deploy to Vercel production**.
+It asks to confirm before the production deploy.
+
+- Skip the confirm: `./scripts/deploy.sh -y "message"`
+- No message → it uses an auto timestamped one.
+- No keys needed — uses your existing `git` login and `vercel login` session.
+- Track the build: **vercel.com → ezer-hrms → Deployments** (~1–2 min).
+
+### Or do it manually
 ```bash
 git add -A
 git commit -m "describe what changed"
+git pull --rebase origin main
 git push origin main
+vercel --prod
 ```
 
-Vercel auto-builds and deploys (~1–2 min). Watch it at:
-**vercel.com → ezer-hrms → Deployments**.
-
 > Pushes authenticate with your GitHub Personal Access Token (already configured).
+> If `vercel --prod` says you're logged out, run `vercel login` once.
 
 ---
 
