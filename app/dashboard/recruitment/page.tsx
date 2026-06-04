@@ -22,7 +22,7 @@ interface Candidate {
   created_at: string
 }
 interface Company { id: string; company_code: string; }
-interface Location { id: string; location_code: string; company_id: string }
+interface Location { id: string; location_code: string; location_name: string; company_id: string }
 interface Department { id: string; dept_name: string; dept_code: string; company_id: string }
 
 const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','MD Final','Offer Sent','Joined','Rejected']
@@ -63,7 +63,7 @@ export default function RecruitmentPage() {
   async function loadMasterData() {
     const [{ data: co }, { data: lo }, { data: de }] = await Promise.all([
       supabase.from('companies').select('id, company_code'),
-      supabase.from('locations').select('id, location_code, company_id'),
+      supabase.from('locations').select('id, location_code, location_name, company_id'),
       supabase.from('departments').select('id, dept_name, dept_code, company_id'),
     ])
     setCompanies(co || []); setLocations(lo || []); setDepartments(de || [])
@@ -270,7 +270,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, onRefresh }
             <div><label style={S.label}>Branch / Location</label>
               <select style={S.select} value={form.location_id} onChange={e => setF('location_id', e.target.value)}>
                 <option value=''>Select Location</option>
-                {filteredLocations.map((l:any) => <option key={l.id} value={l.id}>{l.location_code}</option>)}
+                {filteredLocations.map((l:any) => <option key={l.id} value={l.id}>{l.location_name || l.location_code}</option>)}
               </select>
             </div>
             <div><label style={S.label}>Department</label>
