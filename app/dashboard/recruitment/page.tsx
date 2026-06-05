@@ -967,6 +967,7 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
   const [form, setForm] = useState({ ctc:'', varPct:'10', joining_bonus:'', joining_freq:'With Salary', retention_bonus:'', retention_freq:'After 3 Months', esop:'', esop_plan:'', state:'HR' })
   const [calc, setCalc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
+  const [savedLink, setSavedLink] = useState<string|null>(null)
   const F = (k:string,v:any) => setForm(f=>({...f,[k]:v}))
 
   const PT_RATES:Record<string,number> = { 'KA':200,'MH':200,'TN':0,'TS':200,'AP':200,'WB':200,'GJ':200,'MP':208,'OD':250,'AS':208,'KL':0,'HR':0,'DL':0,'UP':0 }
@@ -1000,23 +1001,24 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
 
   async function saveNegotiation() {
     if (!sel||!calc) return
-    setSaving(true)
-    const { error } = await supabase.from('ctc_negotiations').upsert({
+    setSaving(true); setSavedLink(null)
+    const { data, error } = await supabase.from('ctc_negotiations').upsert({
       candidate_id:sel.id, company_id:sel.company_id||null,
-      offered_ctc:calc.ctcAnnual, variable_pct:form.varPct,
+      offered_ctc:calc.ctcAnnual, variable_pct:Number(form.varPct)||null,
       basic_monthly:Math.round(calc.basic), hra_monthly:Math.round(calc.hra),
       epf_monthly:Math.round(calc.epfEmployee), net_monthly:Math.round(calc.inHand),
-      current_ctc:sel.current_ctc||null, hike_pct:calc.hike,
+      current_ctc:sel.current_ctc||null, hike_pct:calc.hike?Number(calc.hike):null,
       previous_company:sel.current_company||null,
       candidate_name:sel.full_name, position_title:sel.designation||null,
       calculation_data:calc,
       joining_bonus:calc.joining_bonus||0, joining_bonus_freq:form.joining_freq||null,
       retention_bonus:calc.retention_bonus||0, retention_bonus_freq:form.retention_freq||null,
       esop_value:calc.esop||0, esop_remark:form.esop_plan||null,
-    })
+    }).select('link_token').single()
     setSaving(false)
     if (error) { showNotify('Save failed: '+error.message); return }
-    showNotify('Negotiation saved! Now create the offer letter from the Offers tab.')
+    setSavedLink(data?.link_token ? `${window.location.origin}/salary-view/${data.link_token}` : null)
+    showNotify('Negotiation saved! Salary link ready below 👇')
   }
 
   function downloadExcel() {
@@ -1218,6 +1220,18 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
               <button onClick={saveNegotiation} disabled={saving} style={{ ...T.btnPrimary, width:'100%', marginTop:12, padding:10 }}>
                 {saving?'Saving...':'💾 Save Negotiation & Move to Offers'}
               </button>
+
+              {savedLink&&(
+                <div style={{ marginTop:12, background:'#F0F9FF', border:'1px solid #BAE6FD', borderRadius:8, padding:'12px 14px' }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:'#0369A1', marginBottom:6 }}>🔗 CANDIDATE SALARY LINK</div>
+                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                    <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace' }} />
+                    <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btn, background:'#0EA5E9', color:'#fff', whiteSpace:'nowrap' as const }}>📋 Copy</button>
+                    <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', textDecoration:'none', whiteSpace:'nowrap' as const }}>Open ↗</a>
+                  </div>
+                  <div style={{ fontSize:10, color:'#0C4A6E', marginTop:6 }}>Share with the candidate — shows salary breakdown only (no internal data).</div>
+                </div>
+              )}
             </div>
           )}
         </div>
