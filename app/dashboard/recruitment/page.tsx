@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
+import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
 
 // ── TYPES ────────────────────────────────────────────────────────
 interface Company { id:string; company_code:string; company_name?:string }
@@ -96,7 +97,7 @@ function SectionLine({ title }:{ title:string }) {
 
 // ── MAIN ──────────────────────────────────────────────────────────
 export default function RecruitmentPage() {
-  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offers'|'preonboarding'>('dashboard')
+  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'>('dashboard')
   const [companies, setCompanies] = useState<Company[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -130,6 +131,9 @@ export default function RecruitmentPage() {
     { k:'screening', l:'🤖 AI Screening' },
     { k:'pipeline', l:'🔀 Pipeline' },
     { k:'negotiation', l:'💰 Negotiation' },
+    { k:'offerapproval', l:'📋 Offer Approval' },
+    { k:'hrhead', l:'✅ HR Head' },
+    { k:'sendoffer', l:'📨 Send Offers' },
     { k:'offers', l:'📄 Offers' },
     { k:'preonboarding', l:'🎉 Pre-onboarding' },
   ]
@@ -166,6 +170,9 @@ export default function RecruitmentPage() {
         {tab==='screening' && <ScreeningTab {...props} />}
         {tab==='pipeline' && <PipelineTab {...props} />}
         {tab==='negotiation' && <NegotiationTab {...props} />}
+        {tab==='offerapproval' && <OfferApprovalTab {...props} />}
+        {tab==='hrhead' && <HRHeadApprovalDashboard />}
+        {tab==='sendoffer' && <HRManagerSendOffer />}
         {tab==='offers' && <OffersTab {...props} />}
         {tab==='preonboarding' && <PreOnboardTab {...props} />}
       </div>
@@ -1220,6 +1227,57 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
 }
 
 // ── OFFERS TAB ────────────────────────────────────────────────────
+// ── OFFER APPROVAL TAB (Recruiter → HR Head) ──────────────────────
+function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
+  const [sel, setSel] = useState<Candidate|null>(null)
+  const [neg, setNeg] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const eligible = candidates.filter((c:Candidate)=>['Negotiation','MD Final','Optional Round','L2','Offer Sent'].includes(c.stage))
+
+  async function pick(c:Candidate) {
+    setSel(c); setNeg(null); setLoading(true)
+    const { data } = await supabase.from('ctc_negotiations').select('*').eq('candidate_id',c.id).order('created_at',{ascending:false}).limit(1)
+    setNeg(data?.[0]||null); setLoading(false)
+  }
+  const mrf = sel ? mrfs.find((m:MRF)=>m.id===sel.mrf_id) : null
+
+  if (sel) {
+    return (
+      <div>
+        <button style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', marginBottom:12 }} onClick={()=>{setSel(null);setNeg(null)}}>← Back to candidates</button>
+        {loading ? <div style={{ ...T.card, textAlign:'center' as const, color:'#7C3AED' }}>Loading negotiation…</div>
+          : neg ? (
+            <>
+              <CreateOfferApproval candidate={sel} negotiation={neg} mrf={mrf} onSubmitted={()=>{ onRefresh?.(); setSel(null); setNeg(null) }} />
+              <div style={{ maxWidth:700, margin:'16px auto 0' }}><AuditTrailViewer candidateId={sel.id} /></div>
+            </>
+          ) : (
+            <div style={{ ...T.card, color:'#B45309', background:'#FFFBEB', border:'1px solid #FDE68A' }}>
+              No CTC negotiation found for <b>{sel.full_name}</b>. Create one in the 💰 Negotiation tab first.
+            </div>
+          )}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize:13, color:'#6B7280', marginBottom:12 }}>Select a candidate to create an offer approval request for HR Head review.</div>
+      {eligible.length===0 ? (
+        <div style={{ ...T.card, textAlign:'center' as const, color:'#9CA3AF' }}>No candidates in offer stages yet. Move candidates through Pipeline + Negotiation first.</div>
+      ) : eligible.map((c:Candidate)=>(
+        <div key={c.id} style={{ ...T.card, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div>
+            <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}</div>
+            <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.designation||'—'} · {c.stage}</div>
+          </div>
+          <button style={{ ...T.btn, background:'#7C3AED', color:'#fff' }} onClick={()=>pick(c)}>Create Request →</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function OffersTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
   const [letter, setLetter] = useState('')
