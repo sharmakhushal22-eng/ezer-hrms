@@ -265,7 +265,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   }
 
   async function generateJD() {
-    if (!form.designation) { showNotify('Pehle designation daalo','error'); return }
+    if (!form.designation) { showNotify('Please enter the designation first','error'); return }
     setAiLoading(true)
     const dept = departments.find((d:Department)=>d.id===form.department_id)
     try {
@@ -276,12 +276,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       const { jd } = await res.json()
       if (jd) F('job_description', jd)
       showNotify('JD generated!')
-    } catch { showNotify('JD generate nahi ho saka','error') }
+    } catch { showNotify('Could not generate JD','error') }
     setAiLoading(false)
   }
 
   async function saveMRF(status:string) {
-    if (!form.company_id||!form.designation) { showNotify('Company aur Designation zaroori hain','error'); return }
+    if (!form.company_id||!form.designation) { showNotify('Company and Designation are required','error'); return }
     setSaving(true)
     const payload:any = {
       company_id:form.company_id, location_id:form.location_id||null,
@@ -413,7 +413,11 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                   </select>
                 </div>
                 <div><label style={T.label}>Previous Company Preference</label>
-                  <input style={T.input} value={form.previous_company_preference} onChange={e=>F('previous_company_preference',e.target.value)} placeholder="e.g. MNC / Startup" />
+                  <select style={T.select} value={form.previous_company_preference} onChange={e=>F('previous_company_preference',e.target.value)}>
+                    <option value="">Select Preference</option>
+                    <option value="MNC">MNC</option>
+                    <option value="STARTUP">Startup</option>
+                  </select>
                 </div>
               </div>
               <div style={{ marginBottom:10 }}>
@@ -432,7 +436,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               </select>
             </div>
             <div><label style={T.label}>Reason for Hire</label>
-              <input style={T.input} value={form.reason} onChange={e=>F('reason',e.target.value)} placeholder="Expansion / Attrition / New role" />
+              <select style={T.select} value={form.reason} onChange={e=>F('reason',e.target.value)}>
+                <option value="">Select Reason</option>
+                <option value="Expansion">Expansion</option>
+                <option value="Attrition">Attrition</option>
+                <option value="New role">New role</option>
+              </select>
             </div>
           </div>
 
@@ -441,12 +450,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
                 <label style={{ ...T.label, marginBottom:0 }}>Job Description</label>
                 <button onClick={generateJD} disabled={aiLoading} style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', border:'1px solid #DDD6FE', fontSize:11 }}>
-                  {aiLoading?'⏳ Generating...':'🤖 AI se JD Generate Karo'}
+                  {aiLoading?'⏳ Generating...':'🤖 Generate JD with AI'}
                 </button>
               </div>
               <textarea style={{ ...T.textarea, minHeight:150 }} value={form.job_description}
                 onChange={e=>F('job_description',e.target.value)}
-                placeholder="Job description likhein ya AI button se generate karein..." />
+                placeholder="Write a job description or generate it with the AI button..." />
             </div>
           )}
 
@@ -494,8 +503,8 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       {deleteConfirm&&(
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ background:'#fff', borderRadius:12, padding:24, width:340, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-            <div style={{ fontSize:15, fontWeight:600, color:'#1E1B4B', marginBottom:8 }}>MRF Delete Karein?</div>
-            <div style={{ fontSize:13, color:'#9CA3AF', marginBottom:20 }}>Yeh action undo nahi ho sakti.</div>
+            <div style={{ fontSize:15, fontWeight:600, color:'#1E1B4B', marginBottom:8 }}>Delete MRF?</div>
+            <div style={{ fontSize:13, color:'#9CA3AF', marginBottom:20 }}>This action cannot be undone.</div>
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={()=>deleteMRF(deleteConfirm)} style={{ ...T.btn, background:'#DC2626', color:'#fff', flex:1 }}>Delete</button>
               <button onClick={()=>setDeleteConfirm(null)} style={{ ...T.btnOutline, flex:1 }}>Cancel</button>
@@ -522,14 +531,14 @@ function ApprovalModal({ mrf, onApprove, onReject, onClose }:any) {
         </div>
         {mode==='approve'?(
           <>
-            <label style={T.label}>Recruiter Email Assign Karein</label>
+            <label style={T.label}>Assign Recruiter Email</label>
             <input style={{ ...T.input, marginBottom:16 }} value={recruiter} onChange={e=>setRecruiter(e.target.value)} placeholder="recruiter@company.com" />
             <button onClick={()=>onApprove(mrf.id,recruiter)} style={{ ...T.btnPrimary, width:'100%' }}>Approve & Assign</button>
           </>
         ):(
           <>
             <label style={T.label}>Rejection Reason *</label>
-            <textarea style={{ ...T.textarea, marginBottom:16 }} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Reason batao..." rows={3} />
+            <textarea style={{ ...T.textarea, marginBottom:16 }} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Enter a reason..." rows={3} />
             <button onClick={()=>reason&&onReject(mrf.id,reason)} style={{ ...T.btn, background:'#DC2626', color:'#fff', width:'100%' }}>Reject MRF</button>
           </>
         )}
@@ -555,9 +564,9 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
   }
 
   async function runScreening() {
-    if (!selMRF) { showNotify('MRF select karein','error'); return }
-    if (!files.length) { showNotify('Resumes upload karein','error'); return }
-    if (!mrf?.job_description) { showNotify('Selected MRF mein JD nahi hai','error'); return }
+    if (!selMRF) { showNotify('Please select an MRF','error'); return }
+    if (!files.length) { showNotify('Please upload resumes','error'); return }
+    if (!mrf?.job_description) { showNotify('The selected MRF has no JD','error'); return }
     setScreening(true); setResults([]); setProgress(0)
     const res:any[] = []
     for (let i=0; i<files.length; i++) {
@@ -590,13 +599,13 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
     })
     if (error) { showNotify('Add failed: '+error.message,'error'); return }
     const updated = [...results]; updated[idx] = { ...updated[idx], added:true }
-    setResults(updated); showNotify(`${r.candidate_name} pipeline mein add!`); onRefresh()
+    setResults(updated); showNotify(`${r.candidate_name} added to pipeline!`); onRefresh()
   }
 
   async function addAllStrong() {
     const strong = results.map((r,i)=>({ r, i })).filter(({r})=>r.match_tag==='STRONG'&&!r.added)
     for (const { i } of strong) await addToBank(i)
-    showNotify('Sab STRONG candidates added!')
+    showNotify('All STRONG candidates added!')
   }
 
   function downloadExcel() {
@@ -617,25 +626,25 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
         <div style={T.section}>🤖 AI Resume Screening — Bulk Upload</div>
         <div style={{ ...T.g2, marginBottom:12 }}>
           <div>
-            <label style={T.label}>Job Opening Select Karein *</label>
+            <label style={T.label}>Select Job Opening *</label>
             <select style={T.select} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
-              <option value="">MRF Select Karein (JD hona zaroori hai)</option>
+              <option value="">Select MRF (must have a JD)</option>
               {mrfs.filter((m:MRF)=>m.job_description&&m.status==='APPROVED').map((m:MRF)=>(
                 <option key={m.id} value={m.id}>{m.designation||m.position} — {m.no_of_openings||m.openings||0} openings</option>
               ))}
             </select>
           </div>
           <div>
-            <label style={T.label}>Resumes Upload Karein (PDF/Word/TXT)</label>
+            <label style={T.label}>Upload Resumes (PDF/Word/TXT)</label>
             <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv" onChange={e=>setFiles(Array.from(e.target.files||[]))} style={{ display:'none' }} />
             <button onClick={()=>fileRef.current?.click()} style={{ ...T.btnOutline, width:'100%', textAlign:'left' as const }}>
-              📂 {files.length>0?`${files.length} files selected`:'Files Choose Karein'}
+              📂 {files.length>0?`${files.length} files selected`:'Choose Files'}
             </button>
           </div>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <button onClick={runScreening} disabled={screening||!selMRF||!files.length} style={{ ...T.btnPrimary, padding:'9px 20px', opacity:screening||!selMRF||!files.length?0.5:1 }}>
-            {screening?`⏳ ${progress}% (${results.length}/${files.length})` :'🚀 AI Screening Start Karein'}
+            {screening?`⏳ ${progress}% (${results.length}/${files.length})` :'🚀 Start AI Screening'}
           </button>
           {results.length>0&&<button onClick={downloadExcel} style={{ ...T.btn, background:'#059669', color:'#fff' }}>📥 Excel Download</button>}
           {strong.filter(r=>!r.added).length>0&&(
@@ -670,7 +679,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
                 <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4, flexWrap:'wrap' as const }}>
                   <span style={{ fontSize:13, fontWeight:600, color:'#1E1B4B' }}>{r.candidate_name}</span>
                   <Badge text={r.match_tag} />
-                  {r.added&&<span style={{ fontSize:10, color:'#059669', fontWeight:500 }}>✓ Pipeline mein added</span>}
+                  {r.added&&<span style={{ fontSize:10, color:'#059669', fontWeight:500 }}>✓ Added to pipeline</span>}
                 </div>
                 <div style={{ fontSize:11, color:'#6B7280', marginBottom:6 }}>{r.reasoning}</div>
                 {r.interview_questions?.length>0&&(
@@ -708,9 +717,9 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
   const filtered = selMRF==='all'?candidates:candidates.filter((c:Candidate)=>c.mrf_id===selMRF)
 
   async function addCandidate() {
-    if (!cForm.full_name||!cForm.phone) { showNotify('Naam aur Phone zaroori hai','error'); return }
+    if (!cForm.full_name||!cForm.phone) { showNotify('Name and Phone are required','error'); return }
     const { data:dup } = await supabase.from('candidates').select('id').or(`phone.eq.${cForm.phone},email.eq.${cForm.email||'none'}`).limit(1)
-    if (dup?.length&&!window.confirm('Same phone/email candidate already hai. Add karein?')) return
+    if (dup?.length&&!window.confirm('A candidate with the same phone/email already exists. Add anyway?')) return
     const mrf = mrfs.find((m:MRF)=>m.id===cForm.mrf_id)
     const { error } = await supabase.from('candidates').insert({
       mrf_id:cForm.mrf_id||null, company_id:mrf?.company_id||null,
@@ -751,12 +760,12 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
       setAiQs(qs)
       await supabase.from('candidates').update({ ai_questions:qs }).eq('id',c.id)
       onRefresh()
-    } catch { showNotify('Questions generate nahi hue','error') }
+    } catch { showNotify('Could not generate questions','error') }
     setAiQLoading(false)
   }
 
   async function getAIFeedback(c:Candidate, notes:string) {
-    if (!notes.trim()) { showNotify('Pehle notes likhein','error'); return }
+    if (!notes.trim()) { showNotify('Please write notes first','error'); return }
     setAiFbLoading(true)
     const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
     try {
@@ -768,7 +777,7 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
       const newNotes = notes+'\n\n--- AI FEEDBACK ---\n'+result
       await saveNotes(c.id, newNotes)
       setSelCand(c2=>c2?{...c2,interview_notes:newNotes}:null)
-    } catch { showNotify('Feedback generate nahi hua','error') }
+    } catch { showNotify('Could not generate feedback','error') }
     setAiFbLoading(false)
   }
 
@@ -786,7 +795,7 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
 
       {approvedMRFs.length===0&&(
         <div style={{ ...T.card, textAlign:'center' as const, color:'#9CA3AF', padding:32 }}>
-          Koi approved MRF nahi hai. Pehle MRF tab mein approve karein.
+          No approved MRF yet. Approve one in the MRF tab first.
         </div>
       )}
 
@@ -912,9 +921,9 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
       </div>
 
       {/* Interviewer Assignment */}
-      <SectionLine title="Interviewer Assign Karein" />
+      <SectionLine title="Assign Interviewer" />
       <div style={{ display:'flex', gap:8, marginBottom:14 }}>
-        <input style={{ ...T.input, flex:1 }} value={interviewer} onChange={e=>setInterviewer(e.target.value)} placeholder="Interviewer ka naam ya email" />
+        <input style={{ ...T.input, flex:1 }} value={interviewer} onChange={e=>setInterviewer(e.target.value)} placeholder="Interviewer name or email" />
         <button onClick={()=>{ const n = (c.interview_notes||'')+'\n\nInterviewer: '+interviewer; onSaveNotes(c.id,n); setNotes(n) }} style={T.btnOutline}>Assign</button>
       </div>
 
@@ -938,7 +947,7 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
           {aiFbLoading?'⏳...':'🤖 AI Feedback Generate'}
         </button>
       </div>
-      <textarea style={{ ...T.textarea, minHeight:140 }} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Interview notes likhein..." />
+      <textarea style={{ ...T.textarea, minHeight:140 }} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Write interview notes..." />
       <button onClick={()=>onSaveNotes(c.id,notes)} style={{ ...T.btnPrimary, marginTop:6 }}>Save Notes</button>
     </div>
   )
@@ -993,7 +1002,7 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
       current_ctc:sel.current_ctc||null, hike_pct:calc.hike,
       previous_company:sel.current_company||null,
     }).catch(()=>{})
-    showNotify('Negotiation saved! Ab Offers tab se offer letter banao.')
+    showNotify('Negotiation saved! Now create the offer letter from the Offers tab.')
     setSaving(false)
   }
 
@@ -1042,7 +1051,7 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
             <div style={{ marginTop:6 }}><Badge text={c.stage} /></div>
           </div>
         ))}
-        {finalCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', fontSize:13, textAlign:'center' as const, padding:24 }}>Koi candidate MD Final stage mein nahi hai</div>}
+        {finalCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', fontSize:13, textAlign:'center' as const, padding:24 }}>No candidate is at the MD Final stage</div>}
       </div>
 
       {sel&&(
@@ -1269,7 +1278,7 @@ HR Team`
             <div style={{ marginTop:6 }}><Badge text={c.stage} /></div>
           </div>
         ))}
-        {offeredCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' as const, padding:24 }}>Koi candidate nahi hai</div>}
+        {offeredCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' as const, padding:24 }}>No candidates</div>}
       </div>
       {sel&&letter&&(
         <div>
@@ -1319,7 +1328,7 @@ function PreOnboardTab({ supabase, candidates, onRefresh, showNotify }:any) {
       <div style={T.section}>🎉 Pre-onboarding Links</div>
       {notLinked.length>0&&(
         <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:8 }}>Link create karein — Offer sent candidates</div>
+          <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:8 }}>Create link — Offer-sent candidates</div>
           {notLinked.map((c:Candidate)=>(
             <div key={c.id} style={{ ...T.card, border:'1px solid #FDE68A', background:'#FFFBEB', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>

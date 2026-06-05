@@ -281,7 +281,7 @@ export default function EmployeeMaster() {
           ) : employees.length === 0 ? (
             <div style={{ padding:'40px', textAlign:'center' as const, color:'#94A3B8' }}>
               <div style={{ fontSize:'28px', marginBottom:'8px' }}>👥</div>
-              <div>Koi employee nahi mila — filters change karo</div>
+              <div>No employees found — try changing the filters</div>
             </div>
           ) : (
             <div style={{ overflowX:'auto' as const }}>
