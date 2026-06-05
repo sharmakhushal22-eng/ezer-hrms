@@ -994,16 +994,22 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
   async function saveNegotiation() {
     if (!sel||!calc) return
     setSaving(true)
-    await supabase.from('ctc_negotiations').upsert({
+    const { error } = await supabase.from('ctc_negotiations').upsert({
       candidate_id:sel.id, company_id:sel.company_id||null,
       offered_ctc:calc.ctcAnnual, variable_pct:form.varPct,
       basic_monthly:Math.round(calc.basic), hra_monthly:Math.round(calc.hra),
       epf_monthly:Math.round(calc.epfEmployee), net_monthly:Math.round(calc.inHand),
       current_ctc:sel.current_ctc||null, hike_pct:calc.hike,
       previous_company:sel.current_company||null,
-    }).catch(()=>{})
-    showNotify('Negotiation saved! Now create the offer letter from the Offers tab.')
+      candidate_name:sel.full_name, position_title:sel.designation||null,
+      calculation_data:calc,
+      joining_bonus:calc.joining_bonus||0, joining_bonus_freq:form.joining_freq||null,
+      retention_bonus:calc.retention_bonus||0, retention_bonus_freq:form.retention_freq||null,
+      esop_value:calc.esop||0, esop_remark:form.esop_plan||null,
+    })
     setSaving(false)
+    if (error) { showNotify('Save failed: '+error.message); return }
+    showNotify('Negotiation saved! Now create the offer letter from the Offers tab.')
   }
 
   function downloadExcel() {
