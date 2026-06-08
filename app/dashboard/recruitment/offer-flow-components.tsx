@@ -320,17 +320,19 @@ export function HRHeadApprovalDashboard() {
   async function processApproval() {
     if (action === 'reject' && !comment.trim()) { alert('Rejection reason zaroori hai'); return }
     setProcessing(true)
+    // DB CHECK constraint allows only 'APPROVED' / 'REJECTED' (not 'APPROVE'/'REJECT').
+    const headAction = action === 'approve' ? 'APPROVED' : 'REJECTED'
     const newStatus = action === 'approve' ? 'HR_HEAD_APPROVED' : 'HR_HEAD_REJECTED'
     const { error } = await supabase.from('offer_approval_requests').update({
       status: newStatus,
-      hr_head_action: action.toUpperCase(),
+      hr_head_action: headAction,
       hr_head_comments: comment,
       hr_head_actioned_at: new Date().toISOString(),
     }).eq('id', selected.id)
 
     await supabase.from('recruitment_audit_logs').insert({
       candidate_id: selected.candidate_id,
-      action_type: `HR_HEAD_${action.toUpperCase()}ED`,
+      action_type: `HR_HEAD_${headAction}`,
       details: { candidate_name: selected.candidates?.full_name, comment },
       created_at: new Date().toISOString(),
     })
@@ -478,7 +480,7 @@ export function HRManagerSendOffer() {
 
   useEffect(() => {
     supabase.from('offer_approval_requests')
-      .select('*, candidates(full_name, email, phone, designation, experience_years, current_company)')
+      .select('*, candidates(full_name, email, phone, designation, experience_years, current_company), companies(company_name, company_code), manpower_requisitions(designation), ctc_negotiations(basic_monthly, hra_monthly, net_monthly, variable_pct)')
       .eq('status','HR_HEAD_APPROVED')
       .order('hr_head_actioned_at',{ ascending:false })
       .then(({ data }) => setApproved(data || []))
@@ -487,33 +489,77 @@ export function HRManagerSendOffer() {
   function prepareOffer(r: any) {
     setSelected(r)
     setToEmail(r.candidates?.email || '')
-    setSubject(`Offer Letter — ${r.candidates?.designation || 'Position'} | [Company Name]`)
+    const company = r.companies?.company_name || 'our organization'
+    const role = r.candidates?.designation || r.manpower_requisitions?.designation || 'the role'
+    setSubject(`Offer of Employment — ${role} | ${company}`)
     setBody(`Dear ${r.candidates?.full_name},
 
-We are pleased to offer you the position of ${r.candidates?.designation || '[Position]'} with our organization.
+Congratulations! We are delighted to offer you the position of ${role} at ${company}.
 
-Please find attached your formal Offer Letter for your reference.
+Your detailed offer letter is included below (and attached as an image) for your reference.
 
 Key details:
 • Annual CTC: ₹${r.offered_ctc ? fmt(r.offered_ctc) : '—'}
 • Proposed Date of Joining: ${r.proposed_doj ? new Date(r.proposed_doj).toLocaleDateString('en-IN') : '—'}
 
-Please review the offer letter carefully and confirm your acceptance through the link provided in the attachment.
+This offer is valid for 7 days and is subject to background verification and document submission. To accept, simply reply to this email confirming your acceptance.
 
-For any queries, please reach out to us at [HR Email].
+We look forward to welcoming you to the team.
 
 Warm regards,
-[HR Manager Name]
-HR Team | [Company Name]`)
+${company} — Human Resources`)
   }
 
   async function sendOffer() {
-    if (!selected || !toEmail || !body) { alert('Email aur body zaroori hai'); return }
+    if (!selected || !toEmail || !body) { alert('Recipient email and body are required'); return }
+
+    // Validate the To + CC addresses, and warn if CC was left empty (easy to forget).
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRe.test(toEmail.trim())) { alert('Please enter a valid recipient (To) email address.'); return }
+    const ccList = ccEmails.split(',').map((e: string) => e.trim()).filter(Boolean)
+    const badCc = ccList.filter((e: string) => !emailRe.test(e))
+    if (badCc.length) { alert('These CC email(s) look invalid:\n• ' + badCc.join('\n• ')); return }
+    if (ccList.length === 0 && !confirm('No CC email added.\nSend the offer letter without any CC?')) return
+
     setSending(true)
 
-    // Save offer letter
+    // 1. Actually email the offer letter to the candidate via Gmail.
+    try {
+      const offer = {
+        candidate_name: selected.candidates?.full_name,
+        designation: selected.candidates?.designation || selected.manpower_requisitions?.designation,
+        company_name: selected.companies?.company_name,
+        annual_ctc: selected.offered_ctc,
+        variable_pct: selected.offered_variable_pct ?? selected.ctc_negotiations?.variable_pct,
+        monthly_basic: selected.ctc_negotiations?.basic_monthly,
+        monthly_hra: selected.ctc_negotiations?.hra_monthly,
+        monthly_inhand: selected.monthly_inhand ?? selected.ctc_negotiations?.net_monthly,
+        joining_bonus: selected.joining_bonus,
+        retention_bonus: selected.retention_bonus,
+        esop_value: selected.esop_value,
+        proposed_doj: selected.proposed_doj,
+      }
+      const r = await fetch('/api/recruitment/send-offer-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: toEmail, cc: ccEmails, subject, body, offer }),
+      })
+      const d = await r.json().catch(() => ({}))
+      if (!r.ok || !d.ok) {
+        setSending(false)
+        alert('Email NOT sent: ' + (d.error || `HTTP ${r.status}`) + '\nNothing was marked as sent.')
+        return
+      }
+    } catch {
+      setSending(false)
+      alert('Email NOT sent: network error. Nothing was marked as sent.')
+      return
+    }
+
+    // 2. Email is out — record the offer letter.
     const { error } = await supabase.from('offer_letters').insert({
       candidate_id: selected.candidate_id,
+      candidate_name: selected.candidates?.full_name || toEmail,
       company_id: selected.company_id || null,
       letter_content: body,
       to_email: toEmail,
@@ -542,8 +588,8 @@ HR Team | [Company Name]`)
     })
 
     setSending(false)
-    if (error) { alert('Error: ' + error.message); return }
-    alert('Offer letter saved! Email integration se auto-send hoga.')
+    if (error) { alert('Email sent, but saving the record failed: ' + error.message); return }
+    alert(`Offer letter emailed to ${toEmail} and marked as Sent. Candidate moved to "Offer Sent".`)
     setSelected(null)
     setApproved(a => a.filter(r => r.id !== selected.id))
   }
@@ -594,11 +640,11 @@ HR Team | [Company Name]`)
               <textarea style={{ ...S.textarea, minHeight:280 }} value={body} onChange={e=>setBody(e.target.value)} />
             </div>
             <div style={{ background:'#F3F0FF', borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:'#4C1D95' }}>
-              Offer letter PDF auto-generate hoga. Candidate ko accept/upload ka link milega.
+              This emails the offer letter to the candidate via Gmail, records it, and marks the candidate <b>Offer Sent</b> in the pipeline.
             </div>
             <button onClick={sendOffer} disabled={sending}
               style={{ ...S.btn('#7C3AED','#fff'), width:'100%', padding:11, fontSize:13 }}>
-              {sending ? 'Sending...' : '📤 Send Offer Letter to Candidate'}
+              {sending ? 'Sending…' : '📤 Send Offer & Mark as Sent'}
             </button>
           </div>
         )}

@@ -565,11 +565,6 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
   const fileRef = useRef<HTMLInputElement>(null)
   const mrf = mrfs.find((m:MRF)=>m.id===selMRF)
 
-  async function extractText(file:File) {
-    if (file.type==='text/plain'||file.type==='text/csv') return await file.text()
-    return `File: ${file.name}\nSize: ${(file.size/1024).toFixed(0)}KB\nType: ${file.type}`
-  }
-
   async function runScreening() {
     if (!selMRF) { showNotify('Please select an MRF','error'); return }
     if (!files.length) { showNotify('Please upload resumes','error'); return }
@@ -577,18 +572,24 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
     setScreening(true); setResults([]); setProgress(0)
     const res:any[] = []
     for (let i=0; i<files.length; i++) {
-      const text = await extractText(files[i])
-      setProgress(Math.round(((i+1)/files.length)*100))
+      const file = files[i]
+      const fd = new FormData()
+      fd.append('file', file)                               // send the real file — API extracts PDF/DOCX/TXT
+      fd.append('jd_text', mrf.job_description || '')
+      fd.append('skills_required', mrf.skills_required || '')
+      fd.append('experience_required', mrf.experience_required || '')
+      fd.append('education_required', mrf.education_required || '')
+      fd.append('designation', mrf.designation || mrf.position || '')
+      fd.append('previous_company_preference', mrf.previous_company_preference || '')
+      fd.append('candidate_name', file.name.replace(/\.[^.]+$/,''))
       try {
-        const r = await fetch('/api/recruitment/screen-resumes', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({ resume_text:text, jd_text:mrf.job_description, candidate_name:files[i].name.replace(/\.[^.]+$/,'') })
-        })
+        const r = await fetch('/api/recruitment/screen-resumes', { method:'POST', body:fd }) // no Content-Type → browser sets multipart boundary
         const d = await r.json()
-        res.push({ ...d, file_name:files[i].name, added:false })
+        res.push({ ...d, file_name:file.name, added:false })
       } catch {
-        res.push({ candidate_name:files[i].name, score:0, match_tag:'NOT_SUITABLE', reasoning:'Parse error', file_name:files[i].name, added:false })
+        res.push({ candidate_name:file.name.replace(/\.[^.]+$/,''), score:0, match_tag:'NOT_SUITABLE', reasoning:'Network/parse error', matched_skills:[], missing_skills:[], file_name:file.name, added:false })
       }
+      setProgress(Math.round(((i+1)/files.length)*100))
       setResults([...res])
     }
     setScreening(false)
@@ -596,12 +597,19 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
 
   async function addToBank(idx:number) {
     const r = results[idx]
+    const summary = [
+      r.matched_skills?.length ? `Matched: ${r.matched_skills.join(', ')}` : '',
+      r.missing_skills?.length ? `Missing: ${r.missing_skills.join(', ')}` : '',
+      r.experience_match ? `Exp: ${r.experience_match}` : '',
+      r.education_match ? `Edu: ${r.education_match}` : '',
+    ].filter(Boolean).join(' · ')
+    const reasoning = summary ? `${r.reasoning||''}\n\n[ATS] ${summary}`.trim() : (r.reasoning||'')
     const { error } = await supabase.from('candidates').insert({
       mrf_id:selMRF, company_id:mrf?.company_id||null,
       full_name:r.candidate_name, phone:'TBD',
       source:'AI Screening', stage:'AI Screened',
       ai_score:r.score, ai_tag:r.match_tag, ai_match_tag:r.match_tag,
-      ai_reasoning:r.reasoning, ai_questions:r.interview_questions||[],
+      ai_reasoning:reasoning, ai_questions:r.interview_questions||[],
       status:'active', applied_date:new Date().toISOString().split('T')[0],
     })
     if (error) { showNotify('Add failed: '+error.message,'error'); return }
@@ -689,6 +697,26 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
                   {r.added&&<span style={{ fontSize:10, color:'#059669', fontWeight:500 }}>✓ Added to pipeline</span>}
                 </div>
                 <div style={{ fontSize:11, color:'#6B7280', marginBottom:6 }}>{r.reasoning}</div>
+                {typeof r.ats_score==='number'&&(
+                  <div style={{ fontSize:11, color:'#6D28D9', marginBottom:4 }}>ATS skills match: <b>{r.ats_score}%</b> · Overall: <b>{r.score}</b></div>
+                )}
+                {(r.matched_skills?.length||r.missing_skills?.length)?(
+                  <div style={{ display:'flex', flexWrap:'wrap' as const, gap:4, marginBottom:6 }}>
+                    {(r.matched_skills||[]).map((s:string,si:number)=>(
+                      <span key={'m'+si} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'#ECFDF5', color:'#059669', fontWeight:500 }}>✓ {s}</span>
+                    ))}
+                    {(r.missing_skills||[]).map((s:string,si:number)=>(
+                      <span key={'x'+si} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'#FEF2F2', color:'#DC2626', fontWeight:500 }}>✕ {s}</span>
+                    ))}
+                  </div>
+                ):null}
+                {(r.experience_match||r.education_match)&&(
+                  <div style={{ fontSize:11, color:'#6B7280', marginBottom:6 }}>
+                    {r.experience_match&&<span>⏱ {r.experience_match}</span>}
+                    {r.experience_match&&r.education_match&&<span> · </span>}
+                    {r.education_match&&<span>🎓 {r.education_match}</span>}
+                  </div>
+                )}
                 {r.interview_questions?.length>0&&(
                   <details style={{ cursor:'pointer' }}>
                     <summary style={{ fontSize:11, color:'#6D28D9', fontWeight:500 }}>View {r.interview_questions.length} Interview Questions</summary>
@@ -742,6 +770,13 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
   }
 
   async function moveStage(id:string, stage:string) {
+    // Pipeline moves forward only — a candidate can't be sent back to an earlier round.
+    const cur = candidates.find((c:Candidate)=>c.id===id)?.stage
+    const ci = STAGES.indexOf(cur as string), ti = STAGES.indexOf(stage)
+    if (ci!==-1 && ti!==-1 && ti<ci) {
+      showNotify(`Can't move back to "${stage}" — the pipeline only moves forward`,'error')
+      return
+    }
     await supabase.from('candidates').update({ stage }).eq('id',id)
     setSelCand(c=>c?{...c,stage}:null); onRefresh()
   }
@@ -917,14 +952,21 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
       {/* Stage Move */}
       <SectionLine title="Stage Move" />
       <div style={{ display:'flex', flexWrap:'wrap' as const, gap:5, marginBottom:14 }}>
-        {STAGES.map(s=>(
-          <button key={s} onClick={()=>onStageChange(c.id,s)} style={{ ...T.btn, fontSize:10, padding:'4px 9px',
-            background:c.stage===s?STAGE_COLOR[s]:STAGE_COLOR[s]+'12',
-            color:c.stage===s?'#fff':STAGE_COLOR[s],
-            border:c.stage===s?'none':`1px solid ${STAGE_COLOR[s]}30` }}>
-            {s}
-          </button>
-        ))}
+        {STAGES.map(s=>{
+          const isBack = STAGES.indexOf(s) < STAGES.indexOf(c.stage)
+          return (
+            <button key={s} onClick={()=>{ if(!isBack) onStageChange(c.id,s) }} disabled={isBack}
+              title={isBack?'Pipeline moves forward only — cannot return to an earlier round':''}
+              style={{ ...T.btn, fontSize:10, padding:'4px 9px',
+                background:c.stage===s?STAGE_COLOR[s]:STAGE_COLOR[s]+'12',
+                color:c.stage===s?'#fff':STAGE_COLOR[s],
+                border:c.stage===s?'none':`1px solid ${STAGE_COLOR[s]}30`,
+                opacity:isBack?0.35:1, cursor:isBack?'not-allowed':'pointer',
+                textDecoration:isBack?'line-through':'none' }}>
+              {s}
+            </button>
+          )
+        })}
       </div>
 
       {/* Interviewer Assignment */}
@@ -992,10 +1034,12 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
     const inHand = gross - totalDed
     const epfEmployer = Math.min(basic, 15000) * 0.12
     const esicEmployer = gross <= 21000 ? gross * 0.0325 : 0
-    const totalCTC = gross + epfEmployee + epfEmployer + esicEmployer + statBonus
+    // CTC = fixed gross (annual) + variable pay. By construction gross*12 = fixed = ctcAnnual - variable,
+    // so (gross + varMonthly)*12 = ctcAnnual — i.e. monthly CTC reconciles to the entered annual CTC.
+    const ctcMonthly = ctcAnnual / 12
     const hike = sel?.current_ctc ? ((ctcAnnual-sel.current_ctc)/sel.current_ctc*100).toFixed(1) : null
 
-    setCalc({ ctcAnnual, variable, varMonthly:variable/12, fixedMonthly, basic, hra, statBonus, otherAllow, gross, epfEmployee, esicEmployee, ptMonthly, lwfMonthly, totalDed, inHand, epfEmployer, esicEmployer, totalCTCMonthly:totalCTC, totalCTCAnnual:totalCTC*12, hike,
+    setCalc({ ctcAnnual, variable, varMonthly:variable/12, fixedMonthly, basic, hra, statBonus, otherAllow, gross, epfEmployee, esicEmployee, ptMonthly, lwfMonthly, totalDed, inHand, epfEmployer, esicEmployer, totalCTCMonthly:ctcMonthly, totalCTCAnnual:ctcAnnual, hike,
       joining_bonus:Number(form.joining_bonus)||0, retention_bonus:Number(form.retention_bonus)||0, esop:Number(form.esop)||0 })
   }
 
@@ -1042,7 +1086,7 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
       ['','','','',''],
       ['Fixed Component','',Math.round(calc.fixedMonthly),Math.round(calc.fixedMonthly*12),''],
       ['Variable Component','',Math.round(calc.varMonthly),Math.round(calc.variable),''],
-      ['CTC','Gross+EmpEPF+EmpESIC',Math.round(calc.totalCTCMonthly),calc.ctcAnnual,''],
+      ['CTC','Fixed Gross + Variable',Math.round(calc.totalCTCMonthly),calc.ctcAnnual,''],
       ['','','','',''],
       ['Joining Bonus ('+form.joining_freq+')','',' ',calc.joining_bonus,'One-time'],
       ['Retention Bonus ('+form.retention_freq+')','',' ',calc.retention_bonus,'One-time'],
@@ -1177,8 +1221,15 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
                       <td style={{ padding:'6px 10px', textAlign:'right' as const, color:'#6B7280' }}>₹{Math.round(calc.esicEmployer*12).toLocaleString('en-IN')}</td>
                     </tr>
                   )}
+                  {calc.variable>0&&(
+                    <tr style={{ borderBottom:'1px solid #F3F0FF' }}>
+                      <td style={{ padding:'6px 10px', color:'#374151' }}>Variable Pay ({form.varPct}%) <span style={{ fontSize:10, color:'#9CA3AF' }}>performance-linked</span></td>
+                      <td style={{ padding:'6px 10px', textAlign:'right' as const, fontWeight:500 }}>₹{Math.round(calc.varMonthly).toLocaleString('en-IN')}</td>
+                      <td style={{ padding:'6px 10px', textAlign:'right' as const, color:'#6B7280' }}>₹{Math.round(calc.variable).toLocaleString('en-IN')}</td>
+                    </tr>
+                  )}
                   <tr style={{ background:'#EDE9FE' }}>
-                    <td style={{ padding:'7px 10px', fontWeight:600, color:'#1E1B4B' }}>CTC</td>
+                    <td style={{ padding:'7px 10px', fontWeight:600, color:'#1E1B4B' }}>CTC <span style={{ fontSize:10, fontWeight:400, color:'#9CA3AF' }}>(Fixed Gross + Variable)</span></td>
                     <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:'#7C3AED' }}>₹{Math.round(calc.totalCTCMonthly).toLocaleString('en-IN')}</td>
                     <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:700, color:'#7C3AED', fontSize:14 }}>₹{calc.ctcAnnual.toLocaleString('en-IN')}</td>
                   </tr>
@@ -1334,12 +1385,13 @@ HR Team`
 
   async function sendOffer() {
     if (!sel||!letter) return
-    await supabase.from('offer_letters').insert({
-      candidate_id:sel.id, company_id:sel.company_id||null,
+    const { error } = await supabase.from('offer_letters').insert({
+      candidate_id:sel.id, candidate_name:sel.full_name, company_id:sel.company_id||null,
       letter_content:letter, to_email:toEmail,
       cc_emails:cc.split(',').map((e:string)=>e.trim()).filter(Boolean),
       status:'SENT', sent_at:new Date().toISOString()
-    }).catch(()=>{})
+    })
+    if (error) { showNotify('Save failed: '+error.message,'error'); return }
     await supabase.from('candidates').update({ stage:'Offer Sent', doj:doj||null }).eq('id',sel.id)
     showNotify('Offer saved! Email ready.'); onRefresh()
   }
@@ -1375,74 +1427,137 @@ HR Team`
 }
 
 // ── PRE-ONBOARDING ────────────────────────────────────────────────
-function PreOnboardTab({ supabase, candidates, onRefresh, showNotify }:any) {
+function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showNotify }:any) {
   const [links, setLinks] = useState<any[]>([])
-  const [dojMap, setDojMap] = useState<Record<string,string>>({})
+  const [busy, setBusy] = useState('')        // candidate_id being processed
+  const [choose, setChoose] = useState('')    // candidate_id showing Experienced/Fresher choice
 
-  useEffect(()=>{
-    supabase.from('preonboarding_links').select('*, candidates!inner(full_name,email,phone,stage)')
-      .order('created_at',{ascending:false})
+  const load = useCallback(()=>{
+    supabase.from('preonboarding_links').select('*').order('created_at',{ascending:false})
       .then(({data}:any)=>setLinks(data||[]))
   },[supabase])
+  useEffect(()=>{ load() },[load])
 
-  const offeredCands = candidates.filter((c:Candidate)=>['Offer Sent','Joined'].includes(c.stage))
-  const linkedIds = new Set(links.map((l:any)=>l.candidate_id))
-  const notLinked = offeredCands.filter((c:Candidate)=>!linkedIds.has(c.id))
+  const linkByCand = new Map(links.map((l:any)=>[l.candidate_id,l]))
+  const onboardingCands = candidates.filter((c:Candidate)=>['Offer Sent','Joined'].includes(c.stage))
+  const companyName = (c:Candidate)=> companies?.find((co:any)=>co.id===c.company_id)?.company_name || 'our organization'
 
-  async function createLink(candidate_id:string) {
-    const cand = candidates.find((c:Candidate)=>c.id===candidate_id)
-    const { error } = await supabase.from('preonboarding_links').insert({
-      candidate_id, company_id:cand?.company_id||null,
-      doj:dojMap[candidate_id]||null, status:'CREATED', sent_at:new Date().toISOString()
-    })
-    if (error) { showNotify('Error: '+error.message,'error'); return }
-    showNotify('Pre-onboarding link created!')
-    const { data } = await supabase.from('preonboarding_links').select('*, candidates!inner(full_name,email,phone,stage)').order('created_at',{ascending:false})
-    setLinks(data||[]); onRefresh()
+  // Find the candidate's onboarding row, creating one if it doesn't exist yet.
+  async function ensureRow(c:Candidate) {
+    const existing = linkByCand.get(c.id)
+    if (existing) return existing
+    const { data, error } = await supabase.from('preonboarding_links').insert({
+      candidate_id:c.id, company_id:c.company_id||null, doj:c.doj||null, status:'CREATED', sent_at:new Date().toISOString()
+    }).select('*').single()
+    if (error) { showNotify('Error: '+error.message,'error'); return null }
+    return data
   }
+
+  async function sendAcceptance(c:Candidate, type:'EXPERIENCED'|'FRESHER') {
+    if (!c.email) { showNotify('Candidate has no email on file','error'); return }
+    setBusy(c.id)
+    const row = await ensureRow(c); if (!row) { setBusy(''); return }
+    const company = companyName(c)
+    const role = c.designation || 'the role'
+    const doj = row.doj || c.doj || 'to be confirmed'
+    const exp = type==='EXPERIENCED'
+    const title = exp ? 'OFFER ACCEPTANCE & RESIGNATION ADVISORY' : 'JOINING CONFIRMATION LETTER'
+    const subject = exp
+      ? `Acceptance Confirmed & Next Steps — ${role} | ${company}`
+      : `Joining Confirmation — ${role} | ${company}`
+    const paragraphs = exp ? [
+      `Thank you for accepting our offer for the position of ${role} at ${company}. We are delighted to have you join us.`,
+      `As your next step, kindly submit your resignation to your current employer and share your acceptance / relieving documentation with us. Please keep us informed of your last working day so we can finalise your date of joining.`,
+      `Do ensure all notice-period formalities are completed in time for a smooth transition. We look forward to welcoming you on board.`,
+    ] : [
+      `Congratulations and welcome to ${company}! We are pleased to confirm your joining as ${role}.`,
+      `Please report on your date of joining with the required documents. Our HR team will guide you through the onboarding formalities and your workspace setup.`,
+      `We are excited to have you begin your career with us and look forward to a great journey together.`,
+    ]
+    const letter = { company_name:company, title, recipient:c.full_name, paragraphs,
+      highlights:[ { label:'Position', value:role }, { label:'Date of Joining', value:String(doj) } ] }
+    try {
+      const r = await fetch('/api/recruitment/send-letter', { method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({ to:c.email, cc:'', subject,
+          body:`Dear ${c.full_name},\n\n${paragraphs.join('\n\n')}\n\nWarm regards,\n${company} — Human Resources`, letter }) })
+      const d = await r.json().catch(()=>({}))
+      if (!r.ok || !d.ok) { showNotify('Letter email failed: '+(d.error||r.status),'error'); setBusy(''); return }
+    } catch { showNotify('Letter email failed (network)','error'); setBusy(''); return }
+    await supabase.from('preonboarding_links').update({ offer_response:'ACCEPTED', candidate_type:type,
+      response_at:new Date().toISOString(), acceptance_letter_sent_at:new Date().toISOString() }).eq('id', row.id)
+    showNotify(`${exp?'Resignation Acceptance':'Joining Confirmation'} letter emailed to ${c.full_name}!`)
+    setChoose(''); setBusy(''); load(); onRefresh()
+  }
+
+  async function markRevise(c:Candidate) {
+    const note = window.prompt('What needs to be revised in the offer?'); if (note===null) return
+    setBusy(c.id); const row = await ensureRow(c); if (!row) { setBusy(''); return }
+    await supabase.from('preonboarding_links').update({ offer_response:'REVISE', response_at:new Date().toISOString(), revise_note:note }).eq('id', row.id)
+    showNotify('Marked for revision — recruiter to re-initiate offer approval.'); setBusy(''); load(); onRefresh()
+  }
+
+  async function markBackout(c:Candidate) {
+    const reason = window.prompt('Backout reason (candidate will be blacklisted & the MRF reopened):'); if (reason===null) return
+    if (!window.confirm(`Confirm backout for ${c.full_name}?\nThis blacklists the candidate and reopens the MRF.`)) return
+    setBusy(c.id); const row = await ensureRow(c); if (!row) { setBusy(''); return }
+    await supabase.from('preonboarding_links').update({ offer_response:'BACKOUT', response_at:new Date().toISOString(), revise_note:reason }).eq('id', row.id)
+    await supabase.from('candidates').update({ blacklisted:true, blacklist_reason:reason, stage:'Rejected' }).eq('id', c.id)
+    if (c.mrf_id) await supabase.from('manpower_requisitions').update({ status:'APPROVED' }).eq('id', c.mrf_id)
+    showNotify(`${c.full_name} backed out — blacklisted & MRF reopened.`); setBusy(''); load(); onRefresh()
+  }
+
+  const respStyle:Record<string,[string,string]> = { ACCEPTED:['#ECFDF5','#059669'], REVISE:['#FFFBEB','#D97706'], BACKOUT:['#FEF2F2','#DC2626'] }
 
   return (
     <div>
-      <div style={T.section}>🎉 Pre-onboarding Links</div>
-      {notLinked.length>0&&(
-        <div style={{ marginBottom:16 }}>
-          <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:8 }}>Create link — Offer-sent candidates</div>
-          {notLinked.map((c:Candidate)=>(
-            <div key={c.id} style={{ ...T.card, border:'1px solid #FDE68A', background:'#FFFBEB', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-              <div>
-                <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B' }}>{c.full_name}</div>
-                <div style={{ fontSize:11, color:'#9CA3AF' }}>{c.phone} · {c.stage}</div>
-              </div>
-              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                <input type="date" style={{ ...T.input, width:150, fontSize:11 }} value={dojMap[c.id]||''} onChange={e=>setDojMap(m=>({...m,[c.id]:e.target.value}))} />
-                <button onClick={()=>createLink(c.id)} style={{ ...T.btn, background:'#D97706', color:'#fff', fontWeight:600 }}>🔗 Create Link</button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:8 }}>Sent Links ({links.length})</div>
-      {links.map((l:any)=>{
-        const daysSince = Math.floor((Date.now()-new Date(l.sent_at).getTime())/86400000)
-        const backoutRisk = !l.opened_at&&daysSince>=2
+      <div style={T.section}>🎉 Pre-onboarding & Offer Response</div>
+      {onboardingCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' as const, padding:24 }}>No offer-sent candidates yet.</div>}
+      {onboardingCands.map((c:Candidate)=>{
+        const row:any = linkByCand.get(c.id)
+        const resp = row?.offer_response
+        const [bg,fg] = resp ? respStyle[resp] : ['#fff','#6B7280']
         return (
-          <div key={l.id} style={{ ...T.card, border:backoutRisk?'1.5px solid #FCA5A5':'1px solid rgba(124,58,237,0.12)' }}>
+          <div key={c.id} style={{ ...T.card, border:`1px solid ${resp?fg+'40':'rgba(124,58,237,0.12)'}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
-                <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B' }}>{l.candidates?.full_name}</div>
-                <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>DOJ: {l.doj||'Not set'} · {l.candidates?.phone}</div>
-                <div style={{ fontSize:10, color:'#9CA3AF', marginTop:2, fontFamily:'monospace' }}>Token: {l.link_token}</div>
+                <div style={{ fontSize:14, fontWeight:600, color:'#1E1B4B' }}>{c.full_name}</div>
+                <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.designation||'—'} · {companyName(c)} · DOJ: {row?.doj||c.doj||'Not set'}</div>
+                {c.email&&<div style={{ fontSize:11, color:'#9CA3AF', marginTop:1 }}>{c.email}</div>}
               </div>
-              <div style={{ textAlign:'right' as const }}>
-                <Badge text={l.status} />
-                {backoutRisk&&<div style={{ fontSize:11, color:'#DC2626', marginTop:4, fontWeight:500 }}>🚨 {daysSince} days — BACKOUT RISK!</div>}
-              </div>
+              {resp&&(
+                <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:bg, color:fg }}>
+                  {resp==='ACCEPTED'?`✅ Accepted (${row?.candidate_type==='EXPERIENCED'?'Experienced':'Fresher'})`:resp==='REVISE'?'✏️ Revision requested':'🚫 Backed out'}
+                </span>
+              )}
             </div>
-            {l.submitted_at&&(
-              <div style={{ marginTop:10, background:'#ECFDF5', borderRadius:7, padding:10, border:'1px solid #A7F3D0' }}>
-                <div style={{ fontSize:12, color:'#059669', fontWeight:500 }}>✅ Form Submitted — Code generation ready</div>
-              </div>
+
+            {!resp&&(
+              choose===c.id ? (
+                <div style={{ marginTop:12, background:'#F8F7FF', borderRadius:8, padding:'10px 12px', border:'1px solid #E9E5FF' }}>
+                  <div style={{ fontSize:12, color:'#6D28D9', fontWeight:600, marginBottom:8 }}>Candidate type — sends the right letter:</div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'EXPERIENCED')} style={{ ...T.btn, background:'#7C3AED', color:'#fff' }}>{busy===c.id?'Sending…':'Experienced → Resignation Acceptance'}</button>
+                    <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'FRESHER')} style={{ ...T.btn, background:'#2563EB', color:'#fff' }}>{busy===c.id?'Sending…':'Fresher → Joining Confirmation'}</button>
+                    <button onClick={()=>setChoose('')} style={{ ...T.btn, background:'transparent', color:'#9CA3AF' }}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display:'flex', gap:8, marginTop:12 }}>
+                  <button onClick={()=>setChoose(c.id)} style={{ ...T.btn, background:'#ECFDF5', color:'#059669', border:'1px solid #A7F3D0', fontWeight:600 }}>✅ Accepted</button>
+                  <button onClick={()=>markRevise(c)} style={{ ...T.btn, background:'#FFFBEB', color:'#D97706', border:'1px solid #FDE68A', fontWeight:600 }}>✏️ Revise Offer</button>
+                  <button onClick={()=>markBackout(c)} style={{ ...T.btn, background:'#FEF2F2', color:'#DC2626', border:'1px solid #FECACA', fontWeight:600 }}>🚫 Backout</button>
+                </div>
+              )
+            )}
+
+            {resp==='ACCEPTED'&&row?.acceptance_letter_sent_at&&(
+              <div style={{ marginTop:10, fontSize:11, color:'#059669' }}>✉️ {row.candidate_type==='EXPERIENCED'?'Resignation Acceptance':'Joining Confirmation'} letter sent · {new Date(row.acceptance_letter_sent_at).toLocaleDateString('en-IN')}</div>
+            )}
+            {resp==='REVISE'&&row?.revise_note&&(
+              <div style={{ marginTop:10, fontSize:11, color:'#92400E', background:'#FFFBEB', borderRadius:6, padding:'6px 10px' }}>Revision note: {row.revise_note}</div>
+            )}
+            {resp==='BACKOUT'&&(
+              <div style={{ marginTop:10, fontSize:11, color:'#991B1B', background:'#FEF2F2', borderRadius:6, padding:'6px 10px' }}>Blacklisted · MRF reopened{row?.revise_note?` · Reason: ${row.revise_note}`:''}</div>
             )}
           </div>
         )
