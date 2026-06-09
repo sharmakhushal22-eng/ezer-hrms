@@ -1,1 +1,853 @@
-export default function Page(){return(<div style={{padding:"60px",textAlign:"center",background:"#F0F4F8",minHeight:"100vh"}}><h2 style={{color:"#0F172A",fontSize:"22px",marginBottom:"8px"}}>Onboarding</h2><p style={{color:"#64748B"}}>Coming soon</p><div style={{marginTop:"20px",display:"inline-block",padding:"8px 20px",background:"#7C3AED",color:"#fff",borderRadius:"10px"}}>In Development</div></div>)}
+// app/dashboard/onboarding/page.tsx
+// EZER HRMS — Onboarding Admin Dashboard
+// 5 tabs: Overview | All Candidates | Pending Actions | AI Insights | Compliance
+'use client'
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
+
+// ── Types ─────────────────────────────────────────────────────────
+type Stage = 'INVITED'|'IN_PROGRESS'|'SUBMITTED'|'HR_REVIEW'|'APPROVED'|'EMPLOYEE_CREATED'
+type RiskLevel = 'LOW'|'MEDIUM'|'HIGH'
+type Tab = 'overview'|'candidates'|'pending'|'insights'|'compliance'
+
+interface Candidate {
+  id: string; full_name: string; designation: string; department: string
+  email: string; mobile: string; date_of_joining: string
+  status: Stage; current_step: number; form_data: any
+  employee_code?: string; magic_link_token: string
+  submitted_at?: string; created_at: string; company_id: string
+  // Computed
+  docs_uploaded?: number; docs_ai_flagged?: number
+  form11?: boolean; form2?: boolean; bank?: boolean
+  bgv_status?: string; policy_ack?: boolean
+  laptop_issued?: boolean; id_card_issued?: boolean
+  ai_risk?: RiskLevel; ai_risk_reason?: string
+}
+
+// ── EZER theme constants ───────────────────────────────────────────
+const P = '#7C3AED'
+const STAGE_META: Record<Stage, {label:string; bg:string; color:string}> = {
+  INVITED:          { label:'Link sent',        bg:'#FFFBEB', color:'#D97706' },
+  IN_PROGRESS:      { label:'In progress',      bg:'#EEF2FF', color:'#4338CA' },
+  SUBMITTED:        { label:'Submitted',         bg:'#EEEDFE', color:P        },
+  HR_REVIEW:        { label:'HR review',         bg:'#DBEAFE', color:'#1D4ED8' },
+  APPROVED:         { label:'Approved',          bg:'#ECFDF5', color:'#059669' },
+  EMPLOYEE_CREATED: { label:'Employee created',  bg:'#EAF3DE', color:'#3B6D11' },
+}
+const STEP_LABELS = ['','Welcome','OTP','Personal','Contact','Emergency','Documents','Statutory','Declaration']
+const DOCS_REQ = ['AADHAAR_FRONT','AADHAAR_BACK','PAN','PHOTO','DEGREE','BANK_PROOF']
+
+// ── Small helpers ─────────────────────────────────────────────────
+const fmt = (s?: string) => s ? new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : '—'
+const daysLeft = (doj?: string) => {
+  if (!doj) return null
+  const d = Math.ceil((new Date(doj).getTime() - Date.now())/86400000)
+  return d
+}
+const progressPct = (c: Candidate) => {
+  const baseStep = Math.min(c.current_step || 1, 8)
+  const stepPct  = Math.round(((baseStep - 1)/7)*70)
+  const docBonus = c.docs_uploaded ? 15 : 0
+  const statBonus = (c.form11 && c.bank) ? 15 : c.bank ? 8 : 0
+  return Math.min(100, stepPct + docBonus + statBonus)
+}
+
+const Badge = ({ label, bg, color }: {label:string;bg:string;color:string}) => (
+  <span style={{fontSize:10,padding:'2px 8px',borderRadius:99,background:bg,color,fontWeight:600,display:'inline-flex',alignItems:'center'}}>{label}</span>
+)
+const RiskBadge = ({ risk }: {risk?: RiskLevel}) => {
+  if (!risk) return null
+  const m: Record<RiskLevel,{bg:string;color:string}> = {
+    LOW:    {bg:'#EAF3DE',color:'#3B6D11'},
+    MEDIUM: {bg:'#FFFBEB',color:'#D97706'},
+    HIGH:   {bg:'#FCEBEB',color:'#B91C1C'},
+  }
+  return <Badge label={`${risk === 'HIGH' ? '⚠ ' : ''}${risk} risk`} {...m[risk]}/>
+}
+
+function Toast({msg,type,onClose}:{msg:string;type:'ok'|'err';onClose:()=>void}) {
+  useEffect(()=>{const t=setTimeout(onClose,3500);return()=>clearTimeout(t)},[onClose])
+  return <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,borderRadius:10,padding:'12px 20px',fontSize:13,fontWeight:500,background:type==='ok'?'#059669':'#DC2626',color:'#fff',boxShadow:'0 8px 24px rgba(0,0,0,.18)',maxWidth:320}}>{type==='ok'?'✓':'⚠'} {msg}</div>
+}
+
+function ProgressBar({pct,color=P}:{pct:number;color?:string}) {
+  return (
+    <div style={{height:5,background:'rgba(124,58,237,.1)',borderRadius:99,overflow:'hidden',marginTop:4}}>
+      <div style={{height:'100%',background:color,borderRadius:99,width:`${pct}%`,transition:'width .4s'}}/>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MAIN DASHBOARD
+// ══════════════════════════════════════════════════════════════════
+export default function OnboardingDashboard() {
+  const [tab,          setTab]        = useState<Tab>('overview')
+  const [candidates,   setCandidates] = useState<Candidate[]>([])
+  const [loading,      setLoading]    = useState(true)
+  const [toast,        setToast]      = useState<{msg:string;type:'ok'|'err'}|null>(null)
+  const [filterStage,  setFilterStage] = useState<Stage|'ALL'>('ALL')
+  const [filterRisk,   setFilterRisk]  = useState<RiskLevel|'ALL'>('ALL')
+  const [searchQ,      setSearchQ]    = useState('')
+  // Modal state
+  const [linkModal,    setLinkModal]  = useState(false)
+  const [codeModal,    setCodeModal]  = useState<Candidate|null>(null)
+  const [genCode,      setGenCode]    = useState('')
+  const [saving,       setSaving]     = useState(false)
+  // New link form
+  const [newForm, setNewForm] = useState({
+    full_name:'', designation:'', department:'', email:'', mobile:'',
+    date_of_joining:'', offered_ctc:'', employment_type:'Employee',
+  })
+
+  const showToast = (msg:string, type:'ok'|'err'='ok') => setToast({msg,type})
+
+  // ── Load all onboarding candidates ───────────────────────────
+  const load = useCallback(async () => {
+    setLoading(true)
+    const { data: cands, error } = await supabase
+      .from('onboarding_candidates')
+      .select('*')
+      .order('created_at', {ascending:false})
+
+    if (error) { showToast('Load error: '+error.message,'err'); setLoading(false); return }
+
+    // Enrich with documents + statutory forms
+    const enriched: Candidate[] = await Promise.all((cands||[]).map(async (c) => {
+      const [{ data: docs }, { data: forms }, { data: assets }] = await Promise.all([
+        supabase.from('onboarding_documents').select('doc_code,ai_status').eq('onboarding_id',c.id),
+        supabase.from('onboarding_statutory_forms').select('form_type').eq('onboarding_id',c.id),
+        supabase.from('onboarding_asset_requests').select('asset_type,status').eq('onboarding_id',c.id),
+      ])
+      const docCodes  = (docs||[]).map(d=>d.doc_code)
+      const flagged   = (docs||[]).filter(d=>d.ai_status==='MISMATCH'||d.ai_status==='FAILED').length
+      const formTypes = (forms||[]).map(f=>f.form_type)
+      const laptop    = (assets||[]).find(a=>a.asset_type==='LAPTOP')
+      const idCard    = (assets||[]).find(a=>a.asset_type==='ID_CARD')
+
+      // Compute AI risk
+      let risk: RiskLevel = 'LOW'
+      let riskReason = ''
+      const days = daysLeft(c.date_of_joining)
+      if (days !== null && days <= 3 && c.status !== 'EMPLOYEE_CREATED') { risk='HIGH'; riskReason='Joining in ≤3 days, not complete' }
+      else if (flagged > 0) { risk='MEDIUM'; riskReason=`${flagged} document(s) AI flagged` }
+      else if (c.status==='INVITED' && days !== null && days <= 7) { risk='MEDIUM'; riskReason='Link not opened, joining close' }
+
+      return {
+        ...c,
+        docs_uploaded:   docCodes.length,
+        docs_ai_flagged: flagged,
+        form11:          formTypes.includes('EPF_FORM11'),
+        form2:           formTypes.includes('EPF_FORM2'),
+        bank:            formTypes.includes('BANK_MANDATE'),
+        policy_ack:      !!(c.form_data?.step_8?.declaration_accepted),
+        laptop_issued:   laptop?.status === 'ISSUED',
+        id_card_issued:  idCard?.status  === 'ISSUED',
+        ai_risk:         risk,
+        ai_risk_reason:  riskReason,
+      } as Candidate
+    }))
+
+    setCandidates(enriched)
+    setLoading(false)
+  }, [])
+
+  useEffect(()=>{ load() },[load])
+
+  // ── Send magic link ────────────────────────────────────────────
+  const sendMagicLink = async () => {
+    const { full_name, designation, mobile, email, date_of_joining } = newForm
+    if (!full_name || !mobile || !date_of_joining) { showToast('Name, mobile, date of joining required','err'); return }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/onboarding/send-magic-link', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ ...newForm, offered_ctc: newForm.offered_ctc ? parseFloat(newForm.offered_ctc) : null }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error||'Failed')
+      showToast(`Magic link sent for ${full_name}! ${data.magic_link}`)
+      setLinkModal(false)
+      setNewForm({full_name:'',designation:'',department:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee'})
+      load()
+    } catch(e:any) { showToast(e.message,'err') }
+    setSaving(false)
+  }
+
+  // ── Generate employee code ────────────────────────────────────
+  const generateCode = async () => {
+    if (!codeModal || !genCode.trim()) { showToast('Code required','err'); return }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/onboarding/generate-code', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ onboarding_id: codeModal.id, employee_code: genCode.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error||'Failed')
+      showToast(`✓ Employee code ${genCode} generated! ESS access unlocked.`)
+      setCodeModal(null); setGenCode('')
+      load()
+    } catch(e:any) { showToast(e.message,'err') }
+    setSaving(false)
+  }
+
+  // ── Issue asset ───────────────────────────────────────────────
+  const issueAsset = async (candidateId: string, assetType: string) => {
+    await supabase.from('onboarding_asset_requests').upsert({
+      onboarding_id: candidateId, asset_type: assetType,
+      status:'ISSUED', issued_at: new Date().toISOString(),
+    },{onConflict:'onboarding_id,asset_type'})
+    showToast(`${assetType} marked as issued`)
+    load()
+  }
+
+  // ── Computed stats ─────────────────────────────────────────────
+  const total       = candidates.length
+  const active      = candidates.filter(c=>!['EMPLOYEE_CREATED'].includes(c.status)).length
+  const submitted   = candidates.filter(c=>c.status==='SUBMITTED'||c.status==='HR_REVIEW').length
+  const highRisk    = candidates.filter(c=>c.ai_risk==='HIGH').length
+  const joined      = candidates.filter(c=>c.status==='EMPLOYEE_CREATED').length
+  const thisWeek    = candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).length
+
+  // ── Filter candidates ─────────────────────────────────────────
+  const filtered = candidates.filter(c=>{
+    if (filterStage!=='ALL' && c.status!==filterStage) return false
+    if (filterRisk!=='ALL'  && c.ai_risk!==filterRisk)  return false
+    if (searchQ && !c.full_name.toLowerCase().includes(searchQ.toLowerCase()) &&
+        !c.designation?.toLowerCase().includes(searchQ.toLowerCase())) return false
+    return true
+  })
+
+  // ── Pending actions ────────────────────────────────────────────
+  const pendingActions = candidates.flatMap(c => {
+    const actions: {priority:'HIGH'|'MEDIUM'|'LOW'; label:string; candidate:string; action:string; cid:string}[] = []
+    const days = daysLeft(c.date_of_joining)
+
+    if (c.status==='SUBMITTED') actions.push({priority:'HIGH',label:'Review & generate employee code',candidate:c.full_name,action:'generate',cid:c.id})
+    if (c.status==='INVITED' && days!==null && days<=5) actions.push({priority:'HIGH',label:'Link not opened — follow up candidate',candidate:c.full_name,action:'followup',cid:c.id})
+    if (c.docs_ai_flagged && c.docs_ai_flagged>0) actions.push({priority:'MEDIUM',label:`${c.docs_ai_flagged} document(s) AI flagged — review`,candidate:c.full_name,action:'docs',cid:c.id})
+    if (c.status==='APPROVED' && !c.laptop_issued) actions.push({priority:'MEDIUM',label:'Laptop not issued — contact IT',candidate:c.full_name,action:'laptop',cid:c.id})
+    if (c.status==='APPROVED' && !c.id_card_issued) actions.push({priority:'LOW',label:'ID card not issued — contact Admin',candidate:c.full_name,action:'idcard',cid:c.id})
+    if (!c.policy_ack && c.status==='IN_PROGRESS') actions.push({priority:'LOW',label:'Policy acknowledgement pending',candidate:c.full_name,action:'policy',cid:c.id})
+    return actions
+  }).sort((a,b)=>{ const o={HIGH:0,MEDIUM:1,LOW:2}; return o[a.priority]-o[b.priority] })
+
+  // ── Shared section header ──────────────────────────────────────
+  const SH = ({title,sub}:{title:string;sub?:string}) => (
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:14,fontWeight:500,color:'var(--color-text-primary)'}}>{title}</div>
+      {sub && <div style={{fontSize:11,color:'var(--color-text-secondary)',marginTop:2}}>{sub}</div>}
+    </div>
+  )
+
+  // ── OVERVIEW TAB ───────────────────────────────────────────────
+  const OverviewTab = () => (
+    <div>
+      {/* Stat cards */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:10,marginBottom:18}}>
+        {[
+          {label:'Total pipeline',    val:total,     color:P},
+          {label:'Active onboarding', val:active,    color:'#185FA5'},
+          {label:'Joining this week', val:thisWeek,  color:'#D97706'},
+          {label:'Awaiting code',     val:submitted, color:'#7C3AED'},
+          {label:'High risk',         val:highRisk,  color:'#DC2626'},
+          {label:'Completed',         val:joined,    color:'#059669'},
+        ].map(({label,val,color})=>(
+          <div key={label} style={{background:'var(--color-background-secondary)',borderRadius:'var(--border-radius-md)',padding:'12px 14px',borderTop:`2.5px solid ${color}`}}>
+            <div style={{fontSize:10,color:'var(--color-text-secondary)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>{label}</div>
+            <div style={{fontSize:26,fontWeight:500,color}}>{val}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
+
+        {/* Quick actions */}
+        <div>
+          <SH title="Quick actions"/>
+          <div style={{display:'flex',flexDirection:'column',gap:8}}>
+            <button onClick={()=>setLinkModal(true)} style={{padding:'11px 14px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
+              <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/> Generate & send magic link to new joiner
+            </button>
+            <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'var(--color-text-primary)'}}>
+              <i className="ti ti-list-check" style={{fontSize:16,color:'#D97706'}} aria-hidden="true"/> View {pendingActions.filter(a=>a.priority==='HIGH').length} urgent pending actions
+            </button>
+            <button onClick={()=>setTab('compliance')} style={{padding:'11px 14px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'var(--color-text-primary)'}}>
+              <i className="ti ti-shield-check" style={{fontSize:16,color:'#185FA5'}} aria-hidden="true"/> Review PF / ESI / BGV compliance status
+            </button>
+          </div>
+
+          {/* AI alerts */}
+          {highRisk > 0 && (
+            <div style={{marginTop:14,background:'#FCEBEB',border:'0.5px solid #F09595',borderRadius:'var(--border-radius-md)',padding:'12px 14px'}}>
+              <div style={{fontSize:12,fontWeight:500,color:'#991B1B',marginBottom:8}}>
+                <i className="ti ti-alert-triangle" style={{fontSize:14,verticalAlign:-2,marginRight:5}} aria-hidden="true"/>
+                AI flagged {highRisk} high-risk joining{highRisk>1?'s':''}
+              </div>
+              {candidates.filter(c=>c.ai_risk==='HIGH').slice(0,3).map(c=>(
+                <div key={c.id} style={{fontSize:11,color:'#B91C1C',marginBottom:4,display:'flex',alignItems:'center',gap:5}}>
+                  <i className="ti ti-user" style={{fontSize:12}} aria-hidden="true"/> {c.full_name} — {c.ai_risk_reason}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* This week joiners */}
+        <div>
+          <SH title="Joining this week" sub="D-7 to today"/>
+          {candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).length === 0
+            ? <div style={{padding:20,textAlign:'center',color:'var(--color-text-secondary)',fontSize:12}}>No joinings this week</div>
+            : candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).map(c=>{
+              const days = daysLeft(c.date_of_joining)!
+              const pct  = progressPct(c)
+              const sm   = STAGE_META[c.status]
+              return (
+                <div key={c.id} style={{background:'var(--color-background-primary)',border:'0.5px solid var(--color-border-tertiary)',borderRadius:'var(--border-radius-md)',padding:'10px 12px',marginBottom:8,borderLeft:`3px solid ${days<=1?'#DC2626':days<=3?'#D97706':P}`}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:500}}>{c.full_name}</div>
+                      <div style={{fontSize:11,color:'var(--color-text-secondary)',marginTop:1}}>{c.designation}</div>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontSize:11,fontWeight:600,color:days<=1?'#DC2626':days<=3?'#D97706':P}}>
+                        {days===0?'Today!':days===1?'Tomorrow':`D-${days}`}
+                      </div>
+                      <Badge {...sm} label={sm.label}/>
+                    </div>
+                  </div>
+                  <ProgressBar pct={pct} color={pct===100?'#059669':days<=3?'#DC2626':P}/>
+                  <div style={{display:'flex',justifyContent:'space-between',marginTop:5,fontSize:10,color:'var(--color-text-secondary)'}}>
+                    <span>Step {c.current_step||1}/8 · {pct}% complete</span>
+                    {c.status==='SUBMITTED' && (
+                      <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:'#fff',fontFamily:'inherit'}}>
+                        Generate code
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })
+          }
+        </div>
+      </div>
+    </div>
+  )
+
+  // ── ALL CANDIDATES TAB ─────────────────────────────────────────
+  const CandidatesTab = () => (
+    <div>
+      {/* Filters */}
+      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
+        <input value={searchQ} onChange={e=>setSearchQ(e.target.value)}
+          placeholder="Search name, designation..."
+          style={{padding:'7px 11px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',fontSize:12,fontFamily:'inherit',color:'var(--color-text-primary)',background:'var(--color-background-secondary)',outline:'none',minWidth:200}}/>
+        <select value={filterStage} onChange={e=>setFilterStage(e.target.value as any)}
+          style={{padding:'7px 11px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',fontSize:12,fontFamily:'inherit',background:'var(--color-background-secondary)',color:'var(--color-text-primary)',outline:'none'}}>
+          <option value="ALL">All stages</option>
+          {(Object.keys(STAGE_META) as Stage[]).map(s=><option key={s} value={s}>{STAGE_META[s].label}</option>)}
+        </select>
+        <select value={filterRisk} onChange={e=>setFilterRisk(e.target.value as any)}
+          style={{padding:'7px 11px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',fontSize:12,fontFamily:'inherit',background:'var(--color-background-secondary)',color:'var(--color-text-primary)',outline:'none'}}>
+          <option value="ALL">All risk levels</option>
+          <option value="HIGH">High risk only</option>
+          <option value="MEDIUM">Medium risk</option>
+          <option value="LOW">Low risk</option>
+        </select>
+        <div style={{marginLeft:'auto',fontSize:11,color:'var(--color-text-secondary)'}}>{filtered.length} of {total} shown</div>
+        <button onClick={()=>setLinkModal(true)} style={{padding:'7px 14px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
+          <i className="ti ti-plus" style={{fontSize:14}} aria-hidden="true"/> New joiner
+        </button>
+      </div>
+
+      {/* Table */}
+      <div style={{border:'0.5px solid var(--color-border-tertiary)',borderRadius:'var(--border-radius-lg)',overflow:'hidden'}}>
+        <div style={{overflowX:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+            <thead>
+              <tr style={{background:'var(--color-background-secondary)'}}>
+                {['Candidate','Stage','Progress','DOJ','Docs','Statutory','BGV','Risk','Actions'].map(h=>(
+                  <th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--color-text-secondary)',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid var(--color-border-tertiary)',whiteSpace:'nowrap'}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && (
+                <tr><td colSpan={9} style={{padding:32,textAlign:'center',color:'var(--color-text-secondary)'}}>No candidates found</td></tr>
+              )}
+              {filtered.map((c,i)=>{
+                const sm  = STAGE_META[c.status]
+                const pct = progressPct(c)
+                const days = daysLeft(c.date_of_joining)
+                return (
+                  <tr key={c.id} style={{borderBottom:'0.5px solid var(--color-border-tertiary)',background:i%2===0?'var(--color-background-primary)':'var(--color-background-secondary)'}}>
+                    <td style={{padding:'10px 12px',minWidth:160}}>
+                      <div style={{fontWeight:500}}>{c.full_name}</div>
+                      <div style={{fontSize:10,color:'var(--color-text-secondary)',marginTop:1}}>{c.designation || '—'}</div>
+                      {c.employee_code && <div style={{fontSize:10,color:'#059669',marginTop:1,fontWeight:600}}>{c.employee_code}</div>}
+                    </td>
+                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><Badge {...sm} label={sm.label}/></td>
+                    <td style={{padding:'10px 12px',minWidth:100}}>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--color-text-secondary)',marginBottom:2}}>
+                        <span>Step {c.current_step||1}/8</span><span>{pct}%</span>
+                      </div>
+                      <ProgressBar pct={pct} color={pct===100?'#059669':pct>=60?P:'#D97706'}/>
+                    </td>
+                    <td style={{padding:'10px 12px',whiteSpace:'nowrap',fontSize:11}}>
+                      {fmt(c.date_of_joining)}
+                      {days !== null && <div style={{fontSize:10,fontWeight:600,color:days<=3?'#DC2626':days<=7?'#D97706':'#059669'}}>{days<0?`${Math.abs(days)}d ago`:days===0?'Today!':days===1?'Tomorrow':`D-${days}`}</div>}
+                    </td>
+                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
+                      <span style={{fontSize:11}}>{c.docs_uploaded||0}/{DOCS_REQ.length}</span>
+                      {(c.docs_ai_flagged||0)>0 && <div style={{fontSize:10,color:'#D97706',marginTop:1}}>⚠ {c.docs_ai_flagged} flagged</div>}
+                    </td>
+                    <td style={{padding:'10px 12px'}}>
+                      <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form11?'#EAF3DE':'#FCEBEB',color:c.form11?'#3B6D11':'#B91C1C',fontWeight:600}}>F11</span>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form2?'#EAF3DE':'#FCEBEB',color:c.form2?'#3B6D11':'#B91C1C',fontWeight:600}}>F2</span>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.bank?'#EAF3DE':'#FCEBEB',color:c.bank?'#3B6D11':'#B91C1C',fontWeight:600}}>Bank</span>
+                      </div>
+                      <div style={{display:'flex',gap:3,marginTop:3}}>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.laptop_issued?'#EAF3DE':'#EEEDFE',color:c.laptop_issued?'#3B6D11':P,fontWeight:600}}>
+                          {c.laptop_issued?'💻✓':'💻'}
+                        </span>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.id_card_issued?'#EAF3DE':'#EEEDFE',color:c.id_card_issued?'#3B6D11':P,fontWeight:600}}>
+                          {c.id_card_issued?'🪪✓':'🪪'}
+                        </span>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.policy_ack?'#EAF3DE':'#EEEDFE',color:c.policy_ack?'#3B6D11':P,fontWeight:600}}>
+                          {c.policy_ack?'Policy✓':'Policy'}
+                        </span>
+                      </div>
+                    </td>
+                    <td style={{padding:'10px 12px'}}>
+                      <span style={{fontSize:10,fontWeight:600,color:'var(--color-text-secondary)'}}>—</span>
+                    </td>
+                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><RiskBadge risk={c.ai_risk}/></td>
+                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
+                      <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                        {c.status==='SUBMITTED' && (
+                          <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'4px 9px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
+                            <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Code
+                          </button>
+                        )}
+                        {c.status==='INVITED' && (
+                          <button onClick={async()=>{
+                            const link=`${window.location.origin}/onboarding/${c.magic_link_token}`
+                            await navigator.clipboard.writeText(link).catch(()=>{})
+                            showToast('Link copied!')
+                          }} style={{padding:'4px 9px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:10,fontFamily:'inherit',color:'var(--color-text-primary)'}}>
+                            <i className="ti ti-copy" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Link
+                          </button>
+                        )}
+                        {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.laptop_issued && (
+                          <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{padding:'4px 9px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'#FFFBEB',fontSize:10,fontFamily:'inherit',color:'#633806'}}>
+                            💻 Issue
+                          </button>
+                        )}
+                        {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.id_card_issued && (
+                          <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{padding:'4px 9px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'#EEF2FF',fontSize:10,fontFamily:'inherit',color:'#4338CA'}}>
+                            🪪 Issue
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+
+  // ── PENDING ACTIONS TAB ────────────────────────────────────────
+  const PendingTab = () => {
+    const groups: Record<string, typeof pendingActions> = {
+      HIGH:   pendingActions.filter(a=>a.priority==='HIGH'),
+      MEDIUM: pendingActions.filter(a=>a.priority==='MEDIUM'),
+      LOW:    pendingActions.filter(a=>a.priority==='LOW'),
+    }
+    const gMeta = {
+      HIGH:   {label:'Urgent — do today',     bg:'#FCEBEB', color:'#B91C1C', border:'#F09595'},
+      MEDIUM: {label:'Important — this week',  bg:'#FFFBEB', color:'#D97706', border:'#FDE68A'},
+      LOW:    {label:'When possible',          bg:'#EEF2FF', color:'#4338CA', border:'#C7D2FE'},
+    }
+    return (
+      <div>
+        <SH title="Pending actions" sub="Priority-sorted. Resolve High first."/>
+        {pendingActions.length === 0 && (
+          <div style={{padding:40,textAlign:'center',color:'var(--color-text-secondary)'}}>
+            <i className="ti ti-circle-check" style={{fontSize:40,color:'#059669',display:'block',marginBottom:10}} aria-hidden="true"/>
+            All clear! No pending actions.
+          </div>
+        )}
+        {(['HIGH','MEDIUM','LOW'] as const).map(pri => groups[pri].length > 0 && (
+          <div key={pri} style={{marginBottom:16}}>
+            <div style={{fontSize:11,fontWeight:600,color:gMeta[pri].color,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+              <div style={{width:8,height:8,borderRadius:'50%',background:gMeta[pri].color,flexShrink:0}}/>
+              {gMeta[pri].label} ({groups[pri].length})
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {groups[pri].map((a,i)=>{
+                const cand = candidates.find(c=>c.id===a.cid)
+                return (
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:gMeta[pri].bg,borderRadius:'var(--border-radius-md)',border:`0.5px solid ${gMeta[pri].border}`}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:500,color:'var(--color-text-primary)'}}>{a.label}</div>
+                      <div style={{fontSize:11,color:'var(--color-text-secondary)',marginTop:1}}>
+                        <i className="ti ti-user" style={{fontSize:11,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>{a.candidate}
+                        {cand?.date_of_joining && <span style={{marginLeft:8}}>· DOJ: {fmt(cand.date_of_joining)}</span>}
+                      </div>
+                    </div>
+                    {a.action==='generate' && cand && (
+                      <button onClick={()=>{setCodeModal(cand);setGenCode('')}} style={{padding:'5px 12px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                        <i className="ti ti-bolt" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Generate code
+                      </button>
+                    )}
+                    {a.action==='followup' && cand && (
+                      <button onClick={async()=>{
+                        const link=`${window.location.origin}/onboarding/${cand.magic_link_token}`
+                        await navigator.clipboard.writeText(link).catch(()=>{})
+                        showToast('Link copied — send to candidate')
+                      }} style={{padding:'5px 12px',borderRadius:'var(--border-radius-md)',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:'var(--color-background-primary)',fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
+                        <i className="ti ti-copy" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Copy link
+                      </button>
+                    )}
+                    {(a.action==='laptop'||a.action==='idcard') && cand && (
+                      <button onClick={()=>issueAsset(cand.id,a.action==='laptop'?'LAPTOP':'ID_CARD')} style={{padding:'5px 12px',borderRadius:'var(--border-radius-md)',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:'var(--color-background-primary)',fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
+                        Mark issued
+                      </button>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
+  // ── AI INSIGHTS TAB ────────────────────────────────────────────
+  const InsightsTab = () => {
+    const atRisk = candidates.filter(c=>c.ai_risk==='HIGH'||c.ai_risk==='MEDIUM')
+    const champs = candidates.filter(c=>progressPct(c)===100)
+    const flaggedDocs = candidates.filter(c=>(c.docs_ai_flagged||0)>0)
+    return (
+      <div>
+        <SH title="AI insights" sub="Powered by EZER AI — updated on load"/>
+
+        {/* Attrition risk */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:500,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+            <i className="ti ti-alert-triangle" style={{fontSize:15,color:'#DC2626'}} aria-hidden="true"/>
+            Attrition & at-risk joiners ({atRisk.length})
+          </div>
+          {atRisk.length===0
+            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'var(--border-radius-md)',fontSize:12,color:'#3B6D11'}}>✓ No at-risk candidates right now.</div>
+            : atRisk.map(c=>(
+              <div key={c.id} style={{background:'var(--color-background-primary)',border:`0.5px solid ${c.ai_risk==='HIGH'?'#F09595':'#FDE68A'}`,borderRadius:'var(--border-radius-md)',padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${c.ai_risk==='HIGH'?'#DC2626':'#D97706'}`}}>
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
+                  <div>
+                    <div style={{fontSize:12,fontWeight:500}}>{c.full_name} <RiskBadge risk={c.ai_risk}/></div>
+                    <div style={{fontSize:11,color:'var(--color-text-secondary)',marginTop:2}}>{c.designation} · DOJ: {fmt(c.date_of_joining)}</div>
+                    <div style={{fontSize:11,color:c.ai_risk==='HIGH'?'#B91C1C':'#D97706',marginTop:4,fontStyle:'italic'}}>
+                      <i className="ti ti-robot" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
+                      {c.ai_risk_reason}
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:6}}>
+                    {c.status==='SUBMITTED' && (
+                      <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'5px 10px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontFamily:'inherit'}}>Generate code</button>
+                    )}
+                  </div>
+                </div>
+                <ProgressBar pct={progressPct(c)} color={c.ai_risk==='HIGH'?'#DC2626':'#D97706'}/>
+              </div>
+            ))
+          }
+        </div>
+
+        {/* Document AI flags */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:500,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+            <i className="ti ti-file-alert" style={{fontSize:15,color:'#D97706'}} aria-hidden="true"/>
+            Document AI flags ({flaggedDocs.length} candidates)
+          </div>
+          {flaggedDocs.length===0
+            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'var(--border-radius-md)',fontSize:12,color:'#3B6D11'}}>✓ All uploaded documents verified by AI.</div>
+            : flaggedDocs.map(c=>(
+              <div key={c.id} style={{background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'var(--border-radius-md)',padding:'10px 12px',marginBottom:6}}>
+                <div style={{fontSize:12,fontWeight:500}}>{c.full_name}</div>
+                <div style={{fontSize:11,color:'#D97706',marginTop:2}}>
+                  <i className="ti ti-robot" style={{fontSize:11,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>
+                  {c.docs_ai_flagged} document(s) flagged — low confidence or mismatch detected. Manual review recommended.
+                </div>
+              </div>
+            ))
+          }
+        </div>
+
+        {/* Onboarding champions */}
+        <div>
+          <div style={{fontSize:12,fontWeight:500,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+            <i className="ti ti-star" style={{fontSize:15,color:'#D97706'}} aria-hidden="true"/>
+            Onboarding champions — 100% complete ({champs.length})
+          </div>
+          {champs.length===0
+            ? <div style={{padding:16,background:'#EEEDFE',borderRadius:'var(--border-radius-md)',fontSize:12,color:P}}>No 100% complete onboardings yet.</div>
+            : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
+              {champs.map(c=>(
+                <div key={c.id} style={{background:'#EAF3DE',border:'0.5px solid #A7F3D0',borderRadius:'var(--border-radius-md)',padding:'10px 12px',textAlign:'center'}}>
+                  <div style={{width:36,height:36,borderRadius:'50%',background:'#059669',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:500,margin:'0 auto 6px'}}>
+                    {c.full_name.charAt(0)}
+                  </div>
+                  <div style={{fontSize:12,fontWeight:500,color:'#065F46'}}>{c.full_name}</div>
+                  <div style={{fontSize:10,color:'#059669',marginTop:2}}>{c.employee_code||'Code pending'}</div>
+                </div>
+              ))}
+            </div>
+          }
+        </div>
+      </div>
+    )
+  }
+
+  // ── COMPLIANCE TAB ─────────────────────────────────────────────
+  const ComplianceTab = () => {
+    const active = candidates.filter(c=>c.status!=='EMPLOYEE_CREATED')
+    return (
+      <div>
+        <SH title="Compliance tracker" sub="India-specific: PF / ESI / PT / BGV — employee-wise"/>
+
+        {/* Summary row */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:8,marginBottom:16}}>
+          {[
+            {label:'Form 11 pending', val:active.filter(c=>!c.form11).length, color:'#D97706'},
+            {label:'Form 2 pending',  val:active.filter(c=>!c.form2).length,  color:'#D97706'},
+            {label:'Bank pending',    val:active.filter(c=>!c.bank).length,   color:'#D97706'},
+            {label:'Policy pending',  val:active.filter(c=>!c.policy_ack).length, color:'#185FA5'},
+            {label:'Laptop pending',  val:active.filter(c=>!c.laptop_issued).length, color:P},
+            {label:'ID card pending', val:active.filter(c=>!c.id_card_issued).length, color:P},
+          ].map(({label,val,color})=>(
+            <div key={label} style={{background:'var(--color-background-secondary)',borderRadius:'var(--border-radius-md)',padding:'10px 12px',borderLeft:`3px solid ${val>0?color:'#059669'}`}}>
+              <div style={{fontSize:10,color:'var(--color-text-secondary)',marginBottom:3,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:500}}>{label}</div>
+              <div style={{fontSize:22,fontWeight:500,color:val>0?color:'#059669'}}>{val}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Compliance grid */}
+        <div style={{border:'0.5px solid var(--color-border-tertiary)',borderRadius:'var(--border-radius-lg)',overflow:'hidden'}}>
+          <div style={{overflowX:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+              <thead>
+                <tr style={{background:'var(--color-background-secondary)'}}>
+                  {['Employee','DOJ','EPF Form 11','EPF Form 2','Bank','Policy Ack','Laptop','ID Card','PT State','BGV'].map(h=>(
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontSize:9,fontWeight:600,color:'var(--color-text-secondary)',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid var(--color-border-tertiary)',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {candidates.length===0 && (
+                  <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:'var(--color-text-secondary)'}}>No data</td></tr>
+                )}
+                {candidates.map((c,i)=>{
+                  const ptState = (c.form_data as any)?.step_4?.perm_state || '—'
+                  const Tick = ({done}:{done?:boolean}) => (
+                    <span style={{fontSize:14,color:done?'#059669':'#D97706'}}>
+                      {done
+                        ? <i className="ti ti-circle-check" style={{verticalAlign:-1}} aria-hidden="true"/>
+                        : <i className="ti ti-clock" style={{verticalAlign:-1}} aria-hidden="true"/>
+                      }
+                    </span>
+                  )
+                  return (
+                    <tr key={c.id} style={{borderBottom:'0.5px solid var(--color-border-tertiary)',background:i%2===0?'var(--color-background-primary)':'var(--color-background-secondary)'}}>
+                      <td style={{padding:'9px 10px',minWidth:130}}>
+                        <div style={{fontWeight:500,fontSize:12}}>{c.full_name}</div>
+                        <div style={{fontSize:10,color:'var(--color-text-secondary)'}}>{c.designation||'—'}</div>
+                        {c.employee_code && <div style={{fontSize:10,color:'#059669',fontWeight:600}}>{c.employee_code}</div>}
+                      </td>
+                      <td style={{padding:'9px 10px',whiteSpace:'nowrap'}}>{fmt(c.date_of_joining)}</td>
+                      <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.form11}/></td>
+                      <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.form2}/></td>
+                      <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.bank}/></td>
+                      <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.policy_ack}/></td>
+                      <td style={{padding:'9px 10px',textAlign:'center'}}>
+                        {c.laptop_issued
+                          ? <span style={{fontSize:10,color:'#059669',fontWeight:600}}>✓ Issued</span>
+                          : <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontFamily:'inherit',color:'var(--color-text-secondary)'}}>Issue</button>
+                        }
+                      </td>
+                      <td style={{padding:'9px 10px',textAlign:'center'}}>
+                        {c.id_card_issued
+                          ? <span style={{fontSize:10,color:'#059669',fontWeight:600}}>✓ Issued</span>
+                          : <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontFamily:'inherit',color:'var(--color-text-secondary)'}}>Issue</button>
+                        }
+                      </td>
+                      <td style={{padding:'9px 10px',fontSize:11,color:'var(--color-text-secondary)'}}>{ptState}</td>
+                      <td style={{padding:'9px 10px'}}>
+                        <span style={{fontSize:10,color:'var(--color-text-secondary)'}}>—</span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── RENDER ─────────────────────────────────────────────────────
+  const TABS: {key:Tab; icon:string; label:string; badge?:number}[] = [
+    {key:'overview',    icon:'ti-home',        label:'Overview'},
+    {key:'candidates',  icon:'ti-users',       label:'All candidates', badge:total},
+    {key:'pending',     icon:'ti-list-check',  label:'Pending actions', badge:pendingActions.filter(a=>a.priority==='HIGH').length||undefined},
+    {key:'insights',    icon:'ti-brain',       label:'AI insights',    badge:highRisk||undefined},
+    {key:'compliance',  icon:'ti-shield-check',label:'Compliance'},
+  ]
+
+  return (
+    <div style={{background:'var(--color-background-tertiary,#F5F3FF)',minHeight:'100vh',fontFamily:'"DM Sans","Segoe UI",sans-serif',color:'var(--color-text-primary)'}}>
+
+      {/* Header */}
+      <div style={{background:`linear-gradient(135deg, ${P}, #4F46E5)`,padding:'14px 24px 0'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:500,color:'#fff'}}>Onboarding</div>
+            <div style={{fontSize:11,color:'rgba(255,255,255,.6)',marginTop:1}}>
+              {active} active · {thisWeek} joining this week
+            </div>
+          </div>
+          <button onClick={()=>setLinkModal(true)} style={{padding:'8px 16px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:'rgba(255,255,255,.15)',color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+            <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send magic link
+          </button>
+        </div>
+
+        {/* Tab nav */}
+        <div style={{display:'flex',gap:2}}>
+          {TABS.map(t=>(
+            <button key={t.key} onClick={()=>setTab(t.key)}
+              style={{padding:'8px 14px',border:'none',cursor:'pointer',fontSize:12,fontWeight:500,fontFamily:'inherit',background:'transparent',color:tab===t.key?'#fff':'rgba(255,255,255,.55)',borderBottom:`2.5px solid ${tab===t.key?'#fff':'transparent'}`,display:'flex',alignItems:'center',gap:5,transition:'all .15s'}}>
+              <i className={`ti ${t.icon}`} style={{fontSize:14}} aria-hidden="true"/>
+              {t.label}
+              {t.badge!==undefined && t.badge > 0 && (
+                <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background: t.key==='pending' ? '#DC2626' : 'rgba(255,255,255,.25)',color:'#fff',fontWeight:600,minWidth:16,textAlign:'center'}}>
+                  {t.badge}
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{padding:'20px 24px',maxWidth:1400,margin:'0 auto'}}>
+        {loading
+          ? <div style={{textAlign:'center',padding:60,color:'var(--color-text-secondary)'}}>Loading onboarding data...</div>
+          : <>
+            {tab==='overview'    && <OverviewTab/>}
+            {tab==='candidates'  && <CandidatesTab/>}
+            {tab==='pending'     && <PendingTab/>}
+            {tab==='insights'    && <InsightsTab/>}
+            {tab==='compliance'  && <ComplianceTab/>}
+          </>
+        }
+      </div>
+
+      {/* ── SEND MAGIC LINK MODAL ────────────────────────────── */}
+      {linkModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
+          <div style={{background:'var(--color-background-primary)',borderRadius:'var(--border-radius-xl,16px)',padding:'20px 22px',width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontSize:15,fontWeight:500}}>Send joining link to new candidate</div>
+              <button onClick={()=>setLinkModal(false)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'var(--color-text-secondary)',lineHeight:1}}>×</button>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              {[
+                {label:'Full Name *',       key:'full_name',      type:'text', placeholder:'As per Aadhaar'},
+                {label:'Mobile *',          key:'mobile',         type:'tel',  placeholder:'+91 XXXXXXXXXX'},
+                {label:'Email',             key:'email',          type:'email',placeholder:'personal@email.com'},
+                {label:'Designation',       key:'designation',    type:'text', placeholder:'e.g. Software Engineer'},
+                {label:'Department',        key:'department',     type:'text', placeholder:'e.g. Technology'},
+                {label:'Date of Joining *', key:'date_of_joining',type:'date', placeholder:''},
+                {label:'Offered CTC (₹)',   key:'offered_ctc',    type:'number',placeholder:'e.g. 800000'},
+              ].map(({label,key,type,placeholder})=>(
+                <div key={key} style={{marginBottom:8}}>
+                  <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{label}</div>
+                  <input type={type} placeholder={placeholder} value={(newForm as any)[key]} onChange={e=>setNewForm(f=>({...f,[key]:e.target.value}))}
+                    style={{width:'100%',padding:'8px 11px',background:'var(--color-background-secondary)',border:'0.5px solid var(--color-border-secondary)',borderRadius:'var(--border-radius-md)',fontSize:12,color:'var(--color-text-primary)',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                </div>
+              ))}
+              <div style={{marginBottom:8}}>
+                <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Employment Type</div>
+                <select value={newForm.employment_type} onChange={e=>setNewForm(f=>({...f,employment_type:e.target.value}))}
+                  style={{width:'100%',padding:'8px 11px',background:'var(--color-background-secondary)',border:'0.5px solid var(--color-border-secondary)',borderRadius:'var(--border-radius-md)',fontSize:12,color:'var(--color-text-primary)',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
+                  <option>Employee</option><option>Intern</option><option>Consultant</option><option>Contract</option><option>NAPS</option><option>NATS</option>
+                </select>
+              </div>
+            </div>
+            <div style={{background:'#EEEDFE',borderRadius:'var(--border-radius-md)',padding:'9px 12px',marginTop:4,fontSize:11,color:'#534AB7',lineHeight:1.7}}>
+              <i className="ti ti-info-circle" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
+              A 24-hour magic link will be generated. Share with candidate via email or WhatsApp. OTP will be sent to their mobile for verification.
+            </div>
+            <div style={{display:'flex',gap:10,marginTop:16}}>
+              <button onClick={()=>setLinkModal(false)} style={{padding:'9px 16px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:12,fontFamily:'inherit',color:'var(--color-text-primary)'}}>Cancel</button>
+              <button onClick={sendMagicLink} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
+                {saving ? 'Generating...' : '🔗 Generate & send magic link'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── GENERATE CODE MODAL ──────────────────────────────── */}
+      {codeModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
+          <div style={{background:'var(--color-background-primary)',borderRadius:'var(--border-radius-xl,16px)',padding:'20px 22px',width:'100%',maxWidth:440,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontSize:15,fontWeight:500}}>Generate Employee Code</div>
+              <button onClick={()=>setCodeModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'var(--color-text-secondary)',lineHeight:1}}>×</button>
+            </div>
+            <div style={{background:'#EEEDFE',borderRadius:'var(--border-radius-md)',padding:'12px 14px',marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:500,color:P,marginBottom:6}}>{codeModal.full_name}</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,fontSize:11,color:'var(--color-text-secondary)'}}>
+                <span>Designation: {codeModal.designation||'—'}</span>
+                <span>DOJ: {fmt(codeModal.date_of_joining)}</span>
+                <span>Docs: {codeModal.docs_uploaded||0} uploaded</span>
+                <span>Progress: {progressPct(codeModal)}%</span>
+              </div>
+            </div>
+            {progressPct(codeModal) < 80 && (
+              <div style={{background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'var(--border-radius-md)',padding:'8px 12px',marginBottom:12,fontSize:11,color:'#D97706'}}>
+                ⚠ Joining form {100-progressPct(codeModal)}% incomplete. Are you sure you want to generate code now?
+              </div>
+            )}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>Employee Code *</div>
+              <input value={genCode} onChange={e=>setGenCode(e.target.value.toUpperCase())} placeholder="e.g. SSM-00142"
+                style={{width:'100%',padding:'10px 12px',background:'var(--color-background-secondary)',border:`1.5px solid ${P}`,borderRadius:'var(--border-radius-md)',fontSize:15,color:'var(--color-text-primary)',outline:'none',fontFamily:'inherit',letterSpacing:1,fontWeight:500,boxSizing:'border-box'}}/>
+              <div style={{fontSize:10,color:'var(--color-text-secondary)',marginTop:4}}>Format: [CompanyCode]-[5 digits] · Must be unique</div>
+            </div>
+            <div style={{background:'#EAF3DE',borderRadius:'var(--border-radius-md)',padding:'8px 12px',marginBottom:14,fontSize:11,color:'#065F46',lineHeight:1.7}}>
+              ✓ Employee code generated → ESS portal access unlocked → Welcome email auto-sent
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={()=>setCodeModal(null)} style={{padding:'9px 14px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:12,fontFamily:'inherit',color:'var(--color-text-primary)'}}>Cancel</button>
+              <button onClick={generateCode} disabled={saving||!genCode.trim()} style={{flex:1,padding:'9px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:genCode.trim()?'#059669':'#9CA3AF',color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
+                {saving ? '⏳ Generating...' : `⚡ Generate ${genCode||'code'} & unlock ESS`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {toast && <Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}
+    </div>
+  )
+}

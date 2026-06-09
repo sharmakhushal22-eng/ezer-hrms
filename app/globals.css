@@ -3,6 +3,19 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Onboarding module theme — matches the rest of the app
+     (page #F5F3FF · white cards · #1E1B4B text · #7C3AED purple). */
+  --color-background-primary:   #ffffff;  /* cards / surfaces */
+  --color-background-secondary: #fafafb;  /* secondary surfaces / stat tiles */
+  --color-background-tertiary:  #f5f3ff;  /* page background */
+  --color-text-primary:         #1e1b4b;  /* headings / body */
+  --color-text-secondary:       #6b7280;  /* muted text */
+  --color-border-secondary:     #e5e7eb;
+  --color-border-tertiary:      #ede9fe;
+  --border-radius-md:           10px;
+  --border-radius-lg:           14px;
+  --border-radius-xl:           16px;
 }
 
 @theme inline {

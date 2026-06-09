@@ -12,6 +12,6 @@ export function proxy() {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|salary-view|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/((?!_next/static|_next/image|salary-view|joining|onboarding|api/onboarding|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
