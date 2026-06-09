@@ -26,6 +26,7 @@ interface Candidate {
   stage:string; ai_score?:number; ai_tag?:string; ai_match_tag?:string
   ai_reasoning?:string; ai_questions?:string[]; interview_notes?:string
   doj?:string; status?:string; created_at:string; resume_url?:string
+  offer_revised?:boolean; offer_revision_note?:string; blacklisted?:boolean
 }
 
 const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','MD Final','Offer Sent','Joined','Rejected']
@@ -68,6 +69,7 @@ function Badge({ text }:{ text:string }) {
     CREATED:['#FFFBEB','#D97706'], SENT:['#EFF6FF','#1D4ED8'],
     OPENED:['#F3F0FF','#6D28D9'], SUBMITTED_PRE:['#ECFDF5','#059669'],
     'Quick Hire':['#FFF7ED','#EA580C'], 'Full MRF':['#EEF2FF','#4338CA'],
+    'Revised Offer':['#FEF3C7','#B45309'], 'Blacklisted':['#FEF2F2','#DC2626'],
   }
   const [bg,c] = map[text] || ['#F3F0FF','#6D28D9']
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{text}</span>
@@ -494,9 +496,9 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 </div>
                 {(m as any).skills_required&&<div style={{ fontSize:11, color:'#6D28D9', marginTop:4 }}>Skills: {(m as any).skills_required}</div>}
               </div>
-              <div style={{ display:'flex', gap:6, marginLeft:10, flexShrink:0 }}>
+              <div style={{ display:'flex', gap:6, marginLeft:10, flexShrink:0, alignItems:'center' }}>
                 {m.status==='SUBMITTED'&&(
-                  <button onClick={()=>setApprovalModal(m)} style={{ ...T.btn, background:'#ECFDF5', color:'#059669', border:'1px solid #A7F3D0', fontSize:11 }}>✅ Approve</button>
+                  <span style={{ fontSize:10, color:'#9CA3AF', fontStyle:'italic' as const }}>Awaiting HR Head approval</span>
                 )}
                 <button onClick={()=>openEdit(m)} style={{ ...T.btn, background:'#EFF6FF', color:'#1D4ED8', border:'1px solid #BFDBFE', fontSize:11 }}>✏️ Edit</button>
                 <button onClick={()=>setDeleteConfirm(m.id)} style={{ ...T.btn, background:'#FEF2F2', color:'#DC2626', border:'1px solid #FCA5A5', fontSize:11 }}>🗑️</button>
@@ -568,14 +570,17 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
   async function runScreening() {
     if (!selMRF) { showNotify('Please select an MRF','error'); return }
     if (!files.length) { showNotify('Please upload resumes','error'); return }
-    if (!mrf?.job_description) { showNotify('The selected MRF has no JD','error'); return }
+    // No JD? Synthesise one from the MRF's role + skills so screening still works.
+    const jdText = mrf?.job_description ||
+      `Role: ${mrf?.designation||mrf?.position||'—'}. Required skills: ${mrf?.skills_required||'—'}. Experience: ${mrf?.experience_required||'—'}. Education: ${mrf?.education_required||'Any'}.`
+    if (!mrf?.skills_required && !mrf?.job_description) { showNotify('This MRF has no JD or skills — add skills to screen','error'); return }
     setScreening(true); setResults([]); setProgress(0)
     const res:any[] = []
     for (let i=0; i<files.length; i++) {
       const file = files[i]
       const fd = new FormData()
       fd.append('file', file)                               // send the real file — API extracts PDF/DOCX/TXT
-      fd.append('jd_text', mrf.job_description || '')
+      fd.append('jd_text', jdText)
       fd.append('skills_required', mrf.skills_required || '')
       fd.append('experience_required', mrf.experience_required || '')
       fd.append('education_required', mrf.education_required || '')
@@ -643,8 +648,8 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
           <div>
             <label style={T.label}>Select Job Opening *</label>
             <select style={T.select} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
-              <option value="">Select MRF (must have a JD)</option>
-              {mrfs.filter((m:MRF)=>m.job_description&&m.status==='APPROVED').map((m:MRF)=>(
+              <option value="">Select MRF (approved)</option>
+              {mrfs.filter((m:MRF)=>m.status==='APPROVED').map((m:MRF)=>(
                 <option key={m.id} value={m.id}>{m.designation||m.position} — {m.no_of_openings||m.openings||0} openings</option>
               ))}
             </select>
@@ -855,7 +860,7 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
                 {sc.map((c:Candidate)=>(
                   <div key={c.id} onClick={()=>{setSelCand(c);setAiQs([])}}
                     style={{ background:'#fff', borderRadius:7, padding:'9px 10px', marginBottom:6, cursor:'pointer', border:'1px solid #EDE9FE', boxShadow:'0 1px 3px rgba(124,58,237,0.06)' }}>
-                    <div style={{ fontSize:12, fontWeight:600, color:'#1E1B4B', marginBottom:2 }}>{c.full_name}</div>
+                    <div style={{ fontSize:12, fontWeight:600, color:'#1E1B4B', marginBottom:2 }}>{c.full_name}{c.offer_revised&&<span style={{ fontSize:9, color:'#B45309', fontWeight:600, marginLeft:5 }}>✏️ Revised</span>}</div>
                     <div style={{ fontSize:10, color:'#9CA3AF' }}>{c.current_company||'—'} · {c.experience_years||0}yr</div>
                     {c.expected_ctc&&<div style={{ fontSize:10, color:'#7C3AED', marginTop:2, fontWeight:500 }}>₹{(c.expected_ctc/100000).toFixed(1)}L</div>}
                     {c.ai_score&&(
@@ -1004,7 +1009,9 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
 
 // ── NEGOTIATION CALCULATOR ────────────────────────────────────────
 function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
-  const finalCands = candidates.filter((c:Candidate)=>['MD Final','Offer Sent','L2','Optional Round'].includes(c.stage))
+  // Offer Sent is intentionally excluded — once an offer goes out there's no more negotiation.
+  // A revised offer moves the candidate back to 'MD Final', so they reappear here with the calculator.
+  const finalCands = candidates.filter((c:Candidate)=>['MD Final','L2','Optional Round'].includes(c.stage))
   const [sel, setSel] = useState<Candidate|null>(null)
   const [form, setForm] = useState({ ctc:'', varPct:'10', joining_bonus:'', joining_freq:'With Salary', retention_bonus:'', retention_freq:'After 3 Months', esop:'', esop_plan:'', state:'HR' })
   const [calc, setCalc] = useState<any>(null)
@@ -1107,7 +1114,7 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
             style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?'#F3F0FF':'#fff' }}>
             <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B' }}>{c.full_name}</div>
             <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L exp':'—'}</div>
-            <div style={{ marginTop:6 }}><Badge text={c.stage} /></div>
+            <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
           </div>
         ))}
         {finalCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', fontSize:13, textAlign:'center' as const, padding:24 }}>No candidate is at the MD Final stage</div>}
@@ -1333,7 +1340,7 @@ function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
       ) : eligible.map((c:Candidate)=>(
         <div key={c.id} style={{ ...T.card, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
-            <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}</div>
+            <div style={{ fontSize:14, fontWeight:600, display:'flex', gap:6, alignItems:'center' }}>{c.full_name}{c.offer_revised&&<Badge text="Revised Offer" />}</div>
             <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.designation||'—'} · {c.stage}</div>
           </div>
           <button style={{ ...T.btn, background:'#7C3AED', color:'#fff' }} onClick={()=>pick(c)}>Create Request →</button>
@@ -1405,7 +1412,7 @@ HR Team`
             onClick={()=>generateLetter(c)}>
             <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B' }}>{c.full_name}</div>
             <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
-            <div style={{ marginTop:6 }}><Badge text={c.stage} /></div>
+            <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
           </div>
         ))}
         {offeredCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' as const, padding:24 }}>No candidates</div>}
@@ -1490,10 +1497,19 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
   }
 
   async function markRevise(c:Candidate) {
-    const note = window.prompt('What needs to be revised in the offer?'); if (note===null) return
-    setBusy(c.id); const row = await ensureRow(c); if (!row) { setBusy(''); return }
-    await supabase.from('preonboarding_links').update({ offer_response:'REVISE', response_at:new Date().toISOString(), revise_note:note }).eq('id', row.id)
-    showNotify('Marked for revision — recruiter to re-initiate offer approval.'); setBusy(''); load(); onRefresh()
+    const note = window.prompt('What needs to be revised? This sends the candidate back to the Negotiation tab to restart the offer flow.'); if (note===null) return
+    setBusy(c.id)
+    // Clear the pre-onboarding record so the next offer cycle starts fresh,
+    // log the revision, then send the candidate back to Negotiation (MD Final).
+    const existing = linkByCand.get(c.id)
+    if (existing) await supabase.from('preonboarding_links').delete().eq('id', existing.id)
+    await supabase.from('recruitment_audit_logs').insert({
+      candidate_id:c.id, company_id:c.company_id||null, action_type:'OFFER_REVISE_REQUESTED',
+      details:{ note }, created_at:new Date().toISOString()
+    })
+    await supabase.from('candidates').update({ stage:'MD Final', offer_revised:true, offer_revision_note:note }).eq('id', c.id)
+    showNotify(`${c.full_name} sent back to Negotiation — marked Revised Offer.`)
+    setBusy(''); load(); onRefresh()
   }
 
   async function markBackout(c:Candidate) {

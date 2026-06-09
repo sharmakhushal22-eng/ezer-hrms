@@ -1,8 +1,10 @@
 // app/api/recruitment/screen-resumes/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import mammoth from 'mammoth'
+// pdf-parse v1 — import the lib entry directly to avoid its debug-mode file read.
+import pdf from 'pdf-parse/lib/pdf-parse.js'
 
-// mammoth + Buffer need the Node.js runtime (not Edge)
+// mammoth/pdf-parse + Buffer need the Node.js runtime (not Edge)
 export const runtime = 'nodejs'
 
 // Google Gemini. Override the model via GEMINI_MODEL if needed.
@@ -63,47 +65,31 @@ Respond ONLY with valid JSON (no markdown, no commentary):
 Tag rules: STRONG = 75-100, PARTIAL = 40-74, NOT_SUITABLE = 0-39. If REQUIRED SKILLS is "Not specified", score against the JOB DESCRIPTION only and set matched_skills/missing_skills to [].`
 }
 
-// Turn an uploaded resume into Gemini "parts".
-// PDF  -> inlineData base64 (Gemini reads the document directly, incl. scanned)
-// DOCX -> mammoth text extraction (Gemini can't parse .docx natively)
-// TXT/CSV/other text -> raw text
-async function buildParts(file: File, c: Criteria) {
-  const name = file.name.toLowerCase()
-  const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf')
-  const isDocx =
-    file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-    name.endsWith('.docx') ||
-    name.endsWith('.doc')
-
-  if (isPdf) {
-    const base64 = Buffer.from(await file.arrayBuffer()).toString('base64')
-    return [
-      { text: buildPrompt(c) },
-      { inlineData: { mimeType: 'application/pdf', data: base64 } },
-    ]
+// Extract plain text from the uploaded resume. Returns '' if it can't (e.g. scanned PDF).
+async function extractText(buffer: Buffer, isPdf: boolean, isDocx: boolean): Promise<string> {
+  try {
+    if (isPdf) return ((await pdf(buffer)).text || '').trim()
+    if (isDocx) return ((await mammoth.extractRawText({ buffer })).value || '').trim()
+    return buffer.toString('utf-8').trim()
+  } catch {
+    return ''
   }
-
-  let text: string
-  if (isDocx) {
-    const buffer = Buffer.from(await file.arrayBuffer())
-    const { value } = await mammoth.extractRawText({ buffer })
-    text = value
-  } else {
-    text = await file.text()
-  }
-  text = text.trim().slice(0, MAX_RESUME_CHARS)
-  if (!text) throw new Error('Empty resume text after extraction')
-  return [{ text: buildPrompt(c, text) }]
 }
 
-// Robustly pull the JSON object out of the model's reply, even if it leaks
-// prose like "Here is the JSON:" or wraps it in ```json fences.
+// Split a "React, Node.js; SQL / AWS" string into individual skill tokens.
+function parseSkills(s: string): string[] {
+  return (s || '')
+    .split(/[,;/|\n]+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length >= 2)
+}
+
 function parseModelJson(raw: string): any {
   let s = raw.replace(/```json|```/g, '').trim()
   const first = s.indexOf('{')
   const last = s.lastIndexOf('}')
   if (first !== -1 && last !== -1 && last > first) s = s.slice(first, last + 1)
-  return JSON.parse(s) // throws on malformed -> caught by caller -> safe fallback
+  return JSON.parse(s)
 }
 
 export async function POST(req: NextRequest) {
@@ -124,6 +110,52 @@ export async function POST(req: NextRequest) {
     if (!file) return NextResponse.json({ error: 'No resume file provided' }, { status: 400 })
     if (!c.jd_text.trim()) return NextResponse.json({ error: 'No job description provided' }, { status: 400 })
 
+    const name = file.name.toLowerCase()
+    const isPdf = file.type === 'application/pdf' || name.endsWith('.pdf')
+    const isDocx =
+      file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      name.endsWith('.docx') ||
+      name.endsWith('.doc')
+
+    const buffer = Buffer.from(await file.arrayBuffer())
+    let text = await extractText(buffer, isPdf, isDocx)
+    const haveText = text.length >= 80 // enough to keyword-check reliably
+
+    // ── STEP 1: cheap keyword pre-screen (saves AI tokens) ──────────────
+    const required = parseSkills(c.skills_required)
+    if (haveText && required.length > 0) {
+      const lower = text.toLowerCase()
+      const matched = required.filter((sk) => lower.includes(sk.toLowerCase()))
+      if (matched.length === 0) {
+        // None of the required skills appear at all — don't waste an AI call.
+        return NextResponse.json({
+          score: 0,
+          ats_score: 0,
+          match_tag: 'NOT_SUITABLE',
+          matched_skills: [],
+          missing_skills: required,
+          reasoning: `Pre-screen: none of the required skills (${required.join(', ')}) were found in the resume — skipped AI screening to save tokens.`,
+          prescreened: true,
+          candidate_name,
+        })
+      }
+    }
+
+    // ── STEP 2: build Gemini content (compact text when we have it) ─────
+    let parts: any[]
+    if (haveText) {
+      text = text.slice(0, MAX_RESUME_CHARS)
+      parts = [{ text: buildPrompt(c, text) }]
+    } else if (isPdf) {
+      // Scanned / no-text PDF: fall back to Gemini's native document reading.
+      parts = [
+        { text: buildPrompt(c) },
+        { inlineData: { mimeType: 'application/pdf', data: buffer.toString('base64') } },
+      ]
+    } else {
+      throw new Error('Empty resume text after extraction')
+    }
+
     const apiKey = process.env.GEMINI_API_KEY
     if (!apiKey) {
       return NextResponse.json(
@@ -132,24 +164,17 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const parts = await buildParts(file, c)
-
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
       {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-goog-api-key': apiKey,
-        },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify({
           contents: [{ role: 'user', parts }],
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 4096,
             responseMimeType: 'application/json',
-            // gemini-2.5-* are "thinking" models — disable thinking so the full
-            // JSON answer isn't truncated by reasoning tokens.
             thinkingConfig: { thinkingBudget: 0 },
           },
         }),
@@ -166,8 +191,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await res.json()
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
-    const result = parseModelJson(raw)
+    const result = parseModelJson(data.candidates?.[0]?.content?.parts?.[0]?.text || '{}')
     return NextResponse.json({ ...result, candidate_name })
   } catch (err) {
     console.error('screen-resumes failed:', err)

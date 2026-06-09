@@ -306,8 +306,10 @@ export function HRHeadApprovalDashboard() {
   const [comment, setComment] = useState('')
   const [processing, setProcessing] = useState(false)
   const [tab, setTab] = useState<'pending'|'done'>('pending')
+  const [mrfs, setMrfs] = useState<any[]>([])
 
   useEffect(() => { loadRequests() }, [tab])
+  useEffect(() => { loadMrfs() }, [])
 
   async function loadRequests() {
     const { data } = await supabase.from('offer_approval_requests')
@@ -315,6 +317,28 @@ export function HRHeadApprovalDashboard() {
       .eq('status', tab === 'pending' ? 'SUBMITTED' : 'HR_HEAD_APPROVED')
       .order('submitted_at', { ascending: false })
     setRequests(data || [])
+  }
+
+  // HR Head approves Manpower Requisitions (the only place MRFs get approved).
+  async function loadMrfs() {
+    const { data } = await supabase.from('manpower_requisitions')
+      .select('*, companies(company_name)')
+      .eq('status', 'SUBMITTED')
+      .order('created_at', { ascending: false })
+    setMrfs(data || [])
+  }
+  async function approveMrf(id: string) {
+    const { error } = await supabase.from('manpower_requisitions')
+      .update({ status: 'APPROVED', approved_at: new Date().toISOString() }).eq('id', id)
+    if (error) { alert('Error: ' + error.message); return }
+    loadMrfs()
+  }
+  async function rejectMrf(id: string) {
+    const reason = window.prompt('Rejection reason for this MRF:'); if (reason === null) return
+    const { error } = await supabase.from('manpower_requisitions')
+      .update({ status: 'REJECTED', remarks: reason }).eq('id', id)
+    if (error) { alert('Error: ' + error.message); return }
+    loadMrfs()
   }
 
   async function processApproval() {
@@ -352,7 +376,32 @@ export function HRHeadApprovalDashboard() {
 
   return (
     <div style={{ maxWidth:1100, margin:'0 auto', padding:16 }}>
-      <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Head — Offer Approvals</div>
+      <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Head — Approvals</div>
+
+      {/* MRF Approvals — HR Head approves new manpower requisitions here */}
+      <div style={{ marginBottom:22 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>📝 MRF Approvals ({mrfs.length})</div>
+        {mrfs.length === 0 && (
+          <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>No MRFs pending approval</div>
+        )}
+        {mrfs.map(m => (
+          <div key={m.id} style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+            <div>
+              <div style={{ fontSize:14, fontWeight:600 }}>{m.designation || m.position || 'Untitled'}</div>
+              <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>
+                {m.companies?.company_name || ''} · {m.no_of_openings || m.openings || 0} openings · {m.employment_type || '—'}{m.experience_required ? ` · ${m.experience_required}` : ''}
+              </div>
+              {m.skills_required && <div style={{ fontSize:11, color:'#6D28D9', marginTop:3 }}>Skills: {m.skills_required}</div>}
+            </div>
+            <div style={{ display:'flex', gap:8, flexShrink:0 }}>
+              <button onClick={()=>approveMrf(m.id)} style={S.btn('#059669','#fff')}>✅ Approve</button>
+              <button onClick={()=>rejectMrf(m.id)} style={{ ...S.btn('#FEF2F2','#DC2626'), border:'1px solid #FCA5A5' }}>❌ Reject</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'4px 0 8px' }}>📄 Offer Approvals</div>
       <div style={{ display:'flex', gap:8, marginBottom:16 }}>
         {(['pending','done'] as const).map(t => (
           <button key={t} onClick={()=>{setTab(t);setSelected(null)}}
