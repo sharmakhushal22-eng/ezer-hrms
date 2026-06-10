@@ -236,8 +236,8 @@ export default function OnboardingDashboard() {
   // ── Shared section header ──────────────────────────────────────
   const SH = ({title,sub}:{title:string;sub?:string}) => (
     <div style={{marginBottom:14}}>
-      <div style={{fontSize:14,fontWeight:500,color:'var(--color-text-primary)'}}>{title}</div>
-      {sub && <div style={{fontSize:11,color:'var(--color-text-secondary)',marginTop:2}}>{sub}</div>}
+      <div style={{fontSize:14,fontWeight:500,color:'#1E1B4B'}}>{title}</div>
+      {sub && <div style={{fontSize:11,color:'#6B7280',marginTop:2}}>{sub}</div>}
     </div>
   )
 
@@ -254,8 +254,8 @@ export default function OnboardingDashboard() {
           {label:'High risk',         val:highRisk,  color:'#DC2626'},
           {label:'Completed',         val:joined,    color:'#059669'},
         ].map(({label,val,color})=>(
-          <div key={label} style={{background:'var(--color-background-secondary)',borderRadius:'var(--border-radius-md)',padding:'12px 14px',borderTop:`2.5px solid ${color}`}}>
-            <div style={{fontSize:10,color:'var(--color-text-secondary)',fontWeight:500,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>{label}</div>
+          <div key={label} style={{background:'#FAFAF8',borderRadius:'8px',padding:'12px 14px',borderTop:`2.5px solid ${color}`}}>
+            <div style={{fontSize:10,color:'#6B7280',fontWeight:500,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>{label}</div>
             <div style={{fontSize:26,fontWeight:500,color}}>{val}</div>
           </div>
         ))}
@@ -267,20 +267,20 @@ export default function OnboardingDashboard() {
         <div>
           <SH title="Quick actions"/>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            <button onClick={()=>setLinkModal(true)} style={{padding:'11px 14px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
+            <button onClick={()=>setLinkModal(true)} style={{padding:'11px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
               <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/> Generate & send magic link to new joiner
             </button>
-            <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'var(--color-text-primary)'}}>
+            <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'#1E1B4B'}}>
               <i className="ti ti-list-check" style={{fontSize:16,color:'#D97706'}} aria-hidden="true"/> View {pendingActions.filter(a=>a.priority==='HIGH').length} urgent pending actions
             </button>
-            <button onClick={()=>setTab('compliance')} style={{padding:'11px 14px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'var(--color-text-primary)'}}>
+            <button onClick={()=>setTab('compliance')} style={{padding:'11px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'#1E1B4B'}}>
               <i className="ti ti-shield-check" style={{fontSize:16,color:'#185FA5'}} aria-hidden="true"/> Review PF / ESI / BGV compliance status
             </button>
           </div>
 
           {/* AI alerts */}
           {highRisk > 0 && (
-            <div style={{marginTop:14,background:'#FCEBEB',border:'0.5px solid #F09595',borderRadius:'var(--border-radius-md)',padding:'12px 14px'}}>
+            <div style={{marginTop:14,background:'#FCEBEB',border:'0.5px solid #F09595',borderRadius:'8px',padding:'12px 14px'}}>
               <div style={{fontSize:12,fontWeight:500,color:'#991B1B',marginBottom:8}}>
                 <i className="ti ti-alert-triangle" style={{fontSize:14,verticalAlign:-2,marginRight:5}} aria-hidden="true"/>
                 AI flagged {highRisk} high-risk joining{highRisk>1?'s':''}
@@ -298,17 +298,17 @@ export default function OnboardingDashboard() {
         <div>
           <SH title="Joining this week" sub="D-7 to today"/>
           {candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).length === 0
-            ? <div style={{padding:20,textAlign:'center',color:'var(--color-text-secondary)',fontSize:12}}>No joinings this week</div>
+            ? <div style={{padding:20,textAlign:'center',color:'#6B7280',fontSize:12}}>No joinings this week</div>
             : candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).map(c=>{
               const days = daysLeft(c.date_of_joining)!
               const pct  = progressPct(c)
               const sm   = STAGE_META[c.status]
               return (
-                <div key={c.id} style={{background:'var(--color-background-primary)',border:'0.5px solid var(--color-border-tertiary)',borderRadius:'var(--border-radius-md)',padding:'10px 12px',marginBottom:8,borderLeft:`3px solid ${days<=1?'#DC2626':days<=3?'#D97706':P}`}}>
+                <div key={c.id} style={{background:'#FFFFFF',border:'0.5px solid rgba(124,58,237,0.12)',borderRadius:'8px',padding:'10px 12px',marginBottom:8,borderLeft:`3px solid ${days<=1?'#DC2626':days<=3?'#D97706':P}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                     <div>
                       <div style={{fontSize:13,fontWeight:500}}>{c.full_name}</div>
-                      <div style={{fontSize:11,color:'var(--color-text-secondary)',marginTop:1}}>{c.designation}</div>
+                      <div style={{fontSize:11,color:'#6B7280',marginTop:1}}>{c.designation}</div>
                     </div>
                     <div style={{textAlign:'right'}}>
                       <div style={{fontSize:11,fontWeight:600,color:days<=1?'#DC2626':days<=3?'#D97706':P}}>
@@ -318,7 +318,7 @@ export default function OnboardingDashboard() {
                     </div>
                   </div>
                   <ProgressBar pct={pct} color={pct===100?'#059669':days<=3?'#DC2626':P}/>
-                  <div style={{display:'flex',justifyContent:'space-between',marginTop:5,fontSize:10,color:'var(--color-text-secondary)'}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginTop:5,fontSize:10,color:'#6B7280'}}>
                     <span>Step {c.current_step||1}/8 · {pct}% complete</span>
                     {c.status==='SUBMITTED' && (
                       <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:'#fff',fontFamily:'inherit'}}>
@@ -342,54 +342,54 @@ export default function OnboardingDashboard() {
       <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
         <input value={searchQ} onChange={e=>setSearchQ(e.target.value)}
           placeholder="Search name, designation..."
-          style={{padding:'7px 11px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',fontSize:12,fontFamily:'inherit',color:'var(--color-text-primary)',background:'var(--color-background-secondary)',outline:'none',minWidth:200}}/>
+          style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',color:'#1E1B4B',background:'#FAFAF8',outline:'none',minWidth:200}}/>
         <select value={filterStage} onChange={e=>setFilterStage(e.target.value as any)}
-          style={{padding:'7px 11px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',fontSize:12,fontFamily:'inherit',background:'var(--color-background-secondary)',color:'var(--color-text-primary)',outline:'none'}}>
+          style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',background:'#FAFAF8',color:'#1E1B4B',outline:'none'}}>
           <option value="ALL">All stages</option>
           {(Object.keys(STAGE_META) as Stage[]).map(s=><option key={s} value={s}>{STAGE_META[s].label}</option>)}
         </select>
         <select value={filterRisk} onChange={e=>setFilterRisk(e.target.value as any)}
-          style={{padding:'7px 11px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',fontSize:12,fontFamily:'inherit',background:'var(--color-background-secondary)',color:'var(--color-text-primary)',outline:'none'}}>
+          style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',background:'#FAFAF8',color:'#1E1B4B',outline:'none'}}>
           <option value="ALL">All risk levels</option>
           <option value="HIGH">High risk only</option>
           <option value="MEDIUM">Medium risk</option>
           <option value="LOW">Low risk</option>
         </select>
-        <div style={{marginLeft:'auto',fontSize:11,color:'var(--color-text-secondary)'}}>{filtered.length} of {total} shown</div>
-        <button onClick={()=>setLinkModal(true)} style={{padding:'7px 14px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
+        <div style={{marginLeft:'auto',fontSize:11,color:'#6B7280'}}>{filtered.length} of {total} shown</div>
+        <button onClick={()=>setLinkModal(true)} style={{padding:'7px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
           <i className="ti ti-plus" style={{fontSize:14}} aria-hidden="true"/> New joiner
         </button>
       </div>
 
       {/* Table */}
-      <div style={{border:'0.5px solid var(--color-border-tertiary)',borderRadius:'var(--border-radius-lg)',overflow:'hidden'}}>
+      <div style={{border:'0.5px solid rgba(124,58,237,0.12)',borderRadius:'10px',overflow:'hidden'}}>
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
             <thead>
-              <tr style={{background:'var(--color-background-secondary)'}}>
+              <tr style={{background:'#FAFAF8'}}>
                 {['Candidate','Stage','Progress','DOJ','Docs','Statutory','BGV','Risk','Actions'].map(h=>(
-                  <th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:'var(--color-text-secondary)',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid var(--color-border-tertiary)',whiteSpace:'nowrap'}}>{h}</th>
+                  <th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:'#6B7280',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={9} style={{padding:32,textAlign:'center',color:'var(--color-text-secondary)'}}>No candidates found</td></tr>
+                <tr><td colSpan={9} style={{padding:32,textAlign:'center',color:'#6B7280'}}>No candidates found</td></tr>
               )}
               {filtered.map((c,i)=>{
                 const sm  = STAGE_META[c.status]
                 const pct = progressPct(c)
                 const days = daysLeft(c.date_of_joining)
                 return (
-                  <tr key={c.id} style={{borderBottom:'0.5px solid var(--color-border-tertiary)',background:i%2===0?'var(--color-background-primary)':'var(--color-background-secondary)'}}>
+                  <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?'#FFFFFF':'#FAFAF8'}}>
                     <td style={{padding:'10px 12px',minWidth:160}}>
                       <div style={{fontWeight:500}}>{c.full_name}</div>
-                      <div style={{fontSize:10,color:'var(--color-text-secondary)',marginTop:1}}>{c.designation || '—'}</div>
+                      <div style={{fontSize:10,color:'#6B7280',marginTop:1}}>{c.designation || '—'}</div>
                       {c.employee_code && <div style={{fontSize:10,color:'#059669',marginTop:1,fontWeight:600}}>{c.employee_code}</div>}
                     </td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><Badge {...sm} label={sm.label}/></td>
                     <td style={{padding:'10px 12px',minWidth:100}}>
-                      <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'var(--color-text-secondary)',marginBottom:2}}>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#6B7280',marginBottom:2}}>
                         <span>Step {c.current_step||1}/8</span><span>{pct}%</span>
                       </div>
                       <ProgressBar pct={pct} color={pct===100?'#059669':pct>=60?P:'#D97706'}/>
@@ -421,13 +421,13 @@ export default function OnboardingDashboard() {
                       </div>
                     </td>
                     <td style={{padding:'10px 12px'}}>
-                      <span style={{fontSize:10,fontWeight:600,color:'var(--color-text-secondary)'}}>—</span>
+                      <span style={{fontSize:10,fontWeight:600,color:'#6B7280'}}>—</span>
                     </td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><RiskBadge risk={c.ai_risk}/></td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
                       <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
                         {c.status==='SUBMITTED' && (
-                          <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'4px 9px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
+                          <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
                             <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Code
                           </button>
                         )}
@@ -436,17 +436,17 @@ export default function OnboardingDashboard() {
                             const link=`${window.location.origin}/onboarding/${c.magic_link_token}`
                             await navigator.clipboard.writeText(link).catch(()=>{})
                             showToast('Link copied!')
-                          }} style={{padding:'4px 9px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:10,fontFamily:'inherit',color:'var(--color-text-primary)'}}>
+                          }} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#1E1B4B'}}>
                             <i className="ti ti-copy" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Link
                           </button>
                         )}
                         {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.laptop_issued && (
-                          <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{padding:'4px 9px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'#FFFBEB',fontSize:10,fontFamily:'inherit',color:'#633806'}}>
+                          <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FFFBEB',fontSize:10,fontFamily:'inherit',color:'#633806'}}>
                             💻 Issue
                           </button>
                         )}
                         {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.id_card_issued && (
-                          <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{padding:'4px 9px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'#EEF2FF',fontSize:10,fontFamily:'inherit',color:'#4338CA'}}>
+                          <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#EEF2FF',fontSize:10,fontFamily:'inherit',color:'#4338CA'}}>
                             🪪 Issue
                           </button>
                         )}
@@ -478,7 +478,7 @@ export default function OnboardingDashboard() {
       <div>
         <SH title="Pending actions" sub="Priority-sorted. Resolve High first."/>
         {pendingActions.length === 0 && (
-          <div style={{padding:40,textAlign:'center',color:'var(--color-text-secondary)'}}>
+          <div style={{padding:40,textAlign:'center',color:'#6B7280'}}>
             <i className="ti ti-circle-check" style={{fontSize:40,color:'#059669',display:'block',marginBottom:10}} aria-hidden="true"/>
             All clear! No pending actions.
           </div>
@@ -493,16 +493,16 @@ export default function OnboardingDashboard() {
               {groups[pri].map((a,i)=>{
                 const cand = candidates.find(c=>c.id===a.cid)
                 return (
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:gMeta[pri].bg,borderRadius:'var(--border-radius-md)',border:`0.5px solid ${gMeta[pri].border}`}}>
+                  <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:gMeta[pri].bg,borderRadius:'8px',border:`0.5px solid ${gMeta[pri].border}`}}>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:500,color:'var(--color-text-primary)'}}>{a.label}</div>
-                      <div style={{fontSize:11,color:'var(--color-text-secondary)',marginTop:1}}>
+                      <div style={{fontSize:12,fontWeight:500,color:'#1E1B4B'}}>{a.label}</div>
+                      <div style={{fontSize:11,color:'#6B7280',marginTop:1}}>
                         <i className="ti ti-user" style={{fontSize:11,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>{a.candidate}
                         {cand?.date_of_joining && <span style={{marginLeft:8}}>· DOJ: {fmt(cand.date_of_joining)}</span>}
                       </div>
                     </div>
                     {a.action==='generate' && cand && (
-                      <button onClick={()=>{setCodeModal(cand);setGenCode('')}} style={{padding:'5px 12px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                      <button onClick={()=>{setCodeModal(cand);setGenCode('')}} style={{padding:'5px 12px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
                         <i className="ti ti-bolt" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Generate code
                       </button>
                     )}
@@ -511,12 +511,12 @@ export default function OnboardingDashboard() {
                         const link=`${window.location.origin}/onboarding/${cand.magic_link_token}`
                         await navigator.clipboard.writeText(link).catch(()=>{})
                         showToast('Link copied — send to candidate')
-                      }} style={{padding:'5px 12px',borderRadius:'var(--border-radius-md)',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:'var(--color-background-primary)',fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
+                      }} style={{padding:'5px 12px',borderRadius:'8px',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:'#FFFFFF',fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
                         <i className="ti ti-copy" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Copy link
                       </button>
                     )}
                     {(a.action==='laptop'||a.action==='idcard') && cand && (
-                      <button onClick={()=>issueAsset(cand.id,a.action==='laptop'?'LAPTOP':'ID_CARD')} style={{padding:'5px 12px',borderRadius:'var(--border-radius-md)',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:'var(--color-background-primary)',fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
+                      <button onClick={()=>issueAsset(cand.id,a.action==='laptop'?'LAPTOP':'ID_CARD')} style={{padding:'5px 12px',borderRadius:'8px',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:'#FFFFFF',fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
                         Mark issued
                       </button>
                     )}
@@ -546,13 +546,13 @@ export default function OnboardingDashboard() {
             Attrition & at-risk joiners ({atRisk.length})
           </div>
           {atRisk.length===0
-            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'var(--border-radius-md)',fontSize:12,color:'#3B6D11'}}>✓ No at-risk candidates right now.</div>
+            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'8px',fontSize:12,color:'#3B6D11'}}>✓ No at-risk candidates right now.</div>
             : atRisk.map(c=>(
-              <div key={c.id} style={{background:'var(--color-background-primary)',border:`0.5px solid ${c.ai_risk==='HIGH'?'#F09595':'#FDE68A'}`,borderRadius:'var(--border-radius-md)',padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${c.ai_risk==='HIGH'?'#DC2626':'#D97706'}`}}>
+              <div key={c.id} style={{background:'#FFFFFF',border:`0.5px solid ${c.ai_risk==='HIGH'?'#F09595':'#FDE68A'}`,borderRadius:'8px',padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${c.ai_risk==='HIGH'?'#DC2626':'#D97706'}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                   <div>
                     <div style={{fontSize:12,fontWeight:500}}>{c.full_name} <RiskBadge risk={c.ai_risk}/></div>
-                    <div style={{fontSize:11,color:'var(--color-text-secondary)',marginTop:2}}>{c.designation} · DOJ: {fmt(c.date_of_joining)}</div>
+                    <div style={{fontSize:11,color:'#6B7280',marginTop:2}}>{c.designation} · DOJ: {fmt(c.date_of_joining)}</div>
                     <div style={{fontSize:11,color:c.ai_risk==='HIGH'?'#B91C1C':'#D97706',marginTop:4,fontStyle:'italic'}}>
                       <i className="ti ti-robot" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
                       {c.ai_risk_reason}
@@ -560,7 +560,7 @@ export default function OnboardingDashboard() {
                   </div>
                   <div style={{display:'flex',gap:6}}>
                     {c.status==='SUBMITTED' && (
-                      <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'5px 10px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontFamily:'inherit'}}>Generate code</button>
+                      <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'5px 10px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontFamily:'inherit'}}>Generate code</button>
                     )}
                   </div>
                 </div>
@@ -577,9 +577,9 @@ export default function OnboardingDashboard() {
             Document AI flags ({flaggedDocs.length} candidates)
           </div>
           {flaggedDocs.length===0
-            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'var(--border-radius-md)',fontSize:12,color:'#3B6D11'}}>✓ All uploaded documents verified by AI.</div>
+            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'8px',fontSize:12,color:'#3B6D11'}}>✓ All uploaded documents verified by AI.</div>
             : flaggedDocs.map(c=>(
-              <div key={c.id} style={{background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'var(--border-radius-md)',padding:'10px 12px',marginBottom:6}}>
+              <div key={c.id} style={{background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'8px',padding:'10px 12px',marginBottom:6}}>
                 <div style={{fontSize:12,fontWeight:500}}>{c.full_name}</div>
                 <div style={{fontSize:11,color:'#D97706',marginTop:2}}>
                   <i className="ti ti-robot" style={{fontSize:11,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>
@@ -597,10 +597,10 @@ export default function OnboardingDashboard() {
             Onboarding champions — 100% complete ({champs.length})
           </div>
           {champs.length===0
-            ? <div style={{padding:16,background:'#EEEDFE',borderRadius:'var(--border-radius-md)',fontSize:12,color:P}}>No 100% complete onboardings yet.</div>
+            ? <div style={{padding:16,background:'#EEEDFE',borderRadius:'8px',fontSize:12,color:P}}>No 100% complete onboardings yet.</div>
             : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
               {champs.map(c=>(
-                <div key={c.id} style={{background:'#EAF3DE',border:'0.5px solid #A7F3D0',borderRadius:'var(--border-radius-md)',padding:'10px 12px',textAlign:'center'}}>
+                <div key={c.id} style={{background:'#EAF3DE',border:'0.5px solid #A7F3D0',borderRadius:'8px',padding:'10px 12px',textAlign:'center'}}>
                   <div style={{width:36,height:36,borderRadius:'50%',background:'#059669',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:500,margin:'0 auto 6px'}}>
                     {c.full_name.charAt(0)}
                   </div>
@@ -632,27 +632,27 @@ export default function OnboardingDashboard() {
             {label:'Laptop pending',  val:active.filter(c=>!c.laptop_issued).length, color:P},
             {label:'ID card pending', val:active.filter(c=>!c.id_card_issued).length, color:P},
           ].map(({label,val,color})=>(
-            <div key={label} style={{background:'var(--color-background-secondary)',borderRadius:'var(--border-radius-md)',padding:'10px 12px',borderLeft:`3px solid ${val>0?color:'#059669'}`}}>
-              <div style={{fontSize:10,color:'var(--color-text-secondary)',marginBottom:3,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:500}}>{label}</div>
+            <div key={label} style={{background:'#FAFAF8',borderRadius:'8px',padding:'10px 12px',borderLeft:`3px solid ${val>0?color:'#059669'}`}}>
+              <div style={{fontSize:10,color:'#6B7280',marginBottom:3,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:500}}>{label}</div>
               <div style={{fontSize:22,fontWeight:500,color:val>0?color:'#059669'}}>{val}</div>
             </div>
           ))}
         </div>
 
         {/* Compliance grid */}
-        <div style={{border:'0.5px solid var(--color-border-tertiary)',borderRadius:'var(--border-radius-lg)',overflow:'hidden'}}>
+        <div style={{border:'0.5px solid rgba(124,58,237,0.12)',borderRadius:'10px',overflow:'hidden'}}>
           <div style={{overflowX:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
               <thead>
-                <tr style={{background:'var(--color-background-secondary)'}}>
+                <tr style={{background:'#FAFAF8'}}>
                   {['Employee','DOJ','EPF Form 11','EPF Form 2','Bank','Policy Ack','Laptop','ID Card','PT State','BGV'].map(h=>(
-                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontSize:9,fontWeight:600,color:'var(--color-text-secondary)',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid var(--color-border-tertiary)',whiteSpace:'nowrap'}}>{h}</th>
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontSize:9,fontWeight:600,color:'#6B7280',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {candidates.length===0 && (
-                  <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:'var(--color-text-secondary)'}}>No data</td></tr>
+                  <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:'#6B7280'}}>No data</td></tr>
                 )}
                 {candidates.map((c,i)=>{
                   const ptState = (c.form_data as any)?.step_4?.perm_state || '—'
@@ -665,10 +665,10 @@ export default function OnboardingDashboard() {
                     </span>
                   )
                   return (
-                    <tr key={c.id} style={{borderBottom:'0.5px solid var(--color-border-tertiary)',background:i%2===0?'var(--color-background-primary)':'var(--color-background-secondary)'}}>
+                    <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?'#FFFFFF':'#FAFAF8'}}>
                       <td style={{padding:'9px 10px',minWidth:130}}>
                         <div style={{fontWeight:500,fontSize:12}}>{c.full_name}</div>
-                        <div style={{fontSize:10,color:'var(--color-text-secondary)'}}>{c.designation||'—'}</div>
+                        <div style={{fontSize:10,color:'#6B7280'}}>{c.designation||'—'}</div>
                         {c.employee_code && <div style={{fontSize:10,color:'#059669',fontWeight:600}}>{c.employee_code}</div>}
                       </td>
                       <td style={{padding:'9px 10px',whiteSpace:'nowrap'}}>{fmt(c.date_of_joining)}</td>
@@ -679,18 +679,18 @@ export default function OnboardingDashboard() {
                       <td style={{padding:'9px 10px',textAlign:'center'}}>
                         {c.laptop_issued
                           ? <span style={{fontSize:10,color:'#059669',fontWeight:600}}>✓ Issued</span>
-                          : <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontFamily:'inherit',color:'var(--color-text-secondary)'}}>Issue</button>
+                          : <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontFamily:'inherit',color:'#6B7280'}}>Issue</button>
                         }
                       </td>
                       <td style={{padding:'9px 10px',textAlign:'center'}}>
                         {c.id_card_issued
                           ? <span style={{fontSize:10,color:'#059669',fontWeight:600}}>✓ Issued</span>
-                          : <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontFamily:'inherit',color:'var(--color-text-secondary)'}}>Issue</button>
+                          : <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontFamily:'inherit',color:'#6B7280'}}>Issue</button>
                         }
                       </td>
-                      <td style={{padding:'9px 10px',fontSize:11,color:'var(--color-text-secondary)'}}>{ptState}</td>
+                      <td style={{padding:'9px 10px',fontSize:11,color:'#6B7280'}}>{ptState}</td>
                       <td style={{padding:'9px 10px'}}>
-                        <span style={{fontSize:10,color:'var(--color-text-secondary)'}}>—</span>
+                        <span style={{fontSize:10,color:'#6B7280'}}>—</span>
                       </td>
                     </tr>
                   )
@@ -713,7 +713,7 @@ export default function OnboardingDashboard() {
   ]
 
   return (
-    <div style={{background:'var(--color-background-tertiary,#F5F3FF)',minHeight:'100vh',fontFamily:'"DM Sans","Segoe UI",sans-serif',color:'var(--color-text-primary)'}}>
+    <div style={{background:'#F5F3FF',minHeight:'100vh',fontFamily:'"DM Sans","Segoe UI",sans-serif',color:'#1E1B4B'}}>
 
       {/* Header */}
       <div style={{background:`linear-gradient(135deg, ${P}, #4F46E5)`,padding:'14px 24px 0'}}>
@@ -724,7 +724,7 @@ export default function OnboardingDashboard() {
               {active} active · {thisWeek} joining this week
             </div>
           </div>
-          <button onClick={()=>setLinkModal(true)} style={{padding:'8px 16px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:'rgba(255,255,255,.15)',color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+          <button onClick={()=>setLinkModal(true)} style={{padding:'8px 16px',borderRadius:'8px',border:'none',cursor:'pointer',background:'rgba(255,255,255,.15)',color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
             <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send magic link
           </button>
         </div>
@@ -749,7 +749,7 @@ export default function OnboardingDashboard() {
       {/* Content */}
       <div style={{padding:'20px 24px',maxWidth:1400,margin:'0 auto'}}>
         {loading
-          ? <div style={{textAlign:'center',padding:60,color:'var(--color-text-secondary)'}}>Loading onboarding data...</div>
+          ? <div style={{textAlign:'center',padding:60,color:'#6B7280'}}>Loading onboarding data...</div>
           : <>
             {tab==='overview'    && <OverviewTab/>}
             {tab==='candidates'  && <CandidatesTab/>}
@@ -763,10 +763,10 @@ export default function OnboardingDashboard() {
       {/* ── SEND MAGIC LINK MODAL ────────────────────────────── */}
       {linkModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-          <div style={{background:'var(--color-background-primary)',borderRadius:'var(--border-radius-xl,16px)',padding:'20px 22px',width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
+          <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
               <div style={{fontSize:15,fontWeight:500}}>Send joining link to new candidate</div>
-              <button onClick={()=>setLinkModal(false)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'var(--color-text-secondary)',lineHeight:1}}>×</button>
+              <button onClick={()=>setLinkModal(false)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'#6B7280',lineHeight:1}}>×</button>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               {[
@@ -781,24 +781,24 @@ export default function OnboardingDashboard() {
                 <div key={key} style={{marginBottom:8}}>
                   <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{label}</div>
                   <input type={type} placeholder={placeholder} value={(newForm as any)[key]} onChange={e=>setNewForm(f=>({...f,[key]:e.target.value}))}
-                    style={{width:'100%',padding:'8px 11px',background:'var(--color-background-secondary)',border:'0.5px solid var(--color-border-secondary)',borderRadius:'var(--border-radius-md)',fontSize:12,color:'var(--color-text-primary)',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                    style={{width:'100%',padding:'8px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
                 </div>
               ))}
               <div style={{marginBottom:8}}>
                 <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Employment Type</div>
                 <select value={newForm.employment_type} onChange={e=>setNewForm(f=>({...f,employment_type:e.target.value}))}
-                  style={{width:'100%',padding:'8px 11px',background:'var(--color-background-secondary)',border:'0.5px solid var(--color-border-secondary)',borderRadius:'var(--border-radius-md)',fontSize:12,color:'var(--color-text-primary)',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
+                  style={{width:'100%',padding:'8px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
                   <option>Employee</option><option>Intern</option><option>Consultant</option><option>Contract</option><option>NAPS</option><option>NATS</option>
                 </select>
               </div>
             </div>
-            <div style={{background:'#EEEDFE',borderRadius:'var(--border-radius-md)',padding:'9px 12px',marginTop:4,fontSize:11,color:'#534AB7',lineHeight:1.7}}>
+            <div style={{background:'#EEEDFE',borderRadius:'8px',padding:'9px 12px',marginTop:4,fontSize:11,color:'#534AB7',lineHeight:1.7}}>
               <i className="ti ti-info-circle" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
               A 24-hour magic link will be generated. Share with candidate via email or WhatsApp. OTP will be sent to their mobile for verification.
             </div>
             <div style={{display:'flex',gap:10,marginTop:16}}>
-              <button onClick={()=>setLinkModal(false)} style={{padding:'9px 16px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:12,fontFamily:'inherit',color:'var(--color-text-primary)'}}>Cancel</button>
-              <button onClick={sendMagicLink} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
+              <button onClick={()=>setLinkModal(false)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#1E1B4B'}}>Cancel</button>
+              <button onClick={sendMagicLink} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
                 {saving ? 'Generating...' : '🔗 Generate & send magic link'}
               </button>
             </div>
@@ -809,14 +809,14 @@ export default function OnboardingDashboard() {
       {/* ── GENERATE CODE MODAL ──────────────────────────────── */}
       {codeModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-          <div style={{background:'var(--color-background-primary)',borderRadius:'var(--border-radius-xl,16px)',padding:'20px 22px',width:'100%',maxWidth:440,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+          <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:440,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
               <div style={{fontSize:15,fontWeight:500}}>Generate Employee Code</div>
-              <button onClick={()=>setCodeModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'var(--color-text-secondary)',lineHeight:1}}>×</button>
+              <button onClick={()=>setCodeModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'#6B7280',lineHeight:1}}>×</button>
             </div>
-            <div style={{background:'#EEEDFE',borderRadius:'var(--border-radius-md)',padding:'12px 14px',marginBottom:14}}>
+            <div style={{background:'#EEEDFE',borderRadius:'8px',padding:'12px 14px',marginBottom:14}}>
               <div style={{fontSize:12,fontWeight:500,color:P,marginBottom:6}}>{codeModal.full_name}</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,fontSize:11,color:'var(--color-text-secondary)'}}>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,fontSize:11,color:'#6B7280'}}>
                 <span>Designation: {codeModal.designation||'—'}</span>
                 <span>DOJ: {fmt(codeModal.date_of_joining)}</span>
                 <span>Docs: {codeModal.docs_uploaded||0} uploaded</span>
@@ -824,22 +824,22 @@ export default function OnboardingDashboard() {
               </div>
             </div>
             {progressPct(codeModal) < 80 && (
-              <div style={{background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'var(--border-radius-md)',padding:'8px 12px',marginBottom:12,fontSize:11,color:'#D97706'}}>
+              <div style={{background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'8px',padding:'8px 12px',marginBottom:12,fontSize:11,color:'#D97706'}}>
                 ⚠ Joining form {100-progressPct(codeModal)}% incomplete. Are you sure you want to generate code now?
               </div>
             )}
             <div style={{marginBottom:14}}>
               <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>Employee Code *</div>
               <input value={genCode} onChange={e=>setGenCode(e.target.value.toUpperCase())} placeholder="e.g. SSM-00142"
-                style={{width:'100%',padding:'10px 12px',background:'var(--color-background-secondary)',border:`1.5px solid ${P}`,borderRadius:'var(--border-radius-md)',fontSize:15,color:'var(--color-text-primary)',outline:'none',fontFamily:'inherit',letterSpacing:1,fontWeight:500,boxSizing:'border-box'}}/>
-              <div style={{fontSize:10,color:'var(--color-text-secondary)',marginTop:4}}>Format: [CompanyCode]-[5 digits] · Must be unique</div>
+                style={{width:'100%',padding:'10px 12px',background:'#FAFAF8',border:`1.5px solid ${P}`,borderRadius:'8px',fontSize:15,color:'#1E1B4B',outline:'none',fontFamily:'inherit',letterSpacing:1,fontWeight:500,boxSizing:'border-box'}}/>
+              <div style={{fontSize:10,color:'#6B7280',marginTop:4}}>Format: [CompanyCode]-[5 digits] · Must be unique</div>
             </div>
-            <div style={{background:'#EAF3DE',borderRadius:'var(--border-radius-md)',padding:'8px 12px',marginBottom:14,fontSize:11,color:'#065F46',lineHeight:1.7}}>
+            <div style={{background:'#EAF3DE',borderRadius:'8px',padding:'8px 12px',marginBottom:14,fontSize:11,color:'#065F46',lineHeight:1.7}}>
               ✓ Employee code generated → ESS portal access unlocked → Welcome email auto-sent
             </div>
             <div style={{display:'flex',gap:10}}>
-              <button onClick={()=>setCodeModal(null)} style={{padding:'9px 14px',borderRadius:'var(--border-radius-md)',border:'0.5px solid var(--color-border-secondary)',cursor:'pointer',background:'var(--color-background-secondary)',fontSize:12,fontFamily:'inherit',color:'var(--color-text-primary)'}}>Cancel</button>
-              <button onClick={generateCode} disabled={saving||!genCode.trim()} style={{flex:1,padding:'9px',borderRadius:'var(--border-radius-md)',border:'none',cursor:'pointer',background:genCode.trim()?'#059669':'#9CA3AF',color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
+              <button onClick={()=>setCodeModal(null)} style={{padding:'9px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#1E1B4B'}}>Cancel</button>
+              <button onClick={generateCode} disabled={saving||!genCode.trim()} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:genCode.trim()?'#059669':'#9CA3AF',color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
                 {saving ? '⏳ Generating...' : `⚡ Generate ${genCode||'code'} & unlock ESS`}
               </button>
             </div>

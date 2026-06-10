@@ -17,6 +17,7 @@ interface MRF {
   remarks?:string; created_at:string
   mrf_type?:string; education_required?:string; skills_required?:string
   hiring_type?:string; previous_company_preference?:string
+  experience_min?:string; experience_max?:string; education_min?:string; education_max?:string
 }
 interface Candidate {
   id:string; company_id:string; mrf_id?:string; full_name:string
@@ -27,6 +28,7 @@ interface Candidate {
   ai_reasoning?:string; ai_questions?:string[]; interview_notes?:string
   doj?:string; status?:string; created_at:string; resume_url?:string
   offer_revised?:boolean; offer_revision_note?:string; blacklisted?:boolean
+  hr_email?:string; offer_accepted?:boolean; offer_sent_at?:string
 }
 
 const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','MD Final','Offer Sent','Joined','Rejected']
@@ -239,12 +241,54 @@ function DashTab({ mrfs, candidates }:any) {
   )
 }
 
+// ── Skills multi-select (searchable + custom-add to DB) ───────────
+function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:string; onChange:(v:string)=>void; allSkills:string[]; onAddSkill:(n:string)=>void }) {
+  const [q, setQ] = useState('')
+  const selected = value ? value.split(',').map(s=>s.trim()).filter(Boolean) : []
+  const lowerSel = selected.map(s=>s.toLowerCase())
+  const matches = q.trim()
+    ? allSkills.filter(s=>s.toLowerCase().includes(q.trim().toLowerCase()) && !lowerSel.includes(s.toLowerCase())).slice(0,8)
+    : []
+  const exact = allSkills.some(s=>s.toLowerCase()===q.trim().toLowerCase()) || lowerSel.includes(q.trim().toLowerCase())
+  const add = (skill:string) => { if(!lowerSel.includes(skill.toLowerCase())) onChange([...selected, skill].join(', ')); setQ('') }
+  const remove = (skill:string) => onChange(selected.filter(s=>s!==skill).join(', '))
+  const addCustom = () => { const n=q.trim(); if(!n) return; onAddSkill(n); add(n) }
+  return (
+    <div>
+      {selected.length>0 && (
+        <div style={{ display:'flex', flexWrap:'wrap' as const, gap:6, marginBottom:6 }}>
+          {selected.map(s=>(
+            <span key={s} style={{ fontSize:11, padding:'3px 8px', borderRadius:99, background:'#EDE9FE', color:'#6D28D9', fontWeight:500, display:'inline-flex', alignItems:'center' }}>
+              {s}<span onClick={()=>remove(s)} style={{ cursor:'pointer', marginLeft:5, fontWeight:700 }}>×</span>
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ position:'relative' as const }}>
+        <input style={T.input} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search skills — type e.g. 'py' then pick, or add custom"
+          onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); if(matches[0]) add(matches[0]); else if(q.trim()&&!exact) addCustom() } }} />
+        {q.trim() && (matches.length>0 || !exact) && (
+          <div style={{ position:'absolute' as const, top:'100%', left:0, right:0, background:'#fff', border:'1px solid #DDD6FE', borderRadius:7, marginTop:2, zIndex:20, maxHeight:200, overflowY:'auto' as const, boxShadow:'0 6px 18px rgba(0,0,0,.1)' }}>
+            {matches.map(s=>(
+              <div key={s} onClick={()=>add(s)} style={{ padding:'7px 10px', cursor:'pointer', fontSize:13, color:'#1E1B4B' }}>{s}</div>
+            ))}
+            {!exact && q.trim() && (
+              <div onClick={addCustom} style={{ padding:'7px 10px', cursor:'pointer', fontSize:13, color:'#7C3AED', fontWeight:600, borderTop:matches.length?'1px solid #F3F0FF':'none' }}>+ Add custom: “{q.trim()}”</div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── MRF TAB ───────────────────────────────────────────────────────
 function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify }:any) {
   const EMPTY = { company_id:'', location_id:'', department_id:'', designation:'', no_of_openings:1,
     employment_type:'Employee', urgency:'MEDIUM', reason:'', job_description:'', budget_min:'',
     budget_max:'', experience_required:'', mrf_type:'Full MRF', education_required:'',
-    skills_required:'', hiring_type:'New Hire', previous_company_preference:'' }
+    skills_required:'', hiring_type:'New Hire', previous_company_preference:'',
+    experience_min:'', experience_max:'', education_min:'', education_max:'' }
   const [showForm, setShowForm] = useState(false)
   const [editMRF, setEditMRF] = useState<MRF|null>(null)
   const [form, setForm] = useState<any>(EMPTY)
@@ -252,6 +296,17 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   const [aiLoading, setAiLoading] = useState(false)
   const [approvalModal, setApprovalModal] = useState<MRF|null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string|null>(null)
+  const [skills, setSkills] = useState<string[]>([])
+
+  useEffect(()=>{
+    supabase.from('skills').select('name').order('name').then(({data}:any)=>setSkills((data||[]).map((s:any)=>s.name)))
+  },[supabase])
+
+  // Insert a custom skill into the shared skills DB (ignore duplicates), keep local list fresh.
+  async function addSkill(name:string) {
+    const { error } = await supabase.from('skills').insert({ name })
+    if (!error) setSkills(s=>[...s, name].sort((a,b)=>a.localeCompare(b)))
+  }
 
   const filtLocs = form.company_id ? locations.filter((l:Location)=>l.company_id===form.company_id) : locations
   const filtDepts = form.company_id ? departments.filter((d:Department)=>d.company_id===form.company_id) : departments
@@ -269,6 +324,8 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       mrf_type:(m as any).mrf_type||'Full MRF', education_required:(m as any).education_required||'',
       skills_required:(m as any).skills_required||'', hiring_type:(m as any).hiring_type||'New Hire',
       previous_company_preference:(m as any).previous_company_preference||'',
+      experience_min:(m as any).experience_min||'', experience_max:(m as any).experience_max||'',
+      education_min:(m as any).education_min||'', education_max:(m as any).education_max||'',
     })
     setShowForm(true)
   }
@@ -280,7 +337,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     try {
       const res = await fetch('/api/recruitment/generate-jd', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ designation:form.designation, department:dept?.dept_name||'', experience:form.experience_required, employee_type:form.employment_type, education:form.education_required, skills:form.skills_required })
+        body:JSON.stringify({ designation:form.designation, department:dept?.dept_name||'', experience:[form.experience_min,form.experience_max].filter(Boolean).join('-')+(form.experience_min||form.experience_max?' years':''), employee_type:form.employment_type, education:[form.education_min,form.education_max].filter(Boolean).join(' to '), skills:form.skills_required })
       })
       const { jd } = await res.json()
       if (jd) F('job_description', jd)
@@ -292,6 +349,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   async function saveMRF(status:string) {
     if (!form.company_id||!form.designation) { showNotify('Company and Designation are required','error'); return }
     setSaving(true)
+    // Derive the legacy single fields (used by screening + JD-gen) from min/max.
+    const expReq = (form.experience_min||form.experience_max)
+      ? `${form.experience_min||'0'}-${form.experience_max||'0'} years` : (form.experience_required||null)
+    const eduReq = form.education_max || form.education_min || form.education_required || null
     const payload:any = {
       company_id:form.company_id, location_id:form.location_id||null,
       department_id:form.department_id||null,
@@ -301,7 +362,11 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       reason:form.reason, reason_for_hire:form.reason,
       job_description:form.job_description||null, status,
       budget_min:Number(form.budget_min)||null, budget_max:Number(form.budget_max)||null,
-      experience_required:form.experience_required||null,
+      experience_required:expReq, experience_min:form.experience_min||null, experience_max:form.experience_max||null,
+      education_required:eduReq, education_min:form.education_min||null, education_max:form.education_max||null,
+      skills_required:form.skills_required||null,
+      mrf_type:form.mrf_type||null, hiring_type:form.hiring_type||null,
+      previous_company_preference:form.previous_company_preference||null,
     }
     let error:any
     if (editMRF) {
@@ -411,13 +476,24 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           {!isQuick && (
             <>
               <SectionLine title="Requirements" />
-              <div style={{ ...T.g3, marginBottom:10 }}>
-                <div><label style={T.label}>Experience Required</label>
-                  <input style={T.input} value={form.experience_required} onChange={e=>F('experience_required',e.target.value)} placeholder="e.g. 3-5 years" />
+              <div style={{ ...T.g2, marginBottom:10 }}>
+                <div><label style={T.label}>Experience — Min (years)</label>
+                  <input style={T.input} type="number" min="0" value={form.experience_min} onChange={e=>F('experience_min',e.target.value)} placeholder="e.g. 3" />
                 </div>
-                <div><label style={T.label}>Education Required</label>
-                  <select style={T.select} value={form.education_required} onChange={e=>F('education_required',e.target.value)}>
-                    <option value="">Any Education</option>
+                <div><label style={T.label}>Experience — Max (years)</label>
+                  <input style={T.input} type="number" min="0" value={form.experience_max} onChange={e=>F('experience_max',e.target.value)} placeholder="e.g. 5" />
+                </div>
+              </div>
+              <div style={{ ...T.g3, marginBottom:10 }}>
+                <div><label style={T.label}>Education — Minimum</label>
+                  <select style={T.select} value={form.education_min} onChange={e=>F('education_min',e.target.value)}>
+                    <option value="">Any</option>
+                    {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
+                  </select>
+                </div>
+                <div><label style={T.label}>Education — Maximum</label>
+                  <select style={T.select} value={form.education_max} onChange={e=>F('education_max',e.target.value)}>
+                    <option value="">Any</option>
                     {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
                   </select>
                 </div>
@@ -431,7 +507,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               </div>
               <div style={{ marginBottom:10 }}>
                 <label style={T.label}>Key Skills Required</label>
-                <input style={T.input} value={form.skills_required} onChange={e=>F('skills_required',e.target.value)} placeholder="e.g. React, Node.js, SQL, Leadership" />
+                <SkillsMultiSelect value={form.skills_required} onChange={(v:string)=>F('skills_required',v)} allSkills={skills} onAddSkill={addSkill} />
               </div>
             </>
           )}
@@ -750,7 +826,7 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
   const [aiQs, setAiQs] = useState<string[]>([])
   const [aiQLoading, setAiQLoading] = useState(false)
   const [aiFbLoading, setAiFbLoading] = useState(false)
-  const EMPTY_C = { mrf_id:'', full_name:'', phone:'', email:'', current_company:'', designation:'', experience_years:'', current_ctc:'', expected_ctc:'', notice_period:'', source:'Direct' }
+  const EMPTY_C = { mrf_id:'', full_name:'', phone:'', email:'', hr_email:'', current_company:'', designation:'', experience_years:'', current_ctc:'', expected_ctc:'', notice_period:'', source:'Direct' }
   const [cForm, setCForm] = useState<any>(EMPTY_C)
   const CF = (k:string,v:any) => setCForm((f:any)=>({...f,[k]:v}))
   const approvedMRFs = mrfs.filter((m:MRF)=>m.status==='APPROVED')
@@ -764,7 +840,7 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
     const { error } = await supabase.from('candidates').insert({
       mrf_id:cForm.mrf_id||null, company_id:mrf?.company_id||null,
       full_name:cForm.full_name, phone:cForm.phone, mobile:cForm.phone,
-      email:cForm.email||null, current_company:cForm.current_company||null,
+      email:cForm.email||null, hr_email:cForm.hr_email||null, current_company:cForm.current_company||null,
       designation:cForm.designation||null, experience_years:Number(cForm.experience_years)||0,
       current_ctc:Number(cForm.current_ctc)||null, expected_ctc:Number(cForm.expected_ctc)||null,
       notice_period:Number(cForm.notice_period)||null, source:cForm.source, stage:'Applied',
@@ -893,7 +969,10 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
               <div><label style={T.label}>Phone *</label><input style={T.input} value={cForm.phone} onChange={e=>CF('phone',e.target.value)} /></div>
             </div>
             <div style={{ ...T.g2, marginBottom:10 }}>
-              <div><label style={T.label}>Email</label><input style={T.input} value={cForm.email} onChange={e=>CF('email',e.target.value)} /></div>
+              <div><label style={T.label}>Candidate Email</label><input style={T.input} value={cForm.email} onChange={e=>CF('email',e.target.value)} placeholder="candidate@email.com" /></div>
+              <div><label style={T.label}>HR Email (for follow-ups)</label><input style={T.input} value={cForm.hr_email} onChange={e=>CF('hr_email',e.target.value)} placeholder="hr@company.com" /></div>
+            </div>
+            <div style={{ ...T.g2, marginBottom:10 }}>
               <div><label style={T.label}>Source</label>
                 <select style={T.select} value={cForm.source} onChange={e=>CF('source',e.target.value)}>
                   {SOURCES.map(s=><option key={s}>{s}</option>)}
@@ -1008,11 +1087,78 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
 }
 
 // ── NEGOTIATION CALCULATOR ────────────────────────────────────────
+// ── Stipend calculator (Intern / NATS / NAPS / Contract / Live Project / Consultant) ──
+function StipendCalc({ sel, mrf, supabase, showNotify, onRefresh }:any) {
+  const [stipend, setStipend] = useState('')
+  const [tds, setTds] = useState(false)
+  const [tdsPct, setTdsPct] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [savedLink, setSavedLink] = useState<string|null>(null)
+  const s = Number(stipend)||0
+  const pct = tds ? (Number(tdsPct)||0) : 0
+  const tdsAmt = Math.round(s*pct/100)
+  const net = s - tdsAmt
+
+  async function save() {
+    if (!s) { showNotify('Enter the monthly stipend','error'); return }
+    setSaving(true); setSavedLink(null)
+    const calcData = { is_stipend:true, employment_type:mrf?.employment_type, stipend_monthly:s, tds_applicable:tds, tds_pct:pct, tds_amount:tdsAmt, net_monthly:net, annual:s*12 }
+    const { data, error } = await supabase.from('ctc_negotiations').upsert({
+      candidate_id:sel.id, company_id:sel.company_id||null,
+      offered_ctc:s*12, net_monthly:net,
+      candidate_name:sel.full_name, position_title:sel.designation||null,
+      is_stipend:true, stipend_monthly:s, tds_applicable:tds, tds_pct:pct,
+      calculation_data:calcData,
+    }).select('link_token').single()
+    setSaving(false)
+    if (error) { showNotify('Save failed: '+error.message,'error'); return }
+    setSavedLink(data?.link_token ? `${window.location.origin}/salary-view/${data.link_token}` : null)
+    showNotify('Stipend saved! Salary link ready 👇'); onRefresh()
+  }
+
+  return (
+    <div>
+      <div style={T.cardPurple}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', marginBottom:4 }}>💰 Stipend Calculator — {sel.full_name}</div>
+        <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:14 }}>{mrf?.employment_type||'Non-employee'} engagement · stipend only (no PF/HRA structure)</div>
+        <div style={{ ...T.g2, marginBottom:10 }}>
+          <div><label style={T.label}>Monthly Stipend (₹) *</label><input style={T.input} type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder="25000" /></div>
+          <div><label style={T.label}>TDS Applicable?</label>
+            <select style={T.select} value={tds?'Yes':'No'} onChange={e=>setTds(e.target.value==='Yes')}><option>No</option><option>Yes</option></select>
+          </div>
+        </div>
+        {tds&&(<div style={{ marginBottom:10 }}><label style={T.label}>TDS %</label><input style={T.input} type="number" value={tdsPct} onChange={e=>setTdsPct(e.target.value)} placeholder="10" /></div>)}
+        {s>0&&(
+          <div style={{ marginTop:8, background:'#F8F7FF', border:'1px solid #E9E5FF', borderRadius:10, padding:'12px 16px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:13 }}><span style={{ color:'#4B5563' }}>Monthly Stipend</span><span style={{ fontWeight:600 }}>₹{s.toLocaleString('en-IN')}</span></div>
+            {tds&&<div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:13, color:'#DC2626' }}><span>(-) TDS ({pct}%)</span><span>-₹{tdsAmt.toLocaleString('en-IN')}</span></div>}
+            <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 0 0', fontSize:14, fontWeight:700, color:'#059669', borderTop:'1px solid #EDE9FE', marginTop:4 }}><span>Net In-Hand (monthly)</span><span>₹{net.toLocaleString('en-IN')}</span></div>
+            <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0 0', fontSize:12, color:'#7C3AED' }}><span>Annual Stipend</span><span>₹{(s*12).toLocaleString('en-IN')}</span></div>
+          </div>
+        )}
+        <button onClick={save} disabled={saving} style={{ ...T.btnPrimary, width:'100%', marginTop:12, padding:10 }}>{saving?'Saving…':'💾 Save Stipend & Move to Offers'}</button>
+        {savedLink&&(
+          <div style={{ marginTop:12, background:'#F0F9FF', border:'1px solid #BAE6FD', borderRadius:8, padding:'12px 14px' }}>
+            <div style={{ fontSize:11, fontWeight:600, color:'#0369A1', marginBottom:6 }}>🔗 CANDIDATE SALARY LINK</div>
+            <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+              <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace' }} />
+              <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btn, background:'#0EA5E9', color:'#fff', whiteSpace:'nowrap' as const }}>📋 Copy</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
   // Offer Sent is intentionally excluded — once an offer goes out there's no more negotiation.
   // A revised offer moves the candidate back to 'MD Final', so they reappear here with the calculator.
   const finalCands = candidates.filter((c:Candidate)=>['MD Final','L2','Optional Round'].includes(c.stage))
   const [sel, setSel] = useState<Candidate|null>(null)
+  const selMrf = mrfs.find((m:MRF)=>m.id===sel?.mrf_id)
+  // Interns / contract / consultants etc. use the simple stipend calculator, not the full CTC one.
+  const isStipend = !!sel && (selMrf?.employment_type||'Employee') !== 'Employee'
   const [form, setForm] = useState({ ctc:'', varPct:'10', joining_bonus:'', joining_freq:'With Salary', retention_bonus:'', retention_freq:'After 3 Months', esop:'', esop_plan:'', state:'HR' })
   const [calc, setCalc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
@@ -1120,7 +1266,9 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
         {finalCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', fontSize:13, textAlign:'center' as const, padding:24 }}>No candidate is at the MD Final stage</div>}
       </div>
 
-      {sel&&(
+      {sel&&isStipend&&<StipendCalc sel={sel} mrf={selMrf} supabase={supabase} showNotify={showNotify} onRefresh={onRefresh} />}
+
+      {sel&&!isStipend&&(
         <div>
           <div style={T.cardPurple}>
             <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', marginBottom:14 }}>💰 CTC Calculator — {sel.full_name}</div>
@@ -1399,8 +1547,15 @@ HR Team`
       status:'SENT', sent_at:new Date().toISOString()
     })
     if (error) { showNotify('Save failed: '+error.message,'error'); return }
-    await supabase.from('candidates').update({ stage:'Offer Sent', doj:doj||null }).eq('id',sel.id)
+    await supabase.from('candidates').update({ stage:'Offer Sent', doj:doj||null, offer_accepted:false, offer_sent_at:new Date().toISOString(), offer_reminder_sent:false }).eq('id',sel.id)
     showNotify('Offer saved! Email ready.'); onRefresh()
+  }
+
+  // HR presses this once the candidate confirms acceptance → moves them into Pre-onboarding.
+  async function markAccepted(c:Candidate) {
+    const { error } = await supabase.from('candidates').update({ offer_accepted:true }).eq('id', c.id)
+    if (error) { showNotify('Error: '+error.message,'error'); return }
+    showNotify(`${c.full_name} marked Accepted — moved to Pre-onboarding.`); onRefresh()
   }
 
   return (
@@ -1413,6 +1568,12 @@ HR Team`
             <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B' }}>{c.full_name}</div>
             <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
+            {c.stage==='Offer Sent'&&!c.offer_accepted&&(
+              <button onClick={(e)=>{ e.stopPropagation(); markAccepted(c) }} style={{ ...T.btn, background:'#059669', color:'#fff', fontSize:11, fontWeight:600, marginTop:8, width:'100%' }}>✅ Mark Offer Accepted</button>
+            )}
+            {c.stage==='Offer Sent'&&c.offer_accepted&&(
+              <div style={{ fontSize:10, color:'#059669', marginTop:6, fontWeight:600 }}>✓ Accepted — moved to Pre-onboarding</div>
+            )}
           </div>
         ))}
         {offeredCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' as const, padding:24 }}>No candidates</div>}
@@ -1446,7 +1607,8 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
   useEffect(()=>{ load() },[load])
 
   const linkByCand = new Map(links.map((l:any)=>[l.candidate_id,l]))
-  const onboardingCands = candidates.filter((c:Candidate)=>['Offer Sent','Joined'].includes(c.stage))
+  // Only candidates who have ACCEPTED their offer (or already joined) flow into pre-onboarding.
+  const onboardingCands = candidates.filter((c:Candidate)=>(c.stage==='Offer Sent'&&c.offer_accepted)||c.stage==='Joined')
   const companyName = (c:Candidate)=> companies?.find((co:any)=>co.id===c.company_id)?.company_name || 'our organization'
 
   // Find the candidate's onboarding row, creating one if it doesn't exist yet.

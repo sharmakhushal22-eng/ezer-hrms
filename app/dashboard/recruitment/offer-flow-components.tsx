@@ -307,9 +307,11 @@ export function HRHeadApprovalDashboard() {
   const [processing, setProcessing] = useState(false)
   const [tab, setTab] = useState<'pending'|'done'>('pending')
   const [mrfs, setMrfs] = useState<any[]>([])
+  const [rejected, setRejected] = useState<any[]>([])
+  const [rehireStage, setRehireStage] = useState<Record<string,string>>({})
 
   useEffect(() => { loadRequests() }, [tab])
-  useEffect(() => { loadMrfs() }, [])
+  useEffect(() => { loadMrfs(); loadRejected() }, [])
 
   async function loadRequests() {
     const { data } = await supabase.from('offer_approval_requests')
@@ -339,6 +341,27 @@ export function HRHeadApprovalDashboard() {
       .update({ status: 'REJECTED', remarks: reason }).eq('id', id)
     if (error) { alert('Error: ' + error.message); return }
     loadMrfs()
+  }
+
+  // ── Rehire: HR Head re-enters a rejected candidate into the pipeline ──
+  const REHIRE_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','MD Final']
+  async function loadRejected() {
+    const { data } = await supabase.from('candidates')
+      .select('id, full_name, designation, stage, blacklisted, mrf_id, company_id')
+      .eq('stage', 'Rejected').order('created_at', { ascending: false })
+    setRejected(data || [])
+  }
+  async function rehire(c: any, stage: string) {
+    if (!stage) { alert('Pick a pipeline stage to place the candidate'); return }
+    const { error } = await supabase.from('candidates')
+      .update({ stage, blacklisted: false, blacklist_reason: null, status: 'active' }).eq('id', c.id)
+    if (error) { alert('Error: ' + error.message); return }
+    await supabase.from('recruitment_audit_logs').insert({
+      candidate_id: c.id, company_id: c.company_id || null, action_type: 'CANDIDATE_REHIRED',
+      details: { to_stage: stage, name: c.full_name }, created_at: new Date().toISOString(),
+    })
+    setRehireStage(m => { const n = { ...m }; delete n[c.id]; return n })
+    loadRejected()
   }
 
   async function processApproval() {
@@ -396,6 +419,29 @@ export function HRHeadApprovalDashboard() {
             <div style={{ display:'flex', gap:8, flexShrink:0 }}>
               <button onClick={()=>approveMrf(m.id)} style={S.btn('#059669','#fff')}>✅ Approve</button>
               <button onClick={()=>rejectMrf(m.id)} style={{ ...S.btn('#FEF2F2','#DC2626'), border:'1px solid #FCA5A5' }}>❌ Reject</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
+      <div style={{ marginBottom:22 }}>
+        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>♻️ Rehire — Rejected Candidates ({rejected.length})</div>
+        {rejected.length === 0 && (
+          <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>No rejected candidates</div>
+        )}
+        {rejected.map(c => (
+          <div key={c.id} style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+            <div>
+              <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}{c.blacklisted && <span style={{ fontSize:10, color:'#DC2626', marginLeft:8, fontWeight:600 }}>BLACKLISTED</span>}</div>
+              <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>{c.designation || '—'}</div>
+            </div>
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
+              <select value={rehireStage[c.id] || ''} onChange={e=>setRehireStage(m=>({ ...m, [c.id]: e.target.value }))} style={{ ...S.input, width:160 }}>
+                <option value="">Place at stage…</option>
+                {REHIRE_STAGES.map(st => <option key={st} value={st}>{st}</option>)}
+              </select>
+              <button onClick={()=>rehire(c, rehireStage[c.id])} style={S.btn('#059669','#fff')}>♻️ Rehire</button>
             </div>
           </div>
         ))}
@@ -625,7 +671,7 @@ ${company} — Human Resources`)
     }).eq('id', selected.id)
 
     // Update candidate stage
-    await supabase.from('candidates').update({ stage: 'Offer Sent' }).eq('id', selected.candidate_id)
+    await supabase.from('candidates').update({ stage: 'Offer Sent', offer_accepted: false, offer_sent_at: new Date().toISOString(), offer_reminder_sent: false }).eq('id', selected.candidate_id)
 
     // Audit log
     await supabase.from('recruitment_audit_logs').insert({
