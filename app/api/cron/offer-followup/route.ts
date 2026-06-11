@@ -95,7 +95,6 @@ async function run(req: NextRequest) {
   const { data: obCands } = await supabase
     .from('candidates')
     .select('id, full_name, email, hr_email, designation, onboarding_date, onboarding_tasks_emailed, last_touch_reminder_at')
-    .eq('offer_accepted', true)
     .eq('blacklisted', false)
     .not('onboarding_date', 'is', null)
 

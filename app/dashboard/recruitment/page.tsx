@@ -1601,13 +1601,14 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
   const [busy, setBusy] = useState('')        // candidate_id being processed
   const [choose, setChoose] = useState('')    // candidate_id showing Experienced/Fresher choice
   const [obDates, setObDates] = useState<Record<string,string>>({})
+  const [hrEmails, setHrEmails] = useState<Record<string,string>>({})
 
   const obVal = (c:Candidate) => obDates[c.id] ?? (c.onboarding_date || '')
-  async function saveOnboardingDate(c:Candidate) {
-    const date = obVal(c) || null
-    const { error } = await supabase.from('candidates').update({ onboarding_date: date }).eq('id', c.id)
+  const hrVal = (c:Candidate) => hrEmails[c.id] ?? (c.hr_email || '')
+  async function saveOnboarding(c:Candidate) {
+    const { error } = await supabase.from('candidates').update({ onboarding_date: obVal(c)||null, hr_email: hrVal(c)||null }).eq('id', c.id)
     if (error) { showNotify('Error: '+error.message,'error'); return }
-    showNotify(date ? `Onboarding date set for ${c.full_name}.` : 'Onboarding date cleared.'); onRefresh()
+    showNotify(`Saved onboarding details for ${c.full_name}.`); onRefresh()
   }
   const daysToJoin = (c:Candidate) => c.onboarding_date ? Math.ceil((new Date(c.onboarding_date).getTime()-Date.now())/86400000) : null
 
@@ -1720,16 +1721,19 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
               )}
             </div>
 
-            {/* Onboarding / joining date — HR fills this; drives the reminder emails */}
+            {/* Onboarding date + HR email — drive the reminder emails */}
             <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:10, flexWrap:'wrap' as const }}>
               <label style={{ fontSize:11, color:'#6D28D9', fontWeight:600 }}>Onboarding date:</label>
-              <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} style={{ ...T.input, width:160, fontSize:12 }} />
-              <button onClick={()=>saveOnboardingDate(c)} style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', fontSize:11 }}>Save date</button>
+              <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} style={{ ...T.input, width:150, fontSize:12 }} />
+              <label style={{ fontSize:11, color:'#6D28D9', fontWeight:600 }}>HR email:</label>
+              <input value={hrVal(c)} onChange={e=>setHrEmails(m=>({...m,[c.id]:e.target.value}))} placeholder="hr@company.com" style={{ ...T.input, width:180, fontSize:12 }} />
+              <button onClick={()=>saveOnboarding(c)} style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', fontSize:11 }}>Save</button>
               {(()=>{ const d=daysToJoin(c); if(d===null) return null
                 return d>=0 && d<=3
                   ? <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:'#ECFDF5', color:'#059669' }}>🚀 Joining in {d} day{d===1?'':'s'} — start onboarding</span>
                   : <span style={{ fontSize:11, color:d<0?'#DC2626':'#9CA3AF' }}>{d<0?'past joining date':`${d} days to join`}</span> })()}
             </div>
+            {!c.hr_email&&!hrEmails[c.id]&&<div style={{ fontSize:10, color:'#DC2626', marginTop:4 }}>⚠ Add an HR email so onboarding reminder mails can be sent.</div>}
 
             {!resp&&(
               choose===c.id ? (
