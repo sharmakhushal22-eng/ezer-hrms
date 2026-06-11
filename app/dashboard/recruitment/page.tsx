@@ -29,6 +29,7 @@ interface Candidate {
   doj?:string; status?:string; created_at:string; resume_url?:string
   offer_revised?:boolean; offer_revision_note?:string; blacklisted?:boolean
   hr_email?:string; offer_accepted?:boolean; offer_sent_at?:string
+  onboarding_date?:string
 }
 
 const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','MD Final','Offer Sent','Joined','Rejected']
@@ -1154,7 +1155,7 @@ function StipendCalc({ sel, mrf, supabase, showNotify, onRefresh }:any) {
 function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
   // Offer Sent is intentionally excluded — once an offer goes out there's no more negotiation.
   // A revised offer moves the candidate back to 'MD Final', so they reappear here with the calculator.
-  const finalCands = candidates.filter((c:Candidate)=>['MD Final','L2','Optional Round'].includes(c.stage))
+  const finalCands = candidates.filter((c:Candidate)=>['MD Final'].includes(c.stage))
   const [sel, setSel] = useState<Candidate|null>(null)
   const selMrf = mrfs.find((m:MRF)=>m.id===sel?.mrf_id)
   // Interns / contract / consultants etc. use the simple stipend calculator, not the full CTC one.
@@ -1541,7 +1542,7 @@ HR Team`
   async function sendOffer() {
     if (!sel||!letter) return
     const { error } = await supabase.from('offer_letters').insert({
-      candidate_id:sel.id, candidate_name:sel.full_name, company_id:sel.company_id||null,
+      candidate_id:sel.id, candidate_name:sel.full_name, designation:sel.designation||'Not specified', company_id:sel.company_id||null,
       letter_content:letter, to_email:toEmail,
       cc_emails:cc.split(',').map((e:string)=>e.trim()).filter(Boolean),
       status:'SENT', sent_at:new Date().toISOString()
@@ -1599,6 +1600,16 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
   const [links, setLinks] = useState<any[]>([])
   const [busy, setBusy] = useState('')        // candidate_id being processed
   const [choose, setChoose] = useState('')    // candidate_id showing Experienced/Fresher choice
+  const [obDates, setObDates] = useState<Record<string,string>>({})
+
+  const obVal = (c:Candidate) => obDates[c.id] ?? (c.onboarding_date || '')
+  async function saveOnboardingDate(c:Candidate) {
+    const date = obVal(c) || null
+    const { error } = await supabase.from('candidates').update({ onboarding_date: date }).eq('id', c.id)
+    if (error) { showNotify('Error: '+error.message,'error'); return }
+    showNotify(date ? `Onboarding date set for ${c.full_name}.` : 'Onboarding date cleared.'); onRefresh()
+  }
+  const daysToJoin = (c:Candidate) => c.onboarding_date ? Math.ceil((new Date(c.onboarding_date).getTime()-Date.now())/86400000) : null
 
   const load = useCallback(()=>{
     supabase.from('preonboarding_links').select('*').order('created_at',{ascending:false})
@@ -1709,6 +1720,17 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
               )}
             </div>
 
+            {/* Onboarding / joining date — HR fills this; drives the reminder emails */}
+            <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:10, flexWrap:'wrap' as const }}>
+              <label style={{ fontSize:11, color:'#6D28D9', fontWeight:600 }}>Onboarding date:</label>
+              <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} style={{ ...T.input, width:160, fontSize:12 }} />
+              <button onClick={()=>saveOnboardingDate(c)} style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', fontSize:11 }}>Save date</button>
+              {(()=>{ const d=daysToJoin(c); if(d===null) return null
+                return d>=0 && d<=3
+                  ? <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:'#ECFDF5', color:'#059669' }}>🚀 Joining in {d} day{d===1?'':'s'} — start onboarding</span>
+                  : <span style={{ fontSize:11, color:d<0?'#DC2626':'#9CA3AF' }}>{d<0?'past joining date':`${d} days to join`}</span> })()}
+            </div>
+
             {!resp&&(
               choose===c.id ? (
                 <div style={{ marginTop:12, background:'#F8F7FF', borderRadius:8, padding:'10px 12px', border:'1px solid #E9E5FF' }}>
@@ -1736,6 +1758,12 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
             )}
             {resp==='BACKOUT'&&(
               <div style={{ marginTop:10, fontSize:11, color:'#991B1B', background:'#FEF2F2', borderRadius:6, padding:'6px 10px' }}>Blacklisted · MRF reopened{row?.revise_note?` · Reason: ${row.revise_note}`:''}</div>
+            )}
+            {/* Backout available any day (even after acceptance) — blacklists + reopens the MRF */}
+            {(resp==='ACCEPTED'||resp==='REVISE')&&(
+              <div style={{ marginTop:10 }}>
+                <button onClick={()=>markBackout(c)} style={{ ...T.btn, background:'#FEF2F2', color:'#DC2626', border:'1px solid #FECACA', fontSize:11 }}>🚫 Candidate Backed Out</button>
+              </div>
             )}
           </div>
         )

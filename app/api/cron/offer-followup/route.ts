@@ -90,5 +90,62 @@ async function run(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, due: (due || []).length, processed })
+  // ── Onboarding reminders (3-day tasks + 10-day stay-in-touch) ──────────────
+  let onboardingEmails = 0
+  const { data: obCands } = await supabase
+    .from('candidates')
+    .select('id, full_name, email, hr_email, designation, onboarding_date, onboarding_tasks_emailed, last_touch_reminder_at')
+    .eq('offer_accepted', true)
+    .eq('blacklisted', false)
+    .not('onboarding_date', 'is', null)
+
+  const DAY = 86400000
+  for (const c of obCands || []) {
+    if (!c.hr_email) continue
+    const daysLeft = Math.ceil((new Date(c.onboarding_date as string).getTime() - Date.now()) / DAY)
+    const role = c.designation || ''
+    try {
+      // 3 days before joining → ask HR to complete the onboarding setup (once).
+      if (daysLeft >= 0 && daysLeft <= 3 && !c.onboarding_tasks_emailed) {
+        const body = `Hi,
+
+${c.full_name}${role ? ` (${role})` : ''} is joining on ${new Date(c.onboarding_date as string).toLocaleDateString('en-IN')} — that's ${daysLeft} day${daysLeft === 1 ? '' : 's'} away.
+
+Please complete the onboarding setup before the joining date:
+  • Laptop / workstation
+  • Official email + ERP / system access
+  • SIM / phone (if applicable)
+  • ID card & access card
+  • Seat / desk allotment
+  • Joining kit & welcome pack
+
+Kindly ensure everything is ready so the candidate has a smooth first day.
+
+— EZER HRMS`
+        await transporter.sendMail({ from, to: c.hr_email, subject: `Onboarding setup — ${c.full_name} joins in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`, text: body, html: body.replace(/\n/g, '<br>') })
+        await supabase.from('candidates').update({ onboarding_tasks_emailed: true }).eq('id', c.id)
+        onboardingEmails++
+      }
+      // Joining is >30 days away → nudge HR every 10 days to stay in touch.
+      else if (daysLeft > 30) {
+        const last = c.last_touch_reminder_at ? new Date(c.last_touch_reminder_at).getTime() : 0
+        if (Date.now() - last >= 10 * DAY) {
+          const body = `Hi,
+
+${c.full_name}${role ? ` (${role})` : ''} is joining on ${new Date(c.onboarding_date as string).toLocaleDateString('en-IN')} — still ${daysLeft} days away.
+
+Please reach out and keep the candidate engaged so they stay committed until their joining date. A quick check-in call or message helps reduce last-minute drop-offs.
+
+— EZER HRMS`
+          await transporter.sendMail({ from, to: c.hr_email, subject: `Stay in touch — ${c.full_name} (joining ${new Date(c.onboarding_date as string).toLocaleDateString('en-IN')})`, text: body, html: body.replace(/\n/g, '<br>') })
+          await supabase.from('candidates').update({ last_touch_reminder_at: new Date().toISOString() }).eq('id', c.id)
+          onboardingEmails++
+        }
+      }
+    } catch (e) {
+      console.error('onboarding reminder failed for', c.id, e)
+    }
+  }
+
+  return NextResponse.json({ ok: true, due: (due || []).length, processed, onboardingEmails })
 }

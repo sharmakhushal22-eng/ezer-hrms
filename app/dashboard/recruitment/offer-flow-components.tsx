@@ -655,6 +655,7 @@ ${company} — Human Resources`)
     const { error } = await supabase.from('offer_letters').insert({
       candidate_id: selected.candidate_id,
       candidate_name: selected.candidates?.full_name || toEmail,
+      designation: selected.candidates?.designation || selected.manpower_requisitions?.designation || 'Not specified',
       company_id: selected.company_id || null,
       letter_content: body,
       to_email: toEmail,
