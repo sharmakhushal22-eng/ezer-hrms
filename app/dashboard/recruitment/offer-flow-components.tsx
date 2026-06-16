@@ -296,6 +296,19 @@ This document is confidential and for internal approval only.`
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Reusable type-then-Apply search (matches the offer-flow S styles).
+function SearchBar({ placeholder, onApply, width=320 }:{ placeholder:string; onApply:(q:string)=>void; width?:number }) {
+  const [draft, setDraft] = useState('')
+  return (
+    <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
+      <input style={{ ...S.input, maxWidth:width }} value={draft} placeholder={placeholder}
+        onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
+      <button style={S.btn('#7C3AED','#fff')} onClick={()=>onApply(draft.trim())}>Apply</button>
+      {draft && <button style={S.btn('#F3F0FF','#6D28D9')} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
+    </div>
+  )
+}
+
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════
 export function HRHeadApprovalDashboard() {
@@ -309,6 +322,7 @@ export function HRHeadApprovalDashboard() {
   const [mrfs, setMrfs] = useState<any[]>([])
   const [rejected, setRejected] = useState<any[]>([])
   const [rehireStage, setRehireStage] = useState<Record<string,string>>({})
+  const [hq, setHq] = useState('')
 
   useEffect(() => { loadRequests() }, [tab])
   useEffect(() => { loadMrfs(); loadRejected() }, [])
@@ -344,7 +358,7 @@ export function HRHeadApprovalDashboard() {
   }
 
   // ── Rehire: HR Head re-enters a rejected candidate into the pipeline ──
-  const REHIRE_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','MD Final']
+  const REHIRE_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted']
   async function loadRejected() {
     const { data } = await supabase.from('candidates')
       .select('id, full_name, designation, stage, blacklisted, mrf_id, company_id')
@@ -397,17 +411,23 @@ export function HRHeadApprovalDashboard() {
     OFFER_SENT: ['#F3F0FF','#7C3AED'],
   }[s] || ['#F9FAFB','#6B7280'])
 
+  const ql = hq.trim().toLowerCase()
+  const fMrfs = mrfs.filter((m:any)=>!ql || (m.designation||m.position||'').toLowerCase().includes(ql))
+  const fRejected = rejected.filter((c:any)=>!ql || (c.full_name||'').toLowerCase().includes(ql))
+  const fRequests = requests.filter((r:any)=>!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql))
+
   return (
     <div style={{ maxWidth:1100, margin:'0 auto', padding:16 }}>
       <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Head — Approvals</div>
+      <SearchBar placeholder="Search by candidate / job role — filters all sections below…" onApply={setHq} width={420} />
 
       {/* MRF Approvals — HR Head approves new manpower requisitions here */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>📝 MRF Approvals ({mrfs.length})</div>
-        {mrfs.length === 0 && (
-          <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>No MRFs pending approval</div>
+        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>📝 MRF Approvals ({fMrfs.length})</div>
+        {fMrfs.length === 0 && (
+          <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>{ql?'No matching MRF':'No MRFs pending approval'}</div>
         )}
-        {mrfs.map(m => (
+        {fMrfs.map(m => (
           <div key={m.id} style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
             <div>
               <div style={{ fontSize:14, fontWeight:600 }}>{m.designation || m.position || 'Untitled'}</div>
@@ -426,11 +446,11 @@ export function HRHeadApprovalDashboard() {
 
       {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>♻️ Rehire — Rejected Candidates ({rejected.length})</div>
-        {rejected.length === 0 && (
-          <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>No rejected candidates</div>
+        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>♻️ Rehire — Rejected Candidates ({fRejected.length})</div>
+        {fRejected.length === 0 && (
+          <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>{ql?'No matching candidate':'No rejected candidates'}</div>
         )}
-        {rejected.map(c => (
+        {fRejected.map(c => (
           <div key={c.id} style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
             <div>
               <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}{c.blacklisted && <span style={{ fontSize:10, color:'#DC2626', marginLeft:8, fontWeight:600 }}>BLACKLISTED</span>}</div>
@@ -461,12 +481,12 @@ export function HRHeadApprovalDashboard() {
 
         {/* Request List */}
         <div>
-          {requests.length === 0 && (
+          {fRequests.length === 0 && (
             <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:32 }}>
-              No {tab === 'pending' ? 'pending' : 'approved'} requests
+              {ql ? 'No matching candidate' : `No ${tab === 'pending' ? 'pending' : 'approved'} requests`}
             </div>
           )}
-          {requests.map(r => {
+          {fRequests.map(r => {
             const [bg, c] = statusColor(r.status)
             return (
               <div key={r.id} onClick={()=>setSelected(r)}
@@ -572,6 +592,7 @@ export function HRManagerSendOffer() {
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
+  const [sq, setSq] = useState('')
 
   useEffect(() => {
     supabase.from('offer_approval_requests')
@@ -674,6 +695,18 @@ ${company} — Human Resources`)
     // Update candidate stage
     await supabase.from('candidates').update({ stage: 'Offer Sent', offer_accepted: false, offer_sent_at: new Date().toISOString(), offer_reminder_sent: false }).eq('id', selected.candidate_id)
 
+    // Auto-close the MRF once its openings are filled by sent/joined offers.
+    const { data: candRow } = await supabase.from('candidates').select('mrf_id').eq('id', selected.candidate_id).maybeSingle()
+    const mrfId = candRow?.mrf_id
+    if (mrfId) {
+      const { data: m } = await supabase.from('manpower_requisitions').select('no_of_openings, openings, status').eq('id', mrfId).maybeSingle()
+      if (m && m.status !== 'CLOSED') {
+        const openings = Number(m.no_of_openings || m.openings || 1)
+        const { count } = await supabase.from('candidates').select('id', { count: 'exact', head: true }).eq('mrf_id', mrfId).in('stage', ['Offer Sent', 'Joined'])
+        if ((count || 0) >= openings) await supabase.from('manpower_requisitions').update({ status: 'CLOSED' }).eq('id', mrfId)
+      }
+    }
+
     // Audit log
     await supabase.from('recruitment_audit_logs').insert({
       candidate_id: selected.candidate_id,
@@ -690,19 +723,22 @@ ${company} — Human Resources`)
     setApproved(a => a.filter(r => r.id !== selected.id))
   }
 
+  const sql = sq.trim().toLowerCase()
+  const fApproved = approved.filter((r:any)=>!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql))
   return (
     <div style={{ maxWidth:900, margin:'0 auto', padding:16 }}>
       <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Manager — Send Offer Letters</div>
       <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:16 }}>HR Head approved requests — offer letter send karo</div>
+      <SearchBar placeholder="Search candidate…" onApply={setSq} width={300} />
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
         <div>
-          {approved.length === 0 && (
+          {fApproved.length === 0 && (
             <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:32 }}>
-              No approved requests pending
+              {sql ? 'No matching candidate' : 'No approved requests pending'}
             </div>
           )}
-          {approved.map(r => (
+          {fApproved.map(r => (
             <div key={r.id} onClick={() => prepareOffer(r)}
               style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?'#F3F0FF':'#fff' }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}</div>

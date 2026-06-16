@@ -1,5 +1,6 @@
 'use client'
 import { useState, useMemo } from 'react'
+import { supabase } from '@/lib/supabase'
 
 function fmt(n: number) { return Math.round(n).toLocaleString('en-IN') }
 
@@ -68,6 +69,20 @@ function getSlab(ctc: number): number {
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────
 export default function SalaryViewClient({ data }: { data: any }) {
+  const [response, setResponse] = useState<string>(data.candidate_response || '')
+  const [responding, setResponding] = useState(false)
+  async function respond(r: 'ACCEPTED' | 'REJECTED') {
+    let note = ''
+    if (r === 'REJECTED') { const n = window.prompt('Optionally, let us know why you are declining:'); if (n === null) return; note = n }
+    else if (!window.confirm('Confirm you accept this offer?')) return
+    setResponding(true)
+    const { error } = await supabase.from('ctc_negotiations')
+      .update({ candidate_response: r, response_at: new Date().toISOString(), response_note: note || null })
+      .eq('link_token', data.link_token)
+    setResponding(false)
+    if (error) { alert('Sorry, we could not record your response: ' + error.message); return }
+    setResponse(r)
+  }
   const [showCalc, setShowCalc] = useState(false)
   const [regime, setRegime] = useState<'old'|'new'>('new')
   const [dec80C, setDec80C] = useState(150000)
@@ -419,14 +434,33 @@ export default function SalaryViewClient({ data }: { data: any }) {
           <strong>Disclaimer:</strong> Indicative calculation only. Actual in-hand depends on IT declaration, applicable TDS, company policy, and FBP bill submission. Please review your formal offer letter for confirmed figures.
         </div>
 
-        {/* Have Questions — NO Accept/Negotiate */}
-        <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:10, padding:'16px 20px', marginBottom:16, textAlign:'center' as const }}>
-          <div style={{ fontSize:22, marginBottom:8 }}>💬</div>
-          <div style={{ fontSize:14, fontWeight:500, color:'#1D4ED8', marginBottom:4 }}>Have Questions?</div>
-          <div style={{ fontSize:13, color:'#185FA5', lineHeight:1.6 }}>
-            If you have any query regarding your salary structure, please connect with your recruiter directly.
+        {/* Accept / Reject the offer */}
+        {response ? (
+          <div style={{ background: response==='ACCEPTED'?'#ECFDF5':'#FEF2F2', border:`1px solid ${response==='ACCEPTED'?'#A7F3D0':'#FCA5A5'}`, borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
+            <div style={{ fontSize:26, marginBottom:8 }}>{response==='ACCEPTED'?'🎉':'🙏'}</div>
+            <div style={{ fontSize:15, fontWeight:600, color: response==='ACCEPTED'?'#059669':'#DC2626', marginBottom:4 }}>
+              {response==='ACCEPTED' ? 'You have accepted this offer' : 'You have declined this offer'}
+            </div>
+            <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.6 }}>
+              {response==='ACCEPTED'
+                ? 'Thank you! Our HR team will reach out with the next steps shortly.'
+                : 'Thank you for letting us know. Our recruiter may connect with you.'}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ background:'#F5F3FF', border:'1px solid #DDD6FE', borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
+            <div style={{ fontSize:14, fontWeight:600, color:'#4C1D95', marginBottom:12 }}>Would you like to accept this offer?</div>
+            <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
+              <button onClick={()=>respond('ACCEPTED')} disabled={responding}
+                style={{ padding:'11px 32px', borderRadius:9, border:'none', cursor:responding?'not-allowed':'pointer', fontSize:14, fontWeight:600, fontFamily:'inherit', background:'#059669', color:'#fff', opacity:responding?.6:1 }}>
+                ✓ Accept Offer
+              </button>
+            </div>
+            <div style={{ fontSize:12, color:'#6B7280', lineHeight:1.6, marginTop:12 }}>
+              Any questions about your salary structure? Please connect with your recruiter directly.
+            </div>
+          </div>
+        )}
 
         <div style={{ textAlign:'center' as const, color:'#9CA3AF', fontSize:11, paddingBottom:24 }}>
           Powered by <strong>EZER HRMS</strong> · {data.company_name || ''} · Confidential

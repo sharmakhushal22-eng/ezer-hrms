@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
+import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
 
 // ── TYPES ────────────────────────────────────────────────────────
 interface Company { id:string; company_code:string; company_name?:string }
@@ -30,13 +31,14 @@ interface Candidate {
   offer_revised?:boolean; offer_revision_note?:string; blacklisted?:boolean
   hr_email?:string; offer_accepted?:boolean; offer_sent_at?:string
   onboarding_date?:string
+  aadhaar_url?:string; prev_offer_url?:string; pre_negotiation_done?:boolean
 }
 
-const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','MD Final','Offer Sent','Joined','Rejected']
+const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted','Offer Sent','Joined','Rejected']
 const STAGE_COLOR:Record<string,string> = {
   'Applied':'#7C3AED','AI Screened':'#6D28D9','Telephonic':'#D97706',
   'L1':'#DB2777','L2':'#059669','Optional Round':'#4F46E5',
-  'MD Final':'#EA580C','Offer Sent':'#0891B2','Joined':'#16A34A','Rejected':'#DC2626'
+  'Shortlisted':'#16A34A','Offer Sent':'#0891B2','Joined':'#15803D','Rejected':'#DC2626'
 }
 const EMP_TYPES = ['Employee','Intern','Contract','Consultant','NAPS','NATS','Live Project']
 const EDUCATION_OPTIONS = ['Any Graduate','B.Tech/B.E.','MBA/PGDM','M.Tech','B.Com/M.Com','BCA/MCA','Diploma','12th Pass','Any Post Graduate']
@@ -283,6 +285,29 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:st
   )
 }
 
+// ── Reusable search: type, then press Apply (or Enter). Clear resets it. ──
+function SearchBar({ placeholder, onApply, width=300 }:{ placeholder:string; onApply:(q:string)=>void; width?:number }) {
+  const [draft, setDraft] = useState('')
+  return (
+    <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
+      <input style={{ ...T.input, maxWidth:width }} value={draft} placeholder={placeholder}
+        onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
+      <button style={T.btnPrimary} onClick={()=>onApply(draft.trim())}>Apply</button>
+      {draft && <button style={T.btnOutline} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
+    </div>
+  )
+}
+
+// Close an MRF automatically once offers sent (Offer Sent + Joined) reach its openings.
+async function closeMrfIfFilled(supabase:any, mrfId?:string) {
+  if (!mrfId) return
+  const { data:m } = await supabase.from('manpower_requisitions').select('no_of_openings, openings, status').eq('id', mrfId).maybeSingle()
+  if (!m || m.status==='CLOSED') return
+  const openings = Number(m.no_of_openings || m.openings || 1)
+  const { count } = await supabase.from('candidates').select('id', { count:'exact', head:true }).eq('mrf_id', mrfId).in('stage', ['Offer Sent','Joined'])
+  if ((count||0) >= openings) await supabase.from('manpower_requisitions').update({ status:'CLOSED' }).eq('id', mrfId)
+}
+
 // ── MRF TAB ───────────────────────────────────────────────────────
 function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify }:any) {
   const EMPTY = { company_id:'', location_id:'', department_id:'', designation:'', no_of_openings:1,
@@ -294,6 +319,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   const [editMRF, setEditMRF] = useState<MRF|null>(null)
   const [form, setForm] = useState<any>(EMPTY)
   const [saving, setSaving] = useState(false)
+  const [mrfQ, setMrfQ] = useState('')
+  const [fCompany, setFCompany] = useState('')
+  const [fDept, setFDept] = useState('')
+  const [fLoc, setFLoc] = useState('')
+  const [fPos, setFPos] = useState('')
+  const mrfPositions = Array.from(new Set(mrfs.map((m:MRF)=>m.designation||m.position).filter(Boolean))).sort() as string[]
   const [aiLoading, setAiLoading] = useState(false)
   const [approvalModal, setApprovalModal] = useState<MRF|null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string|null>(null)
@@ -397,8 +428,13 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   }
 
   async function deleteMRF(id:string) {
+    // Detach rows whose FK to the MRF is RESTRICT (would otherwise block delete).
+    // candidates.mrf_id is ON DELETE SET NULL, so it needs no handling here.
+    await supabase.from('offer_approval_requests').update({ mrf_id:null }).eq('mrf_id', id)
+    await supabase.from('recruitment_audit_logs').update({ mrf_id:null }).eq('mrf_id', id)
+    await supabase.from('document_collection_links').update({ mrf_id:null }).eq('mrf_id', id)
     const { error } = await supabase.from('manpower_requisitions').delete().eq('id',id)
-    if (error) { showNotify('Delete failed','error'); return }
+    if (error) { showNotify('Delete failed: '+error.message,'error'); return }
     showNotify('MRF deleted'); setDeleteConfirm(null); onRefresh()
   }
 
@@ -552,7 +588,33 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         </div>
       )}
 
-      {mrfs.map((m:MRF)=>{
+      <SearchBar placeholder="Search MRF by job role…" onApply={setMrfQ} />
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const, marginBottom:12, alignItems:'center' }}>
+        <select value={fCompany} onChange={e=>setFCompany(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+          <option value="">All Companies</option>
+          {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+        </select>
+        <select value={fDept} onChange={e=>setFDept(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+          <option value="">All Departments</option>
+          {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+        </select>
+        <select value={fLoc} onChange={e=>setFLoc(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+          <option value="">All Locations</option>
+          {locations.filter((l:Location)=>!fCompany||l.company_id===fCompany).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+        </select>
+        <select value={fPos} onChange={e=>setFPos(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+          <option value="">All Positions</option>
+          {mrfPositions.map((p:string)=><option key={p} value={p}>{p}</option>)}
+        </select>
+        {(fCompany||fDept||fLoc||fPos)&&<button onClick={()=>{setFCompany('');setFDept('');setFLoc('');setFPos('')}} style={T.btnOutline}>Clear filters</button>}
+      </div>
+      {mrfs.filter((m:MRF)=>
+        (!mrfQ || (m.designation||(m as any).position||'').toLowerCase().includes(mrfQ.toLowerCase())) &&
+        (!fCompany || m.company_id===fCompany) &&
+        (!fDept || m.department_id===fDept) &&
+        (!fLoc || m.location_id===fLoc) &&
+        (!fPos || (m.designation||m.position)===fPos)
+      ).map((m:MRF)=>{
         const cands = candidates.filter((c:Candidate)=>c.mrf_id===m.id)
         return (
           <div key={m.id} style={T.card}>
@@ -821,6 +883,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
 
 // ── PIPELINE ──────────────────────────────────────────────────────
 function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
+  const [interviewCand, setInterviewCand] = useState<Candidate|null>(null)
   const [selMRF, setSelMRF] = useState('all')
   const [showAdd, setShowAdd] = useState(false)
   const [selCand, setSelCand] = useState<Candidate|null>(null)
@@ -829,9 +892,15 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
   const [aiFbLoading, setAiFbLoading] = useState(false)
   const EMPTY_C = { mrf_id:'', full_name:'', phone:'', email:'', hr_email:'', current_company:'', designation:'', experience_years:'', current_ctc:'', expected_ctc:'', notice_period:'', source:'Direct' }
   const [cForm, setCForm] = useState<any>(EMPTY_C)
+  const [myEmail, setMyEmail] = useState('')
+  useEffect(()=>{ supabase.auth.getUser().then(({data}:any)=>{ const em=data?.user?.email; if(em){ setMyEmail(em); setCForm((f:any)=>({...f, hr_email:f.hr_email||em})) } }) },[])
+  const cMrf = mrfs.find((m:MRF)=>m.id===cForm.mrf_id)
+  const expCtcOver = !!(cMrf?.budget_max && cForm.expected_ctc!=='' && Number(cForm.expected_ctc) > Number(cMrf.budget_max))
   const CF = (k:string,v:any) => setCForm((f:any)=>({...f,[k]:v}))
   const approvedMRFs = mrfs.filter((m:MRF)=>m.status==='APPROVED')
-  const filtered = selMRF==='all'?candidates:candidates.filter((c:Candidate)=>c.mrf_id===selMRF)
+  const [pipeQ, setPipeQ] = useState('')
+  const filtered = (selMRF==='all'?candidates:candidates.filter((c:Candidate)=>c.mrf_id===selMRF))
+    .filter((c:Candidate)=>!pipeQ || c.full_name.toLowerCase().includes(pipeQ.toLowerCase()))
 
   async function addCandidate() {
     if (!cForm.full_name||!cForm.phone) { showNotify('Name and Phone are required','error'); return }
@@ -848,7 +917,7 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
       status:'active', applied_date:new Date().toISOString().split('T')[0],
     })
     if (error) { showNotify('Error: '+error.message,'error'); return }
-    showNotify('Candidate added!'); setShowAdd(false); setCForm(EMPTY_C); onRefresh()
+    showNotify('Candidate added!'); setShowAdd(false); setCForm({...EMPTY_C, hr_email:myEmail}); onRefresh()
   }
 
   async function moveStage(id:string, stage:string) {
@@ -914,8 +983,9 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
             <option key={m.id} value={m.id}>{m.designation||m.position} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
           ))}
         </select>
-        <button onClick={()=>setShowAdd(true)} style={T.btnPrimary}>+ Add Candidate</button>
+        <button onClick={()=>{ setCForm({...EMPTY_C, hr_email:myEmail}); setShowAdd(true) }} style={T.btnPrimary}>+ Add Candidate</button>
       </div>
+      <SearchBar placeholder="Filter pipeline by candidate name…" onApply={setPipeQ} />
 
       {approvedMRFs.length===0&&(
         <div style={{ ...T.card, textAlign:'center' as const, color:'#9CA3AF', padding:32 }}>
@@ -986,7 +1056,11 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
             </div>
             <div style={{ ...T.g3, marginBottom:16 }}>
               <div><label style={T.label}>Current CTC (₹)</label><input style={T.input} type="number" value={cForm.current_ctc} onChange={e=>CF('current_ctc',e.target.value)} /></div>
-              <div><label style={T.label}>Expected CTC (₹)</label><input style={T.input} type="number" value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} /></div>
+              <div>
+                <label style={T.label}>Expected CTC (₹)</label>
+                <input style={{ ...T.input, ...(expCtcOver?{ borderColor:'#FCA5A5', background:'#FEF2F2' }:{}) }} type="number" value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} />
+                {expCtcOver && <div style={{ fontSize:10, color:'#DC2626', marginTop:3, fontWeight:600 }}>⚠ Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>}
+              </div>
               <div><label style={T.label}>Notice Period (Days)</label><input style={T.input} type="number" value={cForm.notice_period} onChange={e=>CF('notice_period',e.target.value)} /></div>
             </div>
             <div style={{ display:'flex', gap:8 }}>
@@ -1002,15 +1076,34 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
         <CandidateDrawer candidate={selCand} mrfs={mrfs} onClose={()=>setSelCand(null)}
           onStageChange={moveStage} onSaveNotes={saveNotes}
           aiQs={aiQs} aiQLoading={aiQLoading} onGetQuestions={getAIQuestions}
-          aiFbLoading={aiFbLoading} onGetFeedback={getAIFeedback} />
+          aiFbLoading={aiFbLoading} onGetFeedback={getAIFeedback}
+          onOpenInterviews={(c:Candidate)=>{ setSelCand(null); setInterviewCand(c) }} />
+      )}
+
+      {/* ── Interview Pipeline full-screen overlay ── */}
+      {interviewCand && (
+        <div style={{ position:'fixed', inset:0, background:'#F5F3FF', zIndex:300, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
+          <div style={{ background:'linear-gradient(135deg,#7C3AED,#4F46E5)', padding:'12px 20px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10 }}>
+            <button onClick={()=>setInterviewCand(null)} style={{ padding:'6px 14px', borderRadius:7, border:'1px solid rgba(255,255,255,.3)', background:'transparent', color:'#fff', cursor:'pointer', fontSize:12, fontFamily:'inherit', fontWeight:500 }}>← Back to Pipeline</button>
+            <div style={{ fontSize:15, fontWeight:600, color:'#fff' }}>Interview Pipeline — {interviewCand.full_name}</div>
+            <div style={{ marginLeft:'auto', fontSize:12, color:'rgba(255,255,255,.65)' }}>{interviewCand.designation || '—'} · {interviewCand.current_company || '—'}</div>
+          </div>
+          <InterviewPipeline candidate={{
+            id:          interviewCand.id,
+            full_name:   interviewCand.full_name,
+            designation: interviewCand.designation || '—',
+            department:  mrfs.find((m:MRF)=>m.id===interviewCand.mrf_id)?.dept_name || undefined,
+            current_ctc: interviewCand.current_ctc,
+            ai_score:    interviewCand.ai_score ? Math.round(interviewCand.ai_score) : undefined,
+          }} />
+        </div>
       )}
     </div>
   )
 }
 
-function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNotes, aiQs, aiQLoading, onGetQuestions, aiFbLoading, onGetFeedback }:any) {
+function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNotes, aiQs, aiQLoading, onGetQuestions, aiFbLoading, onGetFeedback, onOpenInterviews }:any) {
   const [notes, setNotes] = useState(c.interview_notes||'')
-  const [interviewer, setInterviewer] = useState('')
   const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
 
   return (
@@ -1054,12 +1147,12 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
         })}
       </div>
 
-      {/* Interviewer Assignment */}
-      <SectionLine title="Assign Interviewer" />
-      <div style={{ display:'flex', gap:8, marginBottom:14 }}>
-        <input style={{ ...T.input, flex:1 }} value={interviewer} onChange={e=>setInterviewer(e.target.value)} placeholder="Interviewer name or email" />
-        <button onClick={()=>{ const n = (c.interview_notes||'')+'\n\nInterviewer: '+interviewer; onSaveNotes(c.id,n); setNotes(n) }} style={T.btnOutline}>Assign</button>
-      </div>
+      {/* Interview Pipeline */}
+      <SectionLine title="Interview Rounds" />
+      <button onClick={()=>onOpenInterviews && onOpenInterviews(c)}
+        style={{ ...T.btnPrimary, width:'100%', marginBottom:14, padding:10, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+        📋 Manage Interview Rounds →
+      </button>
 
       {/* AI Questions */}
       <SectionLine title="Interview Questions" />
@@ -1089,12 +1182,15 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
 
 // ── NEGOTIATION CALCULATOR ────────────────────────────────────────
 // ── Stipend calculator (Intern / NATS / NAPS / Contract / Live Project / Consultant) ──
-function StipendCalc({ sel, mrf, supabase, showNotify, onRefresh }:any) {
+function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:any) {
   const [stipend, setStipend] = useState('')
   const [tds, setTds] = useState(false)
   const [tdsPct, setTdsPct] = useState('')
   const [saving, setSaving] = useState(false)
   const [savedLink, setSavedLink] = useState<string|null>(null)
+  const [companyOverride, setCompanyOverride] = useState('')
+  const autoCompany = sel?.company_id || mrf?.company_id || (companies?.length===1 ? companies[0].id : '')
+  const effCompany = autoCompany || companyOverride
   const s = Number(stipend)||0
   const pct = tds ? (Number(tdsPct)||0) : 0
   const tdsAmt = Math.round(s*pct/100)
@@ -1102,10 +1198,13 @@ function StipendCalc({ sel, mrf, supabase, showNotify, onRefresh }:any) {
 
   async function save() {
     if (!s) { showNotify('Enter the monthly stipend','error'); return }
+    const companyId = effCompany || null
+    if (!companyId) { showNotify('Select the company for this candidate first (dropdown in the calculator).','error'); return }
+    if (!sel.company_id) await supabase.from('candidates').update({ company_id:companyId }).eq('id', sel.id)
     setSaving(true); setSavedLink(null)
     const calcData = { is_stipend:true, employment_type:mrf?.employment_type, stipend_monthly:s, tds_applicable:tds, tds_pct:pct, tds_amount:tdsAmt, net_monthly:net, annual:s*12 }
     const { data, error } = await supabase.from('ctc_negotiations').upsert({
-      candidate_id:sel.id, company_id:sel.company_id||null,
+      candidate_id:sel.id, company_id:companyId,
       offered_ctc:s*12, net_monthly:net,
       candidate_name:sel.full_name, position_title:sel.designation||null,
       is_stipend:true, stipend_monthly:s, tds_applicable:tds, tds_pct:pct,
@@ -1122,6 +1221,15 @@ function StipendCalc({ sel, mrf, supabase, showNotify, onRefresh }:any) {
       <div style={T.cardPurple}>
         <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', marginBottom:4 }}>💰 Stipend Calculator — {sel.full_name}</div>
         <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:14 }}>{mrf?.employment_type||'Non-employee'} engagement · stipend only (no PF/HRA structure)</div>
+        {!autoCompany && (
+          <div style={{ marginBottom:12, padding:'8px 12px', background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8 }}>
+            <label style={T.label}>Company * <span style={{ color:'#92400E', fontWeight:400 }}>— not set on this candidate, please choose</span></label>
+            <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
+              <option value="">Select company…</option>
+              {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+            </select>
+          </div>
+        )}
         <div style={{ ...T.g2, marginBottom:10 }}>
           <div><label style={T.label}>Monthly Stipend (₹) *</label><input style={T.input} type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder="25000" /></div>
           <div><label style={T.label}>TDS Applicable?</label>
@@ -1152,10 +1260,80 @@ function StipendCalc({ sel, mrf, supabase, showNotify, onRefresh }:any) {
   )
 }
 
-function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
+// ── Pre-negotiation document checks (Aadhaar + previous offer letter) ──
+function PreNegoChecks({ candidate, supabase, showNotify, onDone }:any) {
+  const [aadhaar, setAadhaar] = useState<string>(candidate.aadhaar_url||'')
+  const [prevOffer, setPrevOffer] = useState<string>(candidate.prev_offer_url||'')
+  const [busy, setBusy] = useState('')
+  const [saving, setSaving] = useState(false)
+  const aadhaarRef = useRef<HTMLInputElement>(null)
+  const prevRef = useRef<HTMLInputElement>(null)
+
+  async function upload(docType:'AADHAAR'|'PREV_OFFER', file:File) {
+    if (!file) return
+    if (file.size > 5*1024*1024) { showNotify('File too large (max 5MB)','error'); return }
+    setBusy(docType)
+    const fd = new FormData()
+    fd.append('candidate_id', candidate.id); fd.append('doc_type', docType); fd.append('file', file)
+    try {
+      const r = await fetch('/api/recruitment/upload-doc', { method:'POST', body:fd })
+      const d = await r.json()
+      if (!r.ok) throw new Error(d.error||'Upload failed')
+      if (docType==='AADHAAR') setAadhaar(d.path); else setPrevOffer(d.path)
+      showNotify(`${docType==='AADHAAR'?'Aadhaar':'Previous offer letter'} uploaded ✓`)
+    } catch(e:any){ showNotify('Upload failed: '+e.message,'error') }
+    setBusy('')
+  }
+
+  async function save() {
+    if (!aadhaar || !prevOffer) { showNotify('Please upload both documents first','error'); return }
+    setSaving(true)
+    const { error } = await supabase.from('candidates').update({ pre_negotiation_done:true }).eq('id', candidate.id)
+    setSaving(false)
+    if (error) { showNotify('Save failed: '+error.message,'error'); return }
+    showNotify(`${candidate.full_name} cleared pre-negotiation checks — moved to CTC Negotiations.`)
+    onDone()
+  }
+
+  const box = (docType:'AADHAAR'|'PREV_OFFER', label:string, val:string, ref:React.RefObject<HTMLInputElement|null>) => (
+    <div style={{ border:`2px dashed ${val?'#A7F3D0':'#DDD6FE'}`, borderRadius:10, padding:'14px 16px', background:val?'#F0FDF4':'#FAFAF8', marginBottom:12 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:600 }}>{val?'✅':'📤'} {label} <span style={{ color:'#DC2626', fontSize:11 }}>*</span></div>
+          {val && <div style={{ fontSize:11, color:'#059669', marginTop:3 }}>Uploaded</div>}
+        </div>
+        <input ref={ref} type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display:'none' }}
+          onChange={e=>{ const f=e.target.files?.[0]; if(f) upload(docType,f); if(ref.current) ref.current.value='' }} />
+        <button onClick={()=>ref.current?.click()} disabled={busy===docType} style={{ ...T.btnPrimary, opacity:busy===docType?.6:1 }}>
+          {busy===docType?'Uploading…':val?'Re-upload':'Upload'}
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={T.cardPurple}>
+      <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', marginBottom:6 }}>📋 Pre-negotiation Checks — {candidate.full_name}</div>
+      <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:14 }}>Upload the candidate's documents, then save to begin CTC negotiation.</div>
+      {box('AADHAAR','Aadhaar Card', aadhaar, aadhaarRef)}
+      {box('PREV_OFFER','Previous Offer Letter', prevOffer, prevRef)}
+      <button onClick={save} disabled={saving||!aadhaar||!prevOffer} style={{ ...T.btnPrimary, width:'100%', padding:11, marginTop:6, opacity:(saving||!aadhaar||!prevOffer)?.6:1 }}>
+        {saving?'Saving…':'Save & Move to CTC Negotiations →'}
+      </button>
+    </div>
+  )
+}
+
+function NegotiationTab({ supabase, companies, mrfs, candidates, onRefresh, showNotify }:any) {
   // Offer Sent is intentionally excluded — once an offer goes out there's no more negotiation.
-  // A revised offer moves the candidate back to 'MD Final', so they reappear here with the calculator.
-  const finalCands = candidates.filter((c:Candidate)=>['MD Final'].includes(c.stage))
+  // A revised offer moves the candidate back to 'Shortlisted', so they reappear here with the calculator.
+  const finalCands = candidates.filter((c:Candidate)=>['Shortlisted'].includes(c.stage))
+  const [subTab, setSubTab] = useState<'checks'|'ctc'>('checks')
+  const [negQ, setNegQ] = useState('')
+  const checksCands = finalCands.filter((c:Candidate)=>!c.pre_negotiation_done)
+  const ctcCands = finalCands.filter((c:Candidate)=>c.pre_negotiation_done)
+  const activeList = subTab==='checks' ? checksCands : ctcCands
+  const shownCands = activeList.filter((c:Candidate)=>!negQ || c.full_name.toLowerCase().includes(negQ.toLowerCase()))
   const [sel, setSel] = useState<Candidate|null>(null)
   const selMrf = mrfs.find((m:MRF)=>m.id===sel?.mrf_id)
   // Interns / contract / consultants etc. use the simple stipend calculator, not the full CTC one.
@@ -1164,6 +1342,26 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
   const [calc, setCalc] = useState<any>(null)
   const [saving, setSaving] = useState(false)
   const [savedLink, setSavedLink] = useState<string|null>(null)
+  const [loadedNeg, setLoadedNeg] = useState<any>(null)
+  const [respMap, setRespMap] = useState<Record<string,string>>({})
+  useEffect(()=>{
+    supabase.from('ctc_negotiations').select('candidate_id, candidate_response, created_at').order('created_at',{ascending:false})
+      .then(({data}:any)=>{
+        const m:Record<string,string> = {}
+        for (const r of data||[]) { if(!(r.candidate_id in m) && r.candidate_response) m[r.candidate_id]=r.candidate_response }
+        setRespMap(m)
+      })
+  },[candidates])
+  async function rejectCand(c:Candidate, e:React.MouseEvent) {
+    e.stopPropagation()
+    if (!window.confirm(`Move ${c.full_name} to Rejected? They'll leave the negotiation list.`)) return
+    const { error } = await supabase.from('candidates').update({ stage:'Rejected' }).eq('id', c.id)
+    if (error) { showNotify('Error: '+error.message,'error'); return }
+    showNotify(`${c.full_name} moved to Rejected.`); if (sel?.id===c.id) setSel(null); onRefresh()
+  }
+  const [companyOverride, setCompanyOverride] = useState('')
+  const autoCompany = sel?.company_id || selMrf?.company_id || (companies?.length===1 ? companies[0].id : '')
+  const effCompany = autoCompany || companyOverride
   const F = (k:string,v:any) => setForm(f=>({...f,[k]:v}))
 
   const PT_RATES:Record<string,number> = { 'KA':200,'MH':200,'TN':0,'TS':200,'AP':200,'WB':200,'GJ':200,'MP':208,'OD':250,'AS':208,'KL':0,'HR':0,'DL':0,'UP':0 }
@@ -1194,14 +1392,40 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
     const hike = sel?.current_ctc ? ((ctcAnnual-sel.current_ctc)/sel.current_ctc*100).toFixed(1) : null
 
     setCalc({ ctcAnnual, variable, varMonthly:variable/12, fixedMonthly, basic, hra, statBonus, otherAllow, gross, epfEmployee, esicEmployee, ptMonthly, lwfMonthly, totalDed, inHand, epfEmployer, esicEmployer, totalCTCMonthly:ctcMonthly, totalCTCAnnual:ctcAnnual, hike,
-      joining_bonus:Number(form.joining_bonus)||0, retention_bonus:Number(form.retention_bonus)||0, esop:Number(form.esop)||0 })
+      joining_bonus:Number(form.joining_bonus)||0, retention_bonus:Number(form.retention_bonus)||0, esop:Number(form.esop)||0, state:form.state })
+  }
+
+  // Load this candidate into the CTC calculator, pre-filling any saved negotiation.
+  async function selectCtcCandidate(c:Candidate) {
+    setSel(c); setCalc(null); setSavedLink(null); setLoadedNeg(null); F('ctc','')
+    const { data } = await supabase.from('ctc_negotiations').select('*')
+      .eq('candidate_id', c.id).order('created_at',{ascending:false}).limit(1).maybeSingle()
+    // First time (no saved negotiation): seed Annual CTC from the candidate's expected CTC.
+    if (!data) { F('ctc', c.expected_ctc ? String(c.expected_ctc) : ''); return }
+    setLoadedNeg(data)
+    setForm(f=>({ ...f,
+      ctc:            data.offered_ctc!=null ? String(data.offered_ctc) : '',
+      varPct:         data.variable_pct!=null ? String(data.variable_pct) : '10',
+      joining_bonus:  data.joining_bonus ? String(data.joining_bonus) : '',
+      joining_freq:   data.joining_bonus_freq || 'With Salary',
+      retention_bonus:data.retention_bonus ? String(data.retention_bonus) : '',
+      retention_freq: data.retention_bonus_freq || 'After 3 Months',
+      esop:           data.esop_value ? String(data.esop_value) : '',
+      esop_plan:      data.esop_remark || '',
+      state:          data.calculation_data?.state || f.state || 'HR',
+    }))
+    if (data.calculation_data) setCalc(data.calculation_data)
+    if (data.link_token) setSavedLink(`${window.location.origin}/salary-view/${data.link_token}`)
   }
 
   async function saveNegotiation() {
     if (!sel||!calc) return
+    const companyId = effCompany || null
+    if (!companyId) { showNotify('Select the company for this candidate first (dropdown in the calculator).','error'); return }
+    if (!sel.company_id) await supabase.from('candidates').update({ company_id:companyId }).eq('id', sel.id)
     setSaving(true); setSavedLink(null)
     const { data, error } = await supabase.from('ctc_negotiations').upsert({
-      candidate_id:sel.id, company_id:sel.company_id||null,
+      candidate_id:sel.id, company_id:companyId,
       offered_ctc:calc.ctcAnnual, variable_pct:Number(form.varPct)||null,
       basic_monthly:Math.round(calc.basic), hra_monthly:Math.round(calc.hra),
       epf_monthly:Math.round(calc.epfEmployee), net_monthly:Math.round(calc.inHand),
@@ -1255,24 +1479,63 @@ function NegotiationTab({ supabase, mrfs, candidates, onRefresh, showNotify }:an
   return (
     <div style={T.g2}>
       <div>
-        <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B', marginBottom:10 }}>MD Final / Negotiation Stage ({finalCands.length})</div>
-        {finalCands.map((c:Candidate)=>(
-          <div key={c.id} onClick={()=>{ setSel(c); setCalc(null); F('ctc','') }}
+        <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' as const }}>
+          <button onClick={()=>{ setSubTab('checks'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='checks'?{ background:'#7C3AED', color:'#fff', borderColor:'#7C3AED' }:{}) }}>📋 Pre-negotiation Checks ({checksCands.length})</button>
+          <button onClick={()=>{ setSubTab('ctc'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='ctc'?{ background:'#7C3AED', color:'#fff', borderColor:'#7C3AED' }:{}) }}>💰 CTC Negotiations ({ctcCands.length})</button>
+        </div>
+        <SearchBar placeholder="Search candidate…" onApply={setNegQ} width={240} />
+        {shownCands.map((c:Candidate)=>(
+          <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
             style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?'#F3F0FF':'#fff' }}>
-            <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B' }}>{c.full_name}</div>
-            <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L exp':'—'}</div>
-            <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B' }}>{c.full_name}</div>
+                <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L exp':'—'}</div>
+              </div>
+              {subTab==='ctc' && (
+                <button onClick={(e)=>rejectCand(c,e)} style={{ padding:'4px 10px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit', background:'#FEF2F2', color:'#DC2626', flexShrink:0 }}>Reject</button>
+              )}
+            </div>
+            <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}>
+              <Badge text={c.stage} />
+              {subTab==='ctc' && respMap[c.id]==='ACCEPTED' && <Badge text="✅ Offer Accepted" />}
+              {subTab==='ctc' && respMap[c.id]==='REJECTED' && <Badge text="❌ Offer Rejected" />}
+              {c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}
+            </div>
           </div>
         ))}
-        {finalCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', fontSize:13, textAlign:'center' as const, padding:24 }}>No candidate is at the MD Final stage</div>}
+        {shownCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', fontSize:13, textAlign:'center' as const, padding:24 }}>{negQ?'No matching candidate':(subTab==='checks'?'No candidates awaiting pre-negotiation checks':'No candidates ready for CTC negotiation')}</div>}
       </div>
 
-      {sel&&isStipend&&<StipendCalc sel={sel} mrf={selMrf} supabase={supabase} showNotify={showNotify} onRefresh={onRefresh} />}
+      {subTab==='checks'&&sel&&(
+        <PreNegoChecks candidate={sel} supabase={supabase} showNotify={showNotify}
+          onDone={()=>{ setSel(null); setSubTab('ctc'); onRefresh() }} />
+      )}
 
-      {sel&&!isStipend&&(
+      {subTab==='ctc'&&sel&&isStipend&&<StipendCalc sel={sel} mrf={selMrf} companies={companies} supabase={supabase} showNotify={showNotify} onRefresh={onRefresh} />}
+
+      {subTab==='ctc'&&sel&&!isStipend&&(
         <div>
           <div style={T.cardPurple}>
             <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', marginBottom:14 }}>💰 CTC Calculator — {sel.full_name}</div>
+            {loadedNeg?.candidate_response && (
+              <div style={{ marginBottom:12, padding:'8px 12px', borderRadius:8, fontSize:12, fontWeight:600,
+                background: loadedNeg.candidate_response==='ACCEPTED'?'#ECFDF5':'#FEF2F2',
+                color: loadedNeg.candidate_response==='ACCEPTED'?'#059669':'#DC2626',
+                border:`1px solid ${loadedNeg.candidate_response==='ACCEPTED'?'#A7F3D0':'#FCA5A5'}` }}>
+                {loadedNeg.candidate_response==='ACCEPTED'?'✅ Candidate ACCEPTED this offer':'❌ Candidate REJECTED this offer'}
+                {loadedNeg.response_note?` — “${loadedNeg.response_note}”`:''}
+              </div>
+            )}
+            {!autoCompany && (
+              <div style={{ marginBottom:12, padding:'8px 12px', background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8 }}>
+                <label style={T.label}>Company * <span style={{ color:'#92400E', fontWeight:400 }}>— not set on this candidate, please choose</span></label>
+                <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
+                  <option value="">Select company…</option>
+                  {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+                </select>
+              </div>
+            )}
             <SectionLine title="Input" />
             <div style={{ ...T.g3, marginBottom:10 }}>
               <div><label style={T.label}>Annual CTC (₹) *</label><input style={T.input} type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder="2400000" /></div>
@@ -1453,7 +1716,20 @@ function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
   const [neg, setNeg] = useState<any>(null)
   const [loading, setLoading] = useState(false)
-  const eligible = candidates.filter((c:Candidate)=>['Negotiation','MD Final','Optional Round','L2','Offer Sent'].includes(c.stage))
+  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set())
+  useEffect(()=>{
+    supabase.from('ctc_negotiations').select('candidate_id, candidate_response, created_at').order('created_at',{ascending:false})
+      .then(({data}:any)=>{
+        const latest = new Map<string,string>()
+        for (const r of data||[]) { if(!latest.has(r.candidate_id)) latest.set(r.candidate_id, r.candidate_response) }
+        const acc = new Set<string>(); latest.forEach((resp,cid)=>{ if(resp==='ACCEPTED') acc.add(cid) })
+        setAcceptedIds(acc)
+      })
+  },[candidates])
+  // Only candidates who ACCEPTED their CTC offer (and aren't already sent/closed) need HR-Head approval.
+  const eligible = candidates.filter((c:Candidate)=>acceptedIds.has(c.id) && !['Offer Sent','Joined','Rejected'].includes(c.stage))
+  const [oaQ, setOaQ] = useState('')
+  const shownEligible = eligible.filter((c:Candidate)=>!oaQ || c.full_name.toLowerCase().includes(oaQ.toLowerCase()))
 
   async function pick(c:Candidate) {
     setSel(c); setNeg(null); setLoading(true)
@@ -1484,9 +1760,10 @@ function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
   return (
     <div>
       <div style={{ fontSize:13, color:'#6B7280', marginBottom:12 }}>Select a candidate to create an offer approval request for HR Head review.</div>
-      {eligible.length===0 ? (
-        <div style={{ ...T.card, textAlign:'center' as const, color:'#9CA3AF' }}>No candidates in offer stages yet. Move candidates through Pipeline + Negotiation first.</div>
-      ) : eligible.map((c:Candidate)=>(
+      <SearchBar placeholder="Search candidate…" onApply={setOaQ} width={240} />
+      {shownEligible.length===0 ? (
+        <div style={{ ...T.card, textAlign:'center' as const, color:'#9CA3AF' }}>{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</div>
+      ) : shownEligible.map((c:Candidate)=>(
         <div key={c.id} style={{ ...T.card, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
             <div style={{ fontSize:14, fontWeight:600, display:'flex', gap:6, alignItems:'center' }}>{c.full_name}{c.offer_revised&&<Badge text="Revised Offer" />}</div>
@@ -1505,7 +1782,9 @@ function OffersTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
   const [toEmail, setToEmail] = useState('')
   const [cc, setCc] = useState('')
   const [doj, setDoj] = useState('')
-  const offeredCands = candidates.filter((c:Candidate)=>['MD Final','Offer Sent'].includes(c.stage))
+  const offeredCands = candidates.filter((c:Candidate)=>['Shortlisted','Offer Sent'].includes(c.stage))
+  const [offQ, setOffQ] = useState('')
+  const shownOffered = offeredCands.filter((c:Candidate)=>!offQ || c.full_name.toLowerCase().includes(offQ.toLowerCase()))
 
   async function generateLetter(c:Candidate) {
     const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
@@ -1549,6 +1828,7 @@ HR Team`
     })
     if (error) { showNotify('Save failed: '+error.message,'error'); return }
     await supabase.from('candidates').update({ stage:'Offer Sent', doj:doj||null, offer_accepted:false, offer_sent_at:new Date().toISOString(), offer_reminder_sent:false }).eq('id',sel.id)
+    await closeMrfIfFilled(supabase, sel.mrf_id)
     showNotify('Offer saved! Email ready.'); onRefresh()
   }
 
@@ -1562,8 +1842,9 @@ HR Team`
   return (
     <div style={T.g2}>
       <div>
-        <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B', marginBottom:10 }}>MD Final / Offer Stage ({offeredCands.length})</div>
-        {offeredCands.map((c:Candidate)=>(
+        <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B', marginBottom:10 }}>Shortlisted / Offer Stage ({shownOffered.length})</div>
+        <SearchBar placeholder="Search candidate…" onApply={setOffQ} width={240} />
+        {shownOffered.map((c:Candidate)=>(
           <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?'#F3F0FF':'#fff' }}
             onClick={()=>generateLetter(c)}>
             <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B' }}>{c.full_name}</div>
@@ -1602,6 +1883,7 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
   const [choose, setChoose] = useState('')    // candidate_id showing Experienced/Fresher choice
   const [obDates, setObDates] = useState<Record<string,string>>({})
   const [hrEmails, setHrEmails] = useState<Record<string,string>>({})
+  const [poQ, setPoQ] = useState('')
 
   const obVal = (c:Candidate) => obDates[c.id] ?? (c.onboarding_date || '')
   const hrVal = (c:Candidate) => hrEmails[c.id] ?? (c.hr_email || '')
@@ -1621,14 +1903,30 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
   const linkByCand = new Map(links.map((l:any)=>[l.candidate_id,l]))
   // Only candidates who have ACCEPTED their offer (or already joined) flow into pre-onboarding.
   const onboardingCands = candidates.filter((c:Candidate)=>(c.stage==='Offer Sent'&&c.offer_accepted)||c.stage==='Joined')
+  const shownOnboarding = onboardingCands.filter((c:Candidate)=>!poQ || c.full_name.toLowerCase().includes(poQ.toLowerCase()))
   const companyName = (c:Candidate)=> companies?.find((co:any)=>co.id===c.company_id)?.company_name || 'our organization'
 
   // Find the candidate's onboarding row, creating one if it doesn't exist yet.
+  // Resolve a company for a candidate that may not have one set directly:
+  // candidate → its MRF → the company chosen during negotiation → single company.
+  async function resolveCompanyId(c:Candidate): Promise<string|null> {
+    if (c.company_id) return c.company_id
+    const mrfC = mrfs?.find((m:any)=>m.id===c.mrf_id)?.company_id
+    if (mrfC) return mrfC
+    const { data: neg } = await supabase.from('ctc_negotiations').select('company_id')
+      .eq('candidate_id', c.id).not('company_id','is',null).order('created_at',{ ascending:false }).limit(1).maybeSingle()
+    if (neg?.company_id) return neg.company_id
+    if (companies?.length===1) return companies[0].id
+    return null
+  }
+
   async function ensureRow(c:Candidate) {
     const existing = linkByCand.get(c.id)
     if (existing) return existing
+    const companyId = await resolveCompanyId(c)
+    if (!companyId) { showNotify('This candidate has no company set. Set it on the candidate (or its MRF) first.','error'); return null }
     const { data, error } = await supabase.from('preonboarding_links').insert({
-      candidate_id:c.id, company_id:c.company_id||null, doj:c.doj||null, status:'CREATED', sent_at:new Date().toISOString()
+      candidate_id:c.id, company_id:companyId, doj:c.doj||null, status:'CREATED', sent_at:new Date().toISOString()
     }).select('*').single()
     if (error) { showNotify('Error: '+error.message,'error'); return null }
     return data
@@ -1674,14 +1972,14 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
     const note = window.prompt('What needs to be revised? This sends the candidate back to the Negotiation tab to restart the offer flow.'); if (note===null) return
     setBusy(c.id)
     // Clear the pre-onboarding record so the next offer cycle starts fresh,
-    // log the revision, then send the candidate back to Negotiation (MD Final).
+    // log the revision, then send the candidate back to Negotiation (Shortlisted).
     const existing = linkByCand.get(c.id)
     if (existing) await supabase.from('preonboarding_links').delete().eq('id', existing.id)
     await supabase.from('recruitment_audit_logs').insert({
-      candidate_id:c.id, company_id:c.company_id||null, action_type:'OFFER_REVISE_REQUESTED',
+      candidate_id:c.id, company_id:(await resolveCompanyId(c))||null, action_type:'OFFER_REVISE_REQUESTED',
       details:{ note }, created_at:new Date().toISOString()
     })
-    await supabase.from('candidates').update({ stage:'MD Final', offer_revised:true, offer_revision_note:note }).eq('id', c.id)
+    await supabase.from('candidates').update({ stage:'Shortlisted', offer_revised:true, offer_revision_note:note }).eq('id', c.id)
     showNotify(`${c.full_name} sent back to Negotiation — marked Revised Offer.`)
     setBusy(''); load(); onRefresh()
   }
@@ -1701,8 +1999,9 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
   return (
     <div>
       <div style={T.section}>🎉 Pre-onboarding & Offer Response</div>
-      {onboardingCands.length===0&&<div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' as const, padding:24 }}>No offer-sent candidates yet.</div>}
-      {onboardingCands.map((c:Candidate)=>{
+      <SearchBar placeholder="Search candidate…" onApply={setPoQ} width={260} />
+      {shownOnboarding.length===0&&<div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' as const, padding:24 }}>{poQ?'No matching candidate':'No offer-sent candidates yet.'}</div>}
+      {shownOnboarding.map((c:Candidate)=>{
         const row:any = linkByCand.get(c.id)
         const resp = row?.offer_response
         const [bg,fg] = resp ? respStyle[resp] : ['#fff','#6B7280']

@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
+import HRActionPanel from '@/components/employees/HRActionPanel'
 
 interface Employee {
   id: string
@@ -100,6 +101,9 @@ export default function EmployeeMaster() {
   const [selected, setSelected]   = useState<Employee|null>(null)
   const [profileTab, setProfileTab] = useState('personal')
   const [showDrawer, setShowDrawer] = useState(false)
+  const [editing, setEditing] = useState(false)
+  const [editForm, setEditForm] = useState<any>({})
+  const [savingEdit, setSavingEdit] = useState(false)
   const [stats, setStats] = useState({
     total:0, active:0, resigned:0,
     employee:0, intern:0, naps:0, nats:0, consultant:0, contract:0
@@ -184,7 +188,23 @@ export default function EmployeeMaster() {
   const filteredDepts = filterCompany ? departments.filter(d => d.company_id === filterCompany) : departments
   const totalPages    = Math.ceil(total / PER_PAGE)
   const initials      = (name: string) => name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'NA'
-  const openProfile   = (emp: Employee) => { setSelected(emp); setProfileTab('personal'); setShowDrawer(true) }
+  const openProfile   = (emp: Employee) => { setSelected(emp); setProfileTab('personal'); setEditing(false); setShowDrawer(true) }
+
+  const EDIT_FIELDS = ['full_name','first_name','last_name','gender','date_of_birth','blood_group','marital_status','designation','grade','employment_type','employment_status','mobile','personal_email','office_email','notice_period_days']
+  const openEdit = () => { if (!selected) return; const f: any = {}; for (const k of EDIT_FIELDS) f[k] = (selected as any)[k] ?? ''; setEditForm(f); setEditing(true) }
+  const editDirty = () => selected ? EDIT_FIELDS.some(k => String(editForm[k] ?? '') !== String((selected as any)[k] ?? '')) : false
+  const cancelEdit = () => { if (editDirty() && !window.confirm('You are exiting without saving. Discard changes?')) return; setEditing(false) }
+  const saveEdit = async () => {
+    if (!selected) return
+    setSavingEdit(true)
+    const patch: any = { ...editForm }
+    if (patch.notice_period_days !== '' && patch.notice_period_days != null) patch.notice_period_days = Number(patch.notice_period_days) || 0
+    const { error } = await supabase.from('employees').update(patch).eq('id', selected.id)
+    setSavingEdit(false)
+    if (error) { alert('Save failed: ' + error.message); return }
+    setSelected({ ...(selected as any), ...patch }); setEditing(false); fetchEmployees()
+  }
+  const handleBack = () => { if (editing) { cancelEdit(); return } setShowDrawer(false) }
 
   return (
     <div style={C.page}>
@@ -377,11 +397,12 @@ export default function EmployeeMaster() {
 
       {/* Profile Drawer */}
       {showDrawer && selected && (
-        <div style={{ position:'fixed' as const, inset:0, background:'rgba(0,0,0,0.35)', zIndex:200 }} onClick={() => setShowDrawer(false)}>
-          <div style={{ position:'absolute' as const, right:0, top:0, bottom:0, width:'480px', background:'#fff', display:'flex', flexDirection:'column' as const, boxShadow:'-4px 0 24px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
+        <div style={{ position:'fixed' as const, inset:0, background:'#F0F4F8', zIndex:200, display:'flex', flexDirection:'column' as const, overflowY:'auto' as const, fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
+          <div style={{ flex:1, display:'flex', flexDirection:'column' as const, width:'100%', maxWidth:'1000px', margin:'0 auto' }}>
 
             {/* Header */}
-            <div style={{ background:'#1E1B4B', padding:'16px 20px', display:'flex', gap:'12px', alignItems:'center' }}>
+            <div style={{ background:'#1E1B4B', padding:'16px 20px', display:'flex', gap:'12px', alignItems:'center', position:'sticky' as const, top:0, zIndex:10 }}>
+              <button onClick={handleBack} style={{ background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.25)', color:'#fff', borderRadius:'7px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit', flexShrink:0 }}>← Back to list</button>
               <div style={{ width:'48px', height:'48px', borderRadius:'50%', background:selected.gender==='Female'?'#FCE7F3':'#EDE9FE', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', fontWeight:700, color:selected.gender==='Female'?'#BE185D':'#7C3AED', flexShrink:0 }}>
                 {initials(selected.full_name)}
               </div>
@@ -394,7 +415,7 @@ export default function EmployeeMaster() {
                   <span style={{ padding:'1px 7px', borderRadius:'5px', fontSize:'10px', ...(GRADE_COLORS[selected.grade]||{bg:'#F1F5F9',color:'#374151'}) }}>{selected.grade}</span>
                 </div>
               </div>
-              <button onClick={() => setShowDrawer(false)} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:'20px', cursor:'pointer', lineHeight:1 }}>✕</button>
+              <button onClick={handleBack} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:'20px', cursor:'pointer', lineHeight:1 }}>✕</button>
             </div>
 
             {/* Tabs */}
@@ -404,6 +425,11 @@ export default function EmployeeMaster() {
                 { id:'employment', label:'💼 Employment' },
                 { id:'statutory',  label:'🏛️ Statutory' },
                 { id:'bank',       label:'🏦 Bank' },
+                { id:'documents',  label:'📄 Documents' },
+                { id:'salary',     label:'💰 Salary' },
+                { id:'onboarding', label:'📋 Onboarding' },
+                { id:'actions',    label:'⚡ HR Actions' },
+                { id:'history',    label:'📜 History' },
               ].map(t => (
                 <button key={t.id} onClick={() => setProfileTab(t.id)} style={{ flex:1, padding:'10px 4px', border:'none', background:'transparent', cursor:'pointer', fontSize:'11px', fontWeight:profileTab===t.id?600:400, color:profileTab===t.id?'#7C3AED':'#64748B', borderBottom:profileTab===t.id?'2.5px solid #7C3AED':'2.5px solid transparent' }}>
                   {t.label}
@@ -512,12 +538,63 @@ export default function EmployeeMaster() {
                   </div>
                 </div>
               )}
+
+              {(profileTab === 'documents' || profileTab === 'salary' || profileTab === 'onboarding' || profileTab === 'actions' || profileTab === 'history') && (
+                <HRActionPanel employee={selected} activeTab={profileTab} onRefresh={fetchEmployees} />
+              )}
             </div>
 
             <div style={{ padding:'12px 20px', borderTop:'1px solid #E2E8F0', display:'flex', gap:'8px' }}>
-              <button style={{ ...C.priBtn, flex:1 }}>✏️ Edit Profile</button>
-              <button style={C.secBtn}>📄 Documents</button>
-              <button style={C.secBtn}>💰 Salary</button>
+              <button onClick={openEdit} style={{ ...C.priBtn, flex:1 }}>✏️ Edit Profile</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full-screen Edit Profile */}
+      {editing && selected && (
+        <div style={{ position:'fixed' as const, inset:0, background:'#F0F4F8', zIndex:210, display:'flex', flexDirection:'column' as const, overflowY:'auto' as const, fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
+          <div style={{ flex:1, width:'100%', maxWidth:'1000px', margin:'0 auto', display:'flex', flexDirection:'column' as const }}>
+            <div style={{ background:'#1E1B4B', padding:'14px 20px', display:'flex', alignItems:'center', gap:'12px', position:'sticky' as const, top:0, zIndex:10 }}>
+              <button onClick={cancelEdit} style={{ background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.25)', color:'#fff', borderRadius:'7px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>← Cancel</button>
+              <div style={{ fontSize:'15px', fontWeight:600, color:'#fff' }}>Edit Profile — {selected.full_name}</div>
+              <button onClick={saveEdit} disabled={savingEdit} style={{ marginLeft:'auto', ...C.priBtn, opacity: savingEdit ? .6 : 1 }}>{savingEdit ? 'Saving…' : '💾 Save'}</button>
+            </div>
+            <div style={{ padding:'16px 20px' }}>
+              <div style={C.card}>
+                <div style={{ fontSize:'13px', fontWeight:600, color:'#374151', marginBottom:'12px' }}>✏️ Editable Fields</div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
+                  {([
+                    { k:'full_name',         label:'Full Name' },
+                    { k:'first_name',        label:'First Name' },
+                    { k:'last_name',         label:'Last Name' },
+                    { k:'gender',            label:'Gender', opts:['Male','Female','Other'] },
+                    { k:'date_of_birth',     label:'Date of Birth', type:'date' },
+                    { k:'blood_group',       label:'Blood Group', opts:['A+','A-','B+','B-','O+','O-','AB+','AB-'] },
+                    { k:'marital_status',    label:'Marital Status', opts:['Single','Married','Divorced','Widowed'] },
+                    { k:'designation',       label:'Designation' },
+                    { k:'grade',             label:'Grade' },
+                    { k:'employment_type',   label:'Employment Type', opts:['Employee','Intern','NAPS','NATS','Consultant','Contract'] },
+                    { k:'employment_status', label:'Employment Status', opts:['Active','Resigned','Sabbatical','Abscond','Inactive'] },
+                    { k:'mobile',            label:'Mobile' },
+                    { k:'personal_email',    label:'Personal Email' },
+                    { k:'office_email',      label:'Office Email' },
+                    { k:'notice_period_days',label:'Notice Period (days)', type:'number' },
+                  ] as { k:string; label:string; type?:string; opts?:string[] }[]).map(f => (
+                    <div key={f.k}>
+                      <label style={{ fontSize:'10px', fontWeight:600, color:'#64748B', textTransform:'uppercase', letterSpacing:'.04em', display:'block', marginBottom:'4px' }}>{f.label}</label>
+                      {f.opts ? (
+                        <select style={{ ...C.sel, width:'100%' }} value={editForm[f.k] ?? ''} onChange={e => setEditForm((p:any) => ({ ...p, [f.k]: e.target.value }))}>
+                          <option value="">—</option>
+                          {f.opts.map(o => <option key={o}>{o}</option>)}
+                        </select>
+                      ) : (
+                        <input type={f.type || 'text'} style={{ ...C.inp, width:'100%' }} value={editForm[f.k] ?? ''} onChange={e => setEditForm((p:any) => ({ ...p, [f.k]: e.target.value }))} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@
 // HR approves form + generates employee code → ESS access unlocked
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { onboardingToEmployee } from '@/lib/onboarding/to-employee'
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,6 +52,13 @@ export async function POST(req: NextRequest) {
 
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
 
+    // ── Bridge: create the master `employees` row from onboarding data ──
+    // Non-fatal: code generation succeeds even if master sync hits an issue;
+    // the result (and any error) is returned so HR knows the sync status.
+    let employeeSync: any = { ok: false }
+    try { employeeSync = await onboardingToEmployee(supa, onboarding_id, employee_code) }
+    catch (e: any) { employeeSync = { error: e?.message || 'sync failed' } }
+
     // Mark statutory enrollment as done
     await supa.from('onboarding_statutory_enrollment').update({
       enrolled_at:  new Date().toISOString(),
@@ -74,13 +82,19 @@ export async function POST(req: NextRequest) {
       action:     'EMPLOYEE_CODE_GENERATED',
       actor_type: 'HR',
       actor_id:   approved_by || null,
-      details:    { employee_code, company_id: cand.company_id },
+      details:    { employee_code, company_id: cand.company_id, employee_synced: !!employeeSync.ok, sync_error: employeeSync.error || null },
     })
 
     return NextResponse.json({
-      success:       true,
+      success:        true,
       employee_code,
-      message:       `Employee ID ${employee_code} generated for ${cand.full_name}. ESS access unlocked.`,
+      employee_synced: !!employeeSync.ok,
+      employee_id:    employeeSync.employee_id || null,
+      sync_error:     employeeSync.error || null,
+      dept_matched:   employeeSync.dept_matched ?? null,
+      message:        employeeSync.ok
+        ? `Employee ID ${employee_code} generated for ${cand.full_name}. Master record created.`
+        : `Employee ID ${employee_code} generated for ${cand.full_name}. (Master sync issue: ${employeeSync.error || 'see logs'})`,
     })
 
   } catch (err: any) {

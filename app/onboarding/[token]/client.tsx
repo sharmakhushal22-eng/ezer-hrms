@@ -24,6 +24,9 @@ const S = {
 const STEPS = ['Welcome', 'OTP Verify', 'Personal', 'Contact & Address', 'Emergency & Employment', 'Documents', 'Statutory & Bank', 'Declaration']
 const STATES = ['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal']
 
+// ── Misc helpers ──────────────────────────────────────────────────
+const ageFromDob = (dob: string) => dob ? Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000)) : 0
+
 // ── Field helpers ─────────────────────────────────────────────────
 const Fld = ({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) => (
   <div style={{ marginBottom: 12 }}>
@@ -121,13 +124,15 @@ function DocUpload({
   }
 
   const aiStatus = status?.ai_status
-  const isOk = aiStatus === 'VERIFIED'
-  const isFailed = aiStatus === 'FAILED' || aiStatus === 'MISMATCH'
+  // The file is saved whenever a record exists. MISMATCH is the only real warning;
+  // FAILED just means AI auto-check was skipped (no AI key) — the upload still succeeded.
+  const isMismatch = aiStatus === 'MISMATCH'
+  const isOk = !!status && !isMismatch
   const isPending = !status
 
-  const borderColor = isOk ? '#A7F3D0' : isFailed ? '#FCA5A5' : '#DDD6FE'
-  const bgColor = isOk ? '#F0FDF4' : isFailed ? '#FEF2F2' : '#FAFAF8'
-  const icon = isOk ? '✅' : isFailed ? '⚠️' : isPending ? '📤' : '⏳'
+  const borderColor = isMismatch ? '#FCD34D' : isOk ? '#A7F3D0' : '#DDD6FE'
+  const bgColor = isMismatch ? '#FFFBEB' : isOk ? '#F0FDF4' : '#FAFAF8'
+  const icon = isMismatch ? '⚠️' : isOk ? '✅' : isPending ? '📤' : '⏳'
 
   return (
     <div style={{ border: `2px dashed ${borderColor}`, borderRadius: 10, padding: '14px 16px', background: bgColor, marginBottom: 10 }}>
@@ -148,7 +153,7 @@ function DocUpload({
                 <span style={{ color: '#D97706', marginLeft: 8 }}>⚠ AI flagged — HR will review</span>
               )}
               {aiStatus === 'FAILED' && (
-                <span style={{ color: '#DC2626', marginLeft: 8 }}>AI unavailable — HR will verify manually</span>
+                <span style={{ color: '#059669', marginLeft: 8 }}>Uploaded ✓ — HR will verify</span>
               )}
             </div>
           )}
@@ -269,6 +274,47 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     acc_holder: (saved.step_7?.acc_holder) || c.full_name || '',
   })
 
+  // ── ESIC applicability — from offered CTC (gross ≈ CTC/12), HR can override ──
+  const grossMonthly = c.offered_ctc ? Number(c.offered_ctc) / 12 : 0
+  const esicApplicable = c.esic_applicable === true || (grossMonthly > 0 && grossMonthly <= 21000)
+
+  // Previous employers (multiple) — seeded from legacy single fields if present
+  const [prevEmployers, setPrevEmployers] = useState<any[]>(
+    (saved.step_5?.prev_employers?.length) ? saved.step_5.prev_employers : [{
+      company: (saved.step_5?.prev_company) || c.current_company || '',
+      designation: (saved.step_5?.prev_designation) || '',
+      from: (saved.step_5?.prev_from) || '', to: (saved.step_5?.prev_to) || '',
+      ctc: (saved.step_5?.prev_ctc) || '', reason: (saved.step_5?.reason_leaving) || '',
+    }]
+  )
+
+  // Education ladder (10th → 12th → Graduation/Diploma → MBA/PG, + more)
+  const [education, setEducation] = useState<any[]>(
+    (saved.step_5?.education?.length) ? saved.step_5.education : [
+      { qualification: '10th', institute: '', year: '' },
+      { qualification: '12th', institute: '', year: '' },
+      { qualification: 'Graduation / Diploma', institute: '', year: '' },
+      { qualification: 'MBA / PG', institute: '', year: '' },
+    ]
+  )
+
+  // Insurance family (Group Mediclaim + ESIC Form 1 family particulars)
+  const ins0 = saved.step_7?.insurance || {}
+  const [insurance, setInsurance] = useState({
+    spouse_name: ins0.spouse_name || '', spouse_dob: ins0.spouse_dob || '', spouse_residing: ins0.spouse_residing || 'Yes',
+    father_name: ins0.father_name || '', father_dob: ins0.father_dob || '', father_residing: ins0.father_residing || 'Yes',
+    mother_name: ins0.mother_name || '', mother_dob: ins0.mother_dob || '', mother_residing: ins0.mother_residing || 'Yes',
+    kid1_name: ins0.kid1_name || '', kid1_dob: ins0.kid1_dob || '',
+    kid2_name: ins0.kid2_name || '', kid2_dob: ins0.kid2_dob || '',
+  })
+
+  // ESIC-specific details (only collected when ESIC applies)
+  const esic0 = saved.step_7?.esic_details || {}
+  const [esic, setEsic] = useState({ prev_ip: esic0.prev_ip || '', dispensary: esic0.dispensary || '' })
+
+  const upEmp = (i: number, patch: any) => setPrevEmployers(arr => arr.map((e, idx) => idx === i ? { ...e, ...patch } : e))
+  const upEdu = (i: number, patch: any) => setEducation(arr => arr.map((e, idx) => idx === i ? { ...e, ...patch } : e))
+
   const [declaration, setDeclaration] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
@@ -290,7 +336,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     setOtpLoading(true)
     const res = await api('/api/onboarding/otp', { token })
     setOtpLoading(false)
-    if (res.success) { setOtpSent(true); showToast('OTP sent to your mobile number') }
+    if (res.success) { setOtpSent(true); showToast(res.dev_otp ? `DEV OTP: ${res.dev_otp}` : (res.message || 'OTP sent to your email')) }
     else showToast(res.error || 'Failed to send OTP', 'err')
   }
 
@@ -333,8 +379,14 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     const final = {
       step_3: personal,
       step_4: contact,
-      step_5: emergency,
-      step_7: statutory,
+      step_5: { ...emergency, prev_employers: prevEmployers, education },
+      step_7: {
+        ...statutory,
+        gross_monthly: grossMonthly,
+        esic_applicable: esicApplicable,
+        esic_details: esic,
+        insurance,
+      },
     }
 
     const res = await api('/api/onboarding/submit', { token, final_form_data: final })
@@ -374,9 +426,16 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   return (
     <div style={S.page}>
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, ${P}, #4F46E5)`, padding: '14px 20px', color: '#fff' }}>
-        <div style={{ fontSize: 16, fontWeight: 600 }}>{co?.company_name || 'EZER HRMS'} — Joining Formalities</div>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)', marginTop: 1 }}>{c.full_name} · {c.designation}</div>
+      <div style={{ background: `linear-gradient(135deg, ${P}, #4F46E5)`, padding: '14px 20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 600 }}>{co?.company_name || 'EZER HRMS'} — Joining Formalities</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)', marginTop: 1 }}>{c.full_name} · {c.designation}</div>
+        </div>
+        {esicApplicable && (
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 99, background: 'rgba(255,255,255,.18)', color: '#fff', border: '1px solid rgba(255,255,255,.35)' }}>
+            🏥 ESIC Applicable
+          </span>
+        )}
       </div>
 
       {/* Step progress */}
@@ -421,7 +480,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
           <div style={S.card}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Verify Your Mobile Number</div>
             <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 16, lineHeight: 1.7 }}>
-              We'll send a 6-digit OTP to your registered mobile: <strong>{c.mobile?.replace(/\d(?=\d{4})/g, '*')}</strong>
+              We'll email a 6-digit OTP to your registered email: <strong>{c.email?.replace(/^(.{2}).*(@.*)$/, '$1***$2') || 'your email'}</strong>
             </div>
             {c.otp_verified ? (
               <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: '#059669' }}>
@@ -603,23 +662,60 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             </label>
 
             {!emergency.is_fresher && (
-              <div style={S.g2}>
-                <Fld label="Previous Company"><input style={S.inp()} value={emergency.prev_company} onChange={e => setEmergency(p => ({ ...p, prev_company: e.target.value }))} /></Fld>
-                <Fld label="Designation"><input style={S.inp()} value={emergency.prev_designation} onChange={e => setEmergency(p => ({ ...p, prev_designation: e.target.value }))} /></Fld>
-                <Fld label="From"><input type="date" style={S.inp()} value={emergency.prev_from} onChange={e => setEmergency(p => ({ ...p, prev_from: e.target.value }))} /></Fld>
-                <Fld label="To"><input type="date" style={S.inp()} value={emergency.prev_to} onChange={e => setEmergency(p => ({ ...p, prev_to: e.target.value }))} /></Fld>
-                <Fld label="Last CTC (Annual ₹)"><input type="number" style={S.inp()} value={emergency.prev_ctc} onChange={e => setEmergency(p => ({ ...p, prev_ctc: e.target.value }))} /></Fld>
-                <Fld label="Reason for Leaving"><input style={S.inp()} value={emergency.reason_leaving} onChange={e => setEmergency(p => ({ ...p, reason_leaving: e.target.value }))} /></Fld>
-              </div>
+              <>
+                {prevEmployers.map((emp, i) => (
+                  <div key={i} style={{ border: '1px solid #EDE9FE', borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: '#FCFBFF' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: P }}>Employer {i + 1}{emp.company ? ` — ${emp.company}` : ''}</div>
+                      {prevEmployers.length > 1 && (
+                        <button onClick={() => setPrevEmployers(arr => arr.filter((_, idx) => idx !== i))} style={{ ...S.btnO, padding: '3px 10px', fontSize: 11, border: '1px solid #FCA5A5', color: '#DC2626' }}>Remove</button>
+                      )}
+                    </div>
+                    <div style={S.g2}>
+                      <Fld label="Company"><input style={S.inp()} value={emp.company} onChange={e => upEmp(i, { company: e.target.value })} /></Fld>
+                      <Fld label="Designation"><input style={S.inp()} value={emp.designation} onChange={e => upEmp(i, { designation: e.target.value })} /></Fld>
+                      <Fld label="From"><input type="date" style={S.inp()} value={emp.from} onChange={e => upEmp(i, { from: e.target.value })} /></Fld>
+                      <Fld label="To"><input type="date" style={S.inp()} value={emp.to} onChange={e => upEmp(i, { to: e.target.value })} /></Fld>
+                      <Fld label="Last CTC (Annual ₹)"><input type="number" style={S.inp()} value={emp.ctc} onChange={e => upEmp(i, { ctc: e.target.value })} /></Fld>
+                      <Fld label="Reason for Leaving"><input style={S.inp()} value={emp.reason} onChange={e => upEmp(i, { reason: e.target.value })} /></Fld>
+                    </div>
+                    <DocUpload docCode={`EXP_${i + 1}`} docName={`Experience / Relieving Letter — Employer ${i + 1}`} required={false} token={token} status={docs[`EXP_${i + 1}`] || null}
+                      onSuccess={(code, data) => { setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: 'uploaded' } })); showToast('Experience letter uploaded ✓') }} />
+                  </div>
+                ))}
+                <button onClick={() => setPrevEmployers(arr => [...arr, { company: '', designation: '', from: '', to: '', ctc: '', reason: '' }])} style={{ ...S.btnO, marginBottom: 4 }}>+ Add another employer</button>
+              </>
             )}
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            {/* Education ladder */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '16px 0 10px' }}>Educational Qualifications</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 10 }}>Standard ladder pre-added. Upload certificate/marksheet for each — used for background verification.</div>
+            {education.map((ed, i) => (
+              <div key={i} style={{ border: '1px solid #EDE9FE', borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: '#FCFBFF' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: P }}>{ed.qualification || `Qualification ${i + 1}`}</div>
+                  {education.length > 1 && (
+                    <button onClick={() => setEducation(arr => arr.filter((_, idx) => idx !== i))} style={{ ...S.btnO, padding: '3px 10px', fontSize: 11, border: '1px solid #FCA5A5', color: '#DC2626' }}>Remove</button>
+                  )}
+                </div>
+                <div style={S.g3}>
+                  <Fld label="Qualification"><input style={S.inp()} value={ed.qualification} onChange={e => upEdu(i, { qualification: e.target.value })} placeholder="10th / B.Tech / MBA…" /></Fld>
+                  <Fld label="School / University / Board"><input style={S.inp()} value={ed.institute} onChange={e => upEdu(i, { institute: e.target.value })} /></Fld>
+                  <Fld label="Year of Passing"><input style={S.inp()} value={ed.year} onChange={e => upEdu(i, { year: e.target.value })} maxLength={4} /></Fld>
+                </div>
+                <DocUpload docCode={`EDU_${i + 1}`} docName={`Certificate / Marksheet — ${ed.qualification || `Qualification ${i + 1}`}`} required={false} token={token} status={docs[`EDU_${i + 1}`] || null}
+                  onSuccess={(code, data) => { setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: 'uploaded' } })); showToast('Certificate uploaded ✓') }} />
+              </div>
+            ))}
+            <button onClick={() => setEducation(arr => [...arr, { qualification: '', institute: '', year: '' }])} style={{ ...S.btnO }}>+ Add qualification (Diploma / PhD / Certification)</button>
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
               <button onClick={prevStep} style={S.btnO}>← Back</button>
               <button onClick={async () => {
                 if (!emergency.emrg1_name || !emergency.emrg1_relation || !emergency.emrg1_mobile) {
                   showToast('Please fill Emergency Contact 1 details', 'err'); return
                 }
-                await saveStep(5, emergency); nextStep()
+                await saveStep(5, { ...emergency, prev_employers: prevEmployers, education }); nextStep()
               }} style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
             </div>
           </div>
@@ -638,6 +734,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               { code: 'AADHAAR_BACK', name: 'Aadhaar Card (Back)', required: true },
               { code: 'PAN', name: 'PAN Card', required: true },
               { code: 'PHOTO', name: 'Passport Size Photo', required: true },
+              { code: 'FAMILY_PHOTO', name: 'Family Photo (all members — for ESIC e-Pehchan card)', required: esicApplicable },
               { code: 'DEGREE', name: 'Highest Degree Certificate', required: true },
               { code: 'EXP_LETTER', name: 'Experience/Relieving Letter', required: !emergency.is_fresher },
               { code: 'BANK_PROOF', name: 'Cancelled Cheque / Bank Passbook', required: true },
@@ -674,7 +771,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
               <button onClick={prevStep} style={S.btnO}>← Back</button>
               <button onClick={async () => {
-                const requiredDocs = ['AADHAAR_FRONT', 'PAN', 'PHOTO', 'DEGREE', 'BANK_PROOF']
+                const requiredDocs = ['AADHAAR_FRONT', 'PAN', 'PHOTO', 'DEGREE', 'BANK_PROOF', ...(esicApplicable ? ['FAMILY_PHOTO'] : [])]
                 const notUploaded = requiredDocs.filter(d => !docs[d])
                 if (notUploaded.length > 0) {
                   showToast(`Please upload: ${notUploaded.join(', ')}`, 'err'); return
@@ -696,7 +793,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             </div>
             <div style={S.g2}>
               <Fld label="PAN Number *" hint="Auto-extracted from PAN card">
-                <input style={{ ...S.inp(!statutory.pan_number), background: '#F0FDF4', borderColor: '#A7F3D0' }} value={statutory.pan_number || aiPan} onChange={e => setStatutory(s => ({ ...s, pan_number: e.target.value.toUpperCase() }))} maxLength={10} />
+                <input style={{ ...S.inp(!statutory.pan_number), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.pan_number || aiPan} onChange={e => setStatutory(s => ({ ...s, pan_number: e.target.value.toUpperCase() }))} maxLength={10} />
               </Fld>
             </div>
 
@@ -754,9 +851,9 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                 <input style={S.inp(!statutory.bank_ifsc)} value={statutory.bank_ifsc} onChange={e => { const v = e.target.value.toUpperCase(); setStatutory(s => ({ ...s, bank_ifsc: v })); lookupIfsc(v) }} maxLength={11} />
               </Fld>
               <Fld label="Bank Name (auto-fill)">
-                <input style={{ ...S.inp(), background: '#F0FDF4', borderColor: '#A7F3D0' }} value={statutory.bank_name} readOnly placeholder="Auto-fills from IFSC" />
+                <input style={{ ...S.inp(), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.bank_name} readOnly placeholder="Auto-fills from IFSC" />
               </Fld>
-              <Fld label="Branch"><input style={{ ...S.inp(), background: '#F0FDF4', borderColor: '#A7F3D0' }} value={statutory.bank_branch} readOnly placeholder="Auto-fills from IFSC" /></Fld>
+              <Fld label="Branch"><input style={{ ...S.inp(), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.bank_branch} readOnly placeholder="Auto-fills from IFSC" /></Fld>
               <Fld label="Account Type">
                 <select style={S.sel} value={statutory.account_type} onChange={e => setStatutory(s => ({ ...s, account_type: e.target.value }))}>
                   <option>Savings</option><option>Current</option>
@@ -764,12 +861,71 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               </Fld>
               <div style={{ gridColumn: 'span 2' }}>
                 <Fld label="Account Holder Name (as per bank)">
-                  <input style={{ ...S.inp(), background: '#F0FDF4', borderColor: '#A7F3D0' }} value={statutory.acc_holder} onChange={e => setStatutory(s => ({ ...s, acc_holder: e.target.value }))} placeholder="In CAPITAL LETTERS" />
+                  <input style={{ ...S.inp(), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.acc_holder} onChange={e => setStatutory(s => ({ ...s, acc_holder: e.target.value }))} placeholder="In CAPITAL LETTERS" />
                 </Fld>
               </div>
             </div>
             {statutory.bank_confirm && statutory.bank_confirm !== statutory.bank_account && (
               <div style={{ color: '#DC2626', fontSize: 12, marginTop: -8, marginBottom: 8 }}>⚠️ Account numbers don't match</div>
+            )}
+
+            {/* ── Family Insurance ─────────────────────────────────── */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '18px 0 4px' }}>
+              Family Insurance Details{esicApplicable && <span style={{ fontSize: 11, color: '#4338CA', fontWeight: 500 }}> · also used for ESIC Form 1</span>}
+            </div>
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 10 }}>For Group Mediclaim{esicApplicable ? ' and the ESIC e-Pehchan card' : ''}. Ages auto-calculate from date of birth.</div>
+
+            {personal.marital_status === 'Married' && (
+              <div style={{ border: '1px solid #EDE9FE', borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: '#FCFBFF' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: P, marginBottom: 8 }}>Spouse{insurance.spouse_dob ? ` · Age ${ageFromDob(insurance.spouse_dob)}` : ''}</div>
+                <div style={S.g3}>
+                  <Fld label="Spouse Name"><input style={S.inp()} value={insurance.spouse_name} onChange={e => setInsurance(s => ({ ...s, spouse_name: e.target.value }))} /></Fld>
+                  <Fld label="Date of Birth"><input type="date" style={S.inp()} value={insurance.spouse_dob} onChange={e => setInsurance(s => ({ ...s, spouse_dob: e.target.value }))} /></Fld>
+                  <Fld label="Residing with you?"><select style={S.sel} value={insurance.spouse_residing} onChange={e => setInsurance(s => ({ ...s, spouse_residing: e.target.value }))}><option>Yes</option><option>No</option></select></Fld>
+                </div>
+              </div>
+            )}
+            <div style={{ border: '1px solid #EDE9FE', borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: '#FCFBFF' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: P, marginBottom: 8 }}>Father{insurance.father_dob ? ` · Age ${ageFromDob(insurance.father_dob)}` : ''}</div>
+              <div style={S.g3}>
+                <Fld label="Father's Name"><input style={S.inp()} value={insurance.father_name} onChange={e => setInsurance(s => ({ ...s, father_name: e.target.value }))} /></Fld>
+                <Fld label="Date of Birth"><input type="date" style={S.inp()} value={insurance.father_dob} onChange={e => setInsurance(s => ({ ...s, father_dob: e.target.value }))} /></Fld>
+                <Fld label="Residing with you?"><select style={S.sel} value={insurance.father_residing} onChange={e => setInsurance(s => ({ ...s, father_residing: e.target.value }))}><option>Yes</option><option>No</option></select></Fld>
+              </div>
+            </div>
+            <div style={{ border: '1px solid #EDE9FE', borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: '#FCFBFF' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: P, marginBottom: 8 }}>Mother{insurance.mother_dob ? ` · Age ${ageFromDob(insurance.mother_dob)}` : ''}</div>
+              <div style={S.g3}>
+                <Fld label="Mother's Name"><input style={S.inp()} value={insurance.mother_name} onChange={e => setInsurance(s => ({ ...s, mother_name: e.target.value }))} /></Fld>
+                <Fld label="Date of Birth"><input type="date" style={S.inp()} value={insurance.mother_dob} onChange={e => setInsurance(s => ({ ...s, mother_dob: e.target.value }))} /></Fld>
+                <Fld label="Residing with you?"><select style={S.sel} value={insurance.mother_residing} onChange={e => setInsurance(s => ({ ...s, mother_residing: e.target.value }))}><option>Yes</option><option>No</option></select></Fld>
+              </div>
+            </div>
+            <div style={S.g2}>
+              <div style={{ border: '1px solid #EDE9FE', borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: '#FCFBFF' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: P, marginBottom: 8 }}>Child 1{insurance.kid1_dob ? ` · Age ${ageFromDob(insurance.kid1_dob)}` : ''}</div>
+                <Fld label="Name"><input style={S.inp()} value={insurance.kid1_name} onChange={e => setInsurance(s => ({ ...s, kid1_name: e.target.value }))} /></Fld>
+                <Fld label="Date of Birth"><input type="date" style={S.inp()} value={insurance.kid1_dob} onChange={e => setInsurance(s => ({ ...s, kid1_dob: e.target.value }))} /></Fld>
+              </div>
+              <div style={{ border: '1px solid #EDE9FE', borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: '#FCFBFF' }}>
+                <div style={{ fontSize: 12, fontWeight: 600, color: P, marginBottom: 8 }}>Child 2{insurance.kid2_dob ? ` · Age ${ageFromDob(insurance.kid2_dob)}` : ''}</div>
+                <Fld label="Name"><input style={S.inp()} value={insurance.kid2_name} onChange={e => setInsurance(s => ({ ...s, kid2_name: e.target.value }))} /></Fld>
+                <Fld label="Date of Birth"><input type="date" style={S.inp()} value={insurance.kid2_dob} onChange={e => setInsurance(s => ({ ...s, kid2_dob: e.target.value }))} /></Fld>
+              </div>
+            </div>
+
+            {/* ── ESIC details (only when applicable) ──────────────── */}
+            {esicApplicable && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 600, color: '#4338CA', margin: '14px 0 4px' }}>🏥 ESIC Details (Form 1)</div>
+                <div style={{ background: '#EEF2FF', border: '1px solid #C7D2FE', borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: '#3730A3' }}>
+                  Your gross salary is within the ESIC limit (≤ ₹21,000/month), so ESIC Form 1 will be generated and your family photo attached for the e-Pehchan card.
+                </div>
+                <div style={S.g2}>
+                  <Fld label="Previous ESIC IP Number (if any)" hint="10-digit number from a previous employer / e-Pehchan card"><input style={S.inp()} value={esic.prev_ip} onChange={e => setEsic(s => ({ ...s, prev_ip: e.target.value }))} maxLength={10} /></Fld>
+                  <Fld label="Preferred ESIC Dispensary / IMP" hint="Nearest ESIC dispensary to your residence"><input style={S.inp()} value={esic.dispensary} onChange={e => setEsic(s => ({ ...s, dispensary: e.target.value }))} /></Fld>
+                </div>
+              </>
             )}
 
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
@@ -779,7 +935,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
                   showToast('Please fill all required fields', 'err'); return
                 }
                 if (statutory.bank_account !== statutory.bank_confirm) { showToast('Account numbers do not match', 'err'); return }
-                await saveStep(7, statutory); nextStep()
+                await saveStep(7, { ...statutory, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance }); nextStep()
               }} style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
             </div>
           </div>

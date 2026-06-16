@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────
-type Stage = 'INVITED'|'IN_PROGRESS'|'SUBMITTED'|'HR_REVIEW'|'APPROVED'|'EMPLOYEE_CREATED'
+type Stage = 'NOT_INVITED'|'INVITED'|'IN_PROGRESS'|'SUBMITTED'|'HR_REVIEW'|'APPROVED'|'EMPLOYEE_CREATED'
 type RiskLevel = 'LOW'|'MEDIUM'|'HIGH'
 type Tab = 'overview'|'candidates'|'pending'|'insights'|'compliance'
 
@@ -16,6 +16,7 @@ interface Candidate {
   status: Stage; current_step: number; form_data: any
   employee_code?: string; magic_link_token: string
   submitted_at?: string; created_at: string; company_id: string
+  candidate_id?: string; recruitment_id?: string  // link back to recruitment.candidates
   // Computed
   docs_uploaded?: number; docs_ai_flagged?: number
   form11?: boolean; form2?: boolean; bank?: boolean
@@ -27,6 +28,7 @@ interface Candidate {
 // ── EZER theme constants ───────────────────────────────────────────
 const P = '#7C3AED'
 const STAGE_META: Record<Stage, {label:string; bg:string; color:string}> = {
+  NOT_INVITED:      { label:'Not invited',       bg:'#F3F4F6', color:'#6B7280' },
   INVITED:          { label:'Link sent',        bg:'#FFFBEB', color:'#D97706' },
   IN_PROGRESS:      { label:'In progress',      bg:'#EEF2FF', color:'#4338CA' },
   SUBMITTED:        { label:'Submitted',         bg:'#EEEDFE', color:P        },
@@ -41,8 +43,10 @@ const DOCS_REQ = ['AADHAAR_FRONT','AADHAAR_BACK','PAN','PHOTO','DEGREE','BANK_PR
 const fmt = (s?: string) => s ? new Date(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}) : '—'
 const daysLeft = (doj?: string) => {
   if (!doj) return null
-  const d = Math.ceil((new Date(doj).getTime() - Date.now())/86400000)
-  return d
+  // Compare calendar dates (ignore time of day) so a same-day joining = 0, not negative.
+  const a = new Date(doj); a.setHours(0, 0, 0, 0)
+  const b = new Date(); b.setHours(0, 0, 0, 0)
+  return Math.round((a.getTime() - b.getTime()) / 86400000)
 }
 const progressPct = (c: Candidate) => {
   const baseStep = Math.min(c.current_step || 1, 8)
@@ -88,17 +92,32 @@ export default function OnboardingDashboard() {
   const [toast,        setToast]      = useState<{msg:string;type:'ok'|'err'}|null>(null)
   const [filterStage,  setFilterStage] = useState<Stage|'ALL'>('ALL')
   const [filterRisk,   setFilterRisk]  = useState<RiskLevel|'ALL'>('ALL')
+  const [joinWindow,   setJoinWindow]  = useState<'all'|'today'|'3days'|'week'|'month'>('all')
   const [searchQ,      setSearchQ]    = useState('')
   // Modal state
   const [linkModal,    setLinkModal]  = useState(false)
   const [codeModal,    setCodeModal]  = useState<Candidate|null>(null)
   const [genCode,      setGenCode]    = useState('')
   const [saving,       setSaving]     = useState(false)
+  const [dateModal,    setDateModal]  = useState<Candidate|null>(null)
+  const [dateVal,      setDateVal]    = useState('')
+  const [resendingId,  setResendingId] = useState('')
   // New link form
+  const [companies, setCompanies] = useState<{id:string;company_name?:string;company_code?:string}[]>([])
   const [newForm, setNewForm] = useState({
-    full_name:'', designation:'', department:'', email:'', mobile:'',
+    company_id:'', full_name:'', designation:'', department:'', email:'', mobile:'',
     date_of_joining:'', offered_ctc:'', employment_type:'Employee',
   })
+
+  // Load companies for the link modal (auto-select if there's only one).
+  useEffect(()=>{
+    supabase.from('companies').select('id,company_code,company_name').order('company_code')
+      .then(({data})=>{
+        const list = data || []
+        setCompanies(list)
+        if (list.length === 1) setNewForm(f=>({...f, company_id:list[0].id}))
+      })
+  },[])
 
   const showToast = (msg:string, type:'ok'|'err'='ok') => setToast({msg,type})
 
@@ -148,15 +167,60 @@ export default function OnboardingDashboard() {
       } as Candidate
     }))
 
-    setCandidates(enriched)
+    // ── Auto-pull joiners from recruitment ───────────────────────
+    // A candidate appears here once they reach pre-onboarding (offer accepted /
+    // joined) OR have a joining date set — so HR can send the onboarding link
+    // even before a joining date is fixed. Not-yet-invited ones show as
+    // NOT_INVITED cards with a "Send onboarding link" button.
+    const { data: recJoiners } = await supabase
+      .from('candidates')
+      .select('id, full_name, email, mobile, phone, designation, company_id, onboarding_date, blacklisted, offer_accepted, stage, created_at')
+      .or('onboarding_date.not.is.null,offer_accepted.is.true,stage.eq.Joined')
+
+    const invitedIds = new Set(enriched.map(c => c.candidate_id).filter(Boolean))
+    const pending: Candidate[] = (recJoiners || [])
+      .filter(r => !r.blacklisted && !invitedIds.has(r.id))
+      .map(r => {
+        const d = daysLeft(r.onboarding_date)
+        return {
+          id:              'rec_' + r.id,
+          recruitment_id:  r.id,
+          full_name:       r.full_name,
+          designation:     r.designation || '',
+          department:      '',
+          email:           r.email || '',
+          mobile:          r.mobile || r.phone || '',
+          date_of_joining: r.onboarding_date,
+          status:          'NOT_INVITED' as Stage,
+          current_step:    0,
+          form_data:       {},
+          company_id:      r.company_id,
+          magic_link_token:'',
+          created_at:      r.created_at || r.onboarding_date,
+          docs_uploaded:   0,
+          docs_ai_flagged: 0,
+          ai_risk:         (d !== null && d <= 3 ? 'HIGH' : d !== null && d <= 7 ? 'MEDIUM' : 'LOW') as RiskLevel,
+          ai_risk_reason:  'Onboarding link not sent yet',
+        } as Candidate
+      })
+
+    // Soonest joining date first; undated rows last.
+    const merged = [...pending, ...enriched].sort((a, b) => {
+      const da = a.date_of_joining ? new Date(a.date_of_joining).getTime() : Infinity
+      const db = b.date_of_joining ? new Date(b.date_of_joining).getTime() : Infinity
+      return da - db
+    })
+
+    setCandidates(merged)
     setLoading(false)
   }, [])
 
   useEffect(()=>{ load() },[load])
 
-  // ── Send magic link ────────────────────────────────────────────
+  // ── Send onboarding link ────────────────────────────────────────────
   const sendMagicLink = async () => {
-    const { full_name, designation, mobile, email, date_of_joining } = newForm
+    const { company_id, full_name, mobile, date_of_joining } = newForm
+    if (!company_id) { showToast('Please select a company','err'); return }
     if (!full_name || !mobile || !date_of_joining) { showToast('Name, mobile, date of joining required','err'); return }
     setSaving(true)
     try {
@@ -166,12 +230,78 @@ export default function OnboardingDashboard() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error||'Failed')
-      showToast(`Magic link sent for ${full_name}! ${data.magic_link}`)
+      showToast(data.emailed ? `Onboarding link emailed for ${full_name}! ✉️` : `Link created (email NOT sent: ${data.email_error || '—'}). Share manually: ${data.magic_link}`, data.emailed ? 'ok' : 'err')
       setLinkModal(false)
-      setNewForm({full_name:'',designation:'',department:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee'})
+      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee'}))
       load()
     } catch(e:any) { showToast(e.message,'err') }
     setSaving(false)
+  }
+
+  // ── Send onboarding link for a recruitment joiner (from the card) ──
+  const sendOnboardingFor = async (c: Candidate) => {
+    if (!c.mobile) { showToast('This candidate has no mobile number — add one in Recruitment first','err'); return }
+    // Resolve company: candidate's own → company chosen during negotiation → single company.
+    let companyId: string | undefined = c.company_id
+    if (!companyId && c.recruitment_id) {
+      const { data: neg } = await supabase.from('ctc_negotiations').select('company_id')
+        .eq('candidate_id', c.recruitment_id).not('company_id','is',null)
+        .order('created_at',{ ascending:false }).limit(1).maybeSingle()
+      companyId = neg?.company_id || (companies.length === 1 ? companies[0].id : undefined)
+    }
+    if (!companyId) { showToast('This candidate has no company set — open them in Recruitment → Negotiation and pick a company first.','err'); return }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/onboarding/send-magic-link', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          candidate_id:    c.recruitment_id || null,
+          company_id:      companyId,
+          full_name:       c.full_name,
+          email:           c.email,
+          mobile:          c.mobile,
+          designation:     c.designation,
+          department:      c.department,
+          date_of_joining: c.date_of_joining,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error||'Failed')
+      showToast(data.emailed ? `Onboarding link emailed to ${c.email} ✉️` : `Link created — email NOT sent (${data.email_error || 'no email'}). Copy it from the candidate's card.`, data.emailed ? 'ok' : 'err')
+      load()
+    } catch(e:any) { showToast(e.message,'err') }
+    setSaving(false)
+  }
+
+  // ── Edit onboarding (joining) date ─────────────────────────────
+  const openDateEdit = (c: Candidate) => { setDateModal(c); setDateVal(c.date_of_joining ? c.date_of_joining.slice(0,10) : '') }
+  const saveDate = async () => {
+    if (!dateModal) return
+    setSaving(true)
+    const c = dateModal
+    // Recruitment joiner (not yet invited) → candidates.onboarding_date.
+    // Already-created onboarding candidate → onboarding_candidates.date_of_joining.
+    const { error } = c.recruitment_id
+      ? await supabase.from('candidates').update({ onboarding_date: dateVal || null }).eq('id', c.recruitment_id)
+      : await supabase.from('onboarding_candidates').update({ date_of_joining: dateVal || null }).eq('id', c.id)
+    setSaving(false)
+    if (error) { showToast('Error: '+error.message, 'err'); return }
+    showToast(`Onboarding date updated for ${c.full_name}.`); setDateModal(null); load()
+  }
+
+  // ── Resend the onboarding link to an already-invited candidate ──
+  const resendLink = async (c: Candidate) => {
+    setResendingId(c.id)
+    try {
+      const res = await fetch('/api/onboarding/resend-link', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ onboarding_id: c.id }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Failed')
+      showToast(data.emailed ? `Onboarding link re-sent to ${c.email} ✉️` : `Link refreshed — email NOT sent (${data.email_error || 'no email'}). Copy it instead.`, data.emailed ? 'ok' : 'err')
+    } catch(e:any) { showToast('Resend failed: '+e.message, 'err') }
+    setResendingId('')
   }
 
   // ── Generate employee code ────────────────────────────────────
@@ -214,6 +344,15 @@ export default function OnboardingDashboard() {
   const filtered = candidates.filter(c=>{
     if (filterStage!=='ALL' && c.status!==filterStage) return false
     if (filterRisk!=='ALL'  && c.ai_risk!==filterRisk)  return false
+    if (joinWindow!=='all') {
+      const d = daysLeft(c.date_of_joining)
+      if (d===null) return false
+      const within = joinWindow==='today' ? d===0
+        : joinWindow==='3days' ? (d>=0 && d<=3)
+        : joinWindow==='week'  ? (d>=0 && d<=7)
+        :                        (d>=0 && d<=31)   // month
+      if (!within) return false
+    }
     if (searchQ && !c.full_name.toLowerCase().includes(searchQ.toLowerCase()) &&
         !c.designation?.toLowerCase().includes(searchQ.toLowerCase())) return false
     return true
@@ -268,7 +407,7 @@ export default function OnboardingDashboard() {
           <SH title="Quick actions"/>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
             <button onClick={()=>setLinkModal(true)} style={{padding:'11px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
-              <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/> Generate & send magic link to new joiner
+              <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/> Generate & send onboarding link to new joiner
             </button>
             <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'#1E1B4B'}}>
               <i className="ti ti-list-check" style={{fontSize:16,color:'#D97706'}} aria-hidden="true"/> View {pendingActions.filter(a=>a.priority==='HIGH').length} urgent pending actions
@@ -338,6 +477,22 @@ export default function OnboardingDashboard() {
   // ── ALL CANDIDATES TAB ─────────────────────────────────────────
   const CandidatesTab = () => (
     <div>
+      {/* Joining-window filter */}
+      <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+        <span style={{fontSize:11,color:'#6B7280',marginRight:2}}>Joining:</span>
+        {([
+          {k:'all',   label:'All'},
+          {k:'today', label:'Today'},
+          {k:'3days', label:'Next 3 days'},
+          {k:'week',  label:'This week'},
+          {k:'month', label:'This month'},
+        ] as {k:typeof joinWindow;label:string}[]).map(w=>(
+          <button key={w.k} onClick={()=>setJoinWindow(w.k)}
+            style={{padding:'6px 13px',borderRadius:99,border:'0.5px solid '+(joinWindow===w.k?P:'#EDE9FE'),cursor:'pointer',fontSize:11.5,fontWeight:joinWindow===w.k?600:500,fontFamily:'inherit',background:joinWindow===w.k?P:'#FAFAF8',color:joinWindow===w.k?'#fff':'#1E1B4B'}}>
+            {w.label}
+          </button>
+        ))}
+      </div>
       {/* Filters */}
       <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
         <input value={searchQ} onChange={e=>setSearchQ(e.target.value)}
@@ -378,7 +533,8 @@ export default function OnboardingDashboard() {
               )}
               {filtered.map((c,i)=>{
                 const sm  = STAGE_META[c.status]
-                const pct = progressPct(c)
+                const notInvited = c.status==='NOT_INVITED'
+                const pct = notInvited ? 0 : progressPct(c)
                 const days = daysLeft(c.date_of_joining)
                 return (
                   <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?'#FFFFFF':'#FAFAF8'}}>
@@ -389,20 +545,25 @@ export default function OnboardingDashboard() {
                     </td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><Badge {...sm} label={sm.label}/></td>
                     <td style={{padding:'10px 12px',minWidth:100}}>
+                      {notInvited ? <span style={{fontSize:11,color:'#9CA3AF'}}>—</span> : <>
                       <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#6B7280',marginBottom:2}}>
                         <span>Step {c.current_step||1}/8</span><span>{pct}%</span>
                       </div>
                       <ProgressBar pct={pct} color={pct===100?'#059669':pct>=60?P:'#D97706'}/>
+                      </>}
                     </td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap',fontSize:11}}>
                       {fmt(c.date_of_joining)}
                       {days !== null && <div style={{fontSize:10,fontWeight:600,color:days<=3?'#DC2626':days<=7?'#D97706':'#059669'}}>{days<0?`${Math.abs(days)}d ago`:days===0?'Today!':days===1?'Tomorrow':`D-${days}`}</div>}
                     </td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
+                      {notInvited ? <span style={{fontSize:11,color:'#9CA3AF'}}>—</span> : <>
                       <span style={{fontSize:11}}>{c.docs_uploaded||0}/{DOCS_REQ.length}</span>
                       {(c.docs_ai_flagged||0)>0 && <div style={{fontSize:10,color:'#D97706',marginTop:1}}>⚠ {c.docs_ai_flagged} flagged</div>}
+                      </>}
                     </td>
                     <td style={{padding:'10px 12px'}}>
+                      {notInvited ? <span style={{fontSize:11,color:'#9CA3AF'}}>—</span> : <>
                       <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
                         <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form11?'#EAF3DE':'#FCEBEB',color:c.form11?'#3B6D11':'#B91C1C',fontWeight:600}}>F11</span>
                         <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form2?'#EAF3DE':'#FCEBEB',color:c.form2?'#3B6D11':'#B91C1C',fontWeight:600}}>F2</span>
@@ -419,6 +580,7 @@ export default function OnboardingDashboard() {
                           {c.policy_ack?'Policy✓':'Policy'}
                         </span>
                       </div>
+                      </>}
                     </td>
                     <td style={{padding:'10px 12px'}}>
                       <span style={{fontSize:10,fontWeight:600,color:'#6B7280'}}>—</span>
@@ -426,6 +588,14 @@ export default function OnboardingDashboard() {
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><RiskBadge risk={c.ai_risk}/></td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
                       <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
+                        {notInvited && (
+                          <button onClick={()=>sendOnboardingFor(c)} disabled={saving} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1}}>
+                            <i className="ti ti-send" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Send onboarding link
+                          </button>
+                        )}
+                        {notInvited && (
+                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit date</button>
+                        )}
                         {c.status==='SUBMITTED' && (
                           <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
                             <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Code
@@ -439,6 +609,14 @@ export default function OnboardingDashboard() {
                           }} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#1E1B4B'}}>
                             <i className="ti ti-copy" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Link
                           </button>
+                        )}
+                        {c.status==='INVITED' && (
+                          <button onClick={()=>resendLink(c)} disabled={resendingId===c.id} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:resendingId===c.id?.6:1}}>
+                            <i className="ti ti-send" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>{resendingId===c.id?'Sending…':'Resend'}
+                          </button>
+                        )}
+                        {c.status==='INVITED' && (
+                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit date</button>
                         )}
                         {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.laptop_issued && (
                           <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FFFBEB',fontSize:10,fontFamily:'inherit',color:'#633806'}}>
@@ -725,7 +903,7 @@ export default function OnboardingDashboard() {
             </div>
           </div>
           <button onClick={()=>setLinkModal(true)} style={{padding:'8px 16px',borderRadius:'8px',border:'none',cursor:'pointer',background:'rgba(255,255,255,.15)',color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
-            <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send magic link
+            <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send onboarding link
           </button>
         </div>
 
@@ -760,7 +938,7 @@ export default function OnboardingDashboard() {
         }
       </div>
 
-      {/* ── SEND MAGIC LINK MODAL ────────────────────────────── */}
+      {/* ── SEND ONBOARDING LINK MODAL ────────────────────────────── */}
       {linkModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
           <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
@@ -769,6 +947,14 @@ export default function OnboardingDashboard() {
               <button onClick={()=>setLinkModal(false)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'#6B7280',lineHeight:1}}>×</button>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+              <div style={{marginBottom:8,gridColumn:'1 / -1'}}>
+                <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Company *</div>
+                <select value={newForm.company_id} onChange={e=>setNewForm(f=>({...f,company_id:e.target.value}))}
+                  style={{width:'100%',padding:'8px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
+                  <option value="">Select company…</option>
+                  {companies.map(co=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+                </select>
+              </div>
               {[
                 {label:'Full Name *',       key:'full_name',      type:'text', placeholder:'As per Aadhaar'},
                 {label:'Mobile *',          key:'mobile',         type:'tel',  placeholder:'+91 XXXXXXXXXX'},
@@ -794,13 +980,32 @@ export default function OnboardingDashboard() {
             </div>
             <div style={{background:'#EEEDFE',borderRadius:'8px',padding:'9px 12px',marginTop:4,fontSize:11,color:'#534AB7',lineHeight:1.7}}>
               <i className="ti ti-info-circle" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
-              A 24-hour magic link will be generated. Share with candidate via email or WhatsApp. OTP will be sent to their mobile for verification.
+              A 24-hour onboarding link will be generated. Share with candidate via email or WhatsApp. OTP will be sent to their mobile for verification.
             </div>
             <div style={{display:'flex',gap:10,marginTop:16}}>
               <button onClick={()=>setLinkModal(false)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#1E1B4B'}}>Cancel</button>
               <button onClick={sendMagicLink} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
-                {saving ? 'Generating...' : '🔗 Generate & send magic link'}
+                {saving ? 'Generating...' : '🔗 Generate & send onboarding link'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT ONBOARDING DATE MODAL ───────────────────────── */}
+      {dateModal && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
+          <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:420,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontSize:15,fontWeight:500}}>Onboarding date — {dateModal.full_name}</div>
+              <button onClick={()=>setDateModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'#6B7280',lineHeight:1}}>×</button>
+            </div>
+            <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Joining / Onboarding Date</div>
+            <input type="date" value={dateVal} onChange={e=>setDateVal(e.target.value)}
+              style={{width:'100%',padding:'9px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+            <div style={{display:'flex',gap:10,marginTop:16}}>
+              <button onClick={()=>setDateModal(null)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#1E1B4B'}}>Cancel</button>
+              <button onClick={saveDate} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>{saving?'Saving…':'Save date'}</button>
             </div>
           </div>
         </div>

@@ -28,7 +28,7 @@ export default async function OnboardingPage({ params }: { params: Promise<{ tok
       id, full_name, email, mobile, designation, department,
       employment_type, date_of_joining, offered_ctc, status,
       current_step, form_data, otp_verified, token_expires_at,
-      company_id, magic_link_token
+      company_id, magic_link_token, esic_applicable
     `)
     .eq('magic_link_token', token)
     .single()
@@ -62,13 +62,15 @@ export default async function OnboardingPage({ params }: { params: Promise<{ tok
     .select('doc_code, ai_status, ai_extracted_data, ai_confidence, ai_flags, file_name, uploaded_at')
     .eq('onboarding_id', candidate.id)
 
-  // Audit: page loaded
-  await supa.from('onboarding_audit_log').insert({
-    onboarding_id: candidate.id,
-    action: 'PAGE_LOADED',
-    actor_type: 'CANDIDATE',
-    details: { step: candidate.current_step },
-  }).catch(() => { }) // Non-blocking
+  // Audit: page loaded (non-blocking — Supabase builder has no .catch)
+  try {
+    await supa.from('onboarding_audit_log').insert({
+      onboarding_id: candidate.id,
+      action: 'PAGE_LOADED',
+      actor_type: 'CANDIDATE',
+      details: { step: candidate.current_step },
+    })
+  } catch { /* ignore */ }
 
   return (
     <OnboardingClient

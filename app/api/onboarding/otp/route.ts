@@ -2,6 +2,9 @@
 // POST: send OTP | PUT: verify OTP
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import nodemailer from 'nodemailer'
+
+export const runtime = 'nodejs' // nodemailer needs Node.js runtime, not Edge
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,7 +21,7 @@ export async function POST(req: NextRequest) {
 
     const { data: cand, error } = await supa
       .from('onboarding_candidates')
-      .select('id, mobile, full_name, otp_verified')
+      .select('id, mobile, email, full_name, otp_verified')
       .eq('magic_link_token', token)
       .single()
 
@@ -32,10 +35,34 @@ export async function POST(req: NextRequest) {
       otp_code: otp, otp_expires_at: expiresAt,
     }).eq('id', cand.id)
 
-    // TODO: Send via SMS provider (Twilio / Gupshup / MSG91)
-    // For development, log the OTP
+    // Deliver the OTP by email (Gmail SMTP). An SMS provider can be added later.
+    const user = process.env.GMAIL_USER
+    const pass = process.env.GMAIL_APP_PASSWORD
+    let emailed = false
+    if (cand.email && user && pass) {
+      try {
+        const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
+        const from = `"${process.env.GMAIL_FROM_NAME || 'HR Team'}" <${user}>`
+        const body =
+`Dear ${cand.full_name},
+
+Your onboarding verification code (OTP) is: ${otp}
+
+This code is valid for 10 minutes. Enter it on your onboarding page to continue.
+
+If you didn't request this, you can safely ignore this email.
+
+Warm regards,
+HR Team`
+        await transporter.sendMail({ from, to: cand.email, subject: `Your onboarding OTP: ${otp}`, text: body, html: body.replace(/\n/g, '<br>') })
+        emailed = true
+      } catch (e) {
+        console.error('OTP email failed:', e)
+      }
+    }
+    // Dev convenience: log the OTP to the server terminal.
     if (process.env.NODE_ENV === 'development') {
-      console.log(`📱 OTP for ${cand.mobile}: ${otp}`)
+      console.log(`📱 OTP for ${cand.mobile} (${cand.email}): ${otp}`)
     }
 
     // Audit
@@ -43,13 +70,16 @@ export async function POST(req: NextRequest) {
       onboarding_id: cand.id,
       action: 'OTP_SENT',
       actor_type: 'SYSTEM',
-      details: { mobile: cand.mobile?.replace(/\d(?=\d{4})/g, '*') },
+      details: { channel: 'EMAIL', email: cand.email, emailed },
       ip_address: req.headers.get('x-forwarded-for') || null,
     })
 
     return NextResponse.json({
       success: true,
-      message: `OTP sent to ${cand.mobile?.replace(/\d(?=\d{4})/g, '*')}`,
+      emailed,
+      message: emailed
+        ? `OTP emailed to ${cand.email}`
+        : (cand.email ? 'OTP generated (email failed — check server logs)' : 'OTP generated (candidate has no email on file)'),
       // In dev: return OTP for testing
       ...(process.env.NODE_ENV === 'development' ? { dev_otp: otp } : {}),
     })

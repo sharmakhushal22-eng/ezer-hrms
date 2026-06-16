@@ -259,7 +259,7 @@ export async function getRecruitmentStats(company_id?: string) {
 }
 
 export async function getPipelineCounts(company_id?: string) {
-  const stages = ['Applied','AI Screened','Telephonic','L1 Interview','L2 Interview','Optional','MD Final','Offer Sent','Joined','Rejected']
+  const stages = ['Applied','AI Screened','Telephonic','L1 Interview','L2 Interview','Optional','Shortlisted','Offer Sent','Joined','Rejected']
   let q = supabase.from('candidates').select('stage').eq('status', 'Active')
   if (company_id) q = q.eq('company_id', company_id)
   const { data } = await q

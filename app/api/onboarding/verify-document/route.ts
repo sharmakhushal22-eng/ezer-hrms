@@ -161,6 +161,11 @@ export async function POST(req: NextRequest) {
       .select('id')
       .single()
 
+    if (docErr) {
+      console.error('onboarding_documents save error:', docErr)
+      return NextResponse.json({ error: 'Could not save the document: ' + docErr.message }, { status: 500 })
+    }
+
     await supa.from('onboarding_audit_log').insert({
       onboarding_id: cand.id,
       action:        'DOCUMENT_UPLOADED',

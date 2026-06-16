@@ -1,5 +1,5 @@
 // app/api/onboarding/validate-token/route.ts
-// Validates magic link token and returns candidate info (no auth needed)
+// Validates onboarding link token and returns candidate info (no auth needed)
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
