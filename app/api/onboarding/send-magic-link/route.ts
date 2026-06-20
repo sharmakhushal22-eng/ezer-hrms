@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const {
       candidate_id, company_id, full_name, email, mobile,
-      designation, department, employment_type, date_of_joining, offered_ctc,
+      designation, department, department_id, employment_type, date_of_joining, offered_ctc,
     } = body
 
     if (!company_id || !full_name || !mobile) {
@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
         mobile,
         designation:     designation || null,
         department:      department || null,
+        department_id:   department_id || null,
         employment_type: employment_type || 'Employee',
         date_of_joining: date_of_joining || null,
         offered_ctc:     offered_ctc || null,

@@ -1,0 +1,299 @@
+'use client'
+// app/dashboard/company-profile/page.tsx — Company Profile (Group → Company → Branch → Statutory)
+// Full master view: details, branches (GPS), statutory regs, bank, license + billing status.
+// Inline edit on any field → auto-writes company_master_audit. Schema: lib/supabase-admin + migration 027.
+import { useState, useEffect, useCallback } from 'react'
+import {
+  loadHierarchy, updateEntity, loadAudit, confirmPayment,
+  type GroupTree, type Company, type Branch, type Registration, type AuditRow,
+} from '@/lib/supabase-company-profile'
+
+// ── Style constant (employees/admin palette — C) ───────────────────
+const C = {
+  page:   { background:'#F0F4F8', minHeight:'100vh', color:'#0F172A', fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
+  card:   { background:'#FFFFFF', borderRadius:10, border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
+  lbl:    { fontSize:10, fontWeight:600, color:'#64748B', textTransform:'uppercase' as const, letterSpacing:'.04em' } as React.CSSProperties,
+  val:    { fontSize:13, color:'#0F172A', marginTop:2 } as React.CSSProperties,
+  input:  { padding:'6px 9px', background:'#F8FAFC', border:'1px solid #CBD5E1', borderRadius:8, color:'#0F172A', fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
+  pri:    { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:'#7C3AED', color:'#fff' } as React.CSSProperties,
+  out:    { padding:'6px 12px', borderRadius:8, border:'1px solid #CBD5E1', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#475569' } as React.CSSProperties,
+  sec:    { fontSize:11, fontWeight:600, color:'#475569', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
+}
+const REG_COLOR: Record<string, string> = { GST:'#2563EB', EPF:'#7C3AED', ESIC:'#059669', PT:'#B45309', LWF:'#0891B2', FACTORY:'#DC2626' }
+const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+
+// ── Helper components (OUTSIDE parent — no focus-loss) ──────────────
+function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
+  useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
+  return (
+    <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>
+      {type==='success'?'✓':'✗'} {msg}
+    </div>
+  )
+}
+function StatusBadge({ status, days }: { status: string; days: number | null }) {
+  const map: Record<string, [string, string, string]> = {
+    ACTIVE:   ['#ECFDF5', '#059669', 'Active'],
+    GRACE:    ['#FFFBEB', '#B45309', 'Grace period'],
+    SUSPENDED:['#FEF2F2', '#DC2626', 'Suspended'],
+  }
+  const [bg, c, label] = map[status] || map.ACTIVE
+  let hint = ''
+  if (status === 'ACTIVE' && days !== null) hint = ` · ${days}d to due`
+  if (status === 'GRACE') hint = ' · pay before suspension'
+  return <span style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{label}{hint}</span>
+}
+function EditField({ label, value, type, onSave, fmtFn }: {
+  label: string; value: any; type?: 'text' | 'number'; onSave: (v: string) => Promise<void>; fmtFn?: (v: any) => string
+}) {
+  const [editing, setEditing] = useState(false)
+  const [v, setV] = useState(String(value ?? ''))
+  const [busy, setBusy] = useState(false)
+  return (
+    <div>
+      <div style={C.lbl}>{label}</div>
+      {!editing ? (
+        <div style={C.val}>
+          {fmtFn ? fmtFn(value) : (value === null || value === undefined || value === '' ? '—' : String(value))}
+          <span onClick={() => { setV(String(value ?? '')); setEditing(true) }} title="edit" style={{ cursor:'pointer', color:'#94A3B8', marginLeft:6, fontSize:12 }}>✎</span>
+        </div>
+      ) : (
+        <div style={{ display:'flex', gap:5, marginTop:3, alignItems:'center' }}>
+          <input type={type || 'text'} value={v} onChange={e => setV(e.target.value)} style={{ ...C.input, width:type==='number'?80:160 }} autoFocus />
+          <button disabled={busy} onClick={async () => { setBusy(true); await onSave(v); setBusy(false); setEditing(false) }} style={{ ...C.pri, padding:'5px 10px' }}>{busy?'…':'Save'}</button>
+          <button onClick={() => setEditing(false)} style={{ ...C.out, padding:'5px 9px' }}>✕</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Company card (one company in the group) ─────────────────────────
+function CompanyCard({ co, isMobile, save, openPay }: {
+  co: Company; isMobile: boolean
+  save: (entity: any, id: string, field: string, val: string, company_id: string) => Promise<void>
+  openPay: (co: Company) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const regsByType: Record<string, Registration[]> = {}
+  for (const r of co.registrations) { (regsByType[r.reg_type] = regsByType[r.reg_type] || []).push(r) }
+  const lic = co.license
+  const empUsed = '—' // headcount comes from employees module; shown as cap here
+
+  return (
+    <div style={{ ...C.card, padding:0, overflow:'hidden' }}>
+      <div onClick={() => setOpen(o => !o)} style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', cursor:'pointer', background:'#F8FAFC', borderBottom: open ? '1px solid #E2E8F0' : 'none' }}>
+        <span style={{ fontSize:14, color:'#94A3B8' }}>{open ? '▾' : '▸'}</span>
+        <span style={{ fontSize:14, fontWeight:600 }}>{co.company_name}</span>
+        {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'#EDE9FE', color:'#7C3AED', fontWeight:600 }}>{co.company_type}</span>}
+        <span style={{ fontSize:10, color:'#94A3B8' }}>{co.company_code}</span>
+        <span style={{ marginLeft:'auto' }}><StatusBadge status={co.account_status} days={co.days_to_due} /></span>
+      </div>
+
+      {open && (
+        <div style={{ padding:'14px 16px' }}>
+          <div style={C.sec}>Company details</div>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:'12px 16px', marginBottom:18 }}>
+            <EditField label="Employer / Director" value={co.short_name} onSave={v => save('COMPANY', co.id, 'short_name', v, co.id)} />
+            <div><div style={C.lbl}>Industry</div><div style={C.val}>{co.industry || '—'}</div></div>
+            <EditField label="PAN" value={co.pan} onSave={v => save('COMPANY', co.id, 'pan', v.toUpperCase(), co.id)} />
+            <EditField label="TAN" value={co.tan} onSave={v => save('COMPANY', co.id, 'tan', v.toUpperCase(), co.id)} />
+            <EditField label="CIN" value={co.cin} onSave={v => save('COMPANY', co.id, 'cin', v.toUpperCase(), co.id)} />
+            <div><div style={C.lbl}>Incorporated</div><div style={C.val}>{fmt(co.date_of_inc)}</div></div>
+            <div style={{ gridColumn:'1 / -1' }}><div style={C.lbl}>Registered office</div><div style={C.val}>{co.reg_office || '—'}</div></div>
+          </div>
+
+          <div style={C.sec}>Branches ({co.branches.length})</div>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:8, marginBottom:18 }}>
+            {co.branches.map((b: Branch) => (
+              <div key={b.id} style={{ border:'1px solid #E2E8F0', borderRadius:8, padding:'10px 12px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
+                  <span style={{ fontSize:13, fontWeight:600 }}>{b.location_name}</span>
+                  <span style={{ fontSize:10, padding:'1px 7px', borderRadius:99, background:'#F1F5F9', color:'#475569' }}>{b.location_type}</span>
+                </div>
+                <div style={{ ...C.lbl, textTransform:'none', fontWeight:400, color:'#64748B', marginBottom:6 }}>
+                  {[b.address_line1, b.city, b.district, b.state, b.pin_code].filter(Boolean).join(', ') || '—'}
+                </div>
+                <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
+                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:'#7C3AED', fontSize:11 }}>map</a></> : '—'}</div></div>
+                  <EditField label="Max employees" value={b.max_employees} type="number" onSave={v => save('LOCATION', b.id, 'max_employees', v, co.id)} />
+                </div>
+              </div>
+            ))}
+            {co.branches.length === 0 && <div style={{ fontSize:12, color:'#94A3B8' }}>No branches.</div>}
+          </div>
+
+          <div style={C.sec}>Statutory registrations</div>
+          <div style={{ overflowX:'auto', marginBottom:18 }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+              <tbody>
+                {co.registrations.map((r: Registration) => (
+                  <tr key={r.id} style={{ borderBottom:'1px solid #F1F5F9' }}>
+                    <td style={{ padding:'7px 8px', width:60 }}><span style={{ fontSize:10, fontWeight:700, color:REG_COLOR[r.reg_type] || '#475569' }}>{r.reg_type}</span></td>
+                    <td style={{ padding:'7px 8px' }}><EditField label="" value={r.reg_number} onSave={v => save('REGISTRATION', r.id, 'reg_number', v, co.id)} /></td>
+                    <td style={{ padding:'7px 8px', color:'#64748B' }}>{[r.state, r.district].filter(Boolean).join(' · ') || '—'}</td>
+                  </tr>
+                ))}
+                {co.registrations.length === 0 && <tr><td style={{ padding:10, color:'#94A3B8' }}>No registrations.</td></tr>}
+              </tbody>
+            </table>
+          </div>
+
+          {co.bank.length > 0 && (
+            <>
+              <div style={C.sec}>Bank accounts</div>
+              <div style={{ marginBottom:18 }}>
+                {co.bank.map(bk => (
+                  <div key={bk.id} style={{ fontSize:12, color:'#475569', padding:'4px 0' }}>
+                    <b>{bk.bank_name}</b> · A/c ••••{(bk.account_number || '').slice(-4)} · {bk.ifsc_code} · {bk.account_type}{bk.is_primary ? ' · primary' : ''}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          <div style={C.sec}>License &amp; billing</div>
+          {lic ? (
+            <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:'12px 16px', alignItems:'flex-end' }}>
+              <div><div style={C.lbl}>Plan</div><div style={C.val}>{lic.plan_name}</div></div>
+              <div><div style={C.lbl}>Max employees</div><div style={C.val}>{lic.max_employees || '—'}</div></div>
+              <div><div style={C.lbl}>Max locations</div><div style={C.val}>{lic.max_locations || '—'} <span style={{ color:'#94A3B8', fontSize:11 }}>({co.branches.length} used)</span></div></div>
+              <div><div style={C.lbl}>Billing cycle</div><div style={C.val}>{lic.billing_cycle || 'QUARTERLY'}</div></div>
+              <div><div style={C.lbl}>Paid till</div><div style={C.val}>{fmt(lic.paid_till)}</div></div>
+              <div><div style={C.lbl}>Grace</div><div style={C.val}>{lic.grace_days ?? 30} days</div></div>
+              <div><div style={C.lbl}>Status</div><div style={{ marginTop:2 }}><StatusBadge status={co.account_status} days={co.days_to_due} /></div></div>
+              <div><button onClick={() => openPay(co)} style={C.pri}>Confirm payment</button></div>
+            </div>
+          ) : <div style={{ fontSize:12, color:'#94A3B8' }}>No license plan set.</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Confirm payment modal ───────────────────────────────────────────
+function PayModal({ co, onClose, onConfirm }: {
+  co: Company; onClose: () => void
+  onConfirm: (period: string, amount: string, from: string, till: string) => Promise<void>
+}) {
+  const today = new Date().toISOString().slice(0, 10)
+  const q = new Date(); q.setMonth(q.getMonth() + 3)
+  const [period, setPeriod] = useState('FY2026-27 Q1')
+  const [amount, setAmount] = useState('')
+  const [from, setFrom] = useState(today)
+  const [till, setTill] = useState(q.toISOString().slice(0, 10))
+  const [busy, setBusy] = useState(false)
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
+      <div style={{ ...C.card, maxWidth:460, width:'100%', marginBottom:0 }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>Confirm payment — {co.company_name}</div>
+        <div style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>Quarter advance. Paid-till roll forward hoga, account ACTIVE.</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          <div><div style={C.lbl}>Period</div><input style={{ ...C.input, width:'100%', marginTop:3 }} value={period} onChange={e => setPeriod(e.target.value)} /></div>
+          <div><div style={C.lbl}>Amount (₹)</div><input type="number" style={{ ...C.input, width:'100%', marginTop:3 }} value={amount} onChange={e => setAmount(e.target.value)} /></div>
+          <div><div style={C.lbl}>Valid from</div><input type="date" style={{ ...C.input, width:'100%', marginTop:3 }} value={from} onChange={e => setFrom(e.target.value)} /></div>
+          <div><div style={C.lbl}>Valid till</div><input type="date" style={{ ...C.input, width:'100%', marginTop:3 }} value={till} onChange={e => setTill(e.target.value)} /></div>
+        </div>
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:16 }}>
+          <button onClick={onClose} style={C.out}>Cancel</button>
+          <button disabled={busy || !co.license} onClick={async () => { setBusy(true); await onConfirm(period, amount, from, till); setBusy(false) }} style={{ ...C.pri, opacity: co.license ? 1 : 0.5 }}>{busy ? '…' : 'Confirm & activate'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════
+export default function CompanyProfilePage() {
+  const [groups, setGroups] = useState<GroupTree[]>([])
+  const [audit, setAudit] = useState<AuditRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isMobile, setIsMobile] = useState(false)
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [pay, setPay] = useState<Company | null>(null)
+
+  const notify = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024)
+    check(); window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
+
+  const reload = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [g, a] = await Promise.all([loadHierarchy(), loadAudit(undefined, 40)])
+      setGroups(g); setAudit(a)
+    } catch (e: any) {
+      notify('Load failed: ' + (e?.message || 'check tables'), 'error')
+    }
+    setLoading(false)
+  }, [])
+  useEffect(() => { reload() }, [reload])
+
+  async function save(entity: any, id: string, field: string, val: string, company_id: string) {
+    const patch: Record<string, any> = { [field]: field === 'max_employees' ? (val === '' ? null : Number(val)) : val }
+    const r = await updateEntity(entity, id, patch, { company_id, changedBy: 'Admin' })
+    if ((r as any).error) { notify('Save failed: ' + (r as any).error.message, 'error'); return }
+    notify('Saved & logged.'); reload()
+  }
+
+  async function doConfirm(period: string, amount: string, from: string, till: string) {
+    if (!pay?.license) return
+    const r = await confirmPayment({
+      company_id: pay.id, license_id: pay.license.id, period, amount: Number(amount) || 0,
+      valid_from: from, valid_till: till, confirmedBy: 'Super Admin',
+    })
+    if ((r as any).error) { notify('Failed: ' + (r as any).error.message, 'error'); setPay(null); return }
+    notify('Payment confirmed — account active.'); setPay(null); reload()
+  }
+
+  const totalCompanies = groups.reduce((s, g) => s + g.companies.length, 0)
+
+  return (
+    <div style={{ ...C.page, padding: isMobile ? '14px 12px' : '20px 24px' }}>
+      <div style={{ maxWidth:1200, margin:'0 auto' }}>
+        <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Company Profile</div>
+        <div style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>Group, companies, branches, statutory registrations, bank &amp; license — view, edit, and audit. Every change is logged.</div>
+
+        {loading ? (
+          <div style={{ ...C.card, textAlign:'center', color:'#7C3AED', padding:40 }}>Loading…</div>
+        ) : groups.length === 0 ? (
+          <div style={{ ...C.card, textAlign:'center', color:'#94A3B8', padding:40 }}>Koi group/company nahi mili. Pehle Company Setup se data add karo.</div>
+        ) : (
+          <>
+            {groups.map(g => (
+              <div key={g.id} style={{ marginBottom:18 }}>
+                <div style={{ ...C.card, display:'flex', alignItems:'center', gap:12, background:'#1E1B4B', color:'#fff', border:'none' }}>
+                  <span style={{ fontSize:18 }}>🏛️</span>
+                  <div><div style={{ fontSize:15, fontWeight:600 }}>{g.group_name}</div><div style={{ fontSize:11, color:'#C7D2FE' }}>{g.group_code} · {g.country} · {g.companies.length} companies</div></div>
+                </div>
+                {g.companies.map(co => (
+                  <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay} />
+                ))}
+              </div>
+            ))}
+
+            <div style={C.card}>
+              <div style={C.sec}>🕓 Audit log — recent changes</div>
+              {audit.length === 0 && <div style={{ fontSize:12, color:'#94A3B8' }}>Abhi tak koi change nahi.</div>}
+              {audit.map(a => (
+                <div key={a.id} style={{ display:'flex', gap:8, padding:'7px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}>
+                  <span style={{ color:'#7C3AED' }}>•</span>
+                  <div>
+                    <div><b>{a.entity_type}</b> · {a.field}: <span style={{ color:'#94A3B8' }}>{a.old_value || '—'}</span> → <span style={{ color:'#0F172A' }}>{a.new_value || '—'}</span></div>
+                    <div style={{ fontSize:10, color:'#94A3B8' }}>{a.changed_by || 'Admin'} · {new Date(a.changed_at).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+
+      {pay && <PayModal co={pay} onClose={() => setPay(null)} onConfirm={doConfirm} />}
+      {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+    </div>
+  )
+}

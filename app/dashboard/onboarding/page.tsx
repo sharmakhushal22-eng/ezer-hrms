@@ -101,15 +101,19 @@ export default function OnboardingDashboard() {
   const [saving,       setSaving]     = useState(false)
   const [dateModal,    setDateModal]  = useState<Candidate|null>(null)
   const [dateVal,      setDateVal]    = useState('')
+  const [editEmail,    setEditEmail]  = useState('')
+  const [editMobile,   setEditMobile] = useState('')
   const [resendingId,  setResendingId] = useState('')
+  const [selIds,       setSelIds]     = useState<Set<string>>(new Set())
   // New link form
   const [companies, setCompanies] = useState<{id:string;company_name?:string;company_code?:string}[]>([])
+  const [departments, setDepartments] = useState<{id:string;dept_name:string;company_id:string}[]>([])
   const [newForm, setNewForm] = useState({
-    company_id:'', full_name:'', designation:'', department:'', email:'', mobile:'',
+    company_id:'', full_name:'', designation:'', department:'', department_id:'', email:'', mobile:'',
     date_of_joining:'', offered_ctc:'', employment_type:'Employee',
   })
 
-  // Load companies for the link modal (auto-select if there's only one).
+  // Load companies + departments for the link modal (auto-select if there's only one).
   useEffect(()=>{
     supabase.from('companies').select('id,company_code,company_name').order('company_code')
       .then(({data})=>{
@@ -117,6 +121,8 @@ export default function OnboardingDashboard() {
         setCompanies(list)
         if (list.length === 1) setNewForm(f=>({...f, company_id:list[0].id}))
       })
+    supabase.from('departments').select('id,dept_name,company_id').order('dept_name')
+      .then(({data})=>setDepartments(data || []))
   },[])
 
   const showToast = (msg:string, type:'ok'|'err'='ok') => setToast({msg,type})
@@ -232,15 +238,18 @@ export default function OnboardingDashboard() {
       if (!res.ok) throw new Error(data.error||'Failed')
       showToast(data.emailed ? `Onboarding link emailed for ${full_name}! ✉️` : `Link created (email NOT sent: ${data.email_error || '—'}). Share manually: ${data.magic_link}`, data.emailed ? 'ok' : 'err')
       setLinkModal(false)
-      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee'}))
+      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',department_id:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee'}))
       load()
     } catch(e:any) { showToast(e.message,'err') }
     setSaving(false)
   }
 
   // ── Send onboarding link for a recruitment joiner (from the card) ──
-  const sendOnboardingFor = async (c: Candidate) => {
-    if (!c.mobile) { showToast('This candidate has no mobile number — add one in Recruitment first','err'); return }
+  // Returns true only if the link was actually created. In bulk mode we stay
+  // quiet (no per-candidate toast/reload) so the caller can report a true count.
+  const sendOnboardingFor = async (c: Candidate, opts?: { bulk?: boolean }): Promise<boolean> => {
+    const bulk = !!opts?.bulk
+    if (!c.mobile) { if (!bulk) showToast('This candidate has no mobile number — add one in Recruitment first','err'); return false }
     // Resolve company: candidate's own → company chosen during negotiation → single company.
     let companyId: string | undefined = c.company_id
     if (!companyId && c.recruitment_id) {
@@ -249,8 +258,9 @@ export default function OnboardingDashboard() {
         .order('created_at',{ ascending:false }).limit(1).maybeSingle()
       companyId = neg?.company_id || (companies.length === 1 ? companies[0].id : undefined)
     }
-    if (!companyId) { showToast('This candidate has no company set — open them in Recruitment → Negotiation and pick a company first.','err'); return }
-    setSaving(true)
+    if (!companyId) { if (!bulk) showToast('This candidate has no company set — open them in Recruitment → Negotiation and pick a company first.','err'); return false }
+    if (!bulk) setSaving(true)
+    let success = false
     try {
       const res = await fetch('/api/onboarding/send-magic-link', {
         method:'POST', headers:{'Content-Type':'application/json'},
@@ -267,26 +277,56 @@ export default function OnboardingDashboard() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error||'Failed')
-      showToast(data.emailed ? `Onboarding link emailed to ${c.email} ✉️` : `Link created — email NOT sent (${data.email_error || 'no email'}). Copy it from the candidate's card.`, data.emailed ? 'ok' : 'err')
-      load()
-    } catch(e:any) { showToast(e.message,'err') }
-    setSaving(false)
+      success = true
+      if (!bulk) {
+        showToast(data.emailed ? `Onboarding link emailed to ${c.email} ✉️` : `Link created — email NOT sent (${data.email_error || 'no email'}). Copy it from the candidate's card.`, data.emailed ? 'ok' : 'err')
+        load()
+      }
+    } catch(e:any) { if (!bulk) showToast(e.message,'err') }
+    if (!bulk) setSaving(false)
+    return success
   }
 
-  // ── Edit onboarding (joining) date ─────────────────────────────
-  const openDateEdit = (c: Candidate) => { setDateModal(c); setDateVal(c.date_of_joining ? c.date_of_joining.slice(0,10) : '') }
+  // ── Edit candidate (DOJ + email + mobile) — HR Manager ─────────
+  const openDateEdit = (c: Candidate) => { setDateModal(c); setDateVal(c.date_of_joining ? c.date_of_joining.slice(0,10) : ''); setEditEmail(c.email || ''); setEditMobile(c.mobile || '') }
   const saveDate = async () => {
     if (!dateModal) return
     setSaving(true)
     const c = dateModal
-    // Recruitment joiner (not yet invited) → candidates.onboarding_date.
-    // Already-created onboarding candidate → onboarding_candidates.date_of_joining.
+    // Recruitment joiner (not yet invited) → candidates. Already-invited → onboarding_candidates.
     const { error } = c.recruitment_id
-      ? await supabase.from('candidates').update({ onboarding_date: dateVal || null }).eq('id', c.recruitment_id)
-      : await supabase.from('onboarding_candidates').update({ date_of_joining: dateVal || null }).eq('id', c.id)
+      ? await supabase.from('candidates').update({ onboarding_date: dateVal || null, email: editEmail || null, phone: editMobile || null, mobile: editMobile || null }).eq('id', c.recruitment_id)
+      : await supabase.from('onboarding_candidates').update({ date_of_joining: dateVal || null, email: editEmail || null, mobile: editMobile || null }).eq('id', c.id)
     setSaving(false)
     if (error) { showToast('Error: '+error.message, 'err'); return }
-    showToast(`Onboarding date updated for ${c.full_name}.`); setDateModal(null); load()
+    showToast(`Updated ${c.full_name}.`); setDateModal(null); load()
+  }
+
+  // ── Bulk send onboarding links to selected not-invited candidates ──
+  const bulkSend = async () => {
+    const targets = filtered.filter(c => selIds.has(c.id) && c.status==='NOT_INVITED')
+    if (!targets.length) { showToast('Select at least one "Not invited" candidate.', 'err'); return }
+    if (!window.confirm(`Send onboarding link to ${targets.length} candidate(s)?`)) return
+    setSaving(true)
+    let ok = 0
+    for (const c of targets) { if (await sendOnboardingFor(c, { bulk: true })) ok++ }
+    setSaving(false); setSelIds(new Set())
+    const failed = targets.length - ok
+    showToast(
+      failed === 0
+        ? `Onboarding link sent to all ${ok} candidate(s).`
+        : `Sent to ${ok}/${targets.length}. ${failed} skipped (missing mobile or company).`,
+      failed === 0 ? 'ok' : 'err'
+    )
+    load()
+  }
+
+  // ── Extend link validity (+7 days) without re-emailing ─────────
+  const extendValidity = async (c: Candidate) => {
+    const { error } = await supabase.from('onboarding_candidates')
+      .update({ token_expires_at: new Date(Date.now() + 7*24*3600*1000).toISOString() }).eq('id', c.id)
+    if (error) { showToast('Error: '+error.message, 'err'); return }
+    showToast(`Link validity extended to 7 days for ${c.full_name}.`); load()
   }
 
   // ── Resend the onboarding link to an already-invited candidate ──
@@ -406,8 +446,8 @@ export default function OnboardingDashboard() {
         <div>
           <SH title="Quick actions"/>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            <button onClick={()=>setLinkModal(true)} style={{padding:'11px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
-              <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/> Generate & send onboarding link to new joiner
+            <button onClick={()=>setTab('candidates')} style={{padding:'11px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
+              <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/> Send onboarding links (All candidates)
             </button>
             <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'#1E1B4B'}}>
               <i className="ti ti-list-check" style={{fontSize:16,color:'#D97706'}} aria-hidden="true"/> View {pendingActions.filter(a=>a.priority==='HIGH').length} urgent pending actions
@@ -511,9 +551,12 @@ export default function OnboardingDashboard() {
           <option value="LOW">Low risk</option>
         </select>
         <div style={{marginLeft:'auto',fontSize:11,color:'#6B7280'}}>{filtered.length} of {total} shown</div>
-        <button onClick={()=>setLinkModal(true)} style={{padding:'7px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:5}}>
-          <i className="ti ti-plus" style={{fontSize:14}} aria-hidden="true"/> New joiner
-        </button>
+        <button onClick={()=>{ const ni = filtered.filter(c=>c.status==='NOT_INVITED'); const all = ni.length>0 && ni.every(c=>selIds.has(c.id)); setSelIds(prev=>{ const n=new Set(prev); ni.forEach(c=>all?n.delete(c.id):n.add(c.id)); return n }) }} style={{padding:'7px 12px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#6D28D9'}}>☑ Select all (not invited)</button>
+        {filtered.some(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)) && (
+          <button onClick={bulkSend} disabled={saving} style={{padding:'7px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:12,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1,display:'flex',alignItems:'center',gap:5}}>
+            <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send link to {filtered.filter(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)).length} selected
+          </button>
+        )}
       </div>
 
       {/* Table */}
@@ -522,14 +565,14 @@ export default function OnboardingDashboard() {
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
             <thead>
               <tr style={{background:'#FAFAF8'}}>
-                {['Candidate','Stage','Progress','DOJ','Docs','Statutory','BGV','Risk','Actions'].map(h=>(
-                  <th key={h} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:'#6B7280',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
+                {['','Candidate','Stage','Progress','DOJ','Docs','Statutory','BGV','Risk','Actions'].map((h,hi)=>(
+                  <th key={hi} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:'#6B7280',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={9} style={{padding:32,textAlign:'center',color:'#6B7280'}}>No candidates found</td></tr>
+                <tr><td colSpan={10} style={{padding:32,textAlign:'center',color:'#6B7280'}}>No candidates found</td></tr>
               )}
               {filtered.map((c,i)=>{
                 const sm  = STAGE_META[c.status]
@@ -538,6 +581,9 @@ export default function OnboardingDashboard() {
                 const days = daysLeft(c.date_of_joining)
                 return (
                   <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?'#FFFFFF':'#FAFAF8'}}>
+                    <td style={{padding:'10px 12px'}}>
+                      {notInvited && <input type="checkbox" checked={selIds.has(c.id)} onChange={()=>setSelIds(prev=>{ const n=new Set(prev); n.has(c.id)?n.delete(c.id):n.add(c.id); return n })} />}
+                    </td>
                     <td style={{padding:'10px 12px',minWidth:160}}>
                       <div style={{fontWeight:500}}>{c.full_name}</div>
                       <div style={{fontSize:10,color:'#6B7280',marginTop:1}}>{c.designation || '—'}</div>
@@ -594,7 +640,7 @@ export default function OnboardingDashboard() {
                           </button>
                         )}
                         {notInvited && (
-                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit date</button>
+                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit</button>
                         )}
                         {c.status==='SUBMITTED' && (
                           <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
@@ -616,7 +662,10 @@ export default function OnboardingDashboard() {
                           </button>
                         )}
                         {c.status==='INVITED' && (
-                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit date</button>
+                          <button onClick={()=>extendValidity(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#1E1B4B'}}>⏱ Extend</button>
+                        )}
+                        {c.status==='INVITED' && (
+                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit</button>
                         )}
                         {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.laptop_issued && (
                           <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FFFBEB',fontSize:10,fontFamily:'inherit',color:'#633806'}}>
@@ -902,8 +951,8 @@ export default function OnboardingDashboard() {
               {active} active · {thisWeek} joining this week
             </div>
           </div>
-          <button onClick={()=>setLinkModal(true)} style={{padding:'8px 16px',borderRadius:'8px',border:'none',cursor:'pointer',background:'rgba(255,255,255,.15)',color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
-            <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send onboarding link
+          <button onClick={()=>setTab('candidates')} style={{padding:'8px 16px',borderRadius:'8px',border:'none',cursor:'pointer',background:'rgba(255,255,255,.15)',color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+            <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send onboarding links
           </button>
         </div>
 
@@ -929,11 +978,13 @@ export default function OnboardingDashboard() {
         {loading
           ? <div style={{textAlign:'center',padding:60,color:'#6B7280'}}>Loading onboarding data...</div>
           : <>
-            {tab==='overview'    && <OverviewTab/>}
-            {tab==='candidates'  && <CandidatesTab/>}
-            {tab==='pending'     && <PendingTab/>}
-            {tab==='insights'    && <InsightsTab/>}
-            {tab==='compliance'  && <ComplianceTab/>}
+            {/* Called as functions (not <Tab/>) so they render inline and don't
+                remount on every keystroke — keeps search-input focus. */}
+            {tab==='overview'    && OverviewTab()}
+            {tab==='candidates'  && CandidatesTab()}
+            {tab==='pending'     && PendingTab()}
+            {tab==='insights'    && InsightsTab()}
+            {tab==='compliance'  && ComplianceTab()}
           </>
         }
       </div>
@@ -960,7 +1011,6 @@ export default function OnboardingDashboard() {
                 {label:'Mobile *',          key:'mobile',         type:'tel',  placeholder:'+91 XXXXXXXXXX'},
                 {label:'Email',             key:'email',          type:'email',placeholder:'personal@email.com'},
                 {label:'Designation',       key:'designation',    type:'text', placeholder:'e.g. Software Engineer'},
-                {label:'Department',        key:'department',     type:'text', placeholder:'e.g. Technology'},
                 {label:'Date of Joining *', key:'date_of_joining',type:'date', placeholder:''},
                 {label:'Offered CTC (₹)',   key:'offered_ctc',    type:'number',placeholder:'e.g. 800000'},
               ].map(({label,key,type,placeholder})=>(
@@ -970,6 +1020,14 @@ export default function OnboardingDashboard() {
                     style={{width:'100%',padding:'8px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
                 </div>
               ))}
+              <div style={{marginBottom:8}}>
+                <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Department</div>
+                <select value={newForm.department_id} onChange={e=>{ const d = departments.find(x=>x.id===e.target.value); setNewForm(f=>({...f, department_id:e.target.value, department: d?.dept_name || ''})) }}
+                  style={{width:'100%',padding:'8px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
+                  <option value="">Select department…</option>
+                  {departments.filter(d=>!newForm.company_id||d.company_id===newForm.company_id).map(d=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+                </select>
+              </div>
               <div style={{marginBottom:8}}>
                 <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Employment Type</div>
                 <select value={newForm.employment_type} onChange={e=>setNewForm(f=>({...f,employment_type:e.target.value}))}
@@ -997,15 +1055,21 @@ export default function OnboardingDashboard() {
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
           <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:420,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div style={{fontSize:15,fontWeight:500}}>Onboarding date — {dateModal.full_name}</div>
+              <div style={{fontSize:15,fontWeight:500}}>Edit candidate — {dateModal.full_name}</div>
               <button onClick={()=>setDateModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'#6B7280',lineHeight:1}}>×</button>
             </div>
             <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Joining / Onboarding Date</div>
             <input type="date" value={dateVal} onChange={e=>setDateVal(e.target.value)}
+              style={{width:'100%',padding:'9px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box',marginBottom:10}}/>
+            <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Email</div>
+            <input type="email" value={editEmail} onChange={e=>setEditEmail(e.target.value)} placeholder="candidate@email.com"
+              style={{width:'100%',padding:'9px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box',marginBottom:10}}/>
+            <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Mobile</div>
+            <input type="tel" value={editMobile} onChange={e=>setEditMobile(e.target.value)} placeholder="+91 XXXXXXXXXX"
               style={{width:'100%',padding:'9px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
             <div style={{display:'flex',gap:10,marginTop:16}}>
               <button onClick={()=>setDateModal(null)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#1E1B4B'}}>Cancel</button>
-              <button onClick={saveDate} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>{saving?'Saving…':'Save date'}</button>
+              <button onClick={saveDate} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>{saving?'Saving…':'Save'}</button>
             </div>
           </div>
         </div>

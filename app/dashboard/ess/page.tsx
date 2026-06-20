@@ -4,9 +4,9 @@
 // role assignment, and admin impersonation entry. Responsive (web/mobile).
 import { useState, useEffect, useCallback } from 'react'
 import {
-  loadUsers, loadRoles, loadAudit, setStatus, assignRoles,
+  loadUsers, loadRoles, loadAudit, loadOrgUnits, setStatus, assignRoles,
   startImpersonation, endImpersonation,
-  type EssUser, type EssRole, type AuditRow,
+  type EssUser, type EssRole, type AuditRow, type OrgUnit,
 } from '@/lib/supabase-ess'
 import EmployeePortal from '@/components/ess/EmployeePortal'
 
@@ -329,6 +329,138 @@ function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign }: {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// ASSIGN ROLES TAB — guided cascade: Company → Location/Branch → Dept → Employee → Role
+// ══════════════════════════════════════════════════════════════════
+function StepHead({ n, title, hint, done }: { n: number; title: string; hint?: string; done?: boolean }) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+      <span style={{ width:22, height:22, borderRadius:99, background: done ? '#059669' : '#7C3AED', color:'#fff', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{done ? '✓' : n}</span>
+      <span style={{ fontSize:13, fontWeight:600 }}>{title}</span>
+      {hint && <span style={{ fontSize:11, color:'#9CA3AF' }}>{hint}</span>}
+    </div>
+  )
+}
+
+function RoleAssignTab({ users, roles, org, isMobile, onAssign }: {
+  users: EssUser[]; roles: EssRole[]
+  org: { companies: OrgUnit[]; locations: OrgUnit[]; departments: OrgUnit[] }
+  isMobile: boolean
+  onAssign: (u: EssUser, roleIds: string[]) => void
+}) {
+  const [companyId, setCompanyId] = useState('')
+  const [locationId, setLocationId] = useState('') // '' = all branches
+  const [deptId, setDeptId] = useState('')         // '' = all departments
+  const [empId, setEmpId] = useState('')
+  const [empQ, setEmpQ] = useState('')
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+
+  const locations = org.locations.filter(l => l.company_id === companyId)
+  const departments = org.departments.filter(d => d.company_id === companyId)
+  const selEmp = users.find(u => u.employee_id === empId) || null
+
+  // reset downstream selections when an upstream choice changes
+  const pickCompany = (v: string) => { setCompanyId(v); setLocationId(''); setDeptId(''); setEmpId('') }
+  const pickLocation = (v: string) => { setLocationId(v); setEmpId('') }
+  const pickDept = (v: string) => { setDeptId(v); setEmpId('') }
+
+  // seed checkboxes with the employee's current roles whenever selection changes
+  useEffect(() => { setPicked(new Set((selEmp?.roles || []).map(r => r.id))) }, [empId])
+
+  const emps = users.filter(u =>
+    u.company_id === companyId &&
+    (!locationId || u.location_id === locationId) &&
+    (!deptId || u.department_id === deptId) &&
+    (!empQ || u.full_name.toLowerCase().includes(empQ.toLowerCase()) || (u.emp_code || '').toLowerCase().includes(empQ.toLowerCase()))
+  )
+
+  const toggle = (id: string) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const pickedRoles = roles.filter(r => picked.has(r.id))
+  const salaryVis = pickedRoles.reduce((acc, r) => (acc === 'ALL' || r.salary_visibility === 'ALL') ? 'ALL' : (r.salary_visibility !== 'NONE' ? r.salary_visibility : acc), 'NONE' as string)
+
+  const SEL = { ...T.input, maxWidth: isMobile ? '100%' : 360 } as React.CSSProperties
+
+  return (
+    <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 320px', gap:10, alignItems:'start' }}>
+      <div>
+        {/* Step 1 — Company */}
+        <div style={T.card}>
+          <StepHead n={1} title="Select Company" done={!!companyId} />
+          <select style={SEL} value={companyId} onChange={e => pickCompany(e.target.value)}>
+            <option value="">— Choose company —</option>
+            {org.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+
+        {/* Step 2 — Location / Branch */}
+        <div style={{ ...T.card, opacity: companyId ? 1 : 0.5, pointerEvents: companyId ? 'auto' : 'none' }}>
+          <StepHead n={2} title="Select Location / Branch" hint="blank = all branches" done={!!locationId} />
+          <select style={SEL} value={locationId} onChange={e => pickLocation(e.target.value)}>
+            <option value="">All branches</option>
+            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+          {companyId && locations.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>Is company ki koi branch nahi mili.</div>}
+        </div>
+
+        {/* Step 3 — Department */}
+        <div style={{ ...T.card, opacity: companyId ? 1 : 0.5, pointerEvents: companyId ? 'auto' : 'none' }}>
+          <StepHead n={3} title="Select Department" hint="blank = all departments" done={!!deptId} />
+          <select style={SEL} value={deptId} onChange={e => pickDept(e.target.value)}>
+            <option value="">All departments</option>
+            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          {companyId && departments.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>Is company ka koi department nahi mila.</div>}
+        </div>
+
+        {/* Step 4 — Employee */}
+        <div style={{ ...T.card, opacity: companyId ? 1 : 0.5, pointerEvents: companyId ? 'auto' : 'none' }}>
+          <StepHead n={4} title="Select Employee" hint={`${emps.length} match`} done={!!empId} />
+          <input style={{ ...T.input, marginBottom:8 }} placeholder="🔍 Search name / emp code" value={empQ} onChange={e => setEmpQ(e.target.value)} />
+          <div style={{ maxHeight:300, overflowY:'auto' }}>
+            {emps.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF', padding:'8px 4px' }}>{companyId ? 'Koi employee match nahi.' : 'Pehle company chuno.'}</div>}
+            {emps.map(u => (
+              <div key={u.employee_id} onClick={() => setEmpId(u.employee_id)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, background: empId === u.employee_id ? '#F3F0FF' : 'transparent', border: empId === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div>
+                  <div style={{ fontSize:10, color:'#9CA3AF' }}>{u.emp_code} · {u.location_name || '—'} · {u.dept_name || '—'}</div>
+                </div>
+                <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end', alignItems:'center' }}>
+                  <StatusPill status={u.account?.status} />
+                  {u.roles.slice(0, 2).map(r => <RoleChip key={r.id} label={r.role_name} />)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Step 5 — Role (sticky panel) */}
+      <div style={{ ...T.card, position: isMobile ? 'static' : 'sticky', top:10 }}>
+        <StepHead n={5} title="Assign Role" done={picked.size > 0 && !!empId} />
+        {!selEmp ? (
+          <div style={{ fontSize:12, color:'#9CA3AF', padding:'8px 0' }}>Steps 1–4 complete karke ek employee chuno.</div>
+        ) : (
+          <>
+            <div style={{ fontSize:13, fontWeight:600, marginBottom:2 }}>{selEmp.full_name}</div>
+            <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:10 }}>{selEmp.emp_code} · {selEmp.designation || '—'}</div>
+            <div style={{ maxHeight:'42vh', overflowY:'auto', marginBottom:10 }}>
+              {roles.map(r => (
+                <label key={r.id} style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 4px', cursor:'pointer', fontSize:12 }}>
+                  <input type="checkbox" checked={picked.has(r.id)} onChange={() => toggle(r.id)} />
+                  <span style={{ flex:1 }}>{r.role_name}</span>
+                  <span style={{ fontSize:9, color:'#9CA3AF' }}>{r.salary_visibility}</span>
+                </label>
+              ))}
+            </div>
+            <div style={{ fontSize:11, color:'#6B7280', marginBottom:10 }}>Salary visibility: <b>{salaryVis}</b></div>
+            <button onClick={() => onAssign(selEmp, [...picked])} style={{ ...T.btnPrimary, width:'100%' }}>Assign {picked.size} role(s)</button>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════
 // AUDIT TAB
 // ══════════════════════════════════════════════════════════════════
 function AuditTab({ audit }: { audit: AuditRow[] }) {
@@ -354,9 +486,10 @@ function AuditTab({ audit }: { audit: AuditRow[] }) {
 // MAIN
 // ══════════════════════════════════════════════════════════════════
 export default function ESSPage() {
-  const [tab, setTab] = useState<'dashboard'|'access'|'roles'|'audit'>('dashboard')
+  const [tab, setTab] = useState<'dashboard'|'access'|'roles'|'assign'|'audit'>('dashboard')
   const [users, setUsers] = useState<EssUser[]>([])
   const [roles, setRoles] = useState<EssRole[]>([])
+  const [org, setOrg] = useState<{ companies: OrgUnit[]; locations: OrgUnit[]; departments: OrgUnit[] }>({ companies: [], locations: [], departments: [] })
   const [audit, setAudit] = useState<AuditRow[]>([])
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ msg:string; type:'success'|'error' }|null>(null)
@@ -377,8 +510,8 @@ export default function ESSPage() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [u, r, a] = await Promise.all([loadUsers(), loadRoles(), loadAudit()])
-      setUsers(u); setRoles(r); setAudit(a)
+      const [u, r, a, o] = await Promise.all([loadUsers(), loadRoles(), loadAudit(), loadOrgUnits()])
+      setUsers(u); setRoles(r); setAudit(a); setOrg(o)
     } catch (e: any) {
       notify('Load failed: ' + (e?.message || 'check that the ESS migration was run'), 'error')
     }
@@ -422,6 +555,7 @@ export default function ESSPage() {
     { k:'dashboard', l:'📊 Dashboard' },
     { k:'access',    l:'🔑 Access Control' },
     { k:'roles',     l:'👤 Roles' },
+    { k:'assign',    l:'🧭 Assign Roles' },
     { k:'audit',     l:'📜 Audit' },
   ] as const
 
@@ -445,6 +579,7 @@ export default function ESSPage() {
             {tab === 'dashboard' && <DashboardTab users={users} audit={audit} isMobile={isMobile} />}
             {tab === 'access' && <AccessTab users={users} isMobile={isMobile} onActivate={doActivate} onDeactivate={askDeactivate} onAssignOpen={(u)=>{ setSelUser(u); setTab('roles') }} onImpersonate={doImpersonate} onBulk={doBulk} />}
             {tab === 'roles' && <RolesTab users={users} roles={roles} isMobile={isMobile} selected={selUser} onSelect={setSelUser} onAssign={doAssign} />}
+            {tab === 'assign' && <RoleAssignTab users={users} roles={roles} org={org} isMobile={isMobile} onAssign={doAssign} />}
             {tab === 'audit' && <AuditTab audit={audit} />}
           </>
         )}

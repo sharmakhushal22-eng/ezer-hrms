@@ -111,7 +111,7 @@ export default function EmployeeMaster() {
   const PER_PAGE = 20
 
   const fetchStats = async () => {
-    const { data } = await supabase.from('employees').select('employment_status, employment_type')
+    const { data } = await supabase.from('employees').select('employment_status, employment_type').neq('is_test', true)
     if (!data) return
     setStats({
       total:      data.length,
@@ -156,7 +156,7 @@ export default function EmployeeMaster() {
         companies(company_name, company_code),
         locations(location_name, city),
         departments(dept_name)
-      `, { count: 'exact' }).order('emp_code')
+      `, { count: 'exact' }).neq('is_test', true).order('emp_code')
 
       if (filterCompany)  q = q.eq('company_id', filterCompany)
       if (filterLocation) q = q.eq('location_id', filterLocation)

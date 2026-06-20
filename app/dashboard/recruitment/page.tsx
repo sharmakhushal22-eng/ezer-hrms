@@ -308,6 +308,13 @@ async function closeMrfIfFilled(supabase:any, mrfId?:string) {
   if ((count||0) >= openings) await supabase.from('manpower_requisitions').update({ status:'CLOSED' }).eq('id', mrfId)
 }
 
+// Re-open a CLOSED MRF (e.g. candidate backed out) so it shows up as hiring again.
+async function reopenMrf(supabase:any, mrfId?:string) {
+  if (!mrfId) return
+  const { data:m } = await supabase.from('manpower_requisitions').select('status').eq('id', mrfId).maybeSingle()
+  if (m?.status === 'CLOSED') await supabase.from('manpower_requisitions').update({ status:'APPROVED' }).eq('id', mrfId)
+}
+
 // ── MRF TAB ───────────────────────────────────────────────────────
 function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify }:any) {
   const EMPTY = { company_id:'', location_id:'', department_id:'', designation:'', no_of_openings:1,
@@ -1717,6 +1724,8 @@ function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
   const [neg, setNeg] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set())
+  // #9 — existing offer-approval requests, so we can block re-create and show status.
+  const [reqMap, setReqMap] = useState<Map<string,{status:string;submitted_at:string}>>(new Map())
   useEffect(()=>{
     supabase.from('ctc_negotiations').select('candidate_id, candidate_response, created_at').order('created_at',{ascending:false})
       .then(({data}:any)=>{
@@ -1725,13 +1734,28 @@ function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
         const acc = new Set<string>(); latest.forEach((resp,cid)=>{ if(resp==='ACCEPTED') acc.add(cid) })
         setAcceptedIds(acc)
       })
+    supabase.from('offer_approval_requests').select('candidate_id, status, submitted_at').order('submitted_at',{ascending:false})
+      .then(({data}:any)=>{
+        const m = new Map<string,{status:string;submitted_at:string}>()
+        for (const r of data||[]) { if(r.candidate_id && !m.has(r.candidate_id)) m.set(r.candidate_id, { status:r.status, submitted_at:r.submitted_at }) }
+        setReqMap(m)
+      })
   },[candidates])
+  // A request is "active" (blocks re-create) unless HR Head rejected it.
+  const activeReq = (cid:string) => { const r = reqMap.get(cid); return r && r.status !== 'HR_HEAD_REJECTED' ? r : null }
   // Only candidates who ACCEPTED their CTC offer (and aren't already sent/closed) need HR-Head approval.
   const eligible = candidates.filter((c:Candidate)=>acceptedIds.has(c.id) && !['Offer Sent','Joined','Rejected'].includes(c.stage))
   const [oaQ, setOaQ] = useState('')
   const shownEligible = eligible.filter((c:Candidate)=>!oaQ || c.full_name.toLowerCase().includes(oaQ.toLowerCase()))
 
+  const STATUS_LABEL: Record<string,string> = {
+    SUBMITTED: 'Offer request sent to HR Head',
+    HR_HEAD_APPROVED: 'Approved by HR Head — offer letter pending',
+    OFFER_SENT: 'Offer letter sent',
+    HR_HEAD_REJECTED: 'Rejected by HR Head — you can re-create',
+  }
   async function pick(c:Candidate) {
+    if (activeReq(c.id)) return   // #9 — already requested; cannot re-create
     setSel(c); setNeg(null); setLoading(true)
     const { data } = await supabase.from('ctc_negotiations').select('*').eq('candidate_id',c.id).order('created_at',{ascending:false}).limit(1)
     setNeg(data?.[0]||null); setLoading(false)
@@ -1763,15 +1787,26 @@ function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
       <SearchBar placeholder="Search candidate…" onApply={setOaQ} width={240} />
       {shownEligible.length===0 ? (
         <div style={{ ...T.card, textAlign:'center' as const, color:'#9CA3AF' }}>{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</div>
-      ) : shownEligible.map((c:Candidate)=>(
-        <div key={c.id} style={{ ...T.card, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      ) : shownEligible.map((c:Candidate)=>{
+        const ar = activeReq(c.id)
+        return (
+        <div key={c.id} style={{ ...T.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
           <div>
             <div style={{ fontSize:14, fontWeight:600, display:'flex', gap:6, alignItems:'center' }}>{c.full_name}{c.offer_revised&&<Badge text="Revised Offer" />}</div>
             <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.designation||'—'} · {c.stage}</div>
           </div>
-          <button style={{ ...T.btn, background:'#7C3AED', color:'#fff' }} onClick={()=>pick(c)}>Create Request →</button>
+          {ar ? (
+            <div style={{ textAlign:'right' as const, flexShrink:0 }}>
+              <div style={{ fontSize:12, fontWeight:600, color: ar.status==='HR_HEAD_REJECTED' ? '#DC2626' : '#059669' }}>
+                {ar.status==='SUBMITTED' ? '⏳ ' : ar.status==='OFFER_SENT' ? '📤 ' : '✅ '}{STATUS_LABEL[ar.status] || ar.status}
+              </div>
+              {ar.submitted_at && <div style={{ fontSize:10.5, color:'#9CA3AF', marginTop:2 }}>on {new Date(ar.submitted_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>}
+            </div>
+          ) : (
+            <button style={{ ...T.btn, background:'#7C3AED', color:'#fff', flexShrink:0 }} onClick={()=>pick(c)}>Create Request →</button>
+          )}
         </div>
-      ))}
+      )})}
     </div>
   )
 }
@@ -1832,11 +1867,35 @@ HR Team`
     showNotify('Offer saved! Email ready.'); onRefresh()
   }
 
-  // HR presses this once the candidate confirms acceptance → moves them into Pre-onboarding.
+  // ── Post-offer-letter response (#13): Accepted / Revision / Backout ──
+  // Accepted → moves into Pre-onboarding; MRF stays/closes per openings.
   async function markAccepted(c:Candidate) {
-    const { error } = await supabase.from('candidates').update({ offer_accepted:true }).eq('id', c.id)
+    const { error } = await supabase.from('candidates').update({ offer_accepted:true, offer_response:'ACCEPTED' }).eq('id', c.id)
     if (error) { showNotify('Error: '+error.message,'error'); return }
+    await closeMrfIfFilled(supabase, c.mrf_id)
+    await supabase.from('recruitment_audit_logs').insert({ candidate_id:c.id, company_id:c.company_id||null, action_type:'OFFER_ACCEPTED', details:{ name:c.full_name }, created_at:new Date().toISOString() })
     showNotify(`${c.full_name} marked Accepted — moved to Pre-onboarding.`); onRefresh()
+  }
+  // Revision → send the offer back to HR Head for re-approval.
+  async function markRevision(c:Candidate) {
+    const reason = window.prompt(`Revision requested for ${c.full_name}.\nWhat needs to change? (sent back to HR Head)`); if (reason===null) return
+    const { error } = await supabase.from('candidates').update({ offer_response:'REVISION', offer_revised:true, offer_accepted:false, stage:'Shortlisted' }).eq('id', c.id)
+    if (error) { showNotify('Error: '+error.message,'error'); return }
+    // Re-open the candidate's latest approval request so HR Head sees it again.
+    const { data:reqs } = await supabase.from('offer_approval_requests').select('id').eq('candidate_id', c.id).order('submitted_at',{ascending:false}).limit(1)
+    if (reqs?.[0]) await supabase.from('offer_approval_requests').update({ status:'SUBMITTED', hr_head_action:null, submitted_at:new Date().toISOString() }).eq('id', reqs[0].id)
+    await reopenMrf(supabase, c.mrf_id)   // free the slot while it's re-approved
+    await supabase.from('recruitment_audit_logs').insert({ candidate_id:c.id, company_id:c.company_id||null, action_type:'OFFER_REVISE_REQUESTED', details:{ name:c.full_name, reason }, created_at:new Date().toISOString() })
+    showNotify(`Revision sent back to HR Head for ${c.full_name}.`); onRefresh()
+  }
+  // Backout → candidate declined; reopen the MRF so it's hiring again.
+  async function markBackout(c:Candidate) {
+    if (!window.confirm(`Mark ${c.full_name} as Backed Out?\nThe candidate will be rejected and the MRF re-opened for hiring.`)) return
+    const { error } = await supabase.from('candidates').update({ offer_response:'BACKOUT', offer_accepted:false, stage:'Rejected', blacklist_reason:'Backed out after offer' }).eq('id', c.id)
+    if (error) { showNotify('Error: '+error.message,'error'); return }
+    await reopenMrf(supabase, c.mrf_id)
+    await supabase.from('recruitment_audit_logs').insert({ candidate_id:c.id, company_id:c.company_id||null, action_type:'OFFER_BACKOUT', details:{ name:c.full_name }, created_at:new Date().toISOString() })
+    showNotify(`${c.full_name} marked Backed Out — MRF re-opened.`); onRefresh()
   }
 
   return (
@@ -1851,7 +1910,11 @@ HR Team`
             <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
             {c.stage==='Offer Sent'&&!c.offer_accepted&&(
-              <button onClick={(e)=>{ e.stopPropagation(); markAccepted(c) }} style={{ ...T.btn, background:'#059669', color:'#fff', fontSize:11, fontWeight:600, marginTop:8, width:'100%' }}>✅ Mark Offer Accepted</button>
+              <div style={{ display:'flex', gap:6, marginTop:8 }}>
+                <button onClick={(e)=>{ e.stopPropagation(); markAccepted(c) }} style={{ ...T.btn, background:'#059669', color:'#fff', fontSize:11, fontWeight:600, flex:1, padding:'7px 4px' }}>✅ Accepted</button>
+                <button onClick={(e)=>{ e.stopPropagation(); markRevision(c) }} style={{ ...T.btn, background:'#FFFBEB', color:'#B45309', border:'1px solid #FDE68A', fontSize:11, fontWeight:600, flex:1, padding:'7px 4px' }}>✏️ Revision</button>
+                <button onClick={(e)=>{ e.stopPropagation(); markBackout(c) }} style={{ ...T.btn, background:'#FEF2F2', color:'#DC2626', border:'1px solid #FCA5A5', fontSize:11, fontWeight:600, flex:1, padding:'7px 4px' }}>🚪 Backout</button>
+              </div>
             )}
             {c.stage==='Offer Sent'&&c.offer_accepted&&(
               <div style={{ fontSize:10, color:'#059669', marginTop:6, fontWeight:600 }}>✓ Accepted — moved to Pre-onboarding</div>

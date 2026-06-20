@@ -16,10 +16,13 @@ export interface EssAccount {
 export interface EssUser {
   employee_id: string; emp_code: string; full_name: string; designation: string | null
   dept_name: string | null; company_name: string | null; location_name: string | null
+  company_id: string | null; location_id: string | null; department_id: string | null
   date_of_resignation: string | null; last_working_date: string | null
   account: EssAccount | null
   roles: EssRole[]
 }
+// Org-unit lookups for the cascading role-assignment flow.
+export interface OrgUnit { id: string; name: string; company_id?: string }
 export interface AuditRow {
   id: string; action: string; performed_by_name: string | null; reason: string | null
   details: any; created_at: string; ess_account_id: string | null
@@ -30,10 +33,25 @@ export async function loadRoles(): Promise<EssRole[]> {
   return (data as any) || []
 }
 
+// Company → Location/Branch → Department lookups for the cascading assign flow.
+// (locations are the branches; departments hang off the company.)
+export async function loadOrgUnits(): Promise<{ companies: OrgUnit[]; locations: OrgUnit[]; departments: OrgUnit[] }> {
+  const [c, l, d] = await Promise.all([
+    supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name'),
+    supabase.from('locations').select('id, location_name, company_id').eq('status', 'Active').order('location_name'),
+    supabase.from('departments').select('id, dept_name, company_id').eq('status', 'Active').order('dept_name'),
+  ])
+  return {
+    companies:   (c.data || []).map((x: any) => ({ id: x.id, name: x.company_name })),
+    locations:   (l.data || []).map((x: any) => ({ id: x.id, name: x.location_name, company_id: x.company_id })),
+    departments: (d.data || []).map((x: any) => ({ id: x.id, name: x.dept_name, company_id: x.company_id })),
+  }
+}
+
 export async function loadUsers(): Promise<EssUser[]> {
   const [{ data: emps }, { data: accts }, { data: ur }, { data: roles }] = await Promise.all([
     supabase.from('employees')
-      .select('id, emp_code, full_name, designation, date_of_resignation, last_working_date, departments(dept_name), companies(company_name), locations(location_name)')
+      .select('id, emp_code, full_name, designation, company_id, location_id, department_id, date_of_resignation, last_working_date, departments(dept_name), companies(company_name), locations(location_name)')
       .order('emp_code'),
     supabase.from('ess_accounts').select('*'),
     supabase.from('ess_user_roles').select('ess_account_id, role_id').eq('is_active', true),
@@ -53,6 +71,7 @@ export async function loadUsers(): Promise<EssUser[]> {
       employee_id: e.id, emp_code: e.emp_code, full_name: e.full_name, designation: e.designation,
       dept_name: e.departments?.dept_name || null, company_name: e.companies?.company_name || null,
       location_name: e.locations?.location_name || null,
+      company_id: e.company_id || null, location_id: e.location_id || null, department_id: e.department_id || null,
       date_of_resignation: e.date_of_resignation, last_working_date: e.last_working_date,
       account, roles: account ? (rolesByAcct.get(account.id) || []) : [],
     } as EssUser
@@ -233,4 +252,86 @@ export async function loadAnnouncements(): Promise<Announcement[]> {
 export async function loadKudos(employeeId: string): Promise<Kudo[]> {
   const { data } = await supabase.from('ess_kudos').select('*').eq('to_employee_id', employeeId).order('created_at', { ascending: false }).limit(20)
   return (data as any) || []
+}
+
+// ════════════════════════════════════════════════════════════════
+// ROLES & PERMISSIONS (migration 028: role_permissions, role_approval_rights)
+// ════════════════════════════════════════════════════════════════
+export type AccessLevel = 'NONE' | 'VIEW' | 'EDIT' | 'FULL'
+export interface RolePermission { id: string; role_id: string; module: string; access_level: AccessLevel }
+export interface ApprovalRight {
+  id: string; role_id: string; approval_type: string
+  can_approve: boolean; can_reject: boolean; can_initiate: boolean; priority: number
+}
+export interface PendingRequest {
+  id: string; employee_id: string; request_type: string; request_data: any; is_confidential: boolean
+  status: string; assigned_to: string | null; submitted_at: string
+  employee_name: string | null; emp_code: string | null; dept_name: string | null
+}
+
+// Modules whose access can be governed per role.
+export const PERM_MODULES = [
+  'Employees', 'Attendance', 'Leave', 'Payroll', 'Compliance', 'HR Letters',
+  'Recruitment', 'Onboarding', 'Approvals', 'Reports', 'Admin Setup',
+  'Company Profile', 'Holidays',
+] as const
+
+// The 9 approval workflows. `live` = a request of this type is actually created
+// in ess_service_requests today (so it can surface in the approval queue).
+export const APPROVAL_TYPES: { key: string; label: string; live: boolean }[] = [
+  { key: 'LEAVE_APPLY',     label: 'Leave Application', live: false },
+  { key: 'EXPENSE_CLAIM',   label: 'Expense / Claims',  live: false },
+  { key: 'HIRING_MRF',      label: 'MRF / Hiring',      live: false },
+  { key: 'OFFER_LETTER',    label: 'Offer Letter',      live: false },
+  { key: 'SALARY_REVISION', label: 'Salary Revision',   live: false },
+  { key: 'RESIGNATION',     label: 'Resignation',       live: true },
+  { key: 'PROFILE_UPDATE',  label: 'Profile Update',    live: true },
+  { key: 'PIP',             label: 'PIP Action',        live: false },
+  { key: 'LOAN',            label: 'Loan Request',      live: true },
+]
+
+export async function loadRolePermissions(): Promise<RolePermission[]> {
+  const { data } = await supabase.from('role_permissions').select('*')
+  return (data || []) as RolePermission[]
+}
+export async function upsertRolePermission(role_id: string, module: string, access_level: AccessLevel) {
+  return supabase.from('role_permissions')
+    .upsert({ role_id, module, access_level, updated_at: new Date().toISOString() }, { onConflict: 'role_id,module' })
+}
+
+export async function loadApprovalRights(): Promise<ApprovalRight[]> {
+  const { data } = await supabase.from('role_approval_rights').select('*')
+  return (data || []) as ApprovalRight[]
+}
+export async function setApprovalRight(role_id: string, approval_type: string, patch: Partial<Pick<ApprovalRight, 'can_approve' | 'can_reject' | 'can_initiate'>>) {
+  return supabase.from('role_approval_rights')
+    .upsert({ role_id, approval_type, ...patch }, { onConflict: 'role_id,approval_type' })
+}
+
+// Pending requests a role can act on. Resolve role_id → approvable types →
+// ess_service_requests still pending of those types. (Direct role_id query —
+// avoids the embedded-filter pitfall of matching ess_roles.role_code inline.)
+export async function loadPendingForRole(role_id: string): Promise<{ types: string[]; requests: PendingRequest[] }> {
+  const { data: rights } = await supabase.from('role_approval_rights')
+    .select('approval_type').eq('role_id', role_id).eq('can_approve', true)
+  const types = (rights || []).map((r: any) => r.approval_type)
+  if (!types.length) return { types: [], requests: [] }
+  const { data } = await supabase.from('ess_service_requests')
+    .select('*, employees(full_name, emp_code, departments(dept_name))')
+    .in('request_type', types)
+    .in('status', ['PENDING', 'IN_REVIEW'])
+    .order('submitted_at', { ascending: false })
+  const requests = (data || []).map((r: any) => ({
+    id: r.id, employee_id: r.employee_id, request_type: r.request_type, request_data: r.request_data,
+    is_confidential: r.is_confidential, status: r.status, assigned_to: r.assigned_to, submitted_at: r.submitted_at,
+    employee_name: r.employees?.full_name || null, emp_code: r.employees?.emp_code || null,
+    dept_name: r.employees?.departments?.dept_name || null,
+  }))
+  return { types, requests }
+}
+
+export async function resolveRequest(requestId: string, action: 'APPROVED' | 'REJECTED', remark: string, byName: string) {
+  return supabase.from('ess_service_requests').update({
+    status: action, resolution_note: remark, assigned_to: byName, resolved_at: new Date().toISOString(),
+  }).eq('id', requestId)
 }

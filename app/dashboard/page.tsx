@@ -38,15 +38,17 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [wished, setWished] = useState<string[]>([])
   const [d, setD] = useState<any>(null)
+  const [sel, setSel] = useState<string | null>(null)
+  const [drillQ, setDrillQ] = useState('')
 
   const load = useCallback(async () => {
     setLoading(true)
     const today = new Date(); today.setHours(0,0,0,0)
     const [empR, compR, candR, mrfR, audR] = await Promise.all([
-      supabase.from('employees').select('id, full_name, first_name, employment_status, blacklisted, date_of_birth, group_doj, last_working_date, company_id, location_id, companies(company_name), locations(location_name)'),
+      supabase.from('employees').select('id, full_name, first_name, employment_status, blacklisted, date_of_birth, group_doj, last_working_date, company_id, location_id, companies(company_name), locations(location_name)').neq('is_test', true),
       supabase.from('companies').select('id, company_name'),
       supabase.from('candidates').select('id, full_name, stage, onboarding_date, blacklisted, created_at, designation'),
-      supabase.from('manpower_requisitions').select('id, status, no_of_openings, openings'),
+      supabase.from('manpower_requisitions').select('id, status, no_of_openings, openings, designation, position'),
       supabase.from('recruitment_audit_logs').select('action_type, details, created_at').order('created_at', { ascending:false }).limit(8),
     ])
     const emps = empR.data || [], cands = candR.data || [], mrfs = mrfR.data || [], audit = audR.data || []
@@ -62,9 +64,26 @@ export default function Dashboard() {
     const companyRows = byName(activeEmps, (e) => e.companies?.company_name).slice(0, 6)
     const locationRows = byName(activeEmps, (e) => e.locations?.location_name).slice(0, 8)
 
-    const openPositions = mrfs.filter((m: any) => m.status === 'APPROVED').reduce((s: number, m: any) => s + (Number(m.no_of_openings || m.openings || 0)), 0)
-    const inPipeline = cands.filter((c: any) => !['Joined','Rejected'].includes(c.stage) && !c.blacklisted).length
-    const joiningSoon = cands.filter((c: any) => c.onboarding_date && !c.blacklisted && (() => { const dd = (new Date(c.onboarding_date).getTime()-Date.now())/86400000; return dd >= -1 && dd <= 30 })()).length
+    const approvedMrfs = mrfs.filter((m: any) => m.status === 'APPROVED')
+    const openPositions = approvedMrfs.reduce((s: number, m: any) => s + (Number(m.no_of_openings || m.openings || 0)), 0)
+    const pipelineCands = cands.filter((c: any) => !['Joined','Rejected'].includes(c.stage) && !c.blacklisted)
+    const inPipeline = pipelineCands.length
+    const joiningCands = cands.filter((c: any) => c.onboarding_date && !c.blacklisted && (() => { const dd = (new Date(c.onboarding_date).getTime()-Date.now())/86400000; return dd >= -1 && dd <= 30 })())
+    const joiningSoon = joiningCands.length
+
+    // Drill-down detail rows per stat card (name / sub / meta).
+    const fmtDate = (s?: string) => s ? new Date(s).toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' }) : '—'
+    const details: Record<string, any[]> = {
+      total: [...emps].sort((a: any,b: any) => (a.full_name||'').localeCompare(b.full_name||''))
+        .map((e: any) => ({ name: e.full_name || '—', sub: e.companies?.company_name || '—', meta: isLeft(e) ? 'Exited' : (e.employment_status || 'Active'), tone: isLeft(e) ? '#DC2626' : '#16A34A' })),
+      active: [...activeEmps].sort((a: any,b: any) => (a.full_name||'').localeCompare(b.full_name||''))
+        .map((e: any) => ({ name: e.full_name || '—', sub: e.companies?.company_name || '—', meta: e.locations?.location_name || '—', tone:'#16A34A' })),
+      open: approvedMrfs.map((m: any) => ({ name: m.designation || m.position || '—', sub: `${Number(m.no_of_openings || m.openings || 0)} opening(s)`, meta: m.status || 'APPROVED', tone:'#3B82F6' })),
+      pipeline: [...pipelineCands].sort((a: any,b: any) => RECRUIT_STAGES.indexOf(a.stage) - RECRUIT_STAGES.indexOf(b.stage))
+        .map((c: any) => ({ name: c.full_name || '—', sub: c.designation || '—', meta: c.stage || '—', tone: STAGE_COLOR[c.stage] || '#7C3AED' })),
+      joining: [...joiningCands].sort((a: any,b: any) => new Date(a.onboarding_date).getTime() - new Date(b.onboarding_date).getTime())
+        .map((c: any) => ({ name: c.full_name || '—', sub: c.designation || '—', meta: fmtDate(c.onboarding_date), tone:'#0891B2' })),
+    }
 
     const pipeline = RECRUIT_STAGES.filter(s => s !== 'Rejected').map(s => ({ stage: s, count: cands.filter((c: any) => c.stage === s).length }))
 
@@ -99,7 +118,7 @@ export default function Dashboard() {
 
     setD({
       total: emps.length, active: activeEmps.length, openPositions, inPipeline, joiningSoon,
-      companyRows, locationRows, pipeline,
+      companyRows, locationRows, pipeline, details,
       activity: activity.slice(0,6),
       today: celeb.filter(c => c.days <= 0), week: celeb.filter(c => c.days > 0).slice(0,6),
     })
@@ -110,12 +129,17 @@ export default function Dashboard() {
   if (loading || !d) return <div style={{ padding:40, textAlign:'center', color:'#7C3AED', fontFamily:'"DM Sans",sans-serif' }}>Loading dashboard…</div>
 
   const stats = [
-    { label:'Total Employees', value: d.total.toLocaleString('en-IN'), sub:`${d.companyRows.length} companies`, color:'#7C3AED' },
-    { label:'Active', value: d.active.toLocaleString('en-IN'), sub: d.total ? `${Math.round(d.active/d.total*100)}% active` : '—', color:'#16A34A' },
-    { label:'Open Positions', value: d.openPositions, sub:'approved MRFs', color:'#3B82F6' },
-    { label:'In Pipeline', value: d.inPipeline, sub:'active candidates', color:'#F97316' },
-    { label:'Joining Soon', value: d.joiningSoon, sub:'next 30 days', color:'#0891B2' },
+    { key:'total', label:'Total Employees', value: d.total.toLocaleString('en-IN'), sub:`${d.companyRows.length} companies`, color:'#7C3AED' },
+    { key:'active', label:'Active', value: d.active.toLocaleString('en-IN'), sub: d.total ? `${Math.round(d.active/d.total*100)}% active` : '—', color:'#16A34A' },
+    { key:'open', label:'Open Positions', value: d.openPositions, sub:'approved MRFs', color:'#3B82F6' },
+    { key:'pipeline', label:'In Pipeline', value: d.inPipeline, sub:'active candidates', color:'#F97316' },
+    { key:'joining', label:'Joining Soon', value: d.joiningSoon, sub:'next 30 days', color:'#0891B2' },
   ]
+  const DRILL_TITLES: Record<string,string> = { total:'All Employees', active:'Active Employees', open:'Open Positions', pipeline:'Candidates in Pipeline', joining:'Joining in next 30 days' }
+  const selRows: any[] = sel ? (d.details?.[sel] || []) : []
+  const filteredRows = drillQ.trim()
+    ? selRows.filter((r: any) => [r.name, r.sub, r.meta].some((x: any) => String(x||'').toLowerCase().includes(drillQ.toLowerCase())))
+    : selRows
   const maxCo = d.companyRows.reduce((m: number, [,v]: any) => Math.max(m, v), 0) || 1
   const maxLoc = d.locationRows.reduce((m: number, [,v]: any) => Math.max(m, v), 0) || 1
   const maxStage = d.pipeline.reduce((m: number, p: any) => Math.max(m, p.count), 0) || 1
@@ -132,16 +156,54 @@ export default function Dashboard() {
       </div>
 
       <div style={{ padding:14 }}>
-        {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:8, marginBottom:12 }}>
-          {stats.map((st, i) => (
-            <div key={i} style={{ ...card, borderTop:`3px solid ${st.color}` }}>
-              <div style={{ fontSize:10, color:'#94A3B8', marginBottom:4, fontWeight:500, textTransform:'uppercase', letterSpacing:'.04em' }}>{st.label}</div>
-              <div style={{ fontSize:20, fontWeight:700, color:'#0F172A', marginBottom:2 }}>{st.value}</div>
-              <div style={{ fontSize:10, color:'#64748B' }}>{st.sub}</div>
-            </div>
-          ))}
+        {/* Stats — click a card to drill down */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:8, marginBottom: sel ? 8 : 12 }}>
+          {stats.map((st) => {
+            const isSel = sel === st.key
+            return (
+              <div key={st.key} onClick={() => { setSel(isSel ? null : st.key); setDrillQ('') }} title="Click to view details"
+                style={{ ...card, borderTop:`3px solid ${st.color}`, cursor:'pointer', transition:'box-shadow .15s, transform .1s',
+                  boxShadow: isSel ? `0 0 0 2px ${st.color}` : 'none',
+                  background: isSel ? '#FAFAFF' : '#fff', position:'relative' }}>
+                <div style={{ fontSize:10, color:'#94A3B8', marginBottom:4, fontWeight:500, textTransform:'uppercase', letterSpacing:'.04em', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <span>{st.label}</span>
+                  <span style={{ fontSize:11, color: isSel ? st.color : '#CBD5E1' }}>{isSel ? '▲' : '▾'}</span>
+                </div>
+                <div style={{ fontSize:20, fontWeight:700, color:'#0F172A', marginBottom:2 }}>{st.value}</div>
+                <div style={{ fontSize:10, color:'#64748B' }}>{st.sub}</div>
+              </div>
+            )
+          })}
         </div>
+
+        {/* Drill-down detail panel */}
+        {sel && (
+          <div style={{ ...card, marginBottom:12, padding:0, overflow:'hidden' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, padding:'10px 14px', borderBottom:'1px solid #F1F5F9', flexWrap:'wrap' }}>
+              <div style={{ fontSize:13, fontWeight:600, color:'#0F172A' }}>
+                {DRILL_TITLES[sel]} <span style={{ fontSize:11, fontWeight:500, color:'#94A3B8' }}>· {filteredRows.length}{drillQ?` of ${selRows.length}`:''}</span>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                <input value={drillQ} onChange={e => setDrillQ(e.target.value)} placeholder="Search…"
+                  style={{ fontSize:12, padding:'5px 10px', border:'1px solid #E2E8F0', borderRadius:6, outline:'none', fontFamily:'inherit', width:160 }} />
+                <button onClick={() => setSel(null)} style={{ fontSize:11, color:'#64748B', background:'#F1F5F9', border:'none', padding:'5px 10px', borderRadius:6, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>✕ Close</button>
+              </div>
+            </div>
+            <div style={{ maxHeight:340, overflowY:'auto' }}>
+              {filteredRows.length === 0 && <div style={{ fontSize:12, color:'#94A3B8', padding:'18px 14px', textAlign:'center' }}>No records.</div>}
+              {filteredRows.map((r: any, i: number) => (
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', borderBottom: i < filteredRows.length-1 ? '1px solid #F8FAFC' : 'none' }}>
+                  <div style={{ width:22, fontSize:10, color:'#CBD5E1', flexShrink:0, textAlign:'right' }}>{i+1}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:500, color:'#0F172A', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r.name}</div>
+                    <div style={{ fontSize:11, color:'#94A3B8', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r.sub}</div>
+                  </div>
+                  <div style={{ fontSize:10.5, fontWeight:600, color: r.tone || '#64748B', background:`${(r.tone||'#64748B')}14`, padding:'3px 9px', borderRadius:99, flexShrink:0, whiteSpace:'nowrap' }}>{r.meta}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Location + Company headcount */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>

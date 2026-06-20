@@ -18,7 +18,7 @@ export interface SyncResult {
 
 export async function onboardingToEmployee(supa: any, onboardingId: string, employeeCode: string): Promise<SyncResult> {
   const { data: oc } = await supa.from('onboarding_candidates')
-    .select('company_id, location_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data')
+    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data')
     .eq('id', onboardingId).maybeSingle()
   if (!oc) return { error: 'onboarding record not found' }
 
@@ -39,10 +39,11 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   const firstName = parts[0] || fullName
   const lastName = parts.length > 1 ? parts.slice(1).join(' ') : ''
 
-  // Gap D — department name (text) → departments.id (UUID FK). Leave null if no match.
-  let departmentId: string | null = null
-  let deptMatched = false
-  if (oc.department) {
+  // Gap D — department FK. Prefer the explicit department_id (set from the masters
+  // dropdown); else fall back to a name lookup. Null + flag if neither resolves.
+  let departmentId: string | null = oc.department_id || null
+  let deptMatched = !!departmentId
+  if (!departmentId && oc.department) {
     const { data: d } = await supa.from('departments').select('id')
       .ilike('dept_name', oc.department).eq('company_id', oc.company_id).maybeSingle()
     if (d?.id) { departmentId = d.id; deptMatched = true }
@@ -88,9 +89,36 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   const { data: ins, error } = await supa.from('employees').insert(row).select('id').single()
   if (error) return { error: error.message, dept_matched: deptMatched }
 
+  const empId = ins.id
+
+  // ── Populate child tables (education / experience / family) from form_data ──
+  // Non-fatal: a child-insert failure must not undo the created employee.
+  try {
+    const edu = (f.step_5?.education || []).filter((e: any) => e.qualification || e.institute)
+    if (edu.length) await supa.from('employee_education').insert(edu.map((e: any) => ({
+      employee_id: empId, qualification: e.qualification || null, institute: e.institute || null,
+      year_of_passing: e.year || null, doc_name: e.docName || null,
+    })))
+
+    const exp = (f.step_5?.prev_employers || []).filter((p: any) => p.company)
+    if (exp.length) await supa.from('employee_experience').insert(exp.map((p: any) => ({
+      employee_id: empId, company: p.company || null, designation: p.designation || null,
+      from_date: p.from || null, to_date: p.to || null, reason_for_change: p.reason || null,
+    })))
+
+    const ins0 = st.insurance || {}
+    const fam: any[] = []
+    if (ins0.spouse_name) fam.push({ relation: 'Spouse', name: ins0.spouse_name, date_of_birth: ins0.spouse_dob || null, residing_with_emp: ins0.spouse_residing === 'Yes' })
+    if (ins0.father_name) fam.push({ relation: 'Father', name: ins0.father_name, date_of_birth: ins0.father_dob || null, residing_with_emp: ins0.father_residing === 'Yes' })
+    if (ins0.mother_name) fam.push({ relation: 'Mother', name: ins0.mother_name, date_of_birth: ins0.mother_dob || null, residing_with_emp: ins0.mother_residing === 'Yes' })
+    if (ins0.kid1_name) fam.push({ relation: 'Child', name: ins0.kid1_name, date_of_birth: ins0.kid1_dob || null, residing_with_emp: true })
+    if (ins0.kid2_name) fam.push({ relation: 'Child', name: ins0.kid2_name, date_of_birth: ins0.kid2_dob || null, residing_with_emp: true })
+    if (fam.length) await supa.from('employee_family').insert(fam.map(x => ({ ...x, employee_id: empId, is_dependent: true })))
+  } catch (e) { /* child tables are best-effort */ }
+
   // Link onboarding ↔ employee so the employee drawer's Onboarding/Salary/Documents
   // tabs (which query by employee_id) populate.
-  await supa.from('onboarding_candidates').update({ employee_id: ins.id }).eq('id', onboardingId)
+  await supa.from('onboarding_candidates').update({ employee_id: empId }).eq('id', onboardingId)
 
-  return { ok: true, employee_id: ins?.id, dept_matched: deptMatched }
+  return { ok: true, employee_id: empId, dept_matched: deptMatched }
 }

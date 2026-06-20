@@ -55,6 +55,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   })
 
   const [recruiterComments, setRecruiterComments] = useState('')
+  const [hiringRemark, setHiringRemark] = useState('')
   const P = (k: string, v: any) => setPrevForm(f => ({ ...f, [k]: v }))
   const J = (k: string, v: any) => setJoining(f => ({ ...f, [k]: v }))
 
@@ -107,6 +108,9 @@ JOINING DETAILS:
 
 DOCUMENTS STATUS:    ${docsCount} document(s) received
 BGV STATUS:          Pending
+
+HIRING MANAGER REMARK / TARGET:
+  ${hiringRemark || 'Nil'}
 
 ${recruiterComments ? `Recruiter Comments:\n  ${recruiterComments}` : ''}
 ${'─'.repeat(50)}
@@ -169,6 +173,7 @@ This document is confidential and for internal approval only.`
       status: 'SUBMITTED',
       submitted_at: new Date().toISOString(),
       recruiter_comments: recruiterComments || null,
+      hiring_manager_remark: hiringRemark || null,
     })
 
     // Audit log
@@ -261,6 +266,12 @@ This document is confidential and for internal approval only.`
         )}
       </div>
 
+      {/* HIRING MANAGER REMARK / ADDITIONAL */}
+      <div style={S.card}>
+        <SecLine title="Hiring Manager — Remark / Additional (e.g. Target)" />
+        <input style={S.input} value={hiringRemark} onChange={e=>setHiringRemark(e.target.value)} placeholder="e.g. Target for the role, special note for HR Head…" />
+      </div>
+
       {/* RECRUITER COMMENTS */}
       <div style={S.card}>
         <SecLine title="Recruiter Comments (Optional)" />
@@ -277,17 +288,18 @@ This document is confidential and for internal approval only.`
         </button>
       </div>
 
-      {/* TEMPLATE PREVIEW */}
+      {/* TEMPLATE PREVIEW — read-only */}
       {showTemplate && (
         <div style={S.card}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
-            <div style={{ fontSize:13, fontWeight:500 }}>Approval Request Template (Editable)</div>
+            <div style={{ fontSize:13, fontWeight:500 }}>Approval Request Preview (read-only)</div>
             <button onClick={()=>setShowTemplate(false)} style={{ ...S.btn('#F3F0FF','#9CA3AF'), padding:'4px 10px', fontSize:11 }}>Hide</button>
           </div>
-          <textarea style={{ ...S.textarea, minHeight:500, fontFamily:'monospace', fontSize:11 }}
-            value={template} onChange={e=>setTemplate(e.target.value)} />
+          <pre style={{ fontFamily:'monospace', fontSize:11, color:'#374151', background:'#F9FAFB', borderRadius:7, padding:12, whiteSpace:'pre-wrap', border:'1px solid #EDE9FE', maxHeight:500, overflow:'auto', margin:0 }}>
+            {template}
+          </pre>
           <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>
-            You can edit the template before submitting. All changes will be saved.
+            This is a preview of what HR Head will see. To change it, edit the fields above and re-generate.
           </div>
         </div>
       )}
@@ -535,6 +547,14 @@ export function HRHeadApprovalDashboard() {
                 ))}
               </div>
             </div>
+
+            {/* Hiring Manager remark / target (#8) */}
+            {selected.hiring_manager_remark && (
+              <div style={S.card}>
+                <div style={S.sec}>Hiring Manager Remark / Target</div>
+                <div style={{ fontSize:12.5, color:'#1E1B4B', whiteSpace:'pre-wrap' }}>{selected.hiring_manager_remark}</div>
+              </div>
+            )}
 
             {/* Approval Action */}
             {selected.status === 'SUBMITTED' && (
@@ -811,8 +831,11 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
     HR_HEAD_APPROVED:          ['✅','HR Head approved'],
     HR_HEAD_REJECTED:          ['❌','HR Head rejected'],
     OFFER_LETTER_SENT:         ['📤','Offer letter sent'],
+    OFFER_ACCEPTED:            ['🎉','Offer accepted'],
     OFFER_ACCEPTED_DIGITAL:    ['🎉','Offer accepted digitally'],
     OFFER_ACCEPTED_UPLOAD:     ['🎉','Signed copy uploaded'],
+    OFFER_REVISE_REQUESTED:    ['✏️','Offer revision requested'],
+    OFFER_BACKOUT:             ['🚪','Candidate backed out'],
   }
 
   return (
