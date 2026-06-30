@@ -6,12 +6,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   listCalendars, createCalendar, setCalendarStatus, deleteCalendar,
-  listCompanies, listBranches, listEmployees, listCompanyMaps, upsertCompanyMap,
+  listCompanies, listBranches, listDepartments, listEmployees, listCompanyMaps, upsertCompanyMap,
   listHolidays, listApplicability, createHoliday, deleteHoliday,
   listWeeklyOffs, createWeeklyOff, deleteWeeklyOff, weekendConflict,
   resolveHolidays, resolveWeeklyOffs, WEEKDAYS, HOLIDAY_TYPES,
   type HolidayCalendar, type CompanyCalendarMap, type HolidayEntry, type HolidayApplicability,
-  type WeeklyOff, type CompanyLite, type BranchLite, type EmployeeLite,
+  type WeeklyOff, type CompanyLite, type BranchLite, type DeptLite, type EmployeeLite,
   type HolidayType, type WeeklyMode, type ResolvedHoliday,
 } from '@/lib/supabase-holidays'
 
@@ -183,7 +183,7 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
   const [desc, setDesc] = useState('')
   const [type, setType] = useState<HolidayType>('FESTIVAL')
   const [isOptional, setIsOptional] = useState(false)
-  const [scopes, setScopes] = useState<{ company_id: string; branch_id: string | null }[]>([])
+  const [scopes, setScopes] = useState<{ company_id: string | null; branch_id: string | null }[]>([])
   const [pickCo, setPickCo] = useState('')
   const [pickBr, setPickBr] = useState('') // '' = all branches
   const [confirmWeekend, setConfirmWeekend] = useState(false)
@@ -191,11 +191,24 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
 
   const addScope = () => {
     if (!pickCo) return
+    // "All companies" → add one scope row per company (company_id is NOT NULL in the DB),
+    // so the holiday genuinely applies to every company. Skips any already-added.
+    if (pickCo === 'ALL') {
+      setScopes(prev => {
+        const next = [...prev]
+        companies.forEach(c => {
+          if (!next.some(s => s.company_id === c.id && s.branch_id === null)) next.push({ company_id: c.id, branch_id: null })
+        })
+        return next
+      })
+      setPickCo(''); setPickBr('')
+      return
+    }
     const row = { company_id: pickCo, branch_id: pickBr || null }
     if (scopes.some(s => s.company_id === row.company_id && s.branch_id === row.branch_id)) return
     setScopes([...scopes, row]); setPickBr('')
   }
-  const coName = (id: string) => companies.find(c => c.id === id)?.company_name || id.slice(0, 6)
+  const coName = (id: string | null) => id ? (companies.find(c => c.id === id)?.company_name || id.slice(0, 6)) : 'All companies'
   const brName = (id: string | null) => id ? (branches.find(b => b.id === id)?.location_name || id.slice(0, 6)) : 'All branches'
 
   const conflict = date ? weekendConflict(date, weeklyOffs, scopes[0]?.company_id || null) : { conflict: false, weekday: '' }
@@ -231,6 +244,7 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
       <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1.4fr auto', gap:8, marginBottom:8 }}>
         <select style={C.input} value={pickCo} onChange={e => { setPickCo(e.target.value); setPickBr('') }}>
           <option value="">— Company —</option>
+          <option value="ALL">🌐 All companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
         </select>
         <select style={C.input} value={pickBr} onChange={e => setPickBr(e.target.value)} disabled={!pickCo}>
@@ -266,8 +280,8 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
 }
 
 // ══ TAB 3 · Weekly off ══════════════════════════════════════════════
-function WeeklyOffTab({ calendars, companies, branches, weeklyOffs, onAdd, onDelete }: {
-  calendars: HolidayCalendar[]; companies: CompanyLite[]; branches: BranchLite[]; weeklyOffs: WeeklyOff[]
+function WeeklyOffTab({ calendars, companies, branches, departments, weeklyOffs, onAdd, onDelete }: {
+  calendars: HolidayCalendar[]; companies: CompanyLite[]; branches: BranchLite[]; departments: DeptLite[]; weeklyOffs: WeeklyOff[]
   onAdd: (i: any) => Promise<void>; onDelete: (id: string) => Promise<void>
 }) {
   const [weekday, setWeekday] = useState(0)
@@ -277,10 +291,12 @@ function WeeklyOffTab({ calendars, companies, branches, weeklyOffs, onAdd, onDel
   const [calId, setCalId] = useState('')
   const [coId, setCoId] = useState('')
   const [brId, setBrId] = useState('')
+  const [deptId, setDeptId] = useState('')
   const [empType, setEmpType] = useState('')
   const [busy, setBusy] = useState(false)
   const coName = (id: string | null) => id ? (companies.find(c => c.id === id)?.company_name || id.slice(0, 6)) : 'All companies'
   const brName = (id: string | null) => id ? (branches.find(b => b.id === id)?.location_name || id.slice(0, 6)) : 'All branches'
+  const deptName = (id: string | null) => id ? (departments.find(d => d.id === id)?.dept_name || id.slice(0, 6)) : 'All departments'
 
   const toggleNth = (n: number) => setNth(nth.includes(n) ? nth.filter(x => x !== n) : [...nth, n].sort())
   const ready = mode === 'EVERY' || nth.length > 0
@@ -289,7 +305,7 @@ function WeeklyOffTab({ calendars, companies, branches, weeklyOffs, onAdd, onDel
     setBusy(true)
     await onAdd({
       calendar_id: calId || null, weekday, mode, nth_occurrences: mode === 'NTH' ? nth : null,
-      is_primary: isPrimary, company_id: coId || null, branch_id: brId || null, employment_type: empType || null,
+      is_primary: isPrimary, company_id: coId || null, branch_id: brId || null, department_id: deptId || null, employment_type: empType || null,
     })
     setNth([]); setIsPrimary(false); setBusy(false)
   }
@@ -323,9 +339,10 @@ function WeeklyOffTab({ calendars, companies, branches, weeklyOffs, onAdd, onDel
         )}
 
         <div style={{ ...C.lbl }}>Scope (blank = all)</div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr auto', gap:10, alignItems:'flex-end' }}>
-          <select style={C.input} value={coId} onChange={e => { setCoId(e.target.value); setBrId('') }}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr auto', gap:10, alignItems:'flex-end' }}>
+          <select style={C.input} value={coId} onChange={e => { setCoId(e.target.value); setBrId(''); setDeptId('') }}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
           <select style={C.input} value={brId} onChange={e => setBrId(e.target.value)} disabled={!coId}><option value="">All branches</option>{branches.filter(b => b.company_id === coId).map(b => <option key={b.id} value={b.id}>{b.location_name}</option>)}</select>
+          <select style={C.input} value={deptId} onChange={e => setDeptId(e.target.value)} disabled={!coId}><option value="">All departments</option>{departments.filter(d => d.company_id === coId).map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}</select>
           <input style={C.input} value={empType} onChange={e => setEmpType(e.target.value)} placeholder="Employment type (blank = all)" />
           <button disabled={!ready || busy} style={{ ...C.pri, opacity: ready ? 1 : 0.5 }} onClick={save}>{busy ? '…' : '+ Add rule'}</button>
         </div>
@@ -339,7 +356,7 @@ function WeeklyOffTab({ calendars, companies, branches, weeklyOffs, onAdd, onDel
             <span style={{ fontWeight:600, width:90 }}>{WEEKDAYS[w.weekday]}</span>
             <Badge text={w.mode === 'EVERY' ? 'EVERY WEEK' : `WEEKS ${(w.nth_occurrences || []).join(',')}`} bg="#EDE9FE" color="#7C3AED" />
             {w.is_primary && <Badge text="PRIMARY" bg="#D1FAE5" color="#065F46" />}
-            <span style={{ color:'#9CA3AF' }}>{coName(w.company_id)} · {brName(w.branch_id)}{w.employment_type ? ` · ${w.employment_type}` : ''}</span>
+            <span style={{ color:'#9CA3AF' }}>{coName(w.company_id)} · {brName(w.branch_id)} · {deptName(w.department_id)}{w.employment_type ? ` · ${w.employment_type}` : ''}</span>
             <button style={{ ...C.danger, marginLeft:'auto' }} onClick={() => onDelete(w.id)}>Delete</button>
           </div>
         ))}
@@ -436,7 +453,7 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
 }
 
 // ══════════════════════════════════════════════════════════════════
-export default function HolidaysPage() {
+export function HolidaysSection() {
   const [tab, setTab] = useState<'cal' | 'hol' | 'week' | 'prev'>('cal')
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -445,6 +462,7 @@ export default function HolidaysPage() {
   const [calendars, setCalendars] = useState<HolidayCalendar[]>([])
   const [companies, setCompanies] = useState<CompanyLite[]>([])
   const [branches, setBranches] = useState<BranchLite[]>([])
+  const [departments, setDepartments] = useState<DeptLite[]>([])
   const [employees, setEmployees] = useState<EmployeeLite[]>([])
   const [maps, setMaps] = useState<CompanyCalendarMap[]>([])
   const [weeklyOffs, setWeeklyOffs] = useState<WeeklyOff[]>([])
@@ -456,10 +474,10 @@ export default function HolidaysPage() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [c, co, b, e, mp, w] = await Promise.all([
-        listCalendars(), listCompanies(), listBranches(), listEmployees(), listCompanyMaps(), listWeeklyOffs(),
+      const [c, co, b, d, e, mp, w] = await Promise.all([
+        listCalendars(), listCompanies(), listBranches(), listDepartments(), listEmployees(), listCompanyMaps(), listWeeklyOffs(),
       ])
-      setCalendars(c); setCompanies(co); setBranches(b); setEmployees(e); setMaps(mp); setWeeklyOffs(w)
+      setCalendars(c); setCompanies(co); setBranches(b); setDepartments(d); setEmployees(e); setMaps(mp); setWeeklyOffs(w)
     } catch (err: any) { notify('Load failed: ' + (err?.message || 'check migration 026'), 'error') }
     setLoading(false)
   }, [])
@@ -486,8 +504,7 @@ export default function HolidaysPage() {
   const tabs: [typeof tab, string][] = [['cal', 'Calendars'], ['hol', 'Holidays'], ['week', 'Weekly Off'], ['prev', 'Employee Preview']]
 
   return (
-    <div style={{ ...C.page, padding:'20px 24px' }}>
-      <div style={{ maxWidth:1200, margin:'0 auto' }}>
+    <>
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Holiday &amp; Weekly-off Configuration</div>
         <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Attendance &amp; Leave config layer — calendars, holidays (branch-wise), weekly offs. Sirf PUBLISHED calendar ESS pe jaata hai.</div>
 
@@ -499,12 +516,21 @@ export default function HolidaysPage() {
           <>
             {tab === 'cal' && <CalendarsTab calendars={calendars} companies={companies} maps={maps} onCreate={hCreateCal} onStatus={hStatus} onDelete={hDeleteCal} onMap={hMap} />}
             {tab === 'hol' && <HolidaysTab calendars={calendars} companies={companies} branches={branches} weeklyOffs={weeklyOffs} selCal={selCal} setSelCal={setSelCal} holidays={holidays} appl={appl} onAdd={hAddHoliday} onDelete={hDeleteHoliday} />}
-            {tab === 'week' && <WeeklyOffTab calendars={calendars} companies={companies} branches={branches} weeklyOffs={weeklyOffs} onAdd={hAddWeekly} onDelete={hDeleteWeekly} />}
+            {tab === 'week' && <WeeklyOffTab calendars={calendars} companies={companies} branches={branches} departments={departments} weeklyOffs={weeklyOffs} onAdd={hAddWeekly} onDelete={hDeleteWeekly} />}
             {tab === 'prev' && <PreviewTab employees={employees} companies={companies} notify={notify} />}
           </>
         )}
-      </div>
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+    </>
+  )
+}
+
+export default function HolidaysPage() {
+  return (
+    <div style={{ ...C.page, padding:'20px 24px' }}>
+      <div style={{ maxWidth:1200, margin:'0 auto' }}>
+        <HolidaysSection />
+      </div>
     </div>
   )
 }

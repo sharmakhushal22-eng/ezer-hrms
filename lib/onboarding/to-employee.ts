@@ -18,7 +18,7 @@ export interface SyncResult {
 
 export async function onboardingToEmployee(supa: any, onboardingId: string, employeeCode: string): Promise<SyncResult> {
   const { data: oc } = await supa.from('onboarding_candidates')
-    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data')
+    .select('company_id, location_id, department_id, designation, department, full_name, email, mobile, date_of_joining, employment_type, esic_applicable, form_data, grade, l1_manager_id, tds_regime, pf_wage_type, pf_applicable, pt_state, lwf_applicable, cost_centre, shift_id, induction_date, team_name, work_location_type')
     .eq('id', onboardingId).maybeSingle()
   if (!oc) return { error: 'onboarding record not found' }
 
@@ -84,12 +84,35 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     bank_account_last4: bankAcc ? bankAcc.slice(-4) : null,
     ifsc_code:       st.bank_ifsc || null,
     account_type:    st.account_type || null,
+    // ── HR activation wizard fields ──
+    grade:                  oc.grade || null,
+    reporting_manager_id:   oc.l1_manager_id || null,
+    tds_regime:             oc.tds_regime || 'NEW',
+    pf_wage_type:           oc.pf_wage_type || 'BASIC_DA',
+    pf_applicable:          oc.pf_applicable ?? true,
+    professional_tax_state: oc.pt_state || null,
+    lwf_applicable:         oc.lwf_applicable ?? false,
+    cost_centre:            oc.cost_centre || null,
+    induction_date:         oc.induction_date || null,
+    team_name:              oc.team_name || null,
+    work_location_type:     oc.work_location_type || 'Office',
   }
 
   const { data: ins, error } = await supa.from('employees').insert(row).select('id').single()
   if (error) return { error: error.message, dept_matched: deptMatched }
 
   const empId = ins.id
+
+  // ── Auto shift assignment from the activation wizard (non-fatal) ──
+  if (oc.shift_id) {
+    try {
+      const sa: any = { employee_id: empId, shift_id: oc.shift_id, assigned_by: 'HR Activation', is_active: true }
+      if (oc.date_of_joining) sa.effective_from = oc.date_of_joining
+      await supa.from('employee_shift_assignment').insert(sa)
+      const { data: sh } = await supa.from('shift_master').select('shift_code').eq('id', oc.shift_id).maybeSingle()
+      if (sh?.shift_code) await supa.from('employees').update({ shift_type: sh.shift_code }).eq('id', empId)
+    } catch { /* shift assignment is best-effort */ }
+  }
 
   // ── Populate child tables (education / experience / family) from form_data ──
   // Non-fatal: a child-insert failure must not undo the created employee.

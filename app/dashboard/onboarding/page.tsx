@@ -4,6 +4,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import ActivationWizard from '@/components/onboarding/ActivationWizard'
 
 // ── Types ─────────────────────────────────────────────────────────
 type Stage = 'NOT_INVITED'|'INVITED'|'IN_PROGRESS'|'SUBMITTED'|'HR_REVIEW'|'APPROVED'|'EMPLOYEE_CREATED'
@@ -14,7 +15,7 @@ interface Candidate {
   id: string; full_name: string; designation: string; department: string
   email: string; mobile: string; date_of_joining: string
   status: Stage; current_step: number; form_data: any
-  employee_code?: string; magic_link_token: string
+  employee_code?: string; employment_type?: string; magic_link_token: string
   submitted_at?: string; created_at: string; company_id: string
   candidate_id?: string; recruitment_id?: string  // link back to recruitment.candidates
   // Computed
@@ -98,6 +99,8 @@ export default function OnboardingDashboard() {
   const [linkModal,    setLinkModal]  = useState(false)
   const [codeModal,    setCodeModal]  = useState<Candidate|null>(null)
   const [genCode,      setGenCode]    = useState('')
+  const [codeLoading,  setCodeLoading] = useState(false)
+  const [codeType,     setCodeType]   = useState('')
   const [saving,       setSaving]     = useState(false)
   const [dateModal,    setDateModal]  = useState<Candidate|null>(null)
   const [dateVal,      setDateVal]    = useState('')
@@ -344,6 +347,20 @@ export default function OnboardingDashboard() {
     setResendingId('')
   }
 
+  // ── Open code modal + auto-suggest the next type-wise code ────
+  const openCodeModal = async (candidate: Candidate) => {
+    setCodeModal(candidate); setGenCode(''); setCodeType(''); setCodeLoading(true)
+    try {
+      const res = await fetch(`/api/onboarding/generate-code?onboarding_id=${candidate.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        setGenCode(data.suggested || '')
+        setCodeType(data.employment_type || '')
+      }
+    } catch { /* silent — HR can still type manually */ }
+    setCodeLoading(false)
+  }
+
   // ── Generate employee code ────────────────────────────────────
   const generateCode = async () => {
     if (!codeModal || !genCode.trim()) { showToast('Code required','err'); return }
@@ -355,7 +372,14 @@ export default function OnboardingDashboard() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error||'Failed')
-      showToast(`✓ Employee code ${genCode} generated! ESS access unlocked.`)
+      const code = data.employee_code || genCode
+      // Surface the master-sync result — earlier this was hidden, so a failed
+      // employees insert looked like success while the master stayed empty.
+      if (data.employee_synced === false) {
+        showToast(`Code ${code} generated, but Employee Master sync FAILED: ${data.sync_error || 'unknown error'}`, 'err')
+      } else {
+        showToast(`✓ ${code} generated — added to Employee Master + ESS unlocked.`)
+      }
       setCodeModal(null); setGenCode('')
       load()
     } catch(e:any) { showToast(e.message,'err') }
@@ -382,6 +406,9 @@ export default function OnboardingDashboard() {
 
   // ── Filter candidates ─────────────────────────────────────────
   const filtered = candidates.filter(c=>{
+    // Once the employee code is generated (onboarding 100% complete), drop the card
+    // from the default list — still reachable by explicitly filtering the stage.
+    if (c.status==='EMPLOYEE_CREATED' && filterStage!=='EMPLOYEE_CREATED') return false
     if (filterStage!=='ALL' && c.status!==filterStage) return false
     if (filterRisk!=='ALL'  && c.ai_risk!==filterRisk)  return false
     if (joinWindow!=='all') {
@@ -500,7 +527,7 @@ export default function OnboardingDashboard() {
                   <div style={{display:'flex',justifyContent:'space-between',marginTop:5,fontSize:10,color:'#6B7280'}}>
                     <span>Step {c.current_step||1}/8 · {pct}% complete</span>
                     {c.status==='SUBMITTED' && (
-                      <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:'#fff',fontFamily:'inherit'}}>
+                      <button onClick={()=>{openCodeModal(c)}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:'#fff',fontFamily:'inherit'}}>
                         Generate code
                       </button>
                     )}
@@ -643,11 +670,11 @@ export default function OnboardingDashboard() {
                           <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit</button>
                         )}
                         {c.status==='SUBMITTED' && (
-                          <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
+                          <button onClick={()=>{openCodeModal(c)}} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
                             <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Code
                           </button>
                         )}
-                        {c.status==='INVITED' && (
+                        {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
                           <button onClick={async()=>{
                             const link=`${window.location.origin}/onboarding/${c.magic_link_token}`
                             await navigator.clipboard.writeText(link).catch(()=>{})
@@ -656,15 +683,15 @@ export default function OnboardingDashboard() {
                             <i className="ti ti-copy" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Link
                           </button>
                         )}
-                        {c.status==='INVITED' && (
+                        {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
                           <button onClick={()=>resendLink(c)} disabled={resendingId===c.id} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:resendingId===c.id?.6:1}}>
                             <i className="ti ti-send" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>{resendingId===c.id?'Sending…':'Resend'}
                           </button>
                         )}
-                        {c.status==='INVITED' && (
+                        {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
                           <button onClick={()=>extendValidity(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#1E1B4B'}}>⏱ Extend</button>
                         )}
-                        {c.status==='INVITED' && (
+                        {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
                           <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit</button>
                         )}
                         {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.laptop_issued && (
@@ -729,7 +756,7 @@ export default function OnboardingDashboard() {
                       </div>
                     </div>
                     {a.action==='generate' && cand && (
-                      <button onClick={()=>{setCodeModal(cand);setGenCode('')}} style={{padding:'5px 12px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                      <button onClick={()=>{openCodeModal(cand)}} style={{padding:'5px 12px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
                         <i className="ti ti-bolt" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Generate code
                       </button>
                     )}
@@ -787,7 +814,7 @@ export default function OnboardingDashboard() {
                   </div>
                   <div style={{display:'flex',gap:6}}>
                     {c.status==='SUBMITTED' && (
-                      <button onClick={()=>{setCodeModal(c);setGenCode('')}} style={{padding:'5px 10px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontFamily:'inherit'}}>Generate code</button>
+                      <button onClick={()=>{openCodeModal(c)}} style={{padding:'5px 10px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontFamily:'inherit'}}>Generate code</button>
                     )}
                   </div>
                 </div>
@@ -1075,45 +1102,15 @@ export default function OnboardingDashboard() {
         </div>
       )}
 
-      {/* ── GENERATE CODE MODAL ──────────────────────────────── */}
+      {/* ── HR ACTIVATION WIZARD ─────────────────────────────── */}
       {codeModal && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-          <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:440,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div style={{fontSize:15,fontWeight:500}}>Generate Employee Code</div>
-              <button onClick={()=>setCodeModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'#6B7280',lineHeight:1}}>×</button>
-            </div>
-            <div style={{background:'#EEEDFE',borderRadius:'8px',padding:'12px 14px',marginBottom:14}}>
-              <div style={{fontSize:12,fontWeight:500,color:P,marginBottom:6}}>{codeModal.full_name}</div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,fontSize:11,color:'#6B7280'}}>
-                <span>Designation: {codeModal.designation||'—'}</span>
-                <span>DOJ: {fmt(codeModal.date_of_joining)}</span>
-                <span>Docs: {codeModal.docs_uploaded||0} uploaded</span>
-                <span>Progress: {progressPct(codeModal)}%</span>
-              </div>
-            </div>
-            {progressPct(codeModal) < 80 && (
-              <div style={{background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'8px',padding:'8px 12px',marginBottom:12,fontSize:11,color:'#D97706'}}>
-                ⚠ Joining form {100-progressPct(codeModal)}% incomplete. Are you sure you want to generate code now?
-              </div>
-            )}
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>Employee Code *</div>
-              <input value={genCode} onChange={e=>setGenCode(e.target.value.toUpperCase())} placeholder="e.g. SSM-00142"
-                style={{width:'100%',padding:'10px 12px',background:'#FAFAF8',border:`1.5px solid ${P}`,borderRadius:'8px',fontSize:15,color:'#1E1B4B',outline:'none',fontFamily:'inherit',letterSpacing:1,fontWeight:500,boxSizing:'border-box'}}/>
-              <div style={{fontSize:10,color:'#6B7280',marginTop:4}}>Format: [CompanyCode]-[5 digits] · Must be unique</div>
-            </div>
-            <div style={{background:'#EAF3DE',borderRadius:'8px',padding:'8px 12px',marginBottom:14,fontSize:11,color:'#065F46',lineHeight:1.7}}>
-              ✓ Employee code generated → ESS portal access unlocked → Welcome email auto-sent
-            </div>
-            <div style={{display:'flex',gap:10}}>
-              <button onClick={()=>setCodeModal(null)} style={{padding:'9px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#1E1B4B'}}>Cancel</button>
-              <button onClick={generateCode} disabled={saving||!genCode.trim()} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:genCode.trim()?'#059669':'#9CA3AF',color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
-                {saving ? '⏳ Generating...' : `⚡ Generate ${genCode||'code'} & unlock ESS`}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ActivationWizard
+          candidate={codeModal}
+          genCode={genCode} setGenCode={setGenCode}
+          codeType={codeType} codeLoading={codeLoading} saving={saving}
+          onGenerate={generateCode}
+          onClose={() => setCodeModal(null)}
+        />
       )}
 
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={()=>setToast(null)}/>}

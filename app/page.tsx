@@ -137,6 +137,9 @@ export default function LoginPage() {
             <div style={{ flex: 1, height: '1px', background: d?'#1F2937':'#E2E8F0' }} />
           </div>
           <button style={{ width:'100%',padding:'12px',background:'transparent',border:`1.5px solid ${d?'#374151':'#E2E8F0'}`,borderRadius:'10px',fontSize:'14px',fontWeight:'500',color:d?'#D1D5DB':'#374151',cursor:'pointer' }}>Contact your admin</button>
+          <div style={{ textAlign: 'center', marginTop: '16px' }}>
+            <a href="/ess-login" style={{ fontSize:'13px',color:'#7C3AED',textDecoration:'none',fontWeight:'500' }}>Employee? Log in to ESS →</a>
+          </div>
           <div style={{ textAlign: 'center', marginTop: '28px' }}>
             <div style={{ fontSize: '12px', color: d?'#4B5563':'#94A3B8', marginBottom: '4px' }}>Powered by <span style={{ color:'#7C3AED',fontWeight:'600' }}>ezerhrms.com</span></div>
             <div style={{ fontSize: '11px', color: d?'#374151':'#CBD5E1' }}>🔒 SOC 2 · 🇮🇳 Data in India · ✦ DPDPA 2023</div>

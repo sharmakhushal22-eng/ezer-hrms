@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase'
 export type AppMode = 'EMPLOYEE' | 'HR_MARK' | 'EARN_AVAIL'
 export type EligibleFrom = 'DOJ' | 'ON_DOJ' | 'AFTER_DAYS' | 'AFTER_PROBATION'
 export type Gender = 'ANY' | 'M' | 'F'
-export type ApprovalBy = 'L1' | 'HR_MANAGER' | 'ASSIGNED'
+export type ApprovalBy = 'L1' | 'HR_MANAGER' | 'ASSIGNED' | 'BOTH'
 
 export interface LeaveType {
   id: string
@@ -25,6 +25,8 @@ export interface LeaveType {
   deduct_salary: boolean
   gender: Gender
   approval_by: ApprovalBy
+  company_id?: string | null
+  branch_id?: string | null
   carry_forward_unlimited: boolean
   is_system: boolean
   annual_quota: number

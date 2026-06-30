@@ -63,6 +63,62 @@ const T = {
   section: { fontSize:12, fontWeight:600, color:'#7C3AED', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10, marginTop:4, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
 
+// ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
+// Reusable filter bar + matcher used across the candidate & record tabs.
+// `f` shape: { company, department, position, location } — all '' means "All".
+function RecFilterBar({ companies, departments, locations, positions, f, setF }:any) {
+  return (
+    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end' }}>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={T.label}>Company</label>
+        <select style={T.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+          <option value="">All companies</option>
+          {(companies||[]).map((c:any)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+        </select>
+      </div>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={T.label}>Department</label>
+        <select style={T.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
+          <option value="">All departments</option>
+          {(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+        </select>
+      </div>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={T.label}>Position</label>
+        <select style={T.select} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
+          <option value="">All positions</option>
+          {(positions||[]).map((p:string)=><option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={T.label}>Location</label>
+        <select style={T.select} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
+          <option value="">All locations</option>
+          {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+        </select>
+      </div>
+      {(f.company||f.department||f.position||f.location) && (
+        <button style={T.btnOutline} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
+      )}
+    </div>
+  )
+}
+
+// True unless a set filter excludes the candidate. Department & location resolve via the candidate's MRF.
+function candidateMatchesFilters(c:any, mrfs:any[], f:any): boolean {
+  if (f.company && c.company_id !== f.company) return false
+  if (f.position && (c.designation||'') !== f.position) return false
+  if (f.department || f.location) {
+    const m = mrfs.find((mm:any)=>mm.id===c.mrf_id)
+    if (f.department && m?.department_id !== f.department) return false
+    if (f.location && m?.location_id !== f.location) return false
+  }
+  return true
+}
+
+// Distinct, sorted position labels derived from a candidate list.
+const distinctPositions = (cands:any[]) => Array.from(new Set(cands.map((c:any)=>c.designation).filter(Boolean))).sort() as string[]
+
 // ── HELPERS ───────────────────────────────────────────────────────
 function Badge({ text }:{ text:string }) {
   const map:Record<string,[string,string]> = {
@@ -178,8 +234,8 @@ export default function RecruitmentPage() {
         {tab==='pipeline' && <PipelineTab {...props} />}
         {tab==='negotiation' && <NegotiationTab {...props} />}
         {tab==='offerapproval' && <OfferApprovalTab {...props} />}
-        {tab==='hrhead' && <HRHeadApprovalDashboard />}
-        {tab==='sendoffer' && <HRManagerSendOffer />}
+        {tab==='hrhead' && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
+        {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
         {tab==='offers' && <OffersTab {...props} />}
         {tab==='preonboarding' && <PreOnboardTab {...props} />}
       </div>
@@ -889,15 +945,16 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
 }
 
 // ── PIPELINE ──────────────────────────────────────────────────────
-function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
+function PipelineTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify }:any) {
   const [interviewCand, setInterviewCand] = useState<Candidate|null>(null)
+  const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [selMRF, setSelMRF] = useState('all')
   const [showAdd, setShowAdd] = useState(false)
   const [selCand, setSelCand] = useState<Candidate|null>(null)
   const [aiQs, setAiQs] = useState<string[]>([])
   const [aiQLoading, setAiQLoading] = useState(false)
   const [aiFbLoading, setAiFbLoading] = useState(false)
-  const EMPTY_C = { mrf_id:'', full_name:'', phone:'', email:'', hr_email:'', current_company:'', designation:'', experience_years:'', current_ctc:'', expected_ctc:'', notice_period:'', source:'Direct' }
+  const EMPTY_C = { mrf_id:'', full_name:'', phone:'', email:'', hr_email:'', current_company:'', designation:'', experience_years:'', current_ctc:'', expected_ctc:'', notice_period:'', source:'Direct', overtime_pay_applicable:'No' }
   const [cForm, setCForm] = useState<any>(EMPTY_C)
   const [myEmail, setMyEmail] = useState('')
   useEffect(()=>{ supabase.auth.getUser().then(({data}:any)=>{ const em=data?.user?.email; if(em){ setMyEmail(em); setCForm((f:any)=>({...f, hr_email:f.hr_email||em})) } }) },[])
@@ -908,6 +965,7 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
   const [pipeQ, setPipeQ] = useState('')
   const filtered = (selMRF==='all'?candidates:candidates.filter((c:Candidate)=>c.mrf_id===selMRF))
     .filter((c:Candidate)=>!pipeQ || c.full_name.toLowerCase().includes(pipeQ.toLowerCase()))
+    .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
 
   async function addCandidate() {
     if (!cForm.full_name||!cForm.phone) { showNotify('Name and Phone are required','error'); return }
@@ -921,6 +979,7 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
       designation:cForm.designation||null, experience_years:Number(cForm.experience_years)||0,
       current_ctc:Number(cForm.current_ctc)||null, expected_ctc:Number(cForm.expected_ctc)||null,
       notice_period:Number(cForm.notice_period)||null, source:cForm.source, stage:'Applied',
+      overtime_pay_applicable: cForm.overtime_pay_applicable === 'Yes',
       status:'active', applied_date:new Date().toISOString().split('T')[0],
     })
     if (error) { showNotify('Error: '+error.message,'error'); return }
@@ -993,6 +1052,7 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
         <button onClick={()=>{ setCForm({...EMPTY_C, hr_email:myEmail}); setShowAdd(true) }} style={T.btnPrimary}>+ Add Candidate</button>
       </div>
       <SearchBar placeholder="Filter pipeline by candidate name…" onApply={setPipeQ} />
+      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
 
       {approvedMRFs.length===0&&(
         <div style={{ ...T.card, textAlign:'center' as const, color:'#9CA3AF', padding:32 }}>
@@ -1054,6 +1114,11 @@ function PipelineTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) 
               <div><label style={T.label}>Source</label>
                 <select style={T.select} value={cForm.source} onChange={e=>CF('source',e.target.value)}>
                   {SOURCES.map(s=><option key={s}>{s}</option>)}
+                </select>
+              </div>
+              <div><label style={T.label}>Overtime Pay Applicable</label>
+                <select style={T.select} value={cForm.overtime_pay_applicable} onChange={e=>CF('overtime_pay_applicable',e.target.value)}>
+                  <option>No</option><option>Yes</option>
                 </select>
               </div>
             </div>
@@ -1331,16 +1396,19 @@ function PreNegoChecks({ candidate, supabase, showNotify, onDone }:any) {
   )
 }
 
-function NegotiationTab({ supabase, companies, mrfs, candidates, onRefresh, showNotify }:any) {
+function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify }:any) {
   // Offer Sent is intentionally excluded — once an offer goes out there's no more negotiation.
   // A revised offer moves the candidate back to 'Shortlisted', so they reappear here with the calculator.
   const finalCands = candidates.filter((c:Candidate)=>['Shortlisted'].includes(c.stage))
   const [subTab, setSubTab] = useState<'checks'|'ctc'>('checks')
   const [negQ, setNegQ] = useState('')
+  const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const checksCands = finalCands.filter((c:Candidate)=>!c.pre_negotiation_done)
   const ctcCands = finalCands.filter((c:Candidate)=>c.pre_negotiation_done)
   const activeList = subTab==='checks' ? checksCands : ctcCands
-  const shownCands = activeList.filter((c:Candidate)=>!negQ || c.full_name.toLowerCase().includes(negQ.toLowerCase()))
+  const shownCands = activeList
+    .filter((c:Candidate)=>!negQ || c.full_name.toLowerCase().includes(negQ.toLowerCase()))
+    .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
   const [sel, setSel] = useState<Candidate|null>(null)
   const selMrf = mrfs.find((m:MRF)=>m.id===sel?.mrf_id)
   // Interns / contract / consultants etc. use the simple stipend calculator, not the full CTC one.
@@ -1491,6 +1559,7 @@ function NegotiationTab({ supabase, companies, mrfs, candidates, onRefresh, show
           <button onClick={()=>{ setSubTab('ctc'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='ctc'?{ background:'#7C3AED', color:'#fff', borderColor:'#7C3AED' }:{}) }}>💰 CTC Negotiations ({ctcCands.length})</button>
         </div>
         <SearchBar placeholder="Search candidate…" onApply={setNegQ} width={240} />
+        <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
         {shownCands.map((c:Candidate)=>(
           <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
             style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?'#F3F0FF':'#fff' }}>
@@ -1719,8 +1788,9 @@ function NegotiationTab({ supabase, companies, mrfs, candidates, onRefresh, show
 
 // ── OFFERS TAB ────────────────────────────────────────────────────
 // ── OFFER APPROVAL TAB (Recruiter → HR Head) ──────────────────────
-function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
+function OfferApprovalTab({ supabase, companies, departments, locations, candidates, mrfs, onRefresh }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
+  const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [neg, setNeg] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set())
@@ -1746,7 +1816,9 @@ function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
   // Only candidates who ACCEPTED their CTC offer (and aren't already sent/closed) need HR-Head approval.
   const eligible = candidates.filter((c:Candidate)=>acceptedIds.has(c.id) && !['Offer Sent','Joined','Rejected'].includes(c.stage))
   const [oaQ, setOaQ] = useState('')
-  const shownEligible = eligible.filter((c:Candidate)=>!oaQ || c.full_name.toLowerCase().includes(oaQ.toLowerCase()))
+  const shownEligible = eligible
+    .filter((c:Candidate)=>!oaQ || c.full_name.toLowerCase().includes(oaQ.toLowerCase()))
+    .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
 
   const STATUS_LABEL: Record<string,string> = {
     SUBMITTED: 'Offer request sent to HR Head',
@@ -1785,6 +1857,7 @@ function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
     <div>
       <div style={{ fontSize:13, color:'#6B7280', marginBottom:12 }}>Select a candidate to create an offer approval request for HR Head review.</div>
       <SearchBar placeholder="Search candidate…" onApply={setOaQ} width={240} />
+      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
       {shownEligible.length===0 ? (
         <div style={{ ...T.card, textAlign:'center' as const, color:'#9CA3AF' }}>{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</div>
       ) : shownEligible.map((c:Candidate)=>{
@@ -1811,15 +1884,27 @@ function OfferApprovalTab({ supabase, candidates, mrfs, onRefresh }:any) {
   )
 }
 
-function OffersTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
+function OffersTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
+  const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [letter, setLetter] = useState('')
   const [toEmail, setToEmail] = useState('')
   const [cc, setCc] = useState('')
   const [doj, setDoj] = useState('')
-  const offeredCands = candidates.filter((c:Candidate)=>['Shortlisted','Offer Sent'].includes(c.stage))
+  // A candidate reaches Offers only AFTER HR Head has APPROVED the offer (offer_approval_requests
+  // status = HR_HEAD_APPROVED) — or an offer is already sent. So the flow is:
+  // shortlist → Negotiation → Offer Approval → HR Head approves → Offers. No bypass.
+  const [approvedIds, setApprovedIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    supabase.from('offer_approval_requests').select('candidate_id, status').then(({ data }: any) => {
+      setApprovedIds(new Set((data || []).filter((r: any) => r.status === 'HR_HEAD_APPROVED').map((r: any) => r.candidate_id)))
+    })
+  }, [supabase])
+  const offeredCands = candidates.filter((c:Candidate)=> approvedIds.has(c.id) || c.stage==='Offer Sent')
   const [offQ, setOffQ] = useState('')
-  const shownOffered = offeredCands.filter((c:Candidate)=>!offQ || c.full_name.toLowerCase().includes(offQ.toLowerCase()))
+  const shownOffered = offeredCands
+    .filter((c:Candidate)=>!offQ || c.full_name.toLowerCase().includes(offQ.toLowerCase()))
+    .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
 
   async function generateLetter(c:Candidate) {
     const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
@@ -1903,6 +1988,7 @@ HR Team`
       <div>
         <div style={{ fontSize:13, fontWeight:600, color:'#1E1B4B', marginBottom:10 }}>Shortlisted / Offer Stage ({shownOffered.length})</div>
         <SearchBar placeholder="Search candidate…" onApply={setOffQ} width={240} />
+        <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
         {shownOffered.map((c:Candidate)=>(
           <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?'#F3F0FF':'#fff' }}
             onClick={()=>generateLetter(c)}>
@@ -1940,7 +2026,8 @@ HR Team`
 }
 
 // ── PRE-ONBOARDING ────────────────────────────────────────────────
-function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showNotify }:any) {
+function PreOnboardTab({ supabase, candidates, companies, departments, locations, mrfs, onRefresh, showNotify }:any) {
+  const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [links, setLinks] = useState<any[]>([])
   const [busy, setBusy] = useState('')        // candidate_id being processed
   const [choose, setChoose] = useState('')    // candidate_id showing Experienced/Fresher choice
@@ -1966,7 +2053,9 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
   const linkByCand = new Map(links.map((l:any)=>[l.candidate_id,l]))
   // Only candidates who have ACCEPTED their offer (or already joined) flow into pre-onboarding.
   const onboardingCands = candidates.filter((c:Candidate)=>(c.stage==='Offer Sent'&&c.offer_accepted)||c.stage==='Joined')
-  const shownOnboarding = onboardingCands.filter((c:Candidate)=>!poQ || c.full_name.toLowerCase().includes(poQ.toLowerCase()))
+  const shownOnboarding = onboardingCands
+    .filter((c:Candidate)=>!poQ || c.full_name.toLowerCase().includes(poQ.toLowerCase()))
+    .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
   const companyName = (c:Candidate)=> companies?.find((co:any)=>co.id===c.company_id)?.company_name || 'our organization'
 
   // Find the candidate's onboarding row, creating one if it doesn't exist yet.
@@ -2063,6 +2152,7 @@ function PreOnboardTab({ supabase, candidates, companies, mrfs, onRefresh, showN
     <div>
       <div style={T.section}>🎉 Pre-onboarding & Offer Response</div>
       <SearchBar placeholder="Search candidate…" onApply={setPoQ} width={260} />
+      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
       {shownOnboarding.length===0&&<div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' as const, padding:24 }}>{poQ?'No matching candidate':'No offer-sent candidates yet.'}</div>}
       {shownOnboarding.map((c:Candidate)=>{
         const row:any = linkByCand.get(c.id)

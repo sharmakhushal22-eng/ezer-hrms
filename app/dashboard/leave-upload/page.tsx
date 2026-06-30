@@ -10,8 +10,12 @@ import {
   type LeaveType, type OrgLite, type ResolvedQuota, type AppMode, type EligibleFrom, type Gender, type ApprovalBy,
 } from '@/lib/supabase-leave-config'
 import {
-  downloadBalanceTemplate, uploadBalances, downloadQuotaTemplate, uploadQuota, type UploadResult,
+  downloadBalanceTemplate, parseBalanceFile, commitBalances,
+  downloadQuotaTemplate, parseQuotaFile, commitQuota,
+  type ParseResult, type CommitResult, type ParsedRow,
 } from '@/lib/supabase-leave-upload'
+import * as XLSX from 'xlsx'
+import { HolidaysSection } from '@/app/dashboard/holidays/page'
 
 const T = {
   page:  { background:'#F5F3FF', minHeight:'100vh', color:'#1E1B4B', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
@@ -57,7 +61,7 @@ const BLANK: Partial<LeaveType> = {
   carry_forward_unlimited:false, is_system:false, annual_quota:0, carry_forward_max:0, is_paid:true,
   is_encashable:false, allow_half_day:true, accrual:'YEARLY', doc_required_after:null, color:'#7C3AED', sort_order:0,
 }
-function LeaveTypeModal({ row, onClose, onSave }: { row: LeaveType | null; onClose: () => void; onSave: (r: Partial<LeaveType>) => Promise<void> }) {
+function LeaveTypeModal({ row, companies, branches, onClose, onSave }: { row: LeaveType | null; companies: any[]; branches: any[]; onClose: () => void; onSave: (r: Partial<LeaveType>) => Promise<void> }) {
   const [f, setF] = useState<Partial<LeaveType>>(row || BLANK)
   const [busy, setBusy] = useState(false)
   const set = (k: keyof LeaveType, v: any) => setF(p => ({ ...p, [k]: v }))
@@ -85,7 +89,7 @@ function LeaveTypeModal({ row, onClose, onSave }: { row: LeaveType | null; onClo
           <div><label style={T.lbl}>Eligible from</label><select style={T.input} value={f.eligible_from} onChange={e => set('eligible_from', e.target.value as EligibleFrom)}><option value="DOJ">From DOJ</option><option value="ON_DOJ">On DOJ</option><option value="AFTER_DAYS">After N days</option><option value="AFTER_PROBATION">After probation</option></select></div>
           <div><label style={T.lbl}>Min tenure (days)</label><input type="number" style={T.input} value={f.min_tenure_days ?? 0} onChange={e => set('min_tenure_days', Number(e.target.value))} /></div>
           <div><label style={T.lbl}>Gender</label><select style={T.input} value={f.gender} onChange={e => set('gender', e.target.value as Gender)}><option value="ANY">Any</option><option value="M">Male only</option><option value="F">Female only</option></select></div>
-          <div><label style={T.lbl}>Approval by</label><select style={T.input} value={f.approval_by} onChange={e => set('approval_by', e.target.value as ApprovalBy)}><option value="L1">L1 Manager</option><option value="HR_MANAGER">HR Manager</option><option value="ASSIGNED">Assigned approver</option></select></div>
+          <div><label style={T.lbl}>Approval by</label><select style={T.input} value={f.approval_by} onChange={e => set('approval_by', e.target.value as ApprovalBy)}><option value="L1">L1 Manager</option><option value="HR_MANAGER">HR Manager</option><option value="ASSIGNED">Assigned approver</option><option value="BOTH">Both (L1 + HR Manager)</option></select></div>
           <div><label style={T.lbl}>Max times in tenure</label><input type="number" style={T.input} value={f.max_times_in_tenure ?? ''} placeholder="∞" onChange={e => set('max_times_in_tenure', numN(e.target.value))} /></div>
         </div>
 
@@ -96,6 +100,12 @@ function LeaveTypeModal({ row, onClose, onSave }: { row: LeaveType | null; onClo
           <Chk k="allow_without_balance" label="Apply without balance" />
           <Chk k="auto_mark_absent" label="Auto-mark absent (attendance)" />
           <Chk k="probation_eligible" label="Eligible during probation" />
+        </div>
+
+        <div style={T.sec}>Applies to (scope — blank = all)</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14 }}>
+          <div><label style={T.lbl}>Company</label><select style={T.input} value={f.company_id || ''} onChange={e => { set('company_id', e.target.value || null); set('branch_id', null) }}><option value="">All companies</option>{companies.map((c:any) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label style={T.lbl}>Branch / Location</label><select style={T.input} value={f.branch_id || ''} onChange={e => set('branch_id', e.target.value || null)} disabled={!f.company_id}><option value="">All branches</option>{branches.filter((b:any) => b.company_id === f.company_id).map((b:any) => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
         </div>
 
         <div style={T.sec}>Quota · carry-forward · encashment</div>
@@ -190,13 +200,14 @@ function BranchQuotaTab({ companies, branches, rows, company, branch, fy, onComp
     <>
       <div style={T.card}>
         <div style={{ display:'grid', gridTemplateColumns:'2fr 2fr 1fr', gap:12 }}>
-          <div><label style={T.lbl}>Company</label><select style={T.input} value={company} onChange={e => onCompany(e.target.value)}><option value="">— Select company —</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-          <div><label style={T.lbl}>Branch</label><select style={T.input} value={branch} onChange={e => onBranch(e.target.value)} disabled={!company}><option value="">Company default (all branches)</option>{coBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
+          <div><label style={T.lbl}>Company</label><select style={T.input} value={company} onChange={e => { const v = e.target.value; onCompany(v); if (v === 'ALL') onBranch('') }}><option value="">— Select company —</option><option value="ALL">🌐 All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><label style={T.lbl}>Branch</label><select style={T.input} value={branch} onChange={e => onBranch(e.target.value)} disabled={!company || company === 'ALL'}><option value="">Company default (all branches)</option>{coBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
           <div><label style={T.lbl}>FY</label><input style={T.input} value={fy} onChange={e => onFy(e.target.value)} placeholder="2026-27" /></div>
         </div>
         <div style={{ fontSize:11, color:'#9CA3AF', marginTop:8 }}>Branch-specific quota company default ko override karti hai. <b>source</b> column batata hai value kahan se aa rahi — branch / company / catalog. Save karne par is exact scope ke liye policy row banti/update hoti hai.</div>
       </div>
 
+      {company === 'ALL' && <div style={{ ...T.card, fontSize:12, color:'#1E40AF', background:'#EFF6FF', border:'1px solid #BFDBFE' }}>🌐 <b>All companies</b> — quotas below are shown from a template; clicking <b>Save</b> on a row applies that quota to <b>every</b> company (company-default scope).</div>}
       {!company ? <div style={{ ...T.card, textAlign:'center', color:'#9CA3AF', padding:30 }}>Company chuno quota dekhne ke liye.</div> : (
         <div style={{ ...T.card, overflowX:'auto', padding:0 }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
@@ -214,67 +225,125 @@ function BranchQuotaTab({ companies, branches, rows, company, branch, fy, onComp
   )
 }
 
-// ══ TAB 3 · Bulk Upload ════════════════════════════════════════════
-function UploaderCard({ icon, title, desc, columns, onTemplate, onUpload }: {
-  icon: string; title: string; desc: string; columns: string[]
-  onTemplate: () => Promise<void>; onUpload: (f: File) => Promise<UploadResult>
+// ══ TAB 3 · Bulk Upload (parse → preview → validate → commit) ══════
+function downloadErrors(rows: ParsedRow[], name: string) {
+  const errs = rows.filter(r => r.status === 'error').map(r => ({ Row: r.rowNo, ...r.cells, Error: r.msg }))
+  if (!errs.length) return
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(errs), 'Errors')
+  XLSX.writeFile(wb, name)
+}
+function StatChip({ icon, label, value, color, bg }: { icon: string; label: string; value: number; color: string; bg: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: bg, borderRadius: 9, padding: '8px 14px' }}>
+      <span style={{ fontSize: 15 }}>{icon}</span>
+      <div><div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1 }}>{value}</div><div style={{ fontSize: 10, color: '#6B7280', marginTop: 2 }}>{label}</div></div>
+    </div>
+  )
+}
+function PreviewTable({ rows }: { rows: ParsedRow[] }) {
+  if (!rows.length) return <div style={{ fontSize: 13, color: '#6B7280', padding: 20, textAlign: 'center' }}>No rows parsed.</div>
+  const cols = Object.keys(rows[0].cells)
+  return (
+    <div style={{ maxHeight: 340, overflow: 'auto', border: '1px solid rgba(124,58,237,0.12)', borderRadius: 9 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <thead><tr style={{ position: 'sticky', top: 0, background: '#F5F3FF', zIndex: 1 }}>
+          <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10, color: '#6B7280', textTransform: 'uppercase', width: 36 }}>#</th>
+          {cols.map(c => <th key={c} style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10, color: '#6B7280', textTransform: 'uppercase' }}>{c}</th>)}
+          <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10, color: '#6B7280', textTransform: 'uppercase' }}>Status</th>
+        </tr></thead>
+        <tbody>{rows.map(r => { const ok = r.status === 'ok'; return (
+          <tr key={r.rowNo} style={{ borderTop: '1px solid #F1EDFB', background: ok ? '#fff' : '#FEF2F2' }}>
+            <td style={{ padding: '7px 10px', color: '#6B7280', borderLeft: `3px solid ${ok ? '#10B981' : '#EF4444'}` }}>{r.rowNo}</td>
+            {cols.map(c => <td key={c} style={{ padding: '7px 10px' }}>{String(r.cells[c] ?? '')}</td>)}
+            <td style={{ padding: '7px 10px' }}>{ok ? <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>✓ ok</span> : <span style={{ fontSize: 11, color: '#B91C1C' }}>✗ {r.msg}</span>}</td>
+          </tr>
+        )})}</tbody>
+      </table>
+    </div>
+  )
+}
+function UploadFlow({ title, desc, columns, errorFile, onTemplate, onParse, onCommit }: {
+  title: string; desc: string; columns: string[]; errorFile: string
+  onTemplate: () => Promise<void>; onParse: (f: File) => Promise<ParseResult>; onCommit: (rows: ParsedRow[]) => Promise<CommitResult>
 }) {
   const [file, setFile] = useState<File | null>(null)
-  const [busy, setBusy] = useState(false); const [tplBusy, setTplBusy] = useState(false)
-  const [result, setResult] = useState<UploadResult | null>(null); const [err, setErr] = useState('')
+  const [parsing, setParsing] = useState(false)
+  const [parsed, setParsed] = useState<ParseResult | null>(null)
+  const [committing, setCommitting] = useState(false)
+  const [result, setResult] = useState<CommitResult | null>(null)
+  const [drag, setDrag] = useState(false)
+  const [tplBusy, setTplBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-  async function run() {
-    if (!file) return
-    setBusy(true); setResult(null); setErr('')
-    try { setResult(await onUpload(file)) } catch (e: any) { setErr(e?.message || 'Upload failed — check the file format.') }
-    setBusy(false)
-  }
+  const handleFile = useCallback(async (f: File) => {
+    setFile(f); setParsed(null); setResult(null); setParsing(true)
+    try { setParsed(await onParse(f)) } catch (e: any) { alert('Parse failed: ' + (e?.message || 'check the file')) }
+    setParsing(false)
+  }, [onParse])
+  async function commit() { if (!parsed) return; setCommitting(true); try { setResult(await onCommit(parsed.rows)) } catch (e: any) { alert('Upload failed: ' + (e?.message || '')) } setCommitting(false) }
+  function reset() { setFile(null); setParsed(null); setResult(null) }
   return (
     <div style={T.card}>
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:6 }}><span style={{ fontSize:20 }}>{icon}</span><div style={{ fontSize:15, fontWeight:600 }}>{title}</div></div>
-      <div style={{ fontSize:12.5, color:'#6B7280', marginBottom:12 }}>{desc}</div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:14 }}>{columns.map(c => <span key={c} style={{ fontSize:11, padding:'2px 8px', borderRadius:6, background:'#F5F3FF', color:'#7C3AED', border:'1px solid rgba(124,58,237,0.12)', whiteSpace:'nowrap' }}>{c}</span>)}</div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:10, alignItems:'center' }}>
-        <button style={T.out} disabled={tplBusy} onClick={async () => { setTplBusy(true); try { await onTemplate() } catch {} setTplBusy(false) }}>⬇ {tplBusy ? 'Preparing…' : 'Download template'}</button>
-        <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display:'none' }} onChange={e => { setFile(e.target.files?.[0] || null); setResult(null); setErr('') }} />
-        <button style={T.out} onClick={() => inputRef.current?.click()}>📄 {file ? file.name : 'Choose Excel file'}</button>
-        <button style={{ ...T.pri, opacity: file && !busy ? 1 : 0.5 }} disabled={!file || busy} onClick={run}>{busy ? 'Uploading…' : 'Upload'}</button>
-      </div>
-      {err && <div style={{ marginTop:12, fontSize:12, color:'#B91C1C', background:'#FEF2F2', padding:'8px 12px', borderRadius:7 }}>{err}</div>}
-      {result && (
-        <div style={{ marginTop:14, borderTop:'1px solid rgba(124,58,237,0.12)', paddingTop:12 }}>
-          <div style={{ display:'flex', gap:16, fontSize:13, marginBottom: result.errors.length ? 10 : 0 }}>
-            <span style={{ color:'#059669', fontWeight:600 }}>✓ {result.inserted} added</span>
-            {result.updated > 0 && <span style={{ color:'#7C3AED', fontWeight:600 }}>↻ {result.updated} updated</span>}
-            {result.skipped > 0 && <span style={{ color:'#6B7280' }}>{result.skipped} blank skipped</span>}
-            {result.errors.length > 0 && <span style={{ color:'#B45309', fontWeight:600 }}>⚠ {result.errors.length} errors</span>}
-          </div>
-          {result.errors.length > 0
-            ? <div style={{ maxHeight:160, overflowY:'auto', background:'#FFFBEB', borderRadius:7, padding:'8px 12px' }}>{result.errors.map((e, i) => <div key={i} style={{ fontSize:12, color:'#92400E', padding:'2px 0' }}>{e.row > 0 ? `Row ${e.row}: ` : ''}{e.msg}</div>)}</div>
-            : <div style={{ fontSize:12, color:'#059669' }}>All rows imported. 🎉</div>}
+      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{title}</div>
+      <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 16 }}>{desc}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>{columns.map(c => <span key={c} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: '#F5F3FF', color: '#7C3AED', border: '1px solid rgba(124,58,237,0.12)' }}>{c}</span>)}</div>
+      {!result && (<>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          <button style={T.out} disabled={tplBusy} onClick={async () => { setTplBusy(true); try { await onTemplate() } catch {} setTplBusy(false) }}>⬇ {tplBusy ? 'Preparing…' : 'Download template'}</button>
         </div>
-      )}
+        <div onClick={() => inputRef.current?.click()} onDragOver={e => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f) }}
+          style={{ border: `2px dashed ${drag ? '#7C3AED' : 'rgba(124,58,237,0.3)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? '#F5F3FF' : '#FCFBFF' }}>
+          <div style={{ fontSize: 26, marginBottom: 6 }}>{file ? '📄' : '⬆️'}</div>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{file ? file.name : 'Drag & drop Excel here, or click to browse'}</div>
+          <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>{parsing ? 'Reading…' : '.xlsx / .xls'}</div>
+          <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }} />
+        </div>
+        {parsed && (<div style={{ marginTop: 18 }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <StatChip icon="✓" label="valid rows" value={parsed.valid} color="#059669" bg="#ECFDF5" />
+            <StatChip icon="⚠" label="errors" value={parsed.errors} color="#B45309" bg="#FFFBEB" />
+            <StatChip icon="–" label="blank skipped" value={parsed.skipped} color="#6B7280" bg="#F8FAFC" />
+          </div>
+          <PreviewTable rows={parsed.rows} />
+          <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+            <button style={{ ...T.pri, opacity: parsed.valid && !committing ? 1 : 0.5 }} disabled={!parsed.valid || committing} onClick={commit}>{committing ? 'Uploading…' : `Confirm & upload ${parsed.valid} row${parsed.valid === 1 ? '' : 's'}`}</button>
+            {parsed.errors > 0 && <button style={T.out} onClick={() => downloadErrors(parsed.rows, errorFile)}>⬇ Download {parsed.errors} errors</button>}
+            <button style={{ ...T.out, border: 'none', color: '#6B7280' }} onClick={reset}>Start over</button>
+          </div>
+        </div>)}
+      </>)}
+      {result && (<div style={{ marginTop: 4 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}><span style={{ fontSize: 28 }}>{result.failed ? '⚠️' : '🎉'}</span><div style={{ fontSize: 15, fontWeight: 600 }}>{result.failed ? 'Uploaded with some failures' : 'Upload complete'}</div></div>
+        <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+          <StatChip icon="＋" label="inserted" value={result.inserted} color="#059669" bg="#ECFDF5" />
+          <StatChip icon="↻" label="updated" value={result.updated} color="#7C3AED" bg="#F5F3FF" />
+          {result.failed > 0 && <StatChip icon="✗" label="failed" value={result.failed} color="#B91C1C" bg="#FEF2F2" />}
+        </div>
+        {result.errors.length > 0 && <div style={{ maxHeight: 140, overflowY: 'auto', background: '#FFFBEB', borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>{result.errors.map((e, i) => <div key={i} style={{ fontSize: 12, color: '#92400E', padding: '2px 0' }}>{e.rowNo > 0 ? `Row ${e.rowNo}: ` : ''}{e.msg}</div>)}</div>}
+        <button style={T.pri} onClick={reset}>Upload another file</button>
+      </div>)}
     </div>
   )
 }
 function UploadTab() {
   return (
     <>
-      <UploaderCard icon="🏢" title="Branch-wise quota (all leave types)"
-        desc="Per company + branch, har leave type ki annual quota. Branch Code = ALL → company default. Ek branch ek hi quota me (DB guard)."
-        columns={['Company Code', 'Branch Code (ALL = default)', 'Leave Type Code', 'Annual Quota', 'Max Carry Forward', 'Laps (Y/N)', 'Encashable (Y/N)', 'Accrual', 'FY']}
-        onTemplate={downloadQuotaTemplate} onUpload={uploadQuota} />
-      <UploaderCard icon="📊" title="Employee leave balance"
-        desc="Har employee ka opening / accrued / used / encashed balance, per leave type. Mid-year migration ya correction ke liye."
+      <UploadFlow title="Branch-wise quota (all leave types)"
+        desc="Per company + branch, each leave type's annual quota. Branch Code = ALL → company default."
+        columns={['Company Code', 'Branch Code (ALL=default)', 'Leave Type Code', 'Annual Quota', 'Max Carry Forward', 'Laps (Y/N)', 'Encashable (Y/N)', 'Accrual', 'FY']}
+        errorFile="quota_errors.xlsx" onTemplate={downloadQuotaTemplate} onParse={parseQuotaFile} onCommit={commitQuota} />
+      <UploadFlow title="Employee leave balance"
+        desc="Each employee's opening / accrued / used / encashed per leave type. For mid-year migration or correction."
         columns={['Employee Code', 'Leave Type Code', 'Year', 'Opening', 'Accrued', 'Used', 'Encashed']}
-        onTemplate={downloadBalanceTemplate} onUpload={uploadBalances} />
-      <div style={{ fontSize:12, color:'#6B7280' }}>💡 Template ke andar "Leave Types", "Companies", "Branches" reference sheets hote hain — valid codes wahan se copy karo.</div>
+        errorFile="balance_errors.xlsx" onTemplate={downloadBalanceTemplate} onParse={parseBalanceFile} onCommit={commitBalances} />
+      <div style={{ fontSize: 12, color: '#6B7280' }}>💡 Templates include "Leave Types / Companies / Branches" reference sheets — copy valid codes from there.</div>
     </>
   )
 }
 
 // ══════════════════════════════════════════════════════════════════
 export default function LeaveConfigPage() {
+  const [section, setSection] = useState<'leave' | 'holidays'>('leave')
   const [tab, setTab] = useState<'types' | 'quota' | 'upload'>('types')
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -302,9 +371,14 @@ export default function LeaveConfigPage() {
 
   const loadQuota = useCallback(async (company: string, branch: string, fy: string) => {
     if (!company) { setQRows([]); return }
-    try { setQRows(await resolveQuota(company, branch || null, fy)) }
+    try {
+      // "All companies": list leave types using the first company as a template — saving applies to every company.
+      const resolveCo = company === 'ALL' ? (companies[0]?.id || '') : company
+      if (!resolveCo) { setQRows([]); return }
+      setQRows(await resolveQuota(resolveCo, company === 'ALL' ? null : (branch || null), fy))
+    }
     catch (e: any) { notify('Quota load failed: ' + (e?.message || ''), 'error') }
-  }, [])
+  }, [companies])
   useEffect(() => { loadQuota(qCompany, qBranch, qFy) }, [qCompany, qBranch, qFy, loadQuota])
 
   async function saveType(r: Partial<LeaveType>) {
@@ -325,6 +399,14 @@ export default function LeaveConfigPage() {
     notify('Deleted.'); reload()
   }
   async function saveQuota(leave_type_id: string, v: any) {
+    if (qCompany === 'ALL') {
+      // Apply this quota to every company (company-default scope, all branches).
+      const results = await Promise.all(companies.map(c => upsertPolicy({ leave_type_id, company_id: c.id, branch_id: null, fy: qFy, ...v }) as any))
+      const failed = results.find((r: any) => r?.error)
+      if (failed) { notify('Save failed: ' + (failed as any).error.message, 'error'); return }
+      notify(`Quota saved for all ${companies.length} companies.`); loadQuota(qCompany, qBranch, qFy)
+      return
+    }
     const { error } = await upsertPolicy({ leave_type_id, company_id: qCompany, branch_id: qBranch || null, fy: qFy, ...v }) as any
     if (error) { notify('Save failed: ' + error.message, 'error'); return }
     notify('Quota saved.'); loadQuota(qCompany, qBranch, qFy)
@@ -335,6 +417,13 @@ export default function LeaveConfigPage() {
   return (
     <div style={{ ...T.page, padding:'20px 24px' }}>
       <div style={{ maxWidth:1180, margin:'0 auto' }}>
+        {/* Top-level section switch — Leave Config + Holiday/Weekly-off in one place */}
+        <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+          <button onClick={() => setSection('leave')} style={T.tab(section === 'leave')}>🌴 Leave Config</button>
+          <button onClick={() => setSection('holidays')} style={T.tab(section === 'holidays')}>📆 Holidays &amp; Week-off</button>
+        </div>
+
+        {section === 'holidays' ? <HolidaysSection /> : (<>
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Leave Configuration</div>
         <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Config-driven leave: catalog (types + behaviour flags) · per company/branch quota · bulk upload. Adding a leave type is a data change, not a deploy.</div>
 
@@ -349,8 +438,9 @@ export default function LeaveConfigPage() {
             {tab === 'upload' && <UploadTab />}
           </>
         )}
+        </>)}
       </div>
-      {editing && <LeaveTypeModal row={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSave={saveType} />}
+      {editing && <LeaveTypeModal row={editing === 'new' ? null : editing} companies={companies} branches={branches} onClose={() => setEditing(null)} onSave={saveType} />}
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   )

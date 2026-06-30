@@ -9,6 +9,7 @@ import {
   type EssUser, type EssRole, type AuditRow, type OrgUnit,
 } from '@/lib/supabase-ess'
 import EmployeePortal from '@/components/ess/EmployeePortal'
+import { RolesPermissionsSection } from '@/app/dashboard/roles/page'
 
 // ── Style constant (exact project palette) ─────────────────────────
 const T = {
@@ -198,7 +199,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
         <input style={{ ...T.input, maxWidth:260 }} placeholder="🔍 Search emp code / name" value={q} onChange={e => setQ(e.target.value)} />
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
           {FILTERS.map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:'#7C3AED', color:'#fff', borderColor:'#7C3AED' } : {}) }}>{f}</button>
+            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:'#7C3AED', color:'#fff', border:'1px solid #7C3AED' } : {}) }}>{f}</button>
           ))}
         </div>
         <div style={{ marginLeft:'auto', fontSize:11, color:'#6B7280' }}>{filtered.length} shown</div>
@@ -486,6 +487,7 @@ function AuditTab({ audit }: { audit: AuditRow[] }) {
 // MAIN
 // ══════════════════════════════════════════════════════════════════
 export default function ESSPage() {
+  const [section, setSection] = useState<'ess'|'roles'>('ess')
   const [tab, setTab] = useState<'dashboard'|'access'|'roles'|'assign'|'audit'>('dashboard')
   const [users, setUsers] = useState<EssUser[]>([])
   const [roles, setRoles] = useState<EssRole[]>([])
@@ -562,12 +564,19 @@ export default function ESSPage() {
   return (
     <div style={{ ...T.page, padding: isMobile ? '14px 12px' : '20px 24px' }}>
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
+        {/* Top-level section switch — ESS & Access + Roles & Permissions in one place */}
+        <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
+          <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:'#7C3AED', color:'#fff', border:'1px solid #7C3AED' } : {}) }}>📱 ESS &amp; Access</button>
+          <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:'#7C3AED', color:'#fff', border:'1px solid #7C3AED' } : {}) }}>🔐 Roles &amp; Permissions</button>
+        </div>
+
+        {section === 'roles' ? <RolesPermissionsSection /> : (<>
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>ESS &amp; Access Management</div>
         <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Employee self-service accounts, roles, and access control.</div>
 
         <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' }}>
           {TABS.map(t => (
-            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:'#7C3AED', color:'#fff', borderColor:'#7C3AED' } : {}) }}>{t.l}</button>
+            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:'#7C3AED', color:'#fff', border:'1px solid #7C3AED' } : {}) }}>{t.l}</button>
           ))}
           <button onClick={reload} style={{ ...T.btnOutline, marginLeft:'auto' }}>↻ Refresh</button>
         </div>
@@ -583,6 +592,7 @@ export default function ESSPage() {
             {tab === 'audit' && <AuditTab audit={audit} />}
           </>
         )}
+        </>)}
       </div>
 
       {/* Deactivation guard modal */}

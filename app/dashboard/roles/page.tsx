@@ -6,10 +6,10 @@
 // Inline styles only. All sub-components OUTSIDE parent.
 import { useState, useEffect, useCallback } from 'react'
 import {
-  loadRoles, loadUsers, assignRoles, loadRolePermissions, upsertRolePermission, loadApprovalRights, setApprovalRight,
-  loadPendingForRole, resolveRequest,
+  loadRoles, loadUsers, assignRoles, loadOrgUnits, loadRolePermissions, upsertRolePermission, loadApprovalRights, setApprovalRight,
+  loadPendingForRole, resolveApproval, loadRecruiters,
   PERM_MODULES, APPROVAL_TYPES,
-  type EssRole, type EssUser, type RolePermission, type ApprovalRight, type PendingRequest, type AccessLevel,
+  type EssRole, type EssUser, type OrgUnit, type RolePermission, type ApprovalRight, type PendingItem, type AccessLevel, type Recruiter,
 } from '@/lib/supabase-ess'
 
 const C = {
@@ -152,23 +152,68 @@ function ApprovalRightsTab({ roles, rights, selId, onSelect, onSet }: {
 }
 
 // ══ TAB 4 · Approval / Rejection ════════════════════════════════════
-function RequestCard({ req, onResolve }: { req: PendingRequest; onResolve: (action: 'APPROVED' | 'REJECTED', remark: string) => Promise<void> }) {
+const SRC_BADGE: Record<string, [string, string, string]> = {
+  mrf:   ['#DBEAFE', '#1E40AF', 'MRF'],
+  offer: ['#FCE7F3', '#9D174D', 'OFFER'],
+  ess:   ['#EDE9FE', '#7C3AED', 'ESS'],
+}
+function RequestCard({ item, recruiters, onResolve }: { item: PendingItem; recruiters: Recruiter[]; onResolve: (action: 'APPROVED' | 'REJECTED', remark: string, recruiters?: Recruiter[]) => Promise<void> }) {
   const [remark, setRemark] = useState('')
   const [busy, setBusy] = useState(false)
+  const [recQ, setRecQ] = useState('')
+  const [selRec, setSelRec] = useState<Recruiter[]>([])
+  const isMrf = item.source === 'mrf'
+  // recruiter-only search, by name OR emp_code; excludes already-picked
+  const matches = recQ.trim()
+    ? recruiters.filter(r => !selRec.some(s => s.id === r.id) &&
+        (r.full_name.toLowerCase().includes(recQ.toLowerCase()) || (r.emp_code || '').toLowerCase().includes(recQ.toLowerCase()))).slice(0, 6)
+    : []
   const run = async (action: 'APPROVED' | 'REJECTED') => {
     if (action === 'REJECTED' && !remark.trim()) return
-    setBusy(true); await onResolve(action, remark.trim()); setBusy(false)
+    setBusy(true); await onResolve(action, remark.trim(), selRec); setBusy(false)
   }
+  const [sb, sc, sl] = SRC_BADGE[item.source] || SRC_BADGE.ess
   return (
     <div style={{ ...C.card, marginBottom:8 }}>
       <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4, flexWrap:'wrap' }}>
-        <Pill text={typeLabel(req.request_type)} bg="#EDE9FE" color="#7C3AED" />
-        <span style={{ fontSize:13, fontWeight:600 }}>{req.employee_name || '—'}</span>
-        <span style={{ fontSize:11, color:'#9CA3AF' }}>{req.emp_code || ''} · {req.dept_name || '—'}</span>
-        {req.is_confidential && <Pill text="CONFIDENTIAL" bg="#FEE2E2" color="#991B1B" />}
-        <span style={{ marginLeft:'auto', fontSize:10, color:'#9CA3AF' }}>{fmtDT(req.submitted_at)}</span>
+        <Pill text={sl} bg={sb} color={sc} />
+        <Pill text={typeLabel(item.approval_type)} bg="#EDE9FE" color="#7C3AED" />
+        <span style={{ fontSize:13, fontWeight:600 }}>{item.title}</span>
+        {item.confidential && <Pill text="CONFIDENTIAL" bg="#FEE2E2" color="#991B1B" />}
+        <span style={{ marginLeft:'auto', fontSize:10, color:'#9CA3AF' }}>{fmtDT(item.submitted_at)}</span>
       </div>
-      <div style={{ fontSize:12, color:'#374151', marginBottom:8 }}>{req.request_data?.detail || (req.request_data ? JSON.stringify(req.request_data).slice(0, 120) : '—')}</div>
+      <div style={{ fontSize:12, color:'#374151' }}>{item.subtitle}</div>
+      <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:8 }}>{item.meta}</div>
+
+      {isMrf && (
+        <div style={{ marginBottom:8 }}>
+          <div style={{ ...C.lbl, marginBottom:4 }}>Assign HR recruiter(s) <span style={{ color:'#9CA3AF', fontWeight:400 }}>(optional)</span></div>
+          {selRec.length > 0 && (
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:6 }}>
+              {selRec.map(r => (
+                <span key={r.id} style={{ fontSize:11, background:'#EDE9FE', border:'1px solid #DDD6FE', borderRadius:99, padding:'3px 10px', display:'inline-flex', gap:6, alignItems:'center' }}>
+                  {r.full_name} <span style={{ color:'#7C3AED', fontWeight:600 }}>{r.emp_code}</span>
+                  <span style={{ cursor:'pointer', color:'#DC2626', fontWeight:700 }} onClick={() => setSelRec(selRec.filter(x => x.id !== r.id))}>×</span>
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ position:'relative' }}>
+            <input style={{ ...C.input, maxWidth:360 }} placeholder="🔍 Search recruiter — name or emp code" value={recQ} onChange={e => setRecQ(e.target.value)} />
+            {matches.length > 0 && (
+              <div style={{ position:'absolute', top:'100%', left:0, right:0, maxWidth:360, background:'#fff', border:'1px solid #DDD6FE', borderRadius:7, marginTop:2, zIndex:30, boxShadow:'0 6px 18px rgba(0,0,0,.1)', maxHeight:200, overflowY:'auto' }}>
+                {matches.map(r => (
+                  <div key={r.id} onClick={() => { setSelRec([...selRec, r]); setRecQ('') }} style={{ padding:'7px 10px', cursor:'pointer', borderBottom:'1px solid #F3F0FF', display:'flex', justifyContent:'space-between', gap:8 }}>
+                    <span style={{ fontSize:13, fontWeight:600 }}>{r.full_name}</span><span style={{ fontSize:11, color:'#7C3AED' }}>{r.emp_code}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {recQ.trim() && matches.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:4 }}>Koi recruiter nahi mila (sirf RECRUITER role waale dikhte hain).</div>}
+          </div>
+        </div>
+      )}
+
       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
         <input style={{ ...C.input, flex:1, minWidth:180 }} placeholder="Remark (reject ke liye zaroori)" value={remark} onChange={e => setRemark(e.target.value)} />
         <button disabled={busy} style={{ ...C.pri, background:'#059669' }} onClick={() => run('APPROVED')}>✓ Approve</button>
@@ -178,16 +223,16 @@ function RequestCard({ req, onResolve }: { req: PendingRequest; onResolve: (acti
   )
 }
 
-function ApprovalTab({ roles, selId, onSelect, pending, onResolve }: {
+function ApprovalTab({ roles, selId, onSelect, pending, recruiters, onResolve }: {
   roles: EssRole[]; selId: string; onSelect: (id: string) => void
-  pending: { types: string[]; requests: PendingRequest[] }
-  onResolve: (req: PendingRequest, action: 'APPROVED' | 'REJECTED', remark: string) => Promise<void>
+  pending: { types: string[]; items: PendingItem[] }; recruiters: Recruiter[]
+  onResolve: (item: PendingItem, action: 'APPROVED' | 'REJECTED', remark: string, recruiters?: Recruiter[]) => Promise<void>
 }) {
   const sel = roles.find(r => r.id === selId)
   return (
     <>
       <div style={C.card}>
-        <label style={C.lbl}>Logged in as (test role)</label>
+        <label style={C.lbl}>Logged in as (role)</label>
         <select style={{ ...C.input, maxWidth:360 }} value={selId} onChange={e => onSelect(e.target.value)}>
           <option value="">— Select a role —</option>
           {roles.map(r => <option key={r.id} value={r.id}>{r.role_name}</option>)}
@@ -203,10 +248,10 @@ function ApprovalTab({ roles, selId, onSelect, pending, onResolve }: {
 
       {sel && pending.types.length > 0 && (
         <div style={C.card}>
-          <div style={C.sec}>Pending requests ({pending.requests.length})</div>
-          {pending.requests.length === 0
-            ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Is role ke liye koi pending request nahi. (Leave / MRF / Offer jaise workflows apne module mein handle hote hain — ESS service requests mein abhi sirf Loan / Resignation / Profile-update aate hain.)</div>
-            : pending.requests.map(req => <RequestCard key={req.id} req={req} onResolve={(a, r) => onResolve(req, a, r)} />)}
+          <div style={C.sec}>Pending approvals ({pending.items.length})</div>
+          {pending.items.length === 0
+            ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Is role ke liye koi pending approval nahi. (MRF, Offer, aur Loan/Resignation/Profile-update yahan aate hain; Leave/Expense/Salary/PIP abhi apne module mein.)</div>
+            : pending.items.map(item => <RequestCard key={`${item.source}:${item.id}`} item={item} recruiters={recruiters} onResolve={(a, r, rec) => onResolve(item, a, r, rec)} />)}
         </div>
       )}
     </>
@@ -214,27 +259,42 @@ function ApprovalTab({ roles, selId, onSelect, pending, onResolve }: {
 }
 
 // ══ TAB · Role Assignment (role-centric: pick role → assign/remove employees) ══
-function AssignRoleTab({ roles, users, rights, selId, onSelect, onToggle, isMobile }: {
+function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, isMobile }: {
   roles: EssRole[]; users: EssUser[]; rights: ApprovalRight[]
+  org: { companies: OrgUnit[]; locations: OrgUnit[]; departments: OrgUnit[] }
   selId: string; onSelect: (id: string) => void
   onToggle: (u: EssUser, role: EssRole, add: boolean) => void
   isMobile: boolean
 }) {
   const [q, setQ] = useState('')
+  const [companyId, setCompanyId] = useState('')
+  const [locId, setLocId] = useState('')   // location / branch
+  const [deptId, setDeptId] = useState('')
   const assignable = roles.filter(r => r.role_code !== 'EMPLOYEE') // EMPLOYEE excluded (spec)
   const sel = roles.find(r => r.id === selId) || null
   const has = (u: EssUser) => u.roles.some(r => r.id === selId)
-  const filtered = users.filter(u => !q || u.full_name.toLowerCase().includes(q.toLowerCase()) || (u.emp_code || '').toLowerCase().includes(q.toLowerCase()))
+
+  // cascade: locations + departments narrow to the chosen company
+  const locs = org.locations.filter(l => !companyId || l.company_id === companyId)
+  const depts = org.departments.filter(d => !companyId || d.company_id === companyId)
+  const pickCompany = (v: string) => { setCompanyId(v); setLocId(''); setDeptId('') }
+
+  const inScope = (u: EssUser) =>
+    (!companyId || u.company_id === companyId) &&
+    (!locId || u.location_id === locId) &&
+    (!deptId || u.department_id === deptId)
+  const filtered = users.filter(u => inScope(u) &&
+    (!q || u.full_name.toLowerCase().includes(q.toLowerCase()) || (u.emp_code || '').toLowerCase().includes(q.toLowerCase())))
   const assigned = filtered.filter(has)
   const unassigned = filtered.filter(u => !has(u))
   const apprv = sel ? rights.filter(x => x.role_id === sel.id && x.can_approve).map(x => x.approval_type) : []
 
   const Row = ({ u, add }: { u: EssUser; add: boolean }) => (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'7px 8px', borderBottom:'1px solid #F3F0FF' }}>
-      <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:'#9CA3AF' }}>{u.emp_code} · {u.dept_name || '—'}</div></div>
+      <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:'#9CA3AF' }}>{u.emp_code} · {u.location_name || '—'} · {u.dept_name || '—'}</div></div>
       {sel && (add
-        ? <button style={{ ...C.out, borderColor:'#A7F3D0', color:'#059669' }} onClick={() => onToggle(u, sel, true)}>Assign →</button>
-        : <button style={{ ...C.out, borderColor:'#FCA5A5', color:'#DC2626' }} onClick={() => onToggle(u, sel, false)}>✕ Remove</button>)}
+        ? <button style={{ ...C.out, border:'1px solid #A7F3D0', color:'#059669' }} onClick={() => onToggle(u, sel, true)}>Assign →</button>
+        : <button style={{ ...C.out, border:'1px solid #FCA5A5', color:'#DC2626' }} onClick={() => onToggle(u, sel, false)}>✕ Remove</button>)}
     </div>
   )
 
@@ -242,7 +302,7 @@ function AssignRoleTab({ roles, users, rights, selId, onSelect, onToggle, isMobi
     <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '240px 1fr', gap:10, alignItems:'start' }}>
       <RoleList roles={assignable} selId={selId} onSelect={onSelect} rightCount={r => `${users.filter(u => u.roles.some(x => x.id === r.id)).length}`} />
       <div>
-        {!sel ? <div style={C.card}><span style={{ fontSize:12, color:'#9CA3AF' }}>Ek role chuno — phir employees assign/remove karo.</span></div> : (
+        {!sel ? <div style={C.card}><span style={{ fontSize:12, color:'#9CA3AF' }}>Ek role chuno — phir company, location/branch &amp; department se employee filter karke assign karo.</span></div> : (
           <>
             <div style={C.card}>
               <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:8 }}>
@@ -251,10 +311,35 @@ function AssignRoleTab({ roles, users, rights, selId, onSelect, onToggle, isMobi
                 <span style={{ fontSize:11, color:'#6B7280' }}>Salary: {sel.salary_visibility} · Scope: {sel.scope}</span>
               </div>
               <div style={{ fontSize:11, color:'#6B7280', marginBottom:4 }}>Can approve:</div>
-              <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+              <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:10 }}>
                 {apprv.length === 0 ? <span style={{ fontSize:10, color:'#9CA3AF' }}>—</span> : apprv.map(t => <Pill key={t} text={typeLabel(t)} bg="#ECFDF5" color="#059669" />)}
               </div>
-              <input style={{ ...C.input, marginTop:10 }} placeholder="🔍 Search employee" value={q} onChange={e => setQ(e.target.value)} />
+              {/* Step 1 — narrow by company → location/branch → department */}
+              <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:8 }}>
+                <div>
+                  <label style={C.lbl}>Company</label>
+                  <select style={C.input} value={companyId} onChange={e => pickCompany(e.target.value)}>
+                    <option value="">All companies</option>
+                    {org.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={C.lbl}>Location / Branch</label>
+                  <select style={C.input} value={locId} onChange={e => setLocId(e.target.value)} disabled={!companyId}>
+                    <option value="">All branches</option>
+                    {locs.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={C.lbl}>Department</label>
+                  <select style={C.input} value={deptId} onChange={e => setDeptId(e.target.value)} disabled={!companyId}>
+                    <option value="">All departments</option>
+                    {depts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* Step 2 — search the employee */}
+              <input style={{ ...C.input, marginTop:10 }} placeholder="🔍 Search employee name / code" value={q} onChange={e => setQ(e.target.value)} />
             </div>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:10 }}>
               <div style={C.card}>
@@ -348,7 +433,7 @@ function ESSPortalTab({ users, perms, rights, selId, onSelect, isMobile }: {
 }
 
 // ══════════════════════════════════════════════════════════════════
-export default function RolesPermissionsPage() {
+export function RolesPermissionsSection() {
   const [tab, setTab] = useState<'assign' | 'ess' | 'overview' | 'modules' | 'approvals' | 'queue'>('assign')
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
@@ -357,6 +442,7 @@ export default function RolesPermissionsPage() {
 
   const [roles, setRoles] = useState<EssRole[]>([])
   const [users, setUsers] = useState<EssUser[]>([])
+  const [org, setOrg] = useState<{ companies: OrgUnit[]; locations: OrgUnit[]; departments: OrgUnit[] }>({ companies: [], locations: [], departments: [] })
   const [perms, setPerms] = useState<RolePermission[]>([])
   const [rights, setRights] = useState<ApprovalRight[]>([])
   const [selRole, setSelRole] = useState('')
@@ -370,13 +456,14 @@ export default function RolesPermissionsPage() {
   }, [])
   // approval queue
   const [queueRole, setQueueRole] = useState('')
-  const [pending, setPending] = useState<{ types: string[]; requests: PendingRequest[] }>({ types: [], requests: [] })
+  const [pending, setPending] = useState<{ types: string[]; items: PendingItem[] }>({ types: [], items: [] })
+  const [recruiters, setRecruiters] = useState<Recruiter[]>([])
 
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [r, u, p, a] = await Promise.all([loadRoles(), loadUsers(), loadRolePermissions(), loadApprovalRights()])
-      setRoles(r); setUsers(u); setPerms(p); setRights(a)
+      const [r, u, o, p, a, rec] = await Promise.all([loadRoles(), loadUsers(), loadOrgUnits(), loadRolePermissions(), loadApprovalRights(), loadRecruiters()])
+      setRoles(r); setUsers(u); setOrg(o); setPerms(p); setRights(a); setRecruiters(rec)
       if (r.length) {
         if (!selRole) setSelRole(r[0].id)
         if (!assignRole) setAssignRole(r.find(x => x.role_code !== 'EMPLOYEE')?.id || r[0].id)
@@ -387,7 +474,7 @@ export default function RolesPermissionsPage() {
   useEffect(() => { reload() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reloadQueue = useCallback(async (roleId: string) => {
-    if (!roleId) { setPending({ types: [], requests: [] }); return }
+    if (!roleId) { setPending({ types: [], items: [] }); return }
     try { setPending(await loadPendingForRole(roleId)) }
     catch (e: any) { notify('Queue load failed: ' + (e?.message || ''), 'error') }
   }, [])
@@ -420,19 +507,18 @@ export default function RolesPermissionsPage() {
     setUsers(await loadUsers()) // refresh just the user→role view
   }
 
-  async function doResolve(req: PendingRequest, action: 'APPROVED' | 'REJECTED', remark: string) {
+  async function doResolve(item: PendingItem, action: 'APPROVED' | 'REJECTED', remark: string, recs?: Recruiter[]) {
     const byName = roles.find(r => r.id === queueRole)?.role_name || 'Admin'
-    const { error } = await resolveRequest(req.id, action, remark, byName)
+    const { error } = await resolveApproval(item, action, remark, byName, recs)
     if (error) { notify('Failed: ' + error.message, 'error'); return }
-    notify(`Request ${action === 'APPROVED' ? 'approved' : 'rejected'}.`)
+    notify(`${action === 'APPROVED' ? 'Approved' : 'Rejected'} ✓${item.source === 'mrf' && action === 'APPROVED' && recs?.length ? ` · ${recs.length} recruiter(s) assigned` : ''}`)
     reloadQueue(queueRole)
   }
 
   const tabs: [typeof tab, string][] = [['assign', '🔐 Role Assignment'], ['ess', '📱 ESS Portal View'], ['overview', 'Overview'], ['modules', 'Module Access'], ['approvals', 'Approval Rights'], ['queue', '✅ Approval / Rejection']]
 
   return (
-    <div style={{ ...C.page, padding:'20px 24px' }}>
-      <div style={{ maxWidth:1200, margin:'0 auto' }}>
+    <>
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Roles &amp; Permissions</div>
         <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Module access &amp; approval rights per role, plus a role-as-tester approval queue. (Employee→role assignment ESS ke 🧭 Assign Roles tab mein hai.)</div>
 
@@ -442,16 +528,25 @@ export default function RolesPermissionsPage() {
 
         {loading ? <div style={{ ...C.card, textAlign:'center', color:'#7C3AED', padding:40 }}>Loading…</div> : (
           <>
-            {tab === 'assign' && <AssignRoleTab roles={roles} users={users} rights={rights} selId={assignRole} onSelect={setAssignRole} onToggle={doAssignToggle} isMobile={isMobile} />}
+            {tab === 'assign' && <AssignRoleTab roles={roles} users={users} rights={rights} org={org} selId={assignRole} onSelect={setAssignRole} onToggle={doAssignToggle} isMobile={isMobile} />}
             {tab === 'ess' && <ESSPortalTab users={users} perms={perms} rights={rights} selId={essEmp} onSelect={setEssEmp} isMobile={isMobile} />}
             {tab === 'overview' && <OverviewTab roles={roles} perms={perms} rights={rights} />}
             {tab === 'modules' && <ModuleAccessTab roles={roles} perms={perms} selId={selRole} onSelect={setSelRole} onSet={setModule} />}
             {tab === 'approvals' && <ApprovalRightsTab roles={roles} rights={rights} selId={selRole} onSelect={setSelRole} onSet={setRight} />}
-            {tab === 'queue' && <ApprovalTab roles={roles} selId={queueRole} onSelect={setQueueRole} pending={pending} onResolve={doResolve} />}
+            {tab === 'queue' && <ApprovalTab roles={roles} selId={queueRole} onSelect={setQueueRole} pending={pending} recruiters={recruiters} onResolve={doResolve} />}
           </>
         )}
-      </div>
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
+    </>
+  )
+}
+
+export default function RolesPage() {
+  return (
+    <div style={{ ...C.page, padding:'20px 24px' }}>
+      <div style={{ maxWidth:1200, margin:'0 auto' }}>
+        <RolesPermissionsSection />
+      </div>
     </div>
   )
 }

@@ -51,7 +51,7 @@ export async function loadOrgUnits(): Promise<{ companies: OrgUnit[]; locations:
 export async function loadUsers(): Promise<EssUser[]> {
   const [{ data: emps }, { data: accts }, { data: ur }, { data: roles }] = await Promise.all([
     supabase.from('employees')
-      .select('id, emp_code, full_name, designation, company_id, location_id, department_id, date_of_resignation, last_working_date, departments(dept_name), companies(company_name), locations(location_name)')
+      .select('id, emp_code, full_name, designation, company_id, location_id, department_id, date_of_resignation, last_working_date, departments(dept_name), companies(company_name), locations!location_id(location_name)')
       .order('emp_code'),
     supabase.from('ess_accounts').select('*'),
     supabase.from('ess_user_roles').select('ess_account_id, role_id').eq('is_active', true),
@@ -157,6 +157,7 @@ export interface EmployeeDetail {
   dept_name: string | null; company_name: string | null; location_name: string | null; city: string | null
   l1_manager_name: string | null; hr_manager_name: string | null
   date_of_resignation: string | null; last_working_date: string | null
+  profile_photo: string | null
   account_status: string | null; password_reset_allowed: boolean
 }
 export interface DirectoryEntry {
@@ -175,7 +176,7 @@ const EMP_FIELDS = `id, emp_code, full_name, first_name, last_name, designation,
   pan_number, aadhar_last4, uan_number, group_doj, company_doj, confirmation_status,
   employment_status, employment_type, l1_manager_id, hr_manager_id,
   date_of_resignation, last_working_date,
-  departments(dept_name), companies(company_name), locations(location_name, city)`
+  departments(dept_name), companies(company_name), locations!location_id(location_name, city)`
 
 export async function loadEmployeeDetail(employeeId: string): Promise<EmployeeDetail | null> {
   const { data: e } = await supabase.from('employees').select(EMP_FIELDS).eq('id', employeeId).maybeSingle()
@@ -187,6 +188,8 @@ export async function loadEmployeeDetail(employeeId: string): Promise<EmployeeDe
     mgrNames = Object.fromEntries((mgrs || []).map((m: any) => [m.id, m.full_name]))
   }
   const { data: acct } = await supabase.from('ess_accounts').select('status, password_reset_allowed').eq('employee_id', employeeId).maybeSingle()
+  // Profile photo loaded separately + best-effort, so a missing column never breaks the portal.
+  const { data: photoRow } = await supabase.from('employees').select('profile_photo').eq('id', employeeId).maybeSingle()
   const x: any = e
   return {
     id: x.id, emp_code: x.emp_code, full_name: x.full_name, first_name: x.first_name, last_name: x.last_name,
@@ -199,13 +202,19 @@ export async function loadEmployeeDetail(employeeId: string): Promise<EmployeeDe
     location_name: x.locations?.location_name || null, city: x.locations?.city || null,
     l1_manager_name: mgrNames[x.l1_manager_id] || null, hr_manager_name: mgrNames[x.hr_manager_id] || null,
     date_of_resignation: x.date_of_resignation, last_working_date: x.last_working_date,
+    profile_photo: (photoRow as any)?.profile_photo ?? null,
     account_status: acct?.status || null, password_reset_allowed: acct?.password_reset_allowed !== false,
   }
 }
 
+// ESS profile picture — stored as a small base64 JPEG on the employee row.
+export async function updateEmployeePhoto(employeeId: string, dataUrl: string | null) {
+  return supabase.from('employees').update({ profile_photo: dataUrl }).eq('id', employeeId)
+}
+
 export async function loadDirectory(): Promise<DirectoryEntry[]> {
   const { data } = await supabase.from('employees')
-    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, blacklisted, last_working_date, departments(dept_name), locations(location_name)')
+    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, blacklisted, last_working_date, departments(dept_name), locations!location_id(location_name)')
     .order('full_name')
   const t0 = new Date(); t0.setHours(0, 0, 0, 0)
   return (data || [])
@@ -281,8 +290,8 @@ export const PERM_MODULES = [
 export const APPROVAL_TYPES: { key: string; label: string; live: boolean }[] = [
   { key: 'LEAVE_APPLY',     label: 'Leave Application', live: false },
   { key: 'EXPENSE_CLAIM',   label: 'Expense / Claims',  live: false },
-  { key: 'HIRING_MRF',      label: 'MRF / Hiring',      live: false },
-  { key: 'OFFER_LETTER',    label: 'Offer Letter',      live: false },
+  { key: 'HIRING_MRF',      label: 'MRF / Hiring',      live: true },
+  { key: 'OFFER_LETTER',    label: 'Offer Letter',      live: true },
   { key: 'SALARY_REVISION', label: 'Salary Revision',   live: false },
   { key: 'RESIGNATION',     label: 'Resignation',       live: true },
   { key: 'PROFILE_UPDATE',  label: 'Profile Update',    live: true },
@@ -308,30 +317,142 @@ export async function setApprovalRight(role_id: string, approval_type: string, p
     .upsert({ role_id, approval_type, ...patch }, { onConflict: 'role_id,approval_type' })
 }
 
-// Pending requests a role can act on. Resolve role_id → approvable types →
-// ess_service_requests still pending of those types. (Direct role_id query —
-// avoids the embedded-filter pitfall of matching ess_roles.role_code inline.)
-export async function loadPendingForRole(role_id: string): Promise<{ types: string[]; requests: PendingRequest[] }> {
+// A pending approval item from any source the selected role can act on.
+export interface PendingItem {
+  source: 'mrf' | 'offer' | 'ess'
+  id: string
+  approval_type: string
+  title: string
+  subtitle: string
+  meta: string
+  submitted_at: string | null
+  confidential?: boolean
+}
+
+// ESS service-request types that have a live source today.
+const ESS_LIVE_TYPES = ['LOAN', 'RESIGNATION', 'PROFILE_UPDATE']
+
+// Unified role inbox: gathers everything pending that this role can approve —
+// MRFs (manpower_requisitions, status 'Submitted'), offer letters
+// (offer_approval_requests, status 'SUBMITTED') and ESS service requests —
+// based on its role_approval_rights (can_approve = true).
+export async function loadPendingForRole(role_id: string): Promise<{ types: string[]; items: PendingItem[] }> {
   const { data: rights } = await supabase.from('role_approval_rights')
     .select('approval_type').eq('role_id', role_id).eq('can_approve', true)
   const types = (rights || []).map((r: any) => r.approval_type)
-  if (!types.length) return { types: [], requests: [] }
-  const { data } = await supabase.from('ess_service_requests')
-    .select('*, employees(full_name, emp_code, departments(dept_name))')
-    .in('request_type', types)
-    .in('status', ['PENDING', 'IN_REVIEW'])
-    .order('submitted_at', { ascending: false })
-  const requests = (data || []).map((r: any) => ({
-    id: r.id, employee_id: r.employee_id, request_type: r.request_type, request_data: r.request_data,
-    is_confidential: r.is_confidential, status: r.status, assigned_to: r.assigned_to, submitted_at: r.submitted_at,
-    employee_name: r.employees?.full_name || null, emp_code: r.employees?.emp_code || null,
-    dept_name: r.employees?.departments?.dept_name || null,
-  }))
-  return { types, requests }
+  if (!types.length) return { types: [], items: [] }
+  const items: PendingItem[] = []
+
+  // MRF / Hiring — a raised MRF awaiting approval is status SUBMITTED.
+  // (The "Submit for Approval" button writes uppercase 'SUBMITTED'; the lib helper
+  //  uses title-case 'Submitted' — match both so nothing is missed.)
+  if (types.includes('HIRING_MRF')) {
+    const { data } = await supabase.from('manpower_requisitions')
+      .select('*, companies(company_name), departments(dept_name), locations(location_name)')
+      .in('status', ['SUBMITTED', 'Submitted']).order('created_at', { ascending: false })
+    for (const m of (data || []) as any[]) items.push({
+      source: 'mrf', id: m.id, approval_type: 'HIRING_MRF',
+      title: `MRF · ${m.position || m.designation || '—'}`,
+      subtitle: [m.companies?.company_name, m.locations?.location_name, m.departments?.dept_name].filter(Boolean).join(' · ') || '—',
+      meta: `${m.openings ?? m.no_of_openings ?? 0} opening(s)${m.mrf_number ? ' · ' + m.mrf_number : ''}`,
+      submitted_at: m.created_at,
+    })
+  }
+
+  // Offer letter — pending HR-Head approval is status 'SUBMITTED'.
+  if (types.includes('OFFER_LETTER')) {
+    const { data } = await supabase.from('offer_approval_requests')
+      .select('*, candidates(full_name), companies(company_name)')
+      .eq('status', 'SUBMITTED').order('submitted_at', { ascending: false })
+    for (const o of (data || []) as any[]) items.push({
+      source: 'offer', id: o.id, approval_type: 'OFFER_LETTER',
+      title: `Offer · ${o.candidates?.full_name || 'Candidate'}`,
+      subtitle: [o.companies?.company_name, o.submitted_by].filter(Boolean).join(' · ') || '—',
+      meta: o.offered_ctc ? `CTC ₹${Number(o.offered_ctc).toLocaleString('en-IN')}` : 'Offer approval',
+      submitted_at: o.submitted_at,
+    })
+  }
+
+  // ESS service requests — live types only (Loan / Resignation / Profile-update).
+  const essTypes = types.filter((t: string) => ESS_LIVE_TYPES.includes(t))
+  if (essTypes.length) {
+    const { data } = await supabase.from('ess_service_requests')
+      .select('*, employees(full_name, emp_code, departments(dept_name))')
+      .in('request_type', essTypes).in('status', ['PENDING', 'IN_REVIEW'])
+      .order('submitted_at', { ascending: false })
+    for (const r of (data || []) as any[]) items.push({
+      source: 'ess', id: r.id, approval_type: r.request_type,
+      title: `${r.request_type} · ${r.employees?.full_name || '—'}`,
+      subtitle: [r.employees?.emp_code, r.employees?.departments?.dept_name].filter(Boolean).join(' · ') || '—',
+      meta: r.request_data?.detail || (r.request_data ? JSON.stringify(r.request_data).slice(0, 80) : '—'),
+      submitted_at: r.submitted_at, confidential: r.is_confidential,
+    })
+  }
+
+  items.sort((a, b) => (b.submitted_at || '').localeCompare(a.submitted_at || ''))
+  return { types, items }
 }
 
 export async function resolveRequest(requestId: string, action: 'APPROVED' | 'REJECTED', remark: string, byName: string) {
   return supabase.from('ess_service_requests').update({
     status: action, resolution_note: remark, assigned_to: byName, resolved_at: new Date().toISOString(),
   }).eq('id', requestId)
+}
+
+// Route an approve/reject back to the correct source table.
+// HR recruiters = employees who hold the RECRUITER ess_role (for MRF assignment).
+export interface Recruiter { id: string; full_name: string; emp_code: string }
+export async function loadRecruiters(): Promise<Recruiter[]> {
+  const { data: role } = await supabase.from('ess_roles').select('id').eq('role_code', 'RECRUITER').maybeSingle()
+  if (!role) return []
+  const { data: ur } = await supabase.from('ess_user_roles').select('ess_account_id').eq('role_id', role.id).eq('is_active', true)
+  const acctIds = (ur || []).map((x: any) => x.ess_account_id)
+  if (!acctIds.length) return []
+  const { data: accts } = await supabase.from('ess_accounts').select('employee_id').in('id', acctIds)
+  const empIds = [...new Set((accts || []).map((a: any) => a.employee_id))]
+  if (!empIds.length) return []
+  const { data: emps } = await supabase.from('employees').select('id, full_name, emp_code').in('id', empIds).neq('is_test', true).order('full_name')
+  return (emps || []) as Recruiter[]
+}
+
+export async function resolveApproval(item: PendingItem, action: 'APPROVED' | 'REJECTED', remark: string, byName: string, recruiters?: Recruiter[]) {
+  const now = new Date().toISOString()
+  if (item.source === 'mrf') {
+    if (action === 'APPROVED') {
+      return supabase.from('manpower_requisitions').update({
+        status: 'APPROVED', approved_at: now, remarks: remark || null,
+        assigned_recruiter_ids: recruiters?.length ? recruiters.map(r => r.id) : null,
+        assigned_recruiter: recruiters?.length ? recruiters.map(r => r.full_name).join(', ') : null,
+      }).eq('id', item.id)
+    }
+    return supabase.from('manpower_requisitions').update({ status: 'REJECTED', remarks: remark || null }).eq('id', item.id)
+  }
+  if (item.source === 'offer') {
+    return supabase.from('offer_approval_requests').update({
+      status: action === 'APPROVED' ? 'HR_HEAD_APPROVED' : 'HR_HEAD_REJECTED',
+      hr_head_action: action, hr_head_comments: remark || null, hr_head_actioned_at: now, hr_head_email: byName || null,
+    }).eq('id', item.id)
+  }
+  return resolveRequest(item.id, action, remark, byName)
+}
+
+// ── ESS employee Leave + Holidays (schema-accurate: leave_balances/leave_applications, resolve_holidays) ──
+export async function loadLeaveBalances(employeeId: string) {
+  const { data } = await supabase.from('leave_balances')
+    .select('*, leave_types(short_name, name)')
+    .eq('employee_id', employeeId).eq('year', '2026')
+  return data || []
+}
+export async function loadLeaveApplications(employeeId: string) {
+  const { data } = await supabase.from('leave_applications')
+    .select('*, leave_types(short_name, name)')
+    .eq('employee_id', employeeId).order('applied_at', { ascending: false }).limit(10)
+  return data || []
+}
+export async function applyLeave(row: { employee_id: string; leave_type_id: string; from_date: string; to_date: string; half_day: boolean; days: number; reason: string }) {
+  return supabase.from('leave_applications').insert({ ...row, status: 'PENDING' })
+}
+export async function loadEmployeeHolidays(employeeId: string) {
+  const { data } = await supabase.rpc('resolve_holidays', { p_employee_id: employeeId })
+  return (data || []) as { holiday_date: string; description: string; holiday_type: string; is_optional: boolean }[]
 }

@@ -27,7 +27,7 @@ export interface HolidayApplicability {
 export interface WeeklyOff {
   id: string; calendar_id: string | null; weekday: number; mode: WeeklyMode
   nth_occurrences: number[] | null; is_primary: boolean
-  company_id: string | null; branch_id: string | null; employment_type: string | null; created_at: string
+  company_id: string | null; branch_id: string | null; department_id: string | null; employment_type: string | null; created_at: string
 }
 export interface ResolvedHoliday { holiday_date: string; description: string; holiday_type: HolidayType; is_optional: boolean }
 
@@ -47,6 +47,11 @@ export async function listCompanies(): Promise<CompanyLite[]> {
 export async function listBranches(): Promise<BranchLite[]> {
   const { data } = await supabase.from('locations').select('id, location_name, company_id').eq('status', 'Active').order('location_name')
   return (data || []) as BranchLite[]
+}
+export interface DeptLite { id: string; dept_name: string; company_id: string }
+export async function listDepartments(): Promise<DeptLite[]> {
+  const { data } = await supabase.from('departments').select('id, dept_name, company_id').eq('status', 'Active').order('dept_name')
+  return (data || []) as DeptLite[]
 }
 export async function listEmployees(): Promise<EmployeeLite[]> {
   const { data } = await supabase
@@ -98,7 +103,7 @@ export async function listApplicability(holiday_ids: string[]): Promise<HolidayA
 export async function createHoliday(input: {
   calendar_id: string; holiday_date: string; description: string; holiday_type: HolidayType
   is_optional: boolean; on_weekly_off: boolean
-  applicability: { company_id: string; branch_id: string | null }[]
+  applicability: { company_id: string | null; branch_id: string | null }[]
   override?: { weekday: string; confirmed_by: string; note?: string }
 }) {
   const { data: he, error } = await supabase.from('holiday_entries').insert({
@@ -132,7 +137,7 @@ export async function listWeeklyOffs(): Promise<WeeklyOff[]> {
 }
 export async function createWeeklyOff(input: {
   calendar_id: string | null; weekday: number; mode: WeeklyMode; nth_occurrences: number[] | null
-  is_primary: boolean; company_id: string | null; branch_id: string | null; employment_type: string | null
+  is_primary: boolean; company_id: string | null; branch_id: string | null; department_id: string | null; employment_type: string | null
 }) {
   return supabase.from('weekly_off_config').insert(input)
 }

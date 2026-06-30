@@ -2,6 +2,101 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
 import HRActionPanel from '@/components/employees/HRActionPanel'
+import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
+import BulkUploadModal from '@/components/employees/BulkUploadModal'
+import * as XLSX from 'xlsx'
+
+// ── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
+const EMP_TYPES = ['Employee', 'Intern', 'NAPS', 'NATS', 'Consultant', 'Contract']
+const mc = {
+  inp:   { width:'100%', padding:'8px 10px', background:'#F8FAFC', border:'1px solid #CBD5E1', borderRadius:'7px', fontSize:'13px', color:'#0F172A', outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
+  lbl:   { fontSize:'10px', fontWeight:600 as const, color:'#64748B', textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:'3px' },
+  pri:   { padding:'9px 16px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:'8px', fontSize:'13px', fontWeight:600 as const, cursor:'pointer', fontFamily:'inherit' },
+  out:   { padding:'9px 14px', background:'#fff', color:'#475569', border:'1px solid #CBD5E1', borderRadius:'8px', fontSize:'13px', cursor:'pointer', fontFamily:'inherit' },
+}
+
+// Next type-wise code from existing employees (no migration dependency, atomic-ish).
+async function nextEmpCode(companyCode: string, companyId: string, employmentType: string): Promise<string> {
+  const suffix = TYPE_SUFFIX[employmentType] ?? ''
+  const prefix = `${(companyCode || 'EZ').toUpperCase()}${suffix}`
+  const { data } = await supabase.from('employees').select('emp_code').eq('company_id', companyId).eq('employment_type', employmentType)
+  let max = 0
+  const re = new RegExp(`^${prefix}(\\d{4})$`)
+  for (const r of (data || []) as any[]) { const m = String(r.emp_code || '').match(re); if (m) max = Math.max(max, parseInt(m[1], 10)) }
+  return buildEmpCode(companyCode || 'EZ', employmentType, max + 1)
+}
+
+function AddEmployeeModal({ companies, locations, departments, onClose, onSaved }: {
+  companies: any[]; locations: any[]; departments: any[]
+  onClose: () => void; onSaved: (msg: string) => void
+}) {
+  const [f, setF] = useState<any>({ full_name:'', company_id:'', location_id:'', department_id:'', employment_type:'Employee', designation:'', mobile:'', personal_email:'', company_doj:'', emp_code:'' })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }))
+  const locs = locations.filter(l => l.company_id === f.company_id)
+  const depts = departments.filter(d => d.company_id === f.company_id)
+  const company = companies.find(c => c.id === f.company_id)
+
+  // auto-fill the code when company + type are chosen (HR can still override)
+  useEffect(() => {
+    let live = true
+    if (f.company_id && f.employment_type) {
+      nextEmpCode(company?.company_code || 'EZ', f.company_id, f.employment_type).then(c => { if (live) setF((p: any) => ({ ...p, emp_code: c })) })
+    }
+    return () => { live = false }
+  }, [f.company_id, f.employment_type]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const ready = f.full_name.trim() && f.company_id && f.emp_code.trim()
+
+  async function save() {
+    setErr(''); setBusy(true)
+    try {
+      const code = f.emp_code.trim().toUpperCase()
+      // uniqueness
+      const { data: dup } = await supabase.from('employees').select('id').eq('emp_code', code).maybeSingle()
+      if (dup) { setErr(`Code ${code} already exists.`); setBusy(false); return }
+      const parts = f.full_name.trim().split(/\s+/)
+      const row = {
+        emp_code: code, common_code: code,
+        company_id: f.company_id, location_id: f.location_id || null, department_id: f.department_id || null,
+        full_name: f.full_name.trim(), first_name: parts[0], last_name: parts.slice(1).join(' ') || null,
+        designation: f.designation || null, employment_type: f.employment_type,
+        employment_status: 'Active', confirmation_status: 'Probation',
+        company_doj: f.company_doj || null, group_doj: f.company_doj || null,
+        mobile: f.mobile || null, personal_email: f.personal_email || null, is_test: false,
+      }
+      const { error } = await supabase.from('employees').insert(row)
+      if (error) { setErr(error.message); setBusy(false); return }
+      onSaved(`${f.full_name.trim()} added (${code}).`)
+    } catch (e: any) { setErr(e?.message || 'Failed'); setBusy(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={onClose}>
+      <div style={{ background:'#fff', borderRadius:'12px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'14px', color:'#0F172A' }}>Add Employee</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'12px' }}>
+          <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Rahul Sharma" /></div>
+          <div><label style={mc.lbl}>Employment type</label><select style={mc.inp} value={f.employment_type} onChange={e => set('employment_type', e.target.value)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
+          <div><label style={mc.lbl}>Company *</label><select style={mc.inp} value={f.company_id} onChange={e => { set('company_id', e.target.value); set('location_id',''); set('department_id','') }}><option value="">— Select —</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name || c.company_code}</option>)}</select></div>
+          <div><label style={mc.lbl}>Location / Branch</label><select style={mc.inp} value={f.location_id} onChange={e => set('location_id', e.target.value)} disabled={!f.company_id}><option value="">— Select —</option>{locs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}</select></div>
+          <div><label style={mc.lbl}>Department</label><select style={mc.inp} value={f.department_id} onChange={e => set('department_id', e.target.value)} disabled={!f.company_id}><option value="">— Select —</option>{depts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></div>
+          <div><label style={mc.lbl}>Designation</label><input style={mc.inp} value={f.designation} onChange={e => set('designation', e.target.value)} /></div>
+          <div><label style={mc.lbl}>Mobile</label><input style={mc.inp} value={f.mobile} onChange={e => set('mobile', e.target.value)} /></div>
+          <div><label style={mc.lbl}>Personal email</label><input style={mc.inp} value={f.personal_email} onChange={e => set('personal_email', e.target.value)} /></div>
+          <div><label style={mc.lbl}>Date of joining</label><input type="date" style={mc.inp} value={f.company_doj} onChange={e => set('company_doj', e.target.value)} /></div>
+          <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Employee code (auto)</label><input style={mc.inp} value={f.emp_code} onChange={e => set('emp_code', e.target.value.toUpperCase())} placeholder="auto" /></div>
+        </div>
+        {err && <div style={{ background:'#FEF2F2', color:'#B91C1C', fontSize:'12px', padding:'8px 12px', borderRadius:'7px', marginBottom:'12px' }}>{err}</div>}
+        <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+          <button style={mc.out} onClick={onClose}>Cancel</button>
+          <button style={{ ...mc.pri, opacity: ready && !busy ? 1 : 0.5 }} disabled={!ready || busy} onClick={save}>{busy ? 'Saving…' : 'Add employee'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface Employee {
   id: string
@@ -88,6 +183,9 @@ export default function EmployeeMaster() {
   const [locations, setLocations] = useState<any[]>([])
   const [departments, setDepts]   = useState<any[]>([])
   const [loading, setLoading]     = useState(true)
+  const [showAdd, setShowAdd]     = useState(false)
+  const [showBulk, setShowBulk]   = useState(false)
+  const [addMsg, setAddMsg]       = useState('')
   const [error, setError]         = useState('')
   const [total, setTotal]         = useState(0)
   const [search, setSearch]       = useState('')
@@ -97,6 +195,7 @@ export default function EmployeeMaster() {
   const [filterType, setFType]    = useState('')
   const [filterStatus, setFStatus]= useState('Active')
   const [filterGrade, setFGrade]  = useState('')
+  const [exporting, setExporting] = useState(false)
   const [page, setPage]           = useState(1)
   const [selected, setSelected]   = useState<Employee|null>(null)
   const [profileTab, setProfileTab] = useState('personal')
@@ -110,8 +209,12 @@ export default function EmployeeMaster() {
   })
   const PER_PAGE = 20
 
-  const fetchStats = async () => {
-    const { data } = await supabase.from('employees').select('employment_status, employment_type').neq('is_test', true)
+  const fetchStats = useCallback(async () => {
+    let q = supabase.from('employees').select('employment_status, employment_type').neq('is_test', true)
+    if (filterCompany)  q = q.eq('company_id', filterCompany)
+    if (filterLocation) q = q.eq('location_id', filterLocation)
+    if (filterDept)     q = q.eq('department_id', filterDept)
+    const { data } = await q
     if (!data) return
     setStats({
       total:      data.length,
@@ -124,7 +227,7 @@ export default function EmployeeMaster() {
       consultant: data.filter(e => e.employment_type === 'Consultant').length,
       contract:   data.filter(e => e.employment_type === 'Contract').length,
     })
-  }
+  }, [filterCompany, filterLocation, filterDept])
 
   const fetchMeta = async () => {
     const [co, lo, de] = await Promise.all([
@@ -154,7 +257,7 @@ export default function EmployeeMaster() {
         blacklisted, rehire_eligible,
         company_id, location_id, department_id,
         companies(company_name, company_code),
-        locations(location_name, city),
+        locations!location_id(location_name, city),
         departments(dept_name)
       `, { count: 'exact' }).neq('is_test', true).order('emp_code')
 
@@ -180,7 +283,56 @@ export default function EmployeeMaster() {
     }
   }, [search, filterCompany, filterLocation, filterDept, filterType, filterStatus, filterGrade, page])
 
-  useEffect(() => { fetchMeta(); fetchStats() }, [])
+  // Export ALL employees matching the current filters (no pagination) to Excel.
+  const exportExcel = async () => {
+    setExporting(true)
+    try {
+      let q = supabase.from('employees').select(`
+        emp_code, common_code, full_name, first_name, last_name, gender, date_of_birth, blood_group, marital_status,
+        employment_type, employment_status, designation, grade, confirmation_status, collar_type, employee_function, employee_category,
+        company_doj, group_doj, notice_period_days, mobile, personal_email, office_email,
+        pan_number, aadhar_last4, uan_number, pf_applicable, esic_applicable, pt_applicable, lwf_applicable,
+        bank_name, bank_account_last4, ifsc_code, account_type,
+        date_of_resignation, last_working_date, blacklisted, rehire_eligible,
+        companies(company_name), departments(dept_name), locations!location_id(location_name, city)
+      `).neq('is_test', true).order('emp_code')
+      if (filterCompany)  q = q.eq('company_id', filterCompany)
+      if (filterLocation) q = q.eq('location_id', filterLocation)
+      if (filterDept)     q = q.eq('department_id', filterDept)
+      if (filterType)     q = q.eq('employment_type', filterType)
+      if (filterStatus)   q = q.eq('employment_status', filterStatus)
+      if (filterGrade)    q = q.eq('grade', filterGrade)
+      if (search.trim())  q = q.or(`full_name.ilike.%${search}%,emp_code.ilike.%${search}%,common_code.ilike.%${search}%,designation.ilike.%${search}%,mobile.ilike.%${search}%`)
+      const { data, error: err } = await q
+      if (err) throw err
+      const rows = (data as any[] || []).map(e => ({
+        'Employee Code': e.emp_code, 'Full Name': e.full_name, 'First Name': e.first_name, 'Last Name': e.last_name,
+        'Company': e.companies?.company_name || '', 'Department': e.departments?.dept_name || '',
+        'Location': e.locations?.location_name || '', 'City': e.locations?.city || '',
+        'Designation': e.designation || '', 'Grade': e.grade || '', 'Employment Type': e.employment_type || '',
+        'Status': e.employment_status || '', 'Confirmation': e.confirmation_status || '',
+        'Collar Type': e.collar_type || '', 'Function': e.employee_function || '', 'Category': e.employee_category || '',
+        'Date of Joining': e.company_doj || '', 'Group DOJ': e.group_doj || '', 'Notice Period (days)': e.notice_period_days ?? '',
+        'Gender': e.gender || '', 'Date of Birth': e.date_of_birth || '', 'Blood Group': e.blood_group || '', 'Marital Status': e.marital_status || '',
+        'Mobile': e.mobile || '', 'Personal Email': e.personal_email || '', 'Office Email': e.office_email || '',
+        'PAN': e.pan_number || '', 'Aadhaar (last4)': e.aadhar_last4 || '', 'UAN': e.uan_number || '',
+        'PF': e.pf_applicable ? 'Yes' : 'No', 'ESIC': e.esic_applicable ? 'Yes' : 'No', 'PT': e.pt_applicable ? 'Yes' : 'No', 'LWF': e.lwf_applicable ? 'Yes' : 'No',
+        'Bank': e.bank_name || '', 'Account (last4)': e.bank_account_last4 || '', 'IFSC': e.ifsc_code || '', 'Account Type': e.account_type || '',
+        'Resignation Date': e.date_of_resignation || '', 'Last Working Day': e.last_working_date || '',
+        'Blacklisted': e.blacklisted ? 'Yes' : 'No', 'Rehire Eligible': e.rehire_eligible === false ? 'No' : 'Yes',
+      }))
+      if (!rows.length) { alert('No employees to export for the current filters.'); setExporting(false); return }
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Employees')
+      XLSX.writeFile(wb, `EZER_Employees_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    } catch (e: any) {
+      alert('Export failed: ' + (e?.message || 'unknown error'))
+    }
+    setExporting(false)
+  }
+
+  useEffect(() => { fetchMeta() }, [])
+  useEffect(() => { fetchStats() }, [fetchStats])
   useEffect(() => { setPage(1) }, [search, filterCompany, filterLocation, filterDept, filterType, filterStatus, filterGrade])
   useEffect(() => { fetchEmployees() }, [fetchEmployees])
 
@@ -218,8 +370,9 @@ export default function EmployeeMaster() {
           </span>
         </div>
         <div style={{ display:'flex', gap:'8px' }}>
-          <button style={C.secBtn}>📥 Export Excel</button>
-          <button style={C.priBtn}>+ Add Employee</button>
+          <button style={{ ...C.secBtn, opacity: exporting ? 0.6 : 1 }} disabled={exporting} onClick={exportExcel}>📥 {exporting ? 'Exporting…' : 'Export Excel'}</button>
+          <button style={C.secBtn} onClick={() => setShowBulk(true)}>⬆ Bulk Upload</button>
+          <button style={C.priBtn} onClick={() => setShowAdd(true)}>+ Add Employee</button>
         </div>
       </div>
 
@@ -599,6 +752,10 @@ export default function EmployeeMaster() {
           </div>
         </div>
       )}
+
+      {showAdd && <AddEmployeeModal companies={companies} locations={locations} departments={departments} onClose={() => setShowAdd(false)} onSaved={(msg) => { setShowAdd(false); setAddMsg(msg); fetchEmployees(); setTimeout(() => setAddMsg(''), 3500) }} />}
+      {showBulk && <BulkUploadModal companies={companies} departments={departments} locations={locations} onClose={() => setShowBulk(false)} onDone={(r) => { setAddMsg(`Bulk: ${r.added} added, ${r.skipped} skipped, ${r.errors} errors`); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 4000) }} />}
+      {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:'#059669', color:'#fff', borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
     </div>
   )
 }

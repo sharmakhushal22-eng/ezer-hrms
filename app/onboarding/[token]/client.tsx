@@ -1,10 +1,10 @@
 // app/onboarding/[token]/client.tsx
 // 8-step employee onboarding wizard with AI doc verification
 'use client'
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 
 // ── Types ────────────────────────────────────────────────────────
-type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+type Step = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12
 interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: any; ai_confidence: number; ai_flags: string[]; file_name: string }
 
 // ── EZER Theme ───────────────────────────────────────────────────
@@ -21,8 +21,9 @@ const S = {
   g3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } as const,
 }
 
-const STEPS = ['Welcome', 'OTP Verify', 'Personal', 'Contact & Address', 'Emergency & Employment', 'Documents', 'Statutory & Bank', 'Declaration']
+const STEPS = ['Welcome', 'Documents', 'AI Review', 'Personal', 'KYC & EPF', 'Nominees', 'ESIC & Family', 'Education', 'Forms Review', 'Policies', 'ACK Doc', 'Aadhaar']
 const STATES = ['Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal']
+const COUNTRIES = ['India', 'United States', 'United Kingdom', 'United Arab Emirates', 'Canada', 'Australia', 'Germany', 'France', 'Singapore', 'Japan', 'China', 'Nepal', 'Bangladesh', 'Sri Lanka', 'Pakistan', 'Bhutan', 'Myanmar', 'Maldives', 'Afghanistan', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman', 'Malaysia', 'Indonesia', 'Thailand', 'Vietnam', 'Philippines', 'South Korea', 'Hong Kong', 'Taiwan', 'New Zealand', 'Ireland', 'Netherlands', 'Belgium', 'Switzerland', 'Sweden', 'Norway', 'Denmark', 'Finland', 'Italy', 'Spain', 'Portugal', 'Austria', 'Poland', 'Russia', 'Turkey', 'Israel', 'Egypt', 'South Africa', 'Nigeria', 'Kenya', 'Mauritius', 'Brazil', 'Mexico', 'Argentina', 'Chile', 'Luxembourg', 'Greece', 'Czech Republic', 'Hungary', 'Other']
 
 // ── Misc helpers ──────────────────────────────────────────────────
 const ageFromDob = (dob: string) => dob ? Math.floor((Date.now() - new Date(dob).getTime()) / (365.25 * 24 * 3600 * 1000)) : 0
@@ -53,24 +54,33 @@ function Toast({ msg, type }: { msg: string; type: 'ok' | 'err' }) {
 
 // ── Step Progress bar ─────────────────────────────────────────────
 function StepBar({ current }: { current: Step }) {
+  const pct = Math.round((current / STEPS.length) * 100)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', padding: '12px 20px', background: '#fff', borderBottom: '1px solid #EDE9FE', overflowX: 'auto', gap: 0 }}>
-      {STEPS.map((s, i) => {
-        const n = i + 1
-        const done = n < current
-        const active = n === current
-        return (
-          <div key={s} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-              <div style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, background: done ? P : active ? P : '#EDE9FE', color: done || active ? '#fff' : '#9CA3AF', transition: 'all .3s' }}>
-                {done ? '✓' : n}
+    <div style={{ background: '#fff', borderBottom: '1px solid #EDE9FE' }}>
+      <div style={{ display: 'flex', alignItems: 'center', padding: '12px 20px 4px', overflowX: 'auto', gap: 0 }}>
+        {STEPS.map((s, i) => {
+          const n = i + 1
+          const done = n < current
+          const active = n === current
+          return (
+            <div key={s} style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600, background: done ? '#059669' : active ? P : '#EDE9FE', color: done || active ? '#fff' : '#9CA3AF', transition: 'all .3s' }}>
+                  {done ? '✓' : n}
+                </div>
+                <div style={{ fontSize: 9, color: active ? P : done ? '#059669' : '#9CA3AF', fontWeight: active ? 600 : 400, whiteSpace: 'nowrap' }}>{s}</div>
               </div>
-              <div style={{ fontSize: 9, color: active ? P : done ? '#059669' : '#9CA3AF', fontWeight: active ? 600 : 400, whiteSpace: 'nowrap' }}>{s}</div>
+              {i < STEPS.length - 1 && <div style={{ width: 24, height: 2, background: done ? '#059669' : '#EDE9FE', margin: '0 2px', marginBottom: 16, transition: 'background .3s' }} />}
             </div>
-            {i < STEPS.length - 1 && <div style={{ width: 24, height: 2, background: done ? P : '#EDE9FE', margin: '0 2px', marginBottom: 16, transition: 'background .3s' }} />}
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 20px 10px' }}>
+        <div style={{ flex: 1, height: 6, background: 'rgba(124,58,237,0.1)', borderRadius: 99, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: P, borderRadius: 99, transition: 'width .3s' }} />
+        </div>
+        <span style={{ fontSize: 11, fontWeight: 600, color: P, whiteSpace: 'nowrap' }}>Step {current} of {STEPS.length} · {pct}%</span>
+      </div>
     </div>
   )
 }
@@ -177,6 +187,567 @@ function DocUpload({
   )
 }
 
+// ── Document list + reusable upload grid (used in Step 2 AND the pre-Policies gate) ──
+const DOC_LIST = (esic: boolean, isFresher: boolean, isForeign = false) => [
+  { code: 'AADHAAR_FRONT', name: 'Aadhaar Card (Front)', required: true },
+  { code: 'AADHAAR_BACK', name: 'Aadhaar Card (Back)', required: true },
+  { code: 'PAN', name: 'PAN Card', required: true },
+  { code: 'PHOTO', name: 'Passport Size Photo', required: true },
+  ...(esic ? [{ code: 'FAMILY_PHOTO', name: 'Family Photo (all members — for ESIC e-Pehchan card)', required: true }] : []),
+  { code: 'DEGREE', name: 'Highest Degree Certificate', required: true },
+  { code: 'EXP_LETTER', name: 'Experience/Relieving Letter', required: !isFresher },
+  { code: 'BANK_PROOF', name: 'Cancelled Cheque / Bank Passbook', required: true },
+  { code: 'UAN_CARD', name: 'UAN Card (if existing PF)', required: false },
+  ...(isForeign ? [
+    { code: 'PASSPORT', name: 'Passport (front page)', required: true },
+    { code: 'VISA', name: 'Visa copy', required: true },
+    { code: 'WORK_PERMIT', name: 'Work Permit', required: false },
+  ] : []),
+]
+const REQUIRED_DOC_CODES = (esic: boolean) => ['AADHAAR_FRONT', 'AADHAAR_BACK', 'PAN', 'PHOTO', 'DEGREE', 'BANK_PROOF', ...(esic ? ['FAMILY_PHOTO'] : [])]
+function DocsGrid({ docs, token, esicApplicable, isFresher, isForeign = false, onUploaded }: {
+  docs: Record<string, DocStatus>; token: string; esicApplicable: boolean; isFresher: boolean; isForeign?: boolean; onUploaded: (code: string, data: any) => void
+}) {
+  return (
+    <>
+      {DOC_LIST(esicApplicable, isFresher, isForeign).map(doc => (
+        <DocUpload key={doc.code} docCode={doc.code} docName={doc.name} required={doc.required} token={token} status={docs[doc.code] || null} onSuccess={onUploaded} />
+      ))}
+    </>
+  )
+}
+
+// ── Phase 2: AI document-extraction review table ──────────────────
+function AIReviewTable({ docs }: { docs: Record<string, DocStatus> }) {
+  const aadhaar = docs['AADHAAR_FRONT']?.ai_extracted_data || {}
+  const pan = docs['PAN']?.ai_extracted_data || {}
+  const bank = docs['BANK']?.ai_extracted_data || docs['BANK_PROOF']?.ai_extracted_data || {}
+  const srcConf = (d?: DocStatus | null) => Math.round(((d?.ai_confidence) || 0) * 100)
+  const rows: { field: string; value: any; conf: number; src?: DocStatus }[] = [
+    { field: 'Full name', value: aadhaar.name || pan.name || '', conf: srcConf(docs['AADHAAR_FRONT'] || docs['PAN']), src: docs['AADHAAR_FRONT'] || docs['PAN'] },
+    { field: 'Date of birth', value: aadhaar.dob || '', conf: srcConf(docs['AADHAAR_FRONT']), src: docs['AADHAAR_FRONT'] },
+    { field: 'PAN number', value: pan.pan_number || '', conf: srcConf(docs['PAN']), src: docs['PAN'] },
+    { field: 'Bank account', value: bank.account_number || bank.account || '', conf: srcConf(docs['BANK'] || docs['BANK_PROOF']), src: docs['BANK'] || docs['BANK_PROOF'] },
+    { field: 'IFSC', value: bank.ifsc || '', conf: srcConf(docs['BANK'] || docs['BANK_PROOF']), src: docs['BANK'] || docs['BANK_PROOF'] },
+  ]
+  if (!rows.some(r => r.value)) return null
+  return (
+    <div style={{ ...S.card, padding: 0, overflow: 'hidden', marginBottom: 12 }}>
+      <div style={{ padding: '10px 14px', fontSize: 12, fontWeight: 600, background: '#F3F0FF', color: '#534AB7' }}>🤖 AI extracted this from your documents — please verify below</div>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        <thead>
+          <tr style={{ background: 'rgba(124,58,237,0.04)' }}>
+            {['Field', 'Extracted value', 'Confidence', 'Status'].map(h => <th key={h} style={{ padding: '7px 14px', textAlign: 'left', fontSize: 10, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>)}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(r => {
+            const mismatch = r.src?.ai_status === 'MISMATCH'
+            const ok = !!r.value && r.conf >= 80 && !mismatch
+            return (
+              <tr key={r.field} style={{ borderTop: '1px solid rgba(124,58,237,0.08)', background: mismatch ? '#FEF2F2' : !r.value ? '#FFFBEB' : 'transparent' }}>
+                <td style={{ padding: '7px 14px', color: '#6B7280' }}>{r.field}</td>
+                <td style={{ padding: '7px 14px', fontWeight: 500 }}>{r.value || '—'}</td>
+                <td style={{ padding: '7px 14px' }}>{r.value ? <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: ok ? '#ECFDF5' : '#FFFBEB', color: ok ? '#059669' : '#B45309' }}>{r.conf}%</span> : '—'}</td>
+                <td style={{ padding: '7px 14px' }}>{!r.value ? <span style={{ color: '#9CA3AF' }}>— Manual entry</span> : mismatch ? <span style={{ color: '#DC2626' }}>⚠ Mismatch — review</span> : ok ? <span style={{ color: '#059669' }}>✓ Verified</span> : <span style={{ color: '#B45309' }}>⚠ Low confidence</span>}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ── Phase 8: read-only statutory form previews (Form 11/2/F/ESIC) ──
+function FormRow({ l, v }: { l: string; v: any }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '5px 0', borderBottom: '1px solid #F3F0FF' }}>
+      <span style={{ fontSize: 11, color: '#6B7280' }}>{l}</span>
+      <span style={{ fontSize: 12, fontWeight: 500, color: '#1E1B4B', textAlign: 'right' }}>{v || '—'}</span>
+    </div>
+  )
+}
+function StatutoryFormCard({ code, title, rows }: { code: string; title: string; rows: [string, any][] }) {
+  const [ok, setOk] = useState(false)
+  return (
+    <div style={{ ...S.card, border: `1px solid ${ok ? '#A7F3D0' : '#EDE9FE'}`, background: ok ? '#F6FFF9' : '#fff' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: 9, fontWeight: 700, color: '#7C3AED', background: '#EDE9FE', padding: '2px 8px', borderRadius: 99 }}>{code}</span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{title}</span>
+        {ok && <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: '#059669' }}>✓ Looks correct</span>}
+      </div>
+      <div>{rows.map(([l, v]) => <FormRow key={l} l={l} v={v} />)}</div>
+      {!ok && <button onClick={() => setOk(true)} style={{ ...S.btnO, marginTop: 10, fontSize: 12, padding: '6px 14px' }}>✓ Looks correct</button>}
+    </div>
+  )
+}
+function StatutoryFormsPreview({ personal, contact, statutory, insurance, esic, candidate, esicApplicable, isForeign = false, epsFamily = [], epsFallback = {} }: {
+  personal: any; contact: any; statutory: any; insurance: any; esic: any; candidate: any; esicApplicable: boolean; isForeign?: boolean
+  epsFamily?: any[]; epsFallback?: any
+}) {
+  const doj = candidate.date_of_joining ? new Date(candidate.date_of_joining).toLocaleDateString('en-IN') : '—'
+  // Form III: date of superannuation = DOB + 60 years
+  const superannuation = personal.dob ? (() => { const d = new Date(personal.dob); d.setFullYear(d.getFullYear() + 60); return d.toLocaleDateString('en-IN') })() : '—'
+  // Form III needs the address split into Village / PO / Thana / Sub-Division
+  const permAddr = [contact?.perm_village, contact?.perm_po, contact?.perm_thana, contact?.perm_sub_division, contact?.perm_line1, contact?.perm_city, contact?.perm_district, contact?.perm_state, contact?.perm_pin].filter(Boolean).join(', ')
+  const fam = [
+    insurance.spouse_name && `${insurance.spouse_name} (Spouse)`,
+    insurance.father_name && `${insurance.father_name} (Father)`,
+    insurance.mother_name && `${insurance.mother_name} (Mother)`,
+    insurance.kid1_name && `${insurance.kid1_name} (Child)`,
+    insurance.kid2_name && `${insurance.kid2_name} (Child)`,
+  ].filter(Boolean).join(', ')
+
+  // EPS Form 2 Part B — family members + fallback nominee
+  const epsFamStr = (epsFamily || [])
+    .filter((m: any) => m && (m.name || m.relation))
+    .map((m: any) => `${m.name || '—'}${m.relation ? ` (${m.relation})` : ''}`)
+    .join(', ')
+  const epsFallbackStr = epsFallback && (epsFallback.name || epsFallback.relation)
+    ? `${epsFallback.name || '—'}${epsFallback.relation ? ` (${epsFallback.relation})` : ''}`
+    : ''
+
+  // ── Tabbed view ──────────────────────────────────────────────────
+  const tabs: { id: string; label: string }[] = [
+    { id: 'form11', label: 'Form 11' },
+    { id: 'form2', label: 'Form 2' },
+    { id: 'form3', label: 'Form III' },
+    ...(esicApplicable ? [{ id: 'esic1', label: 'ESIC Form 1' }] : []),
+  ]
+  const [tab, setTab] = useState('form11')
+  // Keep active tab valid if ESIC tab disappears
+  const activeTab = tabs.some(t => t.id === tab) ? tab : 'form11'
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Review your statutory forms</div>
+      <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>Auto-filled from your data — verify each before signing.</div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        {tabs.map(t => {
+          const on = t.id === activeTab
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', border: `1px solid ${P}`, background: on ? P : '#fff', color: on ? '#fff' : P }}>
+              {t.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {activeTab === 'form11' && (
+        <StatutoryFormCard code="EPF FORM 11" title="PF Declaration (new member)" rows={[
+          ['Name of member', personal.full_name],
+          ["Father's / Husband's name", personal.father_name],
+          ['Date of birth', personal.dob],
+          ['Gender', personal.gender],
+          ['Date of joining', doj],
+          ['PAN', statutory.pan_number],
+          ['Existing PF member', statutory.has_uan ? `Yes — UAN ${statutory.uan_number || '—'}` : 'No'],
+          ['International worker', isForeign ? 'Yes' : 'No'],
+        ]} />
+      )}
+      {activeTab === 'form2' && (
+        <StatutoryFormCard code="EPF FORM 2" title="PF & Pension Nomination" rows={[
+          ['Nominee name', statutory.nominee_name],
+          ['Relationship', statutory.nominee_relation],
+          ['Nominee date of birth', statutory.nominee_dob],
+          ['Share of accumulation', statutory.nominee_share ? `${statutory.nominee_share}%` : '—'],
+          ['Nominee address', statutory.nominee_address],
+          ['Family members (Part B)', epsFamStr],
+          ['Fallback nominee (EPS)', epsFallbackStr],
+        ]} />
+      )}
+      {activeTab === 'form3' && (
+        <StatutoryFormCard code="FORM III" title="Gratuity Nomination (Form F)" rows={[
+          ['Employee name', personal.full_name],
+          ['Religion', personal.religion],
+          ['Department', candidate.department],
+          ['Designation', candidate.designation],
+          ['Date of appointment', doj],
+          ['Date of superannuation (DOB + 60)', superannuation],
+          ['Permanent address', permAddr],
+          ['Nominee name', statutory.grat_nominee_name || statutory.nominee_name],
+          ['Relationship', statutory.grat_nominee_relation || statutory.nominee_relation],
+          ['Nominee age', statutory.nominee_dob ? `${ageFromDob(statutory.nominee_dob)} yrs` : '—'],
+          ['Proportion', '100%'],
+        ]} />
+      )}
+      {activeTab === 'esic1' && esicApplicable && (
+        <StatutoryFormCard code="ESIC FORM 1" title="ESIC Declaration & Family" rows={[
+          ['Insured person', personal.full_name],
+          ['Date of birth', personal.dob],
+          ['Family members', fam],
+          ['Previous ESIC IP no.', esic.prev_ip],
+          ['Nearest dispensary', esic.dispensary],
+        ]} />
+      )}
+    </div>
+  )
+}
+
+// ── Phase 9: Policy acknowledgement (config-driven per company) ─────
+function PolicyCard({ policy, acked, onAck }: { policy: any; acked: boolean; onAck: () => Promise<void> }) {
+  const [open, setOpen] = useState(false)
+  const [scrolledEnd, setScrolledEnd] = useState(false)
+  const [checked, setChecked] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
+  const onScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 10) setScrolledEnd(true)
+  }
+  // A short policy doesn't produce a scrollbar — there's nothing to scroll to,
+  // so treat it as already read and unlock the acknowledgement checkbox.
+  useEffect(() => {
+    if (!open) return
+    const el = bodyRef.current
+    if (el && el.scrollHeight <= el.clientHeight + 4) setScrolledEnd(true)
+  }, [open])
+  return (
+    <div style={{ ...S.card, border: `1px solid ${acked ? '#A7F3D0' : '#EDE9FE'}`, background: acked ? '#F0FDF4' : '#fff' }}>
+      <div onClick={() => setOpen(o => !o)} style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>{policy.policy_title}</span>
+        <span style={{ fontSize: 10, color: '#9CA3AF' }}>{policy.policy_code} · v{policy.version}</span>
+        {policy.is_mandatory && <span style={{ fontSize: 9, fontWeight: 700, color: '#7C3AED', background: '#EDE9FE', padding: '1px 7px', borderRadius: 99 }}>MANDATORY</span>}
+        <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: acked ? '#059669' : '#9CA3AF' }}>{acked ? '✓ Acknowledged' : (open ? '▾' : '▸')}</span>
+      </div>
+      {open && !acked && (
+        <div style={{ marginTop: 10 }}>
+          <div ref={bodyRef} onScroll={onScroll} style={{ maxHeight: 200, overflowY: 'auto', background: '#FAFAF8', border: '1px solid #EDE9FE', borderRadius: 8, padding: '10px 12px', fontSize: 12, color: '#374151', whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+            {policy.policy_body || 'No content.'}
+          </div>
+          {!scrolledEnd && <div style={{ fontSize: 10, color: '#D97706', marginTop: 6 }}>↓ Scroll to the bottom to enable acknowledgement</div>}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10, cursor: scrolledEnd ? 'pointer' : 'not-allowed', opacity: scrolledEnd ? 1 : 0.5, fontSize: 12 }}>
+            <input type="checkbox" disabled={!scrolledEnd} checked={checked} onChange={e => setChecked(e.target.checked)} style={{ marginTop: 2 }} />
+            <span>Maine {policy.policy_title} poori padh li hai aur samajh li hai.</span>
+          </label>
+          <button disabled={!checked || busy} onClick={async () => { setBusy(true); await onAck(); setBusy(false) }}
+            style={{ ...S.btnP, marginTop: 10, padding: '8px 16px', opacity: checked && !busy ? 1 : 0.5, cursor: checked && !busy ? 'pointer' : 'not-allowed' }}>
+            {busy ? '…' : 'Acknowledge'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PolicyAckPhase({ token, onBack, onNext }: {
+  token: string; onBack: () => void; onNext: () => void
+}) {
+  const [policies, setPolicies] = useState<any[]>([])
+  const [acked, setAcked] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    fetch(`/api/onboarding/policies?token=${token}`).then(r => r.json())
+      .then(d => { setPolicies(d.policies || []); setAcked(new Set(d.ackedIds || [])); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [token])
+  const ack = async (p: any) => {
+    await fetch('/api/onboarding/acknowledge-policy', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, policy_id: p.id, policy_code: p.policy_code, policy_title: p.policy_title, policy_version: p.version }),
+    })
+    setAcked(prev => new Set([...prev, p.id]))
+  }
+  const mandatory = policies.filter(p => p.is_mandatory)
+  const allMandatoryAcked = mandatory.every(p => acked.has(p.id))
+  const ackedCount = policies.filter(p => acked.has(p.id)).length
+
+  return (
+    <div>
+      <div style={S.card}>
+        <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Company Policies</div>
+        <div style={{ fontSize: 12, color: '#6B7280' }}>
+          {loading ? 'Loading…' : policies.length === 0 ? 'Is company ke liye koi policy configure nahi hai — aap submit kar sakte hain.' : `Har policy padh kar acknowledge karein. ${ackedCount}/${policies.length} done.`}
+        </div>
+      </div>
+      {policies.map(p => <PolicyCard key={p.id} policy={p} acked={acked.has(p.id)} onAck={() => ack(p)} />)}
+      <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+        <button onClick={onBack} style={S.btnO}>← Back</button>
+        <button onClick={onNext} disabled={!allMandatoryAcked}
+          style={{ ...S.btnP, flex: 1, padding: 12, fontSize: 15, background: allMandatoryAcked ? P : '#9CA3AF', cursor: !allMandatoryAcked ? 'not-allowed' : 'pointer' }}>
+          Review Acknowledgement →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Phase 10: Acknowledgement document preview (auto-filled details) ─
+function AckPreviewPhase({ token, onBack, onNext }: {
+  token: string; onBack: () => void; onNext: () => void
+}) {
+  const [d, setD] = useState<any>(null)
+  useEffect(() => {
+    fetch(`/api/onboarding/ack-preview?token=${token}`).then(r => r.json()).then(setD).catch(() => setD({ error: true }))
+  }, [token])
+  if (!d) return <div style={S.card}>Loading…</div>
+
+  const Row = ({ l, v }: { l: string; v: any }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 12px', background: '#FAFAF8', borderRadius: 7, border: '1px solid #EDE9FE' }}>
+      <span style={{ fontSize: 12, fontWeight: 500, color: '#6B7280' }}>{l}</span>
+      <span style={{ fontSize: 12, fontWeight: 600, color: '#1E1B4B' }}>{v || '—'}</span>
+    </div>
+  )
+  return (
+    <div>
+      <div style={S.card}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>Acknowledgement Document</div>
+        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>Apni details verify karein. Submit ke baad ye document aur policies aapke email par bhi aa jayenge.</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
+          <Row l="Employee Name" v={d.employee_name} />
+          <Row l="Father's Name" v={d.father_name} />
+          <Row l="Designation" v={d.designation} />
+          <Row l="Department" v={d.department} />
+          <Row l="Date of Joining" v={d.doj} />
+          <Row l="Company" v={d.company_name} />
+          <Row l="Work Location" v={d.work_location} />
+          <Row l="Aadhaar" v={`XXXX XXXX ${d.aadhaar_last4 || '****'}`} />
+          <Row l="Employee ID" v={d.employee_code} />
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 600, color: '#7C3AED', marginBottom: 6 }}>Policies acknowledged ({(d.policies_acked || []).length})</div>
+        {(d.policies_acked || []).length === 0
+          ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>—</div>
+          : (d.policies_acked || []).map((p: any) => (
+            <div key={p.policy_code} style={{ fontSize: 12, color: '#065F46', padding: '3px 0' }}>✓ {p.policy_code} — {p.policy_title}</div>
+          ))}
+        <div style={{ background: '#EEEDFE', borderRadius: 10, padding: '12px 14px', marginTop: 14, fontSize: 12, color: '#3C3489', lineHeight: 1.7 }}>
+          I hereby acknowledge that I have received, read, and understood all the above policies, and confirm the details shown are correct.
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onBack} style={S.btnO}>← Back</button>
+        <button onClick={onNext}
+          style={{ ...S.btnP, flex: 1, padding: 12, fontSize: 15, background: P, cursor: 'pointer' }}>
+          Proceed to Aadhaar e-Verify →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Phase 11: Aadhaar e-Verify + digital signature (demo OTP) ───────
+// Records the eSign (mock — UIDAI vendor needed for real OTP) then submits.
+function ESignPhase({ token, onBack, onSubmit, submitting }: {
+  token: string; onBack: () => void; onSubmit: () => void; submitting: boolean
+}) {
+  const [aadhaar, setAadhaar] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [otp, setOtp] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const clean = aadhaar.replace(/\D/g, '')
+  const bundle = ['EPF Form 11 (PF Declaration)', 'EPF Form 2 (Nominee Declaration)', 'Gratuity Form F', 'All Policy Acknowledgements', 'Complete Joining Form (consolidated)']
+  const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: '#6D28D9', textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 5 }
+  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', background: '#FAFAF8', border: `1px solid #DDD6FE`, borderRadius: 8, fontSize: 15, color: '#1E1B4B', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', letterSpacing: 2 }
+
+  const sendOtp = () => {
+    if (clean.length !== 12) { setErr('Enter a valid 12-digit Aadhaar number'); return }
+    setErr(''); setOtpSent(true)
+  }
+  const verifyAndSign = async () => {
+    if (otp.replace(/\D/g, '').length !== 6) { setErr('Enter the 6-digit OTP'); return }
+    setBusy(true); setErr('')
+    try {
+      await fetch('/api/onboarding/esign', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, aadhaar_last4: clean.slice(-4) }) })
+      await onSubmit()
+    } catch { setErr('Verification failed — please try again.'); setBusy(false) }
+  }
+
+  return (
+    <div>
+      <div style={S.card}>
+        <div style={{ fontSize: 15, fontWeight: 600 }}>Aadhaar e-Verify &amp; Digital Signature</div>
+        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>Ek OTP se neeche ke saare forms + policies ek saath e-sign honge.</div>
+        <div style={{ background: '#FAFAF8', border: '1px solid #EDE9FE', borderRadius: 8, padding: '10px 14px' }}>
+          {bundle.map(b => <div key={b} style={{ fontSize: 12, color: '#374151', padding: '3px 0' }}>📄 {b}</div>)}
+        </div>
+      </div>
+
+      <div style={S.card}>
+        {!otpSent ? (
+          <>
+            <label style={lbl}>Aadhaar Number</label>
+            <input style={inp} value={aadhaar} maxLength={14} inputMode="numeric"
+              onChange={e => setAadhaar(e.target.value)} placeholder="XXXX XXXX XXXX" />
+            <button onClick={sendOtp} style={{ ...S.btnP, marginTop: 12, width: '100%', padding: 12, fontSize: 15 }}>Send OTP</button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 12, color: '#065F46', marginBottom: 10 }}>OTP sent to the Aadhaar-linked mobile <span style={{ color: '#9CA3AF' }}>(demo — enter any 6 digits)</span></div>
+            <label style={lbl}>Enter OTP</label>
+            <input style={inp} value={otp} maxLength={6} inputMode="numeric"
+              onChange={e => setOtp(e.target.value.replace(/\D/g, ''))} placeholder="6-digit OTP" autoFocus />
+            <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+              <button onClick={() => { setOtpSent(false); setOtp('') }} style={S.btnO}>Change Aadhaar</button>
+              <button onClick={verifyAndSign} disabled={busy || submitting}
+                style={{ ...S.btnP, flex: 1, padding: 12, fontSize: 15, background: '#059669', cursor: (busy || submitting) ? 'not-allowed' : 'pointer', opacity: (busy || submitting) ? .7 : 1 }}>
+                {(busy || submitting) ? '⏳ Verifying & signing…' : '✅ Verify & e-Sign — Submit'}
+              </button>
+            </div>
+          </>
+        )}
+        {err && <div style={{ marginTop: 10, fontSize: 12, color: '#DC2626', background: '#FEF2F2', borderRadius: 7, padding: '8px 12px' }}>{err}</div>}
+      </div>
+
+      <button onClick={onBack} style={S.btnO}>← Back</button>
+    </div>
+  )
+}
+
+// ── Phase 3b: Cross-document mismatch resolution ──────────────────
+// Gathers the same logical field from multiple source docs, flags mismatches,
+// and lets the employee pick the correct value (written back to form state).
+function CrossDocCheck({ docs, onResolve, onMismatchChange }: {
+  docs: Record<string, DocStatus>
+  onResolve: (field: 'name' | 'dob' | 'pan', value: string) => void
+  onMismatchChange: (unresolvedCount: number) => void
+}) {
+  const norm = (v: any) => (v == null ? '' : String(v).trim())
+  const eq = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+
+  const aadhaar = docs['AADHAAR_FRONT']?.ai_extracted_data || {}
+  const pan = docs['PAN']?.ai_extracted_data || {}
+
+  type FieldDef = { key: 'name' | 'dob' | 'pan'; label: string; sources: { src: string; value: string }[] }
+  const fields: FieldDef[] = [
+    { key: 'name', label: 'Name', sources: [
+      { src: 'Aadhaar', value: norm(aadhaar.name) },
+      { src: 'PAN', value: norm(pan.name) },
+    ] },
+    { key: 'dob', label: 'Date of birth', sources: [
+      { src: 'Aadhaar', value: norm(aadhaar.dob) },
+    ] },
+    { key: 'pan', label: 'PAN', sources: [
+      { src: 'PAN', value: norm(pan.pan_number) },
+    ] },
+  ].map(f => ({ ...f, sources: f.sources.filter(s => s.value) }))
+
+  // Only fields that have at least one extracted value matter for display
+  const present = fields.filter(f => f.sources.length > 0)
+
+  // Classify each field
+  const classify = (f: FieldDef): 'match' | 'mismatch' | 'single' => {
+    if (f.sources.length < 2) return 'single'
+    const first = f.sources[0].value
+    return f.sources.every(s => eq(s.value, first)) ? 'match' : 'mismatch'
+  }
+
+  const mismatchFields = present.filter(f => classify(f) === 'mismatch')
+
+  // Track which mismatches have been resolved (a choice made)
+  const [resolved, setResolved] = useState<Record<string, string>>({})
+
+  const unresolvedCount = mismatchFields.filter(f => !resolved[f.key]).length
+  useEffect(() => { onMismatchChange(unresolvedCount) }, [unresolvedCount, onMismatchChange])
+
+  if (present.length === 0) return null
+
+  return (
+    <div style={{ ...S.card, padding: 0, overflow: 'hidden', marginBottom: 12 }}>
+      <div style={{ padding: '10px 14px', fontSize: 12, fontWeight: 600, background: '#F3F0FF', color: '#534AB7' }}>🔍 Cross-document check — we compared the same details across your documents</div>
+      <div style={{ padding: '6px 14px 12px' }}>
+        {present.map(f => {
+          const status = classify(f)
+          const badge = status === 'match'
+            ? { bg: '#ECFDF5', color: '#059669', txt: '✓ Match' }
+            : status === 'mismatch'
+              ? { bg: '#FFFBEB', color: '#B45309', txt: '⚠ Mismatch' }
+              : { bg: '#EDE9FE', color: '#7C3AED', txt: 'Single source' }
+          return (
+            <div key={f.key} style={{ padding: '10px 0', borderBottom: '1px solid #F3F0FF' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: '#1E1B4B' }}>{f.label}</span>
+                <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 99, background: badge.bg, color: badge.color }}>{badge.txt}</span>
+              </div>
+              <div style={{ fontSize: 11, color: '#6B7280', lineHeight: 1.7 }}>
+                {f.sources.map(s => <span key={s.src} style={{ marginRight: 12 }}><b style={{ color: '#534AB7' }}>{s.src}:</b> {s.value}</span>)}
+              </div>
+              {status === 'mismatch' && (
+                <div style={{ marginTop: 8 }}>
+                  <label style={S.lbl}>Pick the correct {f.label.toLowerCase()}</label>
+                  <select
+                    style={{ ...S.sel, border: resolved[f.key] ? '1px solid #A7F3D0' : '1px solid #FCD34D', background: resolved[f.key] ? '#F0FDF4' : '#FFFBEB' }}
+                    value={resolved[f.key] || ''}
+                    onChange={e => {
+                      const chosen = e.target.value
+                      if (!chosen) return
+                      setResolved(r => ({ ...r, [f.key]: chosen }))
+                      onResolve(f.key, chosen)
+                    }}
+                  >
+                    <option value="">— Select correct value —</option>
+                    {f.sources.map(s => <option key={s.src} value={s.value}>{s.value} (from {s.src})</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── EPS Family Member row (Form 2 Part B) ─────────────────────────
+function EpsFamilyRow({ row, index, canRemove, onChange, onRemove }: {
+  row: any; index: number; canRemove: boolean
+  onChange: (patch: any) => void; onRemove: () => void
+}) {
+  return (
+    <div style={{ border: '1px solid #EDE9FE', borderRadius: 10, padding: '12px 14px', marginBottom: 10, background: '#FCFBFF' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div style={{ fontSize: 12, fontWeight: 600, color: P }}>Family member {index + 1}{row.name ? ` — ${row.name}` : ''}</div>
+        {canRemove && (
+          <button onClick={onRemove} style={{ ...S.btnO, padding: '3px 10px', fontSize: 11, border: '1px solid #FCA5A5', color: '#DC2626' }}>Remove</button>
+        )}
+      </div>
+      <div style={S.g2}>
+        <Fld label="Name"><input style={S.inp()} value={row.name || ''} onChange={e => onChange({ name: e.target.value })} /></Fld>
+        <Fld label="Relation">
+          <select style={S.sel} value={row.relation || ''} onChange={e => onChange({ relation: e.target.value })}>
+            <option value="">Select</option><option>Spouse</option><option>Son</option><option>Daughter</option><option>Father</option><option>Mother</option><option>Other</option>
+          </select>
+        </Fld>
+        <Fld label="Date of Birth"><input type="date" style={S.inp()} value={row.dob || ''} onChange={e => onChange({ dob: e.target.value })} /></Fld>
+        <Fld label="Address"><input style={S.inp()} value={row.address || ''} onChange={e => onChange({ address: e.target.value })} /></Fld>
+      </div>
+    </div>
+  )
+}
+
+// ── Dual acknowledgement copy (HR / Employee) ─────────────────────
+function AckCopy({ copyFor, ackNo, generatedAt, employeeName, designation, department, doj, forms, docsCount }: {
+  copyFor: string; ackNo: string; generatedAt: string; employeeName: string
+  designation: string; department: string; doj: string; forms: string[]; docsCount: number
+}) {
+  const Row = ({ l, v }: { l: string; v: any }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '5px 0', borderBottom: '1px solid #F3F0FF' }}>
+      <span style={{ fontSize: 11, color: '#6B7280' }}>{l}</span>
+      <span style={{ fontSize: 12, fontWeight: 500, color: '#1E1B4B', textAlign: 'right' }}>{v || '—'}</span>
+    </div>
+  )
+  return (
+    <div style={{ ...S.card, flex: 1, minWidth: 260, textAlign: 'left' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ fontSize: 9, fontWeight: 700, color: '#7C3AED', background: '#EDE9FE', padding: '2px 8px', borderRadius: 99 }}>{copyFor}</span>
+        <span style={{ fontSize: 13, fontWeight: 600 }}>Acknowledgement</span>
+      </div>
+      <Row l="ACK No." v={ackNo} />
+      <Row l="Generated" v={generatedAt} />
+      <Row l="Employee Name" v={(employeeName || '').toUpperCase()} />
+      <Row l="Designation" v={designation} />
+      <Row l="Department" v={department} />
+      <Row l="Date of Joining" v={doj} />
+      <div style={{ fontSize: 11, fontWeight: 600, color: P, margin: '10px 0 4px' }}>Forms e-signed</div>
+      {forms.map(f => <div key={f} style={{ fontSize: 12, color: '#059669', padding: '2px 0' }}>✓ {f}</div>)}
+      <div style={{ marginTop: 8 }}><Row l="Documents uploaded" v={docsCount} /></div>
+    </div>
+  )
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═══════════════════════════════════════════════════════════════════
@@ -186,7 +757,9 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   company: any
   uploadedDocs: Record<string, DocStatus>
 }) {
-  const [step, setStep] = useState<Step>((candidate.current_step || 1) as Step)
+  // Numbering changed in the 12-phase redesign, so we don't reuse the raw stored
+  // current_step. Resume at OTP gate if not verified, else at Documents (step 3).
+  const [step, setStep] = useState<Step>((candidate.otp_verified ? 2 : 1) as Step)
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null)
   const [saving, setSaving] = useState(false)
   const [otp, setOtp] = useState('')
@@ -212,6 +785,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     blood_group: (saved.step_3?.blood_group) || '',
     marital_status: (saved.step_3?.marital_status) || '',
     nationality: (saved.step_3?.nationality) || 'Indian',
+    religion: (saved.step_3?.religion) || '',
+    country: (saved.step_3?.country) || 'India',
   })
 
   // Contact step
@@ -220,6 +795,10 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     alt_mobile: (saved.step_4?.alt_mobile) || '',
     personal_email: (saved.step_4?.personal_email) || c.email || '',
     perm_line1: (saved.step_4?.perm_line1) || '',
+    perm_village: (saved.step_4?.perm_village) || '',
+    perm_po: (saved.step_4?.perm_po) || '',
+    perm_thana: (saved.step_4?.perm_thana) || '',
+    perm_sub_division: (saved.step_4?.perm_sub_division) || '',
     perm_city: (saved.step_4?.perm_city) || '',
     perm_district: (saved.step_4?.perm_district) || '',
     perm_state: (saved.step_4?.perm_state) || '',
@@ -272,11 +851,39 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
     bank_branch: (saved.step_7?.bank_branch) || '',
     account_type: (saved.step_7?.account_type) || 'Savings',
     acc_holder: (saved.step_7?.acc_holder) || c.full_name || '',
+    // Foreign employee fields
+    fe_passport_number: (saved.step_7?.fe_passport_number) || '',
+    fe_passport_country: (saved.step_7?.fe_passport_country) || '',
+    fe_passport_expiry: (saved.step_7?.fe_passport_expiry) || '',
+    fe_visa_type: (saved.step_7?.fe_visa_type) || '',
+    fe_visa_number: (saved.step_7?.fe_visa_number) || '',
+    fe_visa_expiry: (saved.step_7?.fe_visa_expiry) || '',
+    fe_work_permit_number: (saved.step_7?.fe_work_permit_number) || '',
+    fe_frro_number: (saved.step_7?.fe_frro_number) || '',
+    fe_tax_residency: (saved.step_7?.fe_tax_residency) || '',
+    fe_tax_country: (saved.step_7?.fe_tax_country) || '',
+    fe_foreign_tin: (saved.step_7?.fe_foreign_tin) || '',
+    fe_ssa_coc: (saved.step_7?.fe_ssa_coc) || '',
+    fe_overseas_line: (saved.step_7?.fe_overseas_line) || '',
+    fe_overseas_city: (saved.step_7?.fe_overseas_city) || '',
+    fe_overseas_country: (saved.step_7?.fe_overseas_country) || '',
   })
 
   // ── ESIC applicability — from offered CTC (gross ≈ CTC/12), HR can override ──
   const grossMonthly = c.offered_ctc ? Number(c.offered_ctc) / 12 : 0
   const esicApplicable = c.esic_applicable === true || (grossMonthly > 0 && grossMonthly <= 21000)
+  // Foreign employee — citizenship country other than India triggers extra KYC + docs.
+  const isForeign = (personal.country || 'India').trim().toLowerCase() !== 'india'
+  // Documents can be skipped on Step 2; if skipped they become mandatory (non-skippable) before Policies.
+  const [docsDeferred, setDocsDeferred] = useState(false)
+  const docsComplete = REQUIRED_DOC_CODES(esicApplicable).every(d => docs[d])
+  const onDocUploaded = (code: string, data: any) => {
+    setDocs(d => ({ ...d, [code]: { doc_code: code, ai_status: data.ai_status, ai_extracted_data: data.ai_extracted, ai_confidence: data.ai_confidence, ai_flags: data.ai_flags, file_name: 'uploaded' } }))
+    if (code === 'PAN' && data.ai_extracted?.pan_number) {
+      setStatutory(s => ({ ...s, pan_number: data.ai_extracted.pan_number, acc_holder: data.ai_extracted.name || s.acc_holder }))
+    }
+    showToast(`${code} uploaded & AI verified ✓`)
+  }
 
   // Previous employers (multiple) — seeded from legacy single fields if present
   const [prevEmployers, setPrevEmployers] = useState<any[]>(
@@ -311,6 +918,21 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   // ESIC-specific details (only collected when ESIC applies)
   const esic0 = saved.step_7?.esic_details || {}
   const [esic, setEsic] = useState({ prev_ip: esic0.prev_ip || '', dispensary: esic0.dispensary || '' })
+
+  // EPS Family Members (Form 2 Part B) + fallback nominee
+  const [epsFamily, setEpsFamily] = useState<any[]>(
+    (saved.step_7?.eps_family?.length) ? saved.step_7.eps_family : [{ name: '', address: '', dob: '', relation: '' }]
+  )
+  const epsFb0 = saved.step_7?.eps_fallback || {}
+  const [epsFallback, setEpsFallback] = useState({ name: epsFb0.name || '', relation: epsFb0.relation || '', address: epsFb0.address || '', dob: epsFb0.dob || '' })
+
+  // Cross-document mismatch tracking (step 3) — Continue blocked until resolved
+  const [crossDocUnresolved, setCrossDocUnresolved] = useState(0)
+  const onCrossDocResolve = useCallback((field: 'name' | 'dob' | 'pan', value: string) => {
+    if (field === 'name') setPersonal(p => ({ ...p, full_name: value }))
+    else if (field === 'dob') setPersonal(p => ({ ...p, dob: value }))
+    else if (field === 'pan') setStatutory(s => ({ ...s, pan_number: value }))
+  }, [])
 
   const upEmp = (i: number, patch: any) => setPrevEmployers(arr => arr.map((e, idx) => idx === i ? { ...e, ...patch } : e))
   const upEdu = (i: number, patch: any) => setEducation(arr => arr.map((e, idx) => idx === i ? { ...e, ...patch } : e))
@@ -368,8 +990,18 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   const aiName = aadhaarDoc?.ai_extracted_data?.name || panDoc?.ai_extracted_data?.name || ''
 
   // ── Navigate steps ───────────────────────────────────────────────
-  const nextStep = () => setStep(s => Math.min(8, s + 1) as Step)
-  const prevStep = () => setStep(s => Math.max(1, s - 1) as Step)
+  // ESIC & Family (step 7) only applies when esicApplicable — skip it otherwise,
+  // both forward (6 → 8) and backward (8 → 6).
+  const nextStep = () => setStep(s => {
+    let n = Math.min(12, s + 1)
+    if (n === 7 && !esicApplicable) n = 8
+    return n as Step
+  })
+  const prevStep = () => setStep(s => {
+    let n = Math.max(1, s - 1)
+    if (n === 7 && !esicApplicable) n = 6
+    return n as Step
+  })
 
   // ── Final Submit ─────────────────────────────────────────────────
   const handleSubmit = async () => {
@@ -386,6 +1018,8 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         esic_applicable: esicApplicable,
         esic_details: esic,
         insurance,
+        eps_family: epsFamily,
+        eps_fallback: epsFallback,
       },
     }
 
@@ -397,30 +1031,44 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   }
 
   // ── SUBMITTED screen ─────────────────────────────────────────────
-  if (submitted) return (
-    <div style={{ ...S.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ maxWidth: 480, width: '100%', padding: 24, textAlign: 'center' }}>
-        <div style={{ ...S.card, padding: 40 }}>
-          <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
-          <div style={{ fontSize: 22, fontWeight: 600, color: '#1E1B4B', marginBottom: 8 }}>Welcome to {co?.company_name || 'the team'}!</div>
-          <div style={{ fontSize: 13, color: '#000000ff', lineHeight: 1.8, marginBottom: 20 }}>
-            Your joining form has been submitted successfully!<br />
-            HR will review it and generate your Employee ID.<br />
-            You'll receive an email with your ESS login details.
+  if (submitted) {
+    const ackNo = `EZR-ACK-${(token || '').slice(0, 8).toUpperCase()}`
+    const generatedAt = new Date().toLocaleString('en-IN')
+    const doj = c.date_of_joining ? new Date(c.date_of_joining).toLocaleDateString('en-IN') : '—'
+    const ackForms = ['Form 11', 'Form 2', 'Form III', ...(esicApplicable ? ['ESIC Form 1'] : [])]
+    return (
+      <div style={{ ...S.page, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ maxWidth: 760, width: '100%', padding: 24, textAlign: 'center' }}>
+          <div style={{ ...S.card, padding: 40 }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>🎉</div>
+            <div style={{ fontSize: 22, fontWeight: 600, color: '#1E1B4B', marginBottom: 8 }}>Welcome to {co?.company_name || 'the team'}!</div>
+            <div style={{ fontSize: 13, color: '#000000ff', lineHeight: 1.8, marginBottom: 20 }}>
+              Your joining form has been submitted successfully!<br />
+              HR will review it and generate your Employee ID.<br />
+              You'll receive an email with your ESS login details.
+            </div>
+            <div style={{ background: '#F3F0FF', borderRadius: 10, padding: 16, marginBottom: 16, textAlign: 'left' }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: P, marginBottom: 10 }}>✅ Steps completed</div>
+              {['Personal details filled', 'Documents uploaded & AI verified', 'Statutory forms submitted', 'PF/Bank details captured', 'Declaration accepted'].map(s => (
+                <div key={s} style={{ fontSize: 12, color: '#059669', marginBottom: 5 }}>✓ {s}</div>
+              ))}
+            </div>
+            <div style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.7 }}>
+              Questions? Contact HR at {co?.hr_email || 'hr@company.com'}
+            </div>
           </div>
-          <div style={{ background: '#F3F0FF', borderRadius: 10, padding: 16, marginBottom: 16, textAlign: 'left' }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: P, marginBottom: 10 }}>✅ Steps completed</div>
-            {['Personal details filled', 'Documents uploaded & AI verified', 'Statutory forms submitted', 'PF/Bank details captured', 'Declaration accepted'].map(s => (
-              <div key={s} style={{ fontSize: 12, color: '#059669', marginBottom: 5 }}>✓ {s}</div>
-            ))}
+
+          {/* Dual acknowledgement copies */}
+          <div style={{ fontSize: 14, fontWeight: 600, color: '#1E1B4B', margin: '4px 0 10px', textAlign: 'left' }}>Acknowledgement Copies</div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+            <AckCopy copyFor="HR MANAGER COPY" ackNo={ackNo} generatedAt={generatedAt} employeeName={personal.full_name || c.full_name} designation={c.designation} department={c.department} doj={doj} forms={ackForms} docsCount={Object.keys(docs).length} />
+            <AckCopy copyFor="EMPLOYEE COPY" ackNo={ackNo} generatedAt={generatedAt} employeeName={personal.full_name || c.full_name} designation={c.designation} department={c.department} doj={doj} forms={ackForms} docsCount={Object.keys(docs).length} />
           </div>
-          <div style={{ fontSize: 12, color: '#9CA3AF', lineHeight: 1.7 }}>
-            Questions? Contact HR at {co?.hr_email || 'hr@company.com'}
-          </div>
+          <button onClick={() => window.print()} style={{ ...S.btnP, padding: '10px 20px' }}>⬇ Download / Print copy</button>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   // ── RENDER ────────────────────────────────────────────────────────
   return (
@@ -429,7 +1077,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
       <div style={{ background: `linear-gradient(135deg, ${P}, #4F46E5)`, padding: '14px 20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 600 }}>{co?.company_name || 'EZER HRMS'} — Joining Formalities</div>
-          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)', marginTop: 1 }}>{c.full_name} · {c.designation}</div>
+          <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)', marginTop: 1 }}>{(c.full_name || '').toUpperCase()} · {c.designation}</div>
         </div>
         {esicApplicable && (
           <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 99, background: 'rgba(255,255,255,.18)', color: '#fff', border: '1px solid rgba(255,255,255,.35)' }}>
@@ -445,87 +1093,57 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
       {saving && <div style={{ background: '#EEEDFE', textAlign: 'center', padding: '4px 0', fontSize: 11, color: P }}>💾 Auto-saving...</div>}
 
       <div style={{ maxWidth: 700, margin: '0 auto', padding: '16px 20px' }}>
+        {/* Global country list — shared by the Personal + KYC foreign-block selectors */}
+        <datalist id="ezer-countries">{COUNTRIES.map(c => <option key={c} value={c} />)}</datalist>
 
-        {/* ═══ STEP 1: WELCOME ═══════════════════════════════════════ */}
+
+        {/* ═══ STEP 1: WELCOME + IDENTITY VERIFY ════════════════════ */}
         {step === 1 && (
           <div>
             <div style={{ ...S.card, background: `linear-gradient(135deg, ${P}, #4F46E5)`, color: '#fff' }}>
-              <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>Welcome, {c.full_name}! 👋</div>
+              <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>Welcome, {(c.full_name || '').toUpperCase()}! 👋</div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,.8)', lineHeight: 1.8 }}>
-                We're excited to have you join {co?.company_name}. Let's complete your joining formalities.
+                We're excited to have you join {co?.company_name}. Let's verify your identity to begin.
               </div>
             </div>
             <div style={S.card}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 14, color: P }}>Your joining details (pre-filled by HR)</div>
-              <div style={S.g2}>
-                {[['Name', c.full_name], ['Designation', c.designation || '—'], ['Department', c.department || '—'], ['Date of Joining', c.date_of_joining ? new Date(c.date_of_joining).toLocaleDateString('en-IN') : '—'], ['Employment Type', c.employment_type || 'Employee'], ['Offered CTC', c.offered_ctc ? `₹${Number(c.offered_ctc).toLocaleString('en-IN')}` : '—']].map(([l, v]) => (
-                  <div key={l} style={{ background: '#F9F8FF', borderRadius: 8, padding: '10px 12px' }}>
-                    <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' }}>{l}</div>
-                    <div style={{ fontSize: 13, fontWeight: 500, marginTop: 2 }}>{v}</div>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Verify Your Identity</div>
+              <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 16, lineHeight: 1.7 }}>
+                We'll email a 6-digit OTP to your registered email: <strong>{c.email?.replace(/^(.{2}).*(@.*)$/, '$1***$2') || 'your email'}</strong>
+              </div>
+              {c.otp_verified ? (
+                <>
+                  <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: '#059669' }}>
+                    ✅ Identity already verified!
                   </div>
-                ))}
-              </div>
-              <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 14px', marginTop: 14, fontSize: 12, color: '#92400E', lineHeight: 1.7 }}>
-                ⏱️ Estimated time: 10-15 minutes &nbsp;|&nbsp; 8 steps &nbsp;|&nbsp; Auto-saves at each step
-              </div>
-              <button onClick={nextStep} style={{ ...S.btnP, width: '100%', padding: 12, marginTop: 14, fontSize: 15 }}>
-                Let's Start 🚀
-              </button>
+                  <button onClick={nextStep} style={{ ...S.btnP, width: '100%', padding: 12, fontSize: 15 }}>Start Onboarding 🚀</button>
+                </>
+              ) : !otpSent ? (
+                <button onClick={sendOtp} disabled={otpLoading} style={{ ...S.btnP, width: '100%', padding: 12, fontSize: 15, opacity: otpLoading ? .6 : 1 }}>
+                  {otpLoading ? 'Sending...' : '📱 Send OTP to Verify'}
+                </button>
+              ) : (
+                <>
+                  <Fld label="Enter 6-digit OTP">
+                    <input style={{ ...S.inp(), textAlign: 'center', letterSpacing: 8, fontSize: 22, fontWeight: 600 }} value={otp} onChange={e => setOtp(e.target.value)} placeholder="••••••" maxLength={6} />
+                  </Fld>
+                  <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                    <button onClick={verifyOtp} disabled={otpLoading || otp.length < 6} style={{ ...S.btnP, flex: 1, opacity: otpLoading || otp.length < 6 ? .6 : 1, cursor: otp.length < 6 ? 'not-allowed' : 'pointer' }}>
+                      {otpLoading ? 'Verifying...' : '✓ Verify & Start'}
+                    </button>
+                    <button onClick={() => { setOtpSent(false); setOtp('') }} style={S.btnO}>Resend</button>
+                  </div>
+                  <div style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center' }}>OTP valid for 10 minutes</div>
+                </>
+              )}
             </div>
           </div>
         )}
 
-        {/* ═══ STEP 2: OTP ══════════════════════════════════════════ */}
-        {step === 2 && (
-          <div style={S.card}>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Verify Your Mobile Number</div>
-            <div style={{ fontSize: 13, color: '#6B7280', marginBottom: 16, lineHeight: 1.7 }}>
-              We'll email a 6-digit OTP to your registered email: <strong>{c.email?.replace(/^(.{2}).*(@.*)$/, '$1***$2') || 'your email'}</strong>
-            </div>
-            {c.otp_verified ? (
-              <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: '#059669' }}>
-                ✅ Mobile already verified!
-              </div>
-            ) : (
-              <>
-                {!otpSent ? (
-                  <button onClick={sendOtp} disabled={otpLoading} style={{ ...S.btnP, width: '100%', padding: 12, opacity: otpLoading ? .6 : 1 }}>
-                    {otpLoading ? 'Sending...' : '📱 Send OTP'}
-                  </button>
-                ) : (
-                  <>
-                    <Fld label="Enter 6-digit OTP">
-                      <input style={{ ...S.inp(), textAlign: 'center', letterSpacing: 8, fontSize: 22, fontWeight: 600 }} value={otp} onChange={e => setOtp(e.target.value)} placeholder="••••••" maxLength={6} />
-                    </Fld>
-                    <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-                      <button onClick={verifyOtp} disabled={otpLoading || otp.length < 6} style={{ ...S.btnP, flex: 1, opacity: otpLoading || otp.length < 6 ? .6 : 1, cursor: otp.length < 6 ? 'not-allowed' : 'pointer' }}>
-                        {otpLoading ? 'Verifying...' : '✓ Verify OTP'}
-                      </button>
-                      <button onClick={() => { setOtpSent(false); setOtp('') }} style={S.btnO}>Resend</button>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center' }}>OTP valid for 10 minutes</div>
-                  </>
-                )}
-              </>
-            )}
-            {c.otp_verified && (
-              <button onClick={nextStep} style={{ ...S.btnP, width: '100%', padding: 12 }}>Continue →</button>
-            )}
-            <button onClick={prevStep} style={{ ...S.btnO, width: '100%', marginTop: 10 }}>← Back</button>
-          </div>
-        )}
-
-        {/* ═══ STEP 3: PERSONAL DETAILS ════════════════════════════ */}
-        {step === 3 && (
+        {/* ═══ STEP 5: PERSONAL DETAILS ════════════════════════════ */}
+        {step === 4 && (
           <div style={S.card}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Personal Details</div>
-
-            {/* AI pre-fill notice */}
-            {aiName && (
-              <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#065F46' }}>
-                🤖 AI extracted name from documents: <strong>{aiName}</strong>. Please verify below.
-              </div>
-            )}
 
             <div style={S.g2}>
               <Fld label="Full Name (as per Aadhaar) *">
@@ -558,7 +1176,22 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               <Fld label="Nationality">
                 <input style={S.inp()} value={personal.nationality} onChange={e => setPersonal(p => ({ ...p, nationality: e.target.value }))} />
               </Fld>
+              <Fld label="Religion *" hint="Required for Gratuity Form III">
+                <select style={S.sel} value={personal.religion} onChange={e => setPersonal(p => ({ ...p, religion: e.target.value }))}>
+                  <option value="">Select</option>{['Hindu', 'Muslim', 'Christian', 'Sikh', 'Buddhist', 'Jain', 'Parsi', 'Other'].map(r => <option key={r}>{r}</option>)}
+                </select>
+              </Fld>
+              <div style={{ gridColumn: 'span 2' }}>
+                <Fld label="Country (Citizenship) *" hint="Type to search. Select a country other than India for foreign-employee onboarding.">
+                  <input list="ezer-countries" style={S.inp(!personal.country)} value={personal.country} onChange={e => setPersonal(p => ({ ...p, country: e.target.value }))} placeholder="India" />
+                </Fld>
+              </div>
             </div>
+            {isForeign && (
+              <div style={{ background: '#F3F0FF', border: '1px solid #DDD6FE', borderRadius: 8, padding: '10px 12px', margin: '4px 0 10px', fontSize: 12, color: '#534AB7', lineHeight: 1.6 }}>
+                🌐 Foreign employee detected — extra passport/visa/tax fields will appear in the KYC &amp; EPF step.
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
               <button onClick={prevStep} style={S.btnO}>← Back</button>
               <button onClick={async () => {
@@ -572,10 +1205,10 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
           </div>
         )}
 
-        {/* ═══ STEP 4: CONTACT & ADDRESS ═══════════════════════════ */}
-        {step === 4 && (
+        {/* ═══ STEP 6: KYC & EPF (Contact + PAN + PF + Bank) ═══════ */}
+        {step === 5 && (
           <div style={S.card}>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Contact & Address</div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>KYC &amp; EPF — Contact, PAN, PF &amp; Bank</div>
 
             <div style={S.g2}>
               <Fld label="Mobile Number *"><input style={S.inp(!contact.mobile)} value={contact.mobile} onChange={e => setContact(c => ({ ...c, mobile: e.target.value }))} /></Fld>
@@ -586,6 +1219,11 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '12px 0 10px' }}>Permanent Address</div>
             <div style={S.g3}>
               <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line 1 *"><input style={S.inp(!contact.perm_line1)} value={contact.perm_line1} onChange={e => setContact(c => ({ ...c, perm_line1: e.target.value }))} /></Fld></div>
+              <Fld label="Village / Area" hint="For Gratuity Form III"><input style={S.inp()} value={contact.perm_village} onChange={e => setContact(c => ({ ...c, perm_village: e.target.value }))} /></Fld>
+              <Fld label="Post Office"><input style={S.inp()} value={contact.perm_po} onChange={e => setContact(c => ({ ...c, perm_po: e.target.value }))} /></Fld>
+              <Fld label="Thana / Police Station"><input style={S.inp()} value={contact.perm_thana} onChange={e => setContact(c => ({ ...c, perm_thana: e.target.value }))} /></Fld>
+              <Fld label="Sub-Division"><input style={S.inp()} value={contact.perm_sub_division} onChange={e => setContact(c => ({ ...c, perm_sub_division: e.target.value }))} /></Fld>
+              <Fld label="District"><input style={S.inp()} value={contact.perm_district} onChange={e => setContact(c => ({ ...c, perm_district: e.target.value }))} /></Fld>
               <Fld label="City *"><input style={S.inp(!contact.perm_city)} value={contact.perm_city} onChange={e => setContact(c => ({ ...c, perm_city: e.target.value }))} /></Fld>
               <Fld label="State *">
                 <select style={S.sel} value={contact.perm_state} onChange={e => setContact(c => ({ ...c, perm_state: e.target.value }))}>
@@ -616,20 +1254,144 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               </>
             )}
 
+            {/* PAN — auto-filled from AI */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '18px 0 10px' }}>PAN</div>
+            <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#065F46' }}>
+              🤖 PAN auto-filled from document AI. Please verify.
+            </div>
+            <div style={S.g2}>
+              <Fld label="PAN Number *" hint="Auto-extracted from PAN card">
+                <input style={{ ...S.inp(!statutory.pan_number), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.pan_number || aiPan} onChange={e => setStatutory(s => ({ ...s, pan_number: e.target.value.toUpperCase() }))} maxLength={10} />
+              </Fld>
+            </div>
+
+            {/* PF Section */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Provident Fund (PF)</div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, marginBottom: 12, userSelect: 'none' }}>
+              <input type="checkbox" checked={statutory.has_uan} onChange={e => setStatutory(s => ({ ...s, has_uan: e.target.checked }))} style={{ width: 16, height: 16 }} />
+              I have an existing UAN (from previous employer)
+            </label>
+            {statutory.has_uan && (
+              <div style={S.g2}>
+                <Fld label="UAN Number" hint="12-digit Universal Account Number">
+                  <input style={S.inp()} value={statutory.uan_number} onChange={e => setStatutory(s => ({ ...s, uan_number: e.target.value }))} maxLength={12} />
+                </Fld>
+                <Fld label="Previous PF Member ID">
+                  <input style={S.inp()} value={statutory.prev_pf_id} onChange={e => setStatutory(s => ({ ...s, prev_pf_id: e.target.value }))} placeholder="e.g. MH/BN/12345" />
+                </Fld>
+              </div>
+            )}
+
+            {/* Bank Details */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Bank Account (for Salary)</div>
+            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#92400E' }}>
+              🔒 Bank details are encrypted. Only Payroll team has access.
+            </div>
+            <div style={S.g2}>
+              <Fld label="Account Number *"><input type="password" style={S.inp(!statutory.bank_account)} value={statutory.bank_account} onChange={e => setStatutory(s => ({ ...s, bank_account: e.target.value }))} /></Fld>
+              <Fld label="Confirm Account Number *"><input style={S.inp(statutory.bank_confirm && statutory.bank_confirm !== statutory.bank_account)} value={statutory.bank_confirm} onChange={e => setStatutory(s => ({ ...s, bank_confirm: e.target.value }))} /></Fld>
+              <Fld label="IFSC Code *" hint="Auto-fills bank name on entry">
+                <input style={S.inp(!statutory.bank_ifsc)} value={statutory.bank_ifsc} onChange={e => { const v = e.target.value.toUpperCase(); setStatutory(s => ({ ...s, bank_ifsc: v })); lookupIfsc(v) }} maxLength={11} />
+              </Fld>
+              <Fld label="Bank Name (auto-fill)">
+                <input style={{ ...S.inp(), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.bank_name} readOnly placeholder="Auto-fills from IFSC" />
+              </Fld>
+              <Fld label="Branch"><input style={{ ...S.inp(), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.bank_branch} readOnly placeholder="Auto-fills from IFSC" /></Fld>
+              <Fld label="Account Type">
+                <select style={S.sel} value={statutory.account_type} onChange={e => setStatutory(s => ({ ...s, account_type: e.target.value }))}>
+                  <option>Savings</option><option>Current</option>
+                </select>
+              </Fld>
+              <div style={{ gridColumn: 'span 2' }}>
+                <Fld label="Account Holder Name (as per bank)">
+                  <input style={{ ...S.inp(), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.acc_holder} onChange={e => setStatutory(s => ({ ...s, acc_holder: e.target.value }))} placeholder="In CAPITAL LETTERS" />
+                </Fld>
+              </div>
+            </div>
+            {statutory.bank_confirm && statutory.bank_confirm !== statutory.bank_account && (
+              <div style={{ color: '#DC2626', fontSize: 12, marginTop: -8, marginBottom: 8 }}>⚠️ Account numbers don't match</div>
+            )}
+
+            {isForeign && (
+              <>
+                <div style={{ background: '#F3F0FF', border: '1px solid #DDD6FE', borderRadius: 8, padding: '8px 12px', margin: '18px 0 4px', fontSize: 12, color: '#534AB7' }}>
+                  🌐 Foreign employee — please complete the additional statutory details below.
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>🌐 Foreign Employee — Passport</div>
+                <div style={S.g3}>
+                  <Fld label="Passport Number *"><input style={S.inp(!statutory.fe_passport_number)} value={statutory.fe_passport_number} onChange={e => setStatutory(s => ({ ...s, fe_passport_number: e.target.value.toUpperCase() }))} /></Fld>
+                  <Fld label="Passport Issuing Country">
+                    <input list="ezer-countries" style={S.inp()} value={statutory.fe_passport_country} onChange={e => setStatutory(s => ({ ...s, fe_passport_country: e.target.value }))} />
+                  </Fld>
+                  <Fld label="Passport Expiry *"><input type="date" style={S.inp(!statutory.fe_passport_expiry)} value={statutory.fe_passport_expiry} onChange={e => setStatutory(s => ({ ...s, fe_passport_expiry: e.target.value }))} /></Fld>
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Visa &amp; Work Authorization</div>
+                <div style={S.g3}>
+                  <Fld label="Visa Type">
+                    <select style={S.sel} value={statutory.fe_visa_type} onChange={e => setStatutory(s => ({ ...s, fe_visa_type: e.target.value }))}>
+                      <option value="">Select</option><option>Employment</option><option>Business</option><option>OCI</option><option>PIO</option>
+                    </select>
+                  </Fld>
+                  <Fld label="Visa Number *"><input style={S.inp(!statutory.fe_visa_number)} value={statutory.fe_visa_number} onChange={e => setStatutory(s => ({ ...s, fe_visa_number: e.target.value }))} /></Fld>
+                  <Fld label="Visa Expiry"><input type="date" style={S.inp()} value={statutory.fe_visa_expiry} onChange={e => setStatutory(s => ({ ...s, fe_visa_expiry: e.target.value }))} /></Fld>
+                  <Fld label="Work Permit Number"><input style={S.inp()} value={statutory.fe_work_permit_number} onChange={e => setStatutory(s => ({ ...s, fe_work_permit_number: e.target.value }))} /></Fld>
+                  <Fld label="FRRO Registration Number" hint="if stay > 180 days"><input style={S.inp()} value={statutory.fe_frro_number} onChange={e => setStatutory(s => ({ ...s, fe_frro_number: e.target.value }))} /></Fld>
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Tax &amp; Social Security</div>
+                <div style={S.g2}>
+                  <Fld label="India Tax Residency Status">
+                    <select style={S.sel} value={statutory.fe_tax_residency} onChange={e => setStatutory(s => ({ ...s, fe_tax_residency: e.target.value }))}>
+                      <option value="">Select</option><option>Resident</option><option>Non-Resident</option><option>Not Ordinarily Resident</option>
+                    </select>
+                  </Fld>
+                  <Fld label="Country of Tax Residency">
+                    <input list="ezer-countries" style={S.inp()} value={statutory.fe_tax_country} onChange={e => setStatutory(s => ({ ...s, fe_tax_country: e.target.value }))} />
+                  </Fld>
+                  <Fld label="Foreign Tax ID / TIN"><input style={S.inp()} value={statutory.fe_foreign_tin} onChange={e => setStatutory(s => ({ ...s, fe_foreign_tin: e.target.value }))} /></Fld>
+                  <Fld label="SSA Certificate of Coverage No." hint="if home country has a Social Security Agreement with India"><input style={S.inp()} value={statutory.fe_ssa_coc} onChange={e => setStatutory(s => ({ ...s, fe_ssa_coc: e.target.value }))} /></Fld>
+                </div>
+
+                <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Permanent Overseas Address</div>
+                <div style={S.g3}>
+                  <div style={{ gridColumn: 'span 3' }}><Fld label="Address Line"><input style={S.inp()} value={statutory.fe_overseas_line} onChange={e => setStatutory(s => ({ ...s, fe_overseas_line: e.target.value }))} /></Fld></div>
+                  <Fld label="City"><input style={S.inp()} value={statutory.fe_overseas_city} onChange={e => setStatutory(s => ({ ...s, fe_overseas_city: e.target.value }))} /></Fld>
+                  <Fld label="Country">
+                    <input list="ezer-countries" style={S.inp()} value={statutory.fe_overseas_country} onChange={e => setStatutory(s => ({ ...s, fe_overseas_country: e.target.value }))} />
+                  </Fld>
+                </div>
+              </>
+            )}
+
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
               <button onClick={prevStep} style={S.btnO}>← Back</button>
               <button onClick={async () => {
-                if (!contact.mobile || !contact.personal_email || !contact.perm_line1 || !contact.perm_city || !contact.perm_state || !contact.perm_pin) {
-                  showToast('Please fill all required fields', 'err'); return
+                const missing: string[] = []
+                if (!contact.mobile?.trim()) missing.push('Mobile')
+                if (!contact.personal_email?.trim()) missing.push('Email')
+                if (!contact.perm_line1?.trim()) missing.push('Address Line 1')
+                if (!contact.perm_city?.trim()) missing.push('City')
+                if (!contact.perm_state?.trim()) missing.push('State')
+                if (!contact.perm_pin?.trim()) missing.push('PIN Code')
+                if (missing.length) {
+                  showToast(`Please fill: ${missing.join(', ')}`, 'err'); return
                 }
-                await saveStep(4, contact); nextStep()
+                if (!statutory.pan_number || !statutory.bank_account || !statutory.bank_ifsc) {
+                  showToast('Please fill PAN and bank details', 'err'); return
+                }
+                if (statutory.bank_account !== statutory.bank_confirm) { showToast('Account numbers do not match', 'err'); return }
+                await saveStep(4, contact)
+                await saveStep(7, { ...statutory, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance, eps_family: epsFamily, eps_fallback: epsFallback })
+                nextStep()
               }} style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
             </div>
           </div>
         )}
 
-        {/* ═══ STEP 5: EMERGENCY + EMPLOYMENT ════════════════════════ */}
-        {step === 5 && (
+        {/* ═══ STEP 9: EMERGENCY + EMPLOYMENT + EDUCATION ════════════ */}
+        {step === 8 && (
           <div style={S.card}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Emergency Contacts & Previous Employment</div>
 
@@ -721,98 +1483,59 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
           </div>
         )}
 
-        {/* ═══ STEP 6: DOCUMENT UPLOAD ════════════════════════════ */}
-        {step === 6 && (
+        {/* ═══ STEP 3: DOCUMENT UPLOAD ════════════════════════════ */}
+        {step === 2 && (
           <div style={S.card}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Document Upload & AI Verification</div>
             <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 14 }}>
               Documents are automatically verified using AI (Gemini 2.5 Flash). Accepted: JPG, PNG, PDF. Max 5MB each.
             </div>
 
-            {[
-              { code: 'AADHAAR_FRONT', name: 'Aadhaar Card (Front)', required: true },
-              { code: 'AADHAAR_BACK', name: 'Aadhaar Card (Back)', required: true },
-              { code: 'PAN', name: 'PAN Card', required: true },
-              { code: 'PHOTO', name: 'Passport Size Photo', required: true },
-              { code: 'FAMILY_PHOTO', name: 'Family Photo (all members — for ESIC e-Pehchan card)', required: esicApplicable },
-              { code: 'DEGREE', name: 'Highest Degree Certificate', required: true },
-              { code: 'EXP_LETTER', name: 'Experience/Relieving Letter', required: !emergency.is_fresher },
-              { code: 'BANK_PROOF', name: 'Cancelled Cheque / Bank Passbook', required: true },
-              { code: 'UAN_CARD', name: 'UAN Card (if existing PF)', required: false },
-            ].map(doc => (
-              <DocUpload
-                key={doc.code}
-                docCode={doc.code}
-                docName={doc.name}
-                required={doc.required}
-                token={token}
-                status={docs[doc.code] || null}
-                onSuccess={(code, data) => {
-                  setDocs(d => ({
-                    ...d,
-                    [code]: {
-                      doc_code: code,
-                      ai_status: data.ai_status,
-                      ai_extracted_data: data.ai_extracted,
-                      ai_confidence: data.ai_confidence,
-                      ai_flags: data.ai_flags,
-                      file_name: 'uploaded',
-                    },
-                  }))
-                  // Auto-fill PAN from extracted data
-                  if (code === 'PAN' && data.ai_extracted?.pan_number) {
-                    setStatutory(s => ({ ...s, pan_number: data.ai_extracted.pan_number, acc_holder: data.ai_extracted.name || s.acc_holder }))
-                  }
-                  showToast(`${code} uploaded & AI verified ✓`)
-                }}
-              />
-            ))}
+            <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} />
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+            <div style={{ display: 'flex', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
               <button onClick={prevStep} style={S.btnO}>← Back</button>
+              <button onClick={() => { setDocsDeferred(true); showToast('Documents skipped — you must upload them before the Policies step.'); nextStep() }}
+                style={{ ...S.btnO, borderColor: '#D97706', color: '#B45309' }}>Skip for later →</button>
               <button onClick={async () => {
-                const requiredDocs = ['AADHAAR_FRONT', 'PAN', 'PHOTO', 'DEGREE', 'BANK_PROOF', ...(esicApplicable ? ['FAMILY_PHOTO'] : [])]
-                const notUploaded = requiredDocs.filter(d => !docs[d])
+                const notUploaded = REQUIRED_DOC_CODES(esicApplicable).filter(d => !docs[d])
                 if (notUploaded.length > 0) {
                   showToast(`Please upload: ${notUploaded.join(', ')}`, 'err'); return
                 }
+                setDocsDeferred(false)
                 await saveStep(6, { docs_uploaded: Object.keys(docs) }); nextStep()
-              }} style={{ ...S.btnP, flex: 1 }}>Continue →</button>
+              }} style={{ ...S.btnP, flex: 1, minWidth: 140 }}>Continue →</button>
             </div>
           </div>
         )}
 
-        {/* ═══ STEP 7: STATUTORY & BANK ═══════════════════════════ */}
-        {step === 7 && (
+        {/* ═══ STEP 4: AI DOCUMENT REVIEW ═════════════════════════ */}
+        {step === 3 && (
           <div style={S.card}>
-            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Statutory Details & Bank Account</div>
-
-            {/* PAN — auto-filled from AI */}
-            <div style={{ background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#065F46' }}>
-              🤖 PAN auto-filled from document AI. Please verify.
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>AI Document Review</div>
+            <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 14 }}>
+              Our AI read your uploaded documents and extracted the details below. Please verify them — you'll confirm/correct them in the next steps.
             </div>
-            <div style={S.g2}>
-              <Fld label="PAN Number *" hint="Auto-extracted from PAN card">
-                <input style={{ ...S.inp(!statutory.pan_number), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.pan_number || aiPan} onChange={e => setStatutory(s => ({ ...s, pan_number: e.target.value.toUpperCase() }))} maxLength={10} />
-              </Fld>
-            </div>
-
-            {/* PF Section */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Provident Fund (PF)</div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, marginBottom: 12, userSelect: 'none' }}>
-              <input type="checkbox" checked={statutory.has_uan} onChange={e => setStatutory(s => ({ ...s, has_uan: e.target.checked }))} style={{ width: 16, height: 16 }} />
-              I have an existing UAN (from previous employer)
-            </label>
-            {statutory.has_uan && (
-              <div style={S.g2}>
-                <Fld label="UAN Number" hint="12-digit Universal Account Number">
-                  <input style={S.inp()} value={statutory.uan_number} onChange={e => setStatutory(s => ({ ...s, uan_number: e.target.value }))} maxLength={12} />
-                </Fld>
-                <Fld label="Previous PF Member ID">
-                  <input style={S.inp()} value={statutory.prev_pf_id} onChange={e => setStatutory(s => ({ ...s, prev_pf_id: e.target.value }))} placeholder="e.g. MH/BN/12345" />
-                </Fld>
+            <AIReviewTable docs={docs} />
+            <CrossDocCheck docs={docs} onResolve={onCrossDocResolve} onMismatchChange={setCrossDocUnresolved} />
+            {crossDocUnresolved > 0 && (
+              <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px', marginBottom: 8 }}>
+                ⚠ Resolve all mismatches to continue ({crossDocUnresolved} remaining)
               </div>
             )}
+            <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+              <button onClick={prevStep} style={S.btnO}>← Back</button>
+              <button onClick={nextStep} disabled={crossDocUnresolved > 0}
+                style={{ ...S.btnP, flex: 1, background: crossDocUnresolved > 0 ? '#9CA3AF' : P, cursor: crossDocUnresolved > 0 ? 'not-allowed' : 'pointer' }}>Continue →</button>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ STEP 7: NOMINEES (PF + Gratuity) ═══════════════════ */}
+        {step === 6 && (
+          <div style={S.card}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Nominees</div>
+            <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>PF nominee share should total 100%.</div>
 
             {/* PF Nominee (Form 11/Form 2) */}
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>PF Nominee (EPF Form 2)</div>
@@ -839,35 +1562,46 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               </Fld>
             </div>
 
-            {/* Bank Details */}
-            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Bank Account (for Salary)</div>
-            <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: '#92400E' }}>
-              🔒 Bank details are encrypted. Only Payroll team has access.
-            </div>
+            {/* EPS Family Members (Form 2 Part B) */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '16px 0 4px' }}>EPS Family Members (Form 2 Part B)</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF', marginBottom: 10 }}>Family members eligible for the Employees' Pension Scheme.</div>
+            {epsFamily.map((row, i) => (
+              <EpsFamilyRow key={i} row={row} index={i} canRemove={epsFamily.length > 1}
+                onChange={patch => setEpsFamily(arr => arr.map((r, idx) => idx === i ? { ...r, ...patch } : r))}
+                onRemove={() => setEpsFamily(arr => arr.filter((_, idx) => idx !== i))} />
+            ))}
+            <button onClick={() => setEpsFamily(arr => [...arr, { name: '', address: '', dob: '', relation: '' }])} style={{ ...S.btnO, marginBottom: 4 }}>+ Add family member</button>
+
+            {/* EPS Fallback Nominee */}
+            <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '16px 0 10px' }}>EPS Fallback Nominee</div>
             <div style={S.g2}>
-              <Fld label="Account Number *"><input type="password" style={S.inp(!statutory.bank_account)} value={statutory.bank_account} onChange={e => setStatutory(s => ({ ...s, bank_account: e.target.value }))} /></Fld>
-              <Fld label="Confirm Account Number *"><input style={S.inp(statutory.bank_confirm && statutory.bank_confirm !== statutory.bank_account)} value={statutory.bank_confirm} onChange={e => setStatutory(s => ({ ...s, bank_confirm: e.target.value }))} /></Fld>
-              <Fld label="IFSC Code *" hint="Auto-fills bank name on entry">
-                <input style={S.inp(!statutory.bank_ifsc)} value={statutory.bank_ifsc} onChange={e => { const v = e.target.value.toUpperCase(); setStatutory(s => ({ ...s, bank_ifsc: v })); lookupIfsc(v) }} maxLength={11} />
-              </Fld>
-              <Fld label="Bank Name (auto-fill)">
-                <input style={{ ...S.inp(), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.bank_name} readOnly placeholder="Auto-fills from IFSC" />
-              </Fld>
-              <Fld label="Branch"><input style={{ ...S.inp(), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.bank_branch} readOnly placeholder="Auto-fills from IFSC" /></Fld>
-              <Fld label="Account Type">
-                <select style={S.sel} value={statutory.account_type} onChange={e => setStatutory(s => ({ ...s, account_type: e.target.value }))}>
-                  <option>Savings</option><option>Current</option>
+              <Fld label="Name"><input style={S.inp()} value={epsFallback.name} onChange={e => setEpsFallback(s => ({ ...s, name: e.target.value }))} /></Fld>
+              <Fld label="Relation">
+                <select style={S.sel} value={epsFallback.relation} onChange={e => setEpsFallback(s => ({ ...s, relation: e.target.value }))}>
+                  <option value="">Select</option><option>Spouse</option><option>Son</option><option>Daughter</option><option>Father</option><option>Mother</option><option>Other</option>
                 </select>
               </Fld>
-              <div style={{ gridColumn: 'span 2' }}>
-                <Fld label="Account Holder Name (as per bank)">
-                  <input style={{ ...S.inp(), background: '#F0FDF4', border: '1px solid #A7F3D0' }} value={statutory.acc_holder} onChange={e => setStatutory(s => ({ ...s, acc_holder: e.target.value }))} placeholder="In CAPITAL LETTERS" />
-                </Fld>
-              </div>
+              <Fld label="Date of Birth"><input type="date" style={S.inp()} value={epsFallback.dob} onChange={e => setEpsFallback(s => ({ ...s, dob: e.target.value }))} /></Fld>
+              <Fld label="Address"><input style={S.inp()} value={epsFallback.address} onChange={e => setEpsFallback(s => ({ ...s, address: e.target.value }))} /></Fld>
             </div>
-            {statutory.bank_confirm && statutory.bank_confirm !== statutory.bank_account && (
-              <div style={{ color: '#DC2626', fontSize: 12, marginTop: -8, marginBottom: 8 }}>⚠️ Account numbers don't match</div>
-            )}
+
+            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+              <button onClick={prevStep} style={S.btnO}>← Back</button>
+              <button onClick={async () => {
+                if (!statutory.nominee_name || !statutory.nominee_dob || !statutory.nominee_address) {
+                  showToast('Please fill all required PF nominee fields', 'err'); return
+                }
+                await saveStep(7, { ...statutory, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance, eps_family: epsFamily, eps_fallback: epsFallback })
+                nextStep()
+              }} style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ STEP 8: ESIC & FAMILY (only when ESIC applicable) ═══ */}
+        {step === 7 && esicApplicable && (
+          <div style={S.card}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>ESIC &amp; Family</div>
 
             {/* ── Family Insurance ─────────────────────────────────── */}
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '18px 0 4px' }}>
@@ -931,19 +1665,18 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
               <button onClick={prevStep} style={S.btnO}>← Back</button>
               <button onClick={async () => {
-                if (!statutory.pan_number || !statutory.nominee_name || !statutory.nominee_dob || !statutory.nominee_address || !statutory.bank_account || !statutory.bank_ifsc) {
-                  showToast('Please fill all required fields', 'err'); return
-                }
-                if (statutory.bank_account !== statutory.bank_confirm) { showToast('Account numbers do not match', 'err'); return }
-                await saveStep(7, { ...statutory, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance }); nextStep()
+                await saveStep(7, { ...statutory, gross_monthly: grossMonthly, esic_applicable: esicApplicable, esic_details: esic, insurance, eps_family: epsFamily, eps_fallback: epsFallback })
+                nextStep()
               }} style={{ ...S.btnP, flex: 1 }}>Save & Continue →</button>
             </div>
           </div>
         )}
 
-        {/* ═══ STEP 8: DECLARATION ════════════════════════════════ */}
-        {step === 8 && (
+        {/* ═══ STEP 10: FORMS REVIEW & DECLARATION ════════════════ */}
+        {step === 9 && (
           <div>
+            {/* Phase 8 — read-only statutory form previews */}
+            <StatutoryFormsPreview personal={personal} contact={contact} statutory={statutory} insurance={insurance} esic={esic} candidate={c} esicApplicable={esicApplicable} isForeign={isForeign} epsFamily={epsFamily} epsFallback={epsFallback} />
             {/* Summary */}
             <div style={S.card}>
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 14 }}>Review & Declaration</div>
@@ -979,12 +1712,35 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
 
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={prevStep} style={S.btnO}>← Back</button>
-              <button onClick={handleSubmit} disabled={!declaration || submitting}
-                style={{ ...S.btnP, flex: 1, padding: 12, fontSize: 15, background: declaration ? '#059669' : '#9CA3AF', cursor: !declaration || submitting ? 'not-allowed' : 'pointer', opacity: submitting ? .7 : 1 }}>
-                {submitting ? '⏳ Submitting...' : '✅ Submit Joining Form'}
+              <button onClick={nextStep} disabled={!declaration}
+                style={{ ...S.btnP, flex: 1, padding: 12, fontSize: 15, background: declaration ? P : '#9CA3AF', cursor: !declaration ? 'not-allowed' : 'pointer' }}>
+                Continue to Policies →
               </button>
             </div>
           </div>
+        )}
+
+        {step === 10 && (
+          docsDeferred && !docsComplete ? (
+            <div style={S.card}>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Upload Pending Documents</div>
+              <div style={{ fontSize: 12, color: '#B45309', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>
+                ⚠ You skipped document upload earlier. Please upload all required documents before acknowledging the company policies — this step cannot be skipped.
+              </div>
+              <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} />
+              <button onClick={prevStep} style={{ ...S.btnO, marginTop: 8 }}>← Back</button>
+            </div>
+          ) : (
+            <PolicyAckPhase token={token} onBack={prevStep} onNext={nextStep} />
+          )
+        )}
+
+        {step === 11 && (
+          <AckPreviewPhase token={token} onBack={prevStep} onNext={nextStep} />
+        )}
+
+        {step === 12 && (
+          <ESignPhase token={token} onBack={prevStep} onSubmit={handleSubmit} submitting={submitting} />
         )}
       </div>
 

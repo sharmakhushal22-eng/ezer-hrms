@@ -27,6 +27,63 @@ function SecLine({ title }: { title: string }) {
   )
 }
 
+// ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
+// `f` shape: { company, department, position, location } — all '' means "All".
+function RecFilterBar({ companies, departments, locations, positions, f, setF }: any) {
+  const lbl = { fontSize:11, fontWeight:600 as const, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 }
+  return (
+    <div style={{ ...S.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end' }}>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={lbl}>Company</label>
+        <select style={S.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+          <option value="">All companies</option>
+          {(companies||[]).map((c:any)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+        </select>
+      </div>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={lbl}>Department</label>
+        <select style={S.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
+          <option value="">All departments</option>
+          {(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+        </select>
+      </div>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={lbl}>Position</label>
+        <select style={S.select} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
+          <option value="">All positions</option>
+          {(positions||[]).map((p:string)=><option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      <div style={{ flex:'1 1 160px', minWidth:140 }}>
+        <label style={lbl}>Location</label>
+        <select style={S.select} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
+          <option value="">All locations</option>
+          {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+        </select>
+      </div>
+      {(f.company||f.department||f.position||f.location) && (
+        <button style={{ ...S.btn('#fff','#6D28D9'), border:'1px solid #DDD6FE' }} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
+      )}
+    </div>
+  )
+}
+
+// Generic matcher for a record carrying company_id/position + an mrf_id (department & location resolve via the MRF).
+// `position` is the record's own role string (designation/position); pass '' if none.
+function recordMatchesFilters(rec: { company_id?:string|null; mrf_id?:string|null; position?:string }, mrfs:any[], f:any): boolean {
+  if (f.company && rec.company_id !== f.company) return false
+  if (f.position && (rec.position||'') !== f.position) return false
+  if (f.department || f.location) {
+    const m = (mrfs||[]).find((mm:any)=>mm.id===rec.mrf_id)
+    if (f.department && m?.department_id !== f.department) return false
+    if (f.location && m?.location_id !== f.location) return false
+  }
+  return true
+}
+
+const FILTER_EMPTY = { company:'', department:'', position:'', location:'' }
+const distinctSorted = (arr:(string|undefined|null)[]) => Array.from(new Set(arr.filter(Boolean))).sort() as string[]
+
 // ═══════════════════════════════════════════════════════════════
 // RECRUITER: CREATE OFFER APPROVAL REQUEST
 // ═══════════════════════════════════════════════════════════════
@@ -323,8 +380,9 @@ function SearchBar({ placeholder, onApply, width=320 }:{ placeholder:string; onA
 
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-export function HRHeadApprovalDashboard() {
+export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup }: any = {}) {
   const supabase = createClient()
+  const [f, setF] = useState(FILTER_EMPTY)
   const [requests, setRequests] = useState<any[]>([])
   const [selected, setSelected] = useState<any>(null)
   const [action, setAction] = useState<'approve'|'reject'>('approve')
@@ -341,7 +399,7 @@ export function HRHeadApprovalDashboard() {
 
   async function loadRequests() {
     const { data } = await supabase.from('offer_approval_requests')
-      .select('*, candidates(full_name, email, phone, experience_years, current_company)')
+      .select('*, candidates(full_name, email, phone, experience_years, current_company, designation)')
       .eq('status', tab === 'pending' ? 'SUBMITTED' : 'HR_HEAD_APPROVED')
       .order('submitted_at', { ascending: false })
     setRequests(data || [])
@@ -424,14 +482,23 @@ export function HRHeadApprovalDashboard() {
   }[s] || ['#F9FAFB','#6B7280'])
 
   const ql = hq.trim().toLowerCase()
-  const fMrfs = mrfs.filter((m:any)=>!ql || (m.designation||m.position||'').toLowerCase().includes(ql))
-  const fRejected = rejected.filter((c:any)=>!ql || (c.full_name||'').toLowerCase().includes(ql))
-  const fRequests = requests.filter((r:any)=>!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql))
+  // Position options pooled from all three lists shown on this dashboard.
+  const positionOpts = distinctSorted([
+    ...mrfs.map((m:any)=>m.designation||m.position),
+    ...rejected.map((c:any)=>c.designation),
+    ...requests.map((r:any)=>r.candidates?.designation),
+  ])
+  // MRF rows carry company/department/location/designation directly.
+  const mrfMatch = (m:any) => recordMatchesFilters({ company_id:m.company_id, mrf_id:m.id, position:m.designation||m.position }, [m], f)
+  const fMrfs = mrfs.filter((m:any)=>(!ql || (m.designation||m.position||'').toLowerCase().includes(ql)) && mrfMatch(m))
+  const fRejected = rejected.filter((c:any)=>(!ql || (c.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:c.company_id, mrf_id:c.mrf_id, position:c.designation }, mrfLookup, f))
+  const fRequests = requests.filter((r:any)=>(!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation }, mrfLookup, f))
 
   return (
     <div style={{ maxWidth:1100, margin:'0 auto', padding:16 }}>
       <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Head — Approvals</div>
       <SearchBar placeholder="Search by candidate / job role — filters all sections below…" onApply={setHq} width={420} />
+      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={positionOpts} f={f} setF={setF} />
 
       {/* MRF Approvals — HR Head approves new manpower requisitions here */}
       <div style={{ marginBottom:22 }}>
@@ -603,8 +670,9 @@ export function HRHeadApprovalDashboard() {
 // ═══════════════════════════════════════════════════════════════
 // HR MANAGER: SEND OFFER LETTER
 // ═══════════════════════════════════════════════════════════════
-export function HRManagerSendOffer() {
+export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup }: any = {}) {
   const supabase = createClient()
+  const [f, setF] = useState(FILTER_EMPTY)
   const [approved, setApproved] = useState<any[]>([])
   const [selected, setSelected] = useState<any>(null)
   const [toEmail, setToEmail] = useState('')
@@ -744,12 +812,14 @@ ${company} — Human Resources`)
   }
 
   const sql = sq.trim().toLowerCase()
-  const fApproved = approved.filter((r:any)=>!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql))
+  const positionOpts = distinctSorted(approved.map((r:any)=>r.candidates?.designation || r.manpower_requisitions?.designation))
+  const fApproved = approved.filter((r:any)=>(!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation || r.manpower_requisitions?.designation }, mrfLookup, f))
   return (
     <div style={{ maxWidth:900, margin:'0 auto', padding:16 }}>
       <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Manager — Send Offer Letters</div>
       <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:16 }}>HR Head approved requests — offer letter send karo</div>
       <SearchBar placeholder="Search candidate…" onApply={setSq} width={300} />
+      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={positionOpts} f={f} setF={setF} />
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
         <div>
