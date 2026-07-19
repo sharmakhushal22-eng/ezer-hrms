@@ -3,6 +3,7 @@
 // Tabs: Dashboard · Access Control · Roles · Audit. Deactivation guard,
 // role assignment, and admin impersonation entry. Responsive (web/mobile).
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   loadUsers, loadRoles, loadAudit, loadOrgUnits, setStatus, assignRoles,
   startImpersonation, endImpersonation,
@@ -159,6 +160,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
   onImpersonate: (u: EssUser) => void
   onBulk: (us: EssUser[], status: 'ACTIVE'|'INACTIVE') => void
 }) {
+  const router = useRouter()
   const [q, setQ] = useState('')
   const [filter, setFilter] = useState<FilterKey>('All')
   const [sel, setSel] = useState<Set<string>>(new Set())
@@ -195,7 +197,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
 
   return (
     <div>
-      <div style={{ ...T.card, display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+      <div style={{ ...T.card, display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
         <input style={{ ...T.input, maxWidth:260 }} placeholder="🔍 Search emp code / name" value={q} onChange={e => setQ(e.target.value)} />
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
           {FILTERS.map(f => (
@@ -210,6 +212,14 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
           <span style={{ fontSize:12, fontWeight:600 }}>{sel.size} selected</span>
           <button onClick={() => { onBulk(selectedUsers, 'ACTIVE'); setSel(new Set()) }} style={{ ...T.btnOutline, borderColor:'#A7F3D0', color:'#059669' }}>✓ Activate</button>
           <button onClick={() => { onBulk(selectedUsers, 'INACTIVE'); setSel(new Set()) }} style={{ ...T.btnOutline, borderColor:'#FCA5A5', color:'#DC2626' }}>⊘ Deactivate</button>
+          <button
+            onClick={() => {
+              const codes = selectedUsers.map(u => u.emp_code).filter(Boolean).join(',')
+              if (!codes) return
+              router.push(`/dashboard/ess-credentials?codes=${encodeURIComponent(codes)}`)
+            }}
+            style={{ ...T.btnPrimary, background:'#7C3AED' }}
+          >🔑 Generate login credentials</button>
           <button onClick={() => setSel(new Set())} style={T.btnOutline}>Clear</button>
         </div>
       )}
@@ -568,6 +578,7 @@ export default function ESSPage() {
         <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
           <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:'#7C3AED', color:'#fff', border:'1px solid #7C3AED' } : {}) }}>📱 ESS &amp; Access</button>
           <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:'#7C3AED', color:'#fff', border:'1px solid #7C3AED' } : {}) }}>🔐 Roles &amp; Permissions</button>
+          <a href="/dashboard/ess-credentials" style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, textDecoration:'none', marginLeft:'auto' }}>🔑 Generate Login Credentials →</a>
         </div>
 
         {section === 'roles' ? <RolesPermissionsSection /> : (<>

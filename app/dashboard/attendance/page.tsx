@@ -164,7 +164,7 @@ function RecordsTab({ employees, records, from, to, onFrom, onTo }: {
   const emp = (id: string) => employees.find(e => e.id === id)
   return (
     <>
-      <div style={{ ...T.card, display:'flex', gap:12, alignItems:'flex-end', flexWrap:'wrap' }}>
+      <div style={{ ...T.card, display:'flex', gap:12, alignItems:'flex-end', flexWrap:'wrap', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
         <div><label style={T.lbl}>From date</label><input type="date" style={{ ...T.input, width:170 }} value={from} max={to || undefined} onChange={e => onFrom(e.target.value)} /></div>
         <div><label style={T.lbl}>To date</label><input type="date" style={{ ...T.input, width:170 }} value={to} min={from || undefined} onChange={e => onTo(e.target.value)} /></div>
         <div style={{ marginLeft:'auto', fontSize:11, color:'#6B7280' }}>{records.length} record(s)</div>

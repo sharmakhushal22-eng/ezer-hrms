@@ -198,7 +198,7 @@ function BranchQuotaTab({ companies, branches, rows, company, branch, fy, onComp
   const coBranches = branches.filter(b => b.company_id === company)
   return (
     <>
-      <div style={T.card}>
+      <div style={{ ...T.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
         <div style={{ display:'grid', gridTemplateColumns:'2fr 2fr 1fr', gap:12 }}>
           <div><label style={T.lbl}>Company</label><select style={T.input} value={company} onChange={e => { const v = e.target.value; onCompany(v); if (v === 'ALL') onBranch('') }}><option value="">— Select company —</option><option value="ALL">🌐 All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label style={T.lbl}>Branch</label><select style={T.input} value={branch} onChange={e => onBranch(e.target.value)} disabled={!company || company === 'ALL'}><option value="">Company default (all branches)</option>{coBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>

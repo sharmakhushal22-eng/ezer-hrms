@@ -162,8 +162,9 @@ export interface EmployeeDetail {
 }
 export interface DirectoryEntry {
   id: string; emp_code: string; full_name: string; designation: string | null
-  dept_name: string | null; location_name: string | null
+  dept_name: string | null; location_name: string | null; company_name: string | null
   mobile: string | null; office_email: string | null; personal_email: string | null
+  previous_company: string | null
 }
 export interface EssNotification { id: string; category: string | null; title: string; body: string | null; link: string | null; is_read: boolean; created_at: string }
 export interface ServiceRequest { id: string; request_type: string; request_data: any; is_confidential: boolean; status: string; assigned_to: string | null; submitted_at: string; resolution_note: string | null }
@@ -214,7 +215,7 @@ export async function updateEmployeePhoto(employeeId: string, dataUrl: string | 
 
 export async function loadDirectory(): Promise<DirectoryEntry[]> {
   const { data } = await supabase.from('employees')
-    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, blacklisted, last_working_date, departments(dept_name), locations!location_id(location_name)')
+    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, previous_company, blacklisted, last_working_date, departments(dept_name), locations!location_id(location_name), companies(company_name)')
     .order('full_name')
   const t0 = new Date(); t0.setHours(0, 0, 0, 0)
   return (data || [])
@@ -222,7 +223,9 @@ export async function loadDirectory(): Promise<DirectoryEntry[]> {
     .map((e: any) => ({
       id: e.id, emp_code: e.emp_code, full_name: e.full_name, designation: e.designation,
       dept_name: e.departments?.dept_name || null, location_name: e.locations?.location_name || null,
+      company_name: e.companies?.company_name || null,
       mobile: e.mobile, office_email: e.office_email, personal_email: e.personal_email,
+      previous_company: e.previous_company || null,
     }))
 }
 
@@ -449,8 +452,17 @@ export async function loadLeaveApplications(employeeId: string) {
     .eq('employee_id', employeeId).order('applied_at', { ascending: false }).limit(10)
   return data || []
 }
-export async function applyLeave(row: { employee_id: string; leave_type_id: string; from_date: string; to_date: string; half_day: boolean; days: number; reason: string }) {
-  return supabase.from('leave_applications').insert({ ...row, status: 'PENDING' })
+export async function applyLeave(row: { employee_id: string; leave_type_id: string; from_date: string; to_date: string; half_day: boolean; days: number; reason: string; half_session?: string }) {
+  const { half_session, ...base } = row
+  const payload: any = { ...base, status: 'PENDING' }
+  if (half_session) payload.half_session = half_session
+  let res = await supabase.from('leave_applications').insert(payload)
+  // Graceful fallback if the half_session column isn't migrated yet (sql56).
+  if (res.error && /half_session/i.test(res.error.message || '')) {
+    delete payload.half_session
+    res = await supabase.from('leave_applications').insert(payload)
+  }
+  return res
 }
 export async function loadEmployeeHolidays(employeeId: string) {
   const { data } = await supabase.rpc('resolve_holidays', { p_employee_id: employeeId })

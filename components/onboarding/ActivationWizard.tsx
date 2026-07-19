@@ -6,7 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   loadActivationData, saveActivation, markApproval,
   computePayrollChecks, checkDuplicates, computeGates, allGatesPass,
-  type ActivationCandidate, type EmpLite, type ShiftLite, type Gate, type PayrollChecks,
+  type ActivationCandidate, type EmpLite, type ShiftLite, type DeptLite, type Gate, type PayrollChecks,
 } from '@/lib/onboarding/activation'
 
 // ── EZER palette ───────────────────────────────────────────────────
@@ -121,22 +121,26 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
 }
 
 // ── Steps ──────────────────────────────────────────────────────────
-function Step1Org({ cand, form, setF, employees, shifts }: any) {
-  const deptMissing = !cand?.department_id
+function Step1Org({ cand, form, setF, employees, shifts, departments }: any) {
+  const deptMissing = !form?.department_id
   return (
     <div>
       <div style={T.sectionH}>Organisation & Role</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:14 }}>
         <Chip k="Company" v={cand?.company_id ? '✓ set' : '—'} />
         <Chip k="Branch" v={cand?.location_id ? '✓ set' : '—'} />
-        <Chip k="Department" v={cand?.department || (deptMissing ? 'Not set' : '✓ set')} danger={deptMissing} />
         <Chip k="Designation" v={cand?.designation || '—'} />
         <Chip k="DOJ" v={cand?.date_of_joining || '—'} />
         <Chip k="Employment" v={cand?.employment_type || '—'} />
       </div>
-      {deptMissing && <div style={{ color:RED, fontSize:12, marginBottom:12 }}>⚠ Department not set — assign one before generating the code.</div>}
 
       <div style={T.g2}>
+        <Field label="Department *">
+          <select value={form.department_id || ''} onChange={e => setF('department_id', e.target.value)} style={{ ...T.input, ...(deptMissing ? { borderColor: RED } : {}) }}>
+            <option value="">Select department…</option>
+            {(departments || []).map((d: DeptLite) => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+        </Field>
         <Field label="Grade"><input value={form.grade || ''} onChange={e => setF('grade', e.target.value)} style={T.input} placeholder="e.g. M3" /></Field>
         <EmpSelect label="L1 Manager" required value={form.l1_manager_id} onChange={v => setF('l1_manager_id', v)} employees={employees} />
         <EmpSelect label="L2 Manager" value={form.l2_manager_id} onChange={v => setF('l2_manager_id', v)} employees={employees} />
@@ -323,6 +327,7 @@ export default function ActivationWizard({ candidate, genCode, setGenCode, codeT
   const [cand, setCand] = useState<ActivationCandidate | null>(null)
   const [employees, setEmployees] = useState<EmpLite[]>([])
   const [shifts, setShifts] = useState<ShiftLite[]>([])
+  const [departments, setDepartments] = useState<DeptLite[]>([])
   const [form, setForm] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -336,9 +341,9 @@ export default function ActivationWizard({ candidate, genCode, setGenCode, codeT
   useEffect(() => {
     let active = true
     setLoading(true)
-    loadActivationData(candidate.id).then(({ cand: c, employees: emps, shifts: sh }) => {
+    loadActivationData(candidate.id).then(({ cand: c, employees: emps, shifts: sh, departments: dpt }) => {
       if (!active) return
-      setCand(c); setEmployees(emps); setShifts(sh)
+      setCand(c); setEmployees(emps); setShifts(sh); setDepartments(dpt)
       setForm({
         ...(c || {}),
         probation_months: c?.probation_months ?? 6,
@@ -430,7 +435,7 @@ export default function ActivationWizard({ candidate, genCode, setGenCode, codeT
           {loading
             ? <div style={{ padding:'40px 0', textAlign:'center', color:MUTED, fontSize:13 }}>Loading activation data…</div>
             : <>
-                {step === 1 && <Step1Org cand={cand} form={form} setF={setF} employees={employees} shifts={shifts} />}
+                {step === 1 && <Step1Org cand={cand} form={form} setF={setF} employees={employees} shifts={shifts} departments={departments} />}
                 {step === 2 && <Step2Payroll form={{ ...form, form_data: cand?.form_data }} setF={setF} checks={checks} dups={dups} />}
                 {step === 3 && <Step3ItAdmin form={form} setF={setF} />}
                 {step === 4 && <Step4Approvals cand={cand} onMark={markRole} onSendEmails={sendEmails} emailMsg={emailMsg} sending={sending} />}

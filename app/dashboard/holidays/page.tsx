@@ -134,7 +134,7 @@ function HolidaysTab({ calendars, companies, branches, weeklyOffs, selCal, setSe
 
   return (
     <>
-      <div style={C.card}>
+      <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
         <label style={C.lbl}>Calendar</label>
         <select style={{ ...C.input, maxWidth:420 }} value={selCal} onChange={e => setSelCal(e.target.value)}>
           <option value="">— Select a holiday calendar —</option>

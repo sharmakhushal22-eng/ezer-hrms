@@ -68,7 +68,7 @@ const T = {
 // `f` shape: { company, department, position, location } — all '' means "All".
 function RecFilterBar({ companies, departments, locations, positions, f, setF }:any) {
   return (
-    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end' }}>
+    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
         <label style={T.label}>Company</label>
         <select style={T.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
@@ -963,9 +963,11 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   const CF = (k:string,v:any) => setCForm((f:any)=>({...f,[k]:v}))
   const approvedMRFs = mrfs.filter((m:MRF)=>m.status==='APPROVED')
   const [pipeQ, setPipeQ] = useState('')
-  const filtered = (selMRF==='all'?candidates:candidates.filter((c:Candidate)=>c.mrf_id===selMRF))
-    .filter((c:Candidate)=>!pipeQ || c.full_name.toLowerCase().includes(pipeQ.toLowerCase()))
+  const [stageF, setStageF] = useState('')   // '' = all stages
+  const baseList = (selMRF==='all'?candidates:candidates.filter((c:Candidate)=>c.mrf_id===selMRF))
+    .filter((c:Candidate)=>!pipeQ || c.full_name.toLowerCase().includes(pipeQ.toLowerCase()) || (c.current_company||'').toLowerCase().includes(pipeQ.toLowerCase()) || (c.designation||'').toLowerCase().includes(pipeQ.toLowerCase()))
     .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
+  const filtered = stageF ? baseList.filter((c:Candidate)=>c.stage===stageF) : baseList
 
   async function addCandidate() {
     if (!cForm.full_name||!cForm.phone) { showNotify('Name and Phone are required','error'); return }
@@ -1060,35 +1062,69 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
         </div>
       )}
 
-      {/* Kanban */}
-      <div style={{ display:'flex', gap:8, overflowX:'auto', paddingBottom:10 }}>
+      {/* Stage filter pills */}
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginBottom:14 }}>
+        <button onClick={()=>setStageF('')} style={{ ...T.btn, fontSize:11, padding:'5px 12px', borderRadius:99,
+          background: stageF===''?'#7C3AED':'#fff', color: stageF===''?'#fff':'#6B7280', border:`1px solid ${stageF===''?'#7C3AED':'#EDE9FE'}` }}>
+          All <span style={{ opacity:.8 }}>({baseList.length})</span>
+        </button>
         {STAGES.map(stage=>{
-          const sc = filtered.filter((c:Candidate)=>c.stage===stage)
+          const n = baseList.filter((c:Candidate)=>c.stage===stage).length
+          const on = stageF===stage
           return (
-            <div key={stage} style={{ minWidth:168, flexShrink:0 }}>
-              <div style={{ background:STAGE_COLOR[stage]+'15', borderRadius:'7px 7px 0 0', padding:'7px 10px', borderTop:`3px solid ${STAGE_COLOR[stage]}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                <span style={{ fontSize:11, fontWeight:600, color:STAGE_COLOR[stage] }}>{stage}</span>
-                <span style={{ fontSize:10, background:STAGE_COLOR[stage]+'20', color:STAGE_COLOR[stage], borderRadius:99, padding:'1px 7px', fontWeight:600 }}>{sc.length}</span>
-              </div>
-              <div style={{ background:'rgba(0,0,0,0.02)', borderRadius:'0 0 7px 7px', minHeight:180, padding:6 }}>
-                {sc.map((c:Candidate)=>(
-                  <div key={c.id} onClick={()=>{setSelCand(c);setAiQs([])}}
-                    style={{ background:'#fff', borderRadius:7, padding:'9px 10px', marginBottom:6, cursor:'pointer', border:'1px solid #EDE9FE', boxShadow:'0 1px 3px rgba(124,58,237,0.06)' }}>
-                    <div style={{ fontSize:12, fontWeight:600, color:'#1E1B4B', marginBottom:2 }}>{c.full_name}{c.offer_revised&&<span style={{ fontSize:9, color:'#B45309', fontWeight:600, marginLeft:5 }}>✏️ Revised</span>}</div>
-                    <div style={{ fontSize:10, color:'#9CA3AF' }}>{c.current_company||'—'} · {c.experience_years||0}yr</div>
-                    {c.expected_ctc&&<div style={{ fontSize:10, color:'#7C3AED', marginTop:2, fontWeight:500 }}>₹{(c.expected_ctc/100000).toFixed(1)}L</div>}
-                    {c.ai_score&&(
-                      <div style={{ fontSize:10, color:(c.ai_tag||c.ai_match_tag)==='STRONG'?'#059669':(c.ai_tag||c.ai_match_tag)==='PARTIAL'?'#D97706':'#DC2626', marginTop:2, fontWeight:500 }}>
-                        AI: {c.ai_score}% {(c.ai_tag||c.ai_match_tag)==='STRONG'?'🟢':(c.ai_tag||c.ai_match_tag)==='PARTIAL'?'🟡':'🔴'}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <button key={stage} onClick={()=>setStageF(on?'':stage)} style={{ ...T.btn, fontSize:11, padding:'5px 12px', borderRadius:99,
+              background: on?STAGE_COLOR[stage]:STAGE_COLOR[stage]+'12', color: on?'#fff':STAGE_COLOR[stage],
+              border:`1px solid ${on?STAGE_COLOR[stage]:STAGE_COLOR[stage]+'30'}` }}>
+              {stage} <span style={{ opacity:.85 }}>({n})</span>
+            </button>
           )
         })}
       </div>
+
+      {/* Candidate cards */}
+      {filtered.length===0 ? (
+        <div style={{ ...T.card, textAlign:'center' as const, color:'#9CA3AF', padding:36 }}>No candidates match your search / filters.</div>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:12 }}>
+          {filtered.map((c:Candidate)=>{
+            const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
+            const tag = c.ai_tag||c.ai_match_tag
+            const tagCol = tag==='STRONG'?'#059669':tag==='PARTIAL'?'#D97706':'#DC2626'
+            const initials = c.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
+            return (
+              <div key={c.id} onClick={()=>{setSelCand(c);setAiQs([])}}
+                style={{ background:'#fff', borderRadius:12, padding:'14px 15px', cursor:'pointer', border:'1px solid #EDE9FE', boxShadow:'0 1px 4px rgba(124,58,237,0.06)', transition:'box-shadow .15s, transform .1s' }}
+                onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 6px 18px rgba(124,58,237,0.14)'; e.currentTarget.style.transform='translateY(-1px)' }}
+                onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(124,58,237,0.06)'; e.currentTarget.style.transform='' }}>
+                {/* header */}
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                  <div style={{ width:40, height:40, borderRadius:'50%', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, flexShrink:0 }}>{initials}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:'#1E1B4B', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}{c.offer_revised&&<span style={{ fontSize:9, color:'#B45309', fontWeight:600, marginLeft:5 }}>✏️</span>}</div>
+                    <div style={{ fontSize:11, color:'#9CA3AF', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.designation||mrf?.designation||'—'}</div>
+                  </div>
+                  <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:99, background:STAGE_COLOR[c.stage]+'18', color:STAGE_COLOR[c.stage], whiteSpace:'nowrap' }}>{c.stage}</span>
+                </div>
+                {/* role / opening */}
+                {mrf && <div style={{ fontSize:11, color:'#7C3AED', fontWeight:500, marginBottom:8 }}>🎯 {mrf.designation||mrf.position}</div>}
+                {/* detail rows */}
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 10px', fontSize:11.5, color:'#374151' }}>
+                  <div><span style={{ color:'#9CA3AF' }}>Company</span><div style={{ fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.current_company||'—'}</div></div>
+                  <div><span style={{ color:'#9CA3AF' }}>Experience</span><div style={{ fontWeight:600 }}>{c.experience_years||0} yr</div></div>
+                  <div><span style={{ color:'#9CA3AF' }}>Expected CTC</span><div style={{ fontWeight:600, color:'#059669' }}>{c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—'}</div></div>
+                  <div><span style={{ color:'#9CA3AF' }}>Notice</span><div style={{ fontWeight:600 }}>{c.notice_period?`${c.notice_period}d`:'—'}</div></div>
+                </div>
+                {/* footer chips */}
+                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, flexWrap:'wrap' as const }}>
+                  {c.ai_score!=null&&<span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:99, background:tagCol+'14', color:tagCol }}>AI {c.ai_score}% {tag==='STRONG'?'🟢':tag==='PARTIAL'?'🟡':'🔴'}</span>}
+                  {c.source&&<span style={{ fontSize:10, color:'#9CA3AF', background:'#F9FAFB', border:'1px solid #EDE9FE', borderRadius:99, padding:'2px 8px' }}>{c.source}</span>}
+                  <span style={{ marginLeft:'auto', fontSize:11, color:'#7C3AED', fontWeight:600 }}>View →</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Add Candidate Modal */}
       {showAdd&&(
@@ -1182,9 +1218,13 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
     <div style={{ position:'fixed', right:0, top:0, bottom:0, width:460, background:'#fff', borderLeft:'1px solid #EDE9FE', zIndex:200, overflowY:'auto', padding:20, boxShadow:'-4px 0 20px rgba(124,58,237,0.1)' }}>
       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
         <div>
-          <div style={{ fontSize:16, fontWeight:700, color:'#1E1B4B' }}>{c.full_name}</div>
-          <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>{c.current_company} · {c.experience_years}yr · {c.phone||c.mobile}</div>
-          {mrf&&<div style={{ fontSize:11, color:'#7C3AED', marginTop:2, fontWeight:500 }}>MRF: {mrf.designation||mrf.position}</div>}
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
+            <div style={{ fontSize:16, fontWeight:700, color:'#1E1B4B' }}>{c.full_name}</div>
+            <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:99, background:STAGE_COLOR[c.stage]+'18', color:STAGE_COLOR[c.stage] }}>{c.stage}</span>
+          </div>
+          <div style={{ fontSize:12, color:'#9CA3AF', marginTop:3 }}>{c.current_company} · {c.experience_years}yr · {c.phone||c.mobile}</div>
+          {c.email&&<div style={{ fontSize:11, color:'#9CA3AF', marginTop:1 }}>✉️ {c.email}</div>}
+          {mrf&&<div style={{ fontSize:11, color:'#7C3AED', marginTop:3, fontWeight:600 }}>🎯 {mrf.designation||mrf.position}{c.source?` · Source: ${c.source}`:''}</div>}
         </div>
         <button onClick={onClose} style={{ ...T.btn, background:'#F3F0FF', color:'#6D28D9', padding:'4px 10px' }}>✕</button>
       </div>

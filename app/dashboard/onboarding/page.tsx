@@ -560,8 +560,8 @@ export default function OnboardingDashboard() {
           </button>
         ))}
       </div>
-      {/* Filters */}
-      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap',alignItems:'center'}}>
+      {/* Filters — frozen (sticky) so they stay visible while the list scrolls */}
+      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap',alignItems:'center',position:'sticky',top:0,zIndex:30,background:'#F5F3FF',padding:'10px 12px',borderRadius:10,boxShadow:'0 2px 8px rgba(15,23,42,0.06)'}}>
         <input value={searchQ} onChange={e=>setSearchQ(e.target.value)}
           placeholder="Search name, designation..."
           style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',color:'#1E1B4B',background:'#FAFAF8',outline:'none',minWidth:200}}/>

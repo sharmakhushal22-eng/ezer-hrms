@@ -4,7 +4,7 @@
 // Letters, Requests, Directory, Notifications). Payroll/Leave/Attendance/PMS show
 // labeled placeholders until those upstream modules exist (Phase 3/4).
 // All sub-components are defined OUTSIDE the parent (no focus-loss).
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
   loadEmployeeDetail, updateEmployeePhoto, loadDirectory, loadNotifications, markNotification, markAllNotifications,
   loadServiceRequests, createServiceRequest, loadLetterRequests, createLetterRequest,
@@ -18,6 +18,11 @@ import {
   resolveDay, computeSummary,
   type MonthlyData, type DayPunch, type RegularisationRequest,
 } from '@/lib/supabase-attendance'
+import * as HR from '@/lib/employees/hr-actions'
+import { loadLeaveTypes } from '@/lib/supabase-leave-config'
+import { supabase } from '@/lib/supabase'
+import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
+import FlexiClaims from '@/components/ess/FlexiClaims'
 
 // ── Styles ─────────────────────────────────────────────────────────
 const T = {
@@ -47,6 +52,23 @@ function StatusPill({ status }: { status: string }) {
   }
   const [bg,c] = map[status] || ['#F3F0FF','#6D28D9']
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{status}</span>
+}
+
+// ── Transfer acknowledgement (ESS) ──────────────────────────────
+function TransferAckCard({ empId, onAck }: { empId: string; onAck: () => void }) {
+  const [transfers, setTransfers] = useState<any[]>([])
+  useEffect(() => { HR.getPendingTransfers(empId).then(setTransfers) }, [empId])
+  if (!transfers.length) return null
+  return (<>{transfers.map(tr => (
+    <div key={tr.id} style={{ background:'#FAEEDA', border:'1px solid #EF9F27', borderRadius:10, padding:'12px 16px', marginBottom:10 }}>
+      <div style={{ fontSize:13, fontWeight:600, color:'#633806' }}>🔄 Transfer Letter — action required</div>
+      <div style={{ fontSize:11, color:'#854F0B', marginTop:3 }}>You are being transferred, effective {tr.effective_date}.</div>
+      <div style={{ display:'flex', gap:8, marginTop:10 }}>
+        {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:'#fff', border:'1px solid #EF9F27', borderRadius:7, fontSize:11, color:'#633806', textDecoration:'none' }}>📄 View Letter</a>}
+        <button onClick={async () => { await HR.acknowledgeTransfer(tr.id); setTransfers(t=>t.filter(x=>x.id!==tr.id)); onAck() }} style={{ padding:'7px 14px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:7, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>✓ Acknowledge & Accept</button>
+      </div>
+    </div>
+  ))}</>)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -185,6 +207,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 
   return (
     <div>
+      <TransferAckCard empId={emp.id} onAck={()=>{}} />
       <div style={{ ...T.card, borderLeft:'3px solid #7C3AED', display:'flex', alignItems:'center', gap:14 }}>
         <div style={{ width:52, height:52, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
         <div>
@@ -441,9 +464,49 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
 // ════════════════════════════════════════════════════════════════
 // DIRECTORY (B10)
 // ════════════════════════════════════════════════════════════════
+function DirDetailRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
+      <span style={{ fontSize:11, color:'#6B7280', fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }}>{label}</span>
+      <span style={{ fontSize:13, color:'#1E1B4B', textAlign:'right', wordBreak:'break-word' }}>{value || '—'}</span>
+    </div>
+  )
+}
+function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () => void }) {
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:4000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={ev => ev.stopPropagation()} style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:440, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'18px 20px', borderBottom:'1px solid #EDE9FE' }}>
+          <div style={{ width:48, height:48, borderRadius:'50%', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:16, flexShrink:0 }}>{initials(e.full_name)}</div>
+          <div style={{ minWidth:0, flex:1 }}>
+            <div style={{ fontSize:16, fontWeight:700 }}>{e.full_name}</div>
+            <div style={{ fontSize:12, color:'#9CA3AF' }}>{e.designation || '—'}</div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, lineHeight:1, cursor:'pointer', color:'#9CA3AF' }}>×</button>
+        </div>
+        <div style={{ padding:'6px 20px 16px' }}>
+          <DirDetailRow label="Employee Code" value={e.emp_code} />
+          <DirDetailRow label="Email ID" value={e.office_email || e.personal_email} />
+          <DirDetailRow label="Mobile Number" value={e.mobile} />
+          <DirDetailRow label="Department" value={e.dept_name} />
+          <DirDetailRow label="Location" value={e.location_name} />
+          <DirDetailRow label="Company Name" value={e.company_name} />
+          <DirDetailRow label="Previous Company" value={e.previous_company} />
+        </div>
+        <div style={{ padding:'0 20px 18px', display:'flex', gap:8, flexWrap:'wrap' }}>
+          {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} style={{ ...T.btnO, textDecoration:'none' }}>📧 Email</a>}
+          {e.mobile && <a href={`tel:${e.mobile}`} style={{ ...T.btnO, textDecoration:'none' }}>📱 Call</a>}
+          {e.mobile && <a href={`https://wa.me/91${(e.mobile||'').replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration:'none' }}>WhatsApp</a>}
+          <button onClick={onClose} style={{ ...T.btnO, marginLeft:'auto' }}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
 function Directory({ isMobile }: { isMobile: boolean }) {
   const [rows, setRows] = useState<DirectoryEntry[]>([])
   const [q, setQ] = useState('')
+  const [sel, setSel] = useState<DirectoryEntry | null>(null)
   useEffect(() => { loadDirectory().then(setRows) }, [])
   const filtered = rows.filter(e => !q || e.full_name.toLowerCase().includes(q.toLowerCase()) || (e.designation||'').toLowerCase().includes(q.toLowerCase()) || (e.dept_name||'').toLowerCase().includes(q.toLowerCase()))
   return (
@@ -451,12 +514,12 @@ function Directory({ isMobile }: { isMobile: boolean }) {
       <div style={T.card}><input style={T.input} placeholder="🔍 Search name / designation / department" value={q} onChange={e => setQ(e.target.value)} /></div>
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill,minmax(280px,1fr))', gap:10 }}>
         {filtered.map(e => (
-          <div key={e.id} style={T.card}>
+          <div key={e.id} onClick={() => setSel(e)} style={{ ...T.card, cursor:'pointer' }}>
             <div style={{ display:'flex', alignItems:'center', gap:10 }}>
               <div style={{ width:40, height:40, borderRadius:'50%', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:13, flexShrink:0 }}>{initials(e.full_name)}</div>
               <div style={{ minWidth:0 }}><div style={{ fontSize:13, fontWeight:600 }}>{e.full_name}</div><div style={{ fontSize:11, color:'#9CA3AF' }}>{e.designation || '—'} · {e.dept_name || '—'}</div></div>
             </div>
-            <div style={{ display:'flex', gap:6, marginTop:10, flexWrap:'wrap' }}>
+            <div style={{ display:'flex', gap:6, marginTop:10, flexWrap:'wrap' }} onClick={ev => ev.stopPropagation()}>
               {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} style={{ ...T.btnO, textDecoration:'none' }}>📧 Email</a>}
               {e.mobile && <a href={`tel:${e.mobile}`} style={{ ...T.btnO, textDecoration:'none' }}>📱 Call</a>}
               {e.mobile && <a href={`https://wa.me/91${(e.mobile||'').replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration:'none' }}>WhatsApp</a>}
@@ -465,6 +528,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
         ))}
         {filtered.length === 0 && <div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' }}>No matches.</div>}
       </div>
+      {sel && <DirectoryDetailModal e={sel} onClose={() => setSel(null)} />}
     </div>
   )
 }
@@ -497,25 +561,34 @@ function Notifications({ emp }: { emp: EmployeeDetail }) {
 // ── Leave & Holidays (ESS) — balances, apply, history, upcoming holidays ──
 function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
   const [balances, setBalances] = useState<any[]>([])
+  const [types, setTypes] = useState<any[]>([])
   const [apps, setApps] = useState<any[]>([])
   const [hols, setHols] = useState<any[]>([])
-  const [form, setForm] = useState({ leave_type_id: '', from_date: '', to_date: '', half_day: false, reason: '' })
+  const [form, setForm] = useState({ leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' })
   const [busy, setBusy] = useState(false)
+  // Half-day is offered only for these leave types.
+  const HALF_DAY_TYPES = ['EL', 'CL', 'SL', 'LWP', 'CP']
   useEffect(() => {
     loadLeaveBalances(emp.id).then(setBalances)
     loadLeaveApplications(emp.id).then(setApps)
     loadEmployeeHolidays(emp.id).then(setHols)
+    // Leave-type catalog (EL, CL, …) — the apply dropdown lists every active,
+    // employee-applicable type, not only the ones the employee has a balance row for.
+    loadLeaveTypes().then(all => setTypes((all || []).filter((t: any) => t.is_active && t.application_mode !== 'HR_MARK')))
   }, [emp.id])
+  // Balance lookup by leave_type_id → shows "(N left)" next to a type when seeded.
+  const balByType = useMemo(() => { const m: Record<string, any> = {}; balances.forEach((b: any) => { m[b.leave_type_id] = b }); return m }, [balances])
   const avail = (b: any) => (Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)
   const barColor = (pct: number) => pct > 60 ? '#059669' : pct > 30 ? '#F59E0B' : '#DC2626'
   const submit = async () => {
     if (!form.leave_type_id || !form.from_date || !form.to_date) { notify('Select leave type and dates', 'error'); return }
+    if (form.half_day && !form.half_session) { notify('Select 1st half or 2nd half', 'error'); return }
     const days = form.half_day ? 0.5 : Math.max(1, Math.round((new Date(form.to_date).getTime() - new Date(form.from_date).getTime()) / 86400000) + 1)
     setBusy(true)
-    const { error } = await applyLeave({ employee_id: emp.id, leave_type_id: form.leave_type_id, from_date: form.from_date, to_date: form.to_date, half_day: form.half_day, days, reason: form.reason }) as any
+    const { error } = await applyLeave({ employee_id: emp.id, leave_type_id: form.leave_type_id, from_date: form.from_date, to_date: form.to_date, half_day: form.half_day, half_session: form.half_day ? form.half_session : '', days, reason: form.reason }) as any
     setBusy(false)
     if (error) { notify('Failed: ' + error.message, 'error'); return }
-    notify('Leave request submitted ✓'); setForm({ leave_type_id: '', from_date: '', to_date: '', half_day: false, reason: '' })
+    notify('Leave request submitted ✓'); setForm({ leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' })
     loadLeaveApplications(emp.id).then(setApps)
   }
   const STATUS: Record<string, [string, string]> = { PENDING: ['#FFFBEB', '#B45309'], APPROVED: ['#ECFDF5', '#059669'], REJECTED: ['#FEF2F2', '#DC2626'], CANCELLED: ['#F3F4F6', '#6B7280'] }
@@ -541,12 +614,35 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
         <div style={T.section}>Apply for Leave</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Leave type</label>
-            <select style={T.input} value={form.leave_type_id} onChange={e => setForm(f => ({ ...f, leave_type_id: e.target.value }))}>
-              <option value="">Select</option>{balances.map((b: any) => <option key={b.leave_type_id} value={b.leave_type_id}>{b.leave_types?.short_name} · {b.leave_types?.name} ({avail(b)} left)</option>)}
+            <select style={T.input} value={form.leave_type_id} onChange={e => setForm(f => ({ ...f, leave_type_id: e.target.value, half_day: false, half_session: '' }))}>
+              <option value="">Select</option>
+              {(types.length ? types : balances.map((b: any) => ({ id: b.leave_type_id, short_name: b.leave_types?.short_name, name: b.leave_types?.name }))).map((t: any) => {
+                const bal = balByType[t.id]
+                return <option key={t.id} value={t.id}>{t.short_name} · {t.name}{bal ? ` (${avail(bal)} left)` : ''}</option>
+              })}
             </select></div>
           <div><label style={T.label}>From</label><input type="date" style={T.input} value={form.from_date} onChange={e => setForm(f => ({ ...f, from_date: e.target.value }))} /></div>
           <div><label style={T.label}>To</label><input type="date" style={T.input} value={form.to_date} onChange={e => setForm(f => ({ ...f, to_date: e.target.value }))} /></div>
-          <label style={{ gridColumn: '1/-1', display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={form.half_day} onChange={e => setForm(f => ({ ...f, half_day: e.target.checked }))} /> Half day</label>
+          {(() => {
+            const selShort = types.find((t: any) => t.id === form.leave_type_id)?.short_name || balByType[form.leave_type_id]?.leave_types?.short_name || ''
+            if (!HALF_DAY_TYPES.includes(selShort)) return null
+            return (
+              <div style={{ gridColumn: '1/-1' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+                  <input type="checkbox" checked={form.half_day} onChange={e => setForm(f => ({ ...f, half_day: e.target.checked, half_session: e.target.checked ? f.half_session : '' }))} /> Half day
+                </label>
+                {form.half_day && (
+                  <div style={{ display: 'flex', gap: 18, marginTop: 8, paddingLeft: 24 }}>
+                    {[['1st', '1st Half'], ['2nd', '2nd Half']].map(([val, lbl]) => (
+                      <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={form.half_session === val} onChange={e => setForm(f => ({ ...f, half_session: e.target.checked ? val : '' }))} /> {lbl}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
           <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason</label><input style={T.input} value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Brief reason" /></div>
         </div>
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, marginTop: 10, opacity: busy ? .6 : 1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
@@ -742,14 +838,20 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
   onDone: () => void; onCancel: () => void
 }) {
   const [dateVal, setDateVal] = useState(date)
-  const [actualIn, setActualIn] = useState('')
-  const [actualOut, setActualOut] = useState('')
+  const [actualIn, setActualIn] = useState('09:00')   // default shift start 9 AM
+  const [actualOut, setActualOut] = useState('18:00') // default shift end 6 PM
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
+  // Regularisation is allowed only for PAST dates — not today, not future.
+  const localYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  const todayStr = localYMD(new Date())
+  const yesterdayStr = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return localYMD(d) })()
+
   const submit = async () => {
     if (!dateVal) { setMsg({ text:'Select the attendance date', ok:false }); return }
+    if (dateVal >= todayStr) { setMsg({ text:'Regularisation is allowed only for past dates — not the current day or future.', ok:false }); return }
     if (!actualIn || !actualOut) { setMsg({ text:'Enter both actual IN and OUT times', ok:false }); return }
     if (actualIn >= actualOut) { setMsg({ text:'Actual IN must be before Actual OUT', ok:false }); return }
     if (!reason.trim()) { setMsg({ text:'Reason is required', ok:false }); return }
@@ -765,8 +867,8 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
     <div style={T.card}>
       <div style={T.section}>⚠ Raise Regularisation</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-        <div style={{ gridColumn:'1/-1' }}><label style={T.label}>Attendance date *</label>{editable
-          ? <input type="date" max={new Date().toISOString().slice(0, 10)} style={T.input} value={dateVal} onChange={e => setDateVal(e.target.value)} />
+        <div style={{ gridColumn:'1/-1' }}><label style={T.label}>Attendance date * <span style={{ fontWeight:400, color:'#9CA3AF' }}>(past dates only)</span></label>{editable
+          ? <input type="date" max={yesterdayStr} style={T.input} value={dateVal} onChange={e => setDateVal(e.target.value)} />
           : <input style={{ ...T.input, background:'#F1F5F9' }} value={dateLbl} readOnly />}</div>
         <div><label style={T.label}>Recorded IN</label><input style={{ ...T.input, background:'#F1F5F9' }} value={rec?.work_in ? fmtT(rec.work_in) : 'Not recorded'} readOnly /></div>
         <div><label style={T.label}>Recorded OUT</label><input style={{ ...T.input, background:'#F1F5F9' }} value={rec?.work_out ? fmtT(rec.work_out) : 'Not recorded'} readOnly /></div>
@@ -879,6 +981,569 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   )
 }
 
+// ── Voluntary PF (VPF) — EPF wage base × percent ──
+function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', red:'#A32D2D', redBg:'#FCEBEB', amber:'#854F0B', amberBg:'#FAEEDA', teal:'#0F6E56' }
+  const MAX_PCT = 88, HIGH_ALERT = 50
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [pctInput, setPctInput] = useState('10')
+  const [ack, setAck] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+  const load = useCallback(() => {
+    setLoading(true)
+    fetch(`/api/ess/vpf?employee_id=${emp.id}`).then(r => r.json()).then(d => {
+      setData(d); if (d?.current_vpf) setPctInput(String(d.current_vpf.vpf_percent)); setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [emp.id])
+  useEffect(() => { load() }, [load])
+
+  if (loading) return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading…</div>
+  const e = data?.employee
+  if (!e) return <div style={{ padding: 20, color: V.red, fontSize: 13 }}>Salary data not found.</div>
+  const base = e.epf_wage_base
+  const current = data?.current_vpf
+  let rawPct = parseFloat(pctInput) || 0
+  let capHit = false
+  if (rawPct > MAX_PCT) { capHit = true; rawPct = MAX_PCT }
+  const vpfMonthly = Math.round(base * rawPct / 100)
+  const vpfAnnual = vpfMonthly * 12
+  const total80c = e.epf_annual + vpfAnnual
+  const over80c = total80c > e.c80_limit
+  const barPct = Math.min(100, Math.round(total80c / e.c80_limit * 100))
+  const showHighAlert = rawPct > HIGH_ALERT && !capHit
+
+  const submit = async () => {
+    setSaving(true)
+    const res = await fetch('/api/ess/vpf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, vpf_percent: rawPct, effective_from_month: 4, acknowledged: true }) })
+    setSaving(false)
+    if (res.ok) { notify('VPF request submitted ✓'); setAck(false); load() }
+    else { const j = await res.json().catch(() => ({})); notify('Failed: ' + (j.error || ''), 'error') }
+  }
+  const stop = async () => {
+    const res = await fetch('/api/ess/vpf', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, stopped_reason: 'Employee requested', stopped_from_month: 4 }) })
+    if (res.ok) { notify('VPF stopped'); load() } else notify('Failed to stop', 'error')
+  }
+  const card: React.CSSProperties = { background: '#fff', border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '5px 0' }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Voluntary PF (VPF)</div>
+        <div style={{ fontSize: 12.5, color: V.muted, marginTop: 2 }}>Apni EPF wages se extra PF deduction — apna percentage set karo.</div>
+      </div>
+
+      {!e.has_ctc && (
+        <div style={{ ...card, background: V.amberBg, border: '1px solid #EFD9A8' }}>
+          <span style={{ fontSize: 12, color: '#633806' }}>ⓘ Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master) — then VPF will calculate correctly.</span>
+        </div>
+      )}
+
+      {current && (
+        <div style={{ ...card, background: '#EEF7F3', border: '1px solid #C5E8DB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12, color: V.teal }}>Active VPF: {current.vpf_percent}% ({inr(current.monthly_vpf_amount)}/mo) — modify below</span>
+          <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: '#fff', color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop VPF</button>
+        </div>
+      )}
+
+      <div style={{ ...card, background: '#FBFAFF' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: V.muted }}>Your EPF wages (from database)</span>
+          <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: e.is_capped ? '#EEEDFE' : '#E1F5EE', color: e.is_capped ? V.purpleDark : V.teal }}>{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</span>
+        </div>
+        <div style={{ fontSize: 24, fontWeight: 600, color: V.purpleDark }}>{inr(base)}</div>
+        <div style={{ ...row, borderTop: `1px solid ${V.border}`, marginTop: 10, paddingTop: 8 }}>
+          <span style={{ fontSize: 12, color: V.muted }}>Current mandatory EPF (12%)</span>
+          <span style={{ fontSize: 13, color: V.navy }}>{inr(e.mandatory_epf_monthly)}/mo</span>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={{ fontSize: 12, color: V.muted, display: 'block', marginBottom: 6 }}>VPF percentage</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <input type="number" value={pctInput} min={1} step={1} onChange={e2 => setPctInput(e2.target.value)} style={{ flex: 1, padding: 10, borderRadius: 8, border: `1px solid ${V.border}`, fontSize: 15, fontFamily: 'inherit' }} placeholder="e.g. 25" />
+          <span style={{ fontSize: 16, fontWeight: 500, color: V.purpleDark }}>%</span>
+        </div>
+        <div style={{ fontSize: 11, color: '#9B9BA8', marginTop: 4 }}>Percentage of your EPF wages.</div>
+      </div>
+
+      {showHighAlert && (
+        <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+          <span style={{ color: V.red }}>⚠</span>
+          <span style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.6 }}><strong>Itna zyada?</strong> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF — net in-hand bahut kam ho jayegi. Confirm karein.</span>
+        </div>
+      )}
+      {capHit && (
+        <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+          <span style={{ color: V.amber }}>ⓘ</span>
+          <span style={{ fontSize: 12, color: '#633806', lineHeight: 1.6 }}>Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.</span>
+        </div>
+      )}
+
+      <div style={{ ...card, background: '#FBFAFF' }}>
+        <div style={row}><span style={{ fontSize: 13, color: V.muted }}>VPF deduction (monthly)</span><span style={{ fontSize: 15, fontWeight: 500, color: V.purpleDark }}>{inr(vpfMonthly)}</span></div>
+        <div style={{ ...row, borderTop: `1px solid ${V.border}` }}><span style={{ fontSize: 13, color: V.muted }}>VPF (annual)</span><span style={{ fontSize: 13, color: V.navy }}>{inr(vpfAnnual)}</span></div>
+        <div style={{ ...row, borderTop: `1px solid ${V.border}` }}><span style={{ fontSize: 13, color: V.red }}>Net in-hand impact</span><span style={{ fontSize: 13, fontWeight: 500, color: V.red }}>−{inr(vpfMonthly)}/mo</span></div>
+      </div>
+
+      <div style={{ ...card, background: '#FBFAFF' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+          <span style={{ fontSize: 13, color: V.muted }}>80C usage (₹1.5L max)</span>
+          <span style={{ fontSize: 12, fontWeight: 500, color: V.navy }}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span>
+        </div>
+        <div style={{ height: 8, background: '#E9E7F5', borderRadius: 20, overflow: 'hidden' }}><div style={{ height: '100%', width: `${barPct}%`, background: over80c ? '#EF9F27' : V.purple, borderRadius: 20 }} /></div>
+        <div style={{ fontSize: 11, color: '#9B9BA8', marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` — ${inr(total80c - e.c80_limit)} pe 80C benefit nahi` : ''}</div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
+        <span style={{ color: V.red }}>ⓘ</span>
+        <div style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.7 }}><strong>Dhyaan se select karein:</strong><br />• VPF se aapki <strong>net in-hand salary kam</strong> ho jayegi<br />• 80C exemption sirf <strong>₹1.5 lakh tak</strong> (EPF + VPF + baaki 80C)<br />• Ye har mahine deduct hoga jab tak aap band na karein</div>
+      </div>
+
+      <label style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: 'pointer' }}>
+        <input type="checkbox" checked={ack} onChange={e2 => setAck(e2.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: V.purple }} />
+        <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>Main samajh gaya/gayi hoon ki isse meri net in-hand salary kam hogi aur 80C exemption ₹1.5L tak seemit hai. Main ye VPF deduction request karta/karti hoon.</span>
+      </label>
+
+      <button disabled={!ack || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: ack ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: ack ? V.purple : '#F5F3FF', color: ack ? '#fff' : '#9B9BA8', cursor: ack ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>
+    </div>
+  )
+}
+
+// ── Corporate NPS enrolment (80CCD(2)) — % of Basic by regime ──
+function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', red:'#A32D2D', amber:'#854F0B', amberBg:'#FAEEDA', blue:'#185FA5', blueBg:'#E6F1FB', teal:'#0F6E56', bg:'#F5F3FF' }
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [hasPran, setHasPran] = useState(true)
+  const [pran, setPran] = useState('')
+  const [pranName, setPranName] = useState('')
+  const [tier, setTier] = useState('Tier I')
+  const [ack, setAck] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [submitPran, setSubmitPran] = useState('')
+  const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+  const load = useCallback(() => {
+    setLoading(true)
+    fetch(`/api/ess/nps?employee_id=${emp.id}`).then(r => r.json()).then(d => {
+      setData(d); if (d?.employee) setPranName(d.employee.name); setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [emp.id])
+  useEffect(() => { load() }, [load])
+
+  if (loading) return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading…</div>
+  const e = data?.employee
+  if (!e) return <div style={{ padding: 20, color: V.red, fontSize: 13 }}>Salary data not found.</div>
+  const current = data?.current_nps
+  const effFmt = new Date(e.effective_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+  const pranClean = pran.replace(/\D/g, '')
+  const pranValid = pranClean.length === e.pran_length
+  const canSubmit = ack && (!hasPran || pranValid)
+  const card: React.CSSProperties = { background: '#fff', border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const label: React.CSSProperties = { fontSize: 12, color: V.muted, display: 'block', marginBottom: 6 }
+  const input: React.CSSProperties = { width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${V.border}`, fontSize: 14, boxSizing: 'border-box', fontFamily: 'inherit' }
+
+  const submit = async () => {
+    setSaving(true)
+    const res = await fetch('/api/ess/nps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, has_existing_pran: hasPran, pran_number: hasPran ? pranClean : null, pran_holder_name: pranName, tier_type: tier, acknowledged: true }) })
+    const d = await res.json().catch(() => ({}))
+    setSaving(false)
+    if (res.ok) { notify(d.pending_pran ? 'PRAN form emailed — submit within 3 days' : 'NPS enrolment submitted ✓'); setAck(false); load() }
+    else notify('Failed: ' + (d.error || ''), 'error')
+  }
+  const doSubmitPran = async () => {
+    const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, action: 'SUBMIT_PRAN', pran_number: submitPran }) })
+    const d = await res.json().catch(() => ({}))
+    if (res.ok) { notify('PRAN submitted — NPS active ✓'); setSubmitPran(''); load() } else notify('Failed: ' + (d.error || ''), 'error')
+  }
+  const stop = async () => {
+    const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, action: 'STOP', stopped_reason: 'Employee requested' }) })
+    if (res.ok) { notify('NPS stopped'); load() } else notify('Failed to stop', 'error')
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Corporate NPS enrolment</div>
+        <div style={{ fontSize: 12.5, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I) — extra tax benefit under Section 80CCD(2).</div>
+      </div>
+
+      {!e.has_ctc && (
+        <div style={{ ...card, background: V.amberBg, border: '1px solid #EFD9A8' }}>
+          <span style={{ fontSize: 12, color: '#633806' }}>ⓘ Your CTC (Basic) isn't configured yet, so NPS shows ₹0. Ask HR to set your CTC (ctc_master).</span>
+        </div>
+      )}
+
+      {current && (
+        <div style={{ ...card, background: current.status === 'PENDING_PRAN' ? V.blueBg : '#EEF7F3', border: `1px solid ${current.status === 'PENDING_PRAN' ? '#B5D4F4' : '#C5E8DB'}` }}>
+          {current.status === 'PENDING_PRAN' ? (
+            <div>
+              <div style={{ fontSize: 12, color: V.blue, marginBottom: 8 }}>PRAN pending — generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '—'}.</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`} style={{ ...input, letterSpacing: 2 }} />
+                <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: V.purple, color: '#fff', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: V.teal }}>Active NPS: {current.contribution_percent}% of Basic ({inr(current.monthly_nps_amount)}/mo)</span>
+              <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: '#fff', color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop NPS</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{ ...card, background: '#FBFAFF' }}>
+        <div style={{ fontSize: 12, color: V.muted, marginBottom: 8 }}>Your contribution (from salary structure)</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          <div><div style={{ fontSize: 11, color: V.muted }}>Monthly Basic</div><div style={{ fontSize: 15, fontWeight: 500, color: V.navy }}>{inr(e.basic_monthly)}</div></div>
+          <div><div style={{ fontSize: 11, color: V.muted }}>Tax regime</div><div style={{ fontSize: 15, fontWeight: 500, color: V.navy }}>{e.tax_regime === 'OLD' ? 'Old' : 'New'}</div></div>
+          <div><div style={{ fontSize: 11, color: V.muted }}>NPS rate</div><div style={{ fontSize: 15, fontWeight: 500, color: V.purpleDark }}>{e.contribution_percent}%</div></div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${V.border}`, marginTop: 10, paddingTop: 8 }}>
+          <span style={{ fontSize: 12, color: V.muted }}>Monthly NPS contribution</span><span style={{ fontSize: 14, fontWeight: 500, color: V.purpleDark }}>{inr(e.monthly_nps_amount)}/mo</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4 }}>
+          <span style={{ fontSize: 12, color: V.muted }}>Effective from</span><span style={{ fontSize: 13, color: V.navy }}>{effFmt}</span>
+        </div>
+        <div style={{ fontSize: 11, color: '#9B9BA8', marginTop: 6 }}>Old regime = 10% of Basic · New regime = 14% of Basic</div>
+      </div>
+
+      <div style={{ marginBottom: 12 }}>
+        <div style={{ fontSize: 13, color: V.muted, marginBottom: 8 }}>Do you already have an NPS account (PRAN)?</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setHasPran(true)} style={{ flex: 1, padding: 10, borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: hasPran ? V.bg : '#fff', color: hasPran ? V.purpleDark : V.navy }}>Yes, I have a PRAN</button>
+          <button onClick={() => setHasPran(false)} style={{ flex: 1, padding: 10, borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: !hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: !hasPran ? V.bg : '#fff', color: !hasPran ? V.purpleDark : V.navy }}>No, I need one</button>
+        </div>
+      </div>
+
+      {hasPran ? (
+        <>
+          <div style={{ marginBottom: 12 }}>
+            <label style={label}>PRAN number ({e.pran_length} digits)</label>
+            <input type="text" value={pran} maxLength={e.pran_length} onChange={e2 => setPran(e2.target.value.replace(/\D/g, ''))} placeholder="e.g. 110012345678" style={{ ...input, letterSpacing: 2 }} />
+            <div style={{ fontSize: 11, marginTop: 4, color: pran.length === 0 ? V.muted : pranValid ? V.teal : V.amber }}>{pran.length === 0 ? `Enter your ${e.pran_length}-digit PRAN` : pranValid ? `Valid ${e.pran_length}-digit PRAN` : `${e.pran_length - pranClean.length} more digit(s) needed`}</div>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div><label style={label}>Name as per PRAN</label><input type="text" value={pranName} onChange={e2 => setPranName(e2.target.value)} style={input} /></div>
+            <div><label style={label}>Account tier</label><select value={tier} onChange={e2 => setTier(e2.target.value)} style={input}><option>Tier I</option><option>Tier II</option></select></div>
+          </div>
+        </>
+      ) : (
+        <div style={{ background: V.blueBg, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <span style={{ color: V.blue }}>✉</span>
+            <div style={{ fontSize: 12, color: '#0C447C', lineHeight: 1.7 }}><strong>A new PRAN will be created for you.</strong><br />On submit, we'll email you the PRAN creation form. Generate your PRAN <strong>within 3 days</strong>, then resubmit here. For help, contact the <strong>Payroll team</strong>.</div>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
+        <span style={{ color: V.amber }}>ⓘ</span>
+        <div style={{ fontSize: 12, color: '#633806', lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product — locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
+      </div>
+
+      <label style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: 'pointer' }}>
+        <input type="checkbox" checked={ack} onChange={e2 => setAck(e2.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: V.purple }} />
+        <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.</span>
+      </label>
+
+      <button disabled={!canSubmit || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: canSubmit ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: canSubmit ? V.purple : '#F5F3FF', color: canSubmit ? '#fff' : '#9B9BA8', cursor: canSubmit ? 'pointer' : 'not-allowed' }}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</button>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════
+// LOANS (ESS) — apply, track requests, sign agreement, manage loans
+// ════════════════════════════════════════════════════════════════
+const LOAN_V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', red:'#A32D2D', redBg:'#FCEBEB', amber:'#854F0B', amberBg:'#FAEEDA', teal:'#0F6E56', tealBg:'#EEF7F3', bg:'#F5F3FF' }
+const loanInr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+// reducing-balance EMI
+function loanEmi(P: number, ratePct: number, n: number): number {
+  if (!P || !n) return 0
+  if (!ratePct) return Math.round(P / n)
+  const r = ratePct / 12 / 100
+  const f = Math.pow(1 + r, n)
+  return Math.round(P * r * f / (f - 1))
+}
+function LoanStatusBadge({ status }: { status: string }) {
+  const s = (status || '').toUpperCase()
+  const map: Record<string, [string, string]> = {
+    SUBMITTED:['#FAEEDA','#854F0B'], IN_APPROVAL:['#FAEEDA','#854F0B'], REQUESTED:['#FAEEDA','#854F0B'], GENERATED:['#FAEEDA','#854F0B'], UNDER_REVIEW:['#E6F1FB','#185FA5'], PENDING_PRAN:['#E6F1FB','#185FA5'],
+    APPROVED:['#EEF7F3','#0F6E56'], RECOVERING:['#EEF7F3','#0F6E56'], DISBURSED:['#EEF7F3','#0F6E56'], SIGNED:['#EEF7F3','#0F6E56'],
+    REJECTED:['#FCEBEB','#A32D2D'], CANCELLED:['#FCEBEB','#A32D2D'], EXIT_RECOVERY:['#FCEBEB','#A32D2D'],
+    CLOSED:['#F1F5F9','#64748B'], FORECLOSED:['#F1F5F9','#64748B'],
+  }
+  const [bg, c] = map[s] || ['#F3F0FF','#6D28D9']
+  return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{s.replace(/_/g,' ')}</span>
+}
+
+// Inline agreement signing panel
+function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: { requestId: string; employeeId: string; notify: (m: string, t?: 'success'|'error') => void; onClose: () => void; onDone: () => void }) {
+  const V = LOAN_V
+  const [agr, setAgr] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [mode, setMode] = useState<'ESIGN'|'UPLOAD'>('ESIGN')
+  const [esignName, setEsignName] = useState('')
+  const [pdfUrl, setPdfUrl] = useState('')
+  const [saving, setSaving] = useState(false)
+  useEffect(() => {
+    setLoading(true)
+    fetch(`/api/ess/loans/agreement?request_id=${requestId}`).then(r => r.json()).then(d => {
+      setAgr(d?.agreement || null); setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [requestId])
+  const card: React.CSSProperties = { background:'#fff', border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
+  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:8, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
+
+  const submit = async () => {
+    if (!agr) return
+    if (mode === 'ESIGN' && !esignName.trim()) { notify('Type your full name to e-sign', 'error'); return }
+    if (mode === 'UPLOAD' && !pdfUrl.trim()) { notify('Paste the signed PDF URL', 'error'); return }
+    setSaving(true)
+    const body = mode === 'ESIGN'
+      ? { agreement_id: agr.id, employee_id: employeeId, signature_type: 'ESIGN', esign_name: esignName.trim(), esign_image_url: 'data:text/plain,' + encodeURIComponent(esignName.trim()) }
+      : { agreement_id: agr.id, employee_id: employeeId, signature_type: 'UPLOAD', signed_pdf_url: pdfUrl.trim() }
+    const res = await fetch('/api/ess/loans/agreement', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) })
+    const d = await res.json().catch(() => ({}))
+    setSaving(false)
+    if (res.ok) { notify('Agreement submitted for review'); onDone() }
+    else notify('Failed: ' + (d.error || ''), 'error')
+  }
+
+  if (loading) return <div style={{ ...card }}><div style={{ color:V.muted, fontSize:13 }}>Loading agreement…</div></div>
+  if (!agr) return (
+    <div style={card}>
+      <div style={{ fontSize:13, color:V.red, marginBottom:8 }}>No agreement found yet — please check back shortly.</div>
+      <button onClick={onClose} style={{ padding:'7px 13px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:12 }}>Close</button>
+    </div>
+  )
+  const schedule: any[] = Array.isArray(agr.schedule_snapshot) ? agr.schedule_snapshot : (typeof agr.schedule_snapshot === 'string' ? (() => { try { return JSON.parse(agr.schedule_snapshot) } catch { return [] } })() : [])
+  const th: React.CSSProperties = { fontSize:10, textAlign:'right', padding:'6px 8px', color:V.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }
+  const td: React.CSSProperties = { fontSize:11, textAlign:'right', padding:'6px 8px', color:V.navy, whiteSpace:'nowrap' }
+  return (
+    <div style={{ ...card, borderColor:V.purple }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy }}>Sign agreement — {agr.agreement_number}</div>
+        <div style={{ display:'flex', gap:8 }}>
+          <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, textDecoration:'none', fontSize:11 }}>📄 View / print</a>
+          <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
+        </div>
+      </div>
+      <div style={{ overflowX:'auto', border:`1px solid ${V.border}`, borderRadius:8, marginBottom:14 }}>
+        <table style={{ borderCollapse:'collapse', width:'100%', minWidth:520 }}>
+          <thead><tr style={{ background:'#FBFAFF' }}>
+            <th style={{ ...th, textAlign:'left' }}>#</th><th style={th}>Due</th><th style={th}>EMI</th><th style={th}>Principal</th><th style={th}>Interest</th><th style={th}>Closing</th>
+          </tr></thead>
+          <tbody>
+            {schedule.map((s, i) => (
+              <tr key={i} style={{ borderTop:`1px solid ${V.border}` }}>
+                <td style={{ ...td, textAlign:'left' }}>{s.installment_number}</td>
+                <td style={td}>{s.due_date || s.month || '—'}</td>
+                <td style={td}>{loanInr(s.emi_amount)}</td>
+                <td style={td}>{loanInr(s.principal_component)}</td>
+                <td style={td}>{loanInr(s.interest_component)}</td>
+                <td style={td}>{loanInr(s.closing_balance)}</td>
+              </tr>
+            ))}
+            {schedule.length === 0 && <tr><td colSpan={6} style={{ ...td, textAlign:'center', color:V.muted }}>No schedule rows.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+        <button onClick={() => setMode('ESIGN')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='ESIGN' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='ESIGN' ? V.bg : '#fff', color: mode==='ESIGN' ? V.purpleDark : V.navy }}>✍️ E-sign</button>
+        <button onClick={() => setMode('UPLOAD')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='UPLOAD' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='UPLOAD' ? V.bg : '#fff', color: mode==='UPLOAD' ? V.purpleDark : V.navy }}>📎 Upload signed PDF</button>
+      </div>
+      {mode === 'ESIGN' ? (
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:12, color:V.muted, display:'block', marginBottom:6 }}>Type your full legal name to sign</label>
+          <input value={esignName} onChange={e => setEsignName(e.target.value)} placeholder="e.g. Rahul Sharma" style={input} />
+          {esignName.trim() && <div style={{ marginTop:8, padding:'10px 14px', border:`1px dashed ${V.purple}`, borderRadius:8, fontFamily:'"Segoe Script","Brush Script MT",cursive', fontSize:22, color:V.purpleDark }}>{esignName}</div>}
+        </div>
+      ) : (
+        <div style={{ marginBottom:12 }}>
+          <label style={{ fontSize:12, color:V.muted, display:'block', marginBottom:6 }}>URL of your signed agreement PDF</label>
+          <input value={pdfUrl} onChange={e => setPdfUrl(e.target.value)} placeholder="https://…/signed-agreement.pdf" style={input} />
+        </div>
+      )}
+      <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:'#fff', cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit signed agreement'}</button>
+    </div>
+  )
+}
+
+function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = LOAN_V
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [typeId, setTypeId] = useState('')
+  const [amount, setAmount] = useState('')
+  const [tenure, setTenure] = useState('')
+  const [reason, setReason] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [signingReq, setSigningReq] = useState<string | null>(null)
+  const load = useCallback(() => {
+    setLoading(true)
+    fetch(`/api/ess/loans?employee_id=${emp.id}`).then(r => r.json()).then(d => {
+      setData(d)
+      if (d?.loan_types?.length && !typeId) setTypeId(d.loan_types[0].id)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [emp.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [load])
+
+  const card: React.CSSProperties = { background:'#fff', border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
+  const label: React.CSSProperties = { fontSize:12, color:V.muted, display:'block', marginBottom:6 }
+  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:8, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
+
+  if (loading) return <div style={{ padding:20, color:V.muted, fontSize:13 }}>Loading…</div>
+
+  const loanTypes: any[] = data?.loan_types || []
+  const myLoans: any[] = data?.my_loans || []
+  const pending: any[] = data?.pending_requests || []
+  const hasCtc = data?.has_ctc
+  const sel = loanTypes.find((t: any) => t.id === typeId)
+  const amtNum = parseFloat(amount) || 0
+  const tenNum = parseInt(tenure) || 0
+  const rate = sel ? Number(sel.interest_rate) || 0 : 0
+  const indicativeEmi = loanEmi(amtNum, rate, tenNum)
+
+  const submit = async () => {
+    if (!sel) { notify('Select a loan type', 'error'); return }
+    if (amtNum <= 0) { notify('Enter an amount', 'error'); return }
+    if (tenNum <= 0) { notify('Enter tenure in months', 'error'); return }
+    setSaving(true)
+    const res = await fetch('/api/ess/loans', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ employee_id: emp.id, loan_type_id: typeId, requested_amount: amtNum, requested_tenure_months: tenNum, reason }) })
+    const d = await res.json().catch(() => ({}))
+    setSaving(false)
+    if (res.ok && d.success) { notify('Loan request submitted ✓'); setAmount(''); setTenure(''); setReason(''); load() }
+    else notify(d.error || 'Failed to submit', 'error')
+  }
+
+  const manage = async (loan: any, request_type: 'CLOSURE'|'PART_PAYMENT') => {
+    let amt: number | undefined
+    if (request_type === 'PART_PAYMENT') {
+      const raw = window.prompt('Part-payment amount (₹):', String(Math.round(loan.outstanding_principal || 0)))
+      if (raw == null) return
+      amt = parseFloat(raw) || 0
+      if (amt <= 0) { notify('Enter a valid amount', 'error'); return }
+    } else {
+      if (!window.confirm(`Foreclose ${loan.loan_number}? Outstanding ${loanInr(loan.outstanding_principal)} will be recovered.`)) return
+    }
+    const res = await fetch('/api/ess/loans', { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ loan_id: loan.id, employee_id: emp.id, request_type, amount: amt }) })
+    const d = await res.json().catch(() => ({}))
+    if (res.ok && d.success) { notify(request_type === 'CLOSURE' ? 'Foreclosure request submitted' : 'Part-payment request submitted'); load() }
+    else notify(d.error || 'Failed', 'error')
+  }
+
+  const row: React.CSSProperties = { display:'flex', justifyContent:'space-between', gap:10, padding:'8px 0', borderBottom:`1px solid ${V.border}`, fontSize:12.5, alignItems:'center', flexWrap:'wrap' }
+
+  return (
+    <div>
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:18, fontWeight:600, color:V.navy }}>Loans</div>
+        <div style={{ fontSize:12.5, color:V.muted, marginTop:2 }}>Apply for a company loan, track approvals, sign your agreement, and manage repayments.</div>
+      </div>
+
+      {!hasCtc && (
+        <div style={{ ...card, background:V.amberBg, border:'1px solid #EFD9A8' }}>
+          <span style={{ fontSize:12, color:'#633806' }}>ⓘ CTC not configured — eligibility shows ₹0; ask HR to set CTC.</span>
+        </div>
+      )}
+
+      {/* Apply for a loan */}
+      <div style={card}>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy, marginBottom:12 }}>Apply for a loan</div>
+        {loanTypes.length === 0 ? <div style={{ fontSize:12, color:V.muted }}>No loan types configured for your company.</div> : (
+          <>
+            <div style={{ marginBottom:12 }}>
+              <label style={label}>Loan type</label>
+              <select value={typeId} onChange={e => setTypeId(e.target.value)} style={input}>
+                {loanTypes.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+              {sel && <div style={{ fontSize:11, color:V.purpleDark, marginTop:6 }}>Max eligible {loanInr(sel.max_eligible)} · {Number(sel.interest_rate) || 0}% {sel.interest_type ? `(${sel.interest_type})` : ''} · tenure {sel.min_tenure_months}–{sel.max_tenure_months} months</div>}
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
+              <div>
+                <label style={label}>Amount (₹)</label>
+                <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="e.g. 100000" style={input} />
+                {sel && amtNum > Number(sel.max_eligible) && <div style={{ fontSize:11, color:V.red, marginTop:4 }}>Max eligible is {loanInr(sel.max_eligible)}</div>}
+              </div>
+              <div>
+                <label style={label}>Tenure (months)</label>
+                <input type="number" value={tenure} onChange={e => setTenure(e.target.value)} placeholder={sel ? `${sel.min_tenure_months}–${sel.max_tenure_months}` : 'months'} style={input} />
+                {sel && tenNum > 0 && (tenNum < sel.min_tenure_months || tenNum > sel.max_tenure_months) && <div style={{ fontSize:11, color:V.red, marginTop:4 }}>Tenure must be {sel.min_tenure_months}–{sel.max_tenure_months} months</div>}
+              </div>
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <label style={label}>Reason</label>
+              <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Purpose of the loan…" style={{ ...input, minHeight:70, resize:'vertical' }} />
+            </div>
+            <div style={{ ...card, background:'#FBFAFF', marginBottom:12 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <span style={{ fontSize:12, color:V.muted }}>Indicative EMI (reducing balance)</span>
+                <span style={{ fontSize:18, fontWeight:600, color:V.purpleDark }}>{loanInr(indicativeEmi)}<span style={{ fontSize:11, color:V.muted, fontWeight:400 }}>/mo</span></span>
+              </div>
+            </div>
+            <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:'#fff', cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
+          </>
+        )}
+      </div>
+
+      {/* Inline agreement signing */}
+      {signingReq && <LoanAgreementPanel requestId={signingReq} employeeId={emp.id} notify={notify} onClose={() => setSigningReq(null)} onDone={() => { setSigningReq(null); load() }} />}
+
+      {/* Pending requests */}
+      <div style={card}>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy, marginBottom:10 }}>Pending requests</div>
+        {pending.length === 0 ? <div style={{ fontSize:12, color:V.muted }}>No pending requests.</div> : pending.map((p: any) => {
+          const t = loanTypes.find((x: any) => x.id === p.loan_type_id)
+          return (
+            <div key={p.id} style={row}>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:V.navy }}>{t?.name || 'Loan'} · {loanInr(p.requested_amount)}</div>
+                <div style={{ fontSize:11, color:V.muted, marginTop:2 }}>EMI {loanInr(p.indicative_emi)} · {p.requested_tenure_months} mo · approval level {p.current_approval_level ?? '—'}</div>
+              </div>
+              <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <LoanStatusBadge status={p.status} />
+                {(p.status || '').toUpperCase() === 'APPROVED' && <button onClick={() => setSigningReq(p.id)} style={{ padding:'6px 12px', borderRadius:7, border:'none', background:V.purple, color:'#fff', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Sign agreement</button>}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* My loans */}
+      <div style={card}>
+        <div style={{ fontSize:14, fontWeight:600, color:V.navy, marginBottom:10 }}>My loans</div>
+        {myLoans.length === 0 ? <div style={{ fontSize:12, color:V.muted }}>No active loans.</div> : myLoans.map((l: any) => {
+          const isRecovering = (l.status || '').toUpperCase() === 'RECOVERING'
+          return (
+            <div key={l.id} style={{ padding:'10px 0', borderBottom:`1px solid ${V.border}` }}>
+              <div style={{ display:'flex', justifyContent:'space-between', gap:10, alignItems:'center', flexWrap:'wrap' }}>
+                <div style={{ fontSize:13, fontWeight:600, color:V.navy }}>{l.loan_number}</div>
+                <LoanStatusBadge status={l.status} />
+              </div>
+              <div style={{ fontSize:11.5, color:V.muted, marginTop:4, lineHeight:1.7 }}>
+                Principal {loanInr(l.principal)} · EMI {loanInr(l.emi_amount)}/mo · Outstanding <b style={{ color:V.navy }}>{loanInr(l.outstanding_principal)}</b><br />
+                Paid {l.paid_installments ?? 0} / {(l.paid_installments ?? 0) + (l.remaining_installments ?? 0)} installments · {l.remaining_installments ?? 0} remaining
+                {l.disbursement_date ? ` · disbursed ${fmt(l.disbursement_date)}` : ''}
+              </div>
+              {isRecovering && (
+                <div style={{ display:'flex', gap:8, marginTop:8 }}>
+                  <button onClick={() => manage(l, 'CLOSURE')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.red}`, background:'#fff', color:V.red, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Foreclose</button>
+                  <button onClick={() => manage(l, 'PART_PAYMENT')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.purple}`, background:'#fff', color:V.purpleDark, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Part-payment</button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // Placeholder for Phase 3/4 modules
 function Placeholder({ title, phase, needs }: { title: string; phase: number; needs: string }) {
   return (
@@ -890,17 +1555,136 @@ function Placeholder({ title, phase, needs }: { title: string; phase: number; ne
   )
 }
 
+// ── Flexi Benefit Plan (FBP) — the employee's company policy for their salary slab ──
+function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', purpleBg:'#F5F3FF' }
+  const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+  const num = (v: any) => (v == null || v === '' ? 0 : Number(v) || 0)
+  const [status, setStatus] = useState<'loading' | 'ready' | 'nopolicy'>('loading')
+  const [slab, setSlab] = useState<any>(null)
+  const [rows, setRows] = useState<any[]>([])
+  const [annualFixed, setAnnualFixed] = useState(0)
+  const [regime, setRegime] = useState<'old' | 'new'>('old')
+  const [companyName, setCompanyName] = useState('')
+
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      setStatus('loading')
+      const { data: e } = await supabase.from('employees').select('company_id, tds_regime, companies(company_name)').eq('id', emp.id).maybeSingle()
+      const companyId = (e as any)?.company_id
+      if ((e as any)?.companies?.company_name) setCompanyName((e as any).companies.company_name)
+      if ((e as any)?.tds_regime) setRegime(String((e as any).tds_regime).toLowerCase().includes('new') ? 'new' : 'old')
+      if (!companyId) { if (live) setStatus('nopolicy'); return }
+
+      // Annual fixed = CTC − variable (from salary_structures, else ctc_master).
+      let fixed = 0
+      const { data: ss } = await supabase.from('salary_structures').select('gross_monthly, employer_pf, employer_esic, gratuity_monthly').eq('employee_id', emp.id).order('effective_date', { ascending: false }).limit(1)
+      if (ss?.[0]) {
+        const s = ss[0]
+        fixed = (num(s.gross_monthly) + num(s.employer_pf) + num(s.employer_esic) + num(s.gratuity_monthly)) * 12
+      } else {
+        const { data: cm } = await supabase.from('ctc_master').select('annual_ctc, annual_variable').eq('employee_id', emp.id).order('effective_from', { ascending: false }).limit(1)
+        if (cm?.[0]) fixed = num(cm[0].annual_ctc) - num(cm[0].annual_variable)
+      }
+      if (live) setAnnualFixed(fixed)
+
+      const { data: slabs } = await supabase.from('flexi_policy_slabs').select('*').eq('company_id', companyId).eq('is_active', true).order('sort_order')
+      if (!slabs?.length) { if (live) setStatus('nopolicy'); return }
+      const found = slabs.find((sl: any) => fixed >= num(sl.fixed_from) && fixed <= num(sl.fixed_to)) || slabs[slabs.length - 1]
+
+      const [{ data: limits }, { data: comps }] = await Promise.all([
+        supabase.from('flexi_slab_limits').select('*').eq('slab_id', found.id).eq('is_active', true),
+        supabase.from('flexi_components').select('*'),
+      ])
+      const byId: Record<string, any> = {}
+      ;(comps || []).forEach((c: any) => { byId[c.id] = c })
+      const merged = (limits || []).map((l: any) => ({ ...l, comp: byId[l.component_id] })).filter((x: any) => x.comp)
+        .sort((a: any, b: any) => (a.comp.sort_order || 0) - (b.comp.sort_order || 0))
+      if (live) { setSlab(found); setRows(merged); setStatus(merged.length ? 'ready' : 'nopolicy') }
+    })()
+    return () => { live = false }
+  }, [emp.id])
+
+  const card: React.CSSProperties = { background: '#fff', border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+
+  if (status === 'loading') return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading flexi policy…</div>
+  if (status === 'nopolicy') return (
+    <div style={card}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>🎛️ Flexi Benefit Plan</div>
+      <div style={{ fontSize: 12.5, color: V.muted }}>No flexi (FBP) policy is configured for {companyName || 'your company'}{annualFixed ? ` at your salary band (${inr(annualFixed)} annual fixed)` : ''} yet. Please check with HR / Payroll.</div>
+    </div>
+  )
+
+  const amt = (r: any) => {
+    const max = regime === 'old' ? r.old_regime_max : r.new_regime_max
+    const avail = regime === 'old' ? r.comp.old_available : r.comp.new_available
+    if (max == null || avail === false) return { text: '—', muted: true }
+    if (r.is_formula || max === -1) return { text: '8.33% of Basic', muted: false }
+    return { text: inr(num(max)) + '/yr', muted: false }
+  }
+  const totalDeclarable = rows.reduce((s, r) => {
+    const max = regime === 'old' ? r.old_regime_max : r.new_regime_max
+    return (max == null || max === -1) ? s : s + num(max)
+  }, 0)
+
+  return (
+    <div>
+      <div style={{ ...card, background: V.purpleBg, borderColor: '#DDD6FE' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>🎛️ Flexi Benefit Plan (FBP)</div>
+          <span style={{ fontSize: 11, background: '#EEEDFE', color: V.purpleDark, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>{companyName}</span>
+        </div>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 10, fontSize: 12 }}>
+          <div><span style={{ color: V.muted }}>Your annual fixed</span><div style={{ fontWeight: 700, fontSize: 15 }}>{inr(annualFixed)}</div></div>
+          <div><span style={{ color: V.muted }}>Applicable slab</span><div style={{ fontWeight: 700, fontSize: 15 }}>{slab?.slab_label || `${inr(num(slab?.fixed_from))} – ${inr(num(slab?.fixed_to))}`}</div></div>
+          <div><span style={{ color: V.muted }}>Max declarable ({regime})</span><div style={{ fontWeight: 700, fontSize: 15, color: V.purple }}>{inr(totalDeclarable)}/yr</div></div>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        {(['old', 'new'] as const).map(rg => (
+          <button key={rg} onClick={() => setRegime(rg)} style={{ padding: '7px 16px', borderRadius: 99, border: `1px solid ${regime === rg ? V.purple : V.border}`, background: regime === rg ? V.purple : '#fff', color: regime === rg ? '#fff' : V.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{rg === 'old' ? 'Old Regime' : 'New Regime'}</button>
+        ))}
+      </div>
+
+      <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '10px 14px', background: V.navy, color: '#fff', fontSize: 11, fontWeight: 700 }}>
+          <span>COMPONENT</span><span style={{ textAlign: 'right' }}>{regime === 'old' ? 'OLD REGIME' : 'NEW REGIME'}</span><span style={{ textAlign: 'right' }}>PERQUISITE / EXTRA</span>
+        </div>
+        {rows.map((r, i) => {
+          const a = amt(r)
+          const perq = num(r.perquisite_monthly) > 0 ? `${inr(num(r.perquisite_monthly))}/mo perq` : (r.comp.is_children_linked && r.children_count ? `${r.children_count} child` : '—')
+          return (
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '9px 14px', borderBottom: `1px solid ${V.border}`, fontSize: 12.5, background: a.muted ? '#FAFAFE' : '#fff' }}>
+              <span style={{ color: V.navy }}>{r.comp.name}</span>
+              <span style={{ textAlign: 'right', fontWeight: 600, color: a.muted ? V.muted : V.navy }}>{a.text}</span>
+              <span style={{ textAlign: 'right', color: V.muted }}>{perq}</span>
+            </div>
+          )
+        })}
+      </div>
+      <div style={{ fontSize: 10.5, color: V.muted, padding: '0 4px' }}>FBP entitlements for your company &amp; salary band. Declaration &amp; bill submission open during the flexi window — raise via HR / Payroll.</div>
+    </div>
+  )
+}
+
 // ════════════════════════════════════════════════════════════════
 // SHELL
 // ════════════════════════════════════════════════════════════════
 const MODULES = [
   { k:'home',          label:'Home',         icon:'🏠', phase:2 },
   { k:'payroll',       label:'Payroll',      icon:'💰', phase:3, needs:'Payroll' },
+  { k:'vpf',           label:'Voluntary PF', icon:'🏦', phase:3, needs:'Payroll' },
+  { k:'nps',           label:'Corporate NPS',icon:'🏛️', phase:3, needs:'Payroll' },
+  { k:'loans',         label:'Loans',        icon:'💸', phase:3, needs:'Payroll' },
+  { k:'flexi',         label:'Flexi Benefits',icon:'🎛️', phase:3, needs:'Payroll' },
+  { k:'flexiclaims',   label:'Flexi Claims', icon:'💳', phase:3, needs:'Payroll' },
   { k:'attendance',    label:'Attendance',   icon:'🗓️', phase:3, needs:'Attendance' },
   { k:'leave',         label:'Leave',        icon:'🌴', phase:3, needs:'Leave' },
   { k:'profile',       label:'Profile',      icon:'👤', phase:2 },
   { k:'documents',     label:'Documents',    icon:'📄', phase:2 },
-  { k:'claims',        label:'Claims',       icon:'🧾', phase:3, needs:'Claims/Payroll' },
+  { k:'claims',        label:'Travel Claims', icon:'🧾', phase:3, needs:'Claims/Payroll' },
   { k:'pms',           label:'Performance',  icon:'📈', phase:4, needs:'Performance' },
   { k:'statutory',     label:'Statutory',    icon:'🏛️', phase:3, needs:'Payroll' },
   { k:'requests',      label:'Requests',     icon:'✉️', phase:2 },
@@ -936,6 +1720,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
       case 'profile':       return <Profile emp={emp} notify={notify} />
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
+      case 'vpf':           return <VpfSection emp={emp} notify={notify} />
+      case 'nps':           return <NpsSection emp={emp} notify={notify} />
+      case 'loans':         return <LoansSection emp={emp} notify={notify} />
+      case 'flexi':         return <FlexiTdsCalculator employeeId={emp.id} empName={emp.full_name} empCode={emp.emp_code} />
+      case 'flexiclaims':   return <FlexiClaims employeeId={emp.id} />
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'requests':      return <Requests emp={emp} notify={notify} />
@@ -964,10 +1753,18 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
       <div style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 70 : 0 }}>
         {/* Top bar */}
-        <div style={{ background:'#fff', borderBottom:'1px solid #EDE9FE', padding: isMobile ? '12px 14px' : '12px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:5 }}>
+        <div style={{ background:'#fff', borderBottom:'1px solid #EDE9FE', padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:5 }}>
           <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600 }}>{MODULES.find(m => m.k === view)?.label}</div>
           {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'#FEF3C7', color:'#92400E', fontWeight:600 }}>Admin viewing {emp.first_name || emp.full_name}</span>}
-          {onExit && <button onClick={onExit} style={{ marginLeft:'auto', ...T.btnO }}>{adminMode ? 'Exit Admin Mode' : 'Close'}</button>}
+          {/* Employee identity — always visible at the top */}
+          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9 }}>
+            <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
+            <div style={{ lineHeight:1.2, textAlign:'right' }}>
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:700, whiteSpace:'nowrap', maxWidth: isMobile ? 130 : 220, overflow:'hidden', textOverflow:'ellipsis' }}>{emp.full_name}</div>
+              <div style={{ fontSize:11, color:'#6B7280', fontFamily:'monospace' }}>{emp.emp_code}</div>
+            </div>
+          </div>
+          {onExit && <button onClick={onExit} style={{ ...T.btnO }}>{adminMode ? 'Exit Admin Mode' : 'Close'}</button>}
         </div>
 
         <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>{renderView()}</div>

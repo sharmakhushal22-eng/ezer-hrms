@@ -304,7 +304,7 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
       <div>
         {!sel ? <div style={C.card}><span style={{ fontSize:12, color:'#9CA3AF' }}>Ek role chuno — phir company, location/branch &amp; department se employee filter karke assign karo.</span></div> : (
           <>
-            <div style={C.card}>
+            <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:8 }}>
                 <span style={{ fontSize:14, fontWeight:600 }}>{sel.role_name}</span>
                 <Pill text={sel.role_code} bg="#EDE9FE" color="#7C3AED" />

@@ -3,6 +3,7 @@
 // Acknowledgement document (auto-filled details + acknowledged policies, with text)
 // via the existing Gmail / nodemailer setup. Non-fatal — never blocks code gen.
 import nodemailer from 'nodemailer'
+import { resolveLetterhead, letterheadHeaderHtml, letterheadFooterHtml } from '@/lib/letterheads'
 
 const esc = (s: any) => String(s ?? '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c] as string))
 
@@ -19,13 +20,12 @@ function buildAckHtml(d: {
       <div style="font-weight:700;font-size:14px;color:#111">${esc(a.policy_title)} <span style="color:#999;font-weight:400;font-size:11px">${esc(a.policy_code)} · v${esc(a.policy_version)}</span> <span style="color:#059669;font-size:11px">✓ Acknowledged</span></div>
       <div style="white-space:pre-wrap;font-size:12px;color:#374151;line-height:1.7;margin-top:8px">${esc(Object.entries(d.bodies).find(([id]) => d.ackById[id]?.policy_code === a.policy_code)?.[1] || '')}</div>
     </div>`).join('')
+  const lh = resolveLetterhead(d.company_name)
   return `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;background:#F5F3FF;margin:0;padding:24px">
-    <div style="max-width:640px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #E5E5E5">
-      <div style="background:#1E1B4B;color:#fff;padding:18px 22px">
-        <div style="font-size:18px;font-weight:700">Employee Policy Handbook</div>
-        <div style="font-size:12px;opacity:.7;margin-top:2px">Acknowledgement &amp; Declaration · ${esc(d.company_name)}</div>
-      </div>
+    <div style="max-width:660px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;border:1px solid #E5E5E5">
+      ${letterheadHeaderHtml(lh)}
       <div style="padding:20px 22px">
+        <div style="font-size:16px;font-weight:700;color:${lh.accent};margin-bottom:4px">Employee Policy Handbook — Acknowledgement &amp; Declaration</div>
         <p style="font-size:13px;color:#374151">Dear ${esc(d.employee_name)},</p>
         <p style="font-size:13px;color:#374151;line-height:1.6">Welcome aboard! Your joining is confirmed and your Employee ID is <b>${esc(d.employee_code)}</b>. Below is your acknowledgement document with the policies you accepted during onboarding.</p>
         <table style="width:100%;border-collapse:collapse;margin:14px 0">
@@ -45,6 +45,7 @@ function buildAckHtml(d: {
           I hereby acknowledge that I have received, read, and understood all the above policies, and confirm the details shown are correct.
         </div>
       </div>
+      ${letterheadFooterHtml(lh)}
     </div>
   </body></html>`
 }

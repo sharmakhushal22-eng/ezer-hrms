@@ -1,10 +1,10 @@
 // lib/onboarding/to-employee.ts
 // Bridge: turn a completed onboarding candidate into a master `employees` row.
-// Reads from onboarding_candidates (form_data jsonb + meta), maps to the REAL,
-// verified employees columns only, with the field renames/splits/FK-lookup the
-// two schemas need. Idempotent (skips if emp_code already exists). Non-destructive:
-// fields that don't exist on `employees` (father_name, addresses, emergency,
-// encryption) are intentionally skipped — see the sync doc.
+// Reads from onboarding_candidates (form_data jsonb + meta), maps to the REAL
+// employees columns, with the field renames/splits/FK-lookup the two schemas need.
+// Idempotent (skips if emp_code already exists). Maps parents, spouse, permanent +
+// residential addresses, emergency contacts and Aadhaar last-4 (these columns exist
+// on employees and were previously — incorrectly — skipped).
 //
 // Pass a Supabase client (the API route passes its service-role/anon client).
 
@@ -30,9 +30,31 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   }
 
   const f = oc.form_data || {}
+  // Inter-company transfer: carry the group DOJ forward from the 1st company (seniority/gratuity).
+  const isTransfer = f.is_transfer === true
+  const groupDoj = (isTransfer && f.group_doj_carry) ? f.group_doj_carry : (oc.date_of_joining || null)
   const p = f.step_3 || {}   // personal
   const ct = f.step_4 || {}  // contact
+  const em = f.step_5 || {}  // emergency + prev employment
   const st = f.step_7 || {}  // statutory + bank
+  const insr = st.insurance || {}
+
+  const orNull = (v: any) => (v === '' || v === undefined || v === null) ? null : v
+  const pin = (v: any) => { const d = String(v ?? '').replace(/\D/g, ''); return d || null }
+  // Previous company = most recent prior employer (latest to_date, else first listed).
+  const prevCompany = (() => {
+    const emps = (em.prev_employers || []).filter((p: any) => p && p.company)
+    if (!emps.length) return em.prev_company || null
+    const sorted = [...emps].sort((a: any, b: any) => String(b.to || '').localeCompare(String(a.to || '')))
+    return sorted[0].company || null
+  })()
+  const join = (...xs: any[]) => { const s = xs.filter(Boolean).join(', ').trim(); return s || null }
+  // Residential = current address; if "same as permanent" was ticked, mirror the permanent block.
+  const sameAddr = ct.same_address === true
+  const resLine1 = sameAddr ? ct.perm_line1 : ct.curr_line1
+  const resCity = sameAddr ? ct.perm_city : ct.curr_city
+  const resState = sameAddr ? ct.perm_state : ct.curr_state
+  const resPin = sameAddr ? ct.perm_pin : ct.curr_pin
 
   const fullName = p.full_name || oc.full_name || ''
   const parts = fullName.trim().split(/\s+/)
@@ -66,16 +88,45 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     date_of_birth:   p.dob || null,
     blood_group:     p.blood_group || null,
     marital_status:  p.marital_status || null,
+    // parents / spouse / demographics (columns exist on employees — previously skipped)
+    father_name:     orNull(p.father_name),
+    mother_name:     orNull(p.mother_name),
+    nationality:     orNull(p.nationality) || 'Indian',
+    religion:        orNull(p.religion),
+    spouse_name:     orNull(insr.spouse_name),
+    spouse_dob:      orNull(insr.spouse_dob),
+    aadhar_last4:    orNull(st.aadhaar_last4 || f.aadhaar_last4),
     // employment (doj→company_doj + group_doj)
     designation:     oc.designation || null,
     employment_type: oc.employment_type || 'Employee',
     employment_status:   'Active',
     confirmation_status: 'Probation',
     company_doj:     oc.date_of_joining || null,
-    group_doj:       oc.date_of_joining || null,
+    group_doj:       groupDoj,
     // contact
     mobile:          ct.mobile || oc.mobile || null,
+    alternate_mobile: orNull(ct.alt_mobile),
     personal_email:  ct.personal_email || oc.email || null,
+    // permanent address
+    perm_address1:   orNull(ct.perm_line1),
+    perm_address2:   join(ct.perm_village, ct.perm_po, ct.perm_thana, ct.perm_sub_division, ct.perm_district),
+    perm_city:       orNull(ct.perm_city),
+    perm_state:      orNull(ct.perm_state),
+    perm_pin:        pin(ct.perm_pin),
+    perm_country:    orNull(p.country) || 'India',
+    // residential / current address (mirrors permanent if "same" ticked)
+    res_address1:    orNull(resLine1),
+    res_city:        orNull(resCity),
+    res_state:       orNull(resState),
+    res_pin:         pin(resPin),
+    res_country:     'India',
+    // emergency contacts (from step 5)
+    emergency_name:      orNull(em.emrg1_name),
+    emergency_relation:  orNull(em.emrg1_relation),
+    emergency_mobile:    orNull(em.emrg1_mobile),
+    emergency2_name:     orNull(em.emrg2_name),
+    emergency2_relation: orNull(em.emrg2_relation),
+    emergency2_mobile:   orNull(em.emrg2_mobile),
     // statutory / bank (bank_ifsc→ifsc_code; bank_account→last4 only, no plaintext)
     pan_number:      st.pan_number || null,
     uan_number:      st.uan_number || null,
@@ -96,6 +147,7 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
     induction_date:         oc.induction_date || null,
     team_name:              oc.team_name || null,
     work_location_type:     oc.work_location_type || 'Office',
+    previous_company:       prevCompany,
   }
 
   const { data: ins, error } = await supa.from('employees').insert(row).select('id').single()
@@ -142,6 +194,16 @@ export async function onboardingToEmployee(supa: any, onboardingId: string, empl
   // Link onboarding ↔ employee so the employee drawer's Onboarding/Salary/Documents
   // tabs (which query by employee_id) populate.
   await supa.from('onboarding_candidates').update({ employee_id: empId }).eq('id', onboardingId)
+
+  // Inter-company transfer: complete the transfer record + link the new employee row.
+  if (isTransfer) {
+    try {
+      await supa.from('employee_transfer').update({
+        new_employee_id: empId, to_emp_code: employeeCode,
+        status: 'COMPLETED', completed_at: new Date().toISOString(),
+      }).eq('onboarding_id', onboardingId)
+    } catch { /* non-fatal */ }
+  }
 
   return { ok: true, employee_id: empId, dept_matched: deptMatched }
 }

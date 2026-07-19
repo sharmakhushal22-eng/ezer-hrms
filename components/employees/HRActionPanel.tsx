@@ -151,6 +151,157 @@ function AbscondForm({ onSave }: { onSave: (d: string) => void }) {
   )
 }
 
+function TransferForm({ employee, companies, branches, managers, shifts, departments, onIntra, onInter }: {
+  employee: any; companies: any[]; branches: any[]; managers: any[]; shifts: any[]; departments: any[];
+  onIntra: (p: any) => void; onInter: (p: any) => void
+}) {
+  const [mode, setMode] = useState<'INTRA' | 'INTER'>('INTRA')
+  // INTRA state
+  const [toBranch, setToBranch] = useState('')
+  const [effDate, setEffDate] = useState(todayISO())
+  const [mgr, setMgr] = useState('')
+  const [desig, setDesig] = useState('')
+  const [dept, setDept] = useState('')
+  const [cc, setCc] = useState('')
+  const [shift, setShift] = useState('')
+  const [benefit, setBenefit] = useState<'NONE' | 'RELOCATION' | 'ONE_TIME_BONUS'>('NONE')
+  const [benefitAmt, setBenefitAmt] = useState('')
+  // INTER state
+  const [toCompany, setToCompany] = useState('')
+  const [iBranch, setIBranch] = useState('')
+  const [iDept, setIDept] = useState('')
+  const [iDesig, setIDesig] = useState('')
+  const [transferDate, setTransferDate] = useState(todayISO())
+  const [benefitMode, setBenefitMode] = useState<'REMAIN_SAME' | 'AS_PER_NEW_POLICY'>('REMAIN_SAME')
+
+  const compBranches = branches.filter(b => b.company_id === employee?.company_id)
+  const compShifts = shifts.filter(s => s.company_id === employee?.company_id)
+  const compDepts = departments.filter(d => d.company_id === employee?.company_id)
+  const otherCompanies = companies.filter(c => c.id !== employee?.company_id)
+  const interBranches = branches.filter(b => b.company_id === toCompany)
+  const interDepts = departments.filter(d => d.company_id === toCompany)
+
+  // Mid-month warning (INTRA)
+  const isMid = effDate ? new Date(effDate).getDate() !== 1 : false
+  const fromBranch = branches.find(b => b.id === employee?.location_id)
+  const tb = branches.find(b => b.id === toBranch)
+  const midWarn = (() => {
+    if (!isMid || !toBranch) return null
+    if (tb && fromBranch && tb.state !== fromBranch.state)
+      return `Effective date is mid-month. For this month, statutory (PT/LWF/PF) will be per the PREVIOUS state (${fromBranch.state}). New state (${tb.state}) applies next month.`
+    return `Effective mid-month; statutory stays ${fromBranch?.state || tb?.state || '—'} this month.`
+  })()
+
+  const lastDay = transferDate ? addDays(transferDate, -1) : ''
+
+  const pill = (active: boolean): React.CSSProperties => ({
+    padding: '7px 16px', borderRadius: 99, border: `1px solid ${active ? '#7C3AED' : '#E2E8F0'}`,
+    background: active ? '#7C3AED' : '#fff', color: active ? '#fff' : '#64748B',
+    fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+  })
+
+  return (
+    <div style={C.card}>
+      <div style={C.sec}>🔄 Transfer Employee</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <button style={pill(mode === 'INTRA')} onClick={() => setMode('INTRA')}>Location (same company)</button>
+        <button style={pill(mode === 'INTER')} onClick={() => setMode('INTER')}>Inter-company</button>
+      </div>
+
+      {mode === 'INTRA' ? (
+        <div>
+          <div style={{ ...C.g2, marginBottom: 8 }}>
+            <div><label style={C.label}>To Branch</label>
+              <select style={C.input} value={toBranch} onChange={e => setToBranch(e.target.value)}>
+                <option value="">Select branch</option>
+                {compBranches.map(b => <option key={b.id} value={b.id}>{b.location_name}{b.state ? ` · ${b.state}` : ''}</option>)}
+              </select></div>
+            <div><label style={C.label}>Effective Date</label><input type="date" style={C.input} value={effDate} onChange={e => setEffDate(e.target.value)} /></div>
+          </div>
+          <div style={{ ...C.g2, marginBottom: 8 }}>
+            <div><label style={C.label}>New Reporting Manager</label>
+              <select style={C.input} value={mgr} onChange={e => setMgr(e.target.value)}>
+                <option value="">— unchanged —</option>
+                {managers.map(m => <option key={m.id} value={m.id}>{m.full_name}{m.emp_code ? ` (${m.emp_code})` : ''}</option>)}
+              </select></div>
+            <div><label style={C.label}>New Designation</label><input style={C.input} value={desig} onChange={e => setDesig(e.target.value)} placeholder="optional" /></div>
+          </div>
+          <div style={{ ...C.g2, marginBottom: 8 }}>
+            <div><label style={C.label}>New Department</label>
+              <select style={C.input} value={dept} onChange={e => setDept(e.target.value)}>
+                <option value="">— unchanged —</option>
+                {compDepts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
+              </select></div>
+            <div><label style={C.label}>New Cost Centre</label><input style={C.input} value={cc} onChange={e => setCc(e.target.value)} placeholder="optional" /></div>
+          </div>
+          <div style={{ ...C.g2, marginBottom: 8 }}>
+            <div><label style={C.label}>Shift</label>
+              <select style={C.input} value={shift} onChange={e => setShift(e.target.value)}>
+                <option value="">— unchanged —</option>
+                {compShifts.map(s => <option key={s.id} value={s.id}>{s.shift_code}</option>)}
+              </select></div>
+            <div><label style={C.label}>Benefit</label>
+              <select style={C.input} value={benefit} onChange={e => setBenefit(e.target.value as any)}>
+                <option value="NONE">None</option><option value="RELOCATION">Relocation</option><option value="ONE_TIME_BONUS">One-time bonus</option>
+              </select></div>
+          </div>
+          {benefit !== 'NONE' && <div style={{ marginBottom: 8 }}><label style={C.label}>Benefit Amount</label><input type="number" style={{ ...C.input, maxWidth: 220 }} value={benefitAmt} onChange={e => setBenefitAmt(e.target.value)} /></div>}
+          {midWarn && <Banner color="#D97706" bg="#FEF3C7">⚠ {midWarn}</Banner>}
+          <button style={C.pri} disabled={!toBranch || !effDate} onClick={() => {
+            if (!toBranch || !effDate) return
+            onIntra({
+              to_branch_id: toBranch, effective_date: effDate,
+              new_reporting_manager_id: mgr || undefined, new_designation: desig || undefined,
+              new_department_id: dept || undefined, new_cost_centre: cc || undefined,
+              new_shift_id: shift || undefined, benefit_type: benefit,
+              benefit_amount: benefitAmt ? Number(benefitAmt) : undefined,
+            })
+          }}>Initiate Location Transfer</button>
+        </div>
+      ) : (
+        <div>
+          <div style={{ ...C.g2, marginBottom: 8 }}>
+            <div><label style={C.label}>To Company</label>
+              <select style={C.input} value={toCompany} onChange={e => { setToCompany(e.target.value); setIBranch(''); setIDept('') }}>
+                <option value="">Select company</option>
+                {otherCompanies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
+              </select></div>
+            <div><label style={C.label}>To Branch</label>
+              <select style={C.input} value={iBranch} onChange={e => setIBranch(e.target.value)}>
+                <option value="">Select branch</option>
+                {interBranches.map(b => <option key={b.id} value={b.id}>{b.location_name}{b.state ? ` · ${b.state}` : ''}</option>)}
+              </select></div>
+          </div>
+          <div style={{ ...C.g2, marginBottom: 8 }}>
+            <div><label style={C.label}>To Department</label>
+              <select style={C.input} value={iDept} onChange={e => setIDept(e.target.value)}>
+                <option value="">— optional —</option>
+                {interDepts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
+              </select></div>
+            <div><label style={C.label}>New Designation</label><input style={C.input} value={iDesig} onChange={e => setIDesig(e.target.value)} placeholder="optional" /></div>
+          </div>
+          <div style={{ ...C.g2, marginBottom: 8 }}>
+            <div><label style={C.label}>Transfer Date</label><input type="date" style={C.input} value={transferDate} onChange={e => setTransferDate(e.target.value)} /></div>
+            <div><label style={C.label}>Last Working Day (old company)</label><input style={{ ...C.input, background: '#F1F5F9' }} value={lastDay ? fmt(lastDay) : '—'} readOnly /></div>
+          </div>
+          <div style={{ marginBottom: 8 }}><label style={C.label}>Benefit Mode</label>
+            <select style={{ ...C.input, maxWidth: 260 }} value={benefitMode} onChange={e => setBenefitMode(e.target.value as any)}>
+              <option value="REMAIN_SAME">Remain same</option><option value="AS_PER_NEW_POLICY">As per new policy</option>
+            </select></div>
+          <button style={C.pri} disabled={!toCompany || !iBranch || !transferDate} onClick={() => {
+            if (!toCompany || !iBranch || !transferDate) return
+            onInter({
+              to_company_id: toCompany, to_branch_id: iBranch,
+              to_department_id: iDept || undefined, new_designation: iDesig || undefined,
+              transfer_date: transferDate, benefit_mode: benefitMode,
+            })
+          }}>Initiate Inter-company Transfer</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Documents tab (all docs submitted by the employee) ─────────────
 function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
   async function download(path: string | null) {
@@ -182,42 +333,127 @@ function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
 }
 
 // ── Salary tab (CTC structure) ─────────────────────────────────────
-function SalaryView({ salary }: { salary: HR.SalaryStructure | null }) {
-  if (!salary) return <div style={{ ...C.card, color:'#94A3B8', textAlign:'center', padding:28 }}>No salary structure on file. It is set during the recruitment CTC offer / onboarding.</div>
-  const c = salary.calc || {}
-  const line = (k: string, m?: number | null, ann?: number | null) => (
-    <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}>
-      <span style={{ color:'#64748B' }}>{k}</span>
-      <span style={{ fontWeight:600 }}>{money(m)}{ann != null ? ` · ${money(ann)}/yr` : ''}</span>
+// Salary-slip layout: identity + Monthly | Annual breakup (earnings → gross →
+// employer cost → deductions → net → CTC summary).
+function BreakupRow({ label, monthly, annual, kind }: { label: string; monthly: number; annual?: number; kind?: 'sub' | 'total' | 'net' | 'plain' }) {
+  const bold = kind === 'sub' || kind === 'total' || kind === 'net'
+  const bg = kind === 'total' ? '#F5F3FF' : kind === 'sub' ? '#FAFAFE' : kind === 'net' ? '#ECFDF5' : 'transparent'
+  const color = kind === 'total' ? '#7C3AED' : kind === 'net' ? '#059669' : '#0F172A'
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'7px 12px', background:bg, borderBottom:'1px solid #F1F5F9', fontSize:12.5 }}>
+      <span style={{ color: bold ? color : '#475569', fontWeight: bold ? 700 : 400 }}>{label}</span>
+      <span style={{ textAlign:'right', fontWeight: bold ? 700 : 500, color: bold ? color : '#0F172A', fontVariantNumeric:'tabular-nums' }}>{money(monthly)}</span>
+      <span style={{ textAlign:'right', fontWeight: bold ? 700 : 500, color: bold ? color : '#64748B', fontVariantNumeric:'tabular-nums' }}>{annual != null ? money(annual) : '—'}</span>
     </div>
   )
+}
+
+function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; employee?: any }) {
+  const d = salary?.detail
+  if (!d) {
+    if (!salary) return <div style={{ ...C.card, color:'#94A3B8', textAlign:'center', padding:28 }}>No salary structure on file. It is set during the recruitment CTC offer / onboarding.</div>
+    // Legacy/onboarding path without a full breakup — keep the simple summary.
+    return (
+      <div>
+        <div style={C.card}>
+          <div style={C.sec}>💰 CTC Summary</div>
+          <Row k="Annual CTC" v={money(salary.offered_ctc)} />
+          <Row k="Variable %" v={salary.variable_pct != null ? `${salary.variable_pct}%` : '—'} />
+          <Row k="Monthly In-hand (est.)" v={money(salary.net_monthly)} />
+          {salary.basic_monthly != null && <Row k="Basic (monthly)" v={money(salary.basic_monthly)} />}
+          {salary.hra_monthly != null && <Row k="HRA (monthly)" v={money(salary.hra_monthly)} />}
+        </div>
+        <div style={{ fontSize:10, color:'#94A3B8', padding:'0 4px' }}>Indicative structure from the recruitment CTC offer.</div>
+      </div>
+    )
+  }
+  const M = (v: number) => v * 12
+
+  // Simplified view for non-regular staff.
+  // Intern / NAPS / NATS → Stipend + TDS (yes/no).  Consultant → Stipend + GST + TDS (yes/no).
+  if (d.simpleKind) {
+    const isConsultant = d.simpleKind === 'CONSULTANT'
+    const stipend = d.stipend ?? d.net
+    const rows: [string, number, number][] = [[isConsultant ? 'Stipend / Fee' : 'Stipend', stipend, M(stipend)]]
+    if (isConsultant) rows.push(['GST (18%)', d.gst ?? 0, M(d.gst ?? 0)])
+    return (
+      <div>
+        <div style={{ ...C.card, padding: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: '#1E1B4B', fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: '.03em' }}>
+            <span>{isConsultant ? 'CONSULTANT PAY' : 'STIPEND'}</span>
+            <span style={{ textAlign: 'right' }}>MONTHLY</span>
+            <span style={{ textAlign: 'right' }}>ANNUAL</span>
+          </div>
+          {rows.map(([l, m, a]) => <BreakupRow key={l} label={l} monthly={m} annual={a} kind={l.startsWith('Stipend') ? 'sub' : 'plain'} />)}
+          {/* TDS yes/no */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderTop: '1px solid #F1F5F9' }}>
+            <span style={{ fontSize: 12.5, color: '#475569' }}>TDS applicable</span>
+            <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 99, background: d.tds ? '#FEF2F2' : '#ECFDF5', color: d.tds ? '#DC2626' : '#059669' }}>
+              {d.tds ? 'Yes' : 'No'}{isConsultant && d.tds ? ' · 194J' : ''}
+            </span>
+          </div>
+        </div>
+        <div style={{ fontSize: 10, color: '#94A3B8', padding: '0 4px' }}>
+          {isConsultant ? 'Consultant professional fee. GST @18% and TDS u/s 194J apply where registered.' : 'Training stipend — no statutory deductions.'}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div>
-      <div style={C.card}>
-        <div style={C.sec}>💰 CTC Summary</div>
-        <Row k="Annual CTC" v={money(salary.offered_ctc)} />
-        <Row k="Variable %" v={salary.variable_pct != null ? `${salary.variable_pct}%` : '—'} />
-        <Row k="Monthly In-hand (est.)" v={money(salary.net_monthly ?? c.inHand)} />
+      {/* CTC summary strip */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:10 }}>
+        {[
+          { l: 'Annual CTC', v: money(d.totalCtc || d.annualCtc), c: '#7C3AED', bg: '#F5F3FF' },
+          { l: 'Net Take-home / mo', v: money(d.net), c: '#059669', bg: '#ECFDF5' },
+          { l: 'Fixed / mo', v: money(d.fixedMonthly), c: '#1E1B4B', bg: '#F8FAFC' },
+        ].map(x => (
+          <div key={x.l} style={{ background:x.bg, border:'1px solid #E2E8F0', borderRadius:10, padding:'12px 14px' }}>
+            <div style={{ fontSize:10, color:'#64748B', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:4 }}>{x.l}</div>
+            <div style={{ fontSize:17, fontWeight:700, color:x.c }}>{x.v}</div>
+          </div>
+        ))}
       </div>
-      <div style={C.card}>
-        <div style={C.sec}>🧾 Monthly Structure</div>
-        {line('Basic', salary.basic_monthly ?? c.basic)}
-        {line('HRA', salary.hra_monthly ?? c.hra)}
-        {c.statBonus != null && line('Statutory Bonus', c.statBonus)}
-        {c.otherAllow != null && line('Other Allowance', c.otherAllow)}
-        {c.gross != null && line('Gross', c.gross)}
-      </div>
-      {(c.epfEmployee != null || salary.epf_monthly != null) && (
-        <div style={C.card}>
-          <div style={C.sec}>➖ Deductions (monthly)</div>
-          {line('EPF (employee)', salary.epf_monthly ?? c.epfEmployee)}
-          {c.esicEmployee != null && line('ESIC (employee)', c.esicEmployee)}
-          {c.ptMonthly != null && line('Professional Tax', c.ptMonthly)}
-          {c.lwfMonthly != null && line('LWF', c.lwfMonthly)}
-          {c.totalDed != null && line('Total Deductions', c.totalDed)}
+
+      <div style={{ ...C.card, padding:0, overflow:'hidden' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'9px 12px', background:'#1E1B4B', fontSize:11, fontWeight:700, color:'#fff', letterSpacing:'.03em' }}>
+          <span>SALARY STRUCTURE{d.payType && d.payType !== 'Regular' ? ` · ${d.payType}` : ''}</span>
+          <span style={{ textAlign:'right' }}>MONTHLY</span>
+          <span style={{ textAlign:'right' }}>ANNUAL</span>
         </div>
-      )}
-      <div style={{ fontSize:10, color:'#94A3B8', padding:'0 4px' }}>Indicative structure from the recruitment CTC offer. Final payroll figures may vary with IT declaration and policy.</div>
+
+        {/* Earnings */}
+        <BreakupRow label="Basic" monthly={d.basic} annual={M(d.basic)} />
+        <BreakupRow label="HRA" monthly={d.hra} annual={M(d.hra)} />
+        {d.statBonus > 0 && <BreakupRow label="Statutory Bonus" monthly={d.statBonus} annual={M(d.statBonus)} />}
+        {d.conveyance > 0 && <BreakupRow label="Conveyance" monthly={d.conveyance} annual={M(d.conveyance)} />}
+        {d.special > 0 && <BreakupRow label="Special Allowance" monthly={d.special} annual={M(d.special)} />}
+        <BreakupRow label="Gross" monthly={d.gross} annual={M(d.gross)} kind="sub" />
+
+        {/* Employer cost */}
+        {(d.erPf > 0 || d.erEsic > 0 || d.gratuity > 0) && <>
+          {d.erPf > 0 && <BreakupRow label="Employer PF" monthly={d.erPf} annual={M(d.erPf)} />}
+          {d.erEsic > 0 && <BreakupRow label="Employer ESIC" monthly={d.erEsic} annual={M(d.erEsic)} />}
+          {d.gratuity > 0 && <BreakupRow label="Gratuity" monthly={d.gratuity} annual={M(d.gratuity)} />}
+        </>}
+
+        {/* Deductions */}
+        {(d.eePf > 0 || d.eeEsic > 0 || d.pt > 0 || d.lwf > 0) && <>
+          <div style={{ padding:'6px 12px', background:'#FEF2F2', fontSize:10, fontWeight:700, color:'#B91C1C', letterSpacing:'.04em' }}>DEDUCTIONS</div>
+          {d.eePf > 0 && <BreakupRow label="Employee PF" monthly={d.eePf} annual={M(d.eePf)} />}
+          {d.eeEsic > 0 && <BreakupRow label="Employee ESIC" monthly={d.eeEsic} annual={M(d.eeEsic)} />}
+          {d.pt > 0 && <BreakupRow label="Professional Tax" monthly={d.pt} annual={M(d.pt)} />}
+          {d.lwf > 0 && <BreakupRow label="LWF" monthly={d.lwf} annual={M(d.lwf)} />}
+        </>}
+        <BreakupRow label="Net Take-home" monthly={d.net} annual={M(d.net)} kind="net" />
+
+        {/* CTC summary */}
+        <BreakupRow label="Fixed" monthly={d.fixedMonthly} annual={M(d.fixedMonthly)} kind="sub" />
+        {d.variableAnnual > 0 && <BreakupRow label="Variable" monthly={Math.round(d.variableAnnual / 12)} annual={d.variableAnnual} />}
+        <BreakupRow label="Total CTC" monthly={Math.round(d.totalCtc / 12)} annual={d.totalCtc} kind="total" />
+      </div>
+      <div style={{ fontSize:10, color:'#94A3B8', padding:'0 4px' }}>FY 2026-27 salary structure. Monthly figures are pro-rated on actual paid days during payroll processing.</div>
     </div>
   )
 }
@@ -231,6 +467,11 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
   const [states, setStates] = useState<HR.ActiveStates>({ pip: null, sabbatical: null, abscond: null, resignation: null })
   const [history, setHistory] = useState<HR.HRAction[]>([])
   const [requests, setRequests] = useState<HR.UpdateRequest[]>([])
+  const [companies, setCompanies] = useState<any[]>([])
+  const [branches, setBranches] = useState<any[]>([])
+  const [managers, setManagers] = useState<any[]>([])
+  const [shifts, setShifts] = useState<any[]>([])
+  const [departments, setDepartments] = useState<any[]>([])
   const [toast, setToast] = useState<{ msg: string; type: 'success'|'error' } | null>(null)
   const by: HR.By = { name: 'HR' }
   const notify = (msg: string, type: 'success'|'error' = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
@@ -243,6 +484,15 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
       HR.loadSalary(employee.id),
     ])
     setOnb(o); setStates(s); setHistory(h); setRequests(r); setSalary(sal)
+    const [comp, br, mgr, sh, dep] = await Promise.all([
+      supabase.from('companies').select('id, company_name, status').eq('status', 'Active'),
+      supabase.from('locations').select('id, location_name, state, company_id, status').eq('status', 'Active'),
+      supabase.from('employees').select('id, full_name, emp_code').eq('employment_status', 'Active'),
+      supabase.from('shift_master').select('id, shift_code, company_id, is_active').eq('is_active', true),
+      supabase.from('departments').select('id, dept_name, company_id, status').eq('status', 'Active'),
+    ])
+    setCompanies(comp.data || []); setBranches(br.data || []); setManagers(mgr.data || [])
+    setShifts(sh.data || []); setDepartments(dep.data || [])
   }, [employee?.id])
   useEffect(() => { reload() }, [reload])
 
@@ -254,10 +504,10 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
 
   if (activeTab === 'onboarding') return (<div style={{ position:'relative' }}><OnboardingTab onb={onb} />{toast && <Toast t={toast} />}</div>)
   if (activeTab === 'documents') return <DocumentsView onb={onb} />
-  if (activeTab === 'salary') return <SalaryView salary={salary} />
+  if (activeTab === 'salary') return <SalaryView salary={salary} employee={employee} />
 
   if (activeTab === 'history') {
-    const icon = (a: string) => a.startsWith('PIP') ? '📉' : a.startsWith('SAB') ? '🌴' : a.startsWith('RESIG') ? '🚪' : a.startsWith('ABSCOND') ? '🚷' : a.includes('APPROVE') ? '✅' : a.includes('REJECT') ? '❌' : '📌'
+    const icon = (a: string) => a.startsWith('PIP') ? '📉' : a.startsWith('SAB') ? '🌴' : a.startsWith('RESIG') ? '🚪' : a.startsWith('ABSCOND') ? '🚷' : a.startsWith('TRANSFER') ? '🔄' : a.includes('APPROVE') ? '✅' : a.includes('REJECT') ? '❌' : '📌'
     return (
       <div style={{ position:'relative' }}>
         <div style={C.card}>
@@ -327,6 +577,9 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
         return res
       }, 'Resignation initiated')} />}
       {!states.abscond && <AbscondForm onSave={(d) => run(() => HR.markAbscond(employee.id, d, by), 'Marked abscond')} />}
+      {!states.resignation && !states.abscond && <TransferForm employee={employee} companies={companies} branches={branches} managers={managers} shifts={shifts} departments={departments}
+        onIntra={(p) => run(() => HR.initiateLocationTransfer({ ...p, employee_ids: [employee.id] }, by), 'Location transfer initiated')}
+        onInter={(p) => run(async () => { const r: any = await HR.initiateInterCompanyTransfer({ ...p, employee_id: employee.id }, by); if (r?.ok) notify(`Transfer initiated · onboarding pre-filled · last day ${r.last_day}`, 'success'); return r }, 'Company transfer initiated')} />}
 
       {toast && <Toast t={toast} />}
     </div>

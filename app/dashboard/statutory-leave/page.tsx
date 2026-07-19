@@ -195,7 +195,7 @@ export default function StatutoryLeavePage() {
         </div>
 
         {/* Toolbar */}
-        <div style={{ ...C.card, display:'flex', gap:8, flexWrap:'wrap', alignItems:'flex-end' }}>
+        <div style={{ ...C.card, display:'flex', gap:8, flexWrap:'wrap', alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
           <div><label style={C.lbl}>FY</label><select style={{ ...C.input, width:120 }} value={fFy} onChange={e => setFFy(e.target.value)}><option value="">All</option>{fys.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
           <div><label style={C.lbl}>Act</label><select style={{ ...C.input, width:140 }} value={fAct} onChange={e => setFAct(e.target.value as any)}><option value="">All</option><option value="SE">Shops & Estab</option><option value="FACTORY">Factories Act</option></select></div>
           <div><label style={C.lbl}>State</label><input style={{ ...C.input, width:160 }} placeholder="filter…" value={fState} onChange={e => setFState(e.target.value)} /></div>

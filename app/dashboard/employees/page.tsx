@@ -6,8 +6,93 @@ import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
 
-// ── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
+// ─── Types ────────────────────────────────────────────────────
+interface Employee {
+  id: string; emp_code: string; common_code: string
+  employment_type: string; full_name: string; first_name: string; last_name: string
+  gender: string; date_of_birth: string; blood_group: string; marital_status: string
+  employment_status: string; collar_type: string; employee_function: string
+  employee_category: string; designation: string; grade: string
+  group_doj: string; company_doj: string; confirmation_status: string
+  mobile: string; personal_email: string; office_email: string
+  pan_number: string; aadhar_last4: string; uan_number: string
+  pf_applicable: boolean; esic_applicable: boolean; pt_applicable: boolean; lwf_applicable: boolean
+  bank_name: string; bank_account_last4: string; ifsc_code: string; account_type: string
+  l1_manager_id: string | null; l2_manager_id: string | null; hr_manager_id: string | null
+  notice_period_days: number; date_of_resignation: string | null; last_working_date: string | null
+  intern_pay: number | null; consultant_pay: number | null; contract_pay: number | null
+  blacklisted: boolean; rehire_eligible: boolean; company_id: string; location_id: string; department_id: string
+  companies?: { company_name: string; company_code: string }
+  locations?: { location_name: string; city: string }
+  departments?: { dept_name: string }
+}
+
+// ─── Palette ──────────────────────────────────────────────────
+const P = {
+  navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489',
+  purpleBg:'#EEEDFE', purpleLight:'#F5F3FF',
+  border:'#E9E7F5', card:'#FFFFFF', page:'#F5F3FF',
+  text:'#1E1B4B', muted:'#6B6B7B', green:'#059669', greenBg:'#ECFDF5',
+  red:'#DC2626', redBg:'#FEF2F2', amber:'#D97706', amberBg:'#FFFBEB',
+}
+
+const GRADE_COLORS: Record<string,{bg:string;color:string}> = {
+  L2:{bg:'#EDE9FE',color:'#7C3AED'}, L1:{bg:'#DDD6FE',color:'#6D28D9'},
+  M3:{bg:'#DBEAFE',color:'#1D4ED8'}, M2:{bg:'#E0F2FE',color:'#0369A1'},
+  M1:{bg:'#CCFBF1',color:'#0D9488'}, E3:{bg:'#DCFCE7',color:'#16A34A'},
+  E2:{bg:'#ECFCCB',color:'#65A30D'}, E1:{bg:'#FEF3C7',color:'#D97706'},
+  W2:{bg:'#FEE2E2',color:'#DC2626'}, W1:{bg:'#FFE4E6',color:'#BE123C'},
+}
+const TYPE_COLORS: Record<string,{bg:string;color:string}> = {
+  Employee:{bg:'#EDE9FE',color:'#7C3AED'}, Intern:{bg:'#DBEAFE',color:'#1D4ED8'},
+  NAPS:{bg:'#DCFCE7',color:'#16A34A'}, NATS:{bg:'#FEF3C7',color:'#D97706'},
+  Consultant:{bg:'#FEE2E2',color:'#DC2626'}, Contract:{bg:'#F1F5F9',color:'#374151'},
+}
+const STATUS_COLORS: Record<string,{bg:string;color:string}> = {
+  Active:{bg:'#DCFCE7',color:'#16A34A'}, Resigned:{bg:'#FEE2E2',color:'#DC2626'},
+  Terminated:{bg:'#FEE2E2',color:'#991B1B'}, Absconding:{bg:'#FEF3C7',color:'#D97706'},
+}
+
+// ─── Inline style helpers ─────────────────────────────────────
+const s = {
+  page:   { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:P.page, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' },
+  topbar: { background:P.card, padding:'11px 20px', borderBottom:`1px solid ${P.border}`, display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const, position:'sticky' as const, top:0, zIndex:40 },
+  body:   { flex:1, padding:'16px 20px' },
+  card:   { background:P.card, borderRadius:'12px', border:`1px solid ${P.border}`, marginBottom:'12px' } as React.CSSProperties,
+  inp:    { padding:'8px 10px', border:`1.5px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', outline:'none', background:'#F8F7FF', color:P.text, width:'100%', boxSizing:'border-box' as const },
+  sel:    { padding:'8px 10px', border:`1.5px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', outline:'none', background:'#F8F7FF', color:P.text, cursor:'pointer', width:'100%' } as React.CSSProperties,
+  priBtn: { padding:'8px 16px', background:P.purple, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer', display:'flex' as const, alignItems:'center' as const, gap:'5px' },
+  secBtn: { padding:'8px 14px', background:P.card, color:P.text, border:`1px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
+  saveBtn:{ padding:'8px 16px', background:P.green, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer', display:'flex' as const, alignItems:'center' as const, gap:'5px' },
+}
+
+const initials = (n: string) => n?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || 'NA'
+const fmt = (v: any) => !v || v === '' ? '—' : String(v)
+const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) }
+
+// ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
 const EMP_TYPES = ['Employee', 'Intern', 'NAPS', 'NATS', 'Consultant', 'Contract']
+
+// Export allowlist — only the columns marked "Keep in Report = Y" in the EZER column
+// reference sheet. Encrypted PII (aadhar_encrypted / bank_account_encrypted) is Y in the
+// sheet but its note says "NEVER in report", so it is deliberately excluded here.
+const EXPORT_EMP_COLS = [
+  // identity
+  'emp_code','full_name','first_name','last_name','salutation','date_of_birth','gender','father_name','mother_name','spouse_name','marital_status','blood_group','nationality','religion','birth_place',
+  // employment
+  'employment_type','employment_status','designation','grade','band','group_doj','company_doj','confirmation_status','confirmation_date','l1_manager_id','hr_manager_id','notice_period_days','retirement_date','collar_type','management_level','work_location_type','cost_centre','induction_date','probation_months',
+  // contact
+  'mobile','alternate_mobile','personal_email','office_email','office_phone','emergency_name','emergency_relation','emergency_mobile','res_address1','res_city','res_state','res_pin','perm_address1','perm_city','perm_state','perm_pin',
+  // statutory IDs
+  'pan_number','aadhar_last4','uan_number','pf_account_number','esic_number',
+  // bank
+  'bank_name','bank_account_last4','ifsc_code','account_type',
+  // statutory config
+  'pf_applicable','epf_method','epf_wage_limit','pf_wage_type','esic_applicable','pt_applicable','professional_tax_state','lwf_applicable','lwf_state','gratuity_eligible','tds_regime','vpf_percent','nps_account',
+  // exit
+  'date_of_resignation','last_working_date','relieving_date','leaving_reason',
+]
+const EXPORT_NAME_COLS = ['company_name','company_code','department_name','location_name','location_city']
 const mc = {
   inp:   { width:'100%', padding:'8px 10px', background:'#F8FAFC', border:'1px solid #CBD5E1', borderRadius:'7px', fontSize:'13px', color:'#0F172A', outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   lbl:   { fontSize:'10px', fontWeight:600 as const, color:'#64748B', textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:'3px' },
@@ -53,7 +138,6 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
     setErr(''); setBusy(true)
     try {
       const code = f.emp_code.trim().toUpperCase()
-      // uniqueness
       const { data: dup } = await supabase.from('employees').select('id').eq('emp_code', code).maybeSingle()
       if (dup) { setErr(`Code ${code} already exists.`); setBusy(false); return }
       const parts = f.full_name.trim().split(/\s+/)
@@ -98,94 +182,151 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
   )
 }
 
-interface Employee {
-  id: string
-  emp_code: string
-  common_code: string
-  employment_type: string
-  full_name: string
-  first_name: string
-  last_name: string
-  gender: string
-  date_of_birth: string
-  blood_group: string
-  marital_status: string
-  employment_status: string
-  collar_type: string
-  employee_function: string
-  employee_category: string
-  designation: string
-  grade: string
-  group_doj: string
-  company_doj: string
-  confirmation_status: string
-  mobile: string
-  personal_email: string
-  office_email: string
-  pan_number: string
-  aadhar_last4: string
-  uan_number: string
-  pf_applicable: boolean
-  esic_applicable: boolean
-  pt_applicable: boolean
-  lwf_applicable: boolean
-  bank_name: string
-  bank_account_last4: string
-  ifsc_code: string
-  account_type: string
-  l1_manager_id: string | null
-  l2_manager_id: string | null
-  hr_manager_id: string | null
-  notice_period_days: number
-  date_of_resignation: string | null
-  last_working_date: string | null
-  blacklisted: boolean
-  rehire_eligible: boolean
-  company_id: string
-  location_id: string
-  department_id: string
-  companies?: { company_name: string; company_code: string }
-  locations?: { location_name: string; city: string }
-  departments?: { dept_name: string }
+// ─── Sub-components — defined OUTSIDE parent to prevent re-mount ──
+
+function StatCard({ label, value, color, onClick, active }: any) {
+  return (
+    <div onClick={onClick} style={{ background: active ? P.purple : P.card, border:`1px solid ${active ? P.purple : P.border}`, borderRadius:'10px', padding:'10px 8px', textAlign:'center', cursor:'pointer', borderTop:`3px solid ${color}`, transition:'all .15s' }}>
+      <div style={{ fontSize:'20px', fontWeight:700, color: active ? '#fff' : color }}>{value}</div>
+      <div style={{ fontSize:'10px', color: active ? 'rgba(255,255,255,.7)' : P.muted, marginTop:'2px' }}>{label}</div>
+    </div>
+  )
 }
 
-const C = {
-  page:   { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:'#F0F4F8', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' },
-  topbar: { background:'#fff', padding:'11px 20px', borderBottom:'1px solid #E2E8F0', display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const, position:'sticky' as const, top:0, zIndex:40 },
-  body:   { flex:1, padding:'16px 20px' },
-  card:   { background:'#fff', borderRadius:'10px', border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:'12px' },
-  inp:    { padding:'8px 12px', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'13px', outline:'none', background:'#F8FAFC', color:'#0F172A' } as React.CSSProperties,
-  sel:    { padding:'8px 12px', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'12px', outline:'none', background:'#F8FAFC', color:'#0F172A', cursor:'pointer' } as React.CSSProperties,
-  priBtn: { padding:'9px 18px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
-  secBtn: { padding:'8px 14px', background:'#fff', color:'#374151', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
+function Badge({ val, map }: { val: string; map: Record<string,{bg:string;color:string}> }) {
+  const c = map[val] || {bg:'#F1F5F9',color:'#374151'}
+  return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '—'}</span>
 }
 
-const GRADE_COLORS: Record<string,{bg:string;color:string}> = {
-  L2:{bg:'#EDE9FE',color:'#7C3AED'}, L1:{bg:'#DDD6FE',color:'#6D28D9'},
-  M3:{bg:'#DBEAFE',color:'#1D4ED8'}, M2:{bg:'#E0F2FE',color:'#0369A1'},
-  M1:{bg:'#CCFBF1',color:'#0D9488'}, E3:{bg:'#DCFCE7',color:'#16A34A'},
-  E2:{bg:'#ECFCCB',color:'#65A30D'}, E1:{bg:'#FEF3C7',color:'#D97706'},
-  W2:{bg:'#FEE2E2',color:'#DC2626'}, W1:{bg:'#FFE4E6',color:'#BE123C'},
-}
-const TYPE_COLORS: Record<string,{bg:string;color:string}> = {
-  Employee:{bg:'#EDE9FE',color:'#7C3AED'}, Intern:{bg:'#DBEAFE',color:'#1D4ED8'},
-  NAPS:{bg:'#DCFCE7',color:'#16A34A'},     NATS:{bg:'#FEF3C7',color:'#D97706'},
-  Consultant:{bg:'#FEE2E2',color:'#DC2626'}, Contract:{bg:'#F1F5F9',color:'#374151'},
-}
-const STATUS_COLORS: Record<string,{bg:string;color:string}> = {
-  Active:{bg:'#DCFCE7',color:'#16A34A'},   Resigned:{bg:'#FEE2E2',color:'#DC2626'},
-  Terminated:{bg:'#FEE2E2',color:'#991B1B'}, Absconding:{bg:'#FEF3C7',color:'#D97706'},
+// Profile header strip
+function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any) {
+  const gc = GRADE_COLORS[emp.grade] || {bg:'#F1F5F9',color:'#374151'}
+  return (
+    <div style={{ background:P.navy, padding:'18px 24px 0', borderRadius:'14px 14px 0 0' }}>
+      <div style={{ display:'flex', alignItems:'flex-start', gap:'16px', paddingBottom:'14px' }}>
+        {/* Avatar */}
+        <div style={{ width:'64px', height:'64px', borderRadius:'50%', background:emp.gender==='Female'?'#FCE7F3':P.purpleBg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', fontWeight:700, color:emp.gender==='Female'?'#BE185D':P.purple, flexShrink:0, border:'3px solid rgba(255,255,255,.15)' }}>
+          {initials(emp.full_name)}
+        </div>
+        {/* Info */}
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:'17px', fontWeight:600, color:'#fff', marginBottom:'3px' }}>{emp.full_name}</div>
+          <div style={{ fontSize:'12px', color:'rgba(255,255,255,.6)', marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
+          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+            <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...TYPE_COLORS[emp.employment_type] }}>{emp.employment_type}</span>
+            <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...STATUS_COLORS[emp.employment_status] }}>{emp.employment_status}</span>
+            <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...gc }}>{emp.grade}</span>
+          </div>
+        </div>
+        {/* Actions */}
+        <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+          {editMode ? (
+            <>
+              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:'#fff', border:'1px solid rgba(255,255,255,.25)', borderRadius:'8px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
+              <button onClick={onSave} disabled={saving} style={{ ...s.saveBtn, opacity: saving ? .7 : 1 }}>
+                <span>{saving ? '⏳' : '💾'}</span>{saving ? 'Saving…' : 'Save changes'}
+              </button>
+            </>
+          ) : (
+            <button onClick={onEdit} style={{ ...s.priBtn }}>
+              <span>✏️</span> Edit profile
+            </button>
+          )}
+        </div>
+      </div>
+      {/* Quick stat strip */}
+      <div style={{ background:'rgba(255,255,255,.06)', margin:'0 -24px', padding:'8px 24px', display:'flex', gap:'20px', flexWrap:'wrap', borderTop:'1px solid rgba(255,255,255,.08)' }}>
+        {[
+          { l:'Group DOJ', v: fmtDate(emp.group_doj) },
+          { l:'Company DOJ', v: fmtDate(emp.company_doj) },
+          { l:'Confirmation', v: fmt(emp.confirmation_status) },
+          { l:'Department', v: (emp as any).departments?.dept_name || '—' },
+          { l:'Location', v: (emp as any).locations?.location_name || '—' },
+          { l:'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '—' },
+        ].map(x => (
+          <div key={x.l} style={{ fontSize:'11px', color:'rgba(255,255,255,.55)' }}>
+            {x.l}: <span style={{ color:'#fff', fontWeight:500 }}>{x.v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }
 
+// Single info row — view or edit
+function Field({ label, value, editMode, fieldKey, editForm, setEditForm, type, opts }: any) {
+  return (
+    <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
+      <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>{label}</div>
+      {editMode ? (
+        opts ? (
+          <select style={s.sel} value={editForm[fieldKey] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))}>
+            <option value="">— Select —</option>
+            {opts.map((o: string) => <option key={o}>{o}</option>)}
+          </select>
+        ) : (
+          <input type={type || 'text'} style={s.inp} value={editForm[fieldKey] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))} />
+        )
+      ) : (
+        <div style={{ fontSize:'13px', color: value && value !== '—' ? P.text : P.muted }}>{value || '—'}</div>
+      )}
+    </div>
+  )
+}
+
+// Section wrapper
+function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+  return (
+    <div style={{ marginBottom:'0', padding:'16px 20px', borderBottom:`1px solid ${P.border}` }}>
+      <div style={{ fontSize:'11px', fontWeight:600, color:P.purple, textTransform:'uppercase', letterSpacing:'.7px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px' }}>
+        <span>{icon}</span>{title}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+// Two-column grid
+function Grid2({ children }: { children: React.ReactNode }) {
+  return <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 24px' }}>{children}</div>
+}
+
+// Tab bar
+function TabBar({ tabs, active, onChange }: any) {
+  return (
+    <div style={{ display:'flex', background:'#F8F7FF', borderBottom:`1px solid ${P.border}`, overflowX:'auto' }}>
+      {tabs.map((t: any) => (
+        <button key={t.id} onClick={() => onChange(t.id)} style={{
+          padding:'11px 16px', border:'none', background:'transparent', cursor:'pointer',
+          fontSize:'12px', fontWeight: active===t.id ? 600 : 400,
+          color: active===t.id ? P.purple : P.muted, whiteSpace:'nowrap',
+          borderBottom: active===t.id ? `2.5px solid ${P.purple}` : '2.5px solid transparent',
+          transition:'all .12s'
+        }}>
+          {t.icon} {t.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Statutory chip
+function StatChip({ label, value }: { label: string; value: boolean }) {
+  return (
+    <div style={{ flex:1, padding:'10px 8px', borderRadius:'10px', background:value?P.greenBg:P.page, border:`1px solid ${value?'#BBF7D0':P.border}`, textAlign:'center' }}>
+      <div style={{ fontSize:'11px', fontWeight:600, color:P.text }}>{label}</div>
+      <div style={{ fontSize:'10px', color:value?P.green:P.muted, marginTop:'4px', fontWeight:500 }}>{value ? '✓ Yes' : '✗ No'}</div>
+    </div>
+  )
+}
+
+// ─── Main Component ───────────────────────────────────────────
 export default function EmployeeMaster() {
   const [employees, setEmployees] = useState<Employee[]>([])
   const [companies, setCompanies] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
   const [departments, setDepts]   = useState<any[]>([])
   const [loading, setLoading]     = useState(true)
-  const [showAdd, setShowAdd]     = useState(false)
-  const [showBulk, setShowBulk]   = useState(false)
-  const [addMsg, setAddMsg]       = useState('')
   const [error, setError]         = useState('')
   const [total, setTotal]         = useState(0)
   const [search, setSearch]       = useState('')
@@ -195,71 +336,60 @@ export default function EmployeeMaster() {
   const [filterType, setFType]    = useState('')
   const [filterStatus, setFStatus]= useState('Active')
   const [filterGrade, setFGrade]  = useState('')
-  const [exporting, setExporting] = useState(false)
   const [page, setPage]           = useState(1)
   const [selected, setSelected]   = useState<Employee|null>(null)
   const [profileTab, setProfileTab] = useState('personal')
   const [showDrawer, setShowDrawer] = useState(false)
-  const [editing, setEditing] = useState(false)
-  const [editForm, setEditForm] = useState<any>({})
-  const [savingEdit, setSavingEdit] = useState(false)
-  const [stats, setStats] = useState({
-    total:0, active:0, resigned:0,
-    employee:0, intern:0, naps:0, nats:0, consultant:0, contract:0
-  })
+  const [editMode, setEditMode]   = useState(false)
+  const [editForm, setEditForm]   = useState<any>({})
+  const [saving, setSaving]       = useState(false)
+  const [showAdd, setShowAdd]     = useState(false)
+  const [showBulk, setShowBulk]   = useState(false)
+  const [addMsg, setAddMsg]       = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [stats, setStats] = useState({ total:0,active:0,resigned:0,employee:0,intern:0,naps:0,nats:0,consultant:0,contract:0 })
   const PER_PAGE = 20
 
   const fetchStats = useCallback(async () => {
-    let q = supabase.from('employees').select('employment_status, employment_type').neq('is_test', true)
+    let q = supabase.from('employees').select('employment_status,employment_type').neq('is_test', true)
     if (filterCompany)  q = q.eq('company_id', filterCompany)
     if (filterLocation) q = q.eq('location_id', filterLocation)
     if (filterDept)     q = q.eq('department_id', filterDept)
     const { data } = await q
     if (!data) return
     setStats({
-      total:      data.length,
-      active:     data.filter(e => e.employment_status === 'Active').length,
-      resigned:   data.filter(e => e.employment_status === 'Resigned').length,
-      employee:   data.filter(e => e.employment_type === 'Employee').length,
-      intern:     data.filter(e => e.employment_type === 'Intern').length,
-      naps:       data.filter(e => e.employment_type === 'NAPS').length,
-      nats:       data.filter(e => e.employment_type === 'NATS').length,
-      consultant: data.filter(e => e.employment_type === 'Consultant').length,
-      contract:   data.filter(e => e.employment_type === 'Contract').length,
+      total:data.length, active:data.filter(e=>e.employment_status==='Active').length,
+      resigned:data.filter(e=>e.employment_status==='Resigned').length,
+      employee:data.filter(e=>e.employment_type==='Employee').length,
+      intern:data.filter(e=>e.employment_type==='Intern').length,
+      naps:data.filter(e=>e.employment_type==='NAPS').length,
+      nats:data.filter(e=>e.employment_type==='NATS').length,
+      consultant:data.filter(e=>e.employment_type==='Consultant').length,
+      contract:data.filter(e=>e.employment_type==='Contract').length,
     })
   }, [filterCompany, filterLocation, filterDept])
 
   const fetchMeta = async () => {
-    const [co, lo, de] = await Promise.all([
+    const [co,lo,de] = await Promise.all([
       supabase.from('companies').select('id,company_name,company_code').eq('status','Active'),
       supabase.from('locations').select('id,location_name,city,company_id').eq('status','Active'),
       supabase.from('departments').select('id,dept_name,company_id').eq('status','Active'),
     ])
-    setCompanies(co.data || [])
-    setLocations(lo.data || [])
-    setDepts(de.data || [])
+    setCompanies(co.data||[]); setLocations(lo.data||[]); setDepts(de.data||[])
   }
 
   const fetchEmployees = useCallback(async () => {
     setLoading(true); setError('')
     try {
-      let q = supabase.from('employees').select(`
-        id, emp_code, common_code, employment_type, full_name, first_name, last_name,
-        gender, date_of_birth, blood_group, marital_status, employment_status,
-        collar_type, employee_function, employee_category, designation, grade,
-        group_doj, company_doj, confirmation_status, notice_period_days,
-        mobile, personal_email, office_email,
-        pan_number, aadhar_last4, uan_number,
-        pf_applicable, esic_applicable, pt_applicable, lwf_applicable,
-        bank_name, bank_account_last4, ifsc_code, account_type,
-        l1_manager_id, l2_manager_id, hr_manager_id,
-        date_of_resignation, last_working_date,
-        blacklisted, rehire_eligible,
-        company_id, location_id, department_id,
-        companies(company_name, company_code),
-        locations!location_id(location_name, city),
-        departments(dept_name)
-      `, { count: 'exact' }).neq('is_test', true).order('emp_code')
+      // select('*') keeps the list resilient to schema additions (intern_pay,
+      // consultant_pay, any future column) — it returns only columns that exist,
+      // so it never 400s on a column that hasn't been migrated yet.
+      // locations!location_id — employees has two FKs to locations (location_id +
+      // actual_posted_location_id); disambiguate or the embed 400s.
+      let q = supabase.from('employees').select(
+        `*, companies(company_name,company_code), locations!location_id(location_name,city), departments(dept_name)`,
+        { count: 'exact' }
+      ).neq('is_test', true).order('emp_code')
 
       if (filterCompany)  q = q.eq('company_id', filterCompany)
       if (filterLocation) q = q.eq('location_id', filterLocation)
@@ -269,33 +399,23 @@ export default function EmployeeMaster() {
       if (filterGrade)    q = q.eq('grade', filterGrade)
       if (search.trim())  q = q.or(`full_name.ilike.%${search}%,emp_code.ilike.%${search}%,common_code.ilike.%${search}%,designation.ilike.%${search}%,mobile.ilike.%${search}%`)
 
-      const from = (page - 1) * PER_PAGE
-      q = q.range(from, from + PER_PAGE - 1)
-
-      const { data, error: err, count } = await q
+      const from = (page-1)*PER_PAGE
+      q = q.range(from, from+PER_PAGE-1)
+      const { data, error:err, count } = await q
       if (err) throw err
-      setEmployees((data as any[]) || [])
-      setTotal(count || 0)
-    } catch (e: any) {
-      setError(e.message || 'Load failed')
-    } finally {
-      setLoading(false)
-    }
-  }, [search, filterCompany, filterLocation, filterDept, filterType, filterStatus, filterGrade, page])
+      setEmployees((data as any[])||[]); setTotal(count||0)
+    } catch(e:any) { setError(e.message||'Load failed') }
+    finally { setLoading(false) }
+  }, [search,filterCompany,filterLocation,filterDept,filterType,filterStatus,filterGrade,page])
 
-  // Export ALL employees matching the current filters (no pagination) to Excel.
+  // Export ALL employees matching the current filters (no pagination) to Excel —
+  // every employees column plus CTC master and current Salary Structure.
   const exportExcel = async () => {
     setExporting(true)
     try {
-      let q = supabase.from('employees').select(`
-        emp_code, common_code, full_name, first_name, last_name, gender, date_of_birth, blood_group, marital_status,
-        employment_type, employment_status, designation, grade, confirmation_status, collar_type, employee_function, employee_category,
-        company_doj, group_doj, notice_period_days, mobile, personal_email, office_email,
-        pan_number, aadhar_last4, uan_number, pf_applicable, esic_applicable, pt_applicable, lwf_applicable,
-        bank_name, bank_account_last4, ifsc_code, account_type,
-        date_of_resignation, last_working_date, blacklisted, rehire_eligible,
-        companies(company_name), departments(dept_name), locations!location_id(location_name, city)
-      `).neq('is_test', true).order('emp_code')
+      let q = supabase.from('employees')
+        .select('*, companies(company_name, company_code), departments(dept_name), locations!location_id(location_name, city)')
+        .neq('is_test', true).order('emp_code')
       if (filterCompany)  q = q.eq('company_id', filterCompany)
       if (filterLocation) q = q.eq('location_id', filterLocation)
       if (filterDept)     q = q.eq('department_id', filterDept)
@@ -305,25 +425,61 @@ export default function EmployeeMaster() {
       if (search.trim())  q = q.or(`full_name.ilike.%${search}%,emp_code.ilike.%${search}%,common_code.ilike.%${search}%,designation.ilike.%${search}%,mobile.ilike.%${search}%`)
       const { data, error: err } = await q
       if (err) throw err
-      const rows = (data as any[] || []).map(e => ({
-        'Employee Code': e.emp_code, 'Full Name': e.full_name, 'First Name': e.first_name, 'Last Name': e.last_name,
-        'Company': e.companies?.company_name || '', 'Department': e.departments?.dept_name || '',
-        'Location': e.locations?.location_name || '', 'City': e.locations?.city || '',
-        'Designation': e.designation || '', 'Grade': e.grade || '', 'Employment Type': e.employment_type || '',
-        'Status': e.employment_status || '', 'Confirmation': e.confirmation_status || '',
-        'Collar Type': e.collar_type || '', 'Function': e.employee_function || '', 'Category': e.employee_category || '',
-        'Date of Joining': e.company_doj || '', 'Group DOJ': e.group_doj || '', 'Notice Period (days)': e.notice_period_days ?? '',
-        'Gender': e.gender || '', 'Date of Birth': e.date_of_birth || '', 'Blood Group': e.blood_group || '', 'Marital Status': e.marital_status || '',
-        'Mobile': e.mobile || '', 'Personal Email': e.personal_email || '', 'Office Email': e.office_email || '',
-        'PAN': e.pan_number || '', 'Aadhaar (last4)': e.aadhar_last4 || '', 'UAN': e.uan_number || '',
-        'PF': e.pf_applicable ? 'Yes' : 'No', 'ESIC': e.esic_applicable ? 'Yes' : 'No', 'PT': e.pt_applicable ? 'Yes' : 'No', 'LWF': e.lwf_applicable ? 'Yes' : 'No',
-        'Bank': e.bank_name || '', 'Account (last4)': e.bank_account_last4 || '', 'IFSC': e.ifsc_code || '', 'Account Type': e.account_type || '',
-        'Resignation Date': e.date_of_resignation || '', 'Last Working Day': e.last_working_date || '',
-        'Blacklisted': e.blacklisted ? 'Yes' : 'No', 'Rehire Eligible': e.rehire_eligible === false ? 'No' : 'Yes',
-      }))
-      if (!rows.length) { alert('No employees to export for the current filters.'); setExporting(false); return }
+      const list = (data as any[] || [])
+      if (!list.length) { alert('No employees to export for the current filters.'); setExporting(false); return }
+
+      const ids = list.map(e => e.id)
+      const ctcMap = new Map<string, any>()
+      const salMap = new Map<string, any>()
+      try {
+        const { data: ctc } = await supabase.from('ctc_master').select('*').in('employee_id', ids).order('created_at', { ascending: false })
+        for (const c of (ctc || []) as any[]) if (!ctcMap.has(c.employee_id)) ctcMap.set(c.employee_id, c)
+      } catch { /* ctc_master optional */ }
+      try {
+        const { data: sal } = await supabase.from('salary_structures').select('*').in('employee_id', ids).order('effective_date', { ascending: false })
+        for (const sr of (sal || []) as any[]) if (!salMap.has(sr.employee_id)) salMap.set(sr.employee_id, sr)
+      } catch { /* salary_structures optional */ }
+      const addPrefixed = (flat: Record<string, any>, obj: any, prefix: string, skip: string[]) => {
+        if (!obj) return
+        for (const [k, v] of Object.entries(obj)) {
+          if (skip.includes(k)) continue
+          flat[prefix + k] = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : v)
+        }
+      }
+
+      const rows = list.map(e => {
+        const { companies, departments, locations, ...scalar } = e
+        const flat: Record<string, any> = {}
+        for (const [k, v] of Object.entries(scalar)) {
+          flat[k] = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : v)
+        }
+        flat['company_name'] = companies?.company_name || ''
+        flat['company_code'] = companies?.company_code || ''
+        flat['department_name'] = departments?.dept_name || ''
+        flat['location_name'] = locations?.location_name || ''
+        flat['location_city'] = locations?.city || ''
+        addPrefixed(flat, ctcMap.get(e.id), 'CTC_', ['id', 'employee_id', 'company_id', 'created_at', 'updated_at'])
+        addPrefixed(flat, salMap.get(e.id), 'SAL_', ['id', 'employee_id', 'created_at', 'created_by'])
+        return flat
+      })
+      // Column reference sheet — keep only "Y" employee columns + name/code joins + the
+      // CTC / Salary breakup (all Y). Everything else (backend/*_id/unlisted columns) is dropped.
+      const allRaw = Array.from(rows.reduce((set, r) => { Object.keys(r).forEach(k => set.add(k)); return set }, new Set<string>()))
+      const empPresent = EXPORT_EMP_COLS.filter(k => allRaw.includes(k))
+      const nameCols = EXPORT_NAME_COLS.filter(k => allRaw.includes(k))
+      const ctcKeys = allRaw.filter(k => k.startsWith('CTC_')).sort()
+      const salKeys = allRaw.filter(k => k.startsWith('SAL_')).sort()
+      // Order: emp_code, full_name, then company/dept/location names, remaining employee cols, CTC, Salary.
+      const lead = ['emp_code', 'full_name']
+      const header = [
+        ...lead.filter(k => empPresent.includes(k)),
+        ...nameCols,
+        ...empPresent.filter(k => !lead.includes(k)),
+        ...ctcKeys, ...salKeys,
+      ]
+      const trimmed = rows.map(r => { const o: Record<string, any> = {}; for (const k of header) o[k] = (k in r) ? r[k] : ''; return o })
       const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Employees')
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(trimmed, { header }), 'Employees')
       XLSX.writeFile(wb, `EZER_Employees_${new Date().toISOString().slice(0, 10)}.xlsx`)
     } catch (e: any) {
       alert('Export failed: ' + (e?.message || 'unknown error'))
@@ -333,430 +489,417 @@ export default function EmployeeMaster() {
 
   useEffect(() => { fetchMeta() }, [])
   useEffect(() => { fetchStats() }, [fetchStats])
-  useEffect(() => { setPage(1) }, [search, filterCompany, filterLocation, filterDept, filterType, filterStatus, filterGrade])
+  useEffect(() => { setPage(1) }, [search,filterCompany,filterLocation,filterDept,filterType,filterStatus,filterGrade])
   useEffect(() => { fetchEmployees() }, [fetchEmployees])
 
-  const filteredLocs  = filterCompany ? locations.filter(l => l.company_id === filterCompany) : locations
-  const filteredDepts = filterCompany ? departments.filter(d => d.company_id === filterCompany) : departments
-  const totalPages    = Math.ceil(total / PER_PAGE)
-  const initials      = (name: string) => name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'NA'
-  const openProfile   = (emp: Employee) => { setSelected(emp); setProfileTab('personal'); setEditing(false); setShowDrawer(true) }
+  const filteredLocs  = filterCompany ? locations.filter(l=>l.company_id===filterCompany) : locations
+  const filteredDepts = filterCompany ? departments.filter(d=>d.company_id===filterCompany) : departments
+  const totalPages    = Math.ceil(total/PER_PAGE)
 
-  const EDIT_FIELDS = ['full_name','first_name','last_name','gender','date_of_birth','blood_group','marital_status','designation','grade','employment_type','employment_status','mobile','personal_email','office_email','notice_period_days']
-  const openEdit = () => { if (!selected) return; const f: any = {}; for (const k of EDIT_FIELDS) f[k] = (selected as any)[k] ?? ''; setEditForm(f); setEditing(true) }
-  const editDirty = () => selected ? EDIT_FIELDS.some(k => String(editForm[k] ?? '') !== String((selected as any)[k] ?? '')) : false
-  const cancelEdit = () => { if (editDirty() && !window.confirm('You are exiting without saving. Discard changes?')) return; setEditing(false) }
+  const openProfile = (emp: Employee) => {
+    setSelected(emp)
+    setProfileTab('personal')
+    setEditMode(false)
+    setEditForm({})
+    setShowDrawer(true)
+  }
+
+  // openEdit — populate the form and switch to edit mode. Optional `emp` lets the
+  // row-level Edit button open the drawer straight into edit mode.
+  const EDIT_FIELDS = ['full_name','first_name','last_name','gender','date_of_birth','blood_group','marital_status','designation','grade','employment_type','employment_status','collar_type','employee_function','employee_category','mobile','personal_email','office_email','notice_period_days','intern_pay','consultant_pay','contract_pay',
+    'father_name','mother_name','spouse_name','nationality','religion','birth_place','pan_number','uan_number','alternate_mobile',
+    'res_address1','res_city','res_state','res_pin','perm_address1','perm_city','perm_state','perm_pin',
+    'emergency_name','emergency_relation','emergency_mobile','emergency2_name','emergency2_relation','emergency2_mobile']
+  const openEdit = (emp?: Employee) => {
+    const src = emp ?? selected
+    if (!src) return
+    const f: any = {}
+    for (const k of EDIT_FIELDS) f[k] = (src as any)[k] ?? ''
+    if (emp) { setSelected(emp); setProfileTab('personal'); setShowDrawer(true) }
+    setEditForm(f)
+    setEditMode(true)
+  }
+
+  const cancelEdit = () => {
+    if (Object.keys(editForm).some(k => String(editForm[k]??'') !== String((selected as any)?.[k]??'')) ) {
+      if (!window.confirm('Discard unsaved changes?')) return
+    }
+    setEditMode(false); setEditForm({})
+  }
+
   const saveEdit = async () => {
     if (!selected) return
-    setSavingEdit(true)
+    setSaving(true)
     const patch: any = { ...editForm }
-    if (patch.notice_period_days !== '' && patch.notice_period_days != null) patch.notice_period_days = Number(patch.notice_period_days) || 0
+    if (patch.notice_period_days !== '') patch.notice_period_days = Number(patch.notice_period_days)||0
+    // Pay columns are numeric — blank → null, otherwise coerce to a number.
+    for (const k of ['intern_pay','consultant_pay','contract_pay']) patch[k] = (patch[k] === '' || patch[k] == null) ? null : (Number(patch[k]) || 0)
     const { error } = await supabase.from('employees').update(patch).eq('id', selected.id)
-    setSavingEdit(false)
-    if (error) { alert('Save failed: ' + error.message); return }
-    setSelected({ ...(selected as any), ...patch }); setEditing(false); fetchEmployees()
+    setSaving(false)
+    if (error) { alert('Save failed: '+error.message); return }
+    const updated = { ...selected, ...patch }
+    setSelected(updated as Employee)
+    setEditMode(false); setEditForm({})
+    fetchEmployees()
   }
-  const handleBack = () => { if (editing) { cancelEdit(); return } setShowDrawer(false) }
 
+  const closeDrawer = () => {
+    if (editMode && !window.confirm('Discard unsaved changes?')) return
+    setShowDrawer(false); setEditMode(false); setEditForm({}); setSelected(null)
+  }
+
+  const TABS = [
+    { id:'personal',   label:'Personal',   icon:'👤' },
+    { id:'employment', label:'Employment',  icon:'💼' },
+    { id:'statutory',  label:'Statutory',   icon:'🏛️' },
+    { id:'bank',       label:'Bank',        icon:'🏦' },
+    { id:'documents',  label:'Documents',   icon:'📄' },
+    { id:'salary',     label:'Salary',      icon:'💰' },
+    { id:'onboarding', label:'Onboarding',  icon:'📋' },
+    { id:'actions',    label:'HR Actions',  icon:'⚡' },
+    { id:'history',    label:'History',     icon:'📜' },
+  ]
+
+  // ─── Render profile tab content ───────────────────────────────
+  const renderTab = (emp: Employee) => {
+    const ef = editForm
+    const F = (label: string, key: string, type?: string, opts?: string[]) => (
+      <Field key={key} label={label} value={key === 'date_of_birth' || key.includes('doj') ? fmtDate((emp as any)[key]) : fmt((emp as any)[key])}
+        editMode={editMode} fieldKey={key} editForm={ef} setEditForm={setEditForm} type={type} opts={opts} />
+    )
+
+    if (profileTab === 'personal') return (
+      <div>
+        <Section title="Identity" icon="🪪">
+          <Grid2>
+            {F('Full Name','full_name')} {F('Common Code','common_code')}
+            {F('First Name','first_name')} {F('Last Name','last_name')}
+            {F('Gender','gender','text',['Male','Female','Other'])}
+            {F('Date of Birth','date_of_birth','date')}
+            {F('Blood Group','blood_group','text',['A+','A-','B+','B-','O+','O-','AB+','AB-'])}
+            {F('Marital Status','marital_status','text',['Single','Married','Divorced','Widowed'])}
+            {F('Nationality','nationality')} {F('Religion','religion')}
+            {F('Birth Place','birth_place')}
+          </Grid2>
+        </Section>
+        <Section title="Family" icon="👪">
+          <Grid2>
+            {F("Father's Name",'father_name')} {F("Mother's Name",'mother_name')}
+            {F('Spouse Name','spouse_name')}
+          </Grid2>
+        </Section>
+        <Section title="Contact" icon="📞">
+          <Grid2>
+            {F('Mobile','mobile')} {F('Alternate Mobile','alternate_mobile')}
+            {F('Personal Email','personal_email')} {F('Office Email','office_email')}
+            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
+              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Aadhaar</div>
+              <div style={{fontSize:'13px',color:P.text}}>XXXX-XXXX-{emp.aadhar_last4 || '—'}</div>
+            </div>
+            {F('PAN Number','pan_number')} {F('UAN Number','uan_number')}
+          </Grid2>
+        </Section>
+        <Section title="Residential Address" icon="🏠">
+          <Grid2>
+            {F('Address','res_address1')} {F('City','res_city')}
+            {F('State','res_state')} {F('PIN','res_pin')}
+          </Grid2>
+        </Section>
+        <Section title="Permanent Address" icon="📍">
+          <Grid2>
+            {F('Address','perm_address1')} {F('City','perm_city')}
+            {F('State','perm_state')} {F('PIN','perm_pin')}
+          </Grid2>
+        </Section>
+        <Section title="Emergency Contact" icon="🚨">
+          <Grid2>
+            {F('Name','emergency_name')} {F('Relation','emergency_relation')}
+            {F('Mobile','emergency_mobile')}
+          </Grid2>
+          <Grid2>
+            {F('Alt. Name','emergency2_name')} {F('Alt. Relation','emergency2_relation')}
+            {F('Alt. Mobile','emergency2_mobile')}
+          </Grid2>
+        </Section>
+      </div>
+    )
+
+    if (profileTab === 'employment') return (
+      <div>
+        <Section title="Employment Details" icon="💼">
+          <Grid2>
+            {F('Designation','designation')}
+            {F('Grade','grade')}
+            {F('Employment Type','employment_type','text',['Employee','Intern','NAPS','NATS','Consultant','Contract'])}
+            {F('Employment Status','employment_status','text',['Active','Resigned','Sabbatical','Abscond','Inactive'])}
+            {F('Collar Type','collar_type','text',['White Collar','Blue Collar'])}
+            {F('Function','employee_function')}
+            {F('Category','employee_category')}
+            {F('Notice Period (Days)','notice_period_days','number')}
+            {emp.employment_type === 'Intern' && F('Intern Pay (₹)','intern_pay','number')}
+            {emp.employment_type === 'Consultant' && F('Consultant Pay (₹)','consultant_pay','number')}
+            {emp.employment_type === 'Contract' && F('Contract Pay (₹)','contract_pay','number')}
+          </Grid2>
+        </Section>
+        <Section title="Joining & Confirmation" icon="📅">
+          <Grid2>
+            {F('Group DOJ','group_doj','date')}
+            {F('Company DOJ','company_doj','date')}
+            {F('Confirmation Status','confirmation_status','text',['Probation','Confirmed'])}
+            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
+              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Company</div>
+              <div style={{fontSize:'13px',color:P.text}}>{(emp as any).companies?.company_name || '—'}</div>
+            </div>
+            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
+              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Location / Branch</div>
+              <div style={{fontSize:'13px',color:P.text}}>{(emp as any).locations?.location_name || '—'}</div>
+            </div>
+            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
+              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Department</div>
+              <div style={{fontSize:'13px',color:P.text}}>{(emp as any).departments?.dept_name || '—'}</div>
+            </div>
+          </Grid2>
+        </Section>
+        {emp.employment_status === 'Resigned' && (
+          <Section title="Exit Details" icon="🚪">
+            <Grid2>
+              {F('Date of Resignation','date_of_resignation','date')}
+              {F('Last Working Date','last_working_date','date')}
+            </Grid2>
+            <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
+              <div style={{ padding:'6px 12px', borderRadius:'8px', background:emp.rehire_eligible?P.greenBg:P.page, border:`1px solid ${emp.rehire_eligible?'#BBF7D0':P.border}`, fontSize:'11px', color:emp.rehire_eligible?P.green:P.muted }}>{emp.rehire_eligible?'✓ Rehire Eligible':'✗ Not Rehire Eligible'}</div>
+              {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'8px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>🚫 Blacklisted</div>}
+            </div>
+          </Section>
+        )}
+      </div>
+    )
+
+    if (profileTab === 'statutory') return (
+      <div>
+        <Section title="Statutory Applicability" icon="⚖️">
+          <div style={{ display:'flex', gap:'8px', marginBottom:'16px' }}>
+            <StatChip label="PF / EPF" value={emp.pf_applicable} />
+            <StatChip label="ESIC" value={emp.esic_applicable} />
+            <StatChip label="Prof. Tax" value={emp.pt_applicable} />
+            <StatChip label="LWF" value={emp.lwf_applicable} />
+          </div>
+          <Grid2>
+            {F('UAN Number','uan_number')}
+            {F('PAN Number','pan_number')}
+            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
+              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Aadhaar</div>
+              <div style={{fontSize:'13px',fontFamily:'monospace',color:P.text}}>XXXX-XXXX-{emp.aadhar_last4||'—'}</div>
+            </div>
+          </Grid2>
+        </Section>
+      </div>
+    )
+
+    if (profileTab === 'bank') return (
+      <Section title="Salary Account" icon="🏦">
+        <div style={{ background:P.greenBg, border:`1px solid #BBF7D0`, borderRadius:'10px', padding:'16px', marginBottom:'12px' }}>
+          <div style={{ fontSize:'12px', fontWeight:600, color:'#15803D', marginBottom:'12px' }}>Primary Account</div>
+          <Grid2>
+            {[
+              ['Bank Name', emp.bank_name],
+              ['Account Type', emp.account_type],
+              ['Account No.', emp.bank_account_last4 ? `XXXX XXXX XXXX ${emp.bank_account_last4}` : '—'],
+              ['IFSC Code', emp.ifsc_code],
+            ].map(([l,v]) => (
+              <div key={l} style={{padding:'6px 0',borderBottom:`1px solid #DCFCE7`}}>
+                <div style={{fontSize:'10px',color:'#16A34A',marginBottom:'3px',fontWeight:500,textTransform:'uppercase',letterSpacing:'.4px'}}>{l}</div>
+                <div style={{fontSize:'13px',color:P.text,fontFamily:l==='Account No.'||l==='IFSC Code'?'monospace':'inherit'}}>{v||'—'}</div>
+              </div>
+            ))}
+          </Grid2>
+        </div>
+      </Section>
+    )
+
+    // These tabs delegate to HRActionPanel (existing logic preserved)
+    if (['documents','salary','onboarding','actions','history'].includes(profileTab)) {
+      return <HRActionPanel employee={emp} activeTab={profileTab} onRefresh={fetchEmployees} />
+    }
+
+    return null
+  }
+
+  // ─── JSX ──────────────────────────────────────────────────────
   return (
-    <div style={C.page}>
+    <div style={s.page}>
+
       {/* Topbar */}
-      <div style={C.topbar}>
-        <div style={{ fontSize:'12px', color:'#64748B' }}>
-          Sharma Group &nbsp;›&nbsp;
-          <span style={{ color:'#7C3AED', fontWeight:500 }}>Employee Master</span>
-          <span style={{ marginLeft:'8px', padding:'2px 8px', background:'#EDE9FE', color:'#7C3AED', borderRadius:'10px', fontSize:'11px' }}>
+      <div style={s.topbar}>
+        <div style={{ fontSize:'12px', color:P.muted }}>
+          <span style={{ color:P.purple, fontWeight:500 }}>Employee Master</span>
+          <span style={{ marginLeft:'8px', padding:'2px 8px', background:P.purpleBg, color:P.purple, borderRadius:'10px', fontSize:'11px' }}>
             {stats.total} Total
           </span>
         </div>
         <div style={{ display:'flex', gap:'8px' }}>
-          <button style={{ ...C.secBtn, opacity: exporting ? 0.6 : 1 }} disabled={exporting} onClick={exportExcel}>📥 {exporting ? 'Exporting…' : 'Export Excel'}</button>
-          <button style={C.secBtn} onClick={() => setShowBulk(true)}>⬆ Bulk Upload</button>
-          <button style={C.priBtn} onClick={() => setShowAdd(true)}>+ Add Employee</button>
+          <button style={{ ...s.secBtn, opacity: exporting ? 0.6 : 1 }} disabled={exporting} onClick={exportExcel}>📥 {exporting ? 'Exporting…' : 'Export Excel'}</button>
+          <button style={s.secBtn} onClick={() => setShowBulk(true)}>⬆ Bulk Upload</button>
+          <button style={s.priBtn} onClick={() => setShowAdd(true)}><span>+</span> Add Employee</button>
         </div>
       </div>
 
-      <div style={C.body}>
-        {/* Stats Cards */}
+      <div style={s.body}>
+
+        {/* Stat Cards */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(8,1fr)', gap:'8px', marginBottom:'14px' }}>
-          {[
-            { label:'Total',      value:stats.total,      color:'#1E1B4B', onClick:()=>{ setFType(''); setFStatus('') } },
-            { label:'Active',     value:stats.active,     color:'#16A34A', onClick:()=>{ setFType(''); setFStatus('Active') } },
-            { label:'Resigned',   value:stats.resigned,   color:'#DC2626', onClick:()=>{ setFType(''); setFStatus('Resigned') } },
-            { label:'Employee',   value:stats.employee,   color:'#7C3AED', onClick:()=>setFType('Employee') },
-            { label:'Intern',     value:stats.intern,     color:'#1D4ED8', onClick:()=>setFType('Intern') },
-            { label:'NAPS',       value:stats.naps,       color:'#0D9488', onClick:()=>setFType('NAPS') },
-            { label:'Consultant', value:stats.consultant, color:'#D97706', onClick:()=>setFType('Consultant') },
-            { label:'Contract',   value:stats.contract,   color:'#374151', onClick:()=>setFType('Contract') },
-          ].map(s => (
-            <div key={s.label} onClick={s.onClick} style={{ background:'#fff', border:'1px solid #E2E8F0', borderRadius:'8px', padding:'10px 8px', textAlign:'center' as const, cursor:'pointer', borderTop:`3px solid ${s.color}` }}>
-              <div style={{ fontSize:'20px', fontWeight:700, color:s.color }}>{loading ? '—' : s.value}</div>
-              <div style={{ fontSize:'10px', color:'#64748B', marginTop:'2px' }}>{s.label}</div>
-            </div>
-          ))}
+          <StatCard label="Total"      value={loading?'—':stats.total}      color={P.navy}    active={!filterStatus&&!filterType} onClick={()=>{setFType('');setFStatus('')}} />
+          <StatCard label="Active"     value={loading?'—':stats.active}     color={P.green}   active={filterStatus==='Active'&&!filterType}   onClick={()=>{setFType('');setFStatus('Active')}} />
+          <StatCard label="Resigned"   value={loading?'—':stats.resigned}   color={P.red}     active={filterStatus==='Resigned'&&!filterType}  onClick={()=>{setFType('');setFStatus('Resigned')}} />
+          <StatCard label="Employee"   value={loading?'—':stats.employee}   color={P.purple}  active={filterType==='Employee'}   onClick={()=>setFType('Employee')} />
+          <StatCard label="Intern"     value={loading?'—':stats.intern}     color='#1D4ED8'   active={filterType==='Intern'}     onClick={()=>setFType('Intern')} />
+          <StatCard label="NAPS"       value={loading?'—':stats.naps}       color='#0D9488'   active={filterType==='NAPS'}       onClick={()=>setFType('NAPS')} />
+          <StatCard label="Consultant" value={loading?'—':stats.consultant} color={P.amber}   active={filterType==='Consultant'} onClick={()=>setFType('Consultant')} />
+          <StatCard label="Contract"   value={loading?'—':stats.contract}   color='#374151'   active={filterType==='Contract'}   onClick={()=>setFType('Contract')} />
         </div>
 
-        {/* Filters */}
-        <div style={{ ...C.card, display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap' as const, padding:'12px 14px' }}>
-          <input
-            style={{ ...C.inp, flex:1, minWidth:'200px' }}
-            placeholder="🔍  Name, Code, Designation, Mobile..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          <select style={C.sel} value={filterCompany} onChange={e => { setFCo(e.target.value); setFLoc(''); setFDept('') }}>
+        {/* Filters — sticky so they stay visible while the list scrolls */}
+        <div style={{ ...s.card, display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', padding:'12px 16px', position:'sticky', top:'58px', zIndex:30, boxShadow:'0 2px 8px rgba(124,58,237,0.06)' }}>
+          <input style={{ ...s.inp, flex:1, minWidth:'200px', width:'auto' }} placeholder="🔍  Name, Code, Designation, Mobile…" value={search} onChange={e=>setSearch(e.target.value)} />
+          <select style={{ ...s.sel, width:'auto', minWidth:'140px' }} value={filterCompany} onChange={e=>{setFCo(e.target.value);setFLoc('');setFDept('')}}>
             <option value="">All Companies</option>
-            {companies.map(c => <option key={c.id} value={c.id}>{c.company_code} — {c.company_name}</option>)}
+            {companies.map(c=><option key={c.id} value={c.id}>{c.company_code} — {c.company_name}</option>)}
           </select>
-          <select style={C.sel} value={filterLocation} onChange={e => setFLoc(e.target.value)} disabled={!filterCompany}>
+          <select style={{ ...s.sel, width:'auto', minWidth:'130px' }} value={filterLocation} onChange={e=>setFLoc(e.target.value)}>
             <option value="">All Locations</option>
-            {filteredLocs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+            {filteredLocs.map(l=><option key={l.id} value={l.id}>{l.location_name}</option>)}
           </select>
-          <select style={C.sel} value={filterDept} onChange={e => setFDept(e.target.value)} disabled={!filterCompany}>
+          <select style={{ ...s.sel, width:'auto', minWidth:'130px' }} value={filterDept} onChange={e=>setFDept(e.target.value)}>
             <option value="">All Depts</option>
-            {filteredDepts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
+            {filteredDepts.map(d=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
           </select>
-          <select style={C.sel} value={filterType} onChange={e => setFType(e.target.value)}>
+          <select style={{ ...s.sel, width:'auto' }} value={filterType} onChange={e=>setFType(e.target.value)}>
             <option value="">All Types</option>
-            {['Employee','Intern','NAPS','NATS','Consultant','Contract'].map(t => <option key={t}>{t}</option>)}
+            {['Employee','Intern','NAPS','NATS','Consultant','Contract'].map(t=><option key={t}>{t}</option>)}
           </select>
-          <select style={C.sel} value={filterStatus} onChange={e => setFStatus(e.target.value)}>
+          <select style={{ ...s.sel, width:'auto' }} value={filterStatus} onChange={e=>setFStatus(e.target.value)}>
             <option value="">All Status</option>
-            {['Active','Resigned','Terminated','Absconding'].map(s => <option key={s}>{s}</option>)}
+            {['Active','Resigned','Terminated','Absconding'].map(t=><option key={t}>{t}</option>)}
           </select>
-          <select style={C.sel} value={filterGrade} onChange={e => setFGrade(e.target.value)}>
+          <select style={{ ...s.sel, width:'auto' }} value={filterGrade} onChange={e=>setFGrade(e.target.value)}>
             <option value="">All Grades</option>
-            {['L2','L1','M3','M2','M1','E3','E2','E1','W2','W1'].map(g => <option key={g}>{g}</option>)}
+            {['L1','L2','M1','M2','M3','E1','E2','E3','W1','W2'].map(g=><option key={g}>{g}</option>)}
           </select>
-          {(search || filterCompany || filterLocation || filterDept || filterType || filterStatus || filterGrade) && (
-            <button style={C.secBtn} onClick={() => { setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus('Active'); setFGrade('') }}>✕ Clear</button>
-          )}
+          <button style={s.secBtn} onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus('Active'); setFGrade('') }}>✕ Clear</button>
         </div>
 
-        {error && (
-          <div style={{ padding:'10px 14px', background:'#FEE2E2', borderRadius:'8px', fontSize:'12px', color:'#DC2626', marginBottom:'12px' }}>
-            ⚠️ {error}
-          </div>
-        )}
+        {/* Error */}
+        {error && <div style={{ background:P.redBg, border:`1px solid #FCA5A5`, borderRadius:'8px', padding:'10px 14px', color:P.red, fontSize:'12px', marginBottom:'12px' }}>⚠ {error}</div>}
 
         {/* Table */}
-        <div style={{ background:'#fff', borderRadius:'10px', border:'1px solid #E2E8F0', overflow:'hidden' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'12px 16px', borderBottom:'1px solid #F1F5F9' }}>
-            <div style={{ fontSize:'13px', fontWeight:600, color:'#0F172A' }}>
-              {loading ? 'Loading...' : `${total} employees found`}
-              {filterStatus && <span style={{ marginLeft:'8px', fontSize:'11px', color:'#64748B' }}>· {filterStatus}</span>}
-            </div>
-            <div style={{ fontSize:'11px', color:'#94A3B8' }}>Page {page} of {totalPages || 1}</div>
+        <div style={s.card}>
+          <div style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+              <thead>
+                <tr style={{ borderBottom:`1.5px solid ${P.border}`, background:P.purpleLight }}>
+                  {['Emp Code','Name & Designation','Type','Location','Grade','Status','DOJ','Mobile','Actions'].map(h=>(
+                    <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:600, color:P.purpleDark, fontSize:'11px', letterSpacing:'.3px', whiteSpace:'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {loading && (
+                  <tr><td colSpan={9} style={{ padding:'32px', textAlign:'center', color:P.muted }}>Loading employees…</td></tr>
+                )}
+                {!loading && employees.length === 0 && (
+                  <tr><td colSpan={9} style={{ padding:'32px', textAlign:'center', color:P.muted }}>No employees found</td></tr>
+                )}
+                {employees.map(emp => {
+                  const gc = GRADE_COLORS[emp.grade] || {bg:'#F1F5F9',color:'#374151'}
+                  const sc = STATUS_COLORS[emp.employment_status] || {bg:'#F1F5F9',color:'#374151'}
+                  return (
+                    <tr key={emp.id} onClick={()=>openProfile(emp)} style={{ borderBottom:`1px solid ${P.border}`, cursor:'pointer', transition:'background .1s' }}
+                      onMouseEnter={e=>(e.currentTarget.style.background='#FAFAFE')}
+                      onMouseLeave={e=>(e.currentTarget.style.background='')}>
+                      <td style={{ padding:'10px 12px', fontWeight:600, color:P.purple, fontFamily:'monospace', fontSize:'11px' }}>{emp.emp_code}</td>
+                      <td style={{ padding:'10px 12px' }}>
+                        <div style={{ fontWeight:500, color:P.text }}>{emp.full_name}</div>
+                        <div style={{ fontSize:'10px', color:P.muted, marginTop:'2px' }}>{emp.designation || '—'}</div>
+                      </td>
+                      <td style={{ padding:'10px 12px' }}><Badge val={emp.employment_type} map={TYPE_COLORS} /></td>
+                      <td style={{ padding:'10px 12px' }}>
+                        <div style={{ fontSize:'12px', color:P.text }}>{(emp as any).locations?.location_name || '—'}</div>
+                        <div style={{ fontSize:'10px', color:P.muted }}>{(emp as any).companies?.company_code || '—'}</div>
+                      </td>
+                      <td style={{ padding:'10px 12px' }}>
+                        <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'11px', fontWeight:500, ...gc }}>{emp.grade || '—'}</span>
+                      </td>
+                      <td style={{ padding:'10px 12px' }}>
+                        <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...sc }}>{emp.employment_status}</span>
+                        {emp.employment_status==='Resigned'&&emp.last_working_date&&(
+                          <div style={{ fontSize:'9px', color:P.red, marginTop:'2px' }}>LWD: {fmtDate(emp.last_working_date)}</div>
+                        )}
+                      </td>
+                      <td style={{ padding:'10px 12px', fontSize:'11px', color:P.muted }}>{fmtDate(emp.company_doj)}</td>
+                      <td style={{ padding:'10px 12px', fontSize:'11px', color:P.text }}>{emp.mobile||'—'}</td>
+                      {/* View + Edit — both wired */}
+                      <td style={{ padding:'10px 12px' }} onClick={e=>e.stopPropagation()}>
+                        <div style={{ display:'flex', gap:'4px' }}>
+                          <button onClick={()=>openProfile(emp)} style={{ padding:'4px 10px', background:P.purpleBg, border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'10px', color:P.purple, fontWeight:500 }}>View</button>
+                          <button onClick={()=>openEdit(emp)} style={{ padding:'4px 10px', background:'#F0FDF4', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'10px', color:P.green, fontWeight:500 }}>Edit</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           </div>
 
-          {loading ? (
-            <div style={{ padding:'40px', textAlign:'center' as const, color:'#94A3B8' }}>⏳ Loading employees...</div>
-          ) : employees.length === 0 ? (
-            <div style={{ padding:'40px', textAlign:'center' as const, color:'#94A3B8' }}>
-              <div style={{ fontSize:'28px', marginBottom:'8px' }}>👥</div>
-              <div>No employees found — try changing the filters</div>
-            </div>
-          ) : (
-            <div style={{ overflowX:'auto' as const }}>
-              <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:'12px' }}>
-                <thead>
-                  <tr style={{ background:'#1E1B4B' }}>
-                    {['Emp Code','Name','Type','Designation','Department','Location / Co.','Grade','Status','DOJ','Mobile','Action'].map(h => (
-                      <th key={h} style={{ padding:'10px 12px', color:'#fff', fontWeight:600, textAlign:'left' as const, fontSize:'11px', whiteSpace:'nowrap' as const }}>{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {employees.map((emp, i) => {
-                    const gc = GRADE_COLORS[emp.grade] || { bg:'#F1F5F9', color:'#374151' }
-                    const tc = TYPE_COLORS[emp.employment_type] || { bg:'#F1F5F9', color:'#374151' }
-                    const sc = STATUS_COLORS[emp.employment_status] || { bg:'#F1F5F9', color:'#374151' }
-                    return (
-                      <tr key={emp.id} style={{ background:i%2===0?'#F8FAFC':'#fff', borderBottom:'1px solid #E2E8F0', cursor:'pointer' }} onClick={() => openProfile(emp)}>
-                        <td style={{ padding:'10px 12px' }}>
-                          <div style={{ fontWeight:600, color:'#7C3AED', fontSize:'12px' }}>{emp.emp_code}</div>
-                          <div style={{ fontSize:'10px', color:'#94A3B8' }}>{emp.common_code}</div>
-                        </td>
-                        <td style={{ padding:'10px 12px' }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-                            <div style={{ width:'30px', height:'30px', borderRadius:'50%', background:emp.gender==='Female'?'#FCE7F3':'#EDE9FE', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:700, color:emp.gender==='Female'?'#BE185D':'#7C3AED', flexShrink:0 }}>
-                              {initials(emp.full_name)}
-                            </div>
-                            <div>
-                              <div style={{ fontWeight:500, color:'#0F172A' }}>{emp.full_name}</div>
-                              <div style={{ fontSize:'10px', color:'#94A3B8' }}>{emp.gender} · {emp.blood_group || '—'}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td style={{ padding:'10px 12px' }}>
-                          <span style={{ padding:'2px 7px', borderRadius:'5px', fontSize:'10px', fontWeight:500, ...tc }}>{emp.employment_type}</span>
-                        </td>
-                        <td style={{ padding:'10px 12px' }}>
-                          <div style={{ fontWeight:500 }}>{emp.designation}</div>
-                          <div style={{ fontSize:'10px', color:'#94A3B8' }}>{emp.collar_type === 'BC' ? '🔵 Blue Collar' : '⚪ White Collar'}</div>
-                        </td>
-                        <td style={{ padding:'10px 12px', color:'#374151' }}>
-                          {(emp as any).departments?.dept_name || '—'}
-                        </td>
-                        <td style={{ padding:'10px 12px' }}>
-                          <div style={{ fontSize:'12px', color:'#374151' }}>{(emp as any).locations?.location_name || '—'}</div>
-                          <div style={{ fontSize:'10px', color:'#94A3B8' }}>{(emp as any).companies?.company_code || '—'}</div>
-                        </td>
-                        <td style={{ padding:'10px 12px' }}>
-                          <span style={{ padding:'2px 7px', borderRadius:'5px', fontSize:'11px', fontWeight:600, ...gc }}>{emp.grade}</span>
-                        </td>
-                        <td style={{ padding:'10px 12px' }}>
-                          <span style={{ padding:'2px 8px', borderRadius:'5px', fontSize:'10px', fontWeight:500, ...sc }}>{emp.employment_status}</span>
-                          {emp.employment_status === 'Resigned' && emp.last_working_date && (
-                            <div style={{ fontSize:'9px', color:'#DC2626', marginTop:'2px' }}>LWD: {emp.last_working_date}</div>
-                          )}
-                        </td>
-                        <td style={{ padding:'10px 12px', fontSize:'11px', color:'#64748B' }}>
-                          <div>{emp.company_doj || '—'}</div>
-                          {emp.group_doj !== emp.company_doj && (
-                            <div style={{ fontSize:'9px', color:'#94A3B8' }}>Grp: {emp.group_doj}</div>
-                          )}
-                        </td>
-                        <td style={{ padding:'10px 12px', fontSize:'11px', color:'#374151' }}>{emp.mobile || '—'}</td>
-                        <td style={{ padding:'10px 12px' }} onClick={e => e.stopPropagation()}>
-                          <div style={{ display:'flex', gap:'4px' }}>
-                            <button onClick={() => openProfile(emp)} style={{ padding:'4px 8px', background:'#EDE9FE', border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:'#7C3AED' }}>View</button>
-                            <button style={{ padding:'4px 8px', background:'#F1F5F9', border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:'#374151' }}>Edit</button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
+          {/* Pagination */}
           {totalPages > 1 && (
-            <div style={{ display:'flex', justifyContent:'center', gap:'6px', padding:'12px', borderTop:'1px solid #F1F5F9' }}>
-              <button style={{ ...C.secBtn, padding:'6px 12px', opacity:page===1?0.4:1 }} onClick={() => setPage(p => Math.max(1, p-1))} disabled={page===1}>← Prev</button>
-              {Array.from({ length:Math.min(totalPages, 7) }, (_, i) => {
-                const p = page <= 4 ? i + 1 : page - 3 + i
-                if (p < 1 || p > totalPages) return null
-                return (
-                  <button key={p} onClick={() => setPage(p)} style={{ width:'32px', height:'32px', border:'1.5px solid', borderRadius:'6px', cursor:'pointer', fontSize:'12px', fontWeight:p===page?600:400, background:p===page?'#7C3AED':'#fff', color:p===page?'#fff':'#374151', borderColor:p===page?'#7C3AED':'#E2E8F0' }}>{p}</button>
-                )
+            <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:'6px', padding:'12px', borderTop:`1px solid ${P.border}` }}>
+              <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===1?.4:1 }} onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>← Prev</button>
+              {Array.from({length:Math.min(totalPages,7)},(_,i)=>{
+                const p = page<=4 ? i+1 : page-3+i
+                if(p<1||p>totalPages) return null
+                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`1.5px solid ${p===page?P.purple:P.border}`,borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple:'#fff',color:p===page?'#fff':P.text }}>{p}</button>
               })}
-              <button style={{ ...C.secBtn, padding:'6px 12px', opacity:page===totalPages?0.4:1 }} onClick={() => setPage(p => Math.min(totalPages, p+1))} disabled={page===totalPages}>Next →</button>
+              <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===totalPages?.4:1 }} onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}>Next →</button>
             </div>
           )}
         </div>
       </div>
 
-      {/* Profile Drawer */}
+      {/* ── PROFILE DRAWER — full screen, same page ── */}
       {showDrawer && selected && (
-        <div style={{ position:'fixed' as const, inset:0, background:'#F0F4F8', zIndex:200, display:'flex', flexDirection:'column' as const, overflowY:'auto' as const, fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
-          <div style={{ flex:1, display:'flex', flexDirection:'column' as const, width:'100%', maxWidth:'1000px', margin:'0 auto' }}>
+        <div style={{ position:'fixed', inset:0, background:P.page, zIndex:200, display:'flex', flexDirection:'column', overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
+          <div style={{ flex:1, width:'100%', maxWidth:'1060px', margin:'0 auto', display:'flex', flexDirection:'column' }}>
 
-            {/* Header */}
-            <div style={{ background:'#1E1B4B', padding:'16px 20px', display:'flex', gap:'12px', alignItems:'center', position:'sticky' as const, top:0, zIndex:10 }}>
-              <button onClick={handleBack} style={{ background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.25)', color:'#fff', borderRadius:'7px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit', flexShrink:0 }}>← Back to list</button>
-              <div style={{ width:'48px', height:'48px', borderRadius:'50%', background:selected.gender==='Female'?'#FCE7F3':'#EDE9FE', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', fontWeight:700, color:selected.gender==='Female'?'#BE185D':'#7C3AED', flexShrink:0 }}>
-                {initials(selected.full_name)}
+            {/* Nav breadcrumb */}
+            <div style={{ padding:'10px 20px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:P.muted }}>
+              <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>← Employee list</button>
+              <span>›</span>
+              <span style={{ color:P.text, fontWeight:500 }}>{selected.full_name}</span>
+              {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'6px', fontSize:'10px', fontWeight:500 }}>Editing</span>}
+            </div>
+
+            {/* Profile header (with edit/save/cancel) */}
+            <div style={{ margin:'0 20px', borderRadius:'14px', overflow:'hidden', border:`1px solid ${P.border}`, marginBottom:'14px' }}>
+              <ProfileHeader emp={selected} editMode={editMode} saving={saving} onEdit={() => openEdit()} onSave={saveEdit} onCancel={cancelEdit} />
+
+              {/* Tab bar */}
+              <TabBar tabs={TABS} active={profileTab} onChange={setProfileTab} />
+
+              {/* Tab content */}
+              <div style={{ background:P.card, minHeight:'320px' }}>
+                {renderTab(selected)}
               </div>
-              <div style={{ flex:1 }}>
-                <div style={{ fontSize:'15px', fontWeight:600, color:'#fff' }}>{selected.full_name}</div>
-                <div style={{ fontSize:'11px', color:'rgba(255,255,255,0.6)', marginTop:'2px' }}>{selected.emp_code} · {selected.designation}</div>
-                <div style={{ display:'flex', gap:'6px', marginTop:'6px' }}>
-                  <span style={{ padding:'1px 7px', borderRadius:'5px', fontSize:'10px', ...(TYPE_COLORS[selected.employment_type]||{bg:'#F1F5F9',color:'#374151'}) }}>{selected.employment_type}</span>
-                  <span style={{ padding:'1px 7px', borderRadius:'5px', fontSize:'10px', ...(STATUS_COLORS[selected.employment_status]||{bg:'#F1F5F9',color:'#374151'}) }}>{selected.employment_status}</span>
-                  <span style={{ padding:'1px 7px', borderRadius:'5px', fontSize:'10px', ...(GRADE_COLORS[selected.grade]||{bg:'#F1F5F9',color:'#374151'}) }}>{selected.grade}</span>
-                </div>
-              </div>
-              <button onClick={handleBack} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.6)', fontSize:'20px', cursor:'pointer', lineHeight:1 }}>✕</button>
             </div>
 
-            {/* Tabs */}
-            <div style={{ display:'flex', borderBottom:'1px solid #E2E8F0', background:'#F8FAFC' }}>
-              {[
-                { id:'personal',   label:'👤 Personal' },
-                { id:'employment', label:'💼 Employment' },
-                { id:'statutory',  label:'🏛️ Statutory' },
-                { id:'bank',       label:'🏦 Bank' },
-                { id:'documents',  label:'📄 Documents' },
-                { id:'salary',     label:'💰 Salary' },
-                { id:'onboarding', label:'📋 Onboarding' },
-                { id:'actions',    label:'⚡ HR Actions' },
-                { id:'history',    label:'📜 History' },
-              ].map(t => (
-                <button key={t.id} onClick={() => setProfileTab(t.id)} style={{ flex:1, padding:'10px 4px', border:'none', background:'transparent', cursor:'pointer', fontSize:'11px', fontWeight:profileTab===t.id?600:400, color:profileTab===t.id?'#7C3AED':'#64748B', borderBottom:profileTab===t.id?'2.5px solid #7C3AED':'2.5px solid transparent' }}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            <div style={{ flex:1, overflowY:'auto' as const, padding:'16px 20px' }}>
-
-              {profileTab === 'personal' && (
-                <div>
-                  {[
-                    { label:'Full Name',      value:selected.full_name },
-                    { label:'Common Code',    value:selected.common_code },
-                    { label:'Gender',         value:selected.gender },
-                    { label:'Date of Birth',  value:selected.date_of_birth || '—' },
-                    { label:'Blood Group',    value:selected.blood_group || '—' },
-                    { label:'Marital Status', value:selected.marital_status || '—' },
-                    { label:'Mobile',         value:selected.mobile },
-                    { label:'Personal Email', value:selected.personal_email || '—' },
-                    { label:'Office Email',   value:selected.office_email || '—' },
-                    { label:'Aadhaar Last 4', value:selected.aadhar_last4 ? `XXXX XXXX ${selected.aadhar_last4}` : '—' },
-                    { label:'PAN',            value:selected.pan_number || '—' },
-                  ].map((f, i) => (
-                    <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #F1F5F9', fontSize:'12px' }}>
-                      <span style={{ color:'#64748B', flexShrink:0, width:'130px' }}>{f.label}</span>
-                      <span style={{ fontWeight:500, color:'#0F172A', textAlign:'right' as const }}>{f.value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {profileTab === 'employment' && (
-                <div>
-                  {[
-                    { label:'Emp Type',       value:selected.employment_type },
-                    { label:'Department',     value:(selected as any).departments?.dept_name || '—' },
-                    { label:'Designation',    value:selected.designation },
-                    { label:'Grade',          value:selected.grade },
-                    { label:'Collar',         value:selected.collar_type === 'BC' ? 'Blue Collar' : 'White Collar' },
-                    { label:'Function',       value:selected.employee_function || '—' },
-                    { label:'Category',       value:selected.employee_category || '—' },
-                    { label:'Company',        value:(selected as any).companies?.company_name || '—' },
-                    { label:'Location',       value:(selected as any).locations?.location_name || '—' },
-                    { label:'Group DOJ',      value:selected.group_doj || '—' },
-                    { label:'Company DOJ',    value:selected.company_doj || '—' },
-                    { label:'Confirmation',   value:selected.confirmation_status || '—' },
-                    { label:'Notice Period',  value:selected.notice_period_days ? `${selected.notice_period_days} days` : '—' },
-                    ...(selected.employment_status === 'Resigned' ? [
-                      { label:'Date of Resign',   value:selected.date_of_resignation || '—' },
-                      { label:'Last Working Day', value:selected.last_working_date || '—' },
-                    ] : []),
-                    { label:'Rehire Eligible', value:selected.rehire_eligible ? '✅ Yes' : '❌ No' },
-                    { label:'Blacklisted',     value:selected.blacklisted ? '🚫 Yes' : 'No' },
-                  ].map((f, i) => (
-                    <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #F1F5F9', fontSize:'12px' }}>
-                      <span style={{ color:'#64748B', flexShrink:0, width:'140px' }}>{f.label}</span>
-                      <span style={{ fontWeight:500, color:'#0F172A', textAlign:'right' as const }}>{f.value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {profileTab === 'statutory' && (
-                <div>
-                  <div style={{ display:'flex', gap:'8px', marginBottom:'14px' }}>
-                    {[
-                      { label:'PF',   value:selected.pf_applicable },
-                      { label:'ESIC', value:selected.esic_applicable },
-                      { label:'PT',   value:selected.pt_applicable },
-                      { label:'LWF',  value:selected.lwf_applicable },
-                    ].map(s => (
-                      <div key={s.label} style={{ flex:1, padding:'10px 6px', borderRadius:'8px', background:s.value?'#F0FDF4':'#F8FAFC', border:`1px solid ${s.value?'#BBF7D0':'#E2E8F0'}`, textAlign:'center' as const }}>
-                        <div style={{ fontSize:'12px', fontWeight:600, color:'#374151' }}>{s.label}</div>
-                        <div style={{ fontSize:'10px', color:s.value?'#16A34A':'#94A3B8', marginTop:'4px' }}>{s.value ? '✅ Yes' : '❌ No'}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {[
-                    { label:'UAN Number', value:selected.uan_number || '—' },
-                    { label:'PAN Number', value:selected.pan_number || '—' },
-                  ].map((f, i) => (
-                    <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid #F1F5F9', fontSize:'12px' }}>
-                      <span style={{ color:'#64748B' }}>{f.label}</span>
-                      <span style={{ fontWeight:500, color:'#0F172A' }}>{f.value}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {profileTab === 'bank' && (
-                <div>
-                  <div style={{ background:'#F0FDF4', border:'1px solid #BBF7D0', borderRadius:'10px', padding:'14px' }}>
-                    <div style={{ fontSize:'13px', fontWeight:600, color:'#15803D', marginBottom:'10px' }}>🏦 Salary Account</div>
-                    {[
-                      { label:'Bank Name',    value:selected.bank_name || '—' },
-                      { label:'Account No.',  value:selected.bank_account_last4 ? `XXXX XXXX ${selected.bank_account_last4}` : '—' },
-                      { label:'IFSC Code',    value:selected.ifsc_code || '—' },
-                      { label:'Account Type', value:selected.account_type || '—' },
-                    ].map((f, i) => (
-                      <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #DCFCE7', fontSize:'12px' }}>
-                        <span style={{ color:'#64748B' }}>{f.label}</span>
-                        <span style={{ fontWeight:500, color:'#0F172A' }}>{f.value}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {(profileTab === 'documents' || profileTab === 'salary' || profileTab === 'onboarding' || profileTab === 'actions' || profileTab === 'history') && (
-                <HRActionPanel employee={selected} activeTab={profileTab} onRefresh={fetchEmployees} />
-              )}
-            </div>
-
-            <div style={{ padding:'12px 20px', borderTop:'1px solid #E2E8F0', display:'flex', gap:'8px' }}>
-              <button onClick={openEdit} style={{ ...C.priBtn, flex:1 }}>✏️ Edit Profile</button>
-            </div>
           </div>
         </div>
       )}
 
-      {/* Full-screen Edit Profile */}
-      {editing && selected && (
-        <div style={{ position:'fixed' as const, inset:0, background:'#F0F4F8', zIndex:210, display:'flex', flexDirection:'column' as const, overflowY:'auto' as const, fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
-          <div style={{ flex:1, width:'100%', maxWidth:'1000px', margin:'0 auto', display:'flex', flexDirection:'column' as const }}>
-            <div style={{ background:'#1E1B4B', padding:'14px 20px', display:'flex', alignItems:'center', gap:'12px', position:'sticky' as const, top:0, zIndex:10 }}>
-              <button onClick={cancelEdit} style={{ background:'rgba(255,255,255,0.12)', border:'1px solid rgba(255,255,255,0.25)', color:'#fff', borderRadius:'7px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:600, fontFamily:'inherit' }}>← Cancel</button>
-              <div style={{ fontSize:'15px', fontWeight:600, color:'#fff' }}>Edit Profile — {selected.full_name}</div>
-              <button onClick={saveEdit} disabled={savingEdit} style={{ marginLeft:'auto', ...C.priBtn, opacity: savingEdit ? .6 : 1 }}>{savingEdit ? 'Saving…' : '💾 Save'}</button>
-            </div>
-            <div style={{ padding:'16px 20px' }}>
-              <div style={C.card}>
-                <div style={{ fontSize:'13px', fontWeight:600, color:'#374151', marginBottom:'12px' }}>✏️ Editable Fields</div>
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px' }}>
-                  {([
-                    { k:'full_name',         label:'Full Name' },
-                    { k:'first_name',        label:'First Name' },
-                    { k:'last_name',         label:'Last Name' },
-                    { k:'gender',            label:'Gender', opts:['Male','Female','Other'] },
-                    { k:'date_of_birth',     label:'Date of Birth', type:'date' },
-                    { k:'blood_group',       label:'Blood Group', opts:['A+','A-','B+','B-','O+','O-','AB+','AB-'] },
-                    { k:'marital_status',    label:'Marital Status', opts:['Single','Married','Divorced','Widowed'] },
-                    { k:'designation',       label:'Designation' },
-                    { k:'grade',             label:'Grade' },
-                    { k:'employment_type',   label:'Employment Type', opts:['Employee','Intern','NAPS','NATS','Consultant','Contract'] },
-                    { k:'employment_status', label:'Employment Status', opts:['Active','Resigned','Sabbatical','Abscond','Inactive'] },
-                    { k:'mobile',            label:'Mobile' },
-                    { k:'personal_email',    label:'Personal Email' },
-                    { k:'office_email',      label:'Office Email' },
-                    { k:'notice_period_days',label:'Notice Period (days)', type:'number' },
-                  ] as { k:string; label:string; type?:string; opts?:string[] }[]).map(f => (
-                    <div key={f.k}>
-                      <label style={{ fontSize:'10px', fontWeight:600, color:'#64748B', textTransform:'uppercase', letterSpacing:'.04em', display:'block', marginBottom:'4px' }}>{f.label}</label>
-                      {f.opts ? (
-                        <select style={{ ...C.sel, width:'100%' }} value={editForm[f.k] ?? ''} onChange={e => setEditForm((p:any) => ({ ...p, [f.k]: e.target.value }))}>
-                          <option value="">—</option>
-                          {f.opts.map(o => <option key={o}>{o}</option>)}
-                        </select>
-                      ) : (
-                        <input type={f.type || 'text'} style={{ ...C.inp, width:'100%' }} value={editForm[f.k] ?? ''} onChange={e => setEditForm((p:any) => ({ ...p, [f.k]: e.target.value }))} />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showAdd && <AddEmployeeModal companies={companies} locations={locations} departments={departments} onClose={() => setShowAdd(false)} onSaved={(msg) => { setShowAdd(false); setAddMsg(msg); fetchEmployees(); setTimeout(() => setAddMsg(''), 3500) }} />}
+      {/* ── Modals + toast ── */}
+      {showAdd && <AddEmployeeModal companies={companies} locations={locations} departments={departments} onClose={() => setShowAdd(false)} onSaved={(msg) => { setShowAdd(false); setAddMsg(msg); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 3500) }} />}
       {showBulk && <BulkUploadModal companies={companies} departments={departments} locations={locations} onClose={() => setShowBulk(false)} onDone={(r) => { setAddMsg(`Bulk: ${r.added} added, ${r.skipped} skipped, ${r.errors} errors`); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 4000) }} />}
       {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:'#059669', color:'#fff', borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
     </div>
   )
 }
-

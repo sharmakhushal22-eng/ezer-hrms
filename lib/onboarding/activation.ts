@@ -5,7 +5,7 @@
 import { supabase } from '@/lib/supabase'
 
 export interface ActivationCandidate {
-  id: string; full_name: string; designation: string | null; employment_type: string | null
+  id: string; candidate_id: string | null; full_name: string; designation: string | null; employment_type: string | null
   company_id: string | null; location_id: string | null; department_id: string | null
   department: string | null; date_of_joining: string | null; offered_ctc: number | null
   status: string | null; employee_code: string | null; form_data: any
@@ -23,8 +23,9 @@ export interface ActivationCandidate {
 }
 export interface EmpLite { id: string; emp_code: string; full_name: string; designation: string | null }
 export interface ShiftLite { id: string; shift_code: string; in_time: string | null; out_time: string | null }
+export interface DeptLite { id: string; dept_name: string; company_id: string | null }
 
-const CAND_COLS = `id, full_name, designation, employment_type, company_id, location_id, department_id, department,
+const CAND_COLS = `id, candidate_id, full_name, designation, employment_type, company_id, location_id, department_id, department,
   date_of_joining, offered_ctc, status, employee_code, form_data,
   grade, l1_manager_id, l2_manager_id, hod_id, hr_spoc_id, cost_centre, team_name, shift_id, induction_date,
   probation_months, confirmation_date, work_location_type, annual_ctc, basic_pct, tds_regime, pf_wage_type,
@@ -35,13 +36,30 @@ const CAND_COLS = `id, full_name, designation, employment_type, company_id, loca
 export async function loadActivationData(onboardingId: string): Promise<{ cand: ActivationCandidate | null; employees: EmpLite[]; shifts: ShiftLite[] }> {
   const candR = await supabase.from('onboarding_candidates').select(CAND_COLS).eq('id', onboardingId).maybeSingle()
   const cand = (candR.data as any) || null
-  const [empR, shR] = await Promise.all([
+  // Annual CTC auto-fetch: if the onboarding row has no CTC yet, pull it from the linked
+  // recruitment record — the negotiated CTC (ctc_negotiations) first, else candidates.offered_ctc.
+  if (cand && !cand.annual_ctc && !cand.offered_ctc && cand.candidate_id) {
+    let ctc: number | null = null
+    try {
+      const neg = await supabase.from('ctc_negotiations').select('offered_ctc')
+        .eq('candidate_id', cand.candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      ctc = (neg.data as any)?.offered_ctc ?? null
+    } catch { /* table optional */ }
+    if (ctc == null) {
+      const c = await supabase.from('candidates').select('offered_ctc, ctc').eq('id', cand.candidate_id).maybeSingle()
+      const row: any = c.data
+      ctc = row?.offered_ctc ?? (row?.ctc != null ? Number(row.ctc) : null)
+    }
+    if (ctc != null && !Number.isNaN(Number(ctc))) cand.offered_ctc = Number(ctc)
+  }
+  const [empR, shR, deptR] = await Promise.all([
     supabase.from('employees').select('id, emp_code, full_name, designation').eq('employment_status', 'Active').order('full_name'),
     cand?.company_id
       ? supabase.from('shift_master').select('id, shift_code, in_time, out_time').eq('company_id', cand.company_id).eq('is_active', true)
       : supabase.from('shift_master').select('id, shift_code, in_time, out_time').eq('is_active', true),
+    supabase.from('departments').select('id, dept_name, company_id').eq('status', 'Active').order('dept_name'),
   ])
-  return { cand, employees: (empR.data as any) || [], shifts: (shR.data as any) || [] }
+  return { cand, employees: (empR.data as any) || [], shifts: (shR.data as any) || [], departments: (deptR.data as any) || [] }
 }
 
 export async function saveActivation(onboardingId: string, payload: Partial<ActivationCandidate>): Promise<{ error: string | null }> {
