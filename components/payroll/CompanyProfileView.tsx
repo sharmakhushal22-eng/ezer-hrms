@@ -62,8 +62,12 @@ function CompanyCard({ co, isMobile }: { co: Company; isMobile: boolean }) {
                   <span style={{ fontSize:13, fontWeight:600 }}>{b.location_name}</span>
                   <span style={{ fontSize:10, padding:'1px 7px', borderRadius:99, background:'#F1F5F9', color:'#475569' }}>{b.location_type}</span>
                 </div>
-                <div style={{ ...C.lbl, textTransform:'none', fontWeight:400, color:'#64748B', marginBottom:6 }}>
-                  {[b.address_line1, b.city, b.district, b.state, b.pin_code].filter(Boolean).join(', ') || '—'}
+                <div style={{ ...C.lbl, textTransform:'none', fontWeight:400, color:'#64748B', marginBottom:8 }}>
+                  {[b.address_line1, b.city, b.pin_code].filter(Boolean).join(', ') || '—'}
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px 12px', marginBottom:8 }}>
+                  <ROField label="District" value={b.district} />
+                  <ROField label="State" value={b.state} />
                 </div>
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
                   <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:'#7C3AED', fontSize:11 }}>map</a></> : '—'}</div></div>

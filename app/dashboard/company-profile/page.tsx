@@ -7,6 +7,7 @@ import {
   loadHierarchy, updateEntity, loadAudit, confirmPayment,
   type GroupTree, type Company, type Branch, type Registration, type AuditRow,
 } from '@/lib/supabase-company-profile'
+import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 
 // ── Style constant (employees/admin palette — C) ───────────────────
 const C = {
@@ -68,6 +69,89 @@ function EditField({ label, value, type, onSave, fmtFn }: {
   )
 }
 
+// ── Searchable dropdown (type to filter) ────────────────────────────
+function SearchSelect({ value, options, placeholder, onChange, disabled }: {
+  value: string; options: string[]; placeholder: string; onChange: (v: string) => void; disabled?: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const filtered = (q.trim() ? options.filter(o => o.toLowerCase().includes(q.toLowerCase())) : options).slice(0, 100)
+  return (
+    <div style={{ position:'relative', width:190 }}>
+      <div onClick={() => { if (!disabled) { setOpen(o => !o); setQ('') } }}
+        style={{ ...C.input, width:'100%', cursor: disabled ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:6, background: disabled ? '#F1F5F9' : '#F8FAFC', color: value ? '#0F172A' : '#94A3B8' }}>
+        <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value || placeholder}</span>
+        <span style={{ color:'#94A3B8', fontSize:11 }}>▾</span>
+      </div>
+      {open && !disabled && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }} />
+          <div style={{ position:'absolute', top:'calc(100% + 3px)', left:0, width:'100%', minWidth:210, background:'#fff', border:'1px solid #DDD6FE', borderRadius:8, boxShadow:'0 8px 24px rgba(30,27,75,0.16)', zIndex:41, overflow:'hidden' }}>
+            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
+              style={{ width:'100%', padding:'8px 10px', border:'none', borderBottom:'1px solid #EEF', fontSize:12.5, outline:'none', boxSizing:'border-box', fontFamily:'inherit' }} />
+            <div style={{ maxHeight:220, overflowY:'auto' }}>
+              {filtered.length === 0 && <div style={{ padding:'8px 10px', fontSize:12, color:'#94A3B8' }}>No matches</div>}
+              {filtered.map(o => (
+                <div key={o} onClick={() => { onChange(o); setOpen(false) }}
+                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = '#F5F3FF'}
+                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? '#EEF2FF' : '#fff'}
+                  style={{ padding:'7px 10px', fontSize:12.5, cursor:'pointer', background: o === value ? '#EEF2FF' : '#fff', color:'#0F172A' }}>
+                  {o}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── State → District editor (pick state first, then its districts) ──
+function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
+  state: any; district: any
+  onSaveState: (v: string) => Promise<void>
+  onSaveDistrict: (v: string) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [st, setSt] = useState(String(state ?? ''))
+  const [di, setDi] = useState(String(district ?? ''))
+  const [busy, setBusy] = useState(false)
+
+  async function save() {
+    setBusy(true)
+    if (st !== String(state ?? '')) await onSaveState(st)
+    if (di !== String(district ?? '')) await onSaveDistrict(di)
+    setBusy(false); setEditing(false)
+  }
+
+  if (!editing) {
+    return (
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px 12px', marginBottom:8 }}>
+        <div><div style={C.lbl}>State</div><div style={C.val}>{state || '—'}</div></div>
+        <div><div style={C.lbl}>District</div><div style={C.val}>{district || '—'}
+          <span onClick={() => { setSt(String(state ?? '')); setDi(String(district ?? '')); setEditing(true) }} title="edit" style={{ cursor:'pointer', color:'#94A3B8', marginLeft:6, fontSize:12 }}>✎</span></div></div>
+      </div>
+    )
+  }
+  return (
+    <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end', marginBottom:8 }}>
+      <div>
+        <div style={C.lbl}>State</div>
+        <SearchSelect value={st} options={INDIAN_STATES} placeholder="Select state"
+          onChange={v => { setSt(v); setDi('') }} />
+      </div>
+      <div>
+        <div style={C.lbl}>District</div>
+        <SearchSelect value={di} options={districtsOf(st)} placeholder={st ? 'Select district' : 'Pick a state first'}
+          onChange={setDi} disabled={!st} />
+      </div>
+      <button disabled={busy} onClick={save} style={{ ...C.pri, padding:'7px 12px' }}>{busy ? '…' : 'Save'}</button>
+      <button onClick={() => setEditing(false)} style={{ ...C.out, padding:'7px 10px' }}>✕</button>
+    </div>
+  )
+}
+
 // ── Company card (one company in the group) ─────────────────────────
 function CompanyCard({ co, isMobile, save, openPay }: {
   co: Company; isMobile: boolean
@@ -87,7 +171,10 @@ function CompanyCard({ co, isMobile, save, openPay }: {
         <span style={{ fontSize:14, fontWeight:600 }}>{co.company_name}</span>
         {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:'#EDE9FE', color:'#7C3AED', fontWeight:600 }}>{co.company_type}</span>}
         <span style={{ fontSize:10, color:'#94A3B8' }}>{co.company_code}</span>
-        <span style={{ marginLeft:'auto' }}><StatusBadge status={co.account_status} days={co.days_to_due} /></span>
+        <span style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
+          <button onClick={e => { e.stopPropagation(); setOpen(true) }} style={{ fontSize:11, fontWeight:600, padding:'4px 11px', borderRadius:7, border:'1px solid #DDD6FE', background:'#fff', color:'#7C3AED', cursor:'pointer' }}>✎ Edit</button>
+          <StatusBadge status={co.account_status} days={co.days_to_due} />
+        </span>
       </div>
 
       {open && (
@@ -95,12 +182,12 @@ function CompanyCard({ co, isMobile, save, openPay }: {
           <div style={C.sec}>Company details</div>
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:'12px 16px', marginBottom:18 }}>
             <EditField label="Employer / Director" value={co.short_name} onSave={v => save('COMPANY', co.id, 'short_name', v, co.id)} />
-            <div><div style={C.lbl}>Industry</div><div style={C.val}>{co.industry || '—'}</div></div>
+            <EditField label="Industry" value={co.industry} onSave={v => save('COMPANY', co.id, 'industry', v, co.id)} />
             <EditField label="PAN" value={co.pan} onSave={v => save('COMPANY', co.id, 'pan', v.toUpperCase(), co.id)} />
             <EditField label="TAN" value={co.tan} onSave={v => save('COMPANY', co.id, 'tan', v.toUpperCase(), co.id)} />
             <EditField label="CIN" value={co.cin} onSave={v => save('COMPANY', co.id, 'cin', v.toUpperCase(), co.id)} />
             <div><div style={C.lbl}>Incorporated</div><div style={C.val}>{fmt(co.date_of_inc)}</div></div>
-            <div style={{ gridColumn:'1 / -1' }}><div style={C.lbl}>Registered office</div><div style={C.val}>{co.reg_office || '—'}</div></div>
+            <div style={{ gridColumn:'1 / -1' }}><EditField label="Registered office" value={co.reg_office} onSave={v => save('COMPANY', co.id, 'reg_office', v, co.id)} /></div>
           </div>
 
           <div style={C.sec}>Branches ({co.branches.length})</div>
@@ -111,9 +198,12 @@ function CompanyCard({ co, isMobile, save, openPay }: {
                   <span style={{ fontSize:13, fontWeight:600 }}>{b.location_name}</span>
                   <span style={{ fontSize:10, padding:'1px 7px', borderRadius:99, background:'#F1F5F9', color:'#475569' }}>{b.location_type}</span>
                 </div>
-                <div style={{ ...C.lbl, textTransform:'none', fontWeight:400, color:'#64748B', marginBottom:6 }}>
-                  {[b.address_line1, b.city, b.district, b.state, b.pin_code].filter(Boolean).join(', ') || '—'}
+                <div style={{ ...C.lbl, textTransform:'none', fontWeight:400, color:'#64748B', marginBottom:8 }}>
+                  {[b.address_line1, b.city, b.pin_code].filter(Boolean).join(', ') || '—'}
                 </div>
+                <StateDistrictEditor state={b.state} district={b.district}
+                  onSaveState={v => save('LOCATION', b.id, 'state', v, co.id)}
+                  onSaveDistrict={v => save('LOCATION', b.id, 'district', v, co.id)} />
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
                   <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:'#7C3AED', fontSize:11 }}>map</a></> : '—'}</div></div>
                   <EditField label="Max employees" value={b.max_employees} type="number" onSave={v => save('LOCATION', b.id, 'max_employees', v, co.id)} />

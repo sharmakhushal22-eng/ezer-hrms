@@ -1,1 +1,53 @@
-export default function Page(){return(<div style={{padding:"60px",textAlign:"center",background:"#F0F4F8",minHeight:"100vh"}}><h2 style={{color:"#0F172A",fontSize:"22px",marginBottom:"8px"}}>HR Letters</h2><p style={{color:"#64748B"}}>Coming soon</p><div style={{marginTop:"20px",display:"inline-block",padding:"8px 20px",background:"#7C3AED",color:"#fff",borderRadius:"10px"}}>In Development</div></div>)}
+'use client'
+// app/dashboard/letters/page.tsx — HR Letters section.
+// Tab 1 (built): Letterhead & Signatory configuration (Group → Company → Branch cascade).
+// Future tabs (templates, generate & issue) will compose letters onto the resolved letterhead.
+import { useState } from 'react'
+import LetterheadConfig from '@/components/letters/LetterheadConfig'
+import LetterTemplates from '@/components/letters/LetterTemplates'
+
+const C = { bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', border: '#E9E7F5', muted: '#6B7280' }
+const font = '"DM Sans","Segoe UI",sans-serif'
+
+const TABS: { id: string; label: string; icon: string; soon?: boolean }[] = [
+  { id: 'letterhead', label: 'Letterhead & Signatory', icon: '🖋️' },
+  { id: 'letters', label: 'Design & Generate Letters', icon: '📄' },
+]
+
+export default function LettersPage() {
+  const [tab, setTab] = useState('letterhead')
+  return (
+    <div style={{ background: C.bg, minHeight: '100vh', fontFamily: font, color: C.navy }}>
+      {/* Gradient header banner */}
+      <div style={{ background: 'linear-gradient(120deg,#1E1B4B 0%,#4C1D95 55%,#7C3AED 100%)', padding: '22px 24px 20px', color: '#fff' }}>
+        <div style={{ maxWidth: 940, margin: '0 auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 13, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}>🖋️</div>
+            <div>
+              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>HR Letters</div>
+              <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)', marginTop: 2 }}>Configure letterheads &amp; signatories once, then draft and issue HR letters on branded stationery.</div>
+            </div>
+          </div>
+          {/* Segmented tabs */}
+          <div style={{ display: 'inline-flex', gap: 4, marginTop: 16, background: 'rgba(255,255,255,0.10)', border: '1px solid rgba(255,255,255,0.16)', borderRadius: 11, padding: 4, flexWrap: 'wrap' }}>
+            {TABS.map(t => {
+              const active = tab === t.id
+              return (
+                <button key={t.id} onClick={() => !t.soon && setTab(t.id)} disabled={t.soon}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 15px', borderRadius: 8, border: 'none', background: active ? '#fff' : 'transparent', color: active ? C.purple : 'rgba(255,255,255,0.82)', fontSize: 12.5, fontWeight: 600, cursor: t.soon ? 'not-allowed' : 'pointer', fontFamily: font, whiteSpace: 'nowrap', opacity: t.soon ? 0.55 : 1, boxShadow: active ? '0 2px 8px rgba(0,0,0,0.18)' : 'none' }}>
+                  <span>{t.icon}</span>{t.label}
+                  {t.soon && <span style={{ fontSize: 8.5, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: 'rgba(255,255,255,0.18)', letterSpacing: '.04em' }}>SOON</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ maxWidth: 940, margin: '0 auto' }}>
+        {tab === 'letterhead' && <LetterheadConfig />}
+        {tab === 'letters' && <LetterTemplates />}
+      </div>
+    </div>
+  )
+}

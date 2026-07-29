@@ -62,6 +62,70 @@ export async function advanceRun(run: PayrollRun): Promise<{ error: string | nul
   await supabase.from('payroll_audit_log').insert({ run_id: run.id, company_id: run.company_id, action: 'STATUS_' + ns, performed_by: 'HR' })
   return { error: null }
 }
+// Month Master snapshot — freeze employee org/statutory/bank/CTC/salary at Month Create.
+// Re-runnable; never touches attendance columns. Returns the number of employees frozen.
+export async function syncPayrollMonth(runId: string): Promise<{ error: string | null; count: number }> {
+  const { data, error } = await supabase.rpc('sync_payroll_month', { p_run_id: runId })
+  return { error: error?.message || null, count: (data as number) || 0 }
+}
+
+export interface AttendanceUploadRow {
+  emp_code: string; earned_leave?: number; casual_leave?: number
+  sick_leave?: number; other_leave?: number; absent_days?: number
+}
+export interface OtUploadRow { emp_code: string; ot_hours: number }
+export interface BatchResult { emp_code: string; result: string }
+
+// Attendance/leave upload — matches emp_code within a run. paid_days is
+// computed server-side as (EL+CL+SL+Other) − Absent. Never touches ot_hours.
+export async function uploadAttendanceBatch(runId: string, rows: AttendanceUploadRow[]): Promise<{ error: string | null; results: BatchResult[] }> {
+  const { data, error } = await supabase.rpc('upload_attendance_batch', { p_run_id: runId, p_rows: rows })
+  return { error: error?.message || null, results: (data as any[]) || [] }
+}
+// Separate OT upload — touches ONLY ot_hours, so it can't overwrite attendance.
+export async function uploadOtBatch(runId: string, rows: OtUploadRow[]): Promise<{ error: string | null; results: BatchResult[] }> {
+  const { data, error } = await supabase.rpc('upload_ot_batch', { p_run_id: runId, p_rows: rows })
+  return { error: error?.message || null, results: (data as any[]) || [] }
+}
+// The run's valid emp codes — fetched once for the client-side "% checking"
+// validation pass before Process (no per-row round-trip).
+export async function getValidEmpCodesForRun(runId: string): Promise<Set<string>> {
+  const { data, error } = await supabase.rpc('get_valid_emp_codes_for_run', { p_run_id: runId })
+  if (error) throw new Error(error.message)
+  return new Set(((data as any[]) || []).map(r => String(r.employee_code)))
+}
+// Attendance Edit tab — per-employee. Only the fields passed change; the rest stay.
+export async function editEmployeeAttendance(runId: string, empCode: string, fields: {
+  paid_days?: number | null; earned_leave?: number | null; casual_leave?: number | null
+  sick_leave?: number | null; other_leave?: number | null; absent_days?: number | null; ot_hours?: number | null
+}): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc('edit_employee_attendance', {
+    p_run_id: runId, p_employee_code: empCode,
+    p_paid_days: fields.paid_days ?? null, p_earned_leave: fields.earned_leave ?? null,
+    p_casual_leave: fields.casual_leave ?? null, p_sick_leave: fields.sick_leave ?? null,
+    p_other_leave: fields.other_leave ?? null, p_absent_days: fields.absent_days ?? null,
+    p_ot_hours: fields.ot_hours ?? null,
+  })
+  return { error: error?.message || null }
+}
+// Arrear days from a prior period, landing in the CURRENT run. Source month untouched.
+export async function addArrearDays(runId: string, empCode: string, arrearDays: number, sourcePeriod: string, reason: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.rpc('add_arrear_days', {
+    p_run_id: runId, p_employee_code: empCode, p_arrear_days: arrearDays,
+    p_source_period: sourcePeriod, p_reason: reason || null,
+  })
+  return { error: error?.message || null }
+}
+
+// Directly set a run's status — used by the Payroll Month controls (Freeze / Lock / reopen).
+export async function setRunStatus(run: PayrollRun, status: string): Promise<{ error: string | null }> {
+  const patch: any = { status, updated_at: new Date().toISOString() }
+  patch.locked_at = status === 'LOCKED' ? new Date().toISOString() : null
+  const { error } = await supabase.from('payroll_runs').update(patch).eq('id', run.id)
+  if (error) return { error: error.message }
+  await supabase.from('payroll_audit_log').insert({ run_id: run.id, company_id: run.company_id, action: 'STATUS_' + status, performed_by: 'HR' })
+  return { error: null }
+}
 export async function cancelRun(run: PayrollRun) {
   await supabase.from('payroll_runs').update({ status: 'CANCELLED' }).eq('id', run.id)
   await supabase.from('payroll_audit_log').insert({ run_id: run.id, company_id: run.company_id, action: 'RUN_CANCELLED', performed_by: 'HR' })
@@ -154,16 +218,18 @@ export async function loadRunRegister(runId: string): Promise<Record<string, any
 // ── Employees & CTC (payroll view) — HRMS is the source of truth ──
 export interface PayrollEmployee {
   id: string; emp_code: string; full_name: string; designation: string | null
-  department: string | null; location: string | null
+  company: string | null; department: string | null; location: string | null
   annual_ctc: number; basic_monthly: number; hra_monthly: number
   bank_name: string | null; ifsc_code: string | null; bank_account_last4: string | null
   pf_applicable: boolean; esic_applicable: boolean; pt_applicable: boolean; lwf_applicable: boolean
   tds_regime: string | null
 }
 export async function loadPayrollEmployees(companyId: string): Promise<PayrollEmployee[]> {
-  const { data: emps } = await supabase.from('employees')
-    .select('id, emp_code, full_name, designation, tds_regime, pf_applicable, esic_applicable, pt_applicable, lwf_applicable, bank_name, ifsc_code, bank_account_last4, departments(dept_name), locations!location_id(location_name)')
-    .eq('company_id', companyId).eq('employment_status', 'Active').order('emp_code')
+  let q = supabase.from('employees')
+    .select('id, emp_code, full_name, designation, tds_regime, pf_applicable, esic_applicable, pt_applicable, lwf_applicable, bank_name, ifsc_code, bank_account_last4, companies(company_name), departments(dept_name), locations!location_id(location_name)')
+    .eq('employment_status', 'Active').order('emp_code')
+  if (companyId) q = q.eq('company_id', companyId)   // '' = all companies (Group Companies mode)
+  const { data: emps } = await q
   const list = (emps as any[]) || []
   if (!list.length) return []
   const ids = list.map(e => e.id)
@@ -173,6 +239,7 @@ export async function loadPayrollEmployees(companyId: string): Promise<PayrollEm
     const c = ctcBy.get(e.id)
     return {
       id: e.id, emp_code: e.emp_code, full_name: e.full_name, designation: e.designation,
+      company: e.companies?.company_name || null,
       department: e.departments?.dept_name || null, location: e.locations?.location_name || null,
       annual_ctc: Number(c?.annual_ctc || 0), basic_monthly: Math.round((c?.basic_annual || 0) / 12), hra_monthly: Math.round((c?.hra_annual || 0) / 12),
       bank_name: e.bank_name, ifsc_code: e.ifsc_code, bank_account_last4: e.bank_account_last4,

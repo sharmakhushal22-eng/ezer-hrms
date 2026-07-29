@@ -51,7 +51,7 @@ interface ReportConfig {
   columns: ReportColumn[];
   filters: FilterConfig[];
   // secondary table joined per-employee (one output row per secondary record)
-  join?: 'ctc_master' | 'vpf_declarations' | 'nps_declarations' | 'flexi_declarations' | 'tds_declarations' | 'leave_balances';
+  join?: 'ctc_master' | 'vpf_declarations' | 'nps_declarations' | 'flexi_declarations' | 'flexi_tds_forms' | 'tds_declarations' | 'leave_balances';
   // pre-filter the base employee set
   scope?: 'active' | 'exited' | 'confirmation_due' | 'all';
 }
@@ -167,13 +167,44 @@ const REPORTS: ReportConfig[] = [
       { key: 'designation', label: 'Designation' },
       { key: 'department_name', label: 'Department' },
       { key: 'grade', label: 'Grade' },
+      { key: 'employment_type', label: 'Employee Type', format: 'badge' },
       { key: 'company_name', label: 'Company' },
+      { key: 'company_doj', label: 'Date of Joining', format: 'date' },
+      { key: 'date_of_resignation', label: 'Date of Resignation', format: 'date' },
       { key: 'fy', label: 'FY' },
+      { key: 'tds_regime', label: 'Regime', format: 'badge' },
+      // All amounts ANNUAL. Annual CTC = salary structure total_ctc (matches Employee
+      // Master → Salary): gross + employer PF + employer ESIC + gratuity + variable.
       { key: 'annual_ctc', label: 'Annual CTC', format: 'currency' },
-      { key: 'annual_variable', label: 'Annual Variable', format: 'currency' },
-      { key: 'basic_annual', label: 'Annual Basic', format: 'currency' },
-      { key: 'hra_annual', label: 'Annual HRA', format: 'currency' },
+      { key: 'gross_annual', label: 'Gross (Annual)', format: 'currency' },
+      { key: 'variable_annual', label: 'Variable (Annual)', format: 'currency' },
+      { key: 'basic_a', label: 'Basic (Annual)', format: 'currency' },
+      { key: 'hra_a', label: 'HRA (Annual)', format: 'currency' },
+      { key: 'conveyance_a', label: 'Conveyance (Annual)', format: 'currency' },
+      { key: 'special_a', label: 'Special Allowance (Annual)', format: 'currency' },
+      { key: 'statbonus_a', label: 'Statutory Bonus (Annual)', format: 'currency' },
+      { key: 'employer_pf_a', label: 'Employer PF (Annual)', format: 'currency' },
+      { key: 'employer_esic_a', label: 'Employer ESIC (Annual)', format: 'currency' },
+      { key: 'gratuity_a', label: 'Gratuity (Annual)', format: 'currency' },
+      { key: 'employee_pf_a', label: 'Employee PF (Annual)', format: 'currency' },
+      { key: 'employee_esic_a', label: 'Employee ESIC (Annual)', format: 'currency' },
+      { key: 'pt_a', label: 'PT (Annual)', format: 'currency' },
+      { key: 'lwf_a', label: 'LWF (Annual)', format: 'currency' },
+      { key: 'net_a', label: 'Net Take-home (Annual)', format: 'currency' },
+      // Flexi / FBP — total + per component (amounts are already annual)
+      { key: 'flexi_total', label: 'Flexi Total (Annual)', format: 'currency' },
+      { key: 'flexi_car', label: 'Flexi: Car Lease', format: 'currency' },
+      { key: 'flexi_driver', label: 'Flexi: Driver Salary', format: 'currency' },
+      { key: 'flexi_fuel', label: 'Flexi: Fuel & Maintenance', format: 'currency' },
+      { key: 'flexi_tel', label: 'Flexi: Telephone / Internet', format: 'currency' },
+      { key: 'flexi_meal', label: 'Flexi: Meal Card', format: 'currency' },
+      { key: 'flexi_device', label: 'Flexi: Gadget / Device', format: 'currency' },
+      { key: 'flexi_attire', label: 'Flexi: Attire / Uniform', format: 'currency' },
+      { key: 'flexi_pda', label: 'Flexi: Books & Periodicals', format: 'currency' },
+      { key: 'flexi_lta', label: 'Flexi: LTA', format: 'currency' },
+      { key: 'epf_wage_a', label: 'EPF Wage (Annual)', format: 'currency' },
       { key: 'epf_wage_limit', label: 'EPF Wage Limit', format: 'currency' },
+      { key: 'pay_type', label: 'Pay Type' },
       { key: 'effective_from', label: 'W.E.F Date', format: 'date' },
       { key: 'status', label: 'Status', format: 'badge' },
     ],
@@ -320,7 +351,7 @@ const REPORTS: ReportConfig[] = [
     description: 'Employee-wise flexi (FBP) component declarations — old & new regime amounts',
     icon: '💼',
     category: 'Salary',
-    join: 'flexi_declarations',
+    join: 'flexi_tds_forms',
     scope: 'all',
     filters: [
       { key: 'fy', label: 'Financial Year', type: 'select', options: ['2026-27','2025-26'] },
@@ -683,16 +714,108 @@ async function fetchReportRows(report: ReportConfig, companyId: string): Promise
   }
 
   if (report.id === 'ctc_report') {
-    // Latest CTC per employee → one row per employee.
-    const latest: Record<string, any> = {};
+    // Latest ctc_master row per employee (keeps status, epf_wage_limit, fy).
+    const latestCtc: Record<string, any> = {};
     rows.forEach(r => {
-      const cur = latest[r.employee_id];
-      if (!cur || String(r.effective_from || '') > String(cur.effective_from || '')) latest[r.employee_id] = r;
+      const cur = latestCtc[r.employee_id];
+      if (!cur || String(r.effective_from || '') > String(cur.effective_from || '')) latestCtc[r.employee_id] = r;
     });
-    return emps.map((e: any) => ({ ...empSubset(e), ...(latest[e.id] || {}) }));
+    // Latest salary_structure per employee — the real component breakup + full total_ctc.
+    const latestSal: Record<string, any> = {};
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      const { data } = await supabase.from('salary_structures').select('*').in('employee_id', chunk);
+      (data || []).forEach((sr: any) => {
+        const cur = latestSal[sr.employee_id];
+        if (!cur || String(sr.effective_date || '') > String(cur.effective_date || '')) latestSal[sr.employee_id] = sr;
+      });
+    }
+    // Latest flexi/FBP declaration per employee — annual flexi total = sum of the chosen
+    // regime's flexi components (nFlexi for NEW, oFlexi for OLD), matching the flexi module.
+    const latestFlexi: Record<string, any> = {};
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      const { data } = await supabase.from('flexi_tds_forms').select('employee_id, regime, form_data, submitted_at, created_at').in('employee_id', chunk);
+      (data || []).forEach((f: any) => {
+        const cur = latestFlexi[f.employee_id];
+        const k = (f.submitted_at || f.created_at || '');
+        if (!cur || String(k) > String(cur.submitted_at || cur.created_at || '')) latestFlexi[f.employee_id] = f;
+      });
+    }
+    const flexiCompsOf = (f: any): Record<string, any> => {
+      if (!f) return {};
+      const fd = typeof f.form_data === 'string' ? (() => { try { return JSON.parse(f.form_data); } catch { return {}; } })() : (f.form_data || {});
+      return String(f.regime || '').toUpperCase() === 'NEW' ? (fd.nFlexi || {}) : (fd.oFlexi || {});
+    };
+    return emps.map((e: any) => {
+      const ctc = latestCtc[e.id] || {};
+      const sal = latestSal[e.id] || {};
+      const flexi = latestFlexi[e.id];
+      const hasSal = !!latestSal[e.id];
+      const ax = (v: any) => (!hasSal || v == null || v === '') ? null : (Number(v) || 0) * 12;   // monthly → annual (blank if no structure)
+      const fc = flexiCompsOf(flexi);
+      const fcv = (code: string) => flexi ? (Number(fc[code]) || 0) : null;   // annual flexi per component (blank if no declaration)
+      return {
+        ...empSubset(e),
+        ...ctc,
+        ...sal,
+        // Authoritative Annual CTC = salary structure total_ctc (matches Employee Master →
+        // Salary): gross + employer PF + ESIC + gratuity + variable. Fall back to
+        // ctc_master.annual_ctc only when no structure exists for the employee.
+        annual_ctc: sal.total_ctc != null ? sal.total_ctc : ctc.annual_ctc,
+        effective_from: sal.effective_date || ctc.effective_from,
+        // Regime: employee master's tds_regime, else the regime chosen on their flexi form.
+        tds_regime: e.tds_regime || flexi?.regime || '',
+        company_doj: e.company_doj,
+        date_of_resignation: e.date_of_resignation,
+        employment_type: e.employment_type,
+        // ── Annualised salary components (monthly × 12) ──
+        basic_a: ax(sal.basic_monthly), hra_a: ax(sal.hra_monthly), conveyance_a: ax(sal.conveyance),
+        special_a: ax(sal.special_allowance), statbonus_a: ax(sal.statutory_bonus),
+        employer_pf_a: ax(sal.employer_pf), employer_esic_a: ax(sal.employer_esic), gratuity_a: ax(sal.gratuity_monthly),
+        employee_pf_a: ax(sal.employee_pf), employee_esic_a: ax(sal.employee_esic),
+        pt_a: ax(sal.pt_monthly), lwf_a: ax(sal.lwf_monthly), net_a: ax(sal.net_take_home), epf_wage_a: ax(sal.epf_wage),
+        // ── Flexi / FBP total + per component (already annual) ──
+        flexi_total: flexi ? Object.values(fc).map((v: any) => Number(v) || 0).reduce((a, b) => a + b, 0) : null,
+        flexi_car: fcv('car'), flexi_driver: fcv('driver'), flexi_fuel: fcv('fuel'), flexi_tel: fcv('tel'),
+        flexi_meal: fcv('meal'), flexi_device: fcv('device'), flexi_attire: fcv('attire'), flexi_pda: fcv('pda'),
+        flexi_lta: (fcv('lta') ?? fcv('ltc')),
+      };
+    });
   }
 
-  // vpf / nps / flexi / tds / leave — one row per secondary record.
+  if (report.id === 'flexi_report') {
+    // flexi_tds_forms stores declared amounts as JSONB (oFlexi/nFlexi keyed by component
+    // code), NOT one row per component. Expand each form into one row per flexi component,
+    // with the old- and new-regime amount side by side.
+    const FLEXI_LABELS: Record<string, string> = {
+      car: 'Car Lease', driver: 'Driver Salary', tel: 'Telephone / Internet', fuel: 'Fuel & Maintenance',
+      meal: 'Meal Card', device: 'Gadget / Device', attire: 'Attire / Uniform', pda: 'Books & Periodicals',
+      lta: 'LTA', ltc: 'LTA', hlus: 'Hardship / Location', edu: 'Education',
+    }
+    const out: any[] = []
+    rows.forEach(f => {
+      const e = empById[f.employee_id]
+      if (!e) return
+      const fd = typeof f.form_data === 'string' ? (() => { try { return JSON.parse(f.form_data) } catch { return {} } })() : (f.form_data || {})
+      const o = fd.oFlexi || {}, n = fd.nFlexi || {}
+      const codes = Array.from(new Set([...Object.keys(o), ...Object.keys(n)])).filter(c => (Number(o[c]) || 0) > 0 || (Number(n[c]) || 0) > 0)
+      const base = { ...empSubset(e), fy: f.fy, tds_regime: e.tds_regime || f.regime, status: f.status, submitted_at: f.submitted_at }
+      if (codes.length === 0) {
+        out.push({ ...base, component_code: '—', old_regime_amt: null, new_regime_amt: null })
+        return
+      }
+      codes.forEach(code => out.push({
+        ...base,
+        component_code: FLEXI_LABELS[code] || code,
+        old_regime_amt: Number(o[code]) || 0,
+        new_regime_amt: Number(n[code]) || 0,
+      }))
+    })
+    return out
+  }
+
+  // vpf / nps / tds / leave — one row per secondary record.
   return rows.map(rec => {
     const e = empById[rec.employee_id];
     return { ...(e ? empSubset(e) : {}), ...rec };

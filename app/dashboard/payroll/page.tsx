@@ -1,9 +1,9 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import {
   loadCompanies, loadPayHeads, savePayHead, deletePayHead,
-  loadRuns, createRun, advanceRun, cancelRun, loadAudit, loadRunRegister,
+  loadRuns, createRun, advanceRun, cancelRun, setRunStatus, syncPayrollMonth, loadAudit, loadRunRegister,
   loadRunSummary, buildNeftRows,
   loadPayrollEmployees, syncRunEmployees,
   MONTHS, RUN_FLOW, nextStatus,
@@ -12,6 +12,21 @@ import {
 import { calculateRun } from '@/lib/payroll/engine'
 import PayHeadCatalog from '@/components/payroll/PayHeadCatalog'
 import CompanyProfileView from '@/components/payroll/CompanyProfileView'
+import PerquisitesConfig from '@/components/payroll/PerquisitesConfig'
+import BonusConfig from '@/components/payroll/BonusConfig'
+import MinimumWageConfig from '@/components/payroll/MinimumWageConfig'
+import LwfConfig from '@/components/payroll/LwfConfig'
+import PtConfig from '@/components/payroll/PtConfig'
+import IncomeTaxConfig from '@/components/payroll/IncomeTaxConfig'
+import EsicConfig from '@/components/payroll/EsicConfig'
+import EpfConfig from '@/components/payroll/EpfConfig'
+import PayrollDashboard from '@/components/payroll/PayrollDashboard'
+import AttendanceUpload from '@/components/payroll/AttendanceUpload'
+import OtUpload from '@/components/payroll/OtUpload'
+import AttendanceEdit from '@/components/payroll/AttendanceEdit'
+import MonthSync from '@/components/payroll/MonthSync'
+import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutoryPanel'
+import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 
 // ── Palette (guide-mandated) ──────────────────────────────────────
 const C = {
@@ -35,15 +50,17 @@ const S = {
   note: { background: 'rgba(124,58,237,0.05)', border: `1px dashed ${C.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.muted } as React.CSSProperties,
 }
 
-const TABS: { id: string; label: string }[] = [
-  { id: 'config', label: '🔧 Configuration' },
-  { id: 'employees', label: '👥 Employees & CTC' },
-  { id: 'run', label: '▶️ Payroll Run' },
-  { id: 'statutory', label: '⚖️ Statutory & Tax' },
-  { id: 'benefits', label: '🎁 Benefits & Loans' },
-  { id: 'offcycle', label: '🔁 Off-cycle · Bonus · FNF' },
-  { id: 'reports', label: '📊 Outputs & Reports' },
-  { id: 'admin', label: '🛡️ Admin & Controls' },
+const TABS: { id: string; label: string; title: string; subtitle: string }[] = [
+  { id: 'dashboard', label: '📊 Dashboard', title: 'Dashboard', subtitle: 'Headcount, cost, compliance deadlines & recent activity at a glance' },
+  { id: 'config', label: '🔧 Configuration', title: 'Configuration', subtitle: 'Group setup, pay heads, statutory slabs & tax rules' },
+  { id: 'attendance', label: '📤 Attendance', title: 'Attendance', subtitle: 'Upload attendance / leave / OT into the month snapshot' },
+  { id: 'employees', label: '👥 Employees & CTC', title: 'Employees & CTC', subtitle: 'Payroll view of the workforce, CTC master and bank details' },
+  { id: 'run', label: '▶️ Payroll Run', title: 'Payroll Run', subtitle: 'The heart — month create → sync → calculate → approve → disburse → lock' },
+  { id: 'statutory', label: '⚖️ Statutory & Tax', title: 'Statutory & Tax', subtitle: 'Compliance-by-design — PF, ESIC, PT, LWF, NPS and TDS' },
+  { id: 'benefits', label: '🎁 Benefits & Loans', title: 'Benefits & Loans', subtitle: 'Flexi benefits, NPS, insurance and the full loan lifecycle' },
+  { id: 'offcycle', label: '🔁 Off-cycle · Bonus · FNF', title: 'Off-cycle · Bonus · FNF', subtitle: 'Ad-hoc payments, bonus registers and full & final settlement' },
+  { id: 'reports', label: '📊 Outputs & Reports', title: 'Outputs & Reports', subtitle: 'Payslips, registers, bank files, challans and dashboards' },
+  { id: 'admin', label: '🛡️ Admin & Controls', title: 'Admin & Controls', subtitle: 'Access control, approvals and the full audit trail' },
 ]
 
 // ── Small shared bits ─────────────────────────────────────────────
@@ -71,16 +88,26 @@ interface SubTab {
   points?: string[]               // feature bullets/chips
   render?: () => React.ReactNode   // inline functional module
   groupGlobal?: boolean            // true = not company-specific; hide the Group-mode company switcher
+  children?: { id: string; label: string }[]   // nested sub-views, shown indented inside the tab dropdown
 }
 
 // Group-mode context passed down so company-specific sub-tabs can show a company switcher.
-interface GroupScope { mode: boolean; companies: { id: string; company_name: string; group_name?: string | null }[]; active: string; onChange: (id: string) => void }
 
-function SubTabHead({ title, subtitle, built, total }: { title: string; subtitle: string; built: number; total: number }) {
+function SubTabHead({ crumbs, subtitle, built, total }: { crumbs: string[]; subtitle: string; built: number; total: number }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
       <div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: C.navy }}>{title}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {crumbs.map((c, i) => {
+            const last = i === crumbs.length - 1
+            return (
+              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {i > 0 && <span style={{ color: '#C9C7D6', fontSize: 15 }}>›</span>}
+                <span style={{ fontSize: 17, fontWeight: last ? 700 : 600, color: last ? C.navy : C.muted }}>{c}</span>
+              </span>
+            )
+          })}
+        </div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{subtitle}</div>
       </div>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: C.muted }}>
@@ -91,22 +118,100 @@ function SubTabHead({ title, subtitle, built, total }: { title: string; subtitle
   )
 }
 
-function SubTabBar({ subs, active, onChange }: { subs: SubTab[]; active: string; onChange: (id: string) => void }) {
+// Main-tab button that opens a dropdown of its own sub-sections. Clicking a section
+// enters that tab + section. The menu hangs directly off the tab button.
+function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, onPick }: {
+  label: string; isActive: boolean; sections: SubTab[]; activeSub: string; activeChild?: string; onPick: (id: string, childId?: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())   // which sections have their children expanded
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const built = sections.filter(s => s.built).length
+  // Position the menu with fixed coordinates off the button so it escapes the tab bar's
+  // horizontal-scroll clipping and never needs scrolling to see the options.
+  const toggle = () => {
+    if (sections.length === 0) { onPick(''); return }   // no sub-sections (e.g. Dashboard) → just activate the tab
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect()
+      const left = Math.max(8, Math.min(r.left, window.innerWidth - 274))
+      setPos({ top: r.bottom + 6, left })
+      setExpanded(new Set())   // each time the menu opens, sub-sections start collapsed
+    }
+    setOpen(o => !o)
+  }
+  const toggleExpand = (id: string) => setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   return (
-    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-      {subs.map(s => {
-        const on = s.id === active
-        return (
-          <button key={s.id} onClick={() => onChange(s.id)} style={{
-            display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 99,
-            border: `1px solid ${on ? C.purple : C.border}`, background: on ? C.purple : '#fff',
-            color: on ? '#fff' : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-          }}>
-            <span style={{ width: 7, height: 7, borderRadius: 99, flexShrink: 0, background: s.built ? (on ? '#fff' : C.success) : (on ? 'rgba(255,255,255,.55)' : '#C9C7D6') }} />
-            <span>{s.icon}</span>{s.label}
-          </button>
-        )
-      })}
+    <div style={{ position: 'relative', flexShrink: 0 }}>
+      <button ref={btnRef} onClick={toggle} style={{
+        display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 8,
+        border: `1px solid ${isActive || open ? C.purple : C.border}`, background: isActive ? C.purple : '#fff',
+        color: isActive ? '#fff' : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+        boxShadow: open ? '0 6px 20px rgba(124,58,237,0.18)' : 'none',
+      }}>
+        {label}
+        {sections.length > 0 && <span style={{ fontSize: 10, opacity: .9, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}>▾</span>}
+      </button>
+      {open && sections.length > 0 && pos && (
+        <>
+          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000 }} />
+          <div style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 1001, minWidth: 262, maxHeight: 'calc(100vh - 96px)', overflowY: 'auto', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em', padding: '6px 10px 8px' }}>Sections · {built}/{sections.length} built</div>
+            {sections.map(s => {
+              const on = isActive && s.id === activeSub
+              const kids = s.children || []
+              const hasKids = kids.length > 0
+              const isExp = expanded.has(s.id)
+              const rowActive = on && !hasKids
+              return (
+                <div key={s.id}>
+                  <button
+                    onClick={() => { if (hasKids) { toggleExpand(s.id) } else { onPick(s.id); setOpen(false) } }}
+                    onMouseEnter={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = '#F7F5FF' }}
+                    onMouseLeave={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 9,
+                      border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 2,
+                      background: rowActive ? 'rgba(124,58,237,0.09)' : 'transparent',
+                    }}>
+                    <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{s.icon}</span>
+                    <span style={{ fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.purpleDark : C.navy, flex: 1 }}>{s.label}</span>
+                    {hasKids ? (
+                      <span style={{ color: C.muted, fontSize: 11, flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+                    ) : (
+                      <>
+                        <span title={s.built ? 'Built' : 'Planned'} style={{ width: 7, height: 7, borderRadius: 99, flexShrink: 0, background: s.built ? C.success : '#C9C7D6' }} />
+                        {on && <span style={{ color: C.purple, fontSize: 13, marginLeft: 2 }}>✓</span>}
+                      </>
+                    )}
+                  </button>
+                  {/* Nested sub-views — hidden until the parent section is clicked (expanded). */}
+                  {hasKids && isExp && (
+                    <div style={{ margin: '0 0 4px 22px', borderLeft: `1px solid ${C.border}`, paddingLeft: 6 }}>
+                      {kids.map(k => {
+                        const kon = on && k.id === activeChild
+                        return (
+                          <button key={k.id} onClick={() => { onPick(s.id, k.id); setOpen(false) }}
+                            onMouseEnter={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = '#F7F5FF' }}
+                            onMouseLeave={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
+                            style={{
+                              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8,
+                              border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 1,
+                              background: kon ? 'rgba(124,58,237,0.09)' : 'transparent',
+                            }}>
+                            <span style={{ fontSize: 12.5, fontWeight: kon ? 700 : 500, color: kon ? C.purpleDark : C.navy, flex: 1 }}>{k.label}</span>
+                            {kon && <span style={{ color: C.purple, fontSize: 12 }}>✓</span>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -155,74 +260,93 @@ function BuiltPanel({ s }: { s: SubTab }) {
   )
 }
 
-function SubTabbed({ title, subtitle, subs, group }: { title: string; subtitle: string; subs: SubTab[]; group?: GroupScope }) {
-  const [active, setActive] = useState(subs[0].id)
-  const cur = subs.find(s => s.id === active) || subs[0]
-  const built = subs.filter(s => s.built).length
-  // Show the company switcher only in Group mode and only on company-specific sub-tabs.
-  const showScope = group?.mode && !cur.groupGlobal && group.companies.length > 1
-  return (
-    <div>
-      <SubTabHead title={title} subtitle={subtitle} built={built} total={subs.length} />
-      <SubTabBar subs={subs} active={active} onChange={setActive} />
-      {showScope && group && <GroupScopeBar companies={group.companies} active={group.active} onChange={group.onChange} />}
-      {cur.render ? cur.render() : cur.built ? <BuiltPanel s={cur} /> : <PlannedPanel s={cur} />}
-    </div>
-  )
+// Resolve the sub-section list for a main tab. companyId '' = Group Companies (all companies at once).
+function subsForTab(tab: string, ctx: { companyId: string; fy: string; subView: string }): SubTab[] {
+  switch (tab) {
+    case 'config': return configSubs(ctx.companyId, ctx.subView, ctx.fy)
+    case 'attendance': return attendanceSubs(ctx.companyId, ctx.fy)
+    case 'employees': return employeeSubs(ctx.companyId)
+    case 'run': return runSubs(ctx.companyId, ctx.fy)
+    case 'statutory': return statutorySubs(ctx.fy)
+    case 'benefits': return benefitsSubs()
+    case 'offcycle': return offcycleSubs()
+    case 'reports': return reportsSubs()
+    case 'admin': return adminSubs(ctx.companyId)
+    default: return []
+  }
 }
 
-// ── Tab views: each main tab, split into architecture sub-modules ──
-function ConfigView({ companyId, group }: { companyId: string; group?: GroupScope }) {
-  return <SubTabbed group={group} title="Configuration" subtitle="Group setup, pay heads, statutory slabs & tax rules" subs={[
-    { id: 'payheads', label: 'Pay Heads', icon: '🧾', built: true, render: () => (
-      <div>
-        <PayHeadCatalog />
-        <div style={{ fontSize: 12, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.04em', margin: '18px 0 10px' }}>Company custom pay heads</div>
-        <ConfigTab companyId={companyId} />
-      </div>
-    ) },
+// ── Sub-section definitions per main tab (metadata + inline render) ──
+function configSubs(companyId: string, subView: string, fy: string): SubTab[] {
+  return [
+    { id: 'payheads', label: 'Pay Heads', icon: '🧾', built: true,
+      children: [
+        { id: 'catalog', label: '📋 Standard Pay Heads' },
+        { id: 'flexi', label: '🎛️ Flexi / FBP' },
+        { id: 'nonstd', label: '👥 Non-standard Types' },
+        { id: 'rules', label: '⚖️ Business Rules' },
+      ],
+      render: () => <PayHeadCatalog view={['flexi', 'nonstd', 'rules'].includes(subView) ? subView : 'catalog'} /> },
     { id: 'group', label: 'Group & Company', icon: '🏢', built: true, groupGlobal: true, render: () => <CompanyProfileView /> },
-    { id: 'fymonth', label: 'FY & Payroll Month', icon: '🗓️', desc: 'Define the financial year and open/close payroll months per company.' },
-    { id: 'categories', label: 'Categories · Dept · Location', icon: '🗂️', built: true, href: '/dashboard/admin', desc: 'Departments, locations and employee categories are configured in Admin Setup.' },
-    { id: 'perquisite', label: 'Perquisite', icon: '🚗', desc: 'Create taxable perquisites — car lease, ESOP, accommodation — with valuation rules.' },
-    { id: 'bonus', label: 'Bonus Config', icon: '🎯', desc: 'Statutory & performance bonus rules, eligibility windows and payout schedule.' },
-    { id: 'tax', label: 'Tax Config', icon: '🧮', desc: 'Old / new regime slabs, surcharge, cess and standard-deduction settings.' },
-    { id: 'slabs', label: 'PT · LWF Slabs', icon: '⚖️', built: true, desc: 'State-wise Professional Tax and LWF slabs. The PT slab logic already powers the payroll engine; a slab editor UI is next.' },
-    { id: 'minwages', label: 'Minimum Wages', icon: '📊', desc: 'State + skill-category minimum-wage master used for compliance checks during the payroll run.' },
-  ]} />
+    { id: 'fymonth', label: 'Payroll Month', icon: '🗓️', built: true,
+      children: [
+        { id: 'create', label: '📅 Create Month' },
+        { id: 'freeze', label: '❄️ Freeze Month' },
+        { id: 'unfreeze', label: '☀️ Unfreeze Month' },
+      ],
+      render: () => <PayrollMonthTab companyId={companyId} fy={fy} mode={(['create', 'freeze', 'unfreeze'].includes(subView) ? subView : 'create') as PmMode} /> },
+    { id: 'categories', label: 'Department · Sub-dept · Location', icon: '🗂️', built: true, render: () => <CompanyStructureView companyId={companyId} /> },
+    { id: 'perquisite', label: 'Perquisite', icon: '🚗', built: true, render: () => <PerquisitesConfig fy={fy} /> },
+    { id: 'bonus', label: 'Bonus Config', icon: '🎯', built: true, render: () => <BonusConfig fy={fy} /> },
+    { id: 'tax', label: 'Tax Config', icon: '🧮', built: true, render: () => <IncomeTaxConfig /> },
+    { id: 'lwf', label: 'LWF', icon: '🏛️', built: true, render: () => <LwfConfig /> },
+    { id: 'esic', label: 'ESIC', icon: '🏥', built: true, render: () => <EsicConfig /> },
+    { id: 'epf', label: 'EPF', icon: '🏦', built: true, render: () => <EpfConfig /> },
+    { id: 'slabs', label: 'PT Slabs', icon: '⚖️', built: true, render: () => <PtConfig /> },
+    { id: 'minwages', label: 'Minimum Wages', icon: '📊', built: true, render: () => <MinimumWageConfig /> },
+  ]
 }
 
-function EmployeesView({ companyId, group }: { companyId: string; group?: GroupScope }) {
-  return <SubTabbed group={group} title="Employees & CTC" subtitle="Payroll view of the workforce, CTC master and bank details" subs={[
+function attendanceSubs(companyId: string, fy: string): SubTab[] {
+  return [
+    { id: 'upload', label: 'Attendance Upload', icon: '📤', built: true, render: () => <AttendanceUpload companyId={companyId} fy={fy} /> },
+    { id: 'ot', label: 'OT Upload', icon: '⏱️', built: true, render: () => <OtUpload companyId={companyId} fy={fy} /> },
+    { id: 'edit', label: 'Edit & Arrear', icon: '✏️', built: true, render: () => <AttendanceEdit companyId={companyId} fy={fy} /> },
+  ]
+}
+
+function employeeSubs(companyId: string): SubTab[] {
+  return [
     { id: 'master', label: 'Employee & CTC Master', icon: '👥', built: true, render: () => <EmployeesTab companyId={companyId} /> },
     { id: 'bank', label: 'Bank Details', icon: '🏦', built: true, href: '/dashboard/employees', desc: 'Salary account, IFSC and masked account number are maintained in the Employee Master.' },
     { id: 'revision', label: 'Salary Revision & Arrears', icon: '📈', desc: 'Versioned CTC with effective dates, increment letters and automatic arrear computation.' },
-  ]} />
+  ]
 }
 
-function RunView({ companyId, fy }: { companyId: string; fy: string }) {
-  return <SubTabbed title="Payroll Run" subtitle="The heart — month create → sync → calculate → approve → disburse → lock" subs={[
+function runSubs(companyId: string, fy: string): SubTab[] {
+  return [
     { id: 'cycle', label: 'Run Cycle', icon: '▶️', built: true, render: () => <RunTab companyId={companyId} headerFy={fy} /> },
+    { id: 'sync', label: 'Snapshot Sync', icon: '🔄', built: true, render: () => <MonthSync companyId={companyId} fy={fy} /> },
     { id: 'uploaders', label: 'Bulk Uploaders', icon: '📤', desc: 'Seven XLSX uploaders feed the run before processing. Saved to payroll_run_inputs and picked up by the engine.', points: ['Additional payment', 'Deduction', 'Manual arrear', 'Statutory adjustment', 'Tax exemption', 'Perquisite tax', 'Other-than-month payment'] },
     { id: 'minwage', label: 'Minimum Wages Check', icon: '🛡️', desc: 'Flags employees whose gross falls below the applicable state minimum wage before payroll is processed.' },
     { id: 'lock', label: 'Lock / Unlock', icon: '🔒', built: true, desc: 'Single & bulk lock/unlock is part of the run status flow — DISBURSED → LOCKED freezes the snapshot and makes past payroll immutable.' },
-  ]} />
+  ]
 }
 
-function StatutoryView() {
-  return <SubTabbed title="Statutory & Tax" subtitle="Compliance-by-design — PF, ESIC, PT, LWF, NPS and TDS" subs={[
+function statutorySubs(fy: string): SubTab[] {
+  return [
     { id: 'pf', label: 'PF / EPF + VPF', icon: '🏦', built: true, href: '/dashboard/ess', desc: 'EPF @12% of capped wage is computed in the engine; VPF opt-in is available in the employee ESS portal.' },
     { id: 'esic', label: 'ESIC', icon: '🩺', built: true, desc: '0.75% employee / 3.25% employer, auto-applied for gross ≤ ₹21,000 during Calculate. Challan export is planned.' },
     { id: 'ptlwf', label: 'PT · LWF', icon: '⚖️', built: true, desc: 'State-wise Professional Tax slabs and Labour Welfare Fund are applied by the payroll engine.' },
     { id: 'nps', label: 'NPS', icon: '🏛️', built: true, href: '/dashboard/ess', desc: 'Corporate NPS enrolment via ESS; 80CCD(2) contribution is deducted in the engine.' },
     { id: 'tds', label: 'TDS Calculation', icon: '🧮', built: true, desc: 'Monthly TDS from each employee’s investment declaration feeds directly into the payroll run.' },
     { id: 'form16', label: 'Form 16 / 24Q', icon: '📄', desc: 'Quarterly 24Q returns and annual Form 16 generation for employees.' },
-    { id: 'perq', label: 'Perquisite Tax', icon: '🚗', desc: 'Perquisite valuation and tax add-back to taxable income.' },
-  ]} />
+    { id: 'perq', label: 'Perquisite Tax', icon: '🚗', built: true, render: () => <PerquisiteStatutoryPanel fy={fy} /> },
+  ]
 }
 
-function BenefitsView() {
-  return <SubTabbed title="Benefits & Loans" subtitle="Flexi benefits, NPS, insurance and the full loan lifecycle" subs={[
+function benefitsSubs(): SubTab[] {
+  return [
     { id: 'flexi', label: 'Flexi Benefit Plan', icon: '🎛️', built: true, href: '/dashboard/flexi-policy', desc: 'FBP components, slabs and employee declarations (old vs new regime).' },
     { id: 'flexiclaims', label: 'Flexi Claims', icon: '💳', built: true, href: '/dashboard/flexi-claims', desc: 'Review reimbursement bills, manage the monthly submission window and per-employee limits. Approved claims flow into payroll.' },
     { id: 'flexiinvoices', label: 'Flexi Invoices & Vouchers', icon: '🧾', built: true, href: '/dashboard/flexi-invoices', desc: 'Generate reimbursement vouchers (PDF) for approved flexi claims — one per employee per month, with invoice number EZER-FLX-…' },
@@ -231,21 +355,21 @@ function BenefitsView() {
     { id: 'loan', label: 'Loan Disbursal & Schedule', icon: '💸', built: true, href: '/dashboard/loans', desc: 'Loan requests, approval workflow, disbursal and the EMI amortisation schedule.' },
     { id: 'emi', label: 'EMI Auto-Deduct', icon: '🔁', built: true, desc: 'Pending EMIs for the month are pulled into the payroll run automatically during Calculate.' },
     { id: 'foreclose', label: 'Part-payment / Foreclosure', icon: '✅', built: true, href: '/dashboard/loans', desc: 'Part-prepayment and foreclosure recalculate the outstanding schedule.' },
-  ]} />
+  ]
 }
 
-function OffcycleView() {
-  return <SubTabbed title="Off-cycle · Bonus · FNF" subtitle="Ad-hoc payments, bonus registers and full & final settlement" subs={[
+function offcycleSubs(): SubTab[] {
+  return [
     { id: 'offcycle', label: 'Off-cycle Payments', icon: '💵', desc: 'Ad-hoc payments outside the monthly cycle — incentives, reimbursements, one-time payouts.' },
     { id: 'bonuscalc', label: 'Bonus Calculation', icon: '🎯', desc: 'Statutory (8.33–20%) and performance bonus computation with eligibility rules.' },
     { id: 'bonusreg', label: 'Bonus Register', icon: '📖', desc: 'Form C bonus register for statutory compliance.' },
     { id: 'fnfcreate', label: 'FNF Creation', icon: '📝', desc: 'Initiate full & final settlement for exited / resigned employees.' },
     { id: 'fnfprocess', label: 'FNF Process', icon: '📤', desc: 'Leave encashment, gratuity, notice recovery and the final settlement statement.' },
-  ]} />
+  ]
 }
 
-function ReportsView() {
-  return <SubTabbed title="Outputs & Reports" subtitle="Payslips, registers, bank files, challans and dashboards" subs={[
+function reportsSubs(): SubTab[] {
+  return [
     { id: 'register', label: 'Payroll Register', icon: '📊', built: true, desc: 'The full computed register for a run — export from Payroll Run → 📥 Register (one row per employee with every earning & deduction).' },
     { id: 'payslip', label: 'Salary Slip Generator', icon: '🧾', desc: 'Branded PDF payslips per employee on the Sharma Group letterhead, pushed to the ESS portal.' },
     { id: 'annual', label: 'Annual Salary', icon: '📅', desc: 'Year-to-date earnings & deductions statement per employee.' },
@@ -253,16 +377,16 @@ function ReportsView() {
     { id: 'challans', label: 'PF ECR · ESIC · PT Challans', icon: '📑', desc: 'Statutory challan and PF ECR text files for upload to government portals.' },
     { id: 'dashboards', label: 'Month-end Dashboards', icon: '📈', desc: 'Headcount, pay summary, location-wise cost and month-on-month variance.' },
     { id: 'mis', label: 'MIS / Variance', icon: '🔍', desc: 'Custom MIS and variance reports across runs.' },
-  ]} />
+  ]
 }
 
-function AdminView({ companyId, group }: { companyId: string; group?: GroupScope }) {
-  return <SubTabbed group={group} title="Admin & Controls" subtitle="Access control, approvals and the full audit trail" subs={[
+function adminSubs(companyId: string): SubTab[] {
+  return [
     { id: 'audit', label: 'Audit Trail', icon: '📜', built: true, render: () => <AuditCard companyId={companyId} refreshKey={0} /> },
     { id: 'rbac', label: 'Role-based Access', icon: '🔑', built: true, href: '/dashboard/roles', desc: 'Payroll roles and permissions are managed in ESS & Role Management.' },
     { id: 'approval', label: 'Approval Workflows', icon: '✅', desc: 'Maker-checker approval chains for payroll sign-off before disbursement.' },
     { id: 'approvalmail', label: 'Approval Mail + Reports', icon: '✉️', desc: 'Automated approval emails with the run summary attached.' },
-  ]} />
+  ]
 }
 
 // ── ConfigTab ─────────────────────────────────────────────────────
@@ -392,6 +516,301 @@ function ConfigTab({ companyId }: { companyId: string }) {
       </div>
 
       <div style={S.note}>Other config (FY/month, PT/LWF/min-wages slabs, tax config, perquisite, bonus) — planned.</div>
+    </div>
+  )
+}
+
+// ── PayrollMonthTab — Create / Freeze / Unfreeze / Lock payroll months ──
+type PmMode = 'create' | 'freeze' | 'unfreeze' | 'lock'
+function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: string; mode: PmMode }) {
+  const [runs, setRuns] = useState<PayrollRun[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [showCreate, setShowCreate] = useState(false)
+  const [companyCount, setCompanyCount] = useState(0)
+  const [groupName, setGroupName] = useState('Group')
+  const allCo = !companyId
+  const FROZEN_OR_BEYOND = ['ATTENDANCE_LOCKED', 'CALCULATED', 'AI_CHECKED', 'APPROVED', 'DISBURSED', 'LOCKED']
+
+  async function reload() { setLoading(true); setRuns(await loadRuns(companyId, fy)); setLoading(false) }
+  useEffect(() => { reload() }, [companyId, fy])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { loadCompanies().then(c => { setCompanyCount(c.length); setGroupName(c[0]?.group_name || 'Group') }).catch(() => {}) }, [])
+
+  // Months already created — hidden from the Create dropdown. In all-companies mode a month is
+  // only "taken" once every company has it; for a single company, any run for that month counts.
+  const disabledMonths = (() => {
+    const byMonth: Record<number, Set<string>> = {}
+    runs.forEach(r => { const m = r.month as number; (byMonth[m] = byMonth[m] || new Set()).add(r.company_id) })
+    const set = new Set<number>()
+    for (let m = 1; m <= 12; m++) {
+      const covered = byMonth[m]?.size || 0
+      if (allCo ? (companyCount > 0 && covered >= companyCount) : covered > 0) set.add(m)
+    }
+    return set
+  })()
+
+  // Create a month for one company: run + Month Master snapshot.
+  async function createOne(cid: string, m: number): Promise<string | null> {
+    const { error, run } = await createRun(cid, fy, m)
+    if (error) return error
+    if (run?.id) { const s = await syncPayrollMonth(run.id); if (s.error) return 'snapshot sync failed: ' + s.error }
+    return null
+  }
+
+  // Run the create for the chosen month; returns a summary + optional error. Used by the modal.
+  async function runCreate(m: number): Promise<{ summary: string; error?: string }> {
+    if (!companyId) {
+      const comps = await loadCompanies()
+      const existing = await loadRuns('', fy)
+      const already = new Set(existing.filter(r => r.month === m).map(r => r.company_id))
+      let created = 0, skipped = 0; const failed: string[] = []
+      for (const c of comps) {
+        if (already.has(c.id)) { skipped++; continue }
+        const e = await createOne(c.id, m)
+        if (e) failed.push(`${c.company_name}: ${e}`); else created++
+      }
+      return {
+        summary: `${MONTHS[m - 1]} ${fy} — month master created for ${created} compan${created === 1 ? 'y' : 'ies'}${skipped ? `, ${skipped} already existed` : ''}.`,
+        error: failed.length ? failed.join('  ·  ') : undefined,
+      }
+    }
+    const e = await createOne(companyId, m)
+    return { summary: e ? '' : `${MONTHS[m - 1]} ${fy} — month master created.`, error: e || undefined }
+  }
+  async function apply(run: PayrollRun, status: string) {
+    setErr(''); setBusy(true)
+    const { error } = await setRunStatus(run, status)
+    setBusy(false)
+    if (error) { setErr(error); return }
+    reload()
+  }
+  // Group mode — apply a status change to every company's run for that month at once.
+  async function applyGroup(list: PayrollRun[], status: string) {
+    setErr(''); setBusy(true)
+    for (const r of list) { const { error } = await setRunStatus(r, status); if (error) { setErr(error); break } }
+    setBusy(false)
+    reload()
+  }
+
+  return (
+    <div>
+      <div style={S.card}>
+        <div style={S.cardTitle}>{mode === 'create' ? '📅 Create payroll month' : mode === 'freeze' ? '❄️ Freeze payroll month' : mode === 'unfreeze' ? '☀️ Unfreeze payroll month' : '🔒 Lock payroll month'} · FY {fy}</div>
+        <div style={{ fontSize: 12, color: C.muted }}>
+          {mode === 'create' ? 'Open a new payroll month so it can be processed.'
+            : mode === 'freeze' ? 'Freezing locks the attendance snapshot so it can’t change while payroll is calculated.'
+              : mode === 'unfreeze' ? 'Re-open a frozen month so attendance can be edited again (reverts it to OPEN).'
+                : 'Locking finalises the month — the payroll snapshot becomes immutable. Unlock to re-open it.'}
+        </div>
+        {mode === 'create' && (
+          <>
+            {allCo && <div style={{ fontSize: 12, color: C.purpleD, marginTop: 10, background: '#EEEDFE', borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
+            <div style={{ marginTop: 12 }}>
+              <button style={{ ...S.btnPrimary }} onClick={() => setShowCreate(true)}>➕ {allCo ? 'Create for all companies' : 'Create month'}</button>
+            </div>
+          </>
+        )}
+        {err && <div style={{ color: C.red, fontSize: 12, marginTop: 8 }}>{err}</div>}
+      </div>
+
+      {loading ? <div style={{ color: C.muted, fontSize: 12 }}>Loading…</div> : runs.length === 0 ? (
+        <div style={S.card}><div style={{ color: C.muted, fontSize: 12 }}>No payroll months for FY {fy}{allCo ? ' across any company' : ''} yet.</div></div>
+      ) : (
+        <div style={S.card}>
+          {allCo ? (
+            // Group Companies → one consolidated "Sharma Group · Month" row per month (rolls up all companies' runs).
+            Object.values(runs.reduce((acc, r) => { (acc[r.month as number] = acc[r.month as number] || []).push(r); return acc }, {} as Record<number, PayrollRun[]>))
+              .sort((a, b) => (a[0].month || 0) - (b[0].month || 0))
+              .map(g => {
+                const statuses = Array.from(new Set(g.map(r => r.status)))
+                const totalEmp = g.reduce((s, r) => s + (r.emp_count || 0), 0)
+                const active = g.filter(r => r.status !== 'CANCELLED')
+                const freezable = active.filter(r => !FROZEN_OR_BEYOND.includes(r.status))
+                const unfreezable = active.filter(r => r.status === 'ATTENDANCE_LOCKED')
+                const lockable = active.filter(r => r.status !== 'LOCKED')
+                const single = statuses.length === 1
+                const pill = single ? statusPill(statuses[0]) : { bg: 'rgba(107,107,123,0.14)', color: C.muted }
+                return (
+                  <div key={g[0].month} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, minWidth: 200 }}>🏛️ {groupName} · {g[0].period_label || `${g[0].fy} · M${g[0].month}`}</div>
+                    <Badge text={`${g.length} compan${g.length === 1 ? 'y' : 'ies'}`} bg="rgba(124,58,237,0.12)" color={C.purple} />
+                    <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: pill.bg, color: pill.color }}>{single ? statuses[0] : statuses.join(' · ')}</span>
+                    {mode === 'create' && <span style={{ fontSize: 11, color: C.muted }}>{totalEmp} employees across {g.length}</span>}
+                    <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                      {mode === 'freeze' && (freezable.length
+                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(freezable, 'ATTENDANCE_LOCKED')}>❄️ Freeze all</button>
+                        : <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>❄️ Frozen</span>)}
+                      {mode === 'unfreeze' && (unfreezable.length
+                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(unfreezable, 'OPEN')}>☀️ Unfreeze all</button>
+                        : <span style={{ fontSize: 11, color: C.muted }}>nothing to unfreeze</span>)}
+                      {mode === 'lock' && (lockable.length
+                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(lockable, 'LOCKED')}>🔒 Lock all</button>
+                        : <button style={S.btnOutline} disabled={busy} onClick={() => applyGroup(active, 'DISBURSED')}>🔓 Unlock all</button>)}
+                    </div>
+                  </div>
+                )
+              })
+          ) : runs.map(run => {
+            const pill = statusPill(run.status)
+            const frozen = FROZEN_OR_BEYOND.includes(run.status)
+            const locked = run.status === 'LOCKED'
+            const cancelled = run.status === 'CANCELLED'
+            return (
+              <div key={run.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, minWidth: 120 }}>{run.period_label || `${run.fy} · M${run.month}`}</div>
+                <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: pill.bg, color: pill.color }}>{run.status}</span>
+                {mode === 'create' && <span style={{ fontSize: 11, color: C.muted }}>{run.emp_count || 0} employees</span>}
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                  {mode === 'freeze' && !cancelled && (
+                    frozen
+                      ? <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>❄️ Frozen</span>
+                      : <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'ATTENDANCE_LOCKED')}>❄️ Freeze</button>
+                  )}
+                  {mode === 'unfreeze' && !cancelled && (
+                    run.status === 'ATTENDANCE_LOCKED'
+                      ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'OPEN')}>☀️ Unfreeze</button>
+                      : <span style={{ fontSize: 11, color: C.muted }}>{frozen ? 'processed — can’t unfreeze' : 'not frozen'}</span>
+                  )}
+                  {mode === 'lock' && !cancelled && (
+                    locked
+                      ? <button style={S.btnOutline} disabled={busy} onClick={() => apply(run, 'DISBURSED')}>🔓 Unlock</button>
+                      : <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'LOCKED')}>🔒 Lock</button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+      <div style={S.note}>The full run lifecycle (sync → calculate → approve → disburse) lives in <b>Payroll Run</b>. These are shortcuts to create, freeze and lock a month.</div>
+
+      {showCreate && (
+        <CreateMonthModal fy={fy} allCo={allCo} onRun={runCreate} disabledMonths={disabledMonths}
+          onClose={() => setShowCreate(false)}
+          onDone={() => reload()} />
+      )}
+    </div>
+  )
+}
+
+// ── CreateMonthModal — pick month → confirm → animated progress → done ──
+function CreateMonthModal({ fy, allCo, onRun, disabledMonths, onClose, onDone }: {
+  fy: string; allCo: boolean
+  onRun: (m: number) => Promise<{ summary: string; error?: string }>
+  disabledMonths: Set<number>
+  onClose: () => void; onDone: () => void
+}) {
+  const availableMonths = MONTHS.map((_, i) => i + 1).filter(m => !disabledMonths.has(m))
+  const [step, setStep] = useState<'pick' | 'confirm' | 'progress' | 'done'>('pick')
+  const [month, setMonth] = useState(availableMonths[0] || 1)
+  const [pct, setPct] = useState(0)
+  const [stage, setStage] = useState('')
+  const [summary, setSummary] = useState('')
+  const [err, setErr] = useState('')
+  const startYear = Number(fy.split('-')[0]) || 2026
+  const calYearOf = (mi: number) => mi <= 8 ? startYear : startYear + 1   // mi 0-based, 0=Apr … 11=Mar
+  const monthLabel = `${MONTHS[month - 1]} ${calYearOf(month - 1)}`
+
+  const STAGES: [number, string][] = [
+    [0, 'Fetching employee details…'],
+    [22, 'Applying joining & leaving rules…'],
+    [45, 'Brewing month master…'],
+    [68, 'Freezing salary snapshot…'],
+    [88, 'Finalising…'],
+  ]
+
+  function begin() {
+    setStep('progress'); setPct(0); setStage(STAGES[0][1]); setErr('')
+    const startedAt = Date.now()
+    let done = false
+    let result: { summary: string; error?: string } | null = null
+    onRun(month).then(r => { result = r }).catch(e => { result = { summary: '', error: String(e?.message || e) } }).finally(() => { done = true })
+
+    let cur = 0
+    const timer = setInterval(() => {
+      cur = Math.min(95, cur + 1.45)   // ~10s to reach 95%
+      setPct(Math.round(cur))
+      const st = [...STAGES].reverse().find(([t]) => cur >= t); if (st) setStage(st[1])
+      if (done && Date.now() - startedAt >= 10000 && cur >= 95) {
+        clearInterval(timer)
+        setPct(100); setStage('Done ✓')
+        setTimeout(() => {
+          setSummary(result?.summary || '')
+          setErr(result?.error || '')
+          setStep('done'); onDone()
+        }, 500)
+      }
+    }, 150)
+  }
+
+  const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }
+  const box: React.CSSProperties = { background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 55px rgba(30,27,75,0.35)' }
+  const GREEN = '#059669'
+
+  return (
+    <div style={overlay}>
+      <div style={box}>
+        {step === 'pick' && (
+          <>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, marginBottom: 4 }}>📅 Create payroll month</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{allCo ? 'A month master will be built for every company.' : 'A month master will be built for the selected company.'} Months already created are not listed.</div>
+            {availableMonths.length === 0 ? (
+              <>
+                <div style={{ fontSize: 13, color: C.navy, background: '#EEEDFE', borderRadius: 8, padding: '12px 14px', marginBottom: 18 }}>All months for FY {fy} have already been created{allCo ? ' for every company' : ''}. 🎉</div>
+                <button style={{ ...S.btnOutline, width: '100%' }} onClick={onClose}>Close</button>
+              </>
+            ) : (
+              <>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 6 }}>Month · FY {fy}</label>
+                <select style={{ ...S.input, width: '100%', marginBottom: 20 }} value={month} onChange={e => setMonth(Number(e.target.value))}>
+                  {availableMonths.map(m => <option key={m} value={m}>{MONTHS[m - 1]} {calYearOf(m - 1)}</option>)}
+                </select>
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button style={{ ...S.btnPrimary, flex: 1 }} onClick={() => setStep('confirm')}>Submit</button>
+                  <button style={{ ...S.btnOutline }} onClick={onClose}>Cancel</button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
+        {step === 'confirm' && (
+          <>
+            <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}>🗓️</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, textAlign: 'center', lineHeight: 1.5, marginBottom: 6 }}>
+              Create the month master for<br /><span style={{ color: C.purple, fontSize: 18, fontWeight: 800 }}>{monthLabel}</span>{allCo ? <span style={{ color: C.muted, fontWeight: 600 }}> for all companies</span> : ''}?
+            </div>
+            <div style={{ fontSize: 11.5, color: C.muted, textAlign: 'center', marginBottom: 20 }}>Each eligible employee&apos;s salary, statutory &amp; bank data will be frozen for this month.</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button style={{ ...S.btnPrimary, flex: 1, background: GREEN }} onClick={begin}>✓ Confirm</button>
+              <button style={{ ...S.btnOutline }} onClick={() => setStep('pick')}>Cancel</button>
+            </div>
+          </>
+        )}
+
+        {step === 'progress' && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, marginBottom: 4 }}>Creating month master…</div>
+            <div style={{ fontSize: 12, color: C.muted, marginBottom: 20 }}>{monthLabel}{allCo ? ' · all companies' : ''}</div>
+            <div style={{ fontSize: 34, fontWeight: 800, color: GREEN, marginBottom: 12 }}>{pct}%</div>
+            <div style={{ height: 14, background: '#E7F6EF', borderRadius: 99, overflow: 'hidden', marginBottom: 14 }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#10B981,#059669)', borderRadius: 99, transition: 'width .2s ease' }} />
+            </div>
+            <div style={{ fontSize: 12.5, color: C.navy, fontWeight: 600, minHeight: 18 }}>{stage}</div>
+          </div>
+        )}
+
+        {step === 'done' && (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ width: 60, height: 60, borderRadius: 99, background: '#ECFDF5', border: `2px solid ${GREEN}`, color: GREEN, fontSize: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>✓</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, marginBottom: 8 }}>Month master ready</div>
+            {summary && <div style={{ fontSize: 12.5, color: C.navy, marginBottom: err ? 10 : 18 }}>{summary}</div>}
+            {err && <div style={{ fontSize: 11.5, color: C.red, background: '#FEF2F2', borderRadius: 8, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
+            <button style={{ ...S.btnPrimary, background: GREEN, width: '100%' }} onClick={onClose}>Done</button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -701,6 +1120,7 @@ function EmployeesTab({ companyId }: { companyId: string }) {
   const [loading, setLoading] = useState(true)
   const [q, setQ] = useState('')
   const [dept, setDept] = useState('')
+  const allCo = !companyId   // Group Companies mode → show all companies together
   const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
   useEffect(() => { setLoading(true); loadPayrollEmployees(companyId).then(d => { setEmps(d); setLoading(false) }) }, [companyId])
 
@@ -714,7 +1134,7 @@ function EmployeesTab({ companyId }: { companyId: string }) {
 
   function exportExcel() {
     const rows = filtered.map(e => ({
-      'Employee Code': e.emp_code, 'Name': e.full_name, 'Designation': e.designation || '', 'Department': e.department || '', 'Location': e.location || '',
+      'Company': e.company || '', 'Employee Code': e.emp_code, 'Name': e.full_name, 'Designation': e.designation || '', 'Department': e.department || '', 'Location': e.location || '',
       'Annual CTC': e.annual_ctc, 'Basic (monthly)': e.basic_monthly, 'HRA (monthly)': e.hra_monthly,
       'Tax Regime': e.tds_regime || '', 'PF': e.pf_applicable ? 'Yes' : 'No', 'ESIC': e.esic_applicable ? 'Yes' : 'No', 'PT': e.pt_applicable ? 'Yes' : 'No', 'LWF': e.lwf_applicable ? 'Yes' : 'No',
       'Bank': e.bank_name || '', 'IFSC': e.ifsc_code || '', 'Account (last4)': e.bank_account_last4 || '',
@@ -742,7 +1162,7 @@ function EmployeesTab({ companyId }: { companyId: string }) {
         <div style={{ ...S.card, overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead><tr style={{ color: C.muted, fontSize: 10, textTransform: 'uppercase' }}>
-              {['Code', 'Name', 'Dept', 'Annual CTC', 'Basic/mo', 'HRA/mo', 'Regime', 'PF/ESIC/PT/LWF', 'Bank'].map(h =>
+              {['Code', 'Name', ...(allCo ? ['Company'] : []), 'Dept', 'Regime', 'PF/ESIC/PT/LWF', 'Bank'].map(h =>
                 <th key={h} style={{ textAlign: 'left', padding: '6px 8px', whiteSpace: 'nowrap' }}>{h}</th>)}
             </tr></thead>
             <tbody>
@@ -750,10 +1170,8 @@ function EmployeesTab({ companyId }: { companyId: string }) {
                 <tr key={e.id} style={{ borderTop: `1px solid ${C.border}` }}>
                   <td style={{ padding: '6px 8px', fontWeight: 600 }}>{e.emp_code}</td>
                   <td style={{ padding: '6px 8px' }}>{e.full_name}<div style={{ fontSize: 10, color: C.muted }}>{e.designation || '—'}</div></td>
+                  {allCo && <td style={{ padding: '6px 8px', fontSize: 11 }}>{e.company || '—'}</td>}
                   <td style={{ padding: '6px 8px' }}>{e.department || '—'}</td>
-                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>{inr(e.annual_ctc)}</td>
-                  <td style={{ padding: '6px 8px' }}>{inr(e.basic_monthly)}</td>
-                  <td style={{ padding: '6px 8px' }}>{inr(e.hra_monthly)}</td>
                   <td style={{ padding: '6px 8px' }}>{e.tds_regime || '—'}</td>
                   <td style={{ padding: '6px 8px', fontSize: 10 }}>{[e.pf_applicable && 'PF', e.esic_applicable && 'ESIC', e.pt_applicable && 'PT', e.lwf_applicable && 'LWF'].filter(Boolean).join(' · ') || '—'}</td>
                   <td style={{ padding: '6px 8px', fontSize: 11 }}>{e.bank_name || '—'}{e.bank_account_last4 ? ` ••${e.bank_account_last4}` : ''}</td>
@@ -787,59 +1205,23 @@ function PlannedTab({ title, items }: { title: string; items: string[] }) {
 const FY_OPTIONS = ['2026-27', '2025-26', '2024-25']
 interface CompanyOpt { id: string; company_name: string; group_id?: string | null; group_name?: string | null }
 
-// Company switcher shown in Group Companies mode — pick which company you're editing.
-function GroupScopeBar({ companies, active, onChange }: { companies: GroupScope['companies']; active: string; onChange: (id: string) => void }) {
-  const groups = Array.from(new Set(companies.map(c => c.group_name || 'Companies')))
-  return (
-    <div style={{ ...S.card, padding: '11px 14px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 11, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.05em' }}>🏛️ Editing company</span>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {groups.map(g => companies.filter(c => (c.group_name || 'Companies') === g).map(c => {
-          const on = c.id === active
-          return (
-            <button key={c.id} onClick={() => onChange(c.id)} style={{
-              padding: '6px 13px', borderRadius: 99, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-              border: `1px solid ${on ? C.purple : C.border}`, background: on ? C.purple : '#fff', color: on ? '#fff' : C.navy,
-            }}>{c.company_name}</button>
-          )
-        }))}
-      </div>
-      <span style={{ marginLeft: 'auto', fontSize: 11, color: C.muted }}>{companies.length} companies · changes save to the selected company</span>
-    </div>
-  )
-}
 export default function PayrollPage() {
   const [companies, setCompanies] = useState<CompanyOpt[]>([])
   const [companyId, setCompanyId] = useState('')   // '' = Group Companies
-  const [groupCo, setGroupCo] = useState('')       // company being edited while in Group mode
   const [fy, setFy] = useState('2026-27')
-  const [tab, setTab] = useState('config')
+  const [tab, setTab] = useState('dashboard')
+  const [sub, setSub] = useState('')                // active sub-section id within the current tab
+  const [subView, setSubView] = useState('catalog') // active nested sub-view (e.g. Pay Heads → Standard)
 
   useEffect(() => {
-    loadCompanies().then(list => {
-      setCompanies(list as any)
-      // Default the header to "Group Companies" ('' ); the switcher targets the first company.
-      if (list.length) setGroupCo(list[0].id)
-    })
+    loadCompanies().then(list => setCompanies(list as any))   // default header = "Group Companies" ('' = all)
   }, [])
 
-  function renderTab() {
-    const groupMode = !companyId                                   // "Group Companies" selected
-    // In Group mode the scoped tabs edit whichever company the switcher points at.
-    const effCompanyId = companyId || groupCo || companies[0]?.id || ''
-    const group: GroupScope = { mode: groupMode, companies, active: effCompanyId, onChange: setGroupCo }
-    switch (tab) {
-      case 'config': return <ConfigView companyId={effCompanyId} group={group} />
-      case 'employees': return <EmployeesView companyId={effCompanyId} group={group} />
-      case 'run': return <RunView companyId={companyId} fy={fy} />
-      case 'statutory': return <StatutoryView />
-      case 'benefits': return <BenefitsView />
-      case 'offcycle': return <OffcycleView />
-      case 'reports': return <ReportsView />
-      case 'admin': return <AdminView companyId={effCompanyId} group={group} />
-      default: return null
-    }
-  }
+  // companyId '' = Group Companies → the scoped tabs show/act on all companies at once.
+  const ctx = { companyId, fy, subView }
+  const sections = subsForTab(tab, ctx)
+  const activeSub = sections.find(s => s.id === sub) || sections[0]
+  const tabMeta = TABS.find(t => t.id === tab)!
 
   return (
     <div style={S.page}>
@@ -848,7 +1230,6 @@ export default function PayrollPage() {
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             <h1 style={S.h1}>Payroll</h1>
-            <div style={S.sub}>Punch-to-payroll · benchmarked vs PeopleStrong</div>
           </div>
           <div>
             <label style={S.label}>Financial Year</label>
@@ -877,22 +1258,43 @@ export default function PayrollPage() {
           </div>
         </div>
 
-        {/* Tab bar — frozen (sticky) so it stays visible while content scrolls */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 8, boxShadow: '0 2px 8px rgba(15,23,42,0.06)' }}>
-          {TABS.map(t => {
-            const active = tab === t.id
-            return (
-              <button key={t.id} onClick={() => setTab(t.id)} style={{
-                padding: '9px 14px', borderRadius: 8, border: `1px solid ${active ? C.purple : C.border}`,
-                background: active ? C.purple : '#fff', color: active ? '#fff' : C.navy,
-                fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-              }}>{t.label}</button>
-            )
-          })}
+        {/* Tab bar — each main tab is a dropdown of its sub-sections; pick one to enter it.
+            Wraps onto multiple rows so every section is always visible without scrolling. */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, rowGap: 8, marginBottom: 16, paddingBottom: 8, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 8, boxShadow: '0 2px 8px rgba(15,23,42,0.06)' }}>
+          {TABS.map(t => (
+            <MainTabDropdown
+              key={t.id}
+              label={t.label}
+              isActive={tab === t.id}
+              sections={subsForTab(t.id, ctx)}
+              activeSub={tab === t.id ? (activeSub?.id || '') : ''}
+              activeChild={tab === t.id ? subView : ''}
+              onPick={(subId, childId) => { setTab(t.id); setSub(subId); if (childId) setSubView(childId) }}
+            />
+          ))}
         </div>
 
         {/* Active panel */}
-        {renderTab()}
+        {tab === 'dashboard' ? (
+          <>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: C.navy }}>Dashboard</div>
+              <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{tabMeta.subtitle}</div>
+            </div>
+            <PayrollDashboard companyId={companyId} fy={fy} companies={companies} />
+          </>
+        ) : (
+          <>
+            <SubTabHead crumbs={(() => {
+              const crumbs = [tabMeta.title]
+              if (activeSub) crumbs.push(activeSub.label)
+              const child = activeSub?.children?.find(c => c.id === subView)
+              if (child) crumbs.push(child.label.replace(/^[^A-Za-z0-9]+/, ''))   // strip leading emoji
+              return crumbs
+            })()} subtitle={tabMeta.subtitle} built={sections.filter(s => s.built).length} total={sections.length} />
+            {activeSub && (activeSub.render ? activeSub.render() : activeSub.built ? <BuiltPanel s={activeSub} /> : <PlannedPanel s={activeSub} />)}
+          </>
+        )}
       </div>
     </div>
   )

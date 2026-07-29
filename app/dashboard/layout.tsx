@@ -12,6 +12,7 @@ const nav = [
   { icon: '📤', label: 'Bulk Uploader', href: '/dashboard/bulk-upload' },
   { icon: '🔄', label: 'Transfer', href: '/dashboard/transfer' },
   { icon: '📅', label: 'Attendance & Leave', href: '/dashboard/attendance' },
+  { icon: '🕒', label: 'Attendance Reports', href: '/dashboard/attendance-reports' },
   { icon: '🌴', label: 'Leave & Holiday Config', href: '/dashboard/leave-upload' },
   { icon: '💰', label: 'Payroll', href: '/dashboard/payroll' },
   { icon: '💳', label: 'Flexi Claims', href: '/dashboard/flexi-claims' },
@@ -24,6 +25,7 @@ const nav = [
   { icon: '🎛️', label: 'Flexi Policy', href: '/dashboard/flexi-policy' },
   { icon: '🏢', label: 'Company Profile', href: '/dashboard/company-profile' },
   { icon: '📊', label: 'Reports', href: '/dashboard/reports' },
+  { icon: '🗄️', label: 'Database Export', href: '/dashboard/db-export' },
   { icon: '🤖', label: 'Ezer AI', href: '/dashboard/ai' },
   { icon: '🎧', label: 'Support', href: '/dashboard/support' },
 ]

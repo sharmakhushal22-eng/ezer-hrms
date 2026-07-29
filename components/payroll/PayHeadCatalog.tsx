@@ -4,6 +4,7 @@
 // Flexi), non-standard employment types, and statutory business rules.
 // Source: EZER-PayHead-Section-Reference.md.
 import { useState } from 'react'
+import SubSectionDropdown from '@/components/payroll/SubSectionDropdown'
 
 const C = {
   bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489', border: '#E9E7F5', muted: '#6B7280',
@@ -123,17 +124,16 @@ function GroupCard({ title, icon, subtitle, children }: { title: string; icon: s
   )
 }
 
-export default function PayHeadCatalog() {
-  const [view, setView] = useState<'catalog' | 'flexi' | 'nonstd' | 'rules'>('catalog')
+export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {}) {
+  const [viewState, setViewState] = useState<'catalog' | 'flexi' | 'nonstd' | 'rules'>('catalog')
+  // Controlled when a `view` prop is passed (selection handled by the Configuration dropdown);
+  // uncontrolled fallback keeps its own dropdown.
+  const view = (viewProp as 'catalog' | 'flexi' | 'nonstd' | 'rules') || viewState
   const TABS: [typeof view, string][] = [['catalog', '📋 Standard Pay Heads'], ['flexi', '🎛️ Flexi / FBP'], ['nonstd', '👥 Non-standard Types'], ['rules', '⚖️ Business Rules']]
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
-        {TABS.map(([id, label]) => (
-          <button key={id} onClick={() => setView(id)} style={{ padding: '7px 13px', borderRadius: 99, border: `1px solid ${view === id ? C.purple : C.border}`, background: view === id ? C.purple : '#fff', color: view === id ? '#fff' : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font }}>{label}</button>
-        ))}
-      </div>
+      {!viewProp && <SubSectionDropdown items={TABS.map(([id, label]) => ({ id, label }))} active={view} onChange={id => setViewState(id as typeof view)} kicker="Pay Heads view" />}
 
       {view === 'catalog' && <>
         <GroupCard title="Earnings" icon="💰" subtitle="salary_structures — fixed & computed earnings"><Table rows={EARNINGS} /></GroupCard>

@@ -1672,6 +1672,39 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
 // ════════════════════════════════════════════════════════════════
 // SHELL
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// MY LETTERS — HR letters published to this employee's ESS
+// ════════════════════════════════════════════════════════════════
+function MyLetters({ emp }: { emp: EmployeeDetail }) {
+  const [rows, setRows] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    supabase.from('my_generated_letters').select('*').eq('employee_id', emp.id).order('letter_date', { ascending: false })
+      .then(({ data }) => { setRows(data || []); setLoading(false) }, () => setLoading(false))
+  }, [emp.id])
+  async function download(fileUrl: string) {
+    const { data } = await supabase.storage.from('generated-letters').createSignedUrl(fileUrl, 300)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
+  }
+  return (
+    <div style={T.card}>
+      <div style={T.section}>🖋️ My Letters</div>
+      {loading ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Loading…</div> :
+        rows.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No letters have been shared with you yet. HR-issued letters (offer, confirmation, etc.) will appear here.</div> :
+        rows.map(r => (
+          <div key={r.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 0', borderBottom:'1px solid #F3F0FF' }}>
+            <span style={{ fontSize:20 }}>📄</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:13, fontWeight:600 }}>{r.letter_name}</div>
+              <div style={{ fontSize:11, color:'#9CA3AF' }}>{new Date(r.letter_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</div>
+            </div>
+            <button onClick={() => download(r.file_url)} style={{ ...T.btnO }}>⬇ Download</button>
+          </div>
+        ))}
+    </div>
+  )
+}
+
 const MODULES = [
   { k:'home',          label:'Home',         icon:'🏠', phase:2 },
   { k:'payroll',       label:'Payroll',      icon:'💰', phase:3, needs:'Payroll' },
@@ -1684,6 +1717,7 @@ const MODULES = [
   { k:'leave',         label:'Leave',        icon:'🌴', phase:3, needs:'Leave' },
   { k:'profile',       label:'Profile',      icon:'👤', phase:2 },
   { k:'documents',     label:'Documents',    icon:'📄', phase:2 },
+  { k:'letters',       label:'My Letters',   icon:'🖋️', phase:2 },
   { k:'claims',        label:'Travel Claims', icon:'🧾', phase:3, needs:'Claims/Payroll' },
   { k:'pms',           label:'Performance',  icon:'📈', phase:4, needs:'Performance' },
   { k:'statutory',     label:'Statutory',    icon:'🏛️', phase:3, needs:'Payroll' },
@@ -1727,6 +1761,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'flexiclaims':   return <FlexiClaims employeeId={emp.id} />
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
+      case 'letters':       return <MyLetters emp={emp} />
       case 'requests':      return <Requests emp={emp} notify={notify} />
       case 'directory':     return <Directory isMobile={isMobile} />
       case 'notifications': return <Notifications emp={emp} />
