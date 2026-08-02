@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import {
   loadCompanies, loadPayHeads, savePayHead, deletePayHead,
-  loadRuns, createRun, advanceRun, cancelRun, setRunStatus, syncPayrollMonth, loadAudit, loadRunRegister,
+  loadRuns, createRun, advanceRun, cancelRun, setRunStatus, syncPayrollMonth, loadAudit, loadRunRegister, loadMonthMaster,
   loadRunSummary, buildNeftRows,
   loadPayrollEmployees, syncRunEmployees,
   MONTHS, RUN_FLOW, nextStatus,
@@ -24,6 +24,7 @@ import PayrollDashboard from '@/components/payroll/PayrollDashboard'
 import AttendanceUpload from '@/components/payroll/AttendanceUpload'
 import OtUpload from '@/components/payroll/OtUpload'
 import AttendanceEdit from '@/components/payroll/AttendanceEdit'
+import AttendanceEditTab from '@/components/payroll/AttendanceEditTab'
 import MonthSync from '@/components/payroll/MonthSync'
 import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutoryPanel'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
@@ -311,7 +312,8 @@ function attendanceSubs(companyId: string, fy: string): SubTab[] {
   return [
     { id: 'upload', label: 'Attendance Upload', icon: '📤', built: true, render: () => <AttendanceUpload companyId={companyId} fy={fy} /> },
     { id: 'ot', label: 'OT Upload', icon: '⏱️', built: true, render: () => <OtUpload companyId={companyId} fy={fy} /> },
-    { id: 'edit', label: 'Edit & Arrear', icon: '✏️', built: true, render: () => <AttendanceEdit companyId={companyId} fy={fy} /> },
+    { id: 'edit', label: 'Attendance Edit', icon: '✏️', built: true, render: () => <AttendanceEditTab companyId={companyId} fy={fy} /> },
+    { id: 'arrear', label: 'Arrear Days', icon: '📌', built: true, render: () => <AttendanceEdit companyId={companyId} fy={fy} mode="arrear" /> },
   ]
 }
 
@@ -533,8 +535,30 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
   const allCo = !companyId
   const FROZEN_OR_BEYOND = ['ATTENDANCE_LOCKED', 'CALCULATED', 'AI_CHECKED', 'APPROVED', 'DISBURSED', 'LOCKED']
 
+  const [dlKey, setDlKey] = useState('')   // which month's master export is in flight
+
   async function reload() { setLoading(true); setRuns(await loadRuns(companyId, fy)); setLoading(false) }
   useEffect(() => { reload() }, [companyId, fy])   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Download the frozen Month Master — every snapshot column for the month. In group mode
+  // this spans every company's run for that month, with a Company column to tell them apart.
+  async function downloadMaster(list: PayrollRun[], label: string, key: string) {
+    if (!list.length) return
+    setDlKey(key); setErr('')
+    try {
+      const rows = await loadMonthMaster(list.map(r => ({ id: r.id, company_name: r.company_name, fy: r.fy })))
+      if (!rows.length) { setErr(`No month master rows for ${label} — sync the month first.`); return }
+      // Header is the union of every row's keys, passed explicitly — otherwise a column
+      // absent from the first row would be silently dropped from the whole sheet.
+      const header: string[] = []
+      rows.forEach(r => Object.keys(r).forEach(k => { if (!header.includes(k)) header.push(k) }))
+      const ws = XLSX.utils.json_to_sheet(rows, { header })
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Month Master')
+      const safe = (s: string) => (s || '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '')
+      XLSX.writeFile(wb, `Month_Master_${safe(label)}.xlsx`.replace(/_+/g, '_'))
+    } catch (e: any) { setErr('Download failed: ' + (e.message || e)) } finally { setDlKey('') }
+  }
   useEffect(() => { loadCompanies().then(c => { setCompanyCount(c.length); setGroupName(c[0]?.group_name || 'Group') }).catch(() => {}) }, [])
 
   // Months already created — hidden from the Create dropdown. In all-companies mode a month is
@@ -638,6 +662,10 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
                     <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: pill.bg, color: pill.color }}>{single ? statuses[0] : statuses.join(' · ')}</span>
                     {mode === 'create' && <span style={{ fontSize: 11, color: C.muted }}>{totalEmp} employees across {g.length}</span>}
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                      <button style={{ ...S.btnOutline, opacity: dlKey === `g${g[0].month}` ? 0.6 : 1 }} disabled={!!dlKey}
+                        onClick={() => downloadMaster(g, `${groupName} ${g[0].period_label || `${g[0].fy} M${g[0].month}`}`, `g${g[0].month}`)}>
+                        {dlKey === `g${g[0].month}` ? 'Preparing…' : '⬇ Month Master'}
+                      </button>
                       {mode === 'freeze' && (freezable.length
                         ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(freezable, 'ATTENDANCE_LOCKED')}>❄️ Freeze all</button>
                         : <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>❄️ Frozen</span>)}
@@ -662,6 +690,10 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
                 <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: pill.bg, color: pill.color }}>{run.status}</span>
                 {mode === 'create' && <span style={{ fontSize: 11, color: C.muted }}>{run.emp_count || 0} employees</span>}
                 <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
+                  <button style={{ ...S.btnOutline, opacity: dlKey === run.id ? 0.6 : 1 }} disabled={!!dlKey}
+                    onClick={() => downloadMaster([run], `${run.company_name || ''} ${run.period_label || `${run.fy} M${run.month}`}`, run.id)}>
+                    {dlKey === run.id ? 'Preparing…' : '⬇ Month Master'}
+                  </button>
                   {mode === 'freeze' && !cancelled && (
                     frozen
                       ? <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>❄️ Frozen</span>

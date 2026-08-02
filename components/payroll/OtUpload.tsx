@@ -6,13 +6,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { loadRuns, uploadOtBatch, getValidEmpCodesForRun, MONTHS, type PayrollRun, type OtUploadRow } from '@/lib/payroll/core'
-import { C, font, num, ValidationCard } from './attendanceShared'
+import { C, font, num, fmtDate, DownloadCard, ValidationCard } from './attendanceShared'
 
 function normalizeRow(r: Record<string, any>): OtUploadRow | null {
   const g = (...keys: string[]) => { for (const k of Object.keys(r)) { const kk = k.trim().toLowerCase(); if (keys.some(x => kk === x)) return r[k] } return undefined }
   const code = g('emp code', 'emp_code', 'empcode', 'employee code')
   if (code == null || String(code).trim() === '') return null
-  return { emp_code: String(code).trim(), ot_hours: num(g('ot hours', 'ot_hours', 'ot', 'overtime hours', 'overtime')) ?? 0 }
+  return { emp_code: String(code).trim(), ot_hours: num(g('total ot hours', 'ot hours', 'ot_hours', 'ot', 'overtime hours', 'overtime')) ?? 0 }
 }
 
 export default function OtUpload({ companyId, fy }: { companyId: string; fy: string }) {
@@ -96,10 +96,20 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
         </div>
       </div>
 
-      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
+      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months. (Download works for any company.)</div>}
+
+      <DownloadCard companyId={companyId} fy={fy}
+        heading="Download OT sheet" note="— filter and download a ready-to-fill OT sheet"
+        filePrefix="OT" sheetName="OT"
+        buildRow={(r, ctx) => ({
+          ...(ctx.isGroup ? { 'Company': ctx.companyName } : {}),
+          'Emp Code': r.employee_code || '', 'Employee Name': r.full_name || '',
+          'Date of Joining': fmtDate(ctx.doj), 'Date of Leaving': fmtDate(ctx.dol),
+          'Total OT Hours': Number(r.ot_hours) || 0,
+        })} />
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>⏱️ Upload OT hours</div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>📤 Upload filled OT</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
           <div>
             <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>
@@ -113,12 +123,13 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
             <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ ...inp, padding: '7px 10px' }} />
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>Columns: <b>Emp Code, OT Hours</b>. Only rows whose Emp Code exists in the selected month are updated. Leave / paid days are untouched.</div>
+        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>Columns: <b>Emp Code, Total OT Hours</b>. Only rows whose Emp Code exists in the selected month are updated. Leave / paid days are untouched.</div>
         {parseErr && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginTop: 10 }}>{parseErr}</div>}
       </div>
 
       {showVal && (
-        <ValidationCard pct={valPct} checking={checking} total={rows.length} matched={matched} unmatched={unmatched}
+        <ValidationCard pct={valPct} checking={checking} stage="Matching employee codes…" total={rows.length}
+          matched={matched} unmatched={unmatched} violations={[]}
           onProcess={doProcess} onCancel={resetUpload} busy={busy} kind="OT" />
       )}
 

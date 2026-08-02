@@ -37,3 +37,94 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* ============================================================
+   Scrollbars — slim overlay style, applied app-wide.
+
+   The default OS scrollbar is thick and draws a grey track that
+   cuts a hard line down the sidebar and every scrollable panel.
+   Here the track is fully transparent and only a small rounded
+   thumb rides up and down, tinted to the app's purple.
+
+   Styled globally rather than per-component because ::-webkit-
+   scrollbar is a pseudo-element and therefore cannot be set from
+   the inline style objects the rest of the app uses. One rule
+   covers all ~179 scroll containers, including future ones.
+   ============================================================ */
+
+/* Firefox ONLY.
+   Deliberately scoped: Chrome 121+ also supports scrollbar-width, and when it
+   is set the browser IGNORES every ::-webkit-scrollbar rule below and falls
+   back to its own native scrollbar. Gating on "browser does not understand
+   ::-webkit-scrollbar" keeps Chrome/Safari on the richer rules underneath. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(124, 58, 237, 0.35) transparent;
+  }
+}
+
+/* WebKit — Chrome, Edge, Safari.
+   Track is always transparent and the thumb is invisible at rest, so the UI
+   shows no scrollbar at all until the pointer is over a scrollable region —
+   then a small rounded rectangle fades in and rides up and down. */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;   /* no grey gutter */
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: transparent;   /* hidden at rest */
+  border-radius: 99px;
+  /* inset so it reads as a floating rectangle, not a filled channel */
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background-color 0.18s ease;
+}
+
+/* Reveal while the pointer is anywhere over the scrolling area (which is the
+   case whenever you are wheel-scrolling it), and deepen on direct interaction. */
+*:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(124, 58, 237, 0.35);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(124, 58, 237, 0.6);
+}
+*::-webkit-scrollbar-thumb:active {
+  background-color: rgba(124, 58, 237, 0.75);
+}
+
+/* Dark surfaces (sidebar / navy panels) — light thumb instead of purple,
+   which would otherwise disappear against #1E1B4B. */
+@supports not selector(::-webkit-scrollbar) {
+  .scroll-on-dark {
+    scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
+  }
+}
+.scroll-on-dark:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.35);
+}
+.scroll-on-dark::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.6);
+}
+.scroll-on-dark::-webkit-scrollbar-thumb:active {
+  background-color: rgba(255, 255, 255, 0.8);
+}
+
+/* Opt-in: completely hidden scrollbar, still scrollable.
+   Use sparingly — only where an element scrolls by drag/keyboard
+   and a visible indicator would be noise. */
+.no-scrollbar {
+  scrollbar-width: none;              /* Firefox */
+  -ms-overflow-style: none;           /* legacy Edge */
+}
+.no-scrollbar::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}

@@ -71,7 +71,7 @@ export async function syncPayrollMonth(runId: string): Promise<{ error: string |
 
 export interface AttendanceUploadRow {
   emp_code: string; earned_leave?: number; casual_leave?: number
-  sick_leave?: number; other_leave?: number; absent_days?: number
+  sick_leave?: number; other_leave?: number; absent_days?: number; weekly_off?: number
 }
 export interface OtUploadRow { emp_code: string; ot_hours: number }
 export interface BatchResult { emp_code: string; result: string }
@@ -95,18 +95,25 @@ export async function getValidEmpCodesForRun(runId: string): Promise<Set<string>
   return new Set(((data as any[]) || []).map(r => String(r.employee_code)))
 }
 // Attendance Edit tab — per-employee. Only the fields passed change; the rest stay.
+// Paid Days is NOT accepted here: the server always recomputes it as
+// (EL+CL+SL+Other) − Absent, the same rule the upload uses, so the two can't drift.
+// runStatusReset is true when the run had already been calculated and was rolled back
+// to SYNCED — the caller should tell the user payroll must be recalculated.
 export async function editEmployeeAttendance(runId: string, empCode: string, fields: {
-  paid_days?: number | null; earned_leave?: number | null; casual_leave?: number | null
-  sick_leave?: number | null; other_leave?: number | null; absent_days?: number | null; ot_hours?: number | null
-}): Promise<{ error: string | null }> {
-  const { error } = await supabase.rpc('edit_employee_attendance', {
+  earned_leave?: number | null; casual_leave?: number | null
+  sick_leave?: number | null; other_leave?: number | null; absent_days?: number | null
+  ot_hours?: number | null; weekly_off?: number | null
+}): Promise<{ error: string | null; paidDays: number | null; runStatusReset: boolean }> {
+  const { data, error } = await supabase.rpc('edit_employee_attendance', {
     p_run_id: runId, p_employee_code: empCode,
-    p_paid_days: fields.paid_days ?? null, p_earned_leave: fields.earned_leave ?? null,
-    p_casual_leave: fields.casual_leave ?? null, p_sick_leave: fields.sick_leave ?? null,
-    p_other_leave: fields.other_leave ?? null, p_absent_days: fields.absent_days ?? null,
-    p_ot_hours: fields.ot_hours ?? null,
+    p_earned_leave: fields.earned_leave ?? null, p_casual_leave: fields.casual_leave ?? null,
+    p_sick_leave: fields.sick_leave ?? null, p_other_leave: fields.other_leave ?? null,
+    p_absent_days: fields.absent_days ?? null, p_ot_hours: fields.ot_hours ?? null,
+    p_weekly_off: fields.weekly_off ?? null,
   })
-  return { error: error?.message || null }
+  if (error) return { error: error.message, paidDays: null, runStatusReset: false }
+  const row = ((data as any[]) || [])[0] || {}
+  return { error: null, paidDays: row.updated_row?.paid_days ?? null, runStatusReset: !!row.run_status_reset }
 }
 // Arrear days from a prior period, landing in the CURRENT run. Source month untouched.
 export async function addArrearDays(runId: string, empCode: string, arrearDays: number, sourcePeriod: string, reason: string): Promise<{ error: string | null }> {
@@ -115,6 +122,90 @@ export async function addArrearDays(runId: string, empCode: string, arrearDays: 
     p_source_period: sourcePeriod, p_reason: reason || null,
   })
   return { error: error?.message || null }
+}
+
+// The arrear / taxable side-table shapes, prefixed as they appear in the export.
+const ARREAR_COLS = [
+  'arrear_basic', 'arrear_hra', 'arrear_conveyance', 'arrear_special_allowance', 'arrear_statutory_bonus',
+  'arrear_employer_pf', 'arrear_employer_esic', 'arrear_gratuity', 'arrear_employee_pf', 'arrear_employee_esic',
+  'arrear_pt', 'arrear_lwf', 'arrear_hostel_allowance', 'arrear_children_education',
+  'arrear_flexi_car_lease', 'arrear_flexi_driver_salary', 'arrear_flexi_fuel_maintenance',
+  'arrear_flexi_telephone_internet', 'arrear_flexi_meal_card', 'arrear_flexi_gadget_device',
+  'arrear_flexi_attire_uniform', 'arrear_flexi_books_periodicals', 'arrear_flexi_lta',
+  'arrear_epf_wage', 'arrear_appraisal_effective_date',
+]
+const TAXABLE_COLS = [
+  'taxable_adjustment_lwf', 'taxable_hostel_allowance', 'taxable_children_education',
+  'taxable_flexi_car_lease', 'taxable_flexi_driver_salary', 'taxable_flexi_fuel_maintenance',
+  'taxable_flexi_telephone_internet', 'taxable_flexi_meal_card', 'taxable_flexi_gadget_device',
+  'taxable_flexi_attire_uniform', 'taxable_flexi_books_periodicals', 'taxable_flexi_lta',
+]
+
+// Full Month Master rows for one or more runs — every frozen column, ready for export.
+// Paginated because PostgREST caps a response at 1000 rows, and a group month spans
+// several companies. Internal keys are dropped; Company is prefixed for group exports.
+export async function loadMonthMaster(runs: { id: string; company_name?: string | null; fy?: string }[]): Promise<Record<string, any>[]> {
+  const out: Record<string, any>[] = []
+  const empIds: string[] = []
+  const fys = new Set<string>()
+  for (const r of runs) {
+    for (let from = 0; ; from += 1000) {
+      const { data, error } = await supabase.from('payroll_employee_snapshot')
+        .select('*').eq('run_id', r.id).order('employee_code').range(from, from + 999)
+      if (error) throw new Error(error.message)
+      const batch = data || []
+      batch.forEach((row: any) => {
+        empIds.push(row.employee_id)
+        if (row.fy) fys.add(row.fy)
+        // id / run_id / employee_id are part of the agreed column spec (System / Base),
+        // so they are carried through rather than stripped as internal keys.
+        out.push({ Company: r.company_name || '', ...row })
+      })
+      if (batch.length < 1000) break
+    }
+  }
+  if (!out.length) return out
+  if (runs[0]?.fy) fys.add(runs[0].fy as string)
+
+  // Arrear and taxable are financial-year scoped and keep moving through the year, so
+  // they are joined live at export time rather than frozen into the snapshot — a frozen
+  // copy would show figures that were already out of date.
+  const ids = Array.from(new Set(empIds))
+  const fyList = Array.from(fys)
+  const side = async (table: string, prefix: string) => {
+    const by = new Map<string, any>()
+    for (let i = 0; i < ids.length; i += 300) {
+      let q = supabase.from(table).select('*').in('employee_id', ids.slice(i, i + 300))
+      if (fyList.length) q = q.in('fy', fyList)
+      const { data } = await q
+      ;(data || []).forEach((row: any) => {
+        const { id, employee_id, company_id, fy, created_at, updated_at, ...rest } = row
+        const clean: Record<string, any> = {}
+        Object.entries(rest).forEach(([k, v]) => { clean[k.startsWith(prefix) ? k : `${prefix}${k}`] = v })
+        by.set(employee_id, clean)
+      })
+    }
+    return by
+  }
+  let arrearBy = new Map<string, any>(), taxableBy = new Map<string, any>()
+  try { arrearBy = await side('arrear', 'arrear_') } catch { /* table optional */ }
+  try { taxableBy = await side('taxable', 'taxable_') } catch { /* table optional */ }
+
+  // Column lists are pinned rather than derived from the returned rows: both tables are
+  // empty until the arrear / tax runs populate them, and a shape derived from data would
+  // silently drop every one of these columns from the report while that is true.
+  const arrearCols = new Set<string>(ARREAR_COLS)
+  const taxableCols = new Set<string>(TAXABLE_COLS)
+  arrearBy.forEach(v => Object.keys(v).forEach(k => arrearCols.add(k)))
+  taxableBy.forEach(v => Object.keys(v).forEach(k => taxableCols.add(k)))
+  return out.map(row => {
+    const eid = row.employee_id
+    const a = arrearBy.get(eid) || {}, t = taxableBy.get(eid) || {}
+    const merged: Record<string, any> = { ...row }
+    arrearCols.forEach(k => { merged[k] = a[k] ?? '' })
+    taxableCols.forEach(k => { merged[k] = t[k] ?? '' })
+    return merged
+  })
 }
 
 // Directly set a run's status — used by the Payroll Month controls (Freeze / Lock / reopen).

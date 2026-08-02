@@ -41,7 +41,7 @@ const STAGE_COLOR:Record<string,string> = {
   'Shortlisted':'#16A34A','Offer Sent':'#0891B2','Joined':'#15803D','Rejected':'#DC2626'
 }
 const EMP_TYPES = ['Employee','Intern','Contract','Consultant','NAPS','NATS','Live Project']
-const EDUCATION_OPTIONS = ['Any Graduate','B.Tech/B.E.','MBA/PGDM','M.Tech','B.Com/M.Com','BCA/MCA','Diploma','12th Pass','Any Post Graduate']
+const EDUCATION_OPTIONS = ['Any Graduate','Bachelors','B.Tech/B.E.','MBA/PGDM','M.Tech','B.Com/M.Com','BCA/MCA','Diploma','12th Pass','Any Post Graduate','Masters']
 const SOURCES = ['Direct','Naukri','LinkedIn','Referral','Campus','WhatsApp','Consultancy','Other']
 
 // ── LIGHT THEME STYLES ───────────────────────────────────────────
@@ -65,6 +65,15 @@ const T = {
 
 // ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
 // Reusable filter bar + matcher used across the candidate & record tabs.
+// A department name repeats once per company. In a filter that spans companies the plain
+// name would appear several times with no way to tell the copies apart, so the owning
+// company is appended only when the name is actually ambiguous in the visible list.
+function deptLabel(d:any, list:any[], companies:any[]) {
+  if (list.filter((x:any)=>x.dept_name===d.dept_name).length < 2) return d.dept_name
+  const co = companies.find((c:any)=>c.id===d.company_id)
+  return `${d.dept_name} — ${co?.company_name||co?.company_code||'—'}`
+}
+
 // `f` shape: { company, department, position, location } — all '' means "All".
 function RecFilterBar({ companies, departments, locations, positions, f, setF }:any) {
   return (
@@ -80,7 +89,10 @@ function RecFilterBar({ companies, departments, locations, positions, f, setF }:
         <label style={T.label}>Department</label>
         <select style={T.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
           <option value="">All departments</option>
-          {(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          {(() => {
+            const vis = (departments||[]).filter((d:any)=>!f.company||d.company_id===f.company)
+            return vis.map((d:any)=><option key={d.id} value={d.id}>{deptLabel(d, vis, companies||[])}</option>)
+          })()}
         </select>
       </div>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
@@ -217,14 +229,19 @@ export default function RecruitmentPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ background:'#fff', display:'flex', padding:'0 24px', borderBottom:'1px solid #EDE9FE', overflowX:'auto', boxShadow:'0 1px 4px rgba(124,58,237,0.08)' }}>
-        {TABS.map(t => (
-          <button key={t.k} onClick={() => setTab(t.k as any)} style={{ ...T.btn, background:'transparent', borderRadius:0, padding:'11px 16px',
-            color:tab===t.k?'#7C3AED':'#9CA3AF', borderBottom:tab===t.k?'2px solid #7C3AED':'2px solid transparent',
-            fontWeight:tab===t.k?600:400 }}>
-            {t.l}
-          </button>
-        ))}
+      <div style={{ background:'#fff', display:'flex', gap:8, padding:'10px 24px', borderBottom:'1px solid #EDE9FE', overflowX:'auto', boxShadow:'0 1px 4px rgba(124,58,237,0.08)' }}>
+        {TABS.map(t => {
+          const on = tab === t.k
+          return (
+            // Pill tabs — same shape as the Onboarding page's join-window buttons.
+            <button key={t.k} onClick={() => setTab(t.k as any)}
+              style={{ padding:'6px 13px', borderRadius:99, border:'0.5px solid '+(on?'#7C3AED':'#EDE9FE'),
+                cursor:'pointer', fontSize:11.5, fontWeight:on?600:500, fontFamily:'inherit',
+                background:on?'#7C3AED':'#FAFAF8', color:on?'#fff':'#1E1B4B', whiteSpace:'nowrap', flexShrink:0 }}>
+              {t.l}
+            </button>
+          )
+        })}
       </div>
 
       <div style={{ padding:'18px 24px', maxWidth:1300 }}>
@@ -403,8 +420,11 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     if (!error) setSkills(s=>[...s, name].sort((a,b)=>a.localeCompare(b)))
   }
 
-  const filtLocs = form.company_id ? locations.filter((l:Location)=>l.company_id===form.company_id) : locations
-  const filtDepts = form.company_id ? departments.filter((d:Department)=>d.company_id===form.company_id) : departments
+  // Each company owns its own copy of a department (three companies → three "Finance &
+  // Accounts" rows). Until a company is chosen there is no correct list to show, so show
+  // none rather than every company's copy stacked on top of each other.
+  const filtLocs = form.company_id ? locations.filter((l:Location)=>l.company_id===form.company_id) : []
+  const filtDepts = form.company_id ? departments.filter((d:Department)=>d.company_id===form.company_id) : []
   const F = (k:string,v:any) => setForm((f:any)=>({...f,[k]:v}))
 
   const isQuick = form.mrf_type === 'Quick Hire'
@@ -526,20 +546,21 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <SectionLine title="Basic Details" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <div><label style={T.label}>Company *</label>
-              <select style={T.select} value={form.company_id} onChange={e=>F('company_id',e.target.value)}>
+              <select style={T.select} value={form.company_id}
+                onChange={e=>setForm((f:any)=>({ ...f, company_id:e.target.value, department_id:'', location_id:'' }))}>
                 <option value="">Select Company</option>
                 {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
               </select>
             </div>
             <div><label style={T.label}>Branch / Location</label>
-              <select style={T.select} value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
-                <option value="">Select Location</option>
+              <select style={T.select} value={form.location_id} disabled={!form.company_id} onChange={e=>F('location_id',e.target.value)}>
+                <option value="">{form.company_id ? 'Select Location' : 'Select a company first'}</option>
                 {filtLocs.map((l:Location)=><option key={l.id} value={l.id}>{l.location_name||l.location_code}</option>)}
               </select>
             </div>
             <div><label style={T.label}>Department</label>
-              <select style={T.select} value={form.department_id} onChange={e=>F('department_id',e.target.value)}>
-                <option value="">Select Department</option>
+              <select style={T.select} value={form.department_id} disabled={!form.company_id} onChange={e=>F('department_id',e.target.value)}>
+                <option value="">{form.company_id ? 'Select Department' : 'Select a company first'}</option>
                 {filtDepts.map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
               </select>
             </div>
@@ -659,7 +680,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         </select>
         <select value={fDept} onChange={e=>setFDept(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
           <option value="">All Departments</option>
-          {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          {(() => {
+            const vis = departments.filter((d:Department)=>!fCompany||d.company_id===fCompany)
+            return vis.map((d:Department)=><option key={d.id} value={d.id}>{deptLabel(d, vis, companies)}</option>)
+          })()}
         </select>
         <select value={fLoc} onChange={e=>setFLoc(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
           <option value="">All Locations</option>

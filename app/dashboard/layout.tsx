@@ -53,7 +53,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {open ? '←' : 'Ez'}
         </div>
         {/* Scrollable nav list — keeps every item reachable on short screens while the toggle stays pinned */}
-        <div style={{ flex: 1, minHeight: 0, width: '100%', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', alignItems: open ? 'flex-start' : 'center', gap: '2px' }}>
+        <div className="scroll-on-dark" style={{ flex: 1, minHeight: 0, width: '100%', overflowY: 'auto', overflowX: 'hidden', display: 'flex', flexDirection: 'column', alignItems: open ? 'flex-start' : 'center', gap: '2px' }}>
           {nav.map((n) => (
             <Link key={n.href} href={n.href} style={{ textDecoration: 'none', width: open ? '100%' : '36px', flexShrink: 0 }}>
               <div style={{ height: '38px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '10px', padding: open ? '0 10px' : '0', justifyContent: open ? 'flex-start' : 'center', background: path === n.href ? '#7C3AED' : 'transparent', transition: 'background .15s', width: '100%' }}>

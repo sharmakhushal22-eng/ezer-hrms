@@ -1,58 +1,25 @@
 'use client'
 // components/payroll/AttendanceUpload.tsx — Payroll → Attendance → Attendance Upload.
-// Pick a created payroll month (run), upload a Leave/Attendance Excel, run the client-side
-// "% checking" validation pass, then Process (→ upload_attendance_batch) or Cancel.
-// paid_days is computed server-side as (EL+CL+SL+Other) − Absent. OT is a SEPARATE uploader.
-// Also: ⬇ Download attendance — a ready-to-fill sheet for the month master, filterable by
-// company / location / department / employee codes (searchable; the code box accepts a
-// pasted bulk list like "OXYZO680, OXYZO741, OXYZO1013").
-import { useState, useEffect, useCallback } from 'react'
+// Download a ready-to-fill attendance sheet, then upload it back for the whole GROUP at
+// once: attendance is always uploaded across every company for the chosen month, so HR
+// works from a single consolidated sheet rather than one file per company.
+//
+// Before anything is written, the sheet is validated over a deliberate ~10s staged pass
+// (green progress bar + live percentage, mirroring Create Month Master):
+//   • every Emp Code must exist in that month's master
+//   • Paid Days must be <= Max Days for every employee — a violation is a hard block
+// Only then does Process commit via upload_attendance_batch, run by run.
+import { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
-import { loadRuns, loadCompanies, uploadAttendanceBatch, getValidEmpCodesForRun, MONTHS, type PayrollRun, type AttendanceUploadRow } from '@/lib/payroll/core'
-import { C, font, num, ddInp, lbl, GROUP, SearchSelect, MultiSelect, ValidationCard, type Opt } from './attendanceShared'
+import { loadRuns, uploadAttendanceBatch, MONTHS, type PayrollRun, type AttendanceUploadRow } from '@/lib/payroll/core'
+import { C, font, num, monthMeta, maxDaysLive, fmtDate, runPeriodISO, DownloadCard, ValidationCard, SearchSelect, lbl, type Opt, type Violation } from './attendanceShared'
 
-// ── Month-day helpers, all computed LIVE from the employee master's DOJ/DOL for the
-// report's month, so corrections show up in the download immediately. `period` is the
-// 1st of the payroll month as 'YYYY-MM-01'. DOJ/DOL are pulled from the employee master.
-function monthMeta(period: string) {
-  const [py, pm] = String(period).slice(0, 7).split('-').map(Number)
-  const start = Date.UTC(py, pm - 1, 1)
-  const end = Date.UTC(py, pm, 0)                 // last day of the month
-  return { py, pm, start, end, daysInMonth: new Date(end).getUTCDate() }
-}
-const toMs = (d: string | null) => { if (!d) return null; const [y, m, dd] = String(d).slice(0, 10).split('-').map(Number); return (y && m && dd) ? Date.UTC(y, m - 1, dd) : null }
+// A parsed sheet row. Paid Days is read so it can be validated against Max Days;
+// the stored value is still recomputed server-side as (EL+CL+SL+Other) − Absent.
+type ParsedRow = AttendanceUploadRow & { paid_days: number | null; weekly_off: number }
 
-// Max Days — the maximum days salary can be paid for in the month, capped by the leaving
-// date. DOL 15-Apr → 15; no leaving this month → the full month (30/31/28).
-function maxDaysLive(dol: string | null, period: string | null): number | null {
-  if (!period) return null
-  const { start, end, daysInMonth } = monthMeta(period)
-  const dl = toMs(dol)
-  if (dl != null && dl >= start && dl <= end) return new Date(dl).getUTCDate()
-  return daysInMonth
-}
-
-// Dates in the report read as DD-MM-YY (e.g. 2018-09-24 → 24-09-18).
-function fmtDate(d: string | null): string {
-  if (!d) return ''
-  const [y, m, dd] = String(d).slice(0, 10).split('-')
-  if (!y || !m || !dd) return ''
-  return `${dd}-${m}-${y.slice(2)}`
-}
-
-// Calendar 1st-of-month for a run, from fy + month (same math as the server's v_period).
-function runPeriodISO(fy: string | null, month: number | null): string | null {
-  if (!fy || !month) return null
-  const startYr = Number(String(fy).split('-')[0])
-  const cal = month <= 9 ? month + 3 : month - 9
-  const yr = month <= 9 ? startYr : startYr + 1
-  return `${yr}-${String(cal).padStart(2, '0')}-01`
-}
-
-// Map the template's friendly headers → snapshot keys. Tolerant of case/spacing.
-// Only leave/absent columns are read here — paid_days is derived server-side, OT is separate.
-function normalizeRow(r: Record<string, any>): AttendanceUploadRow | null {
+function normalizeRow(r: Record<string, any>): ParsedRow | null {
   const g = (...keys: string[]) => { for (const k of Object.keys(r)) { const kk = k.trim().toLowerCase(); if (keys.some(x => kk === x)) return r[k] } return undefined }
   const code = g('emp code', 'emp_code', 'empcode', 'employee code')
   if (code == null || String(code).trim() === '') return null
@@ -63,73 +30,96 @@ function normalizeRow(r: Record<string, any>): AttendanceUploadRow | null {
     sick_leave: num(g('sl', 'sick leave', 'sick_leave')) ?? 0,
     other_leave: num(g('other leave', 'other_leave')) ?? 0,
     absent_days: num(g('absent days', 'absent_days', 'absent')) ?? 0,
+    paid_days: num(g('paid days', 'paid_days')),
+    weekly_off: num(g('weekly off', 'weekly_off', 'week off', 'wo')) ?? 0,
   }
 }
+// Weekly Off is stored with the rest, so Edit can recompute Total Days identically.
+
+// Emp code out of a raw sheet row, using the same tolerant header matching as the parser.
+function codeOfRaw(r: Record<string, any>): string {
+  for (const k of Object.keys(r)) {
+    const kk = k.trim().toLowerCase()
+    if (['emp code', 'emp_code', 'empcode', 'employee code'].includes(kk)) return String(r[k] ?? '').trim()
+  }
+  return ''
+}
+
+// Total Days, as confirmed:
+//   Weekly Off + EL + CL + SL + Other Leave + Paid Days − Absent Days
+function totalDaysOf(r: ParsedRow, paid: number): number {
+  return (r.weekly_off || 0) + (r.earned_leave || 0) + (r.casual_leave || 0)
+    + (r.sick_leave || 0) + (r.other_leave || 0) + paid - (r.absent_days || 0)
+}
+
+// Every header the downloaded template can legitimately carry, plus the aliases the
+// parser accepts. Anything outside this set means a column was added to the sheet.
+const ALLOWED_HEADERS = new Set([
+  'company', 'emp code', 'emp_code', 'empcode', 'employee code',
+  'employee name', 'name', 'department', 'designation', 'month',
+  'date of joining', 'date of leaving', 'days in month', 'max days',
+  'weekly off', 'weekly_off', 'week off', 'wo',
+  'el', 'earned leave', 'earned_leave',
+  'cl', 'casual leave', 'casual_leave',
+  'sl', 'sick leave', 'sick_leave',
+  'other leave', 'other_leave',
+  'paid days', 'paid_days',
+  'absent days', 'absent_days', 'absent',
+  'total days', 'ot hours', 'ot_hours', 'arrear days',
+])
+
+const STAGES: [number, string][] = [
+  [0, 'Reading the attendance sheet…'],
+  [20, 'Matching employee codes to the month master…'],
+  [45, 'Fetching joining & leaving dates…'],
+  [68, 'Checking Paid Days & Total Days against Max Days…'],
+  [88, 'Finalising validation…'],
+]
 
 export default function AttendanceUpload({ companyId, fy }: { companyId: string; fy: string }) {
-  const [runs, setRuns] = useState<PayrollRun[]>([])
-  const [runId, setRunId] = useState('')
-  const [rows, setRows] = useState<AttendanceUploadRow[]>([])
+  const [allRuns, setAllRuns] = useState<PayrollRun[]>([])
+  const [upMonth, setUpMonth] = useState('')            // month number as string — group-wide
+  const [rows, setRows] = useState<ParsedRow[]>([])
+  // The sheet exactly as uploaded — re-emitted on download with a Status column appended.
+  const [rawRows, setRawRows] = useState<Record<string, any>[]>([])
   const [fileName, setFileName] = useState('')
   const [parseErr, setParseErr] = useState('')
+  const [sheetErrs, setSheetErrs] = useState<string[]>([])   // structure / duplicate problems
   const [busy, setBusy] = useState(false)
   const [results, setResults] = useState<{ emp_code: string; result: string }[] | null>(null)
 
-  // client-side validation pass ("% checking")
+  // staged validation
   const [checking, setChecking] = useState(false)
   const [valPct, setValPct] = useState(0)
+  const [stage, setStage] = useState('')
   const [matched, setMatched] = useState<string[]>([])
   const [unmatched, setUnmatched] = useState<string[]>([])
+  const [violations, setViolations] = useState<Violation[]>([])
   const [showVal, setShowVal] = useState(false)
+  const runByCode = useRef<Map<string, string>>(new Map())
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // inline download filters
-  const [dlBusy, setDlBusy] = useState(false)
-  const [dlErr, setDlErr] = useState('')
-  const [dlCompany, setDlCompany] = useState('')
-  const [dlRunId, setDlRunId] = useState('')
-  const [dlLoc, setDlLoc] = useState('')
-  const [dlDept, setDlDept] = useState('')
-  const [dlEmpCodes, setDlEmpCodes] = useState<string[]>([])
-  const [companies, setCompanies] = useState<Opt[]>([])
-  const [allRuns, setAllRuns] = useState<PayrollRun[]>([])
-  const [locOpts, setLocOpts] = useState<Opt[]>([])
-  const [deptOpts, setDeptOpts] = useState<Opt[]>([])
-  const [empOpts, setEmpOpts] = useState<Opt[]>([])
-
-  const reloadRuns = useCallback(async () => {
-    const list = await loadRuns(companyId, fy)
-    setRuns(list); if (list.length && !runId) setRunId(list[0].id)
-  }, [companyId, fy]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { reloadRuns() }, [reloadRuns])
-
-  // download option data
   useEffect(() => {
-    loadCompanies().then(cs => setCompanies((cs as any[]).map(c => ({ value: c.id, label: c.company_name })))).catch(() => {})
-    loadRuns('', fy).then(setAllRuns).catch(() => {})
+    loadRuns('', fy).then(list => {
+      setAllRuns(list)
+      if (list.length) {
+        const first = list.map(r => r.month).sort((a, b) => (a || 0) - (b || 0))[0]
+        setUpMonth(first != null ? String(first) : '')
+      }
+    }).catch(() => {})
   }, [fy])
-  useEffect(() => { setDlCompany(companyId || GROUP) }, [companyId])
+  useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
-  useEffect(() => {
-    if (!dlCompany) { setLocOpts([]); setDeptOpts([]); setEmpOpts([]); setDlRunId(''); return }
-    const grp = dlCompany === GROUP
-    const scope = <T,>(q: any) => grp ? q : q.eq('company_id', dlCompany)
-    scope(supabase.from('locations').select('id, location_name').eq('status', 'Active').order('location_name'))
-      .then(({ data }: any) => setLocOpts((data || []).map((l: any) => ({ value: l.id, label: l.location_name }))))
-    scope(supabase.from('departments').select('id, dept_name').eq('status', 'Active').order('dept_name'))
-      .then(({ data }: any) => setDeptOpts((data || []).map((d: any) => ({ value: d.id, label: d.dept_name }))))
-    scope(supabase.from('employees').select('emp_code, full_name').neq('is_test', true).order('emp_code'))
-      .then(({ data }: any) => setEmpOpts((data || []).filter((e: any) => e.emp_code).map((e: any) => ({ value: e.emp_code, label: `${e.emp_code} — ${e.full_name}` }))))
-    setDlLoc(''); setDlDept(''); setDlEmpCodes([])
-    if (grp) {
-      const firstMonth = allRuns.map(r => r.month).sort((a, b) => (a || 0) - (b || 0))[0]
-      setDlRunId(firstMonth != null ? String(firstMonth) : '')
-    } else {
-      const first = allRuns.find(r => r.company_id === dlCompany)
-      setDlRunId(first ? first.id : '')
-    }
-  }, [dlCompany, allRuns])
+  // One entry per distinct month across every company — the upload is group-wide.
+  const monthOptions: Opt[] = Array.from(new Map(allRuns.map(r =>
+    [r.month, { value: String(r.month), label: r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}` }]
+  )).values()).sort((a, b) => Number(a.value) - Number(b.value))
 
-  function resetUpload() { setRows([]); setFileName(''); setShowVal(false); setResults(null); setMatched([]); setUnmatched([]); setValPct(0) }
+  function resetUpload() {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    setRows([]); setRawRows([]); setFileName(''); setShowVal(false); setResults(null); setSheetErrs([])
+    setMatched([]); setUnmatched([]); setViolations([]); setValPct(0); setStage(''); setChecking(false)
+  }
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     setParseErr(''); resetUpload()
@@ -141,131 +131,173 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
         const wb = XLSX.read(ev.target?.result, { type: 'array' })
         const ws = wb.Sheets[wb.SheetNames[0]]
         const raw = XLSX.utils.sheet_to_json<Record<string, any>>(ws, { defval: '' })
-        const parsed = raw.map(normalizeRow).filter(Boolean) as AttendanceUploadRow[]
+        const parsed = raw.map(normalizeRow).filter(Boolean) as ParsedRow[]
         if (parsed.length === 0) { setParseErr('No valid rows found — check the "Emp Code" column matches the template.'); return }
-        setRows(parsed); runValidation(parsed)
+
+        // ── Sheet-shape checks: the template's columns may be edited, never added to ──
+        const issues: string[] = []
+        const headerRow = (XLSX.utils.sheet_to_json(ws, { header: 1 })[0] || []) as any[]
+        const unknown = headerRow
+          .map(h => String(h ?? '').trim())
+          .filter(h => h && !ALLOWED_HEADERS.has(h.toLowerCase()))
+        if (unknown.length) issues.push(`Extra column${unknown.length > 1 ? 's' : ''} added: ${unknown.join(', ')}. Remove ${unknown.length > 1 ? 'them' : 'it'} and keep the template's columns only.`)
+
+        // A column with data but no header — XLSX names these __EMPTY, __EMPTY_1, …
+        const headerless = new Set<string>()
+        raw.forEach(r => Object.keys(r).forEach(k => {
+          if (/^__EMPTY/.test(k) && String(r[k] ?? '').trim() !== '') headerless.add(k)
+        }))
+        if (headerless.size) issues.push(`${headerless.size} column${headerless.size > 1 ? 's' : ''} filled outside the template's headers. Clear anything to the right of "Absent Days".`)
+
+        // Duplicate employee codes
+        const seen = new Map<string, number>()
+        parsed.forEach(p => seen.set(p.emp_code, (seen.get(p.emp_code) || 0) + 1))
+        const dupes = [...seen.entries()].filter(([, n]) => n > 1)
+        if (dupes.length) issues.push(`Duplicate employee code${dupes.length > 1 ? 's' : ''}: ${dupes.map(([c, n]) => `${c} (${n}×)`).join(', ')}. Each employee must appear once.`)
+
+        setSheetErrs(issues)
+        // Parsed and previewed only — the checking pass starts when Upload is clicked.
+        setRows(parsed); setRawRows(raw)
       } catch (err: any) { setParseErr('Could not read the file: ' + (err.message || err)) }
     }
     reader.readAsArrayBuffer(file)
   }
 
-  // The "% checking" pass — fetch the run's valid codes once, walk rows locally, animate.
-  async function runValidation(parsed: AttendanceUploadRow[]) {
-    if (!runId) { setParseErr('Pick a payroll month first, then re-select the file.'); return }
-    setParseErr(''); setResults(null); setShowVal(true); setChecking(true); setValPct(0)
-    let valid: Set<string>
-    try { valid = await getValidEmpCodesForRun(runId) }
-    catch (e: any) { setChecking(false); setShowVal(false); setParseErr('Could not load this month: ' + (e.message || e)); return }
-    const m: string[] = [], u: string[] = []
-    parsed.forEach(r => (valid.has(r.emp_code) ? m : u).push(r.emp_code))
-    setMatched(m); setUnmatched(u)
-    let p = 0
-    const iv = setInterval(() => { p = Math.min(100, p + 7); setValPct(p); if (p >= 100) { clearInterval(iv); setChecking(false) } }, 80)
+  // Gather the month's master data, then check codes + Paid Days ≤ Max Days.
+  async function validate(parsed: ParsedRow[]) {
+    const monthRuns = allRuns.filter(r => String(r.month) === upMonth)
+    if (!monthRuns.length) throw new Error('No payroll month created for this period yet.')
+    const runIds = monthRuns.map(r => r.id)
+    const periodISO = runPeriodISO(monthRuns[0].fy, monthRuns[0].month)
+
+    // every employee in this month, across all companies in the group
+    const { data: snap, error } = await supabase.from('payroll_employee_snapshot')
+      .select('run_id, employee_id, employee_code').in('run_id', runIds)
+    if (error) throw new Error(error.message)
+
+    // Max Days comes from the employee master's leaving date — the authoritative
+    // source — so an edited "Max Days" column in the sheet cannot weaken the check.
+    const ids = Array.from(new Set((snap || []).map((s: any) => s.employee_id)))
+    const master: Record<string, any> = {}
+    for (let i = 0; i < ids.length; i += 300) {
+      const { data: emp } = await supabase.from('employees')
+        .select('id, date_of_leaving, last_working_date, relieving_date')
+        .in('id', ids.slice(i, i + 300))
+      ;(emp || []).forEach((e: any) => { master[e.id] = e })
+    }
+
+    const runMap = new Map<string, string>()
+    const maxByCode = new Map<string, number>()
+    ;(snap || []).forEach((s: any) => {
+      runMap.set(s.employee_code, s.run_id)
+      const m = master[s.employee_id] || {}
+      const dol = m.date_of_leaving || m.last_working_date || m.relieving_date || null
+      const md = maxDaysLive(dol, periodISO)
+      if (md != null) maxByCode.set(s.employee_code, md)
+    })
+    runByCode.current = runMap
+
+    const m: string[] = [], u: string[] = [], v: Violation[] = []
+    parsed.forEach(r => {
+      if (!runMap.has(r.emp_code)) { u.push(r.emp_code); return }
+      m.push(r.emp_code)
+      // Validate the Paid Days in the sheet; if the column is blank, fall back to the
+      // value the server will compute, so the rule holds either way.
+      const computed = (r.earned_leave || 0) + (r.casual_leave || 0) + (r.sick_leave || 0) + (r.other_leave || 0) - (r.absent_days || 0)
+      const paid = r.paid_days ?? computed
+      const max = maxByCode.get(r.emp_code)
+      if (max == null) return
+      // Neither the paid days nor the reconstructed total may exceed the month's ceiling.
+      if (paid > max) v.push({ code: r.emp_code, rule: 'Paid Days', actual: paid, max })
+      const total = totalDaysOf(r, paid)
+      if (total > max) v.push({ code: r.emp_code, rule: 'Total Days', actual: total, max })
+    })
+    return { m, u, v }
   }
 
+  // Staged progress: always takes at least 10 seconds, like Create Month Master.
+  function runValidation(parsed: ParsedRow[]) {
+    if (!upMonth) { setParseErr('Pick a payroll month first, then re-select the file.'); return }
+    setParseErr(''); setResults(null); setShowVal(true); setChecking(true); setValPct(0); setStage(STAGES[0][1])
+    const startedAt = Date.now()
+    let done = false
+    let out: { m: string[]; u: string[]; v: Violation[] } | null = null
+    let failed = ''
+    validate(parsed).then(r => { out = r }).catch(e => { failed = String(e?.message || e) }).finally(() => { done = true })
+
+    let cur = 0
+    timerRef.current = setInterval(() => {
+      cur = Math.min(95, cur + 1.45)          // ~10s to reach 95%
+      setValPct(Math.round(cur))
+      const st = [...STAGES].reverse().find(([t]) => cur >= t); if (st) setStage(st[1])
+      if (done && Date.now() - startedAt >= 10000 && cur >= 95) {
+        if (timerRef.current) clearInterval(timerRef.current)
+        timerRef.current = null
+        setValPct(100); setStage('Done ✓')
+        setTimeout(() => {
+          setChecking(false)
+          if (failed) { setShowVal(false); setParseErr('Could not validate: ' + failed); return }
+          setMatched(out!.m); setUnmatched(out!.u); setViolations(out!.v)
+        }, 400)
+      }
+    }, 150)
+  }
+
+  // Commit — rows are grouped by the run their emp code belongs to.
   async function doProcess() {
-    if (!runId) return
     const allow = new Set(matched)
     const send = rows.filter(r => allow.has(r.emp_code))
     if (send.length === 0) return
     setBusy(true)
-    const { error, results: res } = await uploadAttendanceBatch(runId, send)
+    const byRun = new Map<string, AttendanceUploadRow[]>()
+    send.forEach(r => {
+      const rid = runByCode.current.get(r.emp_code); if (!rid) return
+      const { paid_days, ...payload } = r
+      if (!byRun.has(rid)) byRun.set(rid, [])
+      byRun.get(rid)!.push(payload)
+    })
+    const all: { emp_code: string; result: string }[] = []
+    let err = ''
+    for (const [rid, batch] of byRun) {
+      const { error, results: res } = await uploadAttendanceBatch(rid, batch)
+      if (error) { err = error; break }
+      all.push(...res)
+    }
     setBusy(false); setShowVal(false)
-    if (error) { setParseErr('Upload failed: ' + error); return }
-    setResults(res)
+    if (err) { setParseErr('Upload failed: ' + err); return }
+    setResults(all)
   }
 
-  const runLabel = (r: PayrollRun) => `month master for ${r.company_name || 'company'} for ${r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}`}`
-  const isGroup = dlCompany === GROUP
-  const dlRunOptions: Opt[] = isGroup
-    ? Array.from(new Map(allRuns.map(r => [r.month, { value: String(r.month), label: r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}` }])).values()).sort((a, b) => Number(a.value) - Number(b.value))
-    : allRuns.filter(r => r.company_id === dlCompany).map(r => ({ value: r.id, label: r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}` }))
-
-  async function downloadAttendance() {
-    if (!dlRunId) { setDlErr('Pick a month first.'); return }
-    setDlBusy(true); setDlErr('')
-    try {
-      const grpRuns = isGroup ? allRuns.filter(r => String(r.month) === dlRunId) : allRuns.filter(r => r.id === dlRunId)
-      const runIds = grpRuns.map(r => r.id)
-      const coName: Record<string, string> = {}; const coPeriod: Record<string, string> = {}; const coPeriodISO: Record<string, string> = {}
-      grpRuns.forEach(r => {
-        coName[r.id] = r.company_name || ''
-        coPeriod[r.id] = r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}`
-        coPeriodISO[r.id] = runPeriodISO(r.fy, r.month) || ''
-      })
-      const period = grpRuns[0]?.period_label || ''
-      const { data: snap, error } = await supabase.from('payroll_employee_snapshot')
-        .select('run_id, employee_id, employee_code, full_name, department, designation, days_in_month, paid_days, earned_leave, casual_leave, sick_leave, other_leave, absent_days')
-        .in('run_id', runIds).order('employee_code')
-      if (error) throw new Error(error.message)
-      let list = snap || []
-
-      // Pull Date of Joining / Date of Leaving / employment_type LIVE from the employee
-      // master (the snapshot copies may be NULL on older months). Only real "Employee"
-      // types are allowed in this attendance record — interns / consultants / contract etc.
-      // are dropped by the master's employment_type, not the (possibly stale) snapshot's.
-      const ids = Array.from(new Set(list.map((r: any) => r.employee_id)))
-      const master: Record<string, any> = {}
-      for (let i = 0; i < ids.length; i += 300) {
-        const { data: emp } = await supabase.from('employees')
-          .select('id, company_doj, date_of_leaving, last_working_date, relieving_date, employment_type')
-          .in('id', ids.slice(i, i + 300))
-        ;(emp || []).forEach((e: any) => { master[e.id] = e })
+  // Re-emit the uploaded sheet unchanged, with a Status column appended per employee.
+  function downloadProcessed() {
+    if (!results) return
+    const statusBy = new Map(results.map(r => [r.emp_code, r.result]))
+    // Emp codes are unique here (duplicates are blocked before upload), so the parsed
+    // row can be looked up by code rather than relying on positional alignment.
+    const parsedBy = new Map(rows.map(r => [r.emp_code, r]))
+    const out = rawRows.map(r => {
+      const code = codeOfRaw(r)
+      const p = parsedBy.get(code)
+      const paid = p ? (p.paid_days ?? ((p.earned_leave || 0) + (p.casual_leave || 0) + (p.sick_leave || 0) + (p.other_leave || 0) - (p.absent_days || 0))) : null
+      return {
+        ...r,
+        // Weekly Off + EL + CL + SL + Other Leave + Paid Days − Absent Days
+        'Total Days': p && paid != null ? totalDaysOf(p, paid) : '',
+        'Status': statusBy.get(code) === 'UPDATED' ? 'Processed' : 'Not processed',
       }
-      list = list.filter((r: any) => master[r.employee_id]?.employment_type === 'Employee')
-
-      if (dlLoc || dlDept || dlEmpCodes.length) {
-        let q = supabase.from('employees').select('id')
-        if (!isGroup) q = q.eq('company_id', dlCompany)
-        if (dlLoc) q = q.eq('location_id', dlLoc)
-        if (dlDept) q = q.eq('department_id', dlDept)
-        if (dlEmpCodes.length) q = q.in('emp_code', dlEmpCodes)
-        const { data: matchedEmp } = await q
-        const allow = new Set((matchedEmp || []).map((e: any) => e.id))
-        list = list.filter((r: any) => allow.has(r.employee_id))
-      }
-      if (list.length === 0) { setDlErr('No matching Employee-type employees for these filters.'); setDlBusy(false); return }
-      const nn = (v: any) => Number(v) || 0
-      const sheet = list.map((r: any) => {
-        const m = master[r.employee_id] || {}
-        const doj = m.company_doj || null
-        const dol = m.date_of_leaving || m.last_working_date || m.relieving_date || null
-        const per = coPeriodISO[r.run_id] || null
-        const weeklyOff = 0   // starts at 0 — HR fills the actual week-offs in the sheet
-        // Attendance figures default to 0 (not blank) so every row always carries a number,
-        // including months whose attendance has not been uploaded yet.
-        const el = nn(r.earned_leave), cl = nn(r.casual_leave), sl = nn(r.sick_leave)
-        const other = nn(r.other_leave), absent = nn(r.absent_days), paid = nn(r.paid_days)
-        // Total Days (confirmed) = Weekly Off + EL + CL + SL + Other Leave + Paid Days − Absent Days
-        const totalDays = weeklyOff + el + cl + sl + other + paid - absent
-        return {
-          ...(isGroup ? { 'Company': coName[r.run_id] || '' } : {}),
-          'Emp Code': r.employee_code || '', 'Employee Name': r.full_name || '', 'Department': r.department || '',
-          'Designation': r.designation || '', 'Month': coPeriod[r.run_id] || period,
-          'Date of Joining': fmtDate(doj), 'Date of Leaving': fmtDate(dol),
-          'Days in Month': r.days_in_month ?? (per ? monthMeta(per).daysInMonth : ''),
-          'Max Days': maxDaysLive(dol, per) ?? '',
-          'Weekly Off': weeklyOff,
-          'EL': el, 'CL': cl, 'SL': sl,
-          'Other Leave': other, 'Absent Days': absent, 'Paid Days': paid,
-          'Total Days': totalDays,
-        }
-      })
-      const ws = XLSX.utils.json_to_sheet(sheet)
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, ws, 'Attendance')
-      const safe = (s: string) => (s || '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '')
-      XLSX.writeFile(wb, `Attendance_${safe(isGroup ? 'Group' : (grpRuns[0]?.company_name || ''))}_${safe(period)}.xlsx`.replace(/_+/g, '_'))
-    } catch (e: any) { setDlErr('Download failed: ' + (e.message || e)) } finally { setDlBusy(false) }
+    })
+    const ws = XLSX.utils.json_to_sheet(out)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Attendance')
+    const base = fileName.replace(/\.(xlsx|xls)$/i, '') || 'Attendance'
+    XLSX.writeFile(wb, `${base}_Processed.xlsx`)
   }
 
   const updated = results?.filter(r => r.result === 'UPDATED').length || 0
   const notFound = results?.filter(r => r.result !== 'UPDATED') || []
   const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' }
-  const dlCompanyName = isGroup ? 'all companies' : (companies.find(c => c.value === dlCompany)?.label || '')
-  const dlPeriod = isGroup
-    ? (dlRunOptions.find(o => o.value === dlRunId)?.label || '')
-    : (allRuns.find(r => r.id === dlRunId)?.period_label || '')
+  const nn = (v: any) => Number(v) || 0
+  const companyCount = allRuns.filter(r => String(r.month) === upMonth).length
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 820 }}>
@@ -277,81 +309,101 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
         </div>
       </div>
 
-      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months. (Download works for any company.)</div>}
+      <DownloadCard companyId={companyId} fy={fy}
+        heading="Download attendance sheet" note="— filter and download a ready-to-fill sheet"
+        filePrefix="Attendance" sheetName="Attendance"
+        buildRow={(r, ctx) => ({
+          ...(ctx.isGroup ? { 'Company': ctx.companyName } : {}),
+          'Emp Code': r.employee_code || '', 'Employee Name': r.full_name || '', 'Department': r.department || '',
+          'Designation': r.designation || '', 'Month': ctx.periodLabel,
+          'Date of Joining': fmtDate(ctx.doj), 'Date of Leaving': fmtDate(ctx.dol),
+          'Days in Month': r.days_in_month ?? (ctx.periodISO ? monthMeta(ctx.periodISO).daysInMonth : ''),
+          'Max Days': maxDaysLive(ctx.dol, ctx.periodISO) ?? '',
+          'Weekly Off': 0,
+          'EL': nn(r.earned_leave), 'CL': nn(r.casual_leave), 'SL': nn(r.sick_leave),
+          'Other Leave': nn(r.other_leave), 'Paid Days': nn(r.paid_days), 'Absent Days': nn(r.absent_days),
+        })} />
 
-      {/* ── Download attendance — inline filters at the top ── */}
-      <div style={{ background: C.card, border: `1px solid ${C.greenBd}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(5,150,105,0.08)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-          <span style={{ width: 26, height: 26, borderRadius: 8, background: C.greenBg, border: `1px solid ${C.greenBd}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>⬇</span>
-          <span style={{ fontSize: 12.5, fontWeight: 800, color: C.navy }}>Download attendance sheet</span>
-          <span style={{ fontSize: 10.5, color: C.muted }}>— filter and download a ready-to-fill sheet</span>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Company</label><SearchSelect value={dlCompany} options={[{ value: GROUP, label: '🏛️ Group Companies (all)' }, ...companies]} placeholder="Select company" onChange={setDlCompany} /></div>
-          <div><label style={lbl}>Month</label><SearchSelect value={dlRunId} options={dlRunOptions} placeholder={dlRunOptions.length ? 'Select month' : 'No month created'} onChange={setDlRunId} /></div>
-          <div><label style={lbl}>Location</label><SearchSelect value={dlLoc} options={[{ value: '', label: 'All locations' }, ...locOpts]} placeholder="All locations" onChange={setDlLoc} /></div>
-          <div><label style={lbl}>Department</label><SearchSelect value={dlDept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDlDept} /></div>
-        </div>
-        <div style={{ marginBottom: 12 }}>
-          <label style={lbl}>Employee codes <span style={{ textTransform: 'none', fontWeight: 400, color: C.muted }}>(optional — leave empty for all; paste a comma / newline list to add many)</span></label>
-          <MultiSelect values={dlEmpCodes} options={empOpts} placeholder="All employees" onChange={setDlEmpCodes} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <button onClick={downloadAttendance} disabled={dlBusy || !dlRunId}
-            style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: dlBusy || !dlRunId ? 'not-allowed' : 'pointer', opacity: dlBusy || !dlRunId ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
-            {dlBusy ? 'Preparing…' : '⬇ Download'}
-          </button>
-          {dlRunId && <span style={{ fontSize: 11.5, color: C.purpleD }}>month master for <b>{dlCompanyName}</b> for <b>{dlPeriod}</b>{(dlLoc || dlDept || dlEmpCodes.length) ? ' · filtered' : ''}</span>}
-        </div>
-        {dlErr && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 10 }}>{dlErr}</div>}
-      </div>
-
-      {/* ── Upload attendance ── */}
+      {/* ── Upload attendance — always group-wide ── */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
         <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>📤 Upload filled attendance</div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
           <div>
-            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>
-            <select style={{ ...inp, minWidth: 300 }} value={runId} onChange={e => { setRunId(e.target.value); resetUpload() }}>
-              {runs.length === 0 && <option value="">No month created — create one first</option>}
-              {runs.map(r => <option key={r.id} value={r.id}>{runLabel(r)}</option>)}
-            </select>
+            <label style={lbl}>Company</label>
+            <SearchSelect value="__group__" options={[{ value: '__group__', label: '🏛️ Group Companies (all)' }]}
+              placeholder="Group Companies" onChange={() => {}} />
           </div>
           <div>
-            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Attendance file (.xlsx)</label>
-            <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ ...inp, padding: '7px 10px' }} />
+            <label style={lbl}>Payroll month</label>
+            <SearchSelect value={upMonth} options={monthOptions}
+              placeholder={monthOptions.length ? 'Select month' : 'No month created'}
+              onChange={v => { setUpMonth(v); resetUpload() }} />
+          </div>
+          <div>
+            <label style={lbl}>Attendance file (.xlsx)</label>
+            <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ ...inp, padding: '7px 10px', width: '100%', boxSizing: 'border-box' }} />
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>Columns: <b>Emp Code, EL, CL, SL, Other Leave, Absent Days</b>. Paid Days = (EL+CL+SL+Other) − Absent, computed on upload. OT is uploaded separately in the OT Upload tab.</div>
+        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10 }}>
+          One sheet covers <b>every company</b> in the group{companyCount ? ` (${companyCount} this month)` : ''} — codes are matched across all of them.
+          Columns: <b>Emp Code, Weekly Off, EL, CL, SL, Other Leave, Paid Days, Absent Days</b>. Before anything is saved every row is checked for
+          <b> Paid Days ≤ Max Days</b> and <b>Total Days ≤ Max Days</b>, where Total Days = Weekly Off + EL + CL + SL + Other Leave + Paid Days − Absent Days.
+        </div>
+
+        {/* Upload — starts the checking pass. Nothing is read until this is clicked. */}
+        {sheetErrs.length > 0 && (
+          <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: '1px solid #FECACA', borderRadius: 8, padding: '10px 12px', marginTop: 12 }}>
+            <div style={{ fontWeight: 800, marginBottom: 6 }}>This sheet has been modified — upload blocked.</div>
+            {sheetErrs.map((e, i) => <div key={i} style={{ padding: '2px 0' }}>• {e}</div>)}
+          </div>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
+          {(() => {
+            const off = !rows.length || !upMonth || checking || busy || sheetErrs.length > 0
+            return (
+              <button onClick={() => runValidation(rows)} disabled={off}
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.5 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
+                {checking ? 'Checking…' : '⬆ Upload attendance'}
+              </button>
+            )
+          })()}
+          {rows.length > 0 && !checking && sheetErrs.length === 0 && (
+            <span style={{ fontSize: 11.5, color: C.purpleD }}><b>{fileName}</b> · {rows.length} rows ready</span>
+          )}
+          {!rows.length && <span style={{ fontSize: 11.5, color: C.muted }}>Choose a file to enable upload</span>}
+        </div>
+
         {parseErr && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginTop: 10 }}>{parseErr}</div>}
       </div>
 
       {showVal && (
-        <ValidationCard pct={valPct} checking={checking} total={rows.length} matched={matched} unmatched={unmatched}
-          onProcess={doProcess} onCancel={resetUpload} busy={busy} kind="attendance" />
+        <ValidationCard pct={valPct} checking={checking} stage={stage} total={rows.length}
+          matched={matched} unmatched={unmatched} violations={violations}
+          onProcess={doProcess} onCancel={resetUpload} busy={busy} kind="attendance" strictUnmatched />
       )}
 
-      {rows.length > 0 && !results && (
+      {rows.length > 0 && !results && !showVal && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Preview · {fileName} ({rows.length} rows)</div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
-              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'EL', 'CL', 'SL', 'Other', 'Absent', 'Paid Days*'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'WO', 'EL', 'CL', 'SL', 'Other', 'Absent', 'Paid Days', 'Total Days'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.slice(0, 8).map((r, i) => {
-                  const pd = (r.earned_leave || 0) + (r.casual_leave || 0) + (r.sick_leave || 0) + (r.other_leave || 0) - (r.absent_days || 0)
+                  const pd = r.paid_days ?? ((r.earned_leave || 0) + (r.casual_leave || 0) + (r.sick_leave || 0) + (r.other_leave || 0) - (r.absent_days || 0))
                   return (
                     <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
                       <td style={{ padding: '7px 10px', fontWeight: 700, color: C.navy }}>{r.emp_code}</td>
-                      {[r.earned_leave, r.casual_leave, r.sick_leave, r.other_leave, r.absent_days].map((v, j) => <td key={j} style={{ padding: '7px 10px', textAlign: 'right', color: C.navy }}>{v ?? '—'}</td>)}
+                      {[r.weekly_off, r.earned_leave, r.casual_leave, r.sick_leave, r.other_leave, r.absent_days].map((v, j) => <td key={j} style={{ padding: '7px 10px', textAlign: 'right', color: C.navy }}>{v ?? '—'}</td>)}
                       <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: pd < 0 ? C.red : C.green }}>{pd}</td>
+                      <td style={{ padding: '7px 10px', textAlign: 'right', fontWeight: 700, color: C.purpleD }}>{totalDaysOf(r, pd)}</td>
                     </tr>
                   )
                 })}
               </tbody>
             </table>
             {rows.length > 8 && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6 }}>+ {rows.length - 8} more rows…</div>}
-            <div style={{ fontSize: 10, color: C.muted, marginTop: 6 }}>* Paid Days preview is the confirmed formula; the server stores the same on Process.</div>
           </div>
         </div>
       )}
@@ -359,8 +411,16 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
       {results && (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Result</div>
-          <div style={{ fontSize: 14, fontWeight: 800, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginBottom: notFound.length ? 12 : 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>
             ✓ {updated} of {results.length} rows updated
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: notFound.length ? 12 : 0 }}>
+            <button onClick={downloadProcessed}
+              style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
+              ⬇ Download processed file
+            </button>
+            <span style={{ fontSize: 11.5, color: C.muted }}>Your uploaded sheet plus <b>Total Days</b> and <b>Status</b> — each employee marked <b>Processed</b>.</span>
           </div>
           {notFound.length > 0 && (
             <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 14px' }}>

@@ -2,7 +2,9 @@
 // components/payroll/AttendanceEdit.tsx — Payroll → Attendance → Edit & Arrear.
 // After upload, correct one employee at a time: search within the month, edit Paid Days /
 // leave / absent / OT inline (edit_employee_attendance — only changed fields move, and
-// paid_days is NOT recomputed here so a manual value stands). Plus an Arrear Days form that
+// paid_days is always recomputed from the leave fields — same rule as the upload, so the
+// two can never drift, and an edit to an already-calculated month rolls it back to SYNCED).
+// Plus an Arrear Days form that
 // lands arrear from a prior period into THIS run (add_arrear_days) without touching the source.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -31,16 +33,21 @@ function NumField({ label, value, onChange, hint }: { label: string; value: stri
   )
 }
 
-export default function AttendanceEdit({ companyId, fy }: { companyId: string; fy: string }) {
+// One component, two tabs: 'edit' corrects attendance, 'arrear' adds prior-period days.
+// They share the month + employee picker and the snapshot load, so the two screens can
+// never disagree about which employee is selected or what the stored figures are.
+export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { companyId: string; fy: string; mode?: 'edit' | 'arrear' }) {
   const [runs, setRuns] = useState<PayrollRun[]>([])
   const [runId, setRunId] = useState('')
   const [snap, setSnap] = useState<SnapRow[]>([])
   const [selCode, setSelCode] = useState('')
 
   // edit form
-  const [f, setF] = useState({ paid_days: '', earned_leave: '', casual_leave: '', sick_leave: '', other_leave: '', absent_days: '', ot_hours: '' })
+  // No paid_days field — it is derived from these on save, never entered.
+  const [f, setF] = useState({ earned_leave: '', casual_leave: '', sick_leave: '', other_leave: '', absent_days: '', ot_hours: '' })
   const [saveBusy, setSaveBusy] = useState(false)
   const [saveMsg, setSaveMsg] = useState(''); const [saveErr, setSaveErr] = useState('')
+  const [recalcMsg, setRecalcMsg] = useState('')   // run was rolled back to SYNCED
 
   // arrear form
   const [arrDays, setArrDays] = useState(''); const [arrMonth, setArrMonth] = useState(''); const [arrReason, setArrReason] = useState('')
@@ -63,9 +70,9 @@ export default function AttendanceEdit({ companyId, fy }: { companyId: string; f
   // populate the edit form when the selected employee changes
   useEffect(() => {
     if (!cur) return
-    setF({ paid_days: s(cur.paid_days), earned_leave: s(cur.earned_leave), casual_leave: s(cur.casual_leave), sick_leave: s(cur.sick_leave), other_leave: s(cur.other_leave), absent_days: s(cur.absent_days), ot_hours: s(cur.ot_hours) })
+    setF({ earned_leave: s(cur.earned_leave), casual_leave: s(cur.casual_leave), sick_leave: s(cur.sick_leave), other_leave: s(cur.other_leave), absent_days: s(cur.absent_days), ot_hours: s(cur.ot_hours) })
     setArrDays(s(cur.arrear_days)); setArrReason(cur.arrear_reason || ''); setArrMonth(cur.arrear_source_period ? String(cur.arrear_source_period).slice(0, 7) : '')
-    setSaveMsg(''); setSaveErr(''); setArrMsg(''); setArrErr('')
+    setSaveMsg(''); setSaveErr(''); setArrMsg(''); setArrErr(''); setRecalcMsg('')
   }, [selCode]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const empOpts: Opt[] = snap.map(r => ({ value: r.employee_code, label: `${r.employee_code} — ${r.full_name}` }))
@@ -73,14 +80,16 @@ export default function AttendanceEdit({ companyId, fy }: { companyId: string; f
 
   async function save() {
     if (!selCode) return
-    setSaveBusy(true); setSaveMsg(''); setSaveErr('')
-    const { error } = await editEmployeeAttendance(runId, selCode, {
-      paid_days: n(f.paid_days), earned_leave: n(f.earned_leave), casual_leave: n(f.casual_leave),
+    setSaveBusy(true); setSaveMsg(''); setSaveErr(''); setRecalcMsg('')
+    const { error, paidDays, runStatusReset } = await editEmployeeAttendance(runId, selCode, {
+      earned_leave: n(f.earned_leave), casual_leave: n(f.casual_leave),
       sick_leave: n(f.sick_leave), other_leave: n(f.other_leave), absent_days: n(f.absent_days), ot_hours: n(f.ot_hours),
     })
     setSaveBusy(false)
     if (error) { setSaveErr(error); return }
-    setSaveMsg(`Saved — ${selCode} updated.`); loadSnap()
+    setSaveMsg(`Saved — ${selCode} updated. Paid Days recalculated to ${paidDays ?? '—'}.`)
+    if (runStatusReset) setRecalcMsg('This month was already calculated — it has been reset to SYNCED. Payroll must be recalculated before approval.')
+    reloadRuns(); loadSnap()
   }
 
   async function saveArrear() {
@@ -104,10 +113,14 @@ export default function AttendanceEdit({ companyId, fy }: { companyId: string; f
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 780 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>✏️</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: mode === 'arrear' ? 'linear-gradient(135deg,#10B981,#059669)' : 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(124,58,237,0.28)' }}>{mode === 'arrear' ? '📌' : '✏️'}</div>
         <div>
-          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Edit &amp; Arrear</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Correct one employee after upload · add arrear days from a prior period</div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>{mode === 'arrear' ? 'Arrear Days' : 'Attendance Edit'}</div>
+          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
+            {mode === 'arrear'
+              ? 'Add days owed from a prior month into this run — the source month is never reopened'
+              : 'Correct one employee after upload — Paid Days is recalculated by the same rule as the upload'}
+          </div>
         </div>
       </div>
 
@@ -132,10 +145,10 @@ export default function AttendanceEdit({ companyId, fy }: { companyId: string; f
           </div>
 
           {/* edit form */}
+          {mode === 'edit' && (
           <div style={card}>
             <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>✏️ Edit attendance — {cur.employee_code} · {cur.full_name}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
-              <NumField label="Paid Days" value={f.paid_days} onChange={v => setF({ ...f, paid_days: v })} hint="not auto-recomputed" />
               <NumField label="Earned Leave" value={f.earned_leave} onChange={v => setF({ ...f, earned_leave: v })} />
               <NumField label="Casual Leave" value={f.casual_leave} onChange={v => setF({ ...f, casual_leave: v })} />
               <NumField label="Sick Leave" value={f.sick_leave} onChange={v => setF({ ...f, sick_leave: v })} />
@@ -143,6 +156,15 @@ export default function AttendanceEdit({ companyId, fy }: { companyId: string; f
               <NumField label="Absent Days" value={f.absent_days} onChange={v => setF({ ...f, absent_days: v })} />
               <NumField label="OT Hours" value={f.ot_hours} onChange={v => setF({ ...f, ot_hours: v })} />
             </div>
+            {/* Paid Days is derived, never typed — same rule as the upload. */}
+            <div style={{ marginTop: 12, background: C.gray, borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Paid Days</span>
+              <span style={{ fontSize: 17, fontWeight: 800, color: (() => { const p = (Number(f.earned_leave) || 0) + (Number(f.casual_leave) || 0) + (Number(f.sick_leave) || 0) + (Number(f.other_leave) || 0) - (Number(f.absent_days) || 0); return p < 0 ? C.red : C.green })() }}>
+                {(Number(f.earned_leave) || 0) + (Number(f.casual_leave) || 0) + (Number(f.sick_leave) || 0) + (Number(f.other_leave) || 0) - (Number(f.absent_days) || 0)}
+              </span>
+              <span style={{ fontSize: 10.5, color: C.muted }}>= (EL + CL + SL + Other) − Absent · calculated on save, same as the upload</span>
+            </div>
+
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={save} disabled={saveBusy}
                 style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
@@ -151,9 +173,17 @@ export default function AttendanceEdit({ companyId, fy }: { companyId: string; f
               {saveMsg && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>✓ {saveMsg}</span>}
               {saveErr && <span style={{ fontSize: 12, color: C.red }}>{saveErr}</span>}
             </div>
+            {recalcMsg && (
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 12px', marginTop: 12 }}>
+                ⚠️ {recalcMsg}
+              </div>
+            )}
           </div>
 
+          )}
+
           {/* arrear form */}
+          {mode === 'arrear' && (
           <div style={{ ...card, borderColor: C.greenBd }}>
             <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 4 }}>📌 Arrear days</div>
             <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 12 }}>Days owed from a prior month land in THIS run — the source month is only recorded for audit and is never reopened.</div>
@@ -172,6 +202,7 @@ export default function AttendanceEdit({ companyId, fy }: { companyId: string; f
               {arrErr && <span style={{ fontSize: 12, color: C.red }}>{arrErr}</span>}
             </div>
           </div>
+          )}
         </>
       )}
     </div>
