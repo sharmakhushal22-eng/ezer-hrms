@@ -72,6 +72,8 @@ export async function syncPayrollMonth(runId: string): Promise<{ error: string |
 export interface AttendanceUploadRow {
   emp_code: string; earned_leave?: number; casual_leave?: number
   sick_leave?: number; other_leave?: number; absent_days?: number; weekly_off?: number
+  // when supplied this is stored as-is; blank falls back to the leave formula
+  paid_days?: number | null
 }
 export interface OtUploadRow { emp_code: string; ot_hours: number }
 export interface BatchResult { emp_code: string; result: string }
@@ -102,14 +104,14 @@ export async function getValidEmpCodesForRun(runId: string): Promise<Set<string>
 export async function editEmployeeAttendance(runId: string, empCode: string, fields: {
   earned_leave?: number | null; casual_leave?: number | null
   sick_leave?: number | null; other_leave?: number | null; absent_days?: number | null
-  ot_hours?: number | null; weekly_off?: number | null
+  ot_hours?: number | null; weekly_off?: number | null; paid_days?: number | null
 }): Promise<{ error: string | null; paidDays: number | null; runStatusReset: boolean }> {
   const { data, error } = await supabase.rpc('edit_employee_attendance', {
     p_run_id: runId, p_employee_code: empCode,
     p_earned_leave: fields.earned_leave ?? null, p_casual_leave: fields.casual_leave ?? null,
     p_sick_leave: fields.sick_leave ?? null, p_other_leave: fields.other_leave ?? null,
     p_absent_days: fields.absent_days ?? null, p_ot_hours: fields.ot_hours ?? null,
-    p_weekly_off: fields.weekly_off ?? null,
+    p_weekly_off: fields.weekly_off ?? null, p_paid_days: fields.paid_days ?? null,
   })
   if (error) return { error: error.message, paidDays: null, runStatusReset: false }
   const row = ((data as any[]) || [])[0] || {}
@@ -338,6 +340,33 @@ export async function loadPayrollEmployees(companyId: string): Promise<PayrollEm
       tds_regime: e.tds_regime,
     }
   })
+}
+
+// ── Bank details view: salary account per employee, with the org / date context
+//    needed to identify who the account belongs to. companyId '' = all companies. ──
+export interface BankRow {
+  emp_code: string; full_name: string; company: string | null
+  department: string | null; location: string | null
+  doj: string | null; dol: string | null
+  bank_name: string | null; account_number: string | null; account_last4: string | null
+  ifsc_code: string | null; account_type: string | null
+}
+export async function loadBankDetails(companyId: string): Promise<BankRow[]> {
+  let q = supabase.from('employees')
+    .select('emp_code, full_name, company_doj, date_of_leaving, last_working_date, relieving_date, bank_name, bank_account_number, bank_account_last4, ifsc_code, account_type, companies(company_name), departments(dept_name), locations!location_id(location_name)')
+    .neq('is_test', true).order('emp_code')
+  if (companyId) q = q.eq('company_id', companyId)
+  const { data } = await q
+  return ((data as any[]) || []).map(e => ({
+    emp_code: e.emp_code, full_name: e.full_name,
+    company: e.companies?.company_name || null,
+    department: e.departments?.dept_name || null,
+    location: e.locations?.location_name || null,
+    doj: e.company_doj || null,
+    dol: e.date_of_leaving || e.last_working_date || e.relieving_date || null,
+    bank_name: e.bank_name, account_number: e.bank_account_number, account_last4: e.bank_account_last4,
+    ifsc_code: e.ifsc_code, account_type: e.account_type,
+  }))
 }
 
 // ── Employee sync (HRMS → Payroll): freeze snapshot into a run, OPEN → SYNCED ──

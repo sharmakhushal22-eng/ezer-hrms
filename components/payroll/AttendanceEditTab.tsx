@@ -60,7 +60,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
 
   // the row being edited (Unprocess → form → Process)
   const [editing, setEditing] = useState<Row | null>(null)
-  const [f, setF] = useState({ weekly_off: '', earned_leave: '', casual_leave: '', sick_leave: '', other_leave: '', absent_days: '', ot_hours: '' })
+  const [f, setF] = useState({ weekly_off: '', earned_leave: '', casual_leave: '', sick_leave: '', other_leave: '', absent_days: '', ot_hours: '', paid_days: '' })
   const [saveBusy, setSaveBusy] = useState(false)
   const [saveErr, setSaveErr] = useState(''); const [saveMsg, setSaveMsg] = useState(''); const [recalc, setRecalc] = useState('')
 
@@ -142,10 +142,12 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
 
   function unprocess(r: Row) {
     setEditing(r); setSaveErr(''); setSaveMsg(''); setRecalc('')
-    setF({ weekly_off: s(r.weekly_off), earned_leave: s(r.earned_leave), casual_leave: s(r.casual_leave), sick_leave: s(r.sick_leave), other_leave: s(r.other_leave), absent_days: s(r.absent_days), ot_hours: s(r.ot_hours) })
+    setF({ weekly_off: s(r.weekly_off), earned_leave: s(r.earned_leave), casual_leave: s(r.casual_leave), sick_leave: s(r.sick_leave), other_leave: s(r.other_leave), absent_days: s(r.absent_days), ot_hours: s(r.ot_hours), paid_days: s(r.paid_days) })
   }
 
-  const calcPaid = nn(f.earned_leave) + nn(f.casual_leave) + nn(f.sick_leave) + nn(f.other_leave) - nn(f.absent_days)
+  // Paid Days as typed wins; blank it out to fall back to the leave formula.
+  const formulaPaid = nn(f.earned_leave) + nn(f.casual_leave) + nn(f.sick_leave) + nn(f.other_leave) - nn(f.absent_days)
+  const calcPaid = f.paid_days.trim() === '' ? formulaPaid : nn(f.paid_days)
   const calcTotal = nn(f.weekly_off) + nn(f.earned_leave) + nn(f.casual_leave) + nn(f.sick_leave) + nn(f.other_leave) + calcPaid - nn(f.absent_days)
   const maxD = editing?.maxDays ?? null
   const violations = maxD == null ? [] : [
@@ -159,6 +161,8 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
     const { error, paidDays, runStatusReset } = await editEmployeeAttendance(editing.run_id, editing.employee_code, {
       weekly_off: nn(f.weekly_off), earned_leave: nn(f.earned_leave), casual_leave: nn(f.casual_leave),
       sick_leave: nn(f.sick_leave), other_leave: nn(f.other_leave), absent_days: nn(f.absent_days), ot_hours: nn(f.ot_hours),
+      // null when blank → server falls back to the leave formula
+      paid_days: f.paid_days.trim() === '' ? null : nn(f.paid_days),
     })
     setSaveBusy(false)
     if (error) { setSaveErr(error); return }
@@ -190,8 +194,8 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
           <div><label style={lbl}>Department</label><SearchSelect value={dept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDept} /></div>
         </div>
         <div style={{ marginBottom: 12 }}>
-          <label style={lbl}>Employee codes <span style={{ textTransform: 'none', fontWeight: 400, color: C.muted }}>(paste a comma / newline list to add many)</span></label>
-          <MultiSelect values={codes} options={empOpts} placeholder="All employees" onChange={setCodes} />
+          <label style={lbl}>Employee codes <span style={{ textTransform: 'none', fontWeight: 400, color: C.muted }}>(type or paste several — e.g. SRS0001, SRS0002)</span></label>
+          <MultiSelect values={codes} options={empOpts} placeholder="Click, then type or paste codes — e.g. SRS0001, SRS0002" onChange={setCodes} />
         </div>
         <button onClick={search} disabled={busy || !monthVal}
           style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: busy || !monthVal ? 'not-allowed' : 'pointer', opacity: busy || !monthVal ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
@@ -286,11 +290,12 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
               <NumIn label="Other Leave" value={f.other_leave} onChange={v => setF({ ...f, other_leave: v })} />
               <NumIn label="Absent Days" value={f.absent_days} onChange={v => setF({ ...f, absent_days: v })} />
               <NumIn label="OT Hours" value={f.ot_hours} onChange={v => setF({ ...f, ot_hours: v })} />
+              <NumIn label="Paid Days" value={f.paid_days} onChange={v => setF({ ...f, paid_days: v })} />
             </div>
 
             <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.5 }}>
-              Paid Days = (EL + CL + SL + Other) − Absent · Total Days = Weekly Off + EL + CL + SL + Other + Paid Days − Absent.
-              Both must be ≤ Max Days, exactly as on upload.
+              <b>Paid Days</b> is stored exactly as typed. Clear the box to derive it from the leaves instead — that would give <b>{formulaPaid}</b> = (EL + CL + SL + Other) − Absent.
+              <br />Total Days = Weekly Off + EL + CL + SL + Other + Paid Days − Absent. Both Paid Days and Total Days must be ≤ Max Days, exactly as on upload.
             </div>
 
             {violations.length > 0 && (

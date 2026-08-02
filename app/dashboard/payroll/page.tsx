@@ -25,6 +25,7 @@ import AttendanceUpload from '@/components/payroll/AttendanceUpload'
 import OtUpload from '@/components/payroll/OtUpload'
 import AttendanceEdit from '@/components/payroll/AttendanceEdit'
 import AttendanceEditTab from '@/components/payroll/AttendanceEditTab'
+import BankDetailsTab from '@/components/payroll/BankDetailsTab'
 import MonthSync from '@/components/payroll/MonthSync'
 import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutoryPanel'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
@@ -320,7 +321,7 @@ function attendanceSubs(companyId: string, fy: string): SubTab[] {
 function employeeSubs(companyId: string): SubTab[] {
   return [
     { id: 'master', label: 'Employee & CTC Master', icon: '👥', built: true, render: () => <EmployeesTab companyId={companyId} /> },
-    { id: 'bank', label: 'Bank Details', icon: '🏦', built: true, href: '/dashboard/employees', desc: 'Salary account, IFSC and masked account number are maintained in the Employee Master.' },
+    { id: 'bank', label: 'Bank Details', icon: '🏦', built: true, render: () => <BankDetailsTab companyId={companyId} /> },
     { id: 'revision', label: 'Salary Revision & Arrears', icon: '📈', desc: 'Versioned CTC with effective dates, increment letters and automatic arrear computation.' },
   ]
 }

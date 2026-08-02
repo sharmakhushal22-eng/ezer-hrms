@@ -30,7 +30,10 @@ function normalizeRow(r: Record<string, any>): ParsedRow | null {
     sick_leave: num(g('sl', 'sick leave', 'sick_leave')) ?? 0,
     other_leave: num(g('other leave', 'other_leave')) ?? 0,
     absent_days: num(g('absent days', 'absent_days', 'absent')) ?? 0,
-    paid_days: num(g('paid days', 'paid_days')),
+    // Blank must stay null, not 0. Number('') is 0, so num() alone would turn an empty
+    // Paid Days cell into an explicit zero and the server would faithfully store it —
+    // silently wiping the value instead of falling back to the leave formula.
+    paid_days: (() => { const v = g('paid days', 'paid_days'); return v === null || v === undefined || String(v).trim() === '' ? null : num(v) })(),
     weekly_off: num(g('weekly off', 'weekly_off', 'week off', 'wo')) ?? 0,
   }
 }
@@ -252,9 +255,10 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
     const byRun = new Map<string, AttendanceUploadRow[]>()
     send.forEach(r => {
       const rid = runByCode.current.get(r.emp_code); if (!rid) return
-      const { paid_days, ...payload } = r
+      // paid_days is sent as typed — the server keeps it when present and falls back to
+      // (EL+CL+SL+Other) − Absent only when the cell was left blank.
       if (!byRun.has(rid)) byRun.set(rid, [])
-      byRun.get(rid)!.push(payload)
+      byRun.get(rid)!.push(r as AttendanceUploadRow)
     })
     const all: { emp_code: string; result: string }[] = []
     let err = ''
