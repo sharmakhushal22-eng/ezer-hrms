@@ -23,6 +23,8 @@ import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import { supabase } from '@/lib/supabase'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
 import FlexiClaims from '@/components/ess/FlexiClaims'
+import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
+import InvestmentProofs from '@/components/ess/InvestmentProofs'
 
 // ── Styles ─────────────────────────────────────────────────────────
 const T = {
@@ -491,7 +493,6 @@ function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () =
           <DirDetailRow label="Department" value={e.dept_name} />
           <DirDetailRow label="Location" value={e.location_name} />
           <DirDetailRow label="Company Name" value={e.company_name} />
-          <DirDetailRow label="Previous Company" value={e.previous_company} />
         </div>
         <div style={{ padding:'0 20px 18px', display:'flex', gap:8, flexWrap:'wrap' }}>
           {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} style={{ ...T.btnO, textDecoration:'none' }}>📧 Email</a>}
@@ -503,31 +504,131 @@ function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () =
     </div>
   )
 }
+// A stable colour per person so the same face keeps the same avatar between visits.
+const DIR_TINTS = [
+  { bg: '#EDE9FE', fg: '#6D28D9' }, { bg: '#E6F1FB', fg: '#185FA5' }, { bg: '#ECFDF5', fg: '#059669' },
+  { bg: '#FFF7ED', fg: '#C2410C' }, { bg: '#FCE7F3', fg: '#BE185D' }, { bg: '#EEF2FF', fg: '#4338CA' },
+  { bg: '#F0FDFA', fg: '#0F766E' }, { bg: '#FEF3C7', fg: '#B45309' },
+]
+const dirTint = (s: string) => DIR_TINTS[Array.from(s || '?').reduce((a, c) => a + c.charCodeAt(0), 0) % DIR_TINTS.length]
+
 function Directory({ isMobile }: { isMobile: boolean }) {
   const [rows, setRows] = useState<DirectoryEntry[]>([])
   const [q, setQ] = useState('')
+  const [dept, setDept] = useState('')
+  const [loc, setLoc] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [err, setErr] = useState('')
   const [sel, setSel] = useState<DirectoryEntry | null>(null)
-  useEffect(() => { loadDirectory().then(setRows) }, [])
-  const filtered = rows.filter(e => !q || e.full_name.toLowerCase().includes(q.toLowerCase()) || (e.designation||'').toLowerCase().includes(q.toLowerCase()) || (e.dept_name||'').toLowerCase().includes(q.toLowerCase()))
+
+  useEffect(() => {
+    setLoading(true)
+    loadDirectory()
+      .then(r => { setRows(r); setErr('') })
+      .catch(e => setErr(e?.message || 'Could not load the directory.'))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const depts = Array.from(new Set(rows.map(r => r.dept_name).filter(Boolean))).sort() as string[]
+  const locs = Array.from(new Set(rows.map(r => r.location_name).filter(Boolean))).sort() as string[]
+  // Search matches several terms, so a pasted list of names or codes works too.
+  const terms = q.split(/[,;\n]+/).map(t => t.trim().toLowerCase()).filter(Boolean)
+  const filtered = rows.filter(e => {
+    if (dept && e.dept_name !== dept) return false
+    if (loc && e.location_name !== loc) return false
+    if (!terms.length) return true
+    return terms.some(t =>
+      e.full_name.toLowerCase().includes(t) || (e.designation || '').toLowerCase().includes(t)
+      || (e.dept_name || '').toLowerCase().includes(t) || (e.emp_code || '').toLowerCase().includes(t)
+      || (e.location_name || '').toLowerCase().includes(t) || (e.office_email || '').toLowerCase().includes(t))
+  })
+
+  const chip = (txt: string, bg: string, fg: string) => (
+    <span style={{ fontSize: 10, fontWeight: 600, background: bg, color: fg, padding: '2px 8px', borderRadius: 99, whiteSpace: 'nowrap' }}>{txt}</span>
+  )
+  const sel2: React.CSSProperties = { ...T.input, minWidth: 150, flex: isMobile ? '1 1 100%' : '0 0 auto', width: 'auto' }
+
   return (
     <div>
-      <div style={T.card}><input style={T.input} placeholder="🔍 Search name / designation / department" value={q} onChange={e => setQ(e.target.value)} /></div>
-      <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill,minmax(280px,1fr))', gap:10 }}>
-        {filtered.map(e => (
-          <div key={e.id} onClick={() => setSel(e)} style={{ ...T.card, cursor:'pointer' }}>
-            <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <div style={{ width:40, height:40, borderRadius:'50%', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:13, flexShrink:0 }}>{initials(e.full_name)}</div>
-              <div style={{ minWidth:0 }}><div style={{ fontSize:13, fontWeight:600 }}>{e.full_name}</div><div style={{ fontSize:11, color:'#9CA3AF' }}>{e.designation || '—'} · {e.dept_name || '—'}</div></div>
-            </div>
-            <div style={{ display:'flex', gap:6, marginTop:10, flexWrap:'wrap' }} onClick={ev => ev.stopPropagation()}>
-              {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} style={{ ...T.btnO, textDecoration:'none' }}>📧 Email</a>}
-              {e.mobile && <a href={`tel:${e.mobile}`} style={{ ...T.btnO, textDecoration:'none' }}>📱 Call</a>}
-              {e.mobile && <a href={`https://wa.me/91${(e.mobile||'').replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration:'none' }}>WhatsApp</a>}
+      {/* header + filters */}
+      <div style={{ ...T.card, marginBottom: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📇</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#1E1B4B' }}>Employee Directory</div>
+            <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+              {loading ? 'Loading colleagues…' : `${filtered.length}${filtered.length !== rows.length ? ` of ${rows.length}` : ''} colleague${filtered.length === 1 ? '' : 's'}`}
             </div>
           </div>
-        ))}
-        {filtered.length === 0 && <div style={{ ...T.card, color:'#9CA3AF', textAlign:'center' }}>No matches.</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input style={{ ...T.input, flex: 1, minWidth: 200 }} placeholder="🔍 Search name, code, designation, department or email" value={q} onChange={e => setQ(e.target.value)} />
+          <select style={sel2} value={dept} onChange={e => setDept(e.target.value)}>
+            <option value="">All departments</option>
+            {depts.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+          <select style={sel2} value={loc} onChange={e => setLoc(e.target.value)}>
+            <option value="">All locations</option>
+            {locs.map(l => <option key={l} value={l}>{l}</option>)}
+          </select>
+          {(q || dept || loc) && (
+            <button onClick={() => { setQ(''); setDept(''); setLoc('') }} style={{ ...T.btnO, whiteSpace: 'nowrap' }}>Clear</button>
+          )}
+        </div>
       </div>
+
+      {err && <div style={{ ...T.card, color: '#A32D2D', background: '#FCEBEB', border: '1px solid #F5C6C6' }}>Could not load the directory — {err}</div>}
+
+      {loading ? (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill,minmax(280px,1fr))', gap: 10 }}>
+          {[0, 1, 2, 3, 4, 5].map(i => (
+            <div key={i} style={{ ...T.card, opacity: .6 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#EEF' }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ height: 11, background: '#EEF', borderRadius: 4, width: '65%', marginBottom: 7 }} />
+                  <div style={{ height: 9, background: '#F3F4F6', borderRadius: 4, width: '45%' }} />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill,minmax(290px,1fr))', gap: 10 }}>
+          {filtered.map(e => {
+            const t = dirTint(e.full_name || e.emp_code || '')
+            return (
+              <div key={e.id} onClick={() => setSel(e)}
+                style={{ ...T.card, cursor: 'pointer', transition: 'box-shadow .15s, transform .1s', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: t.bg, color: t.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>{initials(e.full_name)}</div>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.full_name}</div>
+                    <div style={{ fontSize: 11, color: '#6B6B7B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '—'}</div>
+                    <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 1 }}>{e.emp_code}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {e.dept_name && chip(e.dept_name, '#F5F3FF', '#6D28D9')}
+                  {e.location_name && chip('📍 ' + e.location_name, '#F8FAFC', '#475569')}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: '1px solid #F1F5F9', paddingTop: 8 }} onClick={ev => ev.stopPropagation()}>
+                  {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} title={e.office_email || e.personal_email || ''} style={{ ...T.btnO, textDecoration: 'none' }}>📧 Email</a>}
+                  {e.mobile && <a href={`tel:${e.mobile}`} title={e.mobile} style={{ ...T.btnO, textDecoration: 'none' }}>📱 Call</a>}
+                  {e.mobile && <a href={`https://wa.me/91${(e.mobile || '').replace(/\D/g, '').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration: 'none' }}>💬 WhatsApp</a>}
+                </div>
+              </div>
+            )
+          })}
+          {filtered.length === 0 && !err && (
+            <div style={{ ...T.card, gridColumn: '1 / -1', textAlign: 'center', padding: '30px 16px' }}>
+              <div style={{ fontSize: 30, marginBottom: 6 }}>🔍</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1B4B', marginBottom: 3 }}>No colleagues match that search</div>
+              <div style={{ fontSize: 11.5, color: '#9CA3AF' }}>Try a different name, code or department{(dept || loc) ? ', or clear the filters' : ''}.</div>
+            </div>
+          )}
+        </div>
+      )}
       {sel && <DirectoryDetailModal e={sel} onClose={() => setSel(null)} />}
     </div>
   )
@@ -1712,6 +1813,8 @@ const MODULES = [
   { k:'nps',           label:'Corporate NPS',icon:'🏛️', phase:3, needs:'Payroll' },
   { k:'loans',         label:'Loans',        icon:'💸', phase:3, needs:'Payroll' },
   { k:'flexi',         label:'Flexi Benefits',icon:'🎛️', phase:3, needs:'Payroll' },
+  { k:'declaration',   label:'Investment Declaration', icon:'📄', phase:3, needs:'Payroll' },
+  { k:'proofs',        label:'Investment Proofs', icon:'✅', phase:3, needs:'Payroll' },
   { k:'flexiclaims',   label:'Flexi Claims', icon:'💳', phase:3, needs:'Payroll' },
   { k:'attendance',    label:'Attendance',   icon:'🗓️', phase:3, needs:'Attendance' },
   { k:'leave',         label:'Leave',        icon:'🌴', phase:3, needs:'Leave' },
@@ -1758,6 +1861,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'nps':           return <NpsSection emp={emp} notify={notify} />
       case 'loans':         return <LoansSection emp={emp} notify={notify} />
       case 'flexi':         return <FlexiTdsCalculator employeeId={emp.id} empName={emp.full_name} empCode={emp.emp_code} />
+      case 'declaration':   return <InvestmentDeclaration employeeId={emp.id} empName={emp.full_name} empCode={emp.emp_code} />
+      case 'proofs':        return <InvestmentProofs employeeId={emp.id} />
       case 'flexiclaims':   return <FlexiClaims employeeId={emp.id} />
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />

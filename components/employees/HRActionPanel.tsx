@@ -429,6 +429,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
         {d.statBonus > 0 && <BreakupRow label="Statutory Bonus" monthly={d.statBonus} annual={M(d.statBonus)} />}
         {d.conveyance > 0 && <BreakupRow label="Conveyance" monthly={d.conveyance} annual={M(d.conveyance)} />}
         {d.special > 0 && <BreakupRow label="Special Allowance" monthly={d.special} annual={M(d.special)} />}
+        {d.flexiMonthly > 0 && <BreakupRow label="Flexi (declared)" monthly={d.flexiMonthly} annual={M(d.flexiMonthly)} />}
         <BreakupRow label="Gross" monthly={d.gross} annual={M(d.gross)} kind="sub" />
 
         {/* Employer cost */}

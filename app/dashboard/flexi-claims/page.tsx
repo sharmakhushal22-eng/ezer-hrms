@@ -59,6 +59,8 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [rejectIds, setRejectIds] = useState<string[]>([])
   const [rejectReason, setRejectReason] = useState('')
+  // Partial rejection — only meaningful for one claim at a time.
+  const [partialAmt, setPartialAmt] = useState('')
   const [viewFiles, setViewFiles] = useState<any | null>(null)
   const [fDept, setFDept] = useState(''); const [fLoc, setFLoc] = useState(''); const [fComp, setFComp] = useState('')
   const [fStatus, setFStatus] = useState('PENDING'); const [fAi, setFAi] = useState(''); const [fSearch, setFSearch] = useState('')
@@ -100,9 +102,10 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
   }
   async function confirmReject() {
     if (!rejectReason.trim()) return notify('⚠ Rejection reason is mandatory')
-    const r = await post({ action: 'REJECT', ids: rejectIds, rejection_reason: rejectReason, approved_by: 'Payroll Manager' })
+    const r = await post({ action: 'REJECT', ids: rejectIds, rejection_reason: rejectReason, approved_by: 'Payroll Manager',
+      ...(rejectIds.length === 1 && partialAmt !== '' ? { approved_amount: Number(partialAmt) } : {}) })
     if (r.error) return notify('⚠ ' + r.error)
-    notify(`✓ ${rejectIds.length} claim(s) rejected`); setRejectIds([]); setRejectReason(''); load()
+    notify(`✓ ${rejectIds.length} claim(s) rejected`); setRejectIds([]); setRejectReason(''); setPartialAmt(''); load()
   }
   async function openBills(c: any) {
     const files = c.flexi_claim_files || []
@@ -207,9 +210,29 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
       {rejectIds.length > 0 && (
         <div style={{ ...S.card, border: `1px solid #FCA5A5` }}>
           <div style={{ fontSize: 12, fontWeight: 600, color: C.red, marginBottom: 6 }}>Reject {rejectIds.length} claim(s)</div>
-          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>The reason is shown to the employee. Rejected amounts do NOT reduce their limit.</div>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 8 }}>The reason is shown to the employee. Rejected amounts do NOT reduce their limit — and they become <b>taxable income</b> once Payroll syncs Flexi reimbursement.</div>
           <input style={{ ...S.inp, marginBottom: 8 }} placeholder="Rejection reason (mandatory)" value={rejectReason} onChange={e => setRejectReason(e.target.value)} />
-          <div style={{ display: 'flex', gap: 8 }}><button style={{ ...S.pri, background: C.red }} onClick={confirmReject}>Confirm rejection</button><button style={S.sec} onClick={() => setRejectIds([])}>Cancel</button></div>
+          {rejectIds.length === 1 && (() => {
+            const c = claims.find(x => x.id === rejectIds[0])
+            const claimed = Number(c?.claim_amount) || 0
+            const ok = partialAmt === '' ? 0 : Math.max(0, Math.min(Number(partialAmt) || 0, claimed))
+            return (
+              <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 8, padding: '9px 11px', marginBottom: 8 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 600, color: C.amber, marginBottom: 5 }}>Partial rejection (optional)</div>
+                <div style={{ fontSize: 11, color: C.amber, marginBottom: 6 }}>
+                  Bill {inr(claimed)} ka hai. Agar iska kuch hissa valid hai to yahan wahi amount likho — baaki taxable ho jaayega. Khaali chhodo to poora {inr(claimed)} taxable.
+                </div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input style={{ ...S.inp, width: 150 }} placeholder={`Valid amount (max ${claimed})`} inputMode="numeric"
+                    value={partialAmt} onChange={e => setPartialAmt(e.target.value.replace(/[^0-9]/g, ''))} />
+                  <span style={{ fontSize: 11.5, color: C.amber }}>
+                    → taxable <b>{inr(claimed - ok)}</b>{ok >= claimed && claimed > 0 ? ' — poora valid hai, ye approve ho jaayega' : ''}
+                  </span>
+                </div>
+              </div>
+            )
+          })()}
+          <div style={{ display: 'flex', gap: 8 }}><button style={{ ...S.pri, background: C.red }} onClick={confirmReject}>Confirm rejection</button><button style={S.sec} onClick={() => { setRejectIds([]); setPartialAmt('') }}>Cancel</button></div>
         </div>
       )}
 

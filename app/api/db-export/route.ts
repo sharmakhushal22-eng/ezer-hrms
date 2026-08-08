@@ -18,7 +18,23 @@ export const maxDuration = 300
 
 const PAGE = 1000
 
-export async function GET() {
+export async function GET(req: Request) {
+  // This endpoint dumps EVERY table with the service-role key, which bypasses RLS
+  // completely — so it has to be gated, otherwise locking the payroll tables down
+  // achieves nothing: anyone could just download the whole database from here.
+  // Pass the secret as ?key=… or an x-export-secret header.
+  const secret = process.env.DB_EXPORT_SECRET || process.env.CRON_SECRET
+  const given = req.headers.get('x-export-secret') || new URL(req.url).searchParams.get('key')
+  if (!secret) {
+    // No secret configured → refuse rather than fall open. Local dev can opt out
+    // explicitly with DB_EXPORT_ALLOW_UNPROTECTED=1.
+    if (process.env.DB_EXPORT_ALLOW_UNPROTECTED !== '1') {
+      return NextResponse.json({ error: 'Export is disabled: set DB_EXPORT_SECRET (or CRON_SECRET) first.' }, { status: 503 })
+    }
+  } else if (given !== secret) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const key = (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!
   const usingServiceRole = !!process.env.SUPABASE_SERVICE_ROLE_KEY

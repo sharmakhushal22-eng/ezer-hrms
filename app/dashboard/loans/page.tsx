@@ -170,11 +170,44 @@ function ReadyToDisburse({ companyEmpIds, empMap, notify }: { companyEmpIds: Set
 }
 
 // ── 4) Active loans ──────────────────────────────────────────────
+// EMI is deducted by Payroll → Data Sync → Loan, one entry per payroll month
+// (loan_emi_ledger enforces that), so this screen shows what has actually been
+// recovered rather than what was scheduled. Foreclosure stops future EMIs.
 function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; empMap: Record<string, string> }) {
   const [rows, setRows] = useState<any[]>([])
-  useEffect(() => {
-    supabase.from('loans').select('*').then(({ data }) => setRows((data || []).filter(l => companyEmpIds.has(l.employee_id))))
+  const [paid, setPaid] = useState<Record<string, { n: number; total: number }>>({})
+  const [busy, setBusy] = useState('')
+  const [msg, setMsg] = useState(''); const [err, setErr] = useState('')
+
+  const load = useCallback(() => {
+    supabase.from('loans').select('*').then(({ data }) => {
+      const mine = (data || []).filter(l => companyEmpIds.has(l.employee_id))
+      setRows(mine)
+      if (!mine.length) { setPaid({}); return }
+      supabase.from('loan_emi_ledger').select('loan_id, emi_amount').in('loan_id', mine.map(l => l.id))
+        .then(({ data: led }) => {
+          const acc: Record<string, { n: number; total: number }> = {}
+          ;(led || []).forEach((g: any) => {
+            const a = acc[g.loan_id] || { n: 0, total: 0 }
+            acc[g.loan_id] = { n: a.n + 1, total: a.total + (Number(g.emi_amount) || 0) }
+          })
+          setPaid(acc)
+        })
+    })
   }, [companyEmpIds])
+  useEffect(() => { load() }, [load])
+
+  async function foreclose(l: any) {
+    const left = Number(l.outstanding_principal) || 0
+    if (!confirm(`Foreclose ${l.loan_number}?\n\nBaaki ${inr(left)} ek saath recover maana jaayega aur agle month se koi EMI nahi kategi. Ye wapas nahi hota.`)) return
+    setBusy(l.id); setErr(''); setMsg('')
+    const { data, error } = await supabase.rpc('foreclose_loan', { p_loan_id: l.id })
+    setBusy('')
+    if (error) { setErr(error.message); return }
+    if (!data) { setErr('Ye loan chal hi nahi raha — sirf running loan foreclose hota hai.'); return }
+    setMsg(`${l.loan_number} foreclose ho gaya. Agle month se EMI nahi kategi.`)
+    load()
+  }
   const th: React.CSSProperties = { fontSize:10, textAlign:'right', padding:'6px 8px', color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }
   const td: React.CSSProperties = { fontSize:12, textAlign:'right', padding:'8px 8px', color:C.navy, whiteSpace:'nowrap' }
   return (
@@ -184,7 +217,7 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
         <div style={{ overflowX:'auto' }}>
           <table style={{ borderCollapse:'collapse', width:'100%', minWidth:640 }}>
             <thead><tr style={{ background:'#F8FAFC' }}>
-              <th style={{ ...th, textAlign:'left' }}>Loan #</th><th style={{ ...th, textAlign:'left' }}>Employee</th><th style={th}>Principal</th><th style={th}>EMI</th><th style={th}>Outstanding</th><th style={{ ...th, textAlign:'left' }}>Status</th>
+              <th style={{ ...th, textAlign:'left' }}>Loan #</th><th style={{ ...th, textAlign:'left' }}>Employee</th><th style={th}>Principal</th><th style={th}>EMI</th><th style={th}>Recovered</th><th style={th}>Outstanding</th><th style={{ ...th, textAlign:'left' }}>Status</th><th style={th}></th>
             </tr></thead>
             <tbody>
               {rows.map(l => (
@@ -193,14 +226,31 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
                   <td style={{ ...td, textAlign:'left' }}>{empMap[l.employee_id] || l.employee_id}</td>
                   <td style={td}>{inr(l.principal)}</td>
                   <td style={td}>{inr(l.emi_amount)}</td>
-                  <td style={td}>{inr(l.outstanding_principal)}</td>
+                  <td style={td}>
+                    {inr(paid[l.id]?.total || 0)}
+                    <span style={{ fontSize:10, color:C.muted }}>{paid[l.id]?.n ? ` · ${paid[l.id].n} EMI` : ''}</span>
+                  </td>
+                  <td style={{ ...td, fontWeight:600 }}>{inr(l.outstanding_principal)}</td>
                   <td style={{ ...td, textAlign:'left' }}><Badge status={l.status} /></td>
+                  <td style={td}>
+                    {['DISBURSED','ACTIVE'].includes(String(l.status || '').toUpperCase()) && (
+                      <button onClick={() => foreclose(l)} disabled={busy === l.id}
+                        style={{ padding:'4px 11px', borderRadius:99, border:`0.5px solid ${C.amber}`, background:'#FFFBEB', color:C.amber, fontWeight:700, fontSize:10.5, cursor: busy === l.id ? 'not-allowed' : 'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+                        {busy === l.id ? '…' : 'Foreclose'}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      <div style={{ fontSize:11, color:C.muted, marginTop:10, lineHeight:1.55 }}>
+        EMI <b>Payroll → Data Sync → Loan</b> se katti hai — ek payroll month mein ek hi baar, chahe sync kitni baar chalao. Aakhri EMI utni hi katti hai jitna balance bacha ho.
+      </div>
+      {msg && <div style={{ fontSize:12, fontWeight:600, color:C.green, background:'#ECFDF5', borderRadius:8, padding:'9px 12px', marginTop:10 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize:12, color:C.red, background:'#FEF2F2', borderRadius:8, padding:'9px 12px', marginTop:10 }}>{err}</div>}
     </div>
   )
 }

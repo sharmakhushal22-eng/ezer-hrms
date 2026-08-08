@@ -43,6 +43,22 @@ export async function loadRuns(companyId: string, fy?: string): Promise<PayrollR
   const { data } = await q
   return ((data as any[]) || []).map(r => ({ ...r, company_name: r.companies?.company_name || null }))
 }
+// The calendar month before a payroll period, rolling the financial year back at April
+// (month 1) — Apr 2026-27's predecessor is Mar 2025-26, which loadRuns(fy) would never see.
+export function prevPeriod(fy: string, month: number): { fy: string; month: number } {
+  if (month > 1) return { fy, month: month - 1 }
+  const start = Number(String(fy).split('-')[0]) - 1
+  return { fy: `${start}-${String(start + 1).slice(-2)}`, month: 12 }
+}
+// All runs for one calendar period. companyId '' → every company (group mode), where a
+// single month legitimately spans several runs.
+export async function loadRunsForPeriod(companyId: string, fy: string, month: number): Promise<PayrollRun[]> {
+  let q = supabase.from('payroll_runs').select('*, companies(company_name)')
+    .eq('fy', fy).eq('month', month).neq('status', 'CANCELLED')
+  if (companyId) q = q.eq('company_id', companyId)
+  const { data } = await q
+  return ((data as any[]) || []).map(r => ({ ...r, company_name: r.companies?.company_name || null }))
+}
 export async function createRun(companyId: string, fy: string, month: number, runType = 'REGULAR'): Promise<{ error: string | null; run?: PayrollRun }> {
   const periodLabel = `${MONTHS[month - 1]} ${fy.split('-')[0]}`
   const { data, error } = await supabase.from('payroll_runs').insert({
@@ -62,6 +78,63 @@ export async function advanceRun(run: PayrollRun): Promise<{ error: string | nul
   await supabase.from('payroll_audit_log').insert({ run_id: run.id, company_id: run.company_id, action: 'STATUS_' + ns, performed_by: 'HR' })
   return { error: null }
 }
+// ── Month sequencing: a month can only be created once the PREVIOUS month is closed off.
+// "Closed off" means all three of: attendance processed for every employee, the month
+// frozen, and payroll locked. Checked per company, because in group mode one company can
+// be behind the others. A previous month that was never created is not a blocker — that
+// would deadlock anyone starting mid-year — only an existing, unfinished one is.
+export interface MonthReadiness {
+  companyId: string; companyName: string
+  prevMonth: number; prevLabel: string
+  prevExists: boolean
+  attendanceDone: boolean; attendanceDetail: string
+  frozen: boolean; frozenDetail: string
+  locked: boolean; lockedDetail: string
+  ok: boolean
+}
+const FROZEN_OR_BEYOND = ['ATTENDANCE_LOCKED', 'CALCULATED', 'AI_CHECKED', 'APPROVED', 'DISBURSED', 'LOCKED']
+
+export async function checkMonthReadiness(
+  companies: { id: string; company_name: string }[], fy: string, month: number,
+): Promise<MonthReadiness[]> {
+  if (month <= 1) return []                      // April is the first month of the FY
+  const prev = month - 1
+  const prevLabel = `${MONTHS[prev - 1]} ${fy.split('-')[0]}`
+  const out: MonthReadiness[] = []
+  for (const c of companies) {
+    const { data: runs } = await supabase.from('payroll_runs')
+      .select('id, status, period_label').eq('company_id', c.id).eq('fy', fy).eq('month', prev).neq('status', 'CANCELLED')
+    const run = (runs || [])[0]
+    if (!run) {
+      out.push({
+        companyId: c.id, companyName: c.company_name, prevMonth: prev, prevLabel, prevExists: false,
+        attendanceDone: true, attendanceDetail: '', frozen: true, frozenDetail: '', locked: true, lockedDetail: '',
+        ok: true,
+      })
+      continue
+    }
+    const { count: total } = await supabase.from('payroll_employee_snapshot')
+      .select('*', { count: 'exact', head: true }).eq('run_id', run.id)
+    const { count: pending } = await supabase.from('payroll_employee_snapshot')
+      .select('*', { count: 'exact', head: true }).eq('run_id', run.id).is('attendance_uploaded_at', null)
+
+    const attendanceDone = (total || 0) > 0 && (pending || 0) === 0
+    const frozen = FROZEN_OR_BEYOND.includes(run.status)
+    const locked = run.status === 'LOCKED'
+    out.push({
+      companyId: c.id, companyName: c.company_name, prevMonth: prev,
+      prevLabel: run.period_label || prevLabel, prevExists: true,
+      attendanceDone,
+      attendanceDetail: attendanceDone ? 'all employees processed'
+        : (total || 0) === 0 ? 'month master is empty' : `${pending} of ${total} employees still not processed`,
+      frozen, frozenDetail: frozen ? 'frozen' : `status is ${run.status} — freeze the month first`,
+      locked, lockedDetail: locked ? 'locked' : `status is ${run.status} — payroll not locked yet`,
+      ok: attendanceDone && frozen && locked,
+    })
+  }
+  return out
+}
+
 // Month Master snapshot — freeze employee org/statutory/bank/CTC/salary at Month Create.
 // Re-runnable; never touches attendance columns. Returns the number of employees frozen.
 export async function syncPayrollMonth(runId: string): Promise<{ error: string | null; count: number }> {
@@ -127,6 +200,8 @@ export async function addArrearDays(runId: string, empCode: string, arrearDays: 
 }
 
 // The arrear / taxable side-table shapes, prefixed as they appear in the export.
+// Declared BEFORE MM_ORDER: it spreads them at module-load time, so a later
+// declaration would be in the temporal dead zone and throw on import.
 const ARREAR_COLS = [
   'arrear_basic', 'arrear_hra', 'arrear_conveyance', 'arrear_special_allowance', 'arrear_statutory_bonus',
   'arrear_employer_pf', 'arrear_employer_esic', 'arrear_gratuity', 'arrear_employee_pf', 'arrear_employee_esic',
@@ -136,12 +211,135 @@ const ARREAR_COLS = [
   'arrear_flexi_attire_uniform', 'arrear_flexi_books_periodicals', 'arrear_flexi_lta',
   'arrear_epf_wage', 'arrear_appraisal_effective_date',
 ]
+// The earned counterpart of each structural component — the same 16 heads, pro-rated by
+// paid_days. Kept next to the structural names on purpose: a reader comparing
+// basic_monthly with earn_basic_monthly is exactly how a pro-rata query gets answered.
+const EARN_COLS = [
+  'earn_basic_monthly', 'earn_hra_monthly', 'earn_conveyance',
+  'earn_special_allowance', 'earn_statutory_bonus',
+  'earn_flexi_car', 'earn_flexi_driver', 'earn_flexi_fuel', 'earn_flexi_tel',
+  'earn_flexi_meal', 'earn_flexi_device', 'earn_flexi_attire', 'earn_flexi_pda',
+  'earn_flexi_lta', 'earn_flexi_chedu', 'earn_flexi_hostel',
+]
 const TAXABLE_COLS = [
   'taxable_adjustment_lwf', 'taxable_hostel_allowance', 'taxable_children_education',
   'taxable_flexi_car_lease', 'taxable_flexi_driver_salary', 'taxable_flexi_fuel_maintenance',
   'taxable_flexi_telephone_internet', 'taxable_flexi_meal_card', 'taxable_flexi_gadget_device',
   'taxable_flexi_attire_uniform', 'taxable_flexi_books_periodicals', 'taxable_flexi_lta',
 ]
+
+// ── Month Master column groups ─────────────────────────────────────────────
+// The export is grouped so related fields sit together and each block reads as a
+// section: Sync → Employee → Statutory → Salary (incl. attendance & arrear, which are
+// what salary is computed on) → Flexi → Investment → Bank.
+// These groups are the single source of truth for BOTH the column order of the export
+// and the per-category counters on the month-over-month change table, so a column can
+// never sit in one section on the sheet and be counted under another in the comparison.
+// `skipDiff` marks columns that carry no comparable meaning across months — row ids and
+// the month's own stamps differ by definition, so counting them would flag every employee.
+export interface MmGroup { key: string; label: string; cols: string[]; skipDiff?: string[] }
+export const MM_GROUPS: MmGroup[] = [
+  {
+    key: 'sync', label: 'Sync data',
+    cols: ['id', 'run_id', 'employee_id', 'Company', 'fy', 'period_month', 'payday', 'synced_at', 'created_at'],
+    // Only Company is comparable — a transfer between group companies is a real change.
+    // payday moves with the month by definition, so it sits with the other month stamps.
+    skipDiff: ['id', 'run_id', 'employee_id', 'fy', 'period_month', 'payday', 'synced_at', 'created_at'],
+  },
+  {
+    key: 'employee', label: 'Employee details',
+    cols: [
+      'employee_code', 'full_name', 'father_name', 'mother_name',
+      'employment_type', 'employment_status', 'designation', 'grade',
+      'department', 'sub_department', 'cost_centre', 'location',
+      'group_doj', 'company_doj', 'date_of_joining', 'date_of_leaving',
+      'office_email', 'personal_email', 'l1_manager_id',
+      'company_id', 'department_id', 'location_id',
+      'location_state', 'location_district', 'location_city', 'location_pin_code',
+      'actual_posted_state', 'actual_posted_district', 'self_declared_state',
+      'res_state', 'res_city', 'perm_state', 'perm_city',
+      'international_employee', 'certificate_of_coverage',
+    ],
+  },
+  {
+    key: 'statutory', label: 'Statutory',
+    cols: [
+      'pan_number', 'uan_number', 'previous_uan', 'esic_number', 'pf_account_number',
+      'pf_applicable', 'pf_gross_limit', 'pf_wage_type', 'pf_existing_member', 'pf_scheme_certificate',
+      'epf_method', 'epf_wage_limit', 'epf_exemption_reason',
+      'voluntary_pf_applicable', 'vpf_percent',
+      'epf_pension_applicable', 'pension_applicable', 'pension_number', 'eps_monthly',
+      'esic_applicable', 'esic_wage_limit', 'esi_dispensary_name',
+      'pt_applicable', 'professional_tax_state',
+      'lwf_applicable', 'lwf_state',
+      'tds_regime', 'wage_category', 'gratuity_eligible',
+      'is_international_worker', 'has_certificate_of_coverage',
+    ],
+  },
+  {
+    key: 'salary', label: 'Salary',
+    cols: [
+      'annual_ctc', 'total_ctc', 'variable_annual',
+      'basic_monthly', 'hra_monthly', 'conveyance',
+      'special_allowance', 'special_allowance_gross', 'statutory_bonus',
+      'gross_monthly', 'epf_wage',
+      'employer_pf', 'employer_esic', 'gratuity_monthly',
+      'employee_pf', 'employee_esic', 'pt_monthly', 'lwf_monthly',
+      'net_take_home', 'tds_amount', 'perquisite_total', 'bonus_accrued', 'payment_hold',
+      // attendance drives the salary for the month, so it sits with it
+      'days_in_month', 'total_days', 'weekly_off',
+      'earned_leave', 'casual_leave', 'sick_leave', 'other_leave', 'absent_days',
+      'paid_days', 'ot_hours', 'attendance_uploaded_at', 'ot_uploaded_at',
+      'arrear_days', 'arrear_source_period', 'arrear_reason',
+      ...ARREAR_COLS,
+    ],
+  },
+  {
+    key: 'flexi', label: 'Flexi',
+    cols: [
+      'flexi_regime', 'flexi_car', 'flexi_driver', 'flexi_fuel', 'flexi_tel', 'flexi_meal',
+      'flexi_device', 'flexi_attire', 'flexi_pda', 'flexi_lta', 'flexi_chedu', 'flexi_hostel', 'flexi_total',
+    ],
+  },
+  {
+    // What the employee actually earned this month, as opposed to what the structure
+    // says a full month is worth. Every column here is computed inside the month from
+    // columns already frozen above it — attendance × structure, plus whatever the Bulk
+    // Uploader posted — so it is the last block to settle and the first one HR reads.
+    key: 'earnings', label: 'Earned salary',
+    cols: [...EARN_COLS, 'earn_gross_monthly',
+      'pay_incentive', 'pay_variable', 'pay_bonus', 'pay_buyout',
+      'ded_parking', 'ded_insurance', 'ded_canteen',
+      'total_deduction', 'net_pay'],
+  },
+  { key: 'investment', label: 'Investment', cols: [...TAXABLE_COLS] },
+  {
+    key: 'bank', label: 'Bank details',
+    cols: ['bank_name', 'bank_account_number', 'bank_account_last4', 'ifsc_code', 'account_type'],
+  },
+]
+
+// Month-to-month attendance columns. These are *expected* to differ every month, so the
+// change table can hold them out on request rather than drowning the salary count in them.
+export const MM_ATTENDANCE_COLS: string[] = [
+  'days_in_month', 'total_days', 'weekly_off',
+  'earned_leave', 'casual_leave', 'sick_leave', 'other_leave', 'absent_days',
+  'paid_days', 'ot_hours', 'attendance_uploaded_at', 'ot_uploaded_at',
+  'arrear_days', 'arrear_source_period', 'arrear_reason', ...ARREAR_COLS,
+]
+
+// Anything not listed in a group is appended at the end rather than dropped, so a column
+// added later still reaches the sheet even before it is placed in a group above.
+export const MM_ORDER: string[] = MM_GROUPS.flatMap(g => g.cols)
+// Rebuild a row so its keys follow MM_ORDER; unlisted keys keep their order at the end.
+function orderRow(row: Record<string, any>): Record<string, any> {
+  const out: Record<string, any> = {}
+  for (const k of MM_ORDER) if (k in row) out[k] = row[k]
+  for (const k of Object.keys(row)) if (!(k in out)) out[k] = row[k]
+  return out
+}
+
+// The arrear / taxable side-table shapes, prefixed as they appear in the export.
 
 // Full Month Master rows for one or more runs — every frozen column, ready for export.
 // Paginated because PostgREST caps a response at 1000 rows, and a group month spans
@@ -206,7 +404,7 @@ export async function loadMonthMaster(runs: { id: string; company_name?: string 
     const merged: Record<string, any> = { ...row }
     arrearCols.forEach(k => { merged[k] = a[k] ?? '' })
     taxableCols.forEach(k => { merged[k] = t[k] ?? '' })
-    return merged
+    return orderRow(merged)
   })
 }
 
@@ -268,20 +466,47 @@ export async function loadRunSummary(run: PayrollRun): Promise<RunSummary> {
 }
 
 // ── NEFT bank file rows (net pay per employee + bank details) ──
+// The FULL account number, not last4 — a bank file with a masked account cannot be
+// uploaded anywhere. The masked column stays in the Month Master for on-screen display.
 export async function buildNeftRows(runId: string): Promise<Record<string, string>[]> {
   const [{ data: lines }, { data: snap }] = await Promise.all([
     supabase.from('payroll_lines').select('employee_id, net_pay').eq('run_id', runId),
-    supabase.from('payroll_employee_snapshot').select('employee_id, employee_code, full_name, bank_account_last4, ifsc_code').eq('run_id', runId),
+    supabase.from('payroll_employee_snapshot')
+      .select('employee_id, employee_code, full_name, bank_name, bank_account_number, bank_account_last4, ifsc_code').eq('run_id', runId),
   ])
   const snapBy = new Map<string, any>((snap || []).map((x: any) => [x.employee_id, x]))
   return (lines || []).filter((l: any) => Number(l.net_pay) > 0).map((l: any) => {
     const x = snapBy.get(l.employee_id) || {}
+    const acct = x.bank_account_number || ''
     return {
       beneficiary_name: x.full_name || '', emp_code: x.employee_code || '',
-      account_last4: x.bank_account_last4 || '', ifsc_code: x.ifsc_code || '',
+      bank_name: x.bank_name || '',
+      // Leading apostrophe so Excel keeps leading zeros and never uses scientific notation.
+      account_number: acct ? `'${acct}` : '',
+      ifsc_code: x.ifsc_code || '',
       amount: (Number(l.net_pay) || 0).toFixed(2), narration: 'SALARY',
     }
   })
+}
+
+// Employees who cannot be paid — a payslip exists but there is nowhere to send the money.
+// Worth surfacing before a NEFT file is generated, not after the bank rejects it.
+export async function loadUnbankable(runId: string): Promise<{ employee_code: string; full_name: string; net_pay: number; missing: string }[]> {
+  const [{ data: lines }, { data: snap }] = await Promise.all([
+    supabase.from('payroll_lines').select('employee_id, net_pay').eq('run_id', runId),
+    supabase.from('payroll_employee_snapshot').select('employee_id, employee_code, full_name, bank_account_number, ifsc_code').eq('run_id', runId),
+  ])
+  const snapBy = new Map<string, any>((snap || []).map((x: any) => [x.employee_id, x]))
+  const out: { employee_code: string; full_name: string; net_pay: number; missing: string }[] = []
+  ;(lines || []).forEach((l: any) => {
+    if (!(Number(l.net_pay) > 0)) return
+    const x = snapBy.get(l.employee_id) || {}
+    const gaps: string[] = []
+    if (!x.bank_account_number) gaps.push('account number')
+    if (!x.ifsc_code) gaps.push('IFSC')
+    if (gaps.length) out.push({ employee_code: x.employee_code || '', full_name: x.full_name || '', net_pay: Number(l.net_pay) || 0, missing: gaps.join(' + ') })
+  })
+  return out
 }
 
 // Register for a run = payroll_lines + attendance snapshot + employee snapshot (names),
@@ -289,7 +514,9 @@ export async function buildNeftRows(runId: string): Promise<Record<string, strin
 export async function loadRunRegister(runId: string): Promise<Record<string, any>[]> {
   const [{ data: lines }, { data: att }, { data: snap }] = await Promise.all([
     supabase.from('payroll_lines').select('*').eq('run_id', runId),
-    supabase.from('payroll_attendance_snapshot').select('*').eq('run_id', runId),
+    // Attendance comes from the Month Master, same as the engine. payroll_attendance_snapshot
+    // is a legacy table that nothing populates, so reading it left these columns blank.
+    supabase.from('payroll_employee_snapshot').select('employee_id, paid_days, total_days, days_in_month, absent_days, arrear_days, ot_hours').eq('run_id', runId),
     supabase.from('payroll_employee_snapshot').select('employee_id, employee_code, full_name, department, location, annual_ctc, basic_monthly, hra_monthly, bank_account_last4, ifsc_code').eq('run_id', runId),
   ])
   const attBy = new Map<string, any>((att || []).map((a: any) => [a.employee_id, a]))
@@ -301,7 +528,8 @@ export async function loadRunRegister(runId: string): Promise<Record<string, any
     return {
       employee_code: s.employee_code || '', full_name: s.full_name || '', department: s.department || '', location: s.location || '',
       annual_ctc: s.annual_ctc ?? '', basic_monthly: s.basic_monthly ?? '', hra_monthly: s.hra_monthly ?? '',
-      payable_days: a.payable_days ?? '', present_days: a.present_days ?? '', lop_days: a.lop_days ?? '', arrear_days: a.arrear_days ?? '',
+      paid_days: a.paid_days ?? '', total_days: a.total_days ?? '', days_in_month: a.days_in_month ?? '',
+      absent_days: a.absent_days ?? '', arrear_days: a.arrear_days ?? '', ot_hours: a.ot_hours ?? '',
       ...clean(l, ['id', 'run_id', 'created_at']),
       bank_account_last4: s.bank_account_last4 || '', ifsc_code: s.ifsc_code || '',
     }
@@ -369,43 +597,9 @@ export async function loadBankDetails(companyId: string): Promise<BankRow[]> {
   }))
 }
 
-// ── Employee sync (HRMS → Payroll): freeze snapshot into a run, OPEN → SYNCED ──
-export async function syncRunEmployees(run: PayrollRun): Promise<{ error: string | null; count: number }> {
-  const emps = await loadPayrollEmployees(run.company_id)
-  if (!emps.length) return { error: 'No active employees to sync for this company.', count: 0 }
-  const snapRows = emps.map(e => ({
-    run_id: run.id, employee_id: e.id, employee_code: e.emp_code, full_name: e.full_name,
-    department: e.department, location: e.location, annual_ctc: e.annual_ctc,
-    basic_monthly: e.basic_monthly, hra_monthly: e.hra_monthly,
-    bank_account_last4: e.bank_account_last4, ifsc_code: e.ifsc_code,
-  }))
-  // Replace any prior snapshot for this run, then re-freeze.
-  await supabase.from('payroll_employee_snapshot').delete().eq('run_id', run.id)
-  const { error: se } = await supabase.from('payroll_employee_snapshot').upsert(snapRows, { onConflict: 'run_id,employee_id' })
-  if (se) return { error: se.message, count: 0 }
-
-  // Attendance snapshot for the month (best-effort; days from attendance_records).
-  try {
-    const y = Number(run.fy.split('-')[0]); const cal = run.month <= 9 ? run.month + 3 : run.month - 9
-    const yr = run.month <= 9 ? y : y + 1
-    const from = `${yr}-${String(cal).padStart(2, '0')}-01`
-    const to = `${yr}-${String(cal).padStart(2, '0')}-${new Date(yr, cal, 0).getDate()}`
-    const { data: att } = await supabase.from('attendance_records').select('employee_id, status').gte('attendance_date', from).lte('attendance_date', to).in('employee_id', emps.map(e => e.id))
-    const agg = new Map<string, { present: number; lop: number }>()
-    ;(att || []).forEach((r: any) => {
-      const a = agg.get(r.employee_id) || { present: 0, lop: 0 }
-      if (r.status === 'PRESENT' || r.status === 'HALF_DAY') a.present += r.status === 'HALF_DAY' ? 0.5 : 1
-      if (r.status === 'ABSENT' || r.status === 'LWP') a.lop += 1
-      agg.set(r.employee_id, a)
-    })
-    await supabase.from('payroll_attendance_snapshot').delete().eq('run_id', run.id)
-    const attRows = emps.map(e => { const a = agg.get(e.id) || { present: 0, lop: 0 }; return { run_id: run.id, employee_id: e.id, present_days: a.present, lop_days: a.lop, payable_days: a.present } })
-    await supabase.from('payroll_attendance_snapshot').upsert(attRows, { onConflict: 'run_id,employee_id' })
-  } catch { /* attendance snapshot best-effort */ }
-
-  const patch: any = { emp_count: emps.length, updated_at: new Date().toISOString() }
-  if (run.status === 'OPEN') patch.status = 'SYNCED'
-  await supabase.from('payroll_runs').update(patch).eq('id', run.id)
-  await supabase.from('payroll_audit_log').insert({ run_id: run.id, company_id: run.company_id, action: 'EMPLOYEES_SYNCED', detail: { count: emps.length }, performed_by: 'HR' })
-  return { error: null, count: emps.length }
-}
+// Employee sync used to live here as syncRunEmployees(): it DELETED the run's whole
+// Month Master and rewrote eleven columns, wiping attendance, statutory flags, flexi,
+// bank and salary in one click — and its button sat next to Calculate. sql96's
+// category-wise sync replaced it (each category writes only its own columns and refuses
+// on a locked month), so the old one is gone rather than left around to be re-wired.
+// See lib/payroll/sync.ts.

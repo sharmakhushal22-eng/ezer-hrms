@@ -5,6 +5,7 @@
 // EZER-themed. CTC auto-prefilled from the employee's ctc_master.
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+import { loadSalary, type SalaryStructure } from '@/lib/employees/hr-actions'
 import * as XLSX from 'xlsx'
 
 const P = {
@@ -187,13 +188,30 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
     setTimeout(() => setDraftMsg(''), 3500)
   }
 
+  // The employee's ACTUAL salary structure, from the same loader the Employee Master
+  // uses (lib/employees/hr-actions → loadSalary). Both screens therefore render one
+  // computation, so a figure can never read differently in one place than the other.
+  const [real, setReal] = useState<SalaryStructure | null>(null)
+  useEffect(() => { if (employeeId) loadSalary(employeeId).then(setReal).catch(() => setReal(null)) }, [employeeId])
+  const rd = real?.detail || null
+
   // ── Derived salary ──
   const sal = useMemo(() => {
     const ctc = N(f.ctc), vari = N(f.variable)
-    const fixed = ctc - vari, basic = fixed * .5, hra = basic * .5
+    const fixed = ctc - vari
+    if (rd) {
+      // Real structure — annualise the stored monthly figures rather than assuming
+      // Basic is 50% of Fixed and HRA 50% of Basic.
+      const basic = rd.basic * 12, hra = rd.hra * 12, epf = rd.erPf * 12
+      // Wallet = the GROSS Special Allowance. rd.special is already net of what has
+      // been declared, so using it would shrink the budget as the employee declares.
+      const other = Math.round((rd.specialGross || rd.special) * 12)
+      return { ctc, vari, fixed, basic, hra, epf, lta8: Math.round(basic * .0833), other, si: getSlab(ctc) }
+    }
+    const basic = fixed * .5, hra = basic * .5
     const epf = Math.min((basic / 12) * .12, 1800) * 12, lta8 = Math.round(basic * .0833), other = Math.max(0, fixed - basic - hra - epf)
     return { ctc, vari, fixed, basic, hra, epf, lta8, other, si: getSlab(ctc) }
-  }, [f.ctc, f.variable])
+  }, [f.ctc, f.variable, rd])
 
   // ── Joining-date pro-ration for FY 2026-27 (1 Apr 2026 – 31 Mar 2027) ──
   // DOJ on/before 1 Apr 2026 → full 12 months. DOJ after → pro-rata on worked days,
@@ -315,14 +333,6 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
   )
 
   // ── STEP 1 — Employee & salary ──
-  const salCards = [
-    { l: 'Annual CTC', v: sal.ctc, s: (sal.ctc / 1e5).toFixed(2) + ' LPA' },
-    { l: 'Variable Pay', v: sal.vari, s: 'Performance' },
-    { l: 'Fixed Salary', v: sal.fixed, s: 'CTC – Variable' },
-    { l: 'Basic Salary', v: sal.basic, s: '50% of Fixed' },
-    { l: 'HRA', v: sal.hra, s: '50% of Basic' },
-    { l: 'Employer PF', v: sal.epf, s: 'Max ₹21,600/yr' },
-  ]
   const step1 = (
     <div>
       <div style={s.card}>
@@ -336,28 +346,119 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <Fg label="Annual Variable Pay (₹)"><input style={s.input} type="number" value={f.variable} onChange={e => set('variable', e.target.value)} placeholder="0 if none" /></Fg>
         </div>
       </div>
-      {sal.ctc > 0 && (
+      {/* Actual salary structure — identical rows, order and figures to
+          Employee Master → View → Salary, because both read one loader. */}
+      {rd && (
         <div style={s.card}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>Salary Breakup</div>
-            <span style={{ fontSize: 11, background: P.purpleBg, color: P.purpleDark, padding: '2px 10px', borderRadius: 99, fontWeight: 600 }}>Slab: {SLAB_LABELS[sal.si]}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Your Salary Structure</div>
+            <span style={{ fontSize: 10.5, background: '#ECFDF5', color: '#059669', padding: '2px 10px', borderRadius: 99, fontWeight: 700, border: '1px solid #BBF7D0' }}>
+              ✓ as per your record
+            </span>
+            {rd.payType && rd.payType !== 'Regular' && (
+              <span style={{ fontSize: 10.5, background: P.purpleBg, color: P.purpleDark, padding: '2px 10px', borderRadius: 99, fontWeight: 700 }}>{rd.payType}</span>
+            )}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
-            {salCards.map(c => (
-              <div key={c.l} style={{ background: P.navy, borderRadius: 10, padding: '12px 14px', color: '#fff' }}>
-                <div style={{ fontSize: 10.5, opacity: .7 }}>{c.l}</div>
-                <div style={{ fontSize: 18, fontWeight: 700, margin: '3px 0' }}>{R(c.v)}</div>
-                <div style={{ fontSize: 10, opacity: .6 }}>{c.s}</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 12 }}>
+            {[
+              { l: 'Annual CTC', v: rd.totalCtc || rd.annualCtc, c: '#7C3AED', bg: '#F5F3FF' },
+              { l: 'Net Take-home / mo', v: rd.net, c: '#059669', bg: '#ECFDF5' },
+              { l: 'Fixed / mo', v: rd.fixedMonthly, c: '#1E1B4B', bg: '#F8FAFC' },
+            ].map(x => (
+              <div key={x.l} style={{ background: x.bg, border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, color: '#64748B', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>{x.l}</div>
+                <div style={{ fontSize: 17, fontWeight: 700, color: x.c }}>{R(x.v)}</div>
               </div>
             ))}
           </div>
+
+          <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: '#1E1B4B', fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: '.03em' }}>
+              <span>COMPONENT</span><span style={{ textAlign: 'right' }}>MONTHLY</span><span style={{ textAlign: 'right' }}>ANNUAL</span>
+            </div>
+            {(() => {
+              const M = (v: number) => v * 12
+              const Row = ({ label, m, kind }: { label: string; m: number; kind?: 'sub' | 'net' | 'total' }) => (
+                <div style={{
+                  display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '8px 12px', borderTop: '1px solid #F1F5F9',
+                  background: kind === 'total' ? '#F5F3FF' : kind === 'net' ? '#ECFDF5' : kind === 'sub' ? '#F8FAFC' : '#fff',
+                  fontWeight: kind ? 700 : 400,
+                  color: kind === 'total' ? '#7C3AED' : kind === 'net' ? '#059669' : '#1E1B4B',
+                }}>
+                  <span style={{ fontSize: 12.5 }}>{label}</span>
+                  <span style={{ fontSize: 12.5, textAlign: 'right' }}>{R(m)}</span>
+                  <span style={{ fontSize: 12.5, textAlign: 'right' }}>{R(M(m))}</span>
+                </div>
+              )
+              return (
+                <>
+                  <Row label="Basic" m={rd.basic} />
+                  <Row label="HRA" m={rd.hra} />
+                  {rd.statBonus > 0 && <Row label="Statutory Bonus" m={rd.statBonus} />}
+                  {rd.conveyance > 0 && <Row label="Conveyance" m={rd.conveyance} />}
+                  {rd.special > 0 && <Row label="Special Allowance" m={rd.special} />}
+                  {rd.flexiMonthly > 0 && <Row label="Flexi (declared)" m={rd.flexiMonthly} />}
+                  <Row label="Gross" m={rd.gross} kind="sub" />
+                  {rd.erPf > 0 && <Row label="Employer PF" m={rd.erPf} />}
+                  {rd.erEsic > 0 && <Row label="Employer ESIC" m={rd.erEsic} />}
+                  {rd.gratuity > 0 && <Row label="Gratuity" m={rd.gratuity} />}
+                  {(rd.eePf > 0 || rd.eeEsic > 0 || rd.pt > 0 || rd.lwf > 0) && (
+                    <div style={{ padding: '6px 12px', background: '#FEF2F2', fontSize: 10, fontWeight: 700, color: '#B91C1C', letterSpacing: '.04em', borderTop: '1px solid #F1F5F9' }}>DEDUCTIONS</div>
+                  )}
+                  {rd.eePf > 0 && <Row label="Employee PF" m={rd.eePf} />}
+                  {rd.eeEsic > 0 && <Row label="Employee ESIC" m={rd.eeEsic} />}
+                  {rd.pt > 0 && <Row label="Professional Tax" m={rd.pt} />}
+                  {rd.lwf > 0 && <Row label="LWF" m={rd.lwf} />}
+                  <Row label="Net Take-home" m={rd.net} kind="net" />
+                  <Row label="Fixed" m={rd.fixedMonthly} kind="sub" />
+                  {rd.variableAnnual > 0 && <Row label="Variable" m={Math.round(rd.variableAnnual / 12)} />}
+                  <Row label="Total CTC" m={Math.round(rd.totalCtc / 12)} kind="total" />
+                </>
+              )
+            })()}
+          </div>
+          <div style={{ fontSize: 10, color: '#94A3B8', marginTop: 6 }}>
+            FY 2026-27 salary structure — the same figures shown in your HR record. Monthly amounts are pro-rated on actual paid days during payroll.
+          </div>
+        </div>
+      )}
+
+      {sal.ctc > 0 && (
+        <div style={s.card}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{rd ? 'Flexi Wallet Basis' : 'Salary Breakup'}</div>
+            <span style={{ fontSize: 11, background: P.purpleBg, color: P.purpleDark, padding: '2px 10px', borderRadius: 99, fontWeight: 600 }}>Slab: {SLAB_LABELS[sal.si]}</span>
+          </div>
+          {/* Monthly is shown first and largest because that is the figure the HR record
+              (Employee Master → Salary) displays. The annual number sits beside it, labelled,
+              so the wallet budget can't be mistaken for a different Special Allowance. */}
           <div style={{ marginTop: 10, background: 'linear-gradient(135deg,#4a148c,#7b1fa2)', borderRadius: 10, padding: '14px 16px', color: '#fff' }}>
-            <div style={{ fontSize: 11, opacity: .85 }}>💼 Flexi Wallet (Other Reimbursement)</div>
-            <div style={{ fontSize: 24, fontWeight: 800 }}>{R(sal.other)}</div>
-            <div style={{ fontSize: 10.5, opacity: .8 }}>Fixed − Basic − HRA − PF</div>
+            <div style={{ fontSize: 11, opacity: .85 }}>💼 Flexi Wallet {rd ? '(funded by Special Allowance)' : '(Other Reimbursement)'}</div>
+            {rd ? (
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', margin: '4px 0 2px' }}>
+                <div>
+                  <span style={{ fontSize: 24, fontWeight: 800 }}>{R(rd.specialGross || rd.special)}</span>
+                  <span style={{ fontSize: 12, opacity: .85, marginLeft: 5 }}>per month</span>
+                </div>
+                <div style={{ opacity: .55 }}>|</div>
+                <div>
+                  <span style={{ fontSize: 17, fontWeight: 700 }}>{R(sal.other)}</span>
+                  <span style={{ fontSize: 12, opacity: .85, marginLeft: 5 }}>per year</span>
+                </div>
+              </div>
+            ) : (
+              <>
+                <div style={{ fontSize: 24, fontWeight: 800 }}>{R(sal.other)}</div>
+                <div style={{ fontSize: 10.5, opacity: .8 }}>Fixed − Basic − HRA − PF</div>
+              </>
+            )}
+            {rd && <div style={{ fontSize: 10.5, opacity: .8 }}>Your full Special Allowance — {R(rd.specialGross || rd.special)}/month. {rd.flexiMonthly > 0 ? `${R(rd.flexiMonthly)}/month already declared, ${R(Math.max(0,(rd.specialGross||rd.special)-rd.flexiMonthly))} left.` : ''}</div>}
           </div>
           <div style={{ marginTop: 10, background: P.amberBg, border: '1px solid #FDE68A', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: P.amber }}>
-            <b>Formula:</b> {R(sal.fixed)} − {R(sal.basic)} (Basic) − {R(sal.hra)} (HRA) − {R(sal.epf)} (PF) = <b>Flexi Wallet {R(sal.other)}</b>
+            {rd
+              ? <><b>Source:</b> full Special Allowance <b>{R(rd.specialGross || rd.special)}/month</b> × 12 = <b>{R(sal.other)} annual wallet</b>. Declared flexi is deducted from the Special Allowance paid as salary.</>
+              : <><b>Formula:</b> {R(sal.fixed)} − {R(sal.basic)} (Basic) − {R(sal.hra)} (HRA) − {R(sal.epf)} (PF) = <b>Flexi Wallet {R(sal.other)}</b></>}
           </div>
         </div>
       )}

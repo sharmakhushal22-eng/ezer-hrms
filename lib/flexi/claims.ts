@@ -42,6 +42,21 @@ async function annualFixed(employeeId: string): Promise<number> {
   return 0
 }
 
+// The employee's own claims, via the service-role API route. Falls back to a direct read
+// so an admin screen (which does have a session) still works if the route is unavailable.
+async function loadClaimsForEmployee(employeeId: string): Promise<any[]> {
+  try {
+    const r = await fetch(`/api/flexi/claims?employee_id=${encodeURIComponent(employeeId)}`)
+    if (r.ok) {
+      const j = await r.json()
+      if (Array.isArray(j?.claims)) return j.claims
+    }
+  } catch { /* fall through to the direct read below */ }
+  const { data } = await supabase.from('flexi_claims')
+    .select('component_code, claim_amount, status').eq('employee_id', employeeId)
+  return data || []
+}
+
 // Resolve an employee's flexi entitlements for the FY: policy slab limits (regime-aware)
 // overlaid with any admin overrides, minus what they've already claimed/approved.
 export async function loadEntitlements(employeeId: string): Promise<{
@@ -109,8 +124,11 @@ export async function loadEntitlements(employeeId: string): Promise<{
   ;(ovrs || []).forEach((o: any) => { perComp[o.component_code] = n(o.override_limit); ovrSet.add(o.component_code) })
 
   // Existing claims → totals per component.
-  const { data: claims } = await supabase.from('flexi_claims')
-    .select('component_code, claim_amount, status').eq('employee_id', employeeId)
+  // Fetched through the API, not straight off the table: flexi_claims is RLS-locked to
+  // payroll staff (sql97), and ESS runs on the anon key with no Supabase session. Reading
+  // it directly would quietly return zero rows here — which does not throw, it just shows
+  // the employee a full unused limit and lets them over-claim.
+  const claims = await loadClaimsForEmployee(employeeId)
   const tot: Record<string, { claimed: number; approved: number; pending: number; rejected: number }> = {}
   ;(claims || []).forEach((c: any) => {
     const t = tot[c.component_code] || (tot[c.component_code] = { claimed: 0, approved: 0, pending: 0, rejected: 0 })

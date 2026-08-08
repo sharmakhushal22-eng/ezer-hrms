@@ -3,13 +3,11 @@ import { useState, useEffect, useRef } from 'react'
 import * as XLSX from 'xlsx'
 import {
   loadCompanies, loadPayHeads, savePayHead, deletePayHead,
-  loadRuns, createRun, advanceRun, cancelRun, setRunStatus, syncPayrollMonth, loadAudit, loadRunRegister, loadMonthMaster,
-  loadRunSummary, buildNeftRows,
-  loadPayrollEmployees, syncRunEmployees,
-  MONTHS, RUN_FLOW, nextStatus,
-  type PayHead, type PayrollRun, type PayrollEmployee, type RunSummary,
+  loadRuns, createRun, setRunStatus, syncPayrollMonth, loadAudit, loadMonthMaster, checkMonthReadiness,
+  loadPayrollEmployees,
+  MONTHS,
+  type PayHead, type PayrollRun, type PayrollEmployee, type MonthReadiness,
 } from '@/lib/payroll/core'
-import { calculateRun } from '@/lib/payroll/engine'
 import PayHeadCatalog from '@/components/payroll/PayHeadCatalog'
 import CompanyProfileView from '@/components/payroll/CompanyProfileView'
 import PerquisitesConfig from '@/components/payroll/PerquisitesConfig'
@@ -26,7 +24,10 @@ import OtUpload from '@/components/payroll/OtUpload'
 import AttendanceEdit from '@/components/payroll/AttendanceEdit'
 import AttendanceEditTab from '@/components/payroll/AttendanceEditTab'
 import BankDetailsTab from '@/components/payroll/BankDetailsTab'
+import ManualVoucher from '@/components/payroll/ManualVoucher'
+import ArrearPayments from '@/components/payroll/ArrearPayments'
 import MonthSync from '@/components/payroll/MonthSync'
+import RunCycle from '@/components/payroll/RunCycle'
 import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutoryPanel'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 
@@ -295,6 +296,9 @@ function configSubs(companyId: string, subView: string, fy: string): SubTab[] {
         { id: 'create', label: '📅 Create Month' },
         { id: 'freeze', label: '❄️ Freeze Month' },
         { id: 'unfreeze', label: '☀️ Unfreeze Month' },
+        // PayrollMonthTab always supported this mode; it just had no menu entry, so the
+        // only way to lock a month was the Advance button that Run Cycle no longer has.
+        { id: 'lock', label: '🔒 Lock / Unlock Month' },
       ],
       render: () => <PayrollMonthTab companyId={companyId} fy={fy} mode={(['create', 'freeze', 'unfreeze'].includes(subView) ? subView : 'create') as PmMode} /> },
     { id: 'categories', label: 'Department · Sub-dept · Location', icon: '🗂️', built: true, render: () => <CompanyStructureView companyId={companyId} /> },
@@ -328,11 +332,12 @@ function employeeSubs(companyId: string): SubTab[] {
 
 function runSubs(companyId: string, fy: string): SubTab[] {
   return [
-    { id: 'cycle', label: 'Run Cycle', icon: '▶️', built: true, render: () => <RunTab companyId={companyId} headerFy={fy} /> },
-    { id: 'sync', label: 'Snapshot Sync', icon: '🔄', built: true, render: () => <MonthSync companyId={companyId} fy={fy} /> },
-    { id: 'uploaders', label: 'Bulk Uploaders', icon: '📤', desc: 'Seven XLSX uploaders feed the run before processing. Saved to payroll_run_inputs and picked up by the engine.', points: ['Additional payment', 'Deduction', 'Manual arrear', 'Statutory adjustment', 'Tax exemption', 'Perquisite tax', 'Other-than-month payment'] },
+    { id: 'cycle', label: 'Run Cycle', icon: '▶️', built: true, render: () => <RunCycle companyId={companyId} headerFy={fy} /> },
+    { id: 'sync', label: 'Data Sync', icon: '🔄', built: true, render: () => <MonthSync companyId={companyId} fy={fy} /> },
+    { id: 'uploaders', label: 'Bulk Uploaders', icon: '📤', built: true, render: () => <ManualVoucher companyId={companyId} fy={fy} /> },
+    { id: 'arrearpay', label: 'Arrear & Payments', icon: '💸', built: true, render: () => <ArrearPayments companyId={companyId} fy={fy} /> },
+    { id: 'lock', label: 'Lock / Unlock', icon: '🔒', built: true, href: '/dashboard/payroll', desc: 'Lives in Configuration → Payroll Month → 🔒 Lock / Unlock Month, single or bulk. Locking freezes the month master: every category sync is refused by the database and payroll can no longer be recalculated.' },
     { id: 'minwage', label: 'Minimum Wages Check', icon: '🛡️', desc: 'Flags employees whose gross falls below the applicable state minimum wage before payroll is processed.' },
-    { id: 'lock', label: 'Lock / Unlock', icon: '🔒', built: true, desc: 'Single & bulk lock/unlock is part of the run status flow — DISBURSED → LOCKED freezes the snapshot and makes past payroll immutable.' },
   ]
 }
 
@@ -532,6 +537,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
   const [err, setErr] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [companyCount, setCompanyCount] = useState(0)
+  const [coList, setCoList] = useState<{ id: string; company_name: string }[]>([])
   const [groupName, setGroupName] = useState('Group')
   const allCo = !companyId
   const FROZEN_OR_BEYOND = ['ATTENDANCE_LOCKED', 'CALCULATED', 'AI_CHECKED', 'APPROVED', 'DISBURSED', 'LOCKED']
@@ -560,7 +566,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
       XLSX.writeFile(wb, `Month_Master_${safe(label)}.xlsx`.replace(/_+/g, '_'))
     } catch (e: any) { setErr('Download failed: ' + (e.message || e)) } finally { setDlKey('') }
   }
-  useEffect(() => { loadCompanies().then(c => { setCompanyCount(c.length); setGroupName(c[0]?.group_name || 'Group') }).catch(() => {}) }, [])
+  useEffect(() => { loadCompanies().then(c => { setCompanyCount(c.length); setCoList(c.map((x: any) => ({ id: x.id, company_name: x.company_name }))); setGroupName(c[0]?.group_name || 'Group') }).catch(() => {}) }, [])
 
   // Months already created — hidden from the Create dropdown. In all-companies mode a month is
   // only "taken" once every company has it; for a single company, any run for that month counts.
@@ -720,6 +726,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
 
       {showCreate && (
         <CreateMonthModal fy={fy} allCo={allCo} onRun={runCreate} disabledMonths={disabledMonths}
+          checkReady={(m: number) => checkMonthReadiness(allCo ? coList : coList.filter(c => c.id === companyId), fy, m)}
           onClose={() => setShowCreate(false)}
           onDone={() => reload()} />
       )}
@@ -728,14 +735,17 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
 }
 
 // ── CreateMonthModal — pick month → confirm → animated progress → done ──
-function CreateMonthModal({ fy, allCo, onRun, disabledMonths, onClose, onDone }: {
+function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClose, onDone }: {
   fy: string; allCo: boolean
   onRun: (m: number) => Promise<{ summary: string; error?: string }>
   disabledMonths: Set<number>
+  checkReady: (m: number) => Promise<MonthReadiness[]>
   onClose: () => void; onDone: () => void
 }) {
   const availableMonths = MONTHS.map((_, i) => i + 1).filter(m => !disabledMonths.has(m))
-  const [step, setStep] = useState<'pick' | 'confirm' | 'progress' | 'done'>('pick')
+  const [step, setStep] = useState<'pick' | 'confirm' | 'progress' | 'done' | 'blocked'>('pick')
+  const [checking, setChecking] = useState(false)
+  const [blockers, setBlockers] = useState<MonthReadiness[]>([])
   const [month, setMonth] = useState(availableMonths[0] || 1)
   const [pct, setPct] = useState(0)
   const [stage, setStage] = useState('')
@@ -800,11 +810,52 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, onClose, onDone }:
                   {availableMonths.map(m => <option key={m} value={m}>{MONTHS[m - 1]} {calYearOf(m - 1)}</option>)}
                 </select>
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <button style={{ ...S.btnPrimary, flex: 1 }} onClick={() => setStep('confirm')}>Submit</button>
+                  <button style={{ ...S.btnPrimary, flex: 1, opacity: checking ? 0.6 : 1 }} disabled={checking}
+                    onClick={async () => {
+                      // A month can only be opened once the previous one is fully closed off.
+                      setChecking(true)
+                      const res = await checkReady(month).catch(() => [] as MonthReadiness[])
+                      setChecking(false)
+                      const bad = res.filter(r => !r.ok)
+                      if (bad.length) { setBlockers(bad); setStep('blocked'); return }
+                      setStep('confirm')
+                    }}>{checking ? 'Checking…' : 'Submit'}</button>
                   <button style={{ ...S.btnOutline }} onClick={onClose}>Cancel</button>
                 </div>
               </>
             )}
+          </>
+        )}
+
+        {step === 'blocked' && (
+          <>
+            <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}>🚫</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, textAlign: 'center', marginBottom: 6 }}>
+              Can&apos;t create {monthLabel} yet
+            </div>
+            <div style={{ fontSize: 11.5, color: C.muted, textAlign: 'center', marginBottom: 16 }}>
+              {blockers[0]?.prevLabel} has to be closed off first — attendance processed, month frozen and payroll locked.
+            </div>
+            <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 18 }}>
+              {blockers.map(b => (
+                <div key={b.companyId} style={{ border: '1px solid #FECACA', background: '#FEF2F2', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 6 }}>{b.companyName} · {b.prevLabel}</div>
+                  {[
+                    ['Attendance processed', b.attendanceDone, b.attendanceDetail],
+                    ['Month frozen', b.frozen, b.frozenDetail],
+                    ['Payroll locked', b.locked, b.lockedDetail],
+                  ].map(([label, ok, detail]: any) => (
+                    <div key={label} style={{ fontSize: 11.5, color: ok ? C.success : C.red, padding: '2px 0' }}>
+                      {ok ? '✓' : '✕'} <b>{label}</b>{ok ? '' : ` — ${detail}`}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button style={{ ...S.btnOutline, flex: 1 }} onClick={() => setStep('pick')}>Back</button>
+              <button style={{ ...S.btnPrimary, flex: 1 }} onClick={onClose}>Close</button>
+            </div>
           </>
         )}
 
@@ -864,26 +915,6 @@ function statusPill(status: string) {
   return map[status] || map.OPEN
 }
 
-function Stepper({ status }: { status: string }) {
-  const curIdx = RUN_FLOW.indexOf(status)
-  return (
-    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
-      {RUN_FLOW.map((s, i) => {
-        const active = i === curIdx
-        const done = curIdx >= 0 && i < curIdx
-        return (
-          <span key={s} style={{
-            fontSize: 9.5, fontWeight: 600, padding: '3px 8px', borderRadius: 99,
-            background: active ? C.purple : done ? 'rgba(124,58,237,0.10)' : 'rgba(107,107,123,0.08)',
-            color: active ? '#fff' : done ? C.purple : C.muted,
-            border: `1px solid ${active ? C.purple : C.border}`,
-          }}>{s}</span>
-        )
-      })}
-    </div>
-  )
-}
-
 // ── AuditCard ─────────────────────────────────────────────────────
 function AuditCard({ companyId, refreshKey }: { companyId: string; refreshKey: number }) {
   const [rows, setRows] = useState<any[]>([])
@@ -902,215 +933,6 @@ function AuditCard({ companyId, refreshKey }: { companyId: string; refreshKey: n
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-// ── Run summary stats bar (statutory totals + variance vs last month) ──
-const inrShort = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
-function RunSummaryCard({ run, refreshKey }: { run: PayrollRun; refreshKey: number }) {
-  const [sum, setSum] = useState<RunSummary | null>(null)
-  const [loading, setLoading] = useState(true)
-  useEffect(() => { let live = true; setLoading(true); loadRunSummary(run).then(x => { if (live) { setSum(x); setLoading(false) } }); return () => { live = false } }, [run.id, run.status, refreshKey])
-  if (loading) return <div style={{ marginTop: 10, fontSize: 11, color: C.muted }}>Loading summary…</div>
-  if (!sum || sum.employees === 0) return null
-  const tiles: { l: string; v: string; c?: string }[] = [
-    { l: 'Employees', v: String(sum.employees) },
-    { l: 'Gross', v: inrShort(sum.gross) },
-    { l: 'Net Pay', v: inrShort(sum.net), c: C.success },
-    { l: 'EPF (ee)', v: inrShort(sum.epf) },
-    { l: 'ESIC (ee)', v: inrShort(sum.esic) },
-    { l: 'PT', v: inrShort(sum.pt) },
-    { l: 'LWF', v: inrShort(sum.lwf) },
-    { l: 'TDS', v: inrShort(sum.tds) },
-    { l: 'VPF', v: inrShort(sum.vpf) },
-    { l: 'NPS', v: inrShort(sum.nps) },
-    { l: 'Loan EMI', v: inrShort(sum.loanEmi) },
-    { l: 'Flexi reimb.', v: inrShort(sum.flexi) },
-    { l: 'Employer PF', v: inrShort(sum.employerPf) },
-    { l: 'Employer ESIC', v: inrShort(sum.employerEsic) },
-    { l: 'Gratuity', v: inrShort(sum.gratuity) },
-  ]
-  return (
-    <div style={{ marginTop: 12, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-        <div style={{ fontSize: 12, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.04em' }}>Run Summary</div>
-        {sum.variancePct != null && (
-          <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: sum.variancePct > 0 ? 'rgba(220,38,38,0.10)' : 'rgba(5,150,105,0.10)', color: sum.variancePct > 0 ? C.red : C.success }}>
-            {sum.variancePct > 0 ? '▲' : '▼'} {Math.abs(sum.variancePct)}% net vs last month
-          </span>
-        )}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
-        {tiles.map(t => (
-          <div key={t.l} style={{ background: '#FAFAF8', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px' }}>
-            <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em' }}>{t.l}</div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: t.c || C.navy, marginTop: 2 }}>{t.v}</div>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── RunTab ────────────────────────────────────────────────────────
-function RunTab({ companyId, headerFy }: { companyId: string; headerFy: string }) {
-  const [runs, setRuns] = useState<PayrollRun[]>([])
-  const [loading, setLoading] = useState(true)
-  const fy = headerFy                                    // FY comes from the page header now
-  const [month, setMonth] = useState(1)
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [refreshKey, setRefreshKey] = useState(0)
-  const allCompanies = !companyId
-
-  async function reload() {
-    setLoading(true)
-    setRuns(await loadRuns(companyId, fy))               // '' companyId = all companies · scoped to selected FY
-    setLoading(false)
-    setRefreshKey(k => k + 1)
-  }
-  useEffect(() => { reload() }, [companyId, fy])
-
-  async function create() {
-    if (!companyId) { setErr('Pick a specific company above to create a payroll month.'); return }
-    setErr(''); setBusy(true)
-    const { error } = await createRun(companyId, fy.trim(), month)
-    setBusy(false)
-    if (error) { setErr(error); return }
-    reload()
-  }
-
-  async function advance(run: PayrollRun) {
-    setBusy(true)
-    const { error } = await advanceRun(run)
-    setBusy(false)
-    if (error) { setErr(error); return }
-    reload()
-  }
-
-  async function cancel(run: PayrollRun) {
-    setBusy(true)
-    await cancelRun(run)
-    setBusy(false)
-    reload()
-  }
-
-  async function sync(run: PayrollRun) {
-    setErr(''); setBusy(true)
-    const { error, count } = await syncRunEmployees(run)
-    setBusy(false)
-    if (error) { setErr(error); return }
-    setErr(''); alert(`Synced ${count} employees from HRMS into ${run.period_label}.`)
-    reload()
-  }
-
-  async function calculate(run: PayrollRun) {
-    setErr(''); setBusy(true)
-    const { error, result } = await calculateRun(run)
-    setBusy(false)
-    if (error) { setErr(error); return }
-    const r = result!
-    alert(`Payroll calculated for ${run.period_label}.\n\nProcessed: ${r.processed} employees${r.skipped ? ` · Skipped: ${r.skipped}` : ''}\nGross: ₹${Math.round(r.totalGross).toLocaleString('en-IN')}\nNet payable: ₹${Math.round(r.totalNet).toLocaleString('en-IN')}${r.errors.length ? `\n\n${r.errors.length} warning(s) — first: ${r.errors[0]}` : ''}`)
-    reload()
-  }
-
-  async function exportRegister(run: PayrollRun) {
-    setBusy(true)
-    try {
-      const rows = await loadRunRegister(run.id)
-      if (!rows.length) { alert('No payroll lines for this run yet — sync + process first.'); setBusy(false); return }
-      const allKeys = Array.from(rows.reduce((s, r) => { Object.keys(r).forEach(k => s.add(k)); return s }, new Set<string>()))
-      const wb = XLSX.utils.book_new()
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows, { header: allKeys }), 'Register')
-      XLSX.writeFile(wb, `EZER_Payroll_Register_${(run.period_label || run.fy).replace(/\s+/g, '_')}.xlsx`)
-    } catch (e: any) { alert('Export failed: ' + (e?.message || 'unknown error')) }
-    setBusy(false)
-  }
-
-  async function exportNeft(run: PayrollRun) {
-    setBusy(true)
-    try {
-      const rows = await buildNeftRows(run.id)
-      if (!rows.length) { alert('No payable lines for this run yet — calculate payroll first.'); setBusy(false); return }
-      const head = ['Beneficiary Name', 'Emp Code', 'Account (last4)', 'IFSC', 'Amount', 'Narration']
-      const body = rows.map(r => [r.beneficiary_name, r.emp_code, r.account_last4, r.ifsc_code, r.amount, `${r.narration}-${(run.period_label || run.fy).replace(/\s+/g, '')}`])
-      const csv = '﻿' + [head, ...body].map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
-      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }))
-      const a = document.createElement('a'); a.href = url; a.download = `EZER_NEFT_${(run.period_label || run.fy).replace(/\s+/g, '_')}.csv`; a.click(); URL.revokeObjectURL(url)
-      const total = rows.reduce((t, r) => t + Number(r.amount), 0)
-      alert(`NEFT file generated · ${rows.length} beneficiaries · Total ₹${Math.round(total).toLocaleString('en-IN')}.\n\nNote: full account numbers are encrypted — the file carries the masked last-4 + IFSC. Merge with the beneficiary master before bank upload.`)
-    } catch (e: any) { alert('NEFT export failed: ' + (e?.message || 'unknown error')) }
-    setBusy(false)
-  }
-
-  return (
-    <div>
-      <div style={S.card}>
-        <div style={S.cardTitle}>Create payroll month · FY {fy}</div>
-        {allCompanies ? (
-          <div style={{ fontSize: 12.5, color: C.muted }}>You&apos;re viewing <b>Group Companies</b> (FY {fy}). Pick a specific company in the header to create a new payroll month.</div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 10, alignItems: 'end' }}>
-            <div>
-              <label style={S.label}>Month</label>
-              <select style={S.input} value={month} onChange={e => setMonth(Number(e.target.value))}>
-                {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-              </select>
-            </div>
-            <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={create}>Create payroll month</button>
-          </div>
-        )}
-        {err && <div style={{ color: C.red, fontSize: 12, marginTop: 8 }}>{err}</div>}
-      </div>
-
-      {loading ? <div style={{ color: C.muted, fontSize: 12 }}>Loading…</div> : runs.length === 0 ? (
-        <div style={S.card}><div style={{ color: C.muted, fontSize: 12 }}>No payroll months for FY {fy}{allCompanies ? ' across any company' : ''} yet.{!allCompanies ? ' Create one above.' : ''}</div></div>
-      ) : runs.map(run => {
-        const pill = statusPill(run.status)
-        const ns = nextStatus(run.status)
-        const isLocked = run.status === 'LOCKED'
-        const isCancelled = run.status === 'CANCELLED'
-        return (
-          <div key={run.id} style={S.card}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: C.navy }}>{run.period_label || `${run.fy} · M${run.month}`}</div>
-              {allCompanies && run.company_name && <Badge text={run.company_name} bg="rgba(30,27,75,0.08)" color={C.navy} />}
-              <Badge text={run.run_type} bg="rgba(124,58,237,0.10)" color={C.purple} />
-              <span style={{ display: 'inline-block', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: pill.bg, color: pill.color }}>{run.status}</span>
-              <span style={{ fontSize: 12, color: C.muted }}>{run.emp_count || 0} employees</span>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-                {!isCancelled && (
-                  <button style={{ ...S.btnOutline, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => exportRegister(run)}>📥 Register</button>
-                )}
-                {!isCancelled && ['CALCULATED', 'AI_CHECKED', 'APPROVED', 'DISBURSED', 'LOCKED'].includes(run.status) && (
-                  <button style={{ ...S.btnOutline, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => exportNeft(run)}>🏦 NEFT File</button>
-                )}
-                {!isLocked && !isCancelled && (
-                  <button style={{ ...S.btnOutline, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => sync(run)}>⟳ Sync employees</button>
-                )}
-                {!isLocked && !isCancelled && ['SYNCED', 'ATTENDANCE_LOCKED', 'CALCULATED'].includes(run.status) && (
-                  <button style={{ ...S.btnOutline, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => calculate(run)}>⚙️ {run.status === 'CALCULATED' ? 'Re-calculate' : 'Calculate'}</button>
-                )}
-                {!isLocked && !isCancelled && ns && (
-                  <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => advance(run)}>Advance → {ns}</button>
-                )}
-                {!isLocked && !isCancelled && (
-                  <button style={S.btnDanger} disabled={busy} onClick={() => cancel(run)}>Cancel</button>
-                )}
-              </div>
-            </div>
-            {!isCancelled && <Stepper status={run.status} />}
-            {['CALCULATED', 'AI_CHECKED', 'APPROVED', 'DISBURSED', 'LOCKED'].includes(run.status) && <RunSummaryCard run={run} refreshKey={refreshKey} />}
-          </div>
-        )
-      })}
-
-      <div style={S.note}><b>⟳ Sync employees</b> freezes the HRMS employee master + attendance into this month's snapshot (OPEN → SYNCED). <b>⚙️ Calculate</b> runs the payroll engine — pro-rata earnings, EPF/ESIC/PT/LWF, and VPF/NPS/loan/TDS deductions — and writes each employee's payroll line (→ CALCULATED). A live <b>Run Summary</b> (statutory totals + variance vs last month) appears once calculated. Export the computed lines via <b>📥 Register</b> and the salary bank file via <b>🏦 NEFT File</b>.</div>
-
-      <div style={{ marginTop: 14 }}>
-        <AuditCard companyId={companyId} refreshKey={refreshKey} />
-      </div>
     </div>
   )
 }

@@ -18,6 +18,9 @@ export interface SalaryBreakup {
   payType: string | null
   // earnings (monthly)
   basic: number; hra: number; statBonus: number; conveyance: number; special: number; gross: number
+  // special is NET of declared flexi. specialGross is the contractual figure and
+  // flexiMonthly what was carved out, so the components still add up to gross.
+  specialGross: number; flexiMonthly: number
   // employer cost (monthly)
   erPf: number; erEsic: number; gratuity: number
   // deductions (monthly) + net take-home
@@ -145,7 +148,7 @@ async function loadSalaryFromMaster(employeeId: string): Promise<SalaryStructure
     const gst = isConsultant ? Math.round(pay * 0.18) : 0
     const detail: SalaryBreakup = {
       payType: isConsultant ? 'Consultant Fee' : 'Stipend',
-      basic: pay, hra: 0, statBonus: 0, conveyance: 0, special: 0, gross: pay,
+      basic: pay, hra: 0, statBonus: 0, conveyance: 0, special: 0, gross: pay, specialGross: 0, flexiMonthly: 0,
       erPf: 0, erEsic: 0, gratuity: 0, eePf: 0, eeEsic: 0, pt: 0, lwf: 0, net: pay,
       fixedMonthly: pay, variableAnnual: 0, annualCtc: pay * 12, totalCtc: pay * 12,
       simpleKind: isConsultant ? 'CONSULTANT' : 'STIPEND',
@@ -157,13 +160,15 @@ async function loadSalaryFromMaster(employeeId: string): Promise<SalaryStructure
   // Regular / contract: full breakup from salary_structures (fallback to ctc_master).
   let detail: SalaryBreakup | null = null
   if (sal) {
-    const gross = n(sal.gross_monthly) || (n(sal.basic_monthly) + n(sal.hra_monthly) + n(sal.statutory_bonus) + n(sal.conveyance) + n(sal.special_allowance))
+    const gross = n(sal.gross_monthly) || (n(sal.basic_monthly) + n(sal.hra_monthly) + n(sal.statutory_bonus) + n(sal.conveyance) + (n(sal.special_allowance_gross) || n(sal.special_allowance)))
     const fixedMonthly = gross + n(sal.employer_pf) + n(sal.employer_esic) + n(sal.gratuity_monthly)
     const variableAnnual = n(sal.variable_annual) || n(ctc?.annual_variable)
     detail = {
       payType: sal.pay_type || 'Regular',
       basic: n(sal.basic_monthly), hra: n(sal.hra_monthly), statBonus: n(sal.statutory_bonus),
       conveyance: n(sal.conveyance), special: n(sal.special_allowance), gross,
+      specialGross: n(sal.special_allowance_gross) || n(sal.special_allowance),
+      flexiMonthly: Math.max(0, n(sal.special_allowance_gross) - n(sal.special_allowance)),
       erPf: n(sal.employer_pf), erEsic: n(sal.employer_esic), gratuity: n(sal.gratuity_monthly),
       eePf: n(sal.employee_pf), eeEsic: n(sal.employee_esic), pt: n(sal.pt_monthly), lwf: n(sal.lwf_monthly),
       net: n(sal.net_take_home) || (gross - n(sal.employee_pf) - n(sal.employee_esic) - n(sal.pt_monthly) - n(sal.lwf_monthly)),
@@ -176,6 +181,7 @@ async function loadSalaryFromMaster(employeeId: string): Promise<SalaryStructure
     const gross = perMonth(ctc.annual_ctc) || 0
     detail = {
       payType: 'Regular', basic, hra, statBonus: 0, conveyance: 0, special: Math.max(0, gross - basic - hra), gross,
+      specialGross: Math.max(0, gross - basic - hra), flexiMonthly: 0,
       erPf: 0, erEsic: 0, gratuity: 0, eePf: 0, eeEsic: 0, pt: 0, lwf: 0, net: gross,
       fixedMonthly: gross, variableAnnual: n(ctc.annual_variable), annualCtc: n(ctc.annual_ctc), totalCtc: n(ctc.annual_ctc),
     }

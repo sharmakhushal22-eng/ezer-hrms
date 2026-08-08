@@ -164,7 +164,6 @@ export interface DirectoryEntry {
   id: string; emp_code: string; full_name: string; designation: string | null
   dept_name: string | null; location_name: string | null; company_name: string | null
   mobile: string | null; office_email: string | null; personal_email: string | null
-  previous_company: string | null
 }
 export interface EssNotification { id: string; category: string | null; title: string; body: string | null; link: string | null; is_read: boolean; created_at: string }
 export interface ServiceRequest { id: string; request_type: string; request_data: any; is_confidential: boolean; status: string; assigned_to: string | null; submitted_at: string; resolution_note: string | null }
@@ -214,9 +213,12 @@ export async function updateEmployeePhoto(employeeId: string, dataUrl: string | 
 }
 
 export async function loadDirectory(): Promise<DirectoryEntry[]> {
-  const { data } = await supabase.from('employees')
-    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, previous_company, blacklisted, last_working_date, departments(dept_name), locations!location_id(location_name), companies(company_name)')
+  // Throw rather than return [] — a rejected query previously rendered as a silently
+  // empty directory, which is indistinguishable from "no colleagues found".
+  const { data, error } = await supabase.from('employees')
+    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, blacklisted, last_working_date, departments(dept_name), locations!location_id(location_name), companies(company_name)')
     .order('full_name')
+  if (error) throw new Error(error.message)
   const t0 = new Date(); t0.setHours(0, 0, 0, 0)
   return (data || [])
     .filter((e: any) => !e.blacklisted && !(e.last_working_date && new Date(e.last_working_date) < t0))
@@ -225,7 +227,6 @@ export async function loadDirectory(): Promise<DirectoryEntry[]> {
       dept_name: e.departments?.dept_name || null, location_name: e.locations?.location_name || null,
       company_name: e.companies?.company_name || null,
       mobile: e.mobile, office_email: e.office_email, personal_email: e.personal_email,
-      previous_company: e.previous_company || null,
     }))
 }
 

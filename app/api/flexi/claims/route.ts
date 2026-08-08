@@ -49,15 +49,37 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'REJECT') {
-      const { ids, reviewed_by, approved_by, rejection_reason } = body
+      const { ids, reviewed_by, approved_by, rejection_reason, approved_amount } = body
       if (!ids?.length) return NextResponse.json({ error: 'No claim ids' }, { status: 400 })
       if (!rejection_reason?.trim()) return NextResponse.json({ error: 'Rejection reason required' }, { status: 400 })
-      // Rejected claims DO NOT reduce the limit — balance counts APPROVED only.
-      const { error } = await supa.from('flexi_claims')
-        .update({ status: 'REJECTED', reviewed_by: reviewed_by || null, approved_by: approved_by || 'Payroll Manager', reviewed_at: new Date().toISOString(), rejection_reason })
-        .in('id', ids)
+
+      // Partial rejection: ₹3,000 claimed but only ₹2,000 has a valid bill → ₹1,000 is
+      // what loses its exemption. The rejected part is what Payroll taxes (sql99), so it
+      // is stored explicitly rather than inferred from the status alone.
+      // Only offered for a single claim — a shared amount across a bulk selection would
+      // be meaningless.
+      const partial = ids.length === 1 && approved_amount !== undefined && approved_amount !== null && approved_amount !== ''
+      const patch: Record<string, any> = {
+        status: 'REJECTED', reviewed_by: reviewed_by || null,
+        approved_by: approved_by || 'Payroll Manager',
+        reviewed_at: new Date().toISOString(), rejection_reason,
+      }
+      if (partial) {
+        const { data: claim } = await supa.from('flexi_claims').select('claim_amount').eq('id', ids[0]).single()
+        const claimed = Number(claim?.claim_amount) || 0
+        const ok = Math.max(0, Math.min(Number(approved_amount) || 0, claimed))
+        patch.approved_amount = ok
+        patch.rejected_amount = claimed - ok
+        // Everything proven → nothing to tax, so it is an approval, not a rejection.
+        if (ok >= claimed) { patch.status = 'APPROVED'; patch.rejection_reason = null }
+      } else {
+        // Rejected outright: the whole claim is taxable.
+        patch.approved_amount = 0
+      }
+
+      const { error } = await supa.from('flexi_claims').update(patch).in('id', ids)
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-      return NextResponse.json({ success: true, rejected: ids.length })
+      return NextResponse.json({ success: true, rejected: ids.length, partial })
     }
 
     if (action === 'REQUEST_LIMIT') {
