@@ -150,9 +150,25 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
   const calcPaid = f.paid_days.trim() === '' ? formulaPaid : nn(f.paid_days)
   const calcTotal = nn(f.weekly_off) + nn(f.earned_leave) + nn(f.casual_leave) + nn(f.sick_leave) + nn(f.other_leave) + calcPaid - nn(f.absent_days)
   const maxD = editing?.maxDays ?? null
+
+  // Typing Absent Days re-derives Paid Days as Max Days − Absent, because that is what
+  // the number means: every day of the month the employee was on roll, minus the ones
+  // they were away for. Max Days rather than days-in-month, so a mid-month leaver is
+  // measured against the days they were actually here.
+  // It is written into the field, not just displayed, so what HR sees is what is saved —
+  // a derived-but-invisible value is how a payslip ends up disagreeing with the screen
+  // that produced it. HR can still type over it afterwards.
+  function setAbsent(v: string) {
+    setF(prev => (maxD == null ? { ...prev, absent_days: v } : { ...prev, absent_days: v, paid_days: s(maxD - nn(v)) }))
+  }
+
   const violations = maxD == null ? [] : [
     ...(calcPaid > maxD ? [`Paid Days ${calcPaid} > Max Days ${maxD}`] : []),
     ...(calcTotal > maxD ? [`Total Days ${calcTotal} > Max Days ${maxD}`] : []),
+    // Reachable only by typing more absent days than the month has. Payroll floors it at
+    // zero anyway, so saving it would just hide a typo until someone asks why the salary
+    // was wrong.
+    ...(calcPaid < 0 ? [`Paid Days ${calcPaid} is negative — Absent Days cannot exceed Max Days ${maxD}`] : []),
   ]
 
   async function process() {
@@ -288,13 +304,14 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
               <NumIn label="Casual Leave" value={f.casual_leave} onChange={v => setF({ ...f, casual_leave: v })} />
               <NumIn label="Sick Leave" value={f.sick_leave} onChange={v => setF({ ...f, sick_leave: v })} />
               <NumIn label="Other Leave" value={f.other_leave} onChange={v => setF({ ...f, other_leave: v })} />
-              <NumIn label="Absent Days" value={f.absent_days} onChange={v => setF({ ...f, absent_days: v })} />
+              <NumIn label="Absent Days" value={f.absent_days} onChange={setAbsent} />
               <NumIn label="OT Hours" value={f.ot_hours} onChange={v => setF({ ...f, ot_hours: v })} />
               <NumIn label="Paid Days" value={f.paid_days} onChange={v => setF({ ...f, paid_days: v })} />
             </div>
 
             <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.5 }}>
-              <b>Paid Days</b> is stored exactly as typed. Clear the box to derive it from the leaves instead — that would give <b>{formulaPaid}</b> = (EL + CL + SL + Other) − Absent.
+              Typing <b>Absent Days</b> sets <b>Paid Days = Max Days − Absent</b>{maxD != null && <> — abhi <b>{maxD} − {nn(f.absent_days)} = {maxD - nn(f.absent_days)}</b></>}. Type over it if the case needs something else; whatever is in the box is what gets saved.
+              <br />Clear the box entirely and the server falls back to the leave formula instead — that would give <b>{formulaPaid}</b> = (EL + CL + SL + Other) − Absent.
               <br />Total Days = Weekly Off + EL + CL + SL + Other + Paid Days − Absent. Both Paid Days and Total Days must be ≤ Max Days, exactly as on upload.
             </div>
 

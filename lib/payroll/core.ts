@@ -319,6 +319,91 @@ export const MM_GROUPS: MmGroup[] = [
   },
 ]
 
+// ── The sheet a payroll run hands back ─────────────────────────────────────
+// Not the Month Master. The Month Master is 167 columns of everything the month knows;
+// this is the working out: who, the inputs each formula read, and the numbers those
+// formulas produced — in that order, so a row reads left to right as the calculation
+// itself. Everything else (addresses, PF scheme flags, arrear side-tables, taxable
+// perquisites) is real data that has no part in this arithmetic, and carrying it here
+// only makes the one thing HR is checking harder to find.
+//
+// It deliberately matches the layout of the April salary-calculation sheet, because
+// that is the sheet these numbers get checked against.
+export const RUN_SHEET_COLS: string[] = [
+  // who
+  'Company', 'employee_code', 'full_name', 'department', 'employment_status',
+  // what the pro-rata ratio is built from
+  'payday', 'days_in_month', 'paid_days',
+  // the structured monthly figures each Earn_X is computed from
+  'basic_monthly', 'hra_monthly', 'conveyance', 'special_allowance', 'statutory_bonus',
+  'flexi_car', 'flexi_driver', 'flexi_fuel', 'flexi_tel', 'flexi_meal', 'flexi_device',
+  'flexi_attire', 'flexi_pda', 'flexi_lta', 'flexi_chedu', 'flexi_hostel',
+  'gross_monthly',
+  // what the formulas produced
+  ...EARN_COLS,
+  // paid as uploaded — never pro-rated
+  'pay_incentive', 'pay_variable', 'pay_bonus', 'pay_buyout',
+  'earn_gross_monthly',
+  // the deduction side, in the order the April sheet totals them
+  // The structural statutory figures (epf_wage, employee_pf, employee_esic, pt_monthly,
+  // lwf_monthly) are deliberately NOT here. They come frozen from salary_structures and
+  // are now superseded by the computed blocks below — epf_wage_base / epf_employee and
+  // esic_wages / esic_employee. Showing both invites the reader to reconcile two numbers
+  // that were never meant to agree.
+  'ded_parking', 'ded_insurance', 'ded_canteen',
+  'total_deduction',
+
+  // Code of Wages — the 50% basic floor. Reported alongside the structured basic
+  // rather than replacing it: this figure is a compliance measure, and folding it
+  // into basic would raise gross and quietly breach the CTC it came from.
+  // annual_ctc and ctc_monthly are left out: the same employee has three defensible
+  // "CTC" figures (agreed CTC, fixed cost, total cost) that differ from each other, and
+  // putting one of them next to earned pay reads as a contradiction rather than context.
+  'basic_50_floor', 'basic_for_wages', 'earn_basic_for_wages', 'basic_50_applied',
+
+  // EPF · EPS · EDLI · Admin. The inputs sit next to the outputs on purpose — a
+  // ceiling that did or did not apply is unarguable when pf_gross_limit, the actual
+  // wage and the resulting base are all on the same row.
+  'pf_applicable', 'pf_gross_limit', 'epf_capped',
+  'epf_wages_actual', 'epf_wage_base',
+  'epf_employee', 'epf_employer_total', 'epf_employer_diff',
+  'eps_wages', 'eps_contribution',
+  'edli_wages', 'edli_contribution',
+  'admin_wages', 'admin_charges', 'admin_charges_payable',
+
+  // ESIC. The reason column earns its place: "covered" and "not covered" are both
+  // answers an inspector can question, and the row has to say which rule decided it.
+  'esic_applicable', 'esic_number', 'esic_wage_limit',
+  // Both wage definitions, side by side. esic_wages_cw is always computed; whether the
+  // ceiling is tested on it or on plain gross is a config switch, and esic_basis records
+  // which one this row was actually judged by — otherwise a covered/not-covered call
+  // cannot be explained six months later when the switch has since been flipped.
+  'esic_wages_cw', 'esic_threshold_wage', 'esic_basis',
+  'esic_covered', 'esic_cover_reason',
+  'esic_wages', 'esic_daily_wage', 'esic_employee_exempt',
+  'esic_employee', 'esic_employer', 'esic_total',
+
+  // Professional Tax. pt_rate_found is here because a ₹0 PT has two very different
+  // causes — the state levies none, or nobody has configured the state — and only that
+  // flag separates them. pt_reason spells out which, in words.
+  'pt_state', 'pt_gross', 'pt_slab', 'pt_rate_found', 'pt_amount', 'pt_reason',
+
+  // Labour Welfare Fund. The employer half is reported alongside the employee half
+  // because LWF is one of the few deductions where the employer pays the larger share —
+  // Maharashtra is ₹25 from the employee and ₹75 from the company — and a challan built
+  // from the employee column alone would be short by three quarters.
+  'lwf_state_used', 'lwf_month_applicable', 'lwf_exit_exempt', 'lwf_rate_found',
+  'lwf_employee', 'lwf_employer', 'lwf_reason',
+
+  // Appraisal arrear, head by head. arrear_months is here so the employee's first
+  // question — "which months is this for?" — is answered on the row itself rather than
+  // by someone re-deriving it from an effective date months later.
+  'arrear_appraisal_effective_date', 'arrear_months',
+  'arrear_basic', 'arrear_hra', 'arrear_special_allowance',
+  'arrear_epf_wage', 'arrear_employee_pf', 'arrear_employer_pf',
+  'arrear_total', 'final_net_pay',
+]
+
 // Month-to-month attendance columns. These are *expected* to differ every month, so the
 // change table can hold them out on request rather than drowning the salary count in them.
 export const MM_ATTENDANCE_COLS: string[] = [
@@ -524,7 +609,20 @@ export async function loadRunRegister(runId: string): Promise<Record<string, any
   return (lines || []).map((l: any) => {
     const a = attBy.get(l.employee_id) || {}
     const s = snapBy.get(l.employee_id) || {}
-    const clean = (o: any, skip: string[]) => { const r: any = {}; for (const [k, v] of Object.entries(o || {})) if (!skip.includes(k)) r[k] = (v === null || v === undefined) ? '' : (typeof v === 'object' ? JSON.stringify(v) : v); return r }
+    // Objects are dropped, not stringified. earnings_json and deductions_json are the two
+    // that exist today; they were landing in the register as raw JSON blobs, which is
+    // unreadable in a spreadsheet cell and unusable in a salary register. Everything they
+    // hold is already a real column here — paid_days, total_days, ded_epf, ded_pt and the
+    // rest — so nothing is lost. The typeof check keeps any JSONB column added later from
+    // silently reappearing the same way.
+    const clean = (o: any, skip: string[]) => {
+      const r: any = {}
+      for (const [k, v] of Object.entries(o || {})) {
+        if (skip.includes(k) || (v !== null && typeof v === 'object')) continue
+        r[k] = v === null || v === undefined ? '' : v
+      }
+      return r
+    }
     return {
       employee_code: s.employee_code || '', full_name: s.full_name || '', department: s.department || '', location: s.location || '',
       annual_ctc: s.annual_ctc ?? '', basic_monthly: s.basic_monthly ?? '', hra_monthly: s.hra_monthly ?? '',

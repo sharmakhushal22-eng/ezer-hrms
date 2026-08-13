@@ -28,6 +28,8 @@ import ManualVoucher from '@/components/payroll/ManualVoucher'
 import ArrearPayments from '@/components/payroll/ArrearPayments'
 import MonthSync from '@/components/payroll/MonthSync'
 import RunCycle from '@/components/payroll/RunCycle'
+import Appraisal from '@/components/payroll/Appraisal'
+import LockUnlock from '@/components/payroll/LockUnlock'
 import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutoryPanel'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 
@@ -127,18 +129,31 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
   label: string; isActive: boolean; sections: SubTab[]; activeSub: string; activeChild?: string; onPick: (id: string, childId?: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
+  const [alignRight, setAlignRight] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())   // which sections have their children expanded
   const btnRef = useRef<HTMLButtonElement>(null)
   const built = sections.filter(s => s.built).length
-  // Position the menu with fixed coordinates off the button so it escapes the tab bar's
-  // horizontal-scroll clipping and never needs scrolling to see the options.
+
+  // The menu is anchored to the button by LAYOUT (position: absolute inside the button's
+  // relative wrapper), not by viewport coordinates written into position: fixed.
+  //
+  // It used to measure getBoundingClientRect() and place a fixed-position panel at those
+  // numbers. That silently breaks whenever anything between the button and the viewport
+  // creates a containing block — a transform, a filter, contain: paint — because fixed
+  // then resolves against that ancestor instead of the screen, and the panel lands
+  // hundreds of pixels away. It looked fine on most machines and badly wrong on others,
+  // which is exactly how that class of bug behaves. Layout anchoring cannot drift: the
+  // menu is a child of the button's wrapper, so it goes where the button is, full stop.
+  //
+  // The original reason for fixed — escaping the tab bar's horizontal scroll — no longer
+  // exists; the bar wraps onto multiple rows instead of scrolling.
   const toggle = () => {
     if (sections.length === 0) { onPick(''); return }   // no sub-sections (e.g. Dashboard) → just activate the tab
-    if (!open && btnRef.current) {
-      const r = btnRef.current.getBoundingClientRect()
-      const left = Math.max(8, Math.min(r.left, window.innerWidth - 274))
-      setPos({ top: r.bottom + 6, left })
+    if (!open) {
+      // Only decides which EDGE the menu hangs from. If this measurement is off the menu
+      // is still glued to the button — it just opens leftward instead of rightward.
+      const r = btnRef.current?.getBoundingClientRect()
+      setAlignRight(!!r && typeof window !== 'undefined' && r.left > window.innerWidth * 0.55)
       setExpanded(new Set())   // each time the menu opens, sub-sections start collapsed
     }
     setOpen(o => !o)
@@ -155,10 +170,16 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
         {label}
         {sections.length > 0 && <span style={{ fontSize: 10, opacity: .9, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}>▾</span>}
       </button>
-      {open && sections.length > 0 && pos && (
+      {open && sections.length > 0 && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000 }} />
-          <div style={{ position: 'fixed', top: pos.top, left: pos.left, zIndex: 1001, minWidth: 262, maxHeight: 'calc(100vh - 96px)', overflowY: 'auto', background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6 }}>
+          <div style={{
+            position: 'absolute', top: 'calc(100% + 6px)',
+            ...(alignRight ? { right: 0 } : { left: 0 }),
+            zIndex: 1001, minWidth: 262, maxHeight: '70vh', overflowY: 'auto',
+            background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12,
+            boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6,
+          }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em', padding: '6px 10px 8px' }}>Sections · {built}/{sections.length} built</div>
             {sections.map(s => {
               const on = isActive && s.id === activeSub
@@ -326,7 +347,7 @@ function employeeSubs(companyId: string): SubTab[] {
   return [
     { id: 'master', label: 'Employee & CTC Master', icon: '👥', built: true, render: () => <EmployeesTab companyId={companyId} /> },
     { id: 'bank', label: 'Bank Details', icon: '🏦', built: true, render: () => <BankDetailsTab companyId={companyId} /> },
-    { id: 'revision', label: 'Salary Revision & Arrears', icon: '📈', desc: 'Versioned CTC with effective dates, increment letters and automatic arrear computation.' },
+    { id: 'revision', label: 'Salary Revision & Arrears', icon: '📈', built: true, render: () => <Appraisal /> },
   ]
 }
 
@@ -336,7 +357,7 @@ function runSubs(companyId: string, fy: string): SubTab[] {
     { id: 'sync', label: 'Data Sync', icon: '🔄', built: true, render: () => <MonthSync companyId={companyId} fy={fy} /> },
     { id: 'uploaders', label: 'Bulk Uploaders', icon: '📤', built: true, render: () => <ManualVoucher companyId={companyId} fy={fy} /> },
     { id: 'arrearpay', label: 'Arrear & Payments', icon: '💸', built: true, render: () => <ArrearPayments companyId={companyId} fy={fy} /> },
-    { id: 'lock', label: 'Lock / Unlock', icon: '🔒', built: true, href: '/dashboard/payroll', desc: 'Lives in Configuration → Payroll Month → 🔒 Lock / Unlock Month, single or bulk. Locking freezes the month master: every category sync is refused by the database and payroll can no longer be recalculated.' },
+    { id: 'lock', label: 'Lock / Unlock', icon: '🔒', built: true, render: () => <LockUnlock companyId={companyId} fy={fy} /> },
     { id: 'minwage', label: 'Minimum Wages Check', icon: '🛡️', desc: 'Flags employees whose gross falls below the applicable state minimum wage before payroll is processed.' },
   ]
 }
@@ -345,7 +366,11 @@ function statutorySubs(fy: string): SubTab[] {
   return [
     { id: 'pf', label: 'PF / EPF + VPF', icon: '🏦', built: true, href: '/dashboard/ess', desc: 'EPF @12% of capped wage is computed in the engine; VPF opt-in is available in the employee ESS portal.' },
     { id: 'esic', label: 'ESIC', icon: '🩺', built: true, desc: '0.75% employee / 3.25% employer, auto-applied for gross ≤ ₹21,000 during Calculate. Challan export is planned.' },
-    { id: 'ptlwf', label: 'PT · LWF', icon: '⚖️', built: true, desc: 'State-wise Professional Tax slabs and Labour Welfare Fund are applied by the payroll engine.' },
+    // Same components the Configuration menu shows — one screen each, not copies:
+    // two LWF or PT screens would eventually disagree, and whichever one HR happened to
+    // open would decide what they believed.
+    { id: 'lwf', label: 'LWF', icon: '🏛️', built: true, render: () => <LwfConfig /> },
+    { id: 'ptlwf', label: 'Professional Tax', icon: '⚖️', built: true, render: () => <PtConfig /> },
     { id: 'nps', label: 'NPS', icon: '🏛️', built: true, href: '/dashboard/ess', desc: 'Corporate NPS enrolment via ESS; 80CCD(2) contribution is deducted in the engine.' },
     { id: 'tds', label: 'TDS Calculation', icon: '🧮', built: true, desc: 'Monthly TDS from each employee’s investment declaration feeds directly into the payroll run.' },
     { id: 'form16', label: 'Form 16 / 24Q', icon: '📄', desc: 'Quarterly 24Q returns and annual Form 16 generation for employees.' },

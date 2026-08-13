@@ -12,9 +12,15 @@
 // per-category sync lives in Data Sync, so neither is repeated here.
 import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
-import { loadRuns, loadRunsForPeriod, loadRunRegister, MONTHS, type PayrollRun } from '@/lib/payroll/core'
+import { loadRuns, loadRunsForPeriod, loadRunRegister, loadMonthMaster, RUN_SHEET_COLS, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { calculateRun } from '@/lib/payroll/engine'
-import { loadReadiness, blockerSummary, type Readiness, type ReadinessCheck } from '@/lib/payroll/readiness'
+import { SYNC_CATEGORIES, runCategorySync } from '@/lib/payroll/sync'
+import { lockEmployees } from '@/lib/payroll/lock'
+import {
+  loadSnapshotRows, computeReadiness, applyFilter, filterOptions, blockerSummary,
+  EMPTY_FILTER, isFiltered, NOT_ACTIVE,
+  type Readiness, type ReadinessCheck, type ReadinessFilter, type SnapshotRow,
+} from '@/lib/payroll/readiness'
 
 const C = {
   navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#6D28D9', purpleSoft: '#F3EEFF',
@@ -29,6 +35,20 @@ const periodLabel = (r: { period_label?: string | null; month?: number; fy?: str
   r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}`
 
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+
+// Run Payroll applies the earned-salary formulas before the engine runs, through the
+// same category sync that the Data Sync screen exposes — one implementation of
+// Earn_X = ROUND(X × paid_days / days_in_month), not two that can drift apart.
+const EARN_CAT = SYNC_CATEGORIES.find(c => c.key === 'earnings')
+// Then the statutory pass: 50% basic floor, EPF/EPS/EDLI/Admin, every rate read
+// from epf_config and wage_rules_config rather than written into the code.
+const EPF_CAT = SYNC_CATEGORIES.find(c => c.key === 'epf')
+const ESIC_CAT = SYNC_CATEGORIES.find(c => c.key === 'esic')
+const PT_CAT = SYNC_CATEGORIES.find(c => c.key === 'pt')
+const LWF_CAT = SYNC_CATEGORIES.find(c => c.key === 'lwf')
+// Last: arrear differences a back month against what it actually paid, so it needs the
+// other categories for this month settled first.
+const ARREAR_CAT = SYNC_CATEGORIES.find(c => c.key === 'arrear')
 
 // ── Tab strip button ───────────────────────────────────────────────────────
 // Defined outside the parent: a tab that re-mounts on every render loses its hover
@@ -147,13 +167,102 @@ function Banner({ tone, title, sub }: { tone: 'red' | 'green' | 'amber'; title: 
   )
 }
 
+// ── Filter bar ─────────────────────────────────────────────────────────────
+// Sits directly above the banner, because it defines the SCOPE the banner is judging.
+// Filtering here narrows the payroll run itself, not just the view: HR routinely has to
+// pay one late joiner or re-run one corrected salary out of three hundred, and doing
+// that by recalculating the whole month would silently rewrite 299 payslips nobody
+// asked to change. Everyone outside the filter keeps the line they already had.
+function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
+  rows: SnapshotRow[]
+  filter: ReadinessFilter
+  onChange: (patch: Partial<ReadinessFilter>) => void
+  onClear: () => void
+  matched: number
+  isGroup: boolean
+}) {
+  const { companies, locations, departments, statuses } = filterOptions(rows)
+  const on = isFiltered(filter)
+  const inp: React.CSSProperties = {
+    padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12,
+    background: '#fff', color: C.navy, fontFamily: font, outline: 'none',
+  }
+  const lbl: React.CSSProperties = { fontSize: 9.5, color: C.muted, display: 'block', marginBottom: 3 }
+  return (
+    <div style={{
+      background: on ? C.purpleSoft : '#F8F7FF', border: `1px solid ${on ? '#DDD6FE' : C.border}`,
+      borderRadius: 12, padding: '10px 12px', marginBottom: 14,
+    }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
+        {isGroup && companies.length > 1 && (
+          <div>
+            <label style={lbl}>Company</label>
+            <select style={{ ...inp, minWidth: 170 }} value={filter.company} onChange={e => onChange({ company: e.target.value })}>
+              <option value="">All companies</option>
+              {companies.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        )}
+        <div>
+          <label style={lbl}>Location</label>
+          <select style={{ ...inp, minWidth: 150 }} value={filter.location} onChange={e => onChange({ location: e.target.value })}>
+            <option value="">All locations</option>
+            {locations.map(l => <option key={l} value={l}>{l}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl}>Department</label>
+          <select style={{ ...inp, minWidth: 150 }} value={filter.department} onChange={e => onChange({ department: e.target.value })}>
+            <option value="">All departments</option>
+            {departments.map(d => <option key={d} value={d}>{d}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl}>Status</label>
+          <select style={{ ...inp, minWidth: 140 }} value={filter.status} onChange={e => onChange({ status: e.target.value })}>
+            <option value="">All statuses</option>
+            <option value="Active">Active</option>
+            <option value={NOT_ACTIVE}>Not active</option>
+            {/* The exact words in this month, for when "not active" is too broad. */}
+            {statuses.length > 0 && (
+              <optgroup label="Exactly">
+                {statuses.map(s => <option key={s} value={s}>{s}</option>)}
+              </optgroup>
+            )}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <label style={lbl}>Employee — code or name, paste a list too</label>
+          <input style={{ ...inp, width: '100%' }} value={filter.employee}
+            onChange={e => onChange({ employee: e.target.value })}
+            placeholder="SSM9001, SSM9002   ya   kavya" />
+        </div>
+        {on && (
+          <button onClick={onClear} style={{
+            padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff',
+            color: C.red, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer',
+          }}>Clear</button>
+        )}
+      </div>
+      <div style={{ fontSize: 10.5, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
+        {!on ? <>Koi filter nahi — payroll <b>poore month</b> par chalegi ({rows.length} employees).</>
+          : matched === 0
+            ? <b style={{ color: C.red }}>Is filter se ek bhi employee match nahi hua — chalane ko kuch hai hi nahi.</b>
+            : <>Filter chalu — payroll <b>sirf in {matched}</b> of {rows.length} employees par chalegi. Baaki {rows.length - matched} ki payslip jaisi hai waisi hi rahegi, aur mahina tab tak <b>CALCULATED nahi</b> hoga jab tak poora run na chale.</>}
+      </div>
+    </div>
+  )
+}
+
 // ── Screen ─────────────────────────────────────────────────────────────────
 export default function RunCycle({ companyId, headerFy }: { companyId: string; headerFy: string }) {
   const fy = headerFy
   const [runs, setRuns] = useState<PayrollRun[]>([])
   const [monthVal, setMonthVal] = useState('')
   const [monthRuns, setMonthRuns] = useState<PayrollRun[]>([])
-  const [rd, setRd] = useState<Readiness | null>(null)
+  const [rows, setRows] = useState<SnapshotRow[] | null>(null)
+  const [filter, setFilter] = useState<ReadinessFilter>(EMPTY_FILTER)
   const [tab, setTab] = useState('bank')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -181,15 +290,23 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
   }, [companyId, fy])
 
   const refresh = useCallback(async () => {
-    if (!monthVal) { setMonthRuns([]); setRd(null); return }
+    if (!monthVal) { setMonthRuns([]); setRows(null); return }
     setLoading(true); setErr('')
     try {
       const list = await loadRunsForPeriod(companyId, fy, Number(monthVal))
       setMonthRuns(list)
-      setRd(await loadReadiness(list.map(r => ({ id: r.id, company_name: r.company_name }))))
-    } catch (e: any) { setErr(e?.message || String(e)); setRd(null) } finally { setLoading(false) }
+      setRows(await loadSnapshotRows(list.map(r => ({ id: r.id, company_name: r.company_name }))))
+    } catch (e: any) { setErr(e?.message || String(e)); setRows(null) } finally { setLoading(false) }
   }, [companyId, fy, monthVal])
   useEffect(() => { refresh() }, [refresh])
+
+  // Two readings of the same month. `rd` follows the filter and drives what HR is
+  // looking at; `rdAll` ignores it and drives the Run button — a payroll cannot become
+  // runnable because someone narrowed the view to a location that happens to be clean.
+  const shown = rows ? applyFilter(rows, filter) : []
+  const rd: Readiness | null = rows ? computeReadiness(shown) : null
+  const rdAll: Readiness | null = rows ? computeReadiness(rows) : null
+  const filtering = isFiltered(filter)
 
   const sel = monthRuns[0] || null
   const label = sel ? periodLabel(sel) : monthVal ? `${MONTHS[Number(monthVal) - 1]} ${fy.split('-')[0]}` : ''
@@ -201,25 +318,110 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
   const runnable = monthRuns.filter(r => CALCULABLE.includes(r.status))
   const closed = monthRuns.length > 0 && runnable.length === 0
   const calculated = monthRuns.length > 0 && monthRuns.every(r => r.status !== 'OPEN' && r.status !== 'SYNCED' && r.status !== 'ATTENDANCE_LOCKED')
-  const blockers = rd?.blockers || []
-  const canRun = !!rd && blockers.length === 0 && runnable.length > 0 && !busy
+  // The scope is whatever HR is looking at; within it, employees with a blocking problem
+  // are left out and everybody else is paid. The run only stops when there is nobody
+  // left to pay — one blank account number must never hold up 301 salaries.
+  const scope = filtering ? rd : rdAll
+  const blockers = scope?.blockers || []
+  const willRun = scope?.runnableCodes || []
+  const excluded = scope?.excludedCodes || []
+  const canRun = willRun.length > 0 && runnable.length > 0 && !busy
 
   async function run() {
     if (!canRun) return
     setBusy(true); setErr(''); setResult(null)
+
+    // Codes always go to the engine now, because the excluded employees have to be held
+    // back even when no filter is on. `partial` is reserved for HR narrowing the scope
+    // by hand — that is what must not let the month call itself CALCULATED.
+    const partial = filtering
+    const pay = new Set(willRun)
+    const source = filtering ? shown : (rows || [])
+
+    // In group mode a month is one run per company, so the list is split back out per
+    // run — and a company with nobody left to pay is skipped, not failed.
+    const codesByRun = new Map<string, string[]>()
+    source.forEach(r => {
+      const code = String(r.employee_code)
+      if (!pay.has(code)) return
+      const id = String(r.run_id)
+      codesByRun.set(id, [...(codesByRun.get(id) || []), code])
+    })
+    const targets = runnable.filter(r => codesByRun.has(r.id))
+
     let processed = 0, skipped = 0, net = 0
     const fails: string[] = []
-    for (const r of runnable) {
-      const { error, result: res } = await calculateRun(r)
+    for (const r of targets) {
+      const codes = codesByRun.get(r.id) || []
+
+      // Steps 1-2 — write the earned columns, then the statutory ones, back into the
+      // Month Master. This is what turns
+      // the frozen structure into money: Earn_X = ROUND(X × paid_days / days_in_month),
+      // the uploader payments as-is, then total deduction and net pay. The sheet HR
+      // downloads below is only meaningful once this has run.
+      // Order matters and is not interchangeable: EPF wages are Earn_Gross − Earn_HRA,
+      // so the earned columns have to exist before the statutory ones can be computed.
+      let stepFailed = false
+      for (const [what, cat] of [['earnings', EARN_CAT], ['EPF', EPF_CAT], ['ESIC', ESIC_CAT], ['PT', PT_CAT], ['LWF', LWF_CAT], ['arrear', ARREAR_CAT]] as const) {
+        if (!cat) continue
+        const { error } = await runCategorySync(cat, [r.id], codes)
+        if (error) { fails.push(`${r.company_name || label}: ${what} — ${error}`); stepFailed = true; break }
+      }
+      if (stepFailed) continue
+
+      // Step 3 — the payroll engine, which writes payroll_lines (TDS, loans, net pay).
+      const { error, result: res } = await calculateRun(r, codes, { partial, excluded })
       if (error) { fails.push(`${r.company_name || label}: ${error}`); continue }
       processed += res?.processed || 0
       skipped += res?.skipped || 0
       net += res?.totalNet || 0
+
+      // Step 4 — freeze the people just paid. Their month is settled: no attendance edit,
+      // no bank change, no second run. Only the ones this run actually paid — anybody
+      // left out stays open so their problem can be fixed and they can be run after.
+      const { error: lockErr } = await lockEmployees(r.id, codes)
+      if (lockErr && !/schema cache|could not find|does not exist/i.test(lockErr)) {
+        fails.push(`${r.company_name || label}: lock — ${lockErr}`)
+      }
     }
+
+    // Step 5 — hand over the sheet. HR's next move after a run is always to open the
+    // numbers, so downloading it is the run's last step rather than a button they have
+    // to find afterwards.
+    // Only the employees actually paid — a sheet containing the ones who were left out
+    // would be read as "these were run" by whoever opens it next.
+    if (processed) {
+      try { await downloadSheet(willRun) }
+      catch (e: any) { fails.push('Sheet download failed: ' + (e?.message || e)) }
+    }
+
     setBusy(false)
     if (fails.length) setErr(fails.join('  ·  '))
     if (processed) setResult({ processed, skipped, net })
     refresh()
+  }
+
+  /** The run's working-out sheet: identity, formula inputs, formula outputs. codes = those rows only. */
+  async function downloadSheet(codes: string[] | null) {
+    const all = await loadMonthMaster(monthRuns.map(r => ({ id: r.id, company_name: r.company_name, fy: r.fy })))
+    const want = codes ? new Set(codes) : null
+    const picked = want ? all.filter(r => want.has(String(r.employee_code))) : all
+    if (!picked.length) throw new Error('nothing to export')
+
+    // Company only means something when the month spans companies.
+    const header = RUN_SHEET_COLS.filter(c => c !== 'Company' || isGroup)
+    // Written explicitly rather than by deleting unwanted keys: a column added to the
+    // snapshot later should not silently appear in this sheet.
+    const out = picked.map(r => {
+      const row: Record<string, any> = {}
+      header.forEach(c => { row[c] = r[c] ?? '' })
+      return row
+    })
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(out, { header }), 'Payroll Run')
+    const safe = (s: string) => (s || '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '')
+    XLSX.writeFile(wb, `Payroll_Run_${safe(label)}_${out.length}emp.xlsx`)
   }
 
   async function downloadRegister() {
@@ -243,20 +445,74 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
 
   // Banner text — the point is that HR reads one line and knows whether to keep going.
   const banner = (() => {
-    if (loading && !rd) return { tone: 'amber' as const, title: 'Checking the month…', sub: 'Reading every employee in the Month Master.' }
+    if (loading && !rows) return { tone: 'amber' as const, title: 'Checking the month…', sub: 'Reading every employee in the Month Master.' }
     if (!monthRuns.length) return { tone: 'amber' as const, title: 'No payroll month selected', sub: 'Create one in Configuration → Payroll Month, then come back here.' }
     if (closed) return { tone: 'green' as const, title: `Month is ${monthRuns[0].status.toLowerCase()}`, sub: 'Payroll for this month is closed to recalculation. Reopen it from Lock / Unlock if it genuinely has to change.' }
-    if (blockers.length) return { tone: 'red' as const, title: 'Not ready to run', sub: blockerSummary(blockers) }
-    if (result) return { tone: 'green' as const, title: 'Payroll run complete', sub: `${result.processed} employees processed${result.skipped ? ` · ${result.skipped} skipped` : ''} · net payable ${inr(result.net)}` }
-    if (calculated) return { tone: 'green' as const, title: 'Payroll already calculated', sub: 'Nothing is blocking a re-run — re-run it if attendance or salary changed since.' }
-    return { tone: 'green' as const, title: 'Ready to run', sub: `${rd?.cleanEmployees ?? 0} of ${rd?.totalEmployees ?? 0} employees have nothing outstanding.` }
+    // The banner speaks for whatever will actually be run. Filtered, that is the
+    // selected employees; unfiltered, the whole month. Anything else and HR reads a
+    // verdict about people the button is not going to touch.
+    if (filtering && shown.length === 0) {
+      return { tone: 'amber' as const, title: 'Nobody matches this filter', sub: 'Clear it or widen it — there is nothing to run.' }
+    }
+    // Red is now reserved for "nobody can be paid at all". Some people being left out is
+    // a warning, not a stop — the other 301 salaries still go out today.
+    if (willRun.length === 0) {
+      // Everyone locked is the normal end state of a finished month, not a failure —
+      // saying "nobody can be run" there would read as a fault every single month.
+      const onlyLocked = blockers.length === 1 && blockers[0].key === 'locked'
+      if (onlyLocked) {
+        return {
+          tone: 'green' as const, title: 'Month is done',
+          sub: `Payroll has run for all ${blockers[0].rows.length}. To re-run somebody, unlock them in Lock / Unlock with a reason.`,
+        }
+      }
+      return {
+        tone: 'red' as const, title: 'Nobody left to run',
+        sub: `${blockerSummary(blockers)} — nobody in scope is available.`,
+      }
+    }
+    if (result) {
+      return {
+        tone: excluded.length ? 'amber' as const : 'green' as const,
+        title: 'Payroll run complete',
+        sub: `${result.processed} paid · net ${inr(result.net)}`
+          + (excluded.length ? ` · ${excluded.length} left out (${blockerSummary(blockers)}) — fix and run again for them` : ''),
+      }
+    }
+    const inScope = filtering ? shown.length : (rdAll?.totalEmployees ?? 0)
+    if (excluded.length) {
+      return {
+        tone: 'amber' as const,
+        title: `Ready to run for ${willRun.length} of ${inScope}`,
+        sub: `${excluded.length} will be left out — ${blockerSummary(blockers)}. Unki payslip nahi banegi, baaki sabki ban jaayegi.`,
+      }
+    }
+    if (filtering) {
+      const rest = (rdAll?.totalEmployees ?? 0) - shown.length
+      return {
+        tone: 'green' as const,
+        title: `Ready to run for ${shown.length} employee${shown.length === 1 ? '' : 's'}`,
+        sub: rest > 0
+          ? `Only the selected ${shown.length} will be calculated — the other ${rest} in this month stay exactly as they are.`
+          : 'Every employee in this month is selected.',
+      }
+    }
+    if (calculated) return { tone: 'green' as const, title: 'Payroll already calculated', sub: 'Nothing outstanding — re-run it if attendance or salary changed since.' }
+    return { tone: 'green' as const, title: 'Ready to run', sub: `All ${inScope} employees have nothing outstanding.` }
   })()
 
   const hint = !monthRuns.length ? 'Create a payroll month first'
     : closed ? 'This month is locked — reopen it from Lock / Unlock'
-      : blockers.length ? `Resolve ${blockers.map(b => b.label).join(' and ')} to enable this`
-        : busy ? 'Working…'
-          : `${rd?.totalEmployees ?? 0} employees in this month`
+      : filtering && shown.length === 0 ? 'Nobody matches the filter'
+        : willRun.length === 0
+          ? (blockers.length === 1 && blockers[0].key === 'locked'
+            ? 'Everyone here is locked — unlock someone to run them again'
+            : 'Nobody in scope is available — fix one to enable this')
+          : busy ? 'Working…'
+            : excluded.length ? `${excluded.length} left out — they keep their current payslip, nothing is zeroed`
+              : filtering
+                ? `Only these ${shown.length} — the rest of the month is not touched`
+                : `Runs on all ${rdAll?.totalEmployees ?? 0} employees in this month`
 
   return (
     <div style={{ fontFamily: font, fontSize: 14, color: C.navy, maxWidth: 960 }}>
@@ -277,6 +533,12 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
           {monthOpts.map(r => <option key={r.month} value={String(r.month)}>📅 {periodLabel(r)}</option>)}
         </select>
       </div>
+
+      {rows && rows.length > 0 && (
+        <FilterBar rows={rows} filter={filter} matched={shown.length} isGroup={isGroup}
+          onChange={patch => setFilter(f => ({ ...f, ...patch }))}
+          onClear={() => setFilter(EMPTY_FILTER)} />
+      )}
 
       <Banner tone={banner.tone} title={banner.title} sub={banner.sub} />
 
@@ -310,7 +572,11 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
             display: 'flex', alignItems: 'center', gap: 8,
             boxShadow: canRun ? '0 4px 14px rgba(124,58,237,0.25)' : 'none',
           }}>
-          {busy ? '⏳ Running…' : calculated ? '▶️ Re-run Payroll' : '▶️ Run Payroll'}
+          {busy ? '⏳ Running…'
+            : willRun.length === 0 ? '▶️ Run Payroll'
+              : (filtering || excluded.length)
+                ? `▶️ Run Payroll for ${willRun.length} employee${willRun.length === 1 ? '' : 's'}`
+                : calculated ? '▶️ Re-run Payroll' : '▶️ Run Payroll'}
         </button>
         {calculated && (
           <button onClick={downloadRegister} disabled={busy}

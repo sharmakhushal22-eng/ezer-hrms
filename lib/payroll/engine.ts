@@ -30,19 +30,11 @@ function calendarOf(fy: string, month: number): { year: number; cmonth: number; 
   return { year, cmonth, days }
 }
 
-// State-wise Professional Tax slab (monthly, fixed — not pro-rated).
-function calcPT(gross: number, state: string): number {
-  const PT: Record<string, [number, number, number][]> = {
-    Haryana: [[0, 10000, 0], [10001, 999999, 200]],
-    Maharashtra: [[0, 7500, 0], [7501, 10000, 175], [10001, 999999, 200]],
-    Karnataka: [[0, 15000, 0], [15001, 999999, 200]],
-    Telangana: [[0, 15000, 0], [15001, 20000, 150], [20001, 999999, 200]],
-    'West Bengal': [[0, 10000, 0], [10001, 15000, 110], [15001, 25000, 130], [25001, 40000, 150], [40001, 999999, 200]],
-  }
-  const slabs = PT[state] || PT.Haryana
-  const s = slabs.find(([lo, hi]) => gross >= lo && gross <= hi)
-  return s?.[2] ?? 200
-}
+// Professional Tax used to live here as a five-state table with
+// `PT[state] || PT.Haryana` as the fallback — so an employee in any state the table had
+// never heard of was silently charged Haryana's ₹200. Haryana itself was wrong: it levies
+// no PT at all. Every rate now lives in pt_config and is resolved by sync_month_pt() into
+// pt_amount, which this file reads. See lib/pt/actions.ts and the PT Slabs screen.
 
 // One Month Master row, as the engine reads it.
 interface MonthRow {
@@ -52,6 +44,9 @@ interface MonthRow {
   epf_wage: any; pt_monthly: any; lwf_monthly: any
   pf_applicable: any; esic_applicable: any; pt_applicable: any; lwf_applicable: any
   esic_wage_limit: any; professional_tax_state: any
+  esic_employee: any; esic_employer: any
+  pt_amount: any; pt_rate_found: any
+  lwf_employee: any; lwf_rate_found: any
   voluntary_pf_applicable: any; vpf_percent: any
   days_in_month: any; total_days: any; paid_days: any
   attendance_uploaded_at: any; arrear_days: any; ot_hours: any
@@ -76,12 +71,16 @@ function calcLineFromMonth(
   if (row.attendance_uploaded_at == null && row.paid_days == null) return `${code}: attendance not uploaded`
   if (row.paid_days == null) return `${code}: paid days not set`
 
-  const totalDays = num(row.total_days) || num(row.days_in_month)
+  // The denominator is days_in_month, NOT the employee's on-roll days. Those differ only
+  // for a mid-month joiner or leaver, and that is exactly the case that matters: someone
+  // who joined on the 16th has total_days 15 and paid_days 15, so dividing by total_days
+  // would hand them a full month's salary for half a month on roll.
+  const totalDays = num(row.days_in_month) || num(row.total_days)
   if (totalDays <= 0) return `${code}: month has no days on record — re-sync Employee info`
 
   // Paid days stay raw in the database for audit — the confirmed formula can go negative
   // when an employee has absences and no leave — but pay is never negative, and nobody is
-  // paid for more days than they were on roll.
+  // paid for more days than the month has.
   const paidDays = Math.min(Math.max(0, num(row.paid_days)), totalDays)
   const ratio = paidDays / totalDays
 
@@ -113,13 +112,33 @@ function calcLineFromMonth(
   const erPF = pfOn ? round(epfWage * 0.12) : 0
   const gratuity = pfOn ? round(basic * 0.0481) : 0
 
+  // ESIC comes from the Month Master, computed by sync_month_esic against esic_config.
+  // It used to be recomputed here with hardcoded 0.75/3.25, ordinary rounding, the
+  // ceiling tested against earned gross, and no contribution-period rule — four ways to
+  // disagree with the figure on the ESIC challan for the same employee in the same month.
+  // The fallback below only covers a month synced before that migration existed.
   const esicLimit = num(row.esic_wage_limit) || 21000
-  const dedESIC = esicOn && gross <= esicLimit ? round(gross * 0.0075) : 0
-  const erESIC = esicOn && gross <= esicLimit ? round(gross * 0.0325) : 0
+  const esicSynced = row.esic_employee != null || row.esic_employer != null
+  const dedESIC = esicSynced ? num(row.esic_employee)
+    : (esicOn && gross <= esicLimit ? Math.ceil(gross * 0.0075) : 0)
+  const erESIC = esicSynced ? num(row.esic_employer)
+    : (esicOn && gross <= esicLimit ? Math.ceil(gross * 0.0325) : 0)
 
   // PT is a fixed monthly slab amount — never pro-rated.
-  const dedPT = ptOn ? (row.pt_monthly != null ? num(row.pt_monthly) : calcPT(gross, row.professional_tax_state || 'Haryana')) : 0
-  const dedLWF = lwfOn ? (row.lwf_monthly != null ? num(row.lwf_monthly) : 25) : 0
+  // pt_amount comes from pt_config via sync_month_pt. NULL means the employee's state is
+  // not configured — nothing is deducted and the row says so, rather than guessing a
+  // figure. pt_monthly is the pre-sql108 frozen value, kept only as a fallback for months
+  // synced before that migration.
+  const dedPT = !ptOn ? 0
+    : row.pt_amount != null ? num(row.pt_amount)
+      : (row.pt_rate_found === false ? 0 : num(row.pt_monthly))
+  // lwf_employee comes from lwf_config via sync_month_lwf, read off the employee's
+  // lwf_state. The old fallback of a flat ₹25 was wrong in almost every case: most states
+  // deduct only in June and December, several only in December, and the amounts range
+  // from ₹0.75 in Delhi to ₹50 in Kerala.
+  const dedLWF = !lwfOn ? 0
+    : row.lwf_employee != null ? num(row.lwf_employee)
+      : (row.lwf_rate_found === false ? 0 : num(row.lwf_monthly))
   const dedVPF = row.voluntary_pf_applicable === true ? round(epfWage * (num(row.vpf_percent) / 100)) : 0
 
   const dedNPS = num(npsMonthly)
@@ -166,6 +185,8 @@ const MONTH_COLS = [
   'statutory_bonus', 'epf_wage', 'pt_monthly', 'lwf_monthly',
   'pf_applicable', 'esic_applicable', 'pt_applicable', 'lwf_applicable',
   'esic_wage_limit', 'professional_tax_state', 'voluntary_pf_applicable', 'vpf_percent',
+  'esic_employee', 'esic_employer', 'pt_amount', 'pt_rate_found',
+  'lwf_employee', 'lwf_rate_found',
   'days_in_month', 'total_days', 'paid_days', 'attendance_uploaded_at', 'arrear_days', 'ot_hours',
 ].join(', ')
 
@@ -190,23 +211,34 @@ async function loadVouchers(runId: string): Promise<Map<string, VoucherSplit>> {
   return out
 }
 
-// Calculate the whole run → populate payroll_lines + update run totals.
-export async function processPayrollRun(runId: string): Promise<RunResult> {
+// Calculate a run → populate payroll_lines + update run totals.
+//
+// `codes` scopes the run to specific employees. HR needs this constantly: one joiner
+// arrived late, one salary was corrected after the run — recalculating all 300 to fix
+// one is slow and, worse, silently rewrites 299 payslips that nobody asked to change.
+// null = the whole month, which is what a normal run does.
+export async function processPayrollRun(runId: string, codes: string[] | null = null): Promise<RunResult> {
   const empty: RunResult = { processed: 0, skipped: 0, errors: [], totalGross: 0, totalNet: 0 }
   const { data: run } = await supabase.from('payroll_runs').select('id, company_id, fy, month').eq('id', runId).single()
   if (!run) return { ...empty, errors: ['Run not found'] }
 
   // The Month Master IS the input. Paginated because PostgREST caps a response at 1000.
-  const rows: MonthRow[] = []
+  const all: MonthRow[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from('payroll_employee_snapshot')
       .select(MONTH_COLS).eq('run_id', runId).order('employee_code').range(from, from + 999)
     if (error) return { ...empty, errors: ['Month Master read failed: ' + error.message] }
     const batch = (data || []) as any as MonthRow[]
-    rows.push(...batch)
+    all.push(...batch)
     if (batch.length < 1000) break
   }
-  if (!rows.length) return { ...empty, errors: ['This month has no Month Master rows — run Data Sync → Employee info first.'] }
+  if (!all.length) return { ...empty, errors: ['This month has no Month Master rows — run Data Sync → Employee info first.'] }
+
+  // Filtered in memory rather than through .in() — a few hundred rows cost nothing to
+  // fetch, and a several-hundred-code list would push the request URL past its limit.
+  const wanted = codes ? new Set(codes) : null
+  const rows = wanted ? all.filter(r => wanted.has(String(r.employee_code))) : all
+  if (!rows.length) return { ...empty, errors: ['None of the selected employees are in this month.'] }
 
   const cal = calendarOf(run.fy, run.month)
   const empIds = rows.map(r => r.employee_id)
@@ -262,7 +294,17 @@ export async function processPayrollRun(runId: string): Promise<RunResult> {
 }
 
 // Orchestrator: run the engine then move status OPEN/SYNCED/ATTENDANCE_LOCKED → CALCULATED + audit.
-export async function calculateRun(run: { id: string; company_id: string; status: string }): Promise<{ error: string | null; result?: RunResult }> {
+// `codes` runs payroll for only those employees; everyone else's existing line is left
+// exactly as it was.
+export async function calculateRun(
+  run: { id: string; company_id: string; status: string },
+  codes: string[] | null = null,
+  // A run that covers everyone who COULD be paid is a full run, even though a few
+  // employees were left out for missing details — those have no payslip to compute yet.
+  // Only HR narrowing the scope by hand makes it partial. The two differ in whether the
+  // month may call itself CALCULATED.
+  opts: { partial?: boolean; excluded?: string[] } = {},
+): Promise<{ error: string | null; result?: RunResult }> {
   // OPEN is allowed because Month Create already builds the Month Master — a month with
   // rows in it IS synced, whatever the status column says. The genuinely-empty case is
   // caught below by processPayrollRun with a message that says what to do about it.
@@ -271,9 +313,26 @@ export async function calculateRun(run: { id: string; company_id: string; status
   if (!['OPEN', 'SYNCED', 'ATTENDANCE_LOCKED', 'CALCULATED'].includes(run.status)) {
     return { error: `This month is ${run.status} — reopen it from Lock / Unlock before recalculating.` }
   }
-  const result = await processPayrollRun(run.id)
+  const result = await processPayrollRun(run.id, codes)
   if (!result.processed && result.errors.length) return { error: result.errors[0], result }
-  await supabase.from('payroll_runs').update({ status: 'CALCULATED', updated_at: new Date().toISOString() }).eq('id', run.id)
-  await supabase.from('payroll_audit_log').insert({ run_id: run.id, company_id: run.company_id, action: 'PAYROLL_CALCULATED', detail: { processed: result.processed, skipped: result.skipped, total_net: result.totalNet }, performed_by: 'HR' })
+
+  // A hand-narrowed run does NOT mark the month CALCULATED — the employees outside the
+  // scope still have no payslip, and a status that says otherwise is how an unpaid month
+  // gets approved.
+  if (!opts.partial) {
+    await supabase.from('payroll_runs').update({ status: 'CALCULATED', updated_at: new Date().toISOString() }).eq('id', run.id)
+  }
+  await supabase.from('payroll_audit_log').insert({
+    run_id: run.id, company_id: run.company_id,
+    action: opts.partial ? 'PAYROLL_CALCULATED_PARTIAL' : 'PAYROLL_CALCULATED',
+    detail: {
+      processed: result.processed, skipped: result.skipped, total_net: result.totalNet,
+      ...(opts.partial && codes ? { for_employees: codes } : {}),
+      // Who did NOT get paid and therefore has to be chased — the single most useful
+      // thing to be able to look up a week later.
+      ...(opts.excluded?.length ? { left_out: opts.excluded } : {}),
+    },
+    performed_by: 'HR',
+  })
   return { error: null, result }
 }

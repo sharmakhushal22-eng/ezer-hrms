@@ -1,12 +1,22 @@
 'use client'
-// components/payroll/PtConfig.tsx — Payroll → Configuration → PT Slabs.
-// State-wise Professional Tax: salary-range slabs, per-month amounts (handles
-// Maharashtra's Feb annual-cap bump and Tamil Nadu / Kerala's twice-yearly Mar+Sep
-// pattern), and gender-restricted slabs. Backed by pt_config (effective-dated,
-// EXCLUDE-protected — migration sql70) + get_pt_amount(). Inline in the config dropdown.
+// components/payroll/PtConfig.tsx — Professional Tax configuration.
+// Reached from Configuration → PT Slabs and from Statutory & Tax → Professional Tax;
+// both render this one component, because two PT screens would eventually disagree and
+// whichever one HR happened to open would decide what they believed.
+//
+// Two halves: a Quick check that resolves a single employee's PT, and the full month-wise
+// grid of every state and slab. A column per month rather than one "monthly amount",
+// because PT is not flat across the year — Maharashtra charges ₹300 in February,
+// Tamil Nadu and Kerala bill twice a year and nothing in the other ten months.
+//
+// Quick check calls get_pt_amount(), the same function sync_month_pt() uses during a
+// payroll run, so this screen cannot show ₹200 while the run deducts ₹300. Its
+// rate_found flag carries the distinction that matters: ₹0 means the state levies no PT,
+// null means the state was never configured. Reading the second as the first is what let
+// 92 employees be charged for a tax their state does not have.
 import { useState, useEffect, useCallback } from 'react'
-import { getCurrentPtSlabs, reviseSlab } from '@/lib/pt/actions'
-import { MONTH_LABELS } from '@/lib/pt/types'
+import { getCurrentPtSlabs, reviseSlab, getPtAmount } from '@/lib/pt/actions'
+import { MONTH_KEYS, MONTH_LABELS } from '@/lib/pt/types'
 import type { PtConfig as PtRow, Gender } from '@/lib/pt/types'
 import { INDIAN_STATES } from '@/lib/geo/india-states-districts'
 
@@ -173,6 +183,14 @@ export default function PtConfig() {
   const [error, setError] = useState('')
   const [modal, setModal] = useState<{ open: boolean; preset?: PtRow | null }>({ open: false })
 
+  // Quick check
+  const [qState, setQState] = useState('')
+  const [qMonth, setQMonth] = useState('apr')
+  const [qGross, setQGross] = useState('')
+  const [qBusy, setQBusy] = useState(false)
+  const [qErr, setQErr] = useState('')
+  const [qRes, setQRes] = useState<{ amount: number | null; found: boolean; row: PtRow | null } | null>(null)
+
   const load = useCallback(async () => {
     setLoading(true); setError('')
     try { setSlabs(await getCurrentPtSlabs()) }
@@ -181,57 +199,189 @@ export default function PtConfig() {
   }, [])
   useEffect(() => { load() }, [load])
 
-  const grouped: Record<string, PtRow[]> = {}
-  for (const s of slabs) { (grouped[s.state] ??= []).push(s) }
-  const states = Object.keys(grouped).sort()
+  const states = Array.from(new Set(slabs.map(s => s.state))).sort()
+
+  // A state whose every month is zero in every slab levies no PT at all. Said out loud on
+  // the row, because a column of zeros otherwise reads as missing data and somebody
+  // eventually "fixes" it by typing 200 in.
+  const noPt = new Set(
+    states.filter(st => slabs.filter(s => s.state === st)
+      .every(s => MONTH_KEYS.every(m => Number((s as any)[m]) === 0))))
+
+  async function runCheck() {
+    if (!qState || qGross.trim() === '') return
+    setQBusy(true); setQErr(''); setQRes(null)
+    try {
+      // Calendar date for the chosen month — get_pt_amount reads the month off the date,
+      // so the year only has to be one the slab's validity range covers.
+      const mi = MONTH_KEYS.indexOf(qMonth as any) + 1
+      const r = await getPtAmount({
+        state: qState, grossSalary: Number(qGross) || 0,
+        periodMonth: `2026-${String(mi).padStart(2, '0')}-01`, gender: 'ALL',
+      })
+      const g = Number(qGross) || 0
+      const row = slabs.find(s => s.state === qState && g >= Number(s.slab_min)
+        && (s.slab_max == null || g <= Number(s.slab_max))) || null
+      setQRes({ amount: r?.pt_amount ?? null, found: !!r?.rate_found, row })
+    } catch (e: any) {
+      setQErr(/could not find the function/i.test(e?.message || '')
+        ? 'get_pt_amount() is not in this database yet — run sql108, then sql109.'
+        : (e?.message || String(e)))
+    } finally { setQBusy(false) }
+  }
+
+  const card: React.CSSProperties = {
+    background: C.card, borderRadius: 14, padding: '18px 20px', marginBottom: 16,
+    border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(124,58,237,0.06)',
+  }
+  const th: React.CSSProperties = {
+    background: C.navy, color: '#A5B4FC', padding: '7px 6px', textAlign: 'right',
+    fontSize: 9, textTransform: 'uppercase', position: 'sticky', top: 0, whiteSpace: 'nowrap',
+  }
+  const td: React.CSSProperties = {
+    padding: 6, textAlign: 'right', borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap',
+  }
 
   return (
-    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 760 }}>
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+    <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1200 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
         <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>⚖️</div>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Professional Tax</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>State + salary slab — the amount can vary by month within the same slab</div>
+          <div style={{ fontSize: 19, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Professional Tax Configuration</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+            {loading ? 'Loading…' : `${states.length} states, ${slabs.length} slabs — exactly what the payroll run reads`}
+          </div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
-          onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)'}
-          onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(124,58,237,0.22)', transition: 'filter .12s', whiteSpace: 'nowrap' }}>
+          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(124,58,237,0.22)', whiteSpace: 'nowrap' }}>
           + Add / revise slab
         </button>
       </div>
 
       {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
-      {loading && <div style={{ fontSize: 12, color: C.purple, padding: 8 }}>Loading…</div>}
-      {!loading && states.length === 0 && !error && <div style={{ fontSize: 13, color: C.muted, background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 30, textAlign: 'center' }}>No PT slabs configured yet. Click <b>+ Add / revise slab</b> to add the first one.</div>}
 
-      {states.map(state => {
-        const rows = grouped[state]
-        return (
-          <div key={state} style={{ marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: C.purpleD }}>{state}</span>
-              <span style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, background: C.gray, borderRadius: 99, padding: '1px 8px' }}>{rows.length} slab{rows.length > 1 ? 's' : ''}</span>
-            </div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 6px rgba(124,58,237,0.07)' }}>
-              {rows.map((r, i) => (
-                <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, padding: '10px 14px', borderBottom: i < rows.length - 1 ? `1px solid ${C.border}` : 'none', background: i % 2 === 0 ? C.gray : C.card }}>
-                  <span style={{ color: C.navy, fontWeight: 600 }}>
-                    {slabLabel(r)}
-                    {r.gender !== 'ALL' && <span style={{ marginLeft: 7, fontSize: 9, padding: '1px 7px', borderRadius: 999, background: C.amberBg, color: C.amber, fontWeight: 700 }}>{r.gender}</span>}
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ color: C.muted, fontSize: 12.5 }}>{summarizeMonths(r)}</span>
-                    <button onClick={() => setModal({ open: true, preset: r })} title="Revise this slab"
-                      style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 7, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, cursor: 'pointer' }}>Revise</button>
-                  </span>
-                </div>
-              ))}
-            </div>
+      {/* ── Quick check ─────────────────────────────────────────── */}
+      <div style={card}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>Quick check</div>
+        <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 14 }}>
+          Pick a state, month and gross to see exactly which row payroll will use — same function the run calls.
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr)) auto', gap: 10, alignItems: 'end' }}>
+          <div>
+            <label style={labelStyle}>State</label>
+            <SearchSelect value={qState} options={states} placeholder="Select state"
+              onChange={v => { setQState(v); setQRes(null) }} />
           </div>
-        )
-      })}
+          <div>
+            <label style={labelStyle}>Month</label>
+            <select style={inputStyle} value={qMonth} onChange={e => { setQMonth(e.target.value); setQRes(null) }}>
+              {MONTH_KEYS.map((m, i) => <option key={m} value={m}>{MONTH_LABELS[i]}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Gross Salary</label>
+            <input style={inputStyle} type="number" value={qGross} placeholder="e.g. 22000"
+              onChange={e => { setQGross(e.target.value); setQRes(null) }} />
+          </div>
+          <button onClick={runCheck} disabled={qBusy || !qState || qGross.trim() === ''}
+            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: '#fff', whiteSpace: 'nowrap', background: (!qState || qGross.trim() === '') ? '#D8D3F5' : C.purple, cursor: (!qState || qGross.trim() === '') ? 'not-allowed' : 'pointer' }}>
+            {qBusy ? 'Checking…' : 'Check PT'}
+          </button>
+        </div>
+
+        {qErr && <div style={{ marginTop: 12, fontSize: 12, color: C.red, background: C.redBg, border: '1px solid #FECACA', borderRadius: 9, padding: '10px 12px' }}>{qErr}</div>}
+
+        {qRes && (
+          <div style={{
+            marginTop: 14, borderRadius: 10, padding: '14px 16px',
+            background: qRes.found ? '#ECFDF5' : C.amberBg,
+            border: `1px solid ${qRes.found ? '#A7F3D0' : '#FDE8C8'}`,
+          }}>
+            <div style={{ fontSize: 22, fontWeight: 800, color: qRes.found ? C.green : C.amber }}>
+              {qRes.found ? `₹${Number(qRes.amount ?? 0).toLocaleString('en-IN')}` : 'Not configured'}
+            </div>
+            <div style={{ fontSize: 11.5, color: qRes.found ? '#047857' : '#92400E', marginTop: 3 }}>
+              {!qRes.found
+                ? `${qState} has no slab covering ₹${Number(qGross).toLocaleString('en-IN')} — payroll deducts nothing and flags it.`
+                : Number(qRes.amount) === 0
+                  ? (noPt.has(qState)
+                    ? `${qState} does not levy Professional Tax at all.`
+                    : `${qState} levies PT, but nothing is due in ${MONTH_LABELS[MONTH_KEYS.indexOf(qMonth as any)]} for this slab.`)
+                  : `${qRes.row ? slabLabel(qRes.row) : 'slab'} · ${MONTH_LABELS[MONTH_KEYS.indexOf(qMonth as any)]}`}
+            </div>
+            {qRes.row?.notification_reference && (
+              <div style={{ fontSize: 10, color: C.muted, marginTop: 5 }}>{qRes.row.notification_reference}</div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Full grid ───────────────────────────────────────────── */}
+      <div style={card}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>Full configuration table</div>
+        <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 14 }}>
+          Every state, slab and month-wise amount. A <b>no PT</b> badge means the state levies none at all —
+          that row exists on purpose, so a state with no tax can be told apart from a state nobody configured.
+        </div>
+        {loading ? (
+          <div style={{ fontSize: 12, color: C.purple, padding: 8 }}>Loading…</div>
+        ) : (
+          <div style={{ maxHeight: 520, overflow: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+              <thead>
+                <tr>
+                  <th style={{ ...th, textAlign: 'left' }}>State</th>
+                  <th style={th}>Min Salary</th>
+                  <th style={th}>Max Salary</th>
+                  <th style={{ ...th, textAlign: 'left' }}>Gender</th>
+                  {MONTH_LABELS.map(m => <th key={m} style={th}>{m}</th>)}
+                  <th style={th}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {slabs.map((r, i) => {
+                  const hit = !!qRes?.row && qRes.row.id === r.id
+                  return (
+                    <tr key={r.id} style={{
+                      background: hit ? C.amberBg : i % 2 ? '#FBFAFF' : 'transparent',
+                      outline: hit ? `2px solid ${C.amber}` : 'none',
+                    }}>
+                      <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: C.navy }}>
+                        {r.state}
+                        {noPt.has(r.state) && <span style={{ marginLeft: 6, fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: '#ECFDF5', color: C.green }}>no PT</span>}
+                      </td>
+                      <td style={td}>{Number(r.slab_min).toLocaleString('en-IN')}</td>
+                      <td style={td}>{r.slab_max == null ? '—' : Number(r.slab_max).toLocaleString('en-IN')}</td>
+                      <td style={{ ...td, textAlign: 'left', color: r.gender === 'ALL' ? C.muted : C.amber, fontWeight: r.gender === 'ALL' ? 400 : 700 }}>{r.gender}</td>
+                      {MONTH_KEYS.map(m => {
+                        const v = Number((r as any)[m]) || 0
+                        return <td key={m} style={{ ...td, color: v === 0 ? '#C7C2E8' : C.navy, fontWeight: v > 0 ? 600 : 400 }}>{v}</td>
+                      })}
+                      <td style={{ ...td, textAlign: 'center' }}>
+                        <button onClick={() => setModal({ open: true, preset: r })} title="Revise this slab"
+                          style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, cursor: 'pointer' }}>Revise</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {!loading && slabs.length === 0 && (
+                  <tr><td colSpan={17} style={{ padding: 26, textAlign: 'center', color: C.muted }}>
+                    No PT slabs configured yet. Click <b>+ Add / revise slab</b> to add the first one.
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div style={{ fontSize: 10.5, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
+        <b>Yeh table hi payroll ka source hai.</b> Run Payroll har employee ka PT yahin se uthata hai — uske
+        <b> state</b>, us mahine ke <b>column</b> aur uske <b>gross</b> ke hisaab se. App mein koi rate likha hua
+        nahi hai, isliye yahan badla hua rate agle run mein apne aap lag jaata hai.
+        <br />PT ek <b>fixed monthly</b> amount hai — chhutti lene se kam nahi hota. Revise karne par purani row
+        mitti nahi, band hoti hai; isliye pichhla mahina dobara chalane par bhi wahi rate lagta hai jo tab tha.
+      </div>
 
       {modal.open && <ReviseModal preset={modal.preset} onClose={() => setModal({ open: false })} onSaved={() => { setModal({ open: false }); load() }} />}
     </div>

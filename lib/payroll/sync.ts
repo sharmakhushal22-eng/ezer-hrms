@@ -114,6 +114,75 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
+    // Runs after Earned salary and reads its output, so it is second-last in the
+    // chain: EPF wages are Earn_Gross − Earn_HRA, which do not exist until the
+    // earned columns have been written.
+    key: 'epf', label: 'EPF · EPS · EDLI · Admin', icon: '🏛️', status: 'ready',
+    note: 'Code of Wages 50% basic floor, then EPF wages (Earn Gross − Earn HRA), the ceiling from each employee’s own pf_gross_limit, EPS capped at ₹1,250, EDLI at ₹75, and admin charges with the establishment’s ₹500 minimum. Every rate comes from epf_config and wage_rules_config — nothing is hardcoded.',
+    rpc: 'sync_month_epf', countKey: 'with_earnings',
+    columns: [
+      'employee_code', 'full_name', 'paid_days', 'days_in_month',
+      'annual_ctc', 'ctc_monthly', 'basic_monthly', 'basic_50_floor',
+      'basic_for_wages', 'earn_basic_for_wages', 'basic_50_applied',
+      'earn_gross_monthly', 'earn_hra_monthly',
+      'pf_applicable', 'pf_gross_limit', 'epf_capped',
+      'epf_wages_actual', 'epf_wage_base',
+      'epf_employee', 'epf_employer_total', 'epf_employer_diff',
+      'eps_wages', 'eps_contribution',
+      'edli_wages', 'edli_contribution',
+      'admin_wages', 'admin_charges', 'admin_charges_payable',
+    ],
+  },
+  {
+    // Reads the earned columns like EPF does, so it runs in the same pass, after them.
+    key: 'esic', label: 'ESIC', icon: '🩺', status: 'ready',
+    note: 'Employee 0.75% and employer 3.25%, rounded up to the next rupee as ESIC requires. ESIC Wages = MAX(earned basic, 50% of earned gross) is always shown; whether the ₹21,000 ceiling is tested on that or on plain gross is set by esic_config.esic_threshold_basis — on this data the two differ by 135 employees, so the row records which basis judged it. The ceiling is tested on the full-month rate rather than the month’s earnings, so leave cannot push somebody in and out; and once covered at any point in a contribution period (Apr–Sep, Oct–Mar) an employee stays covered for the rest of it.',
+    rpc: 'sync_month_esic', countKey: 'with_earnings',
+    columns: [
+      'employee_code', 'full_name', 'paid_days',
+      'esic_applicable', 'esic_number', 'gross_monthly', 'esic_wage_limit',
+      'basic_monthly', 'earn_basic_monthly', 'earn_gross_monthly',
+      'esic_wages_cw', 'esic_threshold_wage', 'esic_basis',
+      'esic_covered', 'esic_cover_reason',
+      'esic_wages', 'esic_daily_wage', 'esic_employee_exempt',
+      'esic_employee', 'esic_employer', 'esic_total',
+    ],
+  },
+  {
+    key: 'pt', label: 'Professional Tax', icon: '⚖️', status: 'ready',
+    note: 'Each employee’s PT from pt_config — their state, that month’s column, their gross. A month column per month because PT is not flat across the year: Maharashtra charges ₹300 in February, Tamil Nadu bills twice a year and nothing in the other ten months. PT is a fixed monthly amount, so leave never reduces it. States that levy no PT at all carry an explicit ₹0 row, which is why pt_rate_found matters — a zero and an unconfigured state are different answers.',
+    rpc: 'sync_month_pt', countKey: 'eligible',
+    columns: [
+      'employee_code', 'full_name', 'pt_applicable', 'professional_tax_state',
+      'pt_state', 'pt_gross', 'pt_slab', 'pt_rate_found', 'pt_amount', 'pt_reason',
+    ],
+  },
+  {
+    key: 'lwf', label: 'Labour Welfare Fund', icon: '🏛️', status: 'ready',
+    note: 'Each employee’s LWF from lwf_config — read off their lwf_state, NOT their PT state: the two differ for 300 of 302 employees here. Most states deduct only in June and December, some only in December, so a ₹0 in April is normal rather than missing. Where the state allows it, someone who left mid-period is exempt. LWF is a flat monthly amount — gross and paid days never affect it.',
+    rpc: 'sync_month_lwf', countKey: 'eligible',
+    columns: [
+      'employee_code', 'full_name', 'lwf_applicable', 'lwf_state', 'lwf_state_used',
+      'date_of_leaving', 'lwf_month_applicable', 'lwf_exit_exempt', 'lwf_rate_found',
+      'lwf_employee', 'lwf_employer', 'lwf_reason',
+    ],
+  },
+  {
+    // Runs last of all: arrear is the difference between what a back month actually paid
+    // and what the revised structure says it should have, so every other figure for those
+    // months has to be settled first.
+    key: 'arrear', label: 'Appraisal arrear', icon: '📈', status: 'ready',
+    note: 'Where an appraisal is effective in a back month but pays out in this one, the difference for each already-paid month is worked out head by head and lands in the arrear columns. The pay-out month itself is excluded — it gets the new rate through regular salary, so counting it again would pay it twice. Each back month is differenced against what that month actually froze, not against an assumed structure, and pro-rated on that month’s own paid days.',
+    rpc: 'sync_month_arrear', countKey: 'eligible',
+    columns: [
+      'employee_code', 'full_name', 'arrear_appraisal_effective_date', 'arrear_months',
+      'basic_monthly', 'hra_monthly', 'special_allowance',
+      'arrear_basic', 'arrear_hra', 'arrear_special_allowance',
+      'arrear_epf_wage', 'arrear_employee_pf', 'arrear_employer_pf',
+      'arrear_total', 'net_pay', 'final_net_pay',
+    ],
+  },
+  {
     key: 'flexi_reimb', label: 'Flexi reimbursement', icon: '🧾', status: 'ready',
     note: 'Rejected bills only. A rejected claim loses its exemption and becomes taxable — that rejected amount is what comes into payroll, against the month the claim was FOR, not the month it was reviewed in.',
     rpc: 'sync_month_flexi_reimb', countKey: 'with_reject',
