@@ -47,6 +47,7 @@ interface MonthRow {
   esic_employee: any; esic_employer: any
   pt_amount: any; pt_rate_found: any
   lwf_employee: any; lwf_rate_found: any
+  arrear_total: any; arrear_employee_pf: any; arrear_months: any
   voluntary_pf_applicable: any; vpf_percent: any
   days_in_month: any; total_days: any; paid_days: any
   attendance_uploaded_at: any; arrear_days: any; ot_hours: any
@@ -98,7 +99,14 @@ function calcLineFromMonth(
   const flexi = num(flexiReimb)
   const flexiUnclaimed = Math.max(0, flexiPot - flexi)
 
-  const gross = basic + hra + conveyance + special + statBonus + flexiUnclaimed + v.additions
+  // Back-month arrear from an appraisal, computed by sync_month_arrear before this runs.
+  // It has to land in gross and net here, not just in the Month Master: the bank file,
+  // the register and the run summary all read payroll_lines, so an arrear that stopped at
+  // the snapshot was calculated, displayed, and never actually paid to anyone.
+  const arrear = Math.max(0, num(row.arrear_total))
+  const arrearEpf = Math.max(0, num(row.arrear_employee_pf))
+
+  const gross = basic + hra + conveyance + special + statBonus + flexiUnclaimed + v.additions + arrear
 
   // Statutory flags and limits come from the frozen row, so a flag flipped in HRMS next
   // month cannot change a payslip that was already issued.
@@ -108,7 +116,8 @@ function calcLineFromMonth(
   const lwfOn = row.lwf_applicable === true
 
   const epfWage = Math.min(basic, num(row.epf_wage) || 15000)
-  const dedEPF = pfOn ? round(epfWage * 0.12) : 0
+  // Arrear is wages, so PF is due on it — up to whatever headroom the ceiling left.
+  const dedEPF = pfOn ? round(epfWage * 0.12) + arrearEpf : 0
   const erPF = pfOn ? round(epfWage * 0.12) : 0
   const gratuity = pfOn ? round(basic * 0.0481) : 0
 
@@ -153,7 +162,7 @@ function calcLineFromMonth(
   return {
     run_id: runId, employee_id: row.employee_id,
     basic, hra, conveyance, special_allow: special, statutory_bonus: statBonus,
-    other_earnings: flexiUnclaimed + v.additions,
+    other_earnings: flexiUnclaimed + v.additions + arrear,
     gross_earning: grossWithFlexi, flexi_reimbursement: flexi,
     ded_epf: dedEPF, ded_vpf: dedVPF, ded_esic: dedESIC, ded_pt: dedPT, ded_lwf: dedLWF,
     ded_tds: dedTDS, ded_nps: dedNPS, ded_loan_emi: dedLoan,
@@ -167,6 +176,7 @@ function calcLineFromMonth(
       basic, hra, conveyance, special_allowance: special, statutory_bonus: statBonus,
       flexi_unclaimed_taxable: flexiUnclaimed, flexi_reimbursement: flexi,
       voucher_additions: v.additions, voucher_heads: v.heads,
+      arrear_total: arrear, arrear_months: row.arrear_months || null, arrear_epf: arrearEpf,
     },
     deductions_json: {
       epf: dedEPF, vpf: dedVPF, esic: dedESIC, pt: dedPT, lwf: dedLWF,
@@ -187,6 +197,7 @@ const MONTH_COLS = [
   'esic_wage_limit', 'professional_tax_state', 'voluntary_pf_applicable', 'vpf_percent',
   'esic_employee', 'esic_employer', 'pt_amount', 'pt_rate_found',
   'lwf_employee', 'lwf_rate_found',
+  'arrear_total', 'arrear_employee_pf', 'arrear_months',
   'days_in_month', 'total_days', 'paid_days', 'attendance_uploaded_at', 'arrear_days', 'ot_hours',
 ].join(', ')
 

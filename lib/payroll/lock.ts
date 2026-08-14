@@ -29,13 +29,15 @@ export interface LockRow {
 }
 
 export interface LockFilter {
+  /** group mode mein hi kaam ka — ek mahina teen company ke teen run hota hai */
+  company: string
   department: string
   designation: string
   location: string
   /** free text: emp codes (a pasted list works) or a name */
   employee: string
 }
-export const EMPTY_LOCK_FILTER: LockFilter = { department: '', designation: '', location: '', employee: '' }
+export const EMPTY_LOCK_FILTER: LockFilter = { company: '', department: '', designation: '', location: '', employee: '' }
 
 /** The month's employees with their lock state. Filtering happens server-side so the
  *  list on screen and the set that gets unlocked are decided by the same condition. */
@@ -46,6 +48,10 @@ export async function loadLockList(
   const terms = f.employee.split(/[\s,;]+/).map(t => t.trim()).filter(Boolean)
   const out: LockRow[] = []
   for (const run of runs) {
+    // Company is filtered here rather than server-side: it is not an employee attribute
+    // at all but which company's run the row came from, and the RPC takes one run at a
+    // time anyway. Skipping the call outright also saves a round trip per company.
+    if (f.company && (run.company_name || '') !== f.company) continue
     const { data, error } = await supabase.rpc('payroll_lock_list', {
       p_run_id: run.id,
       p_department: f.department || null,
@@ -70,7 +76,10 @@ export async function loadLockList(
 export function lockFilterOptions(rows: LockRow[]) {
   const uniq = (k: keyof LockRow) =>
     Array.from(new Set(rows.map(r => String(r[k] ?? '').trim()).filter(Boolean))).sort()
-  return { departments: uniq('department'), designations: uniq('designation'), locations: uniq('location') }
+  return {
+    companies: uniq('company'),
+    departments: uniq('department'), designations: uniq('designation'), locations: uniq('location'),
+  }
 }
 
 /** Lock the employees a run just paid. Called by Run Payroll, not by a button. */

@@ -59,11 +59,15 @@ function EmpRow({ r, checked, onToggle, isGroup }: {
   r: LockRow; checked: boolean; onToggle: () => void; isGroup: boolean
 }) {
   const td: React.CSSProperties = { padding: '10px 8px', borderBottom: `1px solid ${C.border}`, verticalAlign: 'middle' }
+  // Every row is selectable, in both directions. Only locked rows used to be, which left
+  // the whole screen dead for a company where nobody is locked yet — and that is the
+  // normal state before the first payroll run. Unlocked rows are tinted rather than
+  // faded: a greyed-out row reads as broken, not as "already open".
   return (
-    <tr style={{ opacity: r.is_locked ? 1 : 0.55 }}>
+    <tr style={{ background: r.is_locked ? 'transparent' : '#F8FDFA' }}>
       <td style={{ ...td, width: 30 }}>
-        <input type="checkbox" checked={checked} onChange={onToggle} disabled={!r.is_locked}
-          style={{ width: 16, height: 16, cursor: r.is_locked ? 'pointer' : 'not-allowed', accentColor: C.purple }} />
+        <input type="checkbox" checked={checked} onChange={onToggle}
+          style={{ width: 16, height: 16, cursor: 'pointer', accentColor: C.purple }} />
       </td>
       <td style={td}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -101,6 +105,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
   const [monthVal, setMonthVal] = useState('')
   const [monthRuns, setMonthRuns] = useState<PayrollRun[]>([])
   const [rows, setRows] = useState<LockRow[]>([])
+  const [optionRows, setOptionRows] = useState<LockRow[]>([])
   const [audit, setAudit] = useState<LockAudit[]>([])
   const [filter, setFilter] = useState<LockFilter>(EMPTY_LOCK_FILTER)
   const [applied, setApplied] = useState<LockFilter>(EMPTY_LOCK_FILTER)
@@ -139,11 +144,15 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
       const thin = list.map(r => ({ id: r.id, company_name: r.company_name }))
       const [data, log] = await Promise.all([loadLockList(thin, applied), loadLockAudit(list.map(r => r.id))])
       setRows(data)
+      // Snapshot of the full month, kept for the dropdowns. Only refreshed when nothing
+      // is filtered, which is exactly when `data` IS the full month.
+      if (!applied.company && !applied.department && !applied.designation
+          && !applied.location && !applied.employee.trim()) setOptionRows(data)
       setAudit(log)
       // Anyone who is no longer selectable drops out of the selection, so the button
       // count can never claim more than it will actually act on.
-      const pickable = new Set(data.filter(r => r.is_locked).map(r => r.employee_code))
-      setSel(prev => new Set([...prev].filter(c => pickable.has(c))))
+      const present = new Set(data.map(r => r.employee_code))
+      setSel(prev => new Set([...prev].filter(c => present.has(c))))
     } catch (e: any) {
       setErr(/schema cache|could not find|does not exist/i.test(e?.message || '')
         ? 'Lock / Unlock needs migration sql102 — it is not applied to this database yet.'
@@ -153,18 +162,26 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
   }, [companyId, fy, monthVal, applied])
   useEffect(() => { refresh() }, [refresh])
 
-  const opts = lockFilterOptions(rows)
+  // Dropdown choices come from the UNFILTERED list. Building them from the visible rows
+  // meant that picking a company emptied the company dropdown of every other company —
+  // the filter would narrow itself until it could not be widened again.
+  const opts = lockFilterOptions(optionRows.length ? optionRows : rows)
+  const companies = opts.companies
   const label = monthRuns[0] ? periodLabel(monthRuns[0]) : ''
   const monthOpts = Array.from(new Map(runs.map(r => [r.month, r])).values()).sort((a, b) => a.month - b.month)
   const lockedCount = rows.filter(r => r.is_locked).length
-  const selected = rows.filter(r => sel.has(r.employee_code) && r.is_locked)
+  // Split by what each selected row actually needs doing. Selecting a mix is fine —
+  // each button acts only on the half it applies to, and says how many that is.
+  const picked      = rows.filter(r => sel.has(r.employee_code))
+  const toUnlock    = picked.filter(r => r.is_locked)
+  const toLock      = picked.filter(r => !r.is_locked)
 
   function toggle(code: string) {
     setSel(prev => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n })
   }
   function toggleAll() {
-    const pickable = rows.filter(r => r.is_locked).map(r => r.employee_code)
-    setSel(prev => (pickable.every(c => prev.has(c)) ? new Set() : new Set(pickable)))
+    const all = rows.map(r => r.employee_code)
+    setSel(prev => (all.length > 0 && all.every(c => prev.has(c)) ? new Set() : new Set(all)))
   }
 
   // Group by run, because in group mode a month is one run per company and each unlock
@@ -176,12 +193,12 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
   }
 
   async function unlock() {
-    if (!selected.length) return
+    if (!toUnlock.length) return
     if (!reason.trim()) { setReasonErr(true); return }
     setReasonErr(false); setBusy(true); setErr(''); setMsg('')
     let count = 0
     const fails: string[] = []
-    for (const [runId, codes] of byRun(selected)) {
+    for (const [runId, codes] of byRun(toUnlock)) {
       const { error, count: n } = await unlockEmployees(runId, codes, reason.trim())
       if (error) fails.push(error); else count += n
     }
@@ -194,8 +211,24 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
     refresh()
   }
 
-  // Undoing an unlock. Not part of the normal flow — payroll running is what locks
-  // people — but an unlock made in error has to be closable without re-running payroll.
+  // Locking by hand. Payroll running is what normally locks people, so this exists for
+  // the case that flow cannot cover: an unlock made in error, which has to be closable
+  // again without re-running a month's payroll to do it.
+  async function lockSelected() {
+    if (!toLock.length) return
+    setBusy(true); setErr(''); setMsg('')
+    let count = 0
+    const fails: string[] = []
+    for (const [runId, codes] of byRun(toLock)) {
+      const { error, count: n } = await lockEmployees(runId, codes)
+      if (error) fails.push(error); else count += n
+    }
+    setBusy(false)
+    if (fails.length) setErr(fails.join('  ·  '))
+    if (count) { setMsg(`✓ ${count} employee${count === 1 ? '' : 's'} locked.`); setSel(new Set()) }
+    refresh()
+  }
+
   async function relock(r: LockRow) {
     setBusy(true); setErr(''); setMsg('')
     const { error, count } = await lockEmployees(r.run_id, [r.employee_code])
@@ -233,6 +266,17 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         <div style={{ fontSize: 14, fontWeight: 700, margin: '0 0 3px' }}>Find employees</div>
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>Filter to select multiple employees at once, or search by employee code directly.</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 12 }}>
+          {/* Company only in group mode — with one company picked in the header it would
+              be a dropdown with a single choice. */}
+          {isGroup && companies.length > 1 && (
+            <div>
+              <label style={fieldLbl}>Company</label>
+              <select style={inp} value={filter.company} onChange={e => setFilter({ ...filter, company: e.target.value })}>
+                <option value="">All companies</option>
+                {companies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label style={fieldLbl}>Department</label>
             <select style={inp} value={filter.department} onChange={e => setFilter({ ...filter, department: e.target.value })}>
@@ -278,15 +322,17 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           <div style={{ fontSize: 11.5, color: C.muted }}>
             🔒 {lockedCount} locked · 🔓 {rows.length - lockedCount} unlocked
           </div>
-          {lockedCount > 0 && (
+          {/* Works on every row now, not just the locked ones — otherwise a company with
+              nothing locked yet had no way to select anything at all. */}
+          {rows.length > 0 && (
             <button onClick={toggleAll}
               style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11.5, fontWeight: 600, color: C.purpleD, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
-              {rows.filter(r => r.is_locked).every(r => sel.has(r.employee_code)) ? 'Clear selection' : `Select all ${lockedCount} locked`}
+              {rows.length > 0 && rows.every(r => sel.has(r.employee_code)) ? 'Clear selection' : `Select all ${rows.length}`}
             </button>
           )}
         </div>
         <div style={{ fontSize: 12, color: C.muted, margin: '3px 0 14px' }}>
-          Select employees to unlock. Only locked rows can be selected — the rest are already open.
+          Tick any row. Locked ones can be unlocked (reason required), unlocked ones can be locked back.
         </div>
 
         {loading ? (
@@ -328,15 +374,32 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           style={{ ...inp, minHeight: 54, resize: 'vertical', borderColor: reasonErr ? C.red : C.border }} />
         {reasonErr && <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>A reason is required before you can unlock any employee.</div>}
 
-        <button onClick={unlock} disabled={busy || selected.length === 0}
-          style={{
-            fontFamily: font, fontSize: 13.5, fontWeight: 700, color: '#fff',
-            background: selected.length && !busy ? C.purple : '#D8D3F5', border: 'none', borderRadius: 10,
-            padding: '12px 22px', cursor: selected.length && !busy ? 'pointer' : 'not-allowed', marginTop: 12,
-            boxShadow: selected.length && !busy ? '0 3px 10px rgba(124,58,237,0.2)' : 'none',
-          }}>
-          {busy ? 'Working…' : `Unlock Selected (${selected.length})`}
-        </button>
+        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button onClick={unlock} disabled={busy || toUnlock.length === 0}
+            style={{
+              fontFamily: font, fontSize: 13.5, fontWeight: 700, color: '#fff',
+              background: toUnlock.length && !busy ? C.purple : '#D8D3F5', border: 'none', borderRadius: 10,
+              padding: '12px 22px', cursor: toUnlock.length && !busy ? 'pointer' : 'not-allowed',
+              boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(124,58,237,0.2)' : 'none',
+            }}>
+            {busy ? 'Working…' : `🔓 Unlock Selected (${toUnlock.length})`}
+          </button>
+          {/* No reason needed to lock: closing a record back up takes nothing away from
+              anyone. Reopening one does, which is why only that side demands a reason. */}
+          <button onClick={lockSelected} disabled={busy || toLock.length === 0}
+            style={{
+              fontFamily: font, fontSize: 13.5, fontWeight: 700,
+              color: toLock.length && !busy ? C.red : '#9CA3AF',
+              background: '#fff', border: `1px solid ${toLock.length && !busy ? C.redBd : C.border}`,
+              borderRadius: 10, padding: '12px 22px',
+              cursor: toLock.length && !busy ? 'pointer' : 'not-allowed',
+            }}>
+            🔒 Lock Selected ({toLock.length})
+          </button>
+          {picked.length === 0 && (
+            <span style={{ fontSize: 11.5, color: C.muted }}>Tick a row above to enable these.</span>
+          )}
+        </div>
 
         {msg && <div style={{ background: C.greenBg, border: `1px solid ${C.greenBd}`, color: C.green, borderRadius: 10, padding: '12px 16px', fontSize: 12.5, fontWeight: 600, marginTop: 12 }}>{msg}</div>}
         {err && <div style={{ background: C.redBg, border: `1px solid ${C.redBd}`, color: C.red, borderRadius: 10, padding: '12px 16px', fontSize: 12.5, marginTop: 12 }}>{err}</div>}

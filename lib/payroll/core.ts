@@ -601,7 +601,10 @@ export async function loadRunRegister(runId: string): Promise<Record<string, any
     supabase.from('payroll_lines').select('*').eq('run_id', runId),
     // Attendance comes from the Month Master, same as the engine. payroll_attendance_snapshot
     // is a legacy table that nothing populates, so reading it left these columns blank.
-    supabase.from('payroll_employee_snapshot').select('employee_id, paid_days, total_days, days_in_month, absent_days, arrear_days, ot_hours').eq('run_id', runId),
+    // arrear_total / arrear_months ride along because the register is what gets checked
+    // when an employee asks why this month's pay is higher — "Apr, May arrear" answers it
+    // on the row, instead of sending someone back to the Month Master to work it out.
+    supabase.from('payroll_employee_snapshot').select('employee_id, paid_days, total_days, days_in_month, absent_days, arrear_days, ot_hours, arrear_total, arrear_months').eq('run_id', runId),
     supabase.from('payroll_employee_snapshot').select('employee_id, employee_code, full_name, department, location, annual_ctc, basic_monthly, hra_monthly, bank_account_last4, ifsc_code').eq('run_id', runId),
   ])
   const attBy = new Map<string, any>((att || []).map((a: any) => [a.employee_id, a]))
@@ -628,6 +631,7 @@ export async function loadRunRegister(runId: string): Promise<Record<string, any
       annual_ctc: s.annual_ctc ?? '', basic_monthly: s.basic_monthly ?? '', hra_monthly: s.hra_monthly ?? '',
       paid_days: a.paid_days ?? '', total_days: a.total_days ?? '', days_in_month: a.days_in_month ?? '',
       absent_days: a.absent_days ?? '', arrear_days: a.arrear_days ?? '', ot_hours: a.ot_hours ?? '',
+      arrear_total: a.arrear_total ?? '', arrear_months: a.arrear_months ?? '',
       ...clean(l, ['id', 'run_id', 'created_at']),
       bank_account_last4: s.bank_account_last4 || '', ifsc_code: s.ifsc_code || '',
     }

@@ -361,13 +361,23 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       // downloads below is only meaningful once this has run.
       // Order matters and is not interchangeable: EPF wages are Earn_Gross − Earn_HRA,
       // so the earned columns have to exist before the statutory ones can be computed.
-      let stepFailed = false
+      // Earnings is the only genuine prerequisite — EPF wages are Earn_Gross − Earn_HRA,
+      // so nothing downstream means anything without it. A failure there stops this
+      // company.
+      //
+      // The statutory steps are different: each one only fills its own columns, and the
+      // engine falls back to the frozen figures for whatever is missing. One of them
+      // breaking used to abort the whole run, so a single bad step meant nobody got paid
+      // and no sheet came out. Now the error is reported and payroll still runs.
+      let prereqFailed = false
       for (const [what, cat] of [['earnings', EARN_CAT], ['EPF', EPF_CAT], ['ESIC', ESIC_CAT], ['PT', PT_CAT], ['LWF', LWF_CAT], ['arrear', ARREAR_CAT]] as const) {
         if (!cat) continue
         const { error } = await runCategorySync(cat, [r.id], codes)
-        if (error) { fails.push(`${r.company_name || label}: ${what} — ${error}`); stepFailed = true; break }
+        if (!error) continue
+        fails.push(`${r.company_name || label}: ${what} — ${error}`)
+        if (what === 'earnings') { prereqFailed = true; break }
       }
-      if (stepFailed) continue
+      if (prereqFailed) continue
 
       // Step 3 — the payroll engine, which writes payroll_lines (TDS, loans, net pay).
       const { error, result: res } = await calculateRun(r, codes, { partial, excluded })
@@ -578,6 +588,18 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
                 ? `▶️ Run Payroll for ${willRun.length} employee${willRun.length === 1 ? '' : 's'}`
                 : calculated ? '▶️ Re-run Payroll' : '▶️ Run Payroll'}
         </button>
+        {/* Available whenever the month has rows, not only after a clean run. The sheet
+            was previously produced only as the last step of a successful run, so any
+            failure earlier in the chain left HR with no numbers at all to look at. */}
+        {(rows?.length ?? 0) > 0 && (
+          <button onClick={() => downloadSheet(null).catch(e => setErr('Sheet download failed: ' + (e?.message || e)))}
+            disabled={busy}
+            style={{
+              fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.purpleD, background: C.card,
+              border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px',
+              cursor: busy ? 'not-allowed' : 'pointer',
+            }}>📄 Download sheet</button>
+        )}
         {calculated && (
           <button onClick={downloadRegister} disabled={busy}
             style={{
