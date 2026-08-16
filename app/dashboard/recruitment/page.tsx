@@ -172,7 +172,7 @@ function SectionLine({ title }:{ title:string }) {
 
 // ── MAIN ──────────────────────────────────────────────────────────
 export default function RecruitmentPage() {
-  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'>('dashboard')
+  const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
   const [companies, setCompanies] = useState<Company[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -211,6 +211,7 @@ export default function RecruitmentPage() {
     { k:'sendoffer', l:'📨 Send Offers' },
     { k:'offers', l:'📄 Offers' },
     { k:'preonboarding', l:'🎉 Pre-onboarding' },
+    { k:'jobstatus', l:'📈 Job Status' },
   ]
   const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify }
 
@@ -255,6 +256,7 @@ export default function RecruitmentPage() {
         {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
         {tab==='offers' && <OffersTab {...props} />}
         {tab==='preonboarding' && <PreOnboardTab {...props} />}
+        {tab==='jobstatus' && <JobStatusTab {...props} />}
       </div>
 
       {notify && <Toast msg={notify.msg} type={notify.type} onClose={() => setNotify(null)} />}
@@ -388,71 +390,993 @@ async function reopenMrf(supabase:any, mrfId?:string) {
   if (m?.status === 'CLOSED') await supabase.from('manpower_requisitions').update({ status:'APPROVED' }).eq('id', mrfId)
 }
 
+// ── MRF HELPERS ───────────────────────────────────────────────────
+// Field taxonomy follows mrf-module-spec.md §2 (sections 1–10).
+const MRF_STATUSES = ['DRAFT','SUBMITTED','ON_HOLD','APPROVED','REJECTED','CLOSED']
+// Quick Hire is the ≤ ₹6L lane; Full MRF carries any CTC, with no floor.
+const QUICK_HIRE_CAP = 600000
+// §1 Requisition type · §3 Work mode · §9 Sourcing mode
+const REQ_TYPES     = ['New Hire','Replacement','Temporary','Backfill']
+const WORK_MODES    = ['Onsite','Hybrid','Remote']
+const SOURCING_MODES= ['External','Internal','Both']
+const ATTACH_KINDS  = [
+  { k:'ORG_CHART',  label:'Org chart snapshot' },
+  { k:'BUDGET_DOC', label:'Budget approval document' },
+  { k:'OTHER',      label:'Other supporting file' },
+]
+// §7 CTQ — Critical-to-Qualify screening questions driving auto-reject.
+const CTQ_TYPES = [
+  { k:'YES_NO',     label:'Yes / No' },
+  { k:'NUMBER_MIN', label:'Number — minimum' },
+  { k:'TEXT',       label:'Free text' },
+]
+// §8 Default approval hierarchy. Stored per requisition (not hardcoded logic),
+// so a different chain can be used per department without a code change.
+const DEFAULT_CHAIN_ROLES = ['Reporting Manager','Department Head','HR','Finance']
+
+const URGENCY_STYLE:Record<string,[string,string]> = {
+  HIGH:['#FEF2F2','#DC2626'], MEDIUM:['#FFFBEB','#D97706'], LOW:['#ECFDF5','#059669'],
+}
+const CUR_SYMBOL:Record<string,string> = { INR:'₹', USD:'$', GBP:'£', EUR:'€', AED:'AED ', SGD:'S$' }
+const money  = (n?:number|null, cur='INR') => n==null ? '—' : (CUR_SYMBOL[cur]||'')+Number(n).toLocaleString('en-IN')
+const lakhs  = (n?:number|null, cur='INR') => n==null ? '—' : cur==='INR' ? '₹'+(Number(n)/100000).toFixed(1)+'L' : money(n,cur)
+const fmtDay = (s?:string|null) => s ? new Date(s).toLocaleDateString('en-IN',{ day:'2-digit', month:'short', year:'numeric' }) : '—'
+const asArray = (v:any) => Array.isArray(v) ? v : (typeof v==='string' && v ? (()=>{ try { return JSON.parse(v) } catch { return [] } })() : [])
+
+// ── Compensation basis, driven by employment type ─────────────────
+// An employee draws a salary; interns, apprentices (NAPS/NATS) and live-project
+// trainees draw a stipend; contractors and consultants are paid fees. The three
+// are quoted on different bases, so the form must not label them all "Salary".
+// `fixedTerm` marks engagements that run for a defined period and therefore
+// need a duration — an internship without one is not a real requisition.
+const COMPENSATION:Record<string,{ kind:'SALARY'|'STIPEND'|'FEES'; label:string; period:'ANNUAL'|'MONTHLY'; fixedTerm:boolean; ph:[string,string] }> = {
+  'Employee':     { kind:'SALARY',  label:'Salary',  period:'ANNUAL',  fixedTerm:false, ph:['600000','1200000'] },
+  'Intern':       { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['10000','25000'] },
+  'NAPS':         { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['9000','15000'] },
+  'NATS':         { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['9000','15000'] },
+  'Live Project': { kind:'STIPEND', label:'Stipend', period:'MONTHLY', fixedTerm:true,  ph:['5000','15000'] },
+  'Contract':     { kind:'FEES',    label:'Fees',    period:'MONTHLY', fixedTerm:true,  ph:['50000','120000'] },
+  'Consultant':   { kind:'FEES',    label:'Fees',    period:'MONTHLY', fixedTerm:false, ph:['75000','200000'] },
+}
+const compOf = (empType?:string) => COMPENSATION[empType||'Employee'] || COMPENSATION['Employee']
+const perLabel = (p:string) => p==='ANNUAL' ? 'per annum' : 'per month'
+/** Annual figures read better in lakhs; monthly stipends and fees do not. */
+const payAmount = (n?:number|null, cur='INR', period='ANNUAL') =>
+  n==null ? '—' : period==='ANNUAL' ? lakhs(n,cur) : money(n,cur)+'/mo'
+/** Target joining date + N months → the engagement's expected end date. */
+function addMonths(dateStr?:string, months?:number|string) {
+  const n = Number(months)
+  if (!dateStr || !n) return null
+  const d = new Date(dateStr); if (isNaN(d.getTime())) return null
+  const day = d.getDate()
+  d.setMonth(d.getMonth() + n)
+  if (d.getDate() < day) d.setDate(0)   // clamp 31 Jan + 1 month → 28/29 Feb
+  return d.toISOString().slice(0,10)
+}
+
+// Load several master_values lists in one round trip, keyed by master type code.
+async function loadMasterValues(supabase:any, codes:string[]) {
+  const out:Record<string,{code:string;label:string}[]> = {}
+  codes.forEach(c=>{ out[c] = [] })
+  const { data:types } = await supabase.from('master_types').select('id, code').in('code', codes)
+  if (!types?.length) return out
+  const byId = new Map(types.map((t:any)=>[t.id, t.code]))
+  const { data:vals } = await supabase.from('master_values')
+    .select('type_id, code, label, is_active, sort_order')
+    .in('type_id', types.map((t:any)=>t.id)).order('sort_order')
+  for (const v of vals||[]) {
+    if (v.is_active === false) continue
+    const c = byId.get(v.type_id) as string | undefined
+    if (c) out[c].push({ code:v.code, label:v.label })
+  }
+  return out
+}
+
+// Field-level validation. Returns { field: message }; empty means valid.
+// `strict` adds the checks that only matter when submitting for approval — a
+// draft is allowed to be half-finished, a submission is not.
+function validateMrf(form:any, strict:boolean) {
+  const e:Record<string,string> = {}
+  const bMin = Number(form.budget_min)||0, bMax = Number(form.budget_max)||0
+  const xMin = Number(form.experience_min)||0, xMax = Number(form.experience_max)||0
+  if (!form.company_id) e.company_id = 'Company is required'
+  if (!String(form.designation||'').trim()) e.designation = 'Designation is required'
+  if (Number(form.no_of_openings) < 1) e.no_of_openings = 'At least 1 opening'
+  const comp = compOf(form.employment_type)
+  if (bMin && bMax && bMin > bMax) e.budget_max = `Max ${comp.label.toLowerCase()} is below the minimum`
+  if (form.experience_min && form.experience_max && xMin > xMax) e.experience_max = 'Max experience is below the minimum'
+  // The two lanes split at ₹6L CTC and do not overlap:
+  //   Quick Hire  → CTC ≤ ₹6L
+  //   Full MRF    → CTC >  ₹6L
+  // Monthly stipends and fees are annualised first, so the same ₹6L boundary
+  // means the same thing whatever the employment type.
+  const annualMax = comp.period==='ANNUAL' ? bMax : bMax * 12
+  const perMo = comp.period==='ANNUAL' ? '' : ` (${money(bMax)}/mo = ${lakhs(annualMax)} a year)`
+  if (bMax && form.mrf_type==='Quick Hire' && annualMax > QUICK_HIRE_CAP)
+    e.budget_max = `Quick Hire covers CTC up to ₹${QUICK_HIRE_CAP/100000}L${perMo} — switch to Full MRF`
+  if (bMax && form.mrf_type==='Full MRF' && annualMax <= QUICK_HIRE_CAP)
+    e.budget_max = `Full MRF is for CTC above ₹${QUICK_HIRE_CAP/100000}L${perMo} — switch to Quick Hire`
+  // A fixed-term engagement without a period is not a usable requisition.
+  if (comp.fixedTerm && strict && !Number(form.duration_months))
+    e.duration_months = `${form.employment_type} is a fixed-term engagement — enter its duration`
+  if (form.duration_months && (Number(form.duration_months) < 1 || Number(form.duration_months) > 60))
+    e.duration_months = 'Duration must be between 1 and 60 months'
+  // §6 — a requisition cannot expire before the role is due to start.
+  if (form.target_joining_date && form.validity_date && form.validity_date < form.target_joining_date)
+    e.validity_date = 'Validity date is before the target joining date'
+  // §5 — replacement hiring needs to say who is being replaced.
+  if ((form.hiring_type==='Replacement'||form.hiring_type==='Backfill') && strict && !form.outgoing_employee_id)
+    e.outgoing_employee_id = 'Select the outgoing employee for a replacement'
+  if (strict) {
+    if (!form.department_id) e.department_id = 'Pick a department before submitting'
+    if (!form.reason) e.reason = 'Reason for hire is required'
+    if (!bMax) e.budget_max = 'Budget is needed for approval'
+    if (!form.target_joining_date) e.target_joining_date = 'Target joining date is required'
+    if (form.mrf_type!=='Quick Hire' && !String(form.skills_required||'').trim() && !String(form.job_description||'').trim())
+      e.skills_required = 'Add skills or a JD — AI screening needs one of them'
+  }
+  return e
+}
+
+async function logMrfAudit(supabase:any, mrf:{id:string; company_id?:string}, action_type:string, details:any) {
+  await supabase.from('recruitment_audit_logs').insert({
+    mrf_id:mrf.id, company_id:mrf.company_id||null, action_type, details,
+    created_at:new Date().toISOString(),
+  })
+}
+
+// Inline-error wrapper. Sub-components stay OUTSIDE the parent so typing in a
+// field does not re-mount the input and lose focus.
+function Field({ label, error, required, hint, children }:{ label:string; error?:string; required?:boolean; hint?:string; children:React.ReactNode }) {
+  return (
+    <div>
+      <label style={T.label}>{label}{required && <span style={{ color:'#DC2626' }}> *</span>}</label>
+      {children}
+      {error ? <div style={{ fontSize:10.5, color:'#DC2626', marginTop:3 }}>⚠ {error}</div>
+             : hint ? <div style={{ fontSize:10, color:'#9CA3AF', marginTop:3 }}>{hint}</div> : null}
+    </div>
+  )
+}
+
+function MrfMeta({ label, value }:{ label:string; value:React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
+      <div style={{ fontSize:12.5, color:'#1E1B4B', marginTop:2 }}>{value ?? '—'}</div>
+    </div>
+  )
+}
+
+// Reusable master-driven dropdown; falls back to a hint when the lookup is empty.
+function MasterSelect({ options, value, onChange, placeholder, style }:any) {
+  return (
+    <select style={style||T.select} value={value||''} onChange={e=>onChange(e.target.value)}>
+      <option value="">{options?.length ? (placeholder||'Select…') : 'No options configured'}</option>
+      {(options||[]).map((o:any)=><option key={o.code} value={o.label}>{o.label}</option>)}
+    </select>
+  )
+}
+
+// ── §7 CTQ QUESTION EDITOR ────────────────────────────────────────
+function CtqEditor({ items, onChange }:{ items:any[]; onChange:(v:any[])=>void }) {
+  const add = () => onChange([...items, { id:`q${Date.now()}`, question:'', type:'YES_NO', expected:'Yes', knockout:true }])
+  const set = (i:number, patch:any) => onChange(items.map((q,ix)=> ix===i ? { ...q, ...patch } : q))
+  const del = (i:number) => onChange(items.filter((_,ix)=>ix!==i))
+  return (
+    <div>
+      {items.length===0 && (
+        <div style={{ fontSize:11.5, color:'#9CA3AF', marginBottom:8 }}>
+          No screening questions. Add one to auto-reject applicants who miss a baseline requirement.
+        </div>
+      )}
+      {items.map((q,i)=>(
+        <div key={q.id||i} style={{ border:'1px solid #EDE9FE', borderRadius:8, padding:'10px 12px', marginBottom:8, background:'#FAFAF8' }}>
+          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
+            <span style={{ fontSize:10.5, fontWeight:700, color:'#6D28D9', minWidth:22 }}>Q{i+1}</span>
+            <input style={{ ...T.input, flex:1 }} value={q.question||''} placeholder="e.g. Do you have a valid B.Tech degree?"
+              onChange={e=>set(i,{ question:e.target.value })} />
+            <button onClick={()=>del(i)} style={{ ...T.btn, background:'#FEF2F2', color:'#DC2626', border:'1px solid #FCA5A5', fontSize:11 }}>✕</button>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:8, alignItems:'center' }}>
+            <select style={T.select} value={q.type||'YES_NO'} onChange={e=>set(i,{ type:e.target.value, expected: e.target.value==='YES_NO'?'Yes':'' })}>
+              {CTQ_TYPES.map(t=><option key={t.k} value={t.k}>{t.label}</option>)}
+            </select>
+            {q.type==='YES_NO' ? (
+              <select style={T.select} value={q.expected||'Yes'} onChange={e=>set(i,{ expected:e.target.value })}>
+                <option value="Yes">Expected: Yes</option><option value="No">Expected: No</option>
+              </select>
+            ) : (
+              <input style={T.input} value={q.expected||''} placeholder={q.type==='NUMBER_MIN'?'Minimum value':'Expected answer'}
+                onChange={e=>set(i,{ expected:e.target.value })} />
+            )}
+            <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11.5, color:'#6B7280', whiteSpace:'nowrap' as const }}>
+              <input type="checkbox" checked={q.knockout!==false} onChange={e=>set(i,{ knockout:e.target.checked })} />
+              Auto-reject
+            </label>
+          </div>
+        </div>
+      ))}
+      <button onClick={add} style={{ ...T.btnOutline }}>+ Add screening question</button>
+    </div>
+  )
+}
+
+// ── §8 APPROVAL CHAIN EDITOR ──────────────────────────────────────
+function ApprovalChainEditor({ chain, onChange }:{ chain:any[]; onChange:(v:any[])=>void }) {
+  const add = (role:string) => onChange([...chain, { step:chain.length+1, role, status:'PENDING', actor:null, comments:null, acted_at:null }])
+  const del = (i:number) => onChange(chain.filter((_,ix)=>ix!==i).map((s,ix)=>({ ...s, step:ix+1 })))
+  const move = (i:number,d:number) => {
+    const j = i+d; if (j<0||j>=chain.length) return
+    const c = [...chain]; [c[i],c[j]] = [c[j],c[i]]
+    onChange(c.map((s,ix)=>({ ...s, step:ix+1 })))
+  }
+  return (
+    <div>
+      {chain.length===0 && (
+        <div style={{ fontSize:11.5, color:'#9CA3AF', marginBottom:8 }}>
+          No chain defined — a single approval will approve this requisition outright.
+        </div>
+      )}
+      {chain.map((s,i)=>(
+        <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 11px', border:'1px solid #EDE9FE',
+          borderRadius:8, marginBottom:6, background: s.status==='APPROVED'?'#ECFDF5': s.status==='REJECTED'?'#FEF2F2':'#FAFAF8' }}>
+          <span style={{ width:22, height:22, borderRadius:'50%', background:'#EDE9FE', color:'#6D28D9', fontSize:11,
+            fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{i+1}</span>
+          <span style={{ fontSize:12.5, fontWeight:600, flex:1 }}>{s.role}</span>
+          {s.status && s.status!=='PENDING' && <Badge text={s.status} />}
+          {s.actor && <span style={{ fontSize:10.5, color:'#9CA3AF' }}>{s.actor}</span>}
+          <button onClick={()=>move(i,-1)} disabled={i===0} style={{ ...T.btn, background:'#F3F0FF', color:'#6D28D9', fontSize:11, opacity:i===0?.4:1 }}>↑</button>
+          <button onClick={()=>move(i,1)} disabled={i===chain.length-1} style={{ ...T.btn, background:'#F3F0FF', color:'#6D28D9', fontSize:11, opacity:i===chain.length-1?.4:1 }}>↓</button>
+          <button onClick={()=>del(i)} style={{ ...T.btn, background:'#FEF2F2', color:'#DC2626', fontSize:11 }}>✕</button>
+        </div>
+      ))}
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginTop:6 }}>
+        {DEFAULT_CHAIN_ROLES.filter(r=>!chain.some(s=>s.role===r)).map(r=>(
+          <button key={r} onClick={()=>add(r)} style={T.btnOutline}>+ {r}</button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ── §9 SOURCING CHANNEL PICKER ────────────────────────────────────
+function ChannelPicker({ options, value, onChange }:{ options:any[]; value:string[]; onChange:(v:string[])=>void }) {
+  const toggle = (label:string) =>
+    onChange(value.includes(label) ? value.filter(v=>v!==label) : [...value, label])
+  if (!options?.length) return <div style={{ fontSize:11.5, color:'#9CA3AF' }}>No sourcing channels configured in Masters.</div>
+  return (
+    <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
+      {options.map((o:any)=>{
+        const on = value.includes(o.label)
+        return (
+          <button key={o.code} onClick={()=>toggle(o.label)} style={{ ...T.btn, fontSize:11,
+            background:on?'#7C3AED':'#fff', color:on?'#fff':'#6D28D9', border:on?'none':'1px solid #DDD6FE' }}>
+            {on?'✓ ':''}{o.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── §10 ATTACHMENTS ───────────────────────────────────────────────
+function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify }:any) {
+  const [kind, setKind] = useState('ORG_CHART')
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  async function upload(file:File) {
+    setBusy(true)
+    const fd = new FormData()
+    fd.append('mrf_id', mrfId); fd.append('kind', kind); fd.append('file', file)
+    try {
+      const r = await fetch('/api/recruitment/upload-mrf-doc', { method:'POST', body:fd })
+      const j = await r.json()
+      if (!r.ok) throw new Error(j.error||'Upload failed')
+      showNotify('File uploaded'); onChanged()
+    } catch (e:any) { showNotify(e.message||'Upload failed','error') }
+    setBusy(false)
+    if (inputRef.current) inputRef.current.value = ''
+  }
+
+  async function open(path:string) {
+    const r = await fetch('/api/recruitment/upload-mrf-doc?path='+encodeURIComponent(path))
+    const j = await r.json()
+    if (j.url) window.open(j.url,'_blank'); else showNotify(j.error||'Could not open file','error')
+  }
+
+  async function remove(path:string) {
+    const r = await fetch(`/api/recruitment/upload-mrf-doc?mrf_id=${mrfId}&path=${encodeURIComponent(path)}`, { method:'DELETE' })
+    if (r.ok) { showNotify('File removed'); onChanged() } else showNotify('Could not remove file','error')
+  }
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap' as const, alignItems:'center' }}>
+        <select style={{ ...T.select, maxWidth:230 }} value={kind} onChange={e=>setKind(e.target.value)}>
+          {ATTACH_KINDS.map(a=><option key={a.k} value={a.k}>{a.label}</option>)}
+        </select>
+        <input ref={inputRef} type="file" style={{ display:'none' }}
+          onChange={e=>{ const f=e.target.files?.[0]; if (f) upload(f) }} />
+        <button onClick={()=>inputRef.current?.click()} disabled={busy} style={{ ...T.btnPrimary, opacity:busy?.6:1 }}>
+          {busy?'Uploading…':'📎 Upload file'}
+        </button>
+        <span style={{ fontSize:10.5, color:'#9CA3AF' }}>Max 10 MB</span>
+      </div>
+      {attachments.length===0 && <div style={{ fontSize:11.5, color:'#9CA3AF' }}>No documents attached.</div>}
+      {attachments.map((a:any)=>(
+        <div key={a.path} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:'1px solid #F3F0FF', gap:10 }}>
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:12.5, fontWeight:600, color:'#1E1B4B' }}>{a.name}</div>
+            <div style={{ fontSize:10.5, color:'#9CA3AF' }}>
+              {ATTACH_KINDS.find(k=>k.k===a.kind)?.label||a.kind}
+              {a.size?` · ${(a.size/1024).toFixed(0)} KB`:''} · {fmtDay(a.uploaded_at)}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+            <button onClick={()=>open(a.path)} style={T.btnOutline}>Open</button>
+            <button onClick={()=>remove(a.path)} style={{ ...T.btn, background:'#FEF2F2', color:'#DC2626', border:'1px solid #FCA5A5', fontSize:11 }}>Remove</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── MRF OVERVIEW ──────────────────────────────────────────────────
+// Headline position maths plus a clickable status breakdown. "Available" is
+// the number still to hire on live requisitions — openings on APPROVED MRFs
+// that no offer has been made against yet, which is what a recruiter is
+// actually working from.
+const STATUS_TONE:Record<string,[string,string]> = {
+  DRAFT:['#F1F5F9','#64748B'], SUBMITTED:['#FFFBEB','#B45309'], ON_HOLD:['#FFF7ED','#C2410C'],
+  APPROVED:['#ECFDF5','#059669'], REJECTED:['#FEF2F2','#DC2626'], CLOSED:['#F1F5F9','#475569'],
+}
+const STATUS_HELP:Record<string,string> = {
+  DRAFT:'Not yet submitted', SUBMITTED:'Waiting on approval', ON_HOLD:'Paused by an approver',
+  APPROVED:'Open for hiring', REJECTED:'Turned down', CLOSED:'Filled or withdrawn',
+}
+
+function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:any) {
+  const filledFor = (m:MRF) => candidates.filter((c:Candidate)=>
+    c.mrf_id===m.id && (c.stage==='Offer Sent'||c.stage==='Joined')).length
+  const openingsOf = (m:MRF) => m.no_of_openings || m.openings || 0
+
+  const live      = mrfs.filter((m:MRF)=>m.status==='APPROVED')
+  const totalOpen = live.reduce((s:number,m:MRF)=>s+openingsOf(m), 0)
+  const totalFill = live.reduce((s:number,m:MRF)=>s+Math.min(filledFor(m), openingsOf(m)), 0)
+  const available = Math.max(0, totalOpen - totalFill)
+  const counts = Object.fromEntries(MRF_STATUSES.map(s=>[s, mrfs.filter((m:MRF)=>m.status===s).length]))
+  const expiring = mrfs.filter((m:MRF)=>{
+    const v = (m as any).validity_date
+    if (!v || ['CLOSED','REJECTED'].includes(m.status)) return false
+    const days = Math.ceil((+new Date(v) - +new Date(new Date().toDateString()))/86400000)
+    return days <= 14
+  }).length
+
+  const Tile = ({ label, value, sub, color }:any) => (
+    <div style={{ background:'#FFFFFF', border:'1px solid rgba(124,58,237,0.12)', borderRadius:10, padding:'11px 13px' }}>
+      <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
+      <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||'#1E1B4B' }}>{value}</div>
+      {sub && <div style={{ fontSize:10.5, color:'#9CA3AF', marginTop:1 }}>{sub}</div>}
+    </div>
+  )
+
+  return (
+    <div style={{ ...T.card, padding:'14px 16px' }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:11, gap:10, flexWrap:'wrap' as const }}>
+        <div style={T.section}>Requisition Overview</div>
+        <div style={{ display:'flex', gap:6 }}>
+          {[['cards','▦ Cards'],['table','☰ List']].map(([k,l])=>(
+            <button key={k} onClick={()=>onView(k)} style={{ ...T.btn, fontSize:11,
+              background:view===k?'#7C3AED':'#fff', color:view===k?'#fff':'#6D28D9',
+              border:view===k?'none':'1px solid #DDD6FE' }}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:9, marginBottom:13 }}>
+        <Tile label="Total MRFs" value={mrfs.length} color="#7C3AED" />
+        <Tile label="Open Positions" value={totalOpen} sub="on approved MRFs" color="#1D4ED8" />
+        <Tile label="Available to Hire" value={available} sub={`${totalFill} already filled`} color={available?'#059669':'#9CA3AF'} />
+        <Tile label="Pending Approval" value={counts.SUBMITTED} sub={counts.ON_HOLD?`${counts.ON_HOLD} on hold`:'awaiting sign-off'} color={counts.SUBMITTED?'#B45309':'#9CA3AF'} />
+        <Tile label="Approved" value={counts.APPROVED} sub="live requisitions" color="#059669" />
+        {expiring>0 && <Tile label="Expiring Soon" value={expiring} sub="within 14 days" color="#DC2626" />}
+      </div>
+
+      {/* Proportional bar — the shape of the pipeline at a glance. */}
+      {mrfs.length>0 && (
+        <div style={{ display:'flex', height:7, borderRadius:99, overflow:'hidden', marginBottom:10, background:'#F3F0FF' }}>
+          {MRF_STATUSES.filter(s=>counts[s]>0).map(s=>(
+            <div key={s} title={`${s.replace('_',' ')}: ${counts[s]}`}
+              style={{ width:`${(counts[s]/mrfs.length)*100}%`, background:STATUS_TONE[s][1] }} />
+          ))}
+        </div>
+      )}
+
+      <div style={{ display:'flex', gap:7, flexWrap:'wrap' as const }}>
+        <button onClick={()=>onPickStatus('')} style={{ ...T.btn, fontSize:11,
+          background: fStatus===''?'#7C3AED':'#fff', color: fStatus===''?'#fff':'#6D28D9',
+          border: fStatus===''?'none':'1px solid #DDD6FE' }}>
+          All <span style={{ fontWeight:700 }}>{mrfs.length}</span>
+        </button>
+        {MRF_STATUSES.map(s=>{
+          const on = fStatus===s
+          const [bg,fg] = STATUS_TONE[s]
+          return (
+            <button key={s} onClick={()=>onPickStatus(on?'':s)} title={STATUS_HELP[s]}
+              style={{ ...T.btn, fontSize:11, display:'flex', alignItems:'center', gap:6,
+                background:on?fg:bg, color:on?'#fff':fg, border:'1px solid '+(on?fg:'transparent'),
+                opacity: counts[s]===0 && !on ? .55 : 1 }}>
+              {s.replace('_',' ')}<span style={{ fontWeight:700 }}>{counts[s]}</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+// ── MRF TABLE (list view) ─────────────────────────────────────────
+function MrfTable({ rows, orgOf, candidates, onOpen, onReview }:any) {
+  const th:React.CSSProperties = { fontSize:10, color:'#6D28D9', fontWeight:600, textTransform:'uppercase',
+    letterSpacing:'.05em', textAlign:'left', padding:'8px 10px', borderBottom:'1px solid #EDE9FE', whiteSpace:'nowrap' }
+  const td:React.CSSProperties = { fontSize:12, color:'#1E1B4B', padding:'9px 10px', borderBottom:'1px solid #F3F0FF', verticalAlign:'middle' }
+  return (
+    <div style={{ ...T.card, padding:0, overflowX:'auto' }}>
+      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:900 }}>
+        <thead>
+          <tr>
+            <th style={th}>MRF No.</th><th style={th}>Position</th><th style={th}>Department</th>
+            <th style={th}>Type</th><th style={{ ...th, textAlign:'center' }}>Openings</th>
+            <th style={{ ...th, textAlign:'center' }}>Filled</th><th style={th}>Status</th>
+            <th style={th}>Recruiter</th><th style={th}>Target</th><th style={th}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((m:MRF)=>{
+            const org = orgOf(m)
+            const openings = m.no_of_openings||m.openings||0
+            const filled = candidates.filter((c:Candidate)=>c.mrf_id===m.id && (c.stage==='Offer Sent'||c.stage==='Joined')).length
+            return (
+              <tr key={m.id} style={{ cursor:'pointer' }} onClick={()=>onOpen(m)}>
+                <td style={{ ...td, color:'#6B7280', whiteSpace:'nowrap' }}>{m.mrf_number||'—'}</td>
+                <td style={td}>
+                  <div style={{ fontWeight:600 }}>{(m as any).job_title||m.designation||m.position||'Untitled'}</div>
+                  {(m as any).grade && <div style={{ fontSize:10.5, color:'#9CA3AF' }}>{(m as any).grade}</div>}
+                </td>
+                <td style={{ ...td, color:'#6B7280' }}>{org.dept}</td>
+                <td style={{ ...td, color:'#6B7280', whiteSpace:'nowrap' }}>
+                  {m.employment_type||'—'}{(m as any).work_mode?` · ${(m as any).work_mode}`:''}
+                </td>
+                <td style={{ ...td, textAlign:'center', fontWeight:600 }}>{openings}</td>
+                <td style={{ ...td, textAlign:'center', color: filled>=openings&&openings>0?'#059669':'#6B7280' }}>{filled}</td>
+                <td style={td}><Badge text={m.status} /></td>
+                <td style={{ ...td, color:'#6B7280' }}>{m.assigned_recruiter||'—'}</td>
+                <td style={{ ...td, color:'#6B7280', whiteSpace:'nowrap' }}>{fmtDay((m as any).target_joining_date)}</td>
+                <td style={{ ...td, textAlign:'right', whiteSpace:'nowrap' }}>
+                  {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
+                    <button onClick={e=>{ e.stopPropagation(); onReview(m) }}
+                      style={{ ...T.btn, background:'#7C3AED', color:'#fff', fontSize:10.5 }}>Review</button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {rows.length===0 && (
+        <div style={{ padding:26, textAlign:'center', color:'#9CA3AF', fontSize:12.5 }}>No requisitions match.</div>
+      )}
+    </div>
+  )
+}
+
+// ── MRF CARD ──────────────────────────────────────────────────────
+function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, onReopen }:any) {
+  const openings = m.no_of_openings || m.openings || 0
+  const filled = cands.filter((c:Candidate)=>c.stage==='Offer Sent'||c.stage==='Joined').length
+  const pct = openings ? Math.min(100, (filled/openings)*100) : 0
+  const [ubg,uc] = URGENCY_STYLE[m.urgency] || ['#F3F0FF','#6D28D9']
+  const chain = asArray(m.approval_chain)
+  const doneSteps = chain.filter((s:any)=>s.status==='APPROVED').length
+  // §6 — flag a requisition that has run past its validity date.
+  const expired = m.validity_date && new Date(m.validity_date) < new Date(new Date().toDateString())
+    && !['CLOSED','REJECTED'].includes(m.status)
+  return (
+    <div style={T.card}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+        <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={()=>onOpen(m)}>
+          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4, flexWrap:'wrap' as const }}>
+            <span style={{ fontSize:14, fontWeight:600, color:'#1E1B4B' }}>{m.job_title||m.designation||m.position||'Untitled'}</span>
+            <Badge text={m.status} />
+            {m.mrf_type && <Badge text={m.mrf_type} />}
+            {m.urgency && <span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, background:ubg, color:uc, fontWeight:600 }}>{m.urgency}</span>}
+            {expired && <span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, background:'#FEF2F2', color:'#DC2626', fontWeight:600 }}>EXPIRED</span>}
+          </div>
+          <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:6 }}>
+            {m.mrf_number || 'No MRF number'} · {org.company} · {org.dept} · {org.loc}
+            {m.business_unit?` · ${m.business_unit}`:''}
+          </div>
+          <div style={{ fontSize:12, color:'#9CA3AF', display:'flex', gap:14, flexWrap:'wrap' as const }}>
+            <span>👥 {openings} opening{openings===1?'':'s'}</span>
+            <span>💼 {m.employment_type||'—'}</span>
+            {m.work_mode && <span>🏢 {m.work_mode}</span>}
+            {m.grade && <span>🏷 {m.grade}</span>}
+            {m.experience_required && <span>⏱ {m.experience_required}</span>}
+            {m.budget_max && <span>💰 {compOf(m.employment_type).label} {payAmount(m.budget_max, m.currency, compOf(m.employment_type).period)} max</span>}
+            {m.duration_months && <span>⏳ {m.duration_months} month{m.duration_months===1?'':'s'}</span>}
+            {m.target_joining_date && <span>📅 by {fmtDay(m.target_joining_date)}</span>}
+            <span style={{ color:'#7C3AED' }}>🧑 {cands.length} candidate{cands.length===1?'':'s'}</span>
+            {m.assigned_recruiter && <span>👤 {m.assigned_recruiter}</span>}
+          </div>
+          {m.skills_required && (
+            <div style={{ fontSize:11, color:'#6D28D9', marginTop:5 }}>Skills: {m.skills_required}</div>
+          )}
+          {m.status==='REJECTED' && m.remarks && (
+            <div style={{ fontSize:11, color:'#DC2626', marginTop:5 }}>Rejected: {m.remarks}</div>
+          )}
+          {chain.length>0 && m.status!=='CLOSED' && (
+            <div style={{ fontSize:11, color:'#6B7280', marginTop:5 }}>
+              Approvals: {doneSteps}/{chain.length}
+              {chain.map((s:any,i:number)=>(
+                <span key={i} style={{ marginLeft:5, color: s.status==='APPROVED'?'#059669': s.status==='REJECTED'?'#DC2626':'#CBD5E1' }}>
+                  {s.status==='APPROVED'?'●':s.status==='REJECTED'?'✕':'○'}
+                </span>
+              ))}
+            </div>
+          )}
+          {openings > 0 && (m.status==='APPROVED'||m.status==='CLOSED') && (
+            <div style={{ marginTop:8, maxWidth:260 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', fontSize:10.5, color:'#9CA3AF', marginBottom:3 }}>
+                <span>Positions filled</span><span>{filled} / {openings}</span>
+              </div>
+              <div style={{ background:'#F3F0FF', borderRadius:99, height:5, overflow:'hidden' }}>
+                <div style={{ width:`${pct}%`, height:'100%', background: pct>=100?'#059669':'#7C3AED', borderRadius:99 }} />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center', flexWrap:'wrap' as const, justifyContent:'flex-end', maxWidth:290 }}>
+          <button onClick={()=>onOpen(m)} style={{ ...T.btn, background:'#F3F0FF', color:'#6D28D9', border:'1px solid #DDD6FE', fontSize:11 }}>👁 View</button>
+          {(m.status==='SUBMITTED'||m.status==='ON_HOLD')&&(
+            <button onClick={()=>onReview(m)} style={{ ...T.btn, background:'#7C3AED', color:'#fff', fontSize:11 }}>✅ Review & Approve</button>
+          )}
+          {m.status==='APPROVED' && (
+            <button onClick={()=>onClose(m)} style={{ ...T.btn, background:'#F1F5F9', color:'#475569', border:'1px solid #CBD5E1', fontSize:11 }}>Close MRF</button>
+          )}
+          {m.status==='CLOSED' && (
+            <button onClick={()=>onReopen(m)} style={{ ...T.btn, background:'#ECFDF5', color:'#059669', border:'1px solid #A7F3D0', fontSize:11 }}>Re-open</button>
+          )}
+          <button onClick={()=>onEdit(m)} style={{ ...T.btn, background:'#EFF6FF', color:'#1D4ED8', border:'1px solid #BFDBFE', fontSize:11 }}>✏️ Edit</button>
+          <button onClick={()=>onDelete(m.id)} style={{ ...T.btn, background:'#FEF2F2', color:'#DC2626', border:'1px solid #FCA5A5', fontSize:11 }}>🗑️</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── MRF DETAIL ────────────────────────────────────────────────────
+function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onReview, onChanged, showNotify }:any) {
+  const [logs, setLogs] = useState<any[]>([])
+  const [loadingLogs, setLoadingLogs] = useState(true)
+  useEffect(()=>{
+    supabase.from('recruitment_audit_logs').select('*').eq('mrf_id', m.id)
+      .order('created_at',{ ascending:false }).limit(50)
+      .then(({data}:any)=>{ setLogs(data||[]); setLoadingLogs(false) })
+  },[supabase, m.id])
+
+  const openings = m.no_of_openings || m.openings || 0
+  const filled = cands.filter((c:Candidate)=>c.stage==='Offer Sent'||c.stage==='Joined').length
+  const byStage = STAGES.map(s=>({ stage:s, rows:cands.filter((c:Candidate)=>c.stage===s) })).filter(x=>x.rows.length)
+  const fmtDT = (s?:string) => s ? new Date(s).toLocaleString('en-IN',{ dateStyle:'medium', timeStyle:'short' }) : '—'
+  const nameOf = (id?:string) => people.find((p:any)=>p.id===id)?.full_name || '—'
+  const ctq = asArray(m.ctq_questions), chain = asArray(m.approval_chain)
+  const channels = asArray(m.sourcing_channels), files = asArray(m.attachments)
+  const comp = compOf(m.employment_type)
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:200, display:'flex', justifyContent:'flex-end' }}
+      onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:'#F5F3FF', width:'100%', maxWidth:760, height:'100%', overflowY:'auto', boxShadow:'-8px 0 30px rgba(30,27,75,0.25)' }}>
+        {/* Header */}
+        <div style={{ background:'linear-gradient(135deg,#7C3AED,#4F46E5)', padding:'16px 20px', position:'sticky', top:0, zIndex:2 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontSize:17, fontWeight:700, color:'#fff' }}>{m.job_title||m.designation||m.position||'Untitled'}</div>
+              <div style={{ fontSize:12, color:'rgba(255,255,255,.75)', marginTop:3 }}>
+                {m.mrf_number||'No MRF number'} · {org.company}
+              </div>
+            </div>
+            <button onClick={onClose} style={{ border:'1px solid rgba(255,255,255,.3)', background:'transparent', color:'#fff', borderRadius:7, padding:'6px 12px', cursor:'pointer', fontSize:12, fontFamily:'inherit', flexShrink:0 }}>✕ Close</button>
+          </div>
+          <div style={{ display:'flex', gap:7, marginTop:10, flexWrap:'wrap' as const }}>
+            <Badge text={m.status} />
+            {m.mrf_type && <Badge text={m.mrf_type} />}
+            {m.urgency && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'rgba(255,255,255,.2)', color:'#fff', fontWeight:600 }}>{m.urgency} priority</span>}
+            {m.work_mode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'rgba(255,255,255,.2)', color:'#fff', fontWeight:600 }}>{m.work_mode}</span>}
+          </div>
+        </div>
+
+        <div style={{ padding:'16px 20px' }}>
+          <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' as const }}>
+            <button onClick={()=>{ onEdit(m); onClose() }} style={T.btnOutline}>✏️ Edit this MRF</button>
+            {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
+              <button onClick={()=>{ onReview(m); onClose() }} style={T.btnPrimary}>✅ Review & Approve</button>
+            )}
+          </div>
+
+          {/* §1 Requisition Meta */}
+          <div style={T.card}>
+            <div style={T.section}>Requisition Meta</div>
+            <div style={{ ...T.g3, rowGap:12 }}>
+              <MrfMeta label="Requisition ID" value={m.mrf_number} />
+              <MrfMeta label="Date Raised" value={fmtDay(m.created_at)} />
+              <MrfMeta label="Raised By" value={m.raised_by_name ? `${m.raised_by_name}${m.raised_by_role?` · ${m.raised_by_role}`:''}` : '—'} />
+              <MrfMeta label="Requisition Type" value={m.hiring_type} />
+              <MrfMeta label="Priority" value={m.urgency} />
+              <MrfMeta label="Form Type" value={m.mrf_type} />
+            </div>
+          </div>
+
+          {/* §2 Position Details */}
+          <div style={T.card}>
+            <div style={T.section}>Position Details</div>
+            <div style={{ ...T.g3, rowGap:12 }}>
+              <MrfMeta label="Job Title" value={m.job_title} />
+              <MrfMeta label="Designation" value={m.designation||m.position} />
+              <MrfMeta label="Department" value={org.dept} />
+              <MrfMeta label="Business Unit" value={m.business_unit} />
+              <MrfMeta label="Grade / Band" value={m.grade} />
+              <MrfMeta label="Job Code" value={m.job_code} />
+              <MrfMeta label="Reporting Manager" value={m.reporting_manager_id ? nameOf(m.reporting_manager_id) : '—'} />
+              <MrfMeta label="Reports-to Designation" value={m.reports_to_designation} />
+              <MrfMeta label="Openings" value={`${openings} (filled ${filled})`} />
+            </div>
+          </div>
+
+          {/* §3 Employment Details */}
+          <div style={T.card}>
+            <div style={T.section}>Employment Details</div>
+            <div style={{ ...T.g3, rowGap:12 }}>
+              <MrfMeta label="Employment Type" value={m.employment_type} />
+              <MrfMeta label="Work Mode" value={m.work_mode} />
+              <MrfMeta label="Work Location" value={org.loc} />
+              <MrfMeta label="Shift / Schedule" value={m.shift_schedule} />
+            </div>
+          </div>
+
+          {/* §4 Budget & Cost — labelled by compensation basis */}
+          <div style={T.card}>
+            <div style={T.section}>Budget &amp; Cost</div>
+            <div style={{ ...T.g3, rowGap:12 }}>
+              <MrfMeta label="Cost Center" value={m.cost_center} />
+              <MrfMeta label="Budgeted Position" value={m.is_budgeted==null?'—':(m.is_budgeted?'Yes — budgeted':'No — unbudgeted')} />
+              <MrfMeta label="Headcount Reference" value={m.headcount_ref} />
+              <MrfMeta label="Paid As" value={`${comp.label} · ${perLabel(comp.period)}`} />
+              <MrfMeta label={`${comp.label} Range`}
+                value={(m.budget_min||m.budget_max)
+                  ? `${money(m.budget_min,m.currency)} — ${money(m.budget_max,m.currency)}${comp.period==='MONTHLY'?' /mo':''}` : '—'} />
+              <MrfMeta label="Currency" value={m.currency} />
+              {(m.duration_months || comp.fixedTerm) && (
+                <MrfMeta label="Engagement Duration"
+                  value={m.duration_months ? `${m.duration_months} month${m.duration_months===1?'':'s'}` : '—'} />
+              )}
+              {m.duration_end && <MrfMeta label="Expected End Date" value={fmtDay(m.duration_end)} />}
+              {m.duration_months && m.budget_max && comp.period==='MONTHLY' && (
+                <MrfMeta label={`Total ${comp.label} (est.)`} value={money(Number(m.budget_max)*Number(m.duration_months), m.currency)} />
+              )}
+            </div>
+          </div>
+
+          {/* §5 Justification */}
+          <div style={T.card}>
+            <div style={T.section}>Justification</div>
+            <div style={{ ...T.g3, rowGap:12, marginBottom: m.business_justification?10:0 }}>
+              <MrfMeta label="Reason for Hire" value={m.reason||m.reason_for_hire} />
+              <MrfMeta label="Outgoing Employee" value={m.outgoing_employee_id ? nameOf(m.outgoing_employee_id) : '—'} />
+              <MrfMeta label="Reason for Exit" value={m.exit_reason} />
+            </div>
+            {m.business_justification && (
+              <div style={{ fontSize:12.5, color:'#374151', lineHeight:1.7, whiteSpace:'pre-wrap' as const, borderTop:'1px solid #F3F0FF', paddingTop:9 }}>
+                {m.business_justification}
+              </div>
+            )}
+          </div>
+
+          {/* §6 Timeline */}
+          <div style={T.card}>
+            <div style={T.section}>Timeline</div>
+            <div style={{ ...T.g3, rowGap:12 }}>
+              <MrfMeta label="Target Joining Date" value={fmtDay(m.target_joining_date)} />
+              <MrfMeta label="Requisition Validity" value={fmtDay(m.validity_date)} />
+              <MrfMeta label="Raised On" value={fmtDay(m.created_at)} />
+            </div>
+          </div>
+
+          {/* §7 Candidate Requirements */}
+          <div style={T.card}>
+            <div style={T.section}>Candidate Requirements</div>
+            <div style={{ ...T.g3, rowGap:12, marginBottom:10 }}>
+              <MrfMeta label="Experience" value={m.experience_required} />
+              <MrfMeta label="Education" value={[m.education_min, m.education_max].filter(Boolean).join(' → ') || m.education_required} />
+              <MrfMeta label="Prev. Company" value={m.previous_company_preference} />
+            </div>
+            {m.skills_required && (
+              <div style={{ marginBottom:10 }}>
+                <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Mandatory Skills</div>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
+                  {String(m.skills_required).split(',').map((s:string)=>s.trim()).filter(Boolean).map((s:string)=>(
+                    <span key={s} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:'#F3F0FF', color:'#6D28D9', fontWeight:500 }}>{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {m.good_to_have_skills && (
+              <div>
+                <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Good-to-have Skills</div>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
+                  {String(m.good_to_have_skills).split(',').map((s:string)=>s.trim()).filter(Boolean).map((s:string)=>(
+                    <span key={s} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:'#EFF6FF', color:'#1D4ED8', fontWeight:500 }}>{s}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* §7 CTQ */}
+          {ctq.length>0 && (
+            <div style={T.card}>
+              <div style={T.section}>Screening (CTQ) Questions</div>
+              {ctq.map((q:any,i:number)=>(
+                <div key={q.id||i} style={{ padding:'8px 0', borderBottom:'1px solid #F3F0FF' }}>
+                  <div style={{ fontSize:12.5, fontWeight:600, color:'#1E1B4B' }}>Q{i+1}. {q.question}</div>
+                  <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>
+                    {CTQ_TYPES.find(t=>t.k===q.type)?.label||q.type} · expected: <b>{q.expected||'—'}</b>
+                    {q.knockout!==false && <span style={{ color:'#DC2626' }}> · auto-reject on fail</span>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* §8 Approval Workflow */}
+          <div style={T.card}>
+            <div style={T.section}>Approval Workflow</div>
+            <div style={{ ...T.g2, rowGap:12, marginBottom: chain.length?10:0 }}>
+              <MrfMeta label="Current Status" value={<Badge text={m.status} />} />
+              <MrfMeta label="Decided On" value={fmtDay(m.approved_at)} />
+            </div>
+            {chain.length===0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No approval chain configured — single-step approval.</div>}
+            {chain.map((s:any,i:number)=>(
+              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'8px 0', borderBottom:'1px solid #F3F0FF' }}>
+                <span style={{ width:22, height:22, borderRadius:'50%', flexShrink:0, fontSize:11, fontWeight:700,
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  background: s.status==='APPROVED'?'#ECFDF5': s.status==='REJECTED'?'#FEF2F2':'#EDE9FE',
+                  color: s.status==='APPROVED'?'#059669': s.status==='REJECTED'?'#DC2626':'#6D28D9' }}>
+                  {s.status==='APPROVED'?'✓':s.status==='REJECTED'?'✕':i+1}
+                </span>
+                <div style={{ minWidth:0, flex:1 }}>
+                  <div style={{ fontSize:12.5, fontWeight:600 }}>{s.role}</div>
+                  <div style={{ fontSize:10.5, color:'#9CA3AF' }}>
+                    {s.status||'PENDING'}{s.actor?` · ${s.actor}`:''}{s.acted_at?` · ${fmtDay(s.acted_at)}`:''}
+                  </div>
+                  {s.comments && <div style={{ fontSize:11.5, color:'#6B7280', marginTop:3, fontStyle:'italic' as const }}>{s.comments}</div>}
+                </div>
+              </div>
+            ))}
+            {m.remarks && (
+              <div style={{ fontSize:12, color: m.status==='REJECTED'?'#DC2626':'#374151', marginTop:10, lineHeight:1.6 }}>
+                <b>Approver comments:</b> {m.remarks}
+              </div>
+            )}
+          </div>
+
+          {/* §9 Sourcing */}
+          <div style={T.card}>
+            <div style={T.section}>Sourcing</div>
+            <div style={{ ...T.g2, rowGap:12, marginBottom: channels.length?10:0 }}>
+              <MrfMeta label="Assigned Recruiter" value={m.assigned_recruiter} />
+              <MrfMeta label="Sourcing Mode" value={m.sourcing_mode} />
+            </div>
+            {channels.length>0 && (
+              <div>
+                <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Preferred Channels</div>
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
+                  {channels.map((c:string)=>(
+                    <span key={c} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:'#ECFDF5', color:'#059669', fontWeight:500 }}>{c}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* §10 Attachments */}
+          <div style={T.card}>
+            <div style={T.section}>Attachments</div>
+            <AttachmentsPanel mrfId={m.id} attachments={files} onChanged={onChanged} showNotify={showNotify} />
+          </div>
+
+          {/* JD */}
+          {m.job_description && (
+            <div style={T.card}>
+              <div style={T.section}>Job Description</div>
+              <div style={{ fontSize:12.5, color:'#374151', lineHeight:1.75, whiteSpace:'pre-wrap' as const }}>{m.job_description}</div>
+            </div>
+          )}
+
+          {/* Candidates */}
+          <div style={T.card}>
+            <div style={T.section}>Candidates ({cands.length})</div>
+            {cands.length===0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No candidates linked to this MRF yet.</div>}
+            {byStage.map(({stage, rows})=>(
+              <div key={stage} style={{ marginBottom:10 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:7, marginBottom:5 }}>
+                  <span style={{ width:8, height:8, borderRadius:'50%', background:STAGE_COLOR[stage]||'#9CA3AF' }} />
+                  <span style={{ fontSize:11.5, fontWeight:600, color:'#1E1B4B' }}>{stage}</span>
+                  <span style={{ fontSize:10.5, color:'#9CA3AF' }}>{rows.length}</span>
+                </div>
+                {rows.map((c:Candidate)=>(
+                  <div key={c.id} style={{ display:'flex', justifyContent:'space-between', padding:'5px 0 5px 15px', fontSize:12, borderBottom:'1px solid #F9FAFB' }}>
+                    <span style={{ color:'#374151' }}>{c.full_name}</span>
+                    <span style={{ color:'#9CA3AF', fontSize:11 }}>
+                      {c.ai_score!=null ? `AI ${Math.round(c.ai_score)}` : ''}{c.current_company?` · ${c.current_company}`:''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Activity */}
+          <div style={T.card}>
+            <div style={T.section}>Activity</div>
+            {loadingLogs && <div style={{ fontSize:12, color:'#9CA3AF' }}>Loading…</div>}
+            {!loadingLogs && logs.length===0 && (
+              <div style={{ fontSize:12, color:'#9CA3AF' }}>No activity recorded against this MRF yet.</div>
+            )}
+            {logs.map((l:any)=>(
+              <div key={l.id} style={{ display:'flex', gap:10, padding:'7px 0', borderBottom:'1px solid #F3F0FF' }}>
+                <div style={{ width:7, height:7, borderRadius:'50%', background:'#7C3AED', marginTop:5, flexShrink:0 }} />
+                <div style={{ minWidth:0, flex:1 }}>
+                  <div style={{ fontSize:12.5, fontWeight:600, color:'#1E1B4B' }}>{String(l.action_type||'').replace(/_/g,' ')}</div>
+                  {l.details && (
+                    <div style={{ fontSize:11, color:'#6B7280', marginTop:2 }}>
+                      {Object.entries(l.details).map(([k,v])=>`${k}: ${v}`).join(' · ')}
+                    </div>
+                  )}
+                  <div style={{ fontSize:10, color:'#9CA3AF', marginTop:2 }}>
+                    {fmtDT(l.created_at)}{l.actor_email?` · ${l.actor_email}`:''}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── MRF TAB ───────────────────────────────────────────────────────
 function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify }:any) {
-  const EMPTY = { company_id:'', location_id:'', department_id:'', designation:'', no_of_openings:1,
-    employment_type:'Employee', urgency:'MEDIUM', reason:'', job_description:'', budget_min:'',
-    budget_max:'', experience_required:'', mrf_type:'Full MRF', education_required:'',
-    skills_required:'', hiring_type:'New Hire', previous_company_preference:'',
-    experience_min:'', experience_max:'', education_min:'', education_max:'' }
+  const EMPTY = {
+    // §1 Requisition Meta
+    mrf_type:'Full MRF', hiring_type:'New Hire', urgency:'MEDIUM',
+    raised_by_name:'', raised_by_role:'',
+    // §2 Position Details
+    company_id:'', location_id:'', department_id:'', job_title:'', designation:'',
+    business_unit:'', grade:'', job_code:'', reporting_manager_id:'', no_of_openings:1,
+    // §3 Employment Details
+    employment_type:'Employee', work_mode:'Onsite', shift_schedule:'',
+    // §4 Budget & Cost
+    cost_center:'', is_budgeted:'', headcount_ref:'', budget_min:'', budget_max:'', currency:'INR',
+    duration_months:'',
+    // §5 Justification
+    reason:'', outgoing_employee_id:'', exit_reason:'', business_justification:'',
+    // §6 Timeline
+    target_joining_date:'', validity_date:'',
+    // §7 Candidate Requirements
+    experience_required:'', experience_min:'', experience_max:'',
+    education_required:'', education_min:'', education_max:'',
+    skills_required:'', good_to_have_skills:'', previous_company_preference:'',
+    job_description:'', ctq_questions:[] as any[],
+    // §8 Approval Workflow
+    approval_chain:[] as any[],
+    // §9 Sourcing
+    sourcing_mode:'External', sourcing_channels:[] as string[],
+  }
   const [showForm, setShowForm] = useState(false)
   const [editMRF, setEditMRF] = useState<MRF|null>(null)
   const [form, setForm] = useState<any>(EMPTY)
+  const [errors, setErrors] = useState<Record<string,string>>({})
   const [saving, setSaving] = useState(false)
   const [mrfQ, setMrfQ] = useState('')
   const [fCompany, setFCompany] = useState('')
   const [fDept, setFDept] = useState('')
   const [fLoc, setFLoc] = useState('')
   const [fPos, setFPos] = useState('')
+  const [fStatus, setFStatus] = useState('')
+  const [sortBy, setSortBy] = useState('newest')
+  const [view, setView] = useState<'cards'|'table'>('cards')
   const mrfPositions = Array.from(new Set(mrfs.map((m:MRF)=>m.designation||m.position).filter(Boolean))).sort() as string[]
   const [aiLoading, setAiLoading] = useState(false)
   const [approvalModal, setApprovalModal] = useState<MRF|null>(null)
+  const [detailMRF, setDetailMRF] = useState<MRF|null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string|null>(null)
   const [skills, setSkills] = useState<string[]>([])
+  const [masters, setMasters] = useState<Record<string,{code:string;label:string}[]>>({})
+  const [people, setPeople] = useState<any[]>([])
 
   useEffect(()=>{
     supabase.from('skills').select('name').order('name').then(({data}:any)=>setSkills((data||[]).map((s:any)=>s.name)))
+    // Lookups reused from the existing masters module (§2 grade, §3 shift,
+    // §5 exit reason, §9 sourcing channel) plus the three added by 032.
+    loadMasterValues(supabase, ['grade','shift_type','candidate_source','separation_reason','business_unit','cost_center','currency'])
+      .then(setMasters)
+    supabase.from('employees').select('id, full_name, emp_code, designation')
+      .order('full_name').then(({data}:any)=>setPeople(data||[]))
   },[supabase])
 
-  // Insert a custom skill into the shared skills DB (ignore duplicates), keep local list fresh.
   async function addSkill(name:string) {
     const { error } = await supabase.from('skills').insert({ name })
     if (!error) setSkills(s=>[...s, name].sort((a,b)=>a.localeCompare(b)))
   }
 
-  // Each company owns its own copy of a department (three companies → three "Finance &
-  // Accounts" rows). Until a company is chosen there is no correct list to show, so show
-  // none rather than every company's copy stacked on top of each other.
-  const filtLocs = form.company_id ? locations.filter((l:Location)=>l.company_id===form.company_id) : []
-  const filtDepts = form.company_id ? departments.filter((d:Department)=>d.company_id===form.company_id) : []
-  const F = (k:string,v:any) => setForm((f:any)=>({...f,[k]:v}))
+  const filtLocs = form.company_id ? locations.filter((l:Location)=>l.company_id===form.company_id) : locations
+  const filtDepts = form.company_id ? departments.filter((d:Department)=>d.company_id===form.company_id) : departments
+  const F = (k:string,v:any) => { setForm((f:any)=>({...f,[k]:v})); setErrors(e=> e[k] ? { ...e, [k]:'' } : e) }
+  const eb = (k:string) => errors[k] ? { ...T.input, border:'1px solid #FCA5A5', background:'#FEF2F2' } : T.input
 
   const isQuick = form.mrf_type === 'Quick Hire'
+  const isReplacement = form.hiring_type==='Replacement' || form.hiring_type==='Backfill'
+  // Salary vs stipend vs fees — drives the labels in §4 and the duration field.
+  const comp = compOf(form.employment_type)
+
+  const orgOf = (m:MRF) => ({
+    company: companies.find((c:Company)=>c.id===m.company_id)?.company_name
+      || companies.find((c:Company)=>c.id===m.company_id)?.company_code || '—',
+    dept: departments.find((d:Department)=>d.id===m.department_id)?.dept_name || '—',
+    loc: locations.find((l:Location)=>l.id===m.location_id)?.location_name || '—',
+  })
 
   function openEdit(m:MRF) {
-    setEditMRF(m)
-    setForm({ company_id:m.company_id||'', location_id:m.location_id||'', department_id:m.department_id||'',
-      designation:m.designation||m.position||'', no_of_openings:m.no_of_openings||m.openings||1,
-      employment_type:m.employment_type||'Employee', urgency:m.urgency||'MEDIUM',
-      reason:m.reason||m.reason_for_hire||'', job_description:m.job_description||'',
-      budget_min:m.budget_min||'', budget_max:m.budget_max||'', experience_required:m.experience_required||'',
-      mrf_type:(m as any).mrf_type||'Full MRF', education_required:(m as any).education_required||'',
-      skills_required:(m as any).skills_required||'', hiring_type:(m as any).hiring_type||'New Hire',
-      previous_company_preference:(m as any).previous_company_preference||'',
-      experience_min:(m as any).experience_min||'', experience_max:(m as any).experience_max||'',
-      education_min:(m as any).education_min||'', education_max:(m as any).education_max||'',
+    setEditMRF(m); setErrors({})
+    const a:any = m
+    setForm({
+      mrf_type:a.mrf_type||'Full MRF', hiring_type:a.hiring_type||'New Hire', urgency:m.urgency||'MEDIUM',
+      raised_by_name:a.raised_by_name||'', raised_by_role:a.raised_by_role||'',
+      company_id:m.company_id||'', location_id:m.location_id||'', department_id:m.department_id||'',
+      job_title:a.job_title||m.designation||m.position||'', designation:m.designation||m.position||'',
+      business_unit:a.business_unit||'', grade:a.grade||'', job_code:a.job_code||'',
+      reporting_manager_id:a.reporting_manager_id||'', no_of_openings:m.no_of_openings||m.openings||1,
+      employment_type:m.employment_type||'Employee', work_mode:a.work_mode||'Onsite', shift_schedule:a.shift_schedule||'',
+      cost_center:a.cost_center||'', is_budgeted: a.is_budgeted==null?'':(a.is_budgeted?'yes':'no'),
+      headcount_ref:a.headcount_ref||'', budget_min:m.budget_min||'', budget_max:m.budget_max||'', currency:a.currency||'INR',
+      duration_months:a.duration_months||'',
+      reason:m.reason||m.reason_for_hire||'', outgoing_employee_id:a.outgoing_employee_id||'',
+      exit_reason:a.exit_reason||'', business_justification:a.business_justification||'',
+      target_joining_date:a.target_joining_date||'', validity_date:a.validity_date||'',
+      experience_required:m.experience_required||'', experience_min:a.experience_min||'', experience_max:a.experience_max||'',
+      education_required:a.education_required||'', education_min:a.education_min||'', education_max:a.education_max||'',
+      skills_required:a.skills_required||'', good_to_have_skills:a.good_to_have_skills||'',
+      previous_company_preference:a.previous_company_preference||'',
+      job_description:m.job_description||'', ctq_questions:asArray(a.ctq_questions),
+      approval_chain:asArray(a.approval_chain),
+      sourcing_mode:a.sourcing_mode||'External', sourcing_channels:asArray(a.sourcing_channels),
     })
     setShowForm(true)
   }
 
   async function generateJD() {
-    if (!form.designation) { showNotify('Please enter the designation first','error'); return }
+    if (!form.designation && !form.job_title) { showNotify('Please enter the job title or designation first','error'); return }
     setAiLoading(true)
     const dept = departments.find((d:Department)=>d.id===form.department_id)
     try {
       const res = await fetch('/api/recruitment/generate-jd', {
         method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ designation:form.designation, department:dept?.dept_name||'', experience:[form.experience_min,form.experience_max].filter(Boolean).join('-')+(form.experience_min||form.experience_max?' years':''), employee_type:form.employment_type, education:[form.education_min,form.education_max].filter(Boolean).join(' to '), skills:form.skills_required })
+        body:JSON.stringify({ designation:form.designation||form.job_title, department:dept?.dept_name||'', experience:[form.experience_min,form.experience_max].filter(Boolean).join('-')+(form.experience_min||form.experience_max?' years':''), employee_type:form.employment_type, education:[form.education_min,form.education_max].filter(Boolean).join(' to '), skills:form.skills_required })
       })
       const { jd } = await res.json()
       if (jd) F('job_description', jd)
@@ -462,16 +1386,22 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   }
 
   async function saveMRF(status:string) {
-    if (!form.company_id||!form.designation) { showNotify('Company and Designation are required','error'); return }
+    const errs = validateMrf(form, status==='SUBMITTED')
+    setErrors(errs)
+    if (Object.keys(errs).length) {
+      showNotify(status==='SUBMITTED' ? 'Fix the highlighted fields before submitting' : 'Fix the highlighted fields', 'error')
+      return
+    }
     setSaving(true)
-    // Derive the legacy single fields (used by screening + JD-gen) from min/max.
     const expReq = (form.experience_min||form.experience_max)
       ? `${form.experience_min||'0'}-${form.experience_max||'0'} years` : (form.experience_required||null)
     const eduReq = form.education_max || form.education_min || form.education_required || null
+    // Derived so the requisition still reads correctly if that manager later moves on.
+    const mgr = people.find((p:any)=>p.id===form.reporting_manager_id)
     const payload:any = {
-      company_id:form.company_id, location_id:form.location_id||null,
-      department_id:form.department_id||null,
+      company_id:form.company_id, location_id:form.location_id||null, department_id:form.department_id||null,
       designation:form.designation, position:form.designation,
+      job_title:form.job_title||form.designation||null,
       no_of_openings:Number(form.no_of_openings)||1, openings:Number(form.no_of_openings)||1,
       employment_type:form.employment_type, urgency:form.urgency,
       reason:form.reason, reason_for_hire:form.reason,
@@ -482,37 +1412,103 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       skills_required:form.skills_required||null,
       mrf_type:form.mrf_type||null, hiring_type:form.hiring_type||null,
       previous_company_preference:form.previous_company_preference||null,
+      // ── added by 032 ──
+      raised_by_name:form.raised_by_name||null, raised_by_role:form.raised_by_role||null,
+      business_unit:form.business_unit||null, grade:form.grade||null, job_code:form.job_code||null,
+      reporting_manager_id:form.reporting_manager_id||null,
+      reports_to_designation: mgr?.designation || null,
+      work_mode:form.work_mode||null, shift_schedule:form.shift_schedule||null,
+      cost_center:form.cost_center||null,
+      is_budgeted: form.is_budgeted==='' ? null : form.is_budgeted==='yes',
+      headcount_ref:form.headcount_ref||null, currency:form.currency||'INR',
+      // Compensation basis is derived from employment type, then stored, so the
+      // requisition keeps the basis it was raised on.
+      compensation_type: compOf(form.employment_type).kind,
+      pay_period: compOf(form.employment_type).period,
+      duration_months: compOf(form.employment_type).fixedTerm || form.duration_months
+        ? (Number(form.duration_months)||null) : null,
+      duration_end: addMonths(form.target_joining_date, form.duration_months),
+      outgoing_employee_id: isReplacement ? (form.outgoing_employee_id||null) : null,
+      exit_reason: isReplacement ? (form.exit_reason||null) : null,
+      business_justification:form.business_justification||null,
+      target_joining_date:form.target_joining_date||null, validity_date:form.validity_date||null,
+      good_to_have_skills:form.good_to_have_skills||null,
+      ctq_questions:form.ctq_questions||[], approval_chain:form.approval_chain||[],
+      sourcing_mode:form.sourcing_mode||null, sourcing_channels:form.sourcing_channels||[],
     }
-    let error:any
+    let error:any, savedId = editMRF?.id
     if (editMRF) {
       const r = await supabase.from('manpower_requisitions').update(payload).eq('id',editMRF.id)
       error = r.error
     } else {
-      const r = await supabase.from('manpower_requisitions').insert(payload)
-      error = r.error
+      const r = await supabase.from('manpower_requisitions').insert(payload).select('id').single()
+      error = r.error; savedId = r.data?.id
     }
     setSaving(false)
     if (error) { showNotify('Save failed: '+error.message,'error'); return }
+    if (savedId) {
+      await logMrfAudit(supabase, { id:savedId, company_id:form.company_id },
+        editMRF ? 'MRF_UPDATED' : status==='DRAFT' ? 'MRF_DRAFTED' : 'MRF_SUBMITTED',
+        { position:form.designation, openings:Number(form.no_of_openings)||1 })
+    }
     showNotify(editMRF?'MRF updated!':status==='DRAFT'?'Draft saved!':'MRF submitted for approval!')
-    setShowForm(false); setEditMRF(null); setForm(EMPTY); onRefresh()
+    setShowForm(false); setEditMRF(null); setForm(EMPTY); setErrors({}); onRefresh()
   }
 
-  async function approveMRF(id:string, recruiter:string) {
+  // §8 — advance the chain one step. Only when every step is approved (or when
+  // no chain is configured) does the requisition itself become APPROVED.
+  async function approveMRF(id:string, recruiter:string, comments:string, actor:string) {
+    const mrf = mrfs.find((m:MRF)=>m.id===id); if (!mrf) return
+    const chain = asArray((mrf as any).approval_chain)
+    const idx = chain.findIndex((s:any)=>s.status!=='APPROVED')
+    let nextChain = chain, finalStatus = 'APPROVED'
+    if (idx >= 0) {
+      nextChain = chain.map((s:any,i:number)=> i===idx
+        ? { ...s, status:'APPROVED', actor:actor||null, comments:comments||null, acted_at:new Date().toISOString() } : s)
+      finalStatus = nextChain.every((s:any)=>s.status==='APPROVED') ? 'APPROVED' : 'SUBMITTED'
+    }
+    const patch:any = { status:finalStatus, approval_chain:nextChain, remarks:comments||null }
+    if (recruiter) patch.assigned_recruiter = recruiter
+    if (finalStatus==='APPROVED') patch.approved_at = new Date().toISOString()
+    const { error } = await supabase.from('manpower_requisitions').update(patch).eq('id',id)
+    if (error) { showNotify('Approval failed: '+error.message,'error'); return }
+    await logMrfAudit(supabase, mrf, finalStatus==='APPROVED'?'MRF_APPROVED':'MRF_APPROVAL_STEP',
+      { position:mrf.designation||mrf.position, step: idx>=0?chain[idx].role:'single', recruiter:recruiter||'unassigned' })
+    showNotify(finalStatus==='APPROVED'
+      ? (recruiter ? 'MRF approved — recruiter assigned.' : 'MRF fully approved.')
+      : `Step approved — ${nextChain.filter((s:any)=>s.status==='APPROVED').length}/${nextChain.length} done.`)
+    setApprovalModal(null); onRefresh()
+  }
+
+  async function rejectMRF(id:string, remarks:string, actor:string) {
+    const mrf = mrfs.find((m:MRF)=>m.id===id); if (!mrf) return
+    const chain = asArray((mrf as any).approval_chain)
+    const idx = chain.findIndex((s:any)=>s.status!=='APPROVED')
+    const nextChain = idx>=0 ? chain.map((s:any,i:number)=> i===idx
+      ? { ...s, status:'REJECTED', actor:actor||null, comments:remarks, acted_at:new Date().toISOString() } : s) : chain
     const { error } = await supabase.from('manpower_requisitions')
-      .update({ status:'APPROVED', assigned_recruiter:recruiter, approved_at:new Date().toISOString() }).eq('id',id)
-    if (error) { showNotify('Error','error'); return }
-    showNotify('MRF Approved! Recruiter assigned.'); setApprovalModal(null); onRefresh()
+      .update({ status:'REJECTED', remarks, approval_chain:nextChain }).eq('id',id)
+    if (error) { showNotify('Rejection failed: '+error.message,'error'); return }
+    await logMrfAudit(supabase, mrf, 'MRF_REJECTED', { position:mrf.designation||mrf.position, reason:remarks })
+    showNotify('MRF rejected'); setApprovalModal(null); onRefresh()
   }
 
-  async function rejectMRF(id:string, remarks:string) {
-    const { error } = await supabase.from('manpower_requisitions').update({ status:'REJECTED', remarks }).eq('id',id)
-    if (error) { showNotify('Error','error'); return }
-    showNotify('MRF Rejected'); setApprovalModal(null); onRefresh()
+  async function holdMRF(id:string, remarks:string) {
+    const mrf = mrfs.find((m:MRF)=>m.id===id); if (!mrf) return
+    const { error } = await supabase.from('manpower_requisitions').update({ status:'ON_HOLD', remarks:remarks||null }).eq('id',id)
+    if (error) { showNotify('Update failed: '+error.message,'error'); return }
+    await logMrfAudit(supabase, mrf, 'MRF_ON_HOLD', { position:mrf.designation||mrf.position, reason:remarks||'—' })
+    showNotify('MRF put on hold'); setApprovalModal(null); onRefresh()
+  }
+
+  async function setMrfStatus(m:MRF, status:string, action:string) {
+    const { error } = await supabase.from('manpower_requisitions').update({ status }).eq('id',m.id)
+    if (error) { showNotify('Update failed: '+error.message,'error'); return }
+    await logMrfAudit(supabase, m, action, { position:m.designation||m.position })
+    showNotify(status==='CLOSED'?'MRF closed':'MRF re-opened'); onRefresh()
   }
 
   async function deleteMRF(id:string) {
-    // Detach rows whose FK to the MRF is RESTRICT (would otherwise block delete).
-    // candidates.mrf_id is ON DELETE SET NULL, so it needs no handling here.
     await supabase.from('offer_approval_requests').update({ mrf_id:null }).eq('mrf_id', id)
     await supabase.from('recruitment_audit_logs').update({ mrf_id:null }).eq('mrf_id', id)
     await supabase.from('document_collection_links').update({ mrf_id:null }).eq('mrf_id', id)
@@ -521,147 +1517,408 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     showNotify('MRF deleted'); setDeleteConfirm(null); onRefresh()
   }
 
+  const visible = mrfs.filter((m:MRF)=>
+    (!mrfQ || (m.designation||(m as any).position||'').toLowerCase().includes(mrfQ.toLowerCase())
+           || ((m as any).job_title||'').toLowerCase().includes(mrfQ.toLowerCase())
+           || (m.mrf_number||'').toLowerCase().includes(mrfQ.toLowerCase())) &&
+    (!fCompany || m.company_id===fCompany) &&
+    (!fDept || m.department_id===fDept) &&
+    (!fLoc || m.location_id===fLoc) &&
+    (!fPos || (m.designation||m.position)===fPos) &&
+    (!fStatus || m.status===fStatus)
+  ).sort((a:MRF,b:MRF)=>{
+    if (sortBy==='oldest')   return +new Date(a.created_at) - +new Date(b.created_at)
+    if (sortBy==='openings') return (b.no_of_openings||b.openings||0) - (a.no_of_openings||a.openings||0)
+    if (sortBy==='urgency')  { const r:any={HIGH:0,MEDIUM:1,LOW:2}; return (r[a.urgency||'']??3)-(r[b.urgency||'']??3) }
+    if (sortBy==='joining')  return +new Date((a as any).target_joining_date||'2999-01-01') - +new Date((b as any).target_joining_date||'2999-01-01')
+    return +new Date(b.created_at) - +new Date(a.created_at)
+  })
+
+  const pendingCount = mrfs.filter((m:MRF)=>m.status==='SUBMITTED').length
+
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' as const }}>
         <div style={{ fontSize:15, fontWeight:600, color:'#1E1B4B' }}>Manpower Requisitions ({mrfs.length})</div>
-        <button onClick={()=>{setEditMRF(null);setForm(EMPTY);setShowForm(!showForm)}} style={T.btnPrimary}>
+        <button onClick={()=>{setEditMRF(null);setForm(EMPTY);setErrors({});setShowForm(!showForm)}} style={T.btnPrimary}>
           {showForm?'✕ Cancel':'+ New MRF'}
         </button>
       </div>
 
+      <MrfOverview mrfs={mrfs} candidates={candidates} fStatus={fStatus}
+        onPickStatus={setFStatus} view={view} onView={setView} />
+
+      {pendingCount>0 && (
+        <div style={{ fontSize:11.5, color:'#B45309', background:'#FFFBEB', border:'1px solid #FDE68A',
+          borderRadius:7, padding:'8px 12px', marginBottom:12, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
+          ⏳ {pendingCount} requisition{pendingCount===1?'':'s'} awaiting approval
+          <button onClick={()=>setFStatus('SUBMITTED')} style={{ ...T.btn, background:'#B45309', color:'#fff', fontSize:11 }}>
+            Show them
+          </button>
+        </div>
+      )}
+
       {showForm && (
         <div style={T.cardPurple}>
-          {/* MRF Type Selector */}
           <div style={{ display:'flex', gap:10, marginBottom:16 }}>
             {['Quick Hire','Full MRF'].map(type=>(
               <button key={type} onClick={()=>F('mrf_type',type)} style={{ ...T.btn, flex:1, padding:'10px',
                 background:form.mrf_type===type?'#7C3AED':'#F3F0FF', color:form.mrf_type===type?'#fff':'#6D28D9',
                 border:form.mrf_type===type?'none':'1px solid #DDD6FE', fontSize:13 }}>
-                {type==='Quick Hire'?'⚡ Quick Hire (< ₹6L)':'📋 Full MRF (≥ ₹6L)'}
+                {type==='Quick Hire'?'⚡ Quick Hire (CTC ≤ ₹6L)':'📋 Full MRF (CTC > ₹6L)'}
               </button>
             ))}
           </div>
 
-          <SectionLine title="Basic Details" />
+          {/* Live read on the ₹6L split, so the wrong lane is caught before
+              submit. Monthly stipends/fees are annualised to compare like
+              with like. Quick Hire ≤ ₹6L · Full MRF > ₹6L. */}
+          {(()=>{
+            const bMax = Number(form.budget_max)||0
+            if (!bMax) return null
+            const annual = comp.period==='ANNUAL' ? bMax : bMax*12
+            const shouldBe = annual > QUICK_HIRE_CAP ? 'Full MRF' : 'Quick Hire'
+            const asYearly = comp.period==='ANNUAL'
+              ? lakhs(bMax, form.currency)
+              : `${money(bMax, form.currency)}/mo = ${lakhs(annual, form.currency)} a year`
+            if (shouldBe === form.mrf_type) return (
+              <div style={{ background:'#ECFDF5', border:'1px solid #A7F3D0', borderRadius:7, padding:'8px 12px',
+                marginBottom:14, fontSize:11.5, color:'#059669' }}>
+                ✓ {asYearly} — correct lane for {form.mrf_type}.
+              </div>
+            )
+            return (
+              <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:7, padding:'9px 12px',
+                marginBottom:14, fontSize:12, color:'#B91C1C', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
+                <span>
+                  {asYearly} — {shouldBe==='Full MRF'
+                    ? 'above ₹6L, so this belongs on a Full MRF.'
+                    : 'at or below ₹6L, so this belongs on a Quick Hire.'}
+                </span>
+                <button onClick={()=>F('mrf_type', shouldBe)} style={{ ...T.btn, background:'#DC2626', color:'#fff', fontSize:11 }}>
+                  Switch to {shouldBe}
+                </button>
+              </div>
+            )
+          })()}
+
+          {/* ── §1 Requisition Meta ── */}
+          <SectionLine title="1 · Requisition Meta" />
           <div style={{ ...T.g3, marginBottom:10 }}>
-            <div><label style={T.label}>Company *</label>
-              <select style={T.select} value={form.company_id}
-                onChange={e=>setForm((f:any)=>({ ...f, company_id:e.target.value, department_id:'', location_id:'' }))}>
+            <Field label="Requisition Type">
+              <select style={T.select} value={form.hiring_type} onChange={e=>F('hiring_type',e.target.value)}>
+                {REQ_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
+            <Field label="Priority">
+              <select style={T.select} value={form.urgency} onChange={e=>F('urgency',e.target.value)}>
+                <option value="HIGH">🔴 High / Urgent</option>
+                <option value="MEDIUM">🟡 Medium / Normal</option>
+                <option value="LOW">🟢 Low</option>
+              </select>
+            </Field>
+            <Field label="Requisition ID" hint={editMRF?undefined:'Generated on save'}>
+              <input style={{ ...T.input, background:'#F1F5F9', color:'#6B7280' }} value={(editMRF as any)?.mrf_number||'Auto-generated'} readOnly />
+            </Field>
+          </div>
+          <div style={{ ...T.g2, marginBottom:10 }}>
+            <Field label="Raised By — Name">
+              <input style={T.input} value={form.raised_by_name} onChange={e=>F('raised_by_name',e.target.value)} placeholder="Your name" />
+            </Field>
+            <Field label="Raised By — Role">
+              <input style={T.input} value={form.raised_by_role} onChange={e=>F('raised_by_role',e.target.value)} placeholder="e.g. Department Head" />
+            </Field>
+          </div>
+
+          {/* ── §2 Position Details ── */}
+          <SectionLine title="2 · Position Details" />
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Company" required error={errors.company_id}>
+              <select style={eb('company_id')} value={form.company_id} onChange={e=>F('company_id',e.target.value)}>
                 <option value="">Select Company</option>
                 {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
               </select>
-            </div>
-            <div><label style={T.label}>Branch / Location</label>
-              <select style={T.select} value={form.location_id} disabled={!form.company_id} onChange={e=>F('location_id',e.target.value)}>
-                <option value="">{form.company_id ? 'Select Location' : 'Select a company first'}</option>
-                {filtLocs.map((l:Location)=><option key={l.id} value={l.id}>{l.location_name||l.location_code}</option>)}
-              </select>
-            </div>
-            <div><label style={T.label}>Department</label>
-              <select style={T.select} value={form.department_id} disabled={!form.company_id} onChange={e=>F('department_id',e.target.value)}>
-                <option value="">{form.company_id ? 'Select Department' : 'Select a company first'}</option>
+            </Field>
+            <Field label="Department / Function" error={errors.department_id}>
+              <select style={eb('department_id')} value={form.department_id} onChange={e=>F('department_id',e.target.value)}>
+                <option value="">Select Department</option>
                 {filtDepts.map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
               </select>
-            </div>
+            </Field>
+            <Field label="Business Unit">
+              <MasterSelect options={masters.business_unit} value={form.business_unit} onChange={(v:string)=>F('business_unit',v)} />
+            </Field>
           </div>
           <div style={{ ...T.g3, marginBottom:10 }}>
-            <div><label style={T.label}>Designation *</label>
-              <input style={T.input} value={form.designation} onChange={e=>F('designation',e.target.value)} placeholder="e.g. Senior Engineer" />
-            </div>
-            <div><label style={T.label}>No. of Openings</label>
-              <input style={T.input} type="number" min={1} value={form.no_of_openings} onChange={e=>F('no_of_openings',e.target.value)} />
-            </div>
-            <div><label style={T.label}>Employment Type</label>
+            <Field label="Job Title">
+              <input style={T.input} value={form.job_title} onChange={e=>F('job_title',e.target.value)} placeholder="e.g. Backend Engineer II" />
+            </Field>
+            <Field label="Designation" required error={errors.designation}>
+              <input style={eb('designation')} value={form.designation} onChange={e=>F('designation',e.target.value)} placeholder="e.g. Senior Engineer" />
+            </Field>
+            <Field label="No. of Openings" error={errors.no_of_openings}>
+              <input style={eb('no_of_openings')} type="number" min={1} value={form.no_of_openings} onChange={e=>F('no_of_openings',e.target.value)} />
+            </Field>
+          </div>
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Grade / Band">
+              <MasterSelect options={masters.grade} value={form.grade} onChange={(v:string)=>F('grade',v)} />
+            </Field>
+            <Field label="Job Code" hint="Position-based staffing only">
+              <input style={T.input} value={form.job_code} onChange={e=>F('job_code',e.target.value)} placeholder="e.g. ENG-BE-02" />
+            </Field>
+            <Field label="Reporting Manager"
+              hint={people.find((p:any)=>p.id===form.reporting_manager_id)?.designation
+                ? `Reports to: ${people.find((p:any)=>p.id===form.reporting_manager_id)?.designation}` : undefined}>
+              <select style={T.select} value={form.reporting_manager_id} onChange={e=>F('reporting_manager_id',e.target.value)}>
+                <option value="">Select Manager</option>
+                {people.map((p:any)=><option key={p.id} value={p.id}>{p.full_name} — {p.designation||'—'}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          {/* ── §3 Employment Details ── */}
+          <SectionLine title="3 · Employment Details" />
+          <div style={{ ...T.g4, marginBottom:10 }}>
+            <Field label="Employment Type">
               <select style={T.select} value={form.employment_type} onChange={e=>F('employment_type',e.target.value)}>
                 {EMP_TYPES.map(t=><option key={t}>{t}</option>)}
               </select>
-            </div>
-          </div>
-          <div style={{ ...T.g3, marginBottom:10 }}>
-            <div><label style={T.label}>Hiring Type</label>
-              <select style={T.select} value={form.hiring_type} onChange={e=>F('hiring_type',e.target.value)}>
-                <option value="New Hire">New Hire</option>
-                <option value="Replacement">Replacement</option>
-                <option value="Backfill">Backfill</option>
+            </Field>
+            <Field label="Work Mode">
+              <select style={T.select} value={form.work_mode} onChange={e=>F('work_mode',e.target.value)}>
+                {WORK_MODES.map(w=><option key={w} value={w}>{w}</option>)}
               </select>
-            </div>
-            <div><label style={T.label}>Budget Min (₹)</label>
-              <input style={T.input} type="number" value={form.budget_min} onChange={e=>F('budget_min',e.target.value)} placeholder="600000" />
-            </div>
-            <div><label style={T.label}>Budget Max (₹)</label>
-              <input style={T.input} type="number" value={form.budget_max} onChange={e=>F('budget_max',e.target.value)} placeholder="1200000" />
-            </div>
+            </Field>
+            <Field label="Work Location">
+              <select style={T.select} value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
+                <option value="">Select Location</option>
+                {filtLocs.map((l:Location)=><option key={l.id} value={l.id}>{l.location_name||l.location_code}</option>)}
+              </select>
+            </Field>
+            <Field label="Shift / Schedule">
+              <MasterSelect options={masters.shift_type} value={form.shift_schedule} onChange={(v:string)=>F('shift_schedule',v)} />
+            </Field>
           </div>
 
+          {/* ── §4 Budget & Cost ── */}
+          <SectionLine title="4 · Budget & Cost" />
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Cost Center">
+              <MasterSelect options={masters.cost_center} value={form.cost_center} onChange={(v:string)=>F('cost_center',v)} />
+            </Field>
+            <Field label="Budgeted Position">
+              <select style={T.select} value={form.is_budgeted} onChange={e=>F('is_budgeted',e.target.value)}>
+                <option value="">Not specified</option>
+                <option value="yes">Yes — budgeted</option>
+                <option value="no">No — unbudgeted</option>
+              </select>
+            </Field>
+            <Field label="Approved Headcount Ref." hint="Link to the headcount plan record">
+              <input style={T.input} value={form.headcount_ref} onChange={e=>F('headcount_ref',e.target.value)} placeholder="e.g. HCP-2026-014" />
+            </Field>
+          </div>
+          {/* Labels follow the employment type: employees draw a salary,
+              interns/apprentices a stipend, contractors and consultants fees. */}
+          <div style={{ background:'#F3F0FF', borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:11.5, color:'#6D28D9' }}>
+            <b>{form.employment_type}</b> → paid as <b>{comp.label.toLowerCase()}</b>, quoted <b>{perLabel(comp.period)}</b>
+            {comp.fixedTerm && <> · fixed-term engagement, duration required</>}
+          </div>
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Currency">
+              {masters.currency?.length
+                ? <MasterSelect options={masters.currency} value={form.currency} onChange={(v:string)=>F('currency',(v.split(' ')[0]||v))} />
+                : <input style={T.input} value={form.currency} onChange={e=>F('currency',e.target.value)} />}
+            </Field>
+            <Field label={`${comp.label} Range — Min`} hint={perLabel(comp.period)}>
+              <input style={T.input} type="number" value={form.budget_min} onChange={e=>F('budget_min',e.target.value)} placeholder={comp.ph[0]} />
+            </Field>
+            <Field label={`${comp.label} Range — Max`} error={errors.budget_max} hint={errors.budget_max?undefined:perLabel(comp.period)}>
+              <input style={eb('budget_max')} type="number" value={form.budget_max} onChange={e=>F('budget_max',e.target.value)} placeholder={comp.ph[1]} />
+            </Field>
+          </div>
+          {form.budget_min && form.budget_max && !errors.budget_max && (
+            <div style={{ fontSize:11, color:'#6D28D9', marginBottom:10 }}>
+              {comp.label} band: {payAmount(Number(form.budget_min), form.currency, comp.period)} — {payAmount(Number(form.budget_max), form.currency, comp.period)}
+              {comp.period==='MONTHLY' && form.duration_months && (
+                <> · total over {form.duration_months} month{Number(form.duration_months)===1?'':'s'}: {' '}
+                  {money(Number(form.budget_max)*Number(form.duration_months), form.currency)}</>
+              )}
+            </div>
+          )}
+
+          {/* Fixed-term engagements run for a defined period. */}
+          {(comp.fixedTerm || comp.period==='MONTHLY') && (
+            <div style={{ ...T.g3, marginBottom:10 }}>
+              <Field label={`${comp.kind==='STIPEND' && form.employment_type==='Intern' ? 'Internship' : 'Engagement'} Duration (months)`}
+                required={comp.fixedTerm} error={errors.duration_months}
+                hint={errors.duration_months?undefined:(comp.fixedTerm?'Required for this employment type':'Optional')}>
+                <input style={eb('duration_months')} type="number" min={1} max={60} value={form.duration_months}
+                  onChange={e=>F('duration_months',e.target.value)} placeholder="e.g. 6" />
+              </Field>
+              <Field label="Expected End Date"
+                hint={form.target_joining_date ? 'Derived from joining date + duration' : 'Set the target joining date first'}>
+                <input style={{ ...T.input, background:'#F1F5F9', color:'#6B7280' }} readOnly
+                  value={addMonths(form.target_joining_date, form.duration_months) ? fmtDay(addMonths(form.target_joining_date, form.duration_months)) : '—'} />
+              </Field>
+              <div />
+            </div>
+          )}
+
+          {/* ── §5 Justification ── */}
+          <SectionLine title="5 · Justification" />
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="Reason for Hire" error={errors.reason}>
+              <select style={eb('reason')} value={form.reason} onChange={e=>F('reason',e.target.value)}>
+                <option value="">Select Reason</option>
+                <option value="New position">New position</option>
+                <option value="Replacement">Replacement</option>
+                <option value="Expansion">Expansion</option>
+                <option value="Attrition">Attrition</option>
+              </select>
+            </Field>
+            <Field label="Outgoing Employee" error={errors.outgoing_employee_id}
+              hint={isReplacement?undefined:'Only for Replacement / Backfill'}>
+              <select style={{ ...eb('outgoing_employee_id'), opacity:isReplacement?1:.55 }} disabled={!isReplacement}
+                value={form.outgoing_employee_id} onChange={e=>F('outgoing_employee_id',e.target.value)}>
+                <option value="">Select Employee</option>
+                {people.map((p:any)=><option key={p.id} value={p.id}>{p.full_name} ({p.emp_code})</option>)}
+              </select>
+            </Field>
+            <Field label="Reason for Exit">
+              <select style={{ ...T.select, opacity:isReplacement?1:.55 }} disabled={!isReplacement}
+                value={form.exit_reason} onChange={e=>F('exit_reason',e.target.value)}>
+                <option value="">Select Reason</option>
+                {(masters.separation_reason||[]).map(o=><option key={o.code} value={o.label}>{o.label}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div style={{ marginBottom:10 }}>
+            <Field label="Business Justification">
+              <textarea style={{ ...T.textarea, minHeight:80 }} value={form.business_justification}
+                onChange={e=>F('business_justification',e.target.value)}
+                placeholder="Why this headcount is needed — business impact, workload, revenue linkage…" />
+            </Field>
+          </div>
+
+          {/* ── §6 Timeline ── */}
+          <SectionLine title="6 · Timeline" />
+          <div style={{ ...T.g2, marginBottom:10 }}>
+            <Field label="Target Joining Date" error={errors.target_joining_date}>
+              <input type="date" style={eb('target_joining_date')} value={form.target_joining_date} onChange={e=>F('target_joining_date',e.target.value)} />
+            </Field>
+            <Field label="Requisition Validity / Expiry" error={errors.validity_date} hint="Auto-flagged as expired if unfilled past this date">
+              <input type="date" style={eb('validity_date')} value={form.validity_date} onChange={e=>F('validity_date',e.target.value)} />
+            </Field>
+          </div>
+
+          {/* ── §7 Candidate Requirements ── */}
           {!isQuick && (
             <>
-              <SectionLine title="Requirements" />
+              <SectionLine title="7 · Candidate Requirements" />
               <div style={{ ...T.g2, marginBottom:10 }}>
-                <div><label style={T.label}>Experience — Min (years)</label>
+                <Field label="Experience — Min (years)">
                   <input style={T.input} type="number" min="0" value={form.experience_min} onChange={e=>F('experience_min',e.target.value)} placeholder="e.g. 3" />
-                </div>
-                <div><label style={T.label}>Experience — Max (years)</label>
-                  <input style={T.input} type="number" min="0" value={form.experience_max} onChange={e=>F('experience_max',e.target.value)} placeholder="e.g. 5" />
-                </div>
+                </Field>
+                <Field label="Experience — Max (years)" error={errors.experience_max}>
+                  <input style={eb('experience_max')} type="number" min="0" value={form.experience_max} onChange={e=>F('experience_max',e.target.value)} placeholder="e.g. 5" />
+                </Field>
               </div>
               <div style={{ ...T.g3, marginBottom:10 }}>
-                <div><label style={T.label}>Education — Minimum</label>
+                <Field label="Education — Minimum">
                   <select style={T.select} value={form.education_min} onChange={e=>F('education_min',e.target.value)}>
                     <option value="">Any</option>
                     {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
                   </select>
-                </div>
-                <div><label style={T.label}>Education — Maximum</label>
+                </Field>
+                <Field label="Education — Maximum">
                   <select style={T.select} value={form.education_max} onChange={e=>F('education_max',e.target.value)}>
                     <option value="">Any</option>
                     {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
                   </select>
-                </div>
-                <div><label style={T.label}>Previous Company Preference</label>
+                </Field>
+                <Field label="Previous Company Preference">
                   <select style={T.select} value={form.previous_company_preference} onChange={e=>F('previous_company_preference',e.target.value)}>
                     <option value="">Select Preference</option>
                     <option value="MNC">MNC</option>
                     <option value="STARTUP">Startup</option>
                   </select>
-                </div>
+                </Field>
               </div>
               <div style={{ marginBottom:10 }}>
-                <label style={T.label}>Key Skills Required</label>
-                <SkillsMultiSelect value={form.skills_required} onChange={(v:string)=>F('skills_required',v)} allSkills={skills} onAddSkill={addSkill} />
+                <Field label="Mandatory Skills" error={errors.skills_required}>
+                  <SkillsMultiSelect value={form.skills_required} onChange={(v:string)=>F('skills_required',v)} allSkills={skills} onAddSkill={addSkill} />
+                </Field>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <Field label="Good-to-have Skills">
+                  <SkillsMultiSelect value={form.good_to_have_skills} onChange={(v:string)=>F('good_to_have_skills',v)} allSkills={skills} onAddSkill={addSkill} />
+                </Field>
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
+                  <label style={{ ...T.label, marginBottom:0 }}>Job Description</label>
+                  <button onClick={generateJD} disabled={aiLoading} style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', border:'1px solid #DDD6FE', fontSize:11 }}>
+                    {aiLoading?'⏳ Generating...':'🤖 Generate JD with AI'}
+                  </button>
+                </div>
+                <textarea style={{ ...T.textarea, minHeight:150 }} value={form.job_description}
+                  onChange={e=>F('job_description',e.target.value)}
+                  placeholder="Write a job description or generate it with the AI button..." />
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <label style={T.label}>Screening (CTQ) Questions</label>
+                <CtqEditor items={form.ctq_questions} onChange={(v:any[])=>F('ctq_questions',v)} />
               </div>
             </>
           )}
 
-          <div style={{ ...T.g2, marginBottom:10 }}>
-            <div><label style={T.label}>Urgency</label>
-              <select style={T.select} value={form.urgency} onChange={e=>F('urgency',e.target.value)}>
-                <option value="HIGH">🔴 High</option>
-                <option value="MEDIUM">🟡 Medium</option>
-                <option value="LOW">🟢 Low</option>
-              </select>
-            </div>
-            <div><label style={T.label}>Reason for Hire</label>
-              <select style={T.select} value={form.reason} onChange={e=>F('reason',e.target.value)}>
-                <option value="">Select Reason</option>
-                <option value="Expansion">Expansion</option>
-                <option value="Attrition">Attrition</option>
-                <option value="New role">New role</option>
-              </select>
-            </div>
+          {/* ── §8 Approval Workflow ── */}
+          <SectionLine title="8 · Approval Workflow" />
+          <div style={{ marginBottom:14 }}>
+            <label style={T.label}>Approval Hierarchy</label>
+            <ApprovalChainEditor chain={form.approval_chain} onChange={(v:any[])=>F('approval_chain',v)} />
           </div>
 
+          {/* ── §9 Sourcing ── */}
           {!isQuick && (
-            <div style={{ marginBottom:14 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
-                <label style={{ ...T.label, marginBottom:0 }}>Job Description</label>
-                <button onClick={generateJD} disabled={aiLoading} style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', border:'1px solid #DDD6FE', fontSize:11 }}>
-                  {aiLoading?'⏳ Generating...':'🤖 Generate JD with AI'}
-                </button>
+            <>
+              <SectionLine title="9 · Sourcing" />
+              <div style={{ ...T.g2, marginBottom:10 }}>
+                <Field label="Internal vs External">
+                  <select style={T.select} value={form.sourcing_mode} onChange={e=>F('sourcing_mode',e.target.value)}>
+                    {SOURCING_MODES.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </Field>
+                <Field label="Assigned Recruiter" hint="Set on approval, or enter here">
+                  <input style={{ ...T.input, background:'#F1F5F9', color:'#6B7280' }}
+                    value={(editMRF as any)?.assigned_recruiter||'Assigned at approval'} readOnly />
+                </Field>
               </div>
-              <textarea style={{ ...T.textarea, minHeight:150 }} value={form.job_description}
-                onChange={e=>F('job_description',e.target.value)}
-                placeholder="Write a job description or generate it with the AI button..." />
+              <div style={{ marginBottom:14 }}>
+                <label style={T.label}>Preferred Sourcing Channels</label>
+                <ChannelPicker options={masters.candidate_source} value={form.sourcing_channels}
+                  onChange={(v:string[])=>F('sourcing_channels',v)} />
+              </div>
+            </>
+          )}
+
+          {/* ── §10 Attachments ── */}
+          <SectionLine title="10 · Attachments" />
+          <div style={{ marginBottom:14 }}>
+            {editMRF ? (
+              <AttachmentsPanel mrfId={editMRF.id} attachments={asArray((editMRF as any).attachments)}
+                onChanged={onRefresh} showNotify={showNotify} />
+            ) : (
+              <div style={{ fontSize:11.5, color:'#9CA3AF' }}>
+                Save the requisition first — files attach to a saved MRF.
+              </div>
+            )}
+          </div>
+
+          {Object.values(errors).filter(Boolean).length>0 && (
+            <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:7, padding:'9px 12px', marginBottom:12, fontSize:12, color:'#B91C1C' }}>
+              {Object.values(errors).filter(Boolean).length} field(s) need attention before this can be saved.
             </div>
           )}
 
@@ -672,7 +1929,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         </div>
       )}
 
-      <SearchBar placeholder="Search MRF by job role…" onApply={setMrfQ} />
+      <SearchBar placeholder="Search by job title, role or MRF number…" onApply={setMrfQ} />
       <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const, marginBottom:12, alignItems:'center' }}>
         <select value={fCompany} onChange={e=>setFCompany(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
           <option value="">All Companies</option>
@@ -680,10 +1937,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         </select>
         <select value={fDept} onChange={e=>setFDept(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
           <option value="">All Departments</option>
-          {(() => {
-            const vis = departments.filter((d:Department)=>!fCompany||d.company_id===fCompany)
-            return vis.map((d:Department)=><option key={d.id} value={d.id}>{deptLabel(d, vis, companies)}</option>)
-          })()}
+          {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
         </select>
         <select value={fLoc} onChange={e=>setFLoc(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
           <option value="">All Locations</option>
@@ -693,53 +1947,61 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <option value="">All Positions</option>
           {mrfPositions.map((p:string)=><option key={p} value={p}>{p}</option>)}
         </select>
-        {(fCompany||fDept||fLoc||fPos)&&<button onClick={()=>{setFCompany('');setFDept('');setFLoc('');setFPos('')}} style={T.btnOutline}>Clear filters</button>}
+        <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="openings">Most openings</option>
+          <option value="urgency">Most urgent</option>
+          <option value="joining">Earliest joining</option>
+        </select>
+        {(fCompany||fDept||fLoc||fPos||fStatus)&&<button onClick={()=>{setFCompany('');setFDept('');setFLoc('');setFPos('');setFStatus('')}} style={T.btnOutline}>Clear filters</button>}
       </div>
-      {mrfs.filter((m:MRF)=>
-        (!mrfQ || (m.designation||(m as any).position||'').toLowerCase().includes(mrfQ.toLowerCase())) &&
-        (!fCompany || m.company_id===fCompany) &&
-        (!fDept || m.department_id===fDept) &&
-        (!fLoc || m.location_id===fLoc) &&
-        (!fPos || (m.designation||m.position)===fPos)
-      ).map((m:MRF)=>{
-        const cands = candidates.filter((c:Candidate)=>c.mrf_id===m.id)
-        return (
-          <div key={m.id} style={T.card}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-              <div style={{ flex:1 }}>
-                <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:5, flexWrap:'wrap' as const }}>
-                  <span style={{ fontSize:14, fontWeight:600, color:'#1E1B4B' }}>{m.designation||m.position||'Untitled'}</span>
-                  <Badge text={m.status} />
-                  {m.urgency&&<span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, background:m.urgency==='HIGH'?'#FEF2F2':m.urgency==='MEDIUM'?'#FFFBEB':'#ECFDF5', color:m.urgency==='HIGH'?'#DC2626':m.urgency==='MEDIUM'?'#D97706':'#059669', fontWeight:500 }}>{m.urgency}</span>}
-                </div>
-                <div style={{ fontSize:12, color:'#9CA3AF', display:'flex', gap:14, flexWrap:'wrap' as const }}>
-                  <span>👥 {m.no_of_openings||m.openings||0} openings</span>
-                  <span>💼 {m.employment_type||'—'}</span>
-                  {m.experience_required&&<span>⏱ {m.experience_required}</span>}
-                  {m.budget_max&&<span>💰 ₹{(m.budget_max/100000).toFixed(1)}L max</span>}
-                  <span style={{ color:'#7C3AED' }}>🧑 {cands.length} candidates</span>
-                  {m.assigned_recruiter&&<span>👤 {m.assigned_recruiter}</span>}
-                </div>
-                {(m as any).skills_required&&<div style={{ fontSize:11, color:'#6D28D9', marginTop:4 }}>Skills: {(m as any).skills_required}</div>}
-              </div>
-              <div style={{ display:'flex', gap:6, marginLeft:10, flexShrink:0, alignItems:'center' }}>
-                {m.status==='SUBMITTED'&&(
-                  <span style={{ fontSize:10, color:'#9CA3AF', fontStyle:'italic' as const }}>Awaiting HR Head approval</span>
-                )}
-                <button onClick={()=>openEdit(m)} style={{ ...T.btn, background:'#EFF6FF', color:'#1D4ED8', border:'1px solid #BFDBFE', fontSize:11 }}>✏️ Edit</button>
-                <button onClick={()=>setDeleteConfirm(m.id)} style={{ ...T.btn, background:'#FEF2F2', color:'#DC2626', border:'1px solid #FCA5A5', fontSize:11 }}>🗑️</button>
-              </div>
-            </div>
-          </div>
-        )
-      })}
 
-      {approvalModal&&<ApprovalModal mrf={approvalModal} onApprove={approveMRF} onReject={rejectMRF} onClose={()=>setApprovalModal(null)} />}
+      {visible.length>0 && (
+        <div style={{ fontSize:11.5, color:'#9CA3AF', marginBottom:8 }}>
+          Showing {visible.length} of {mrfs.length} requisition{mrfs.length===1?'':'s'}
+          {fStatus?` · ${fStatus.replace('_',' ')}`:''}
+        </div>
+      )}
+
+      {visible.length===0 && (
+        <div style={{ ...T.card, textAlign:'center' as const, padding:34, color:'#9CA3AF' }}>
+          <div style={{ fontSize:30, marginBottom:8 }}>📝</div>
+          <div style={{ fontSize:14, fontWeight:600, color:'#1E1B4B' }}>No requisitions match</div>
+          <div style={{ fontSize:12.5, marginTop:5 }}>
+            {mrfs.length ? 'Try clearing the filters above.' : 'Create your first MRF with the + New MRF button.'}
+          </div>
+        </div>
+      )}
+
+      {view==='table' && visible.length>0 && (
+        <MrfTable rows={visible} orgOf={orgOf} candidates={candidates}
+          onOpen={setDetailMRF} onReview={setApprovalModal} />
+      )}
+
+      {view==='cards' && visible.map((m:MRF)=>(
+        <MrfCard key={m.id} m={m} org={orgOf(m)}
+          cands={candidates.filter((c:Candidate)=>c.mrf_id===m.id)}
+          onOpen={setDetailMRF} onEdit={openEdit} onDelete={setDeleteConfirm}
+          onReview={setApprovalModal}
+          onClose={(x:MRF)=>setMrfStatus(x,'CLOSED','MRF_CLOSED')}
+          onReopen={(x:MRF)=>setMrfStatus(x,'APPROVED','MRF_REOPENED')} />
+      ))}
+
+      {detailMRF && (
+        <MrfDetail supabase={supabase} mrf={mrfs.find((x:MRF)=>x.id===detailMRF.id)||detailMRF} org={orgOf(detailMRF)}
+          cands={candidates.filter((c:Candidate)=>c.mrf_id===detailMRF.id)} people={people}
+          onClose={()=>setDetailMRF(null)} onEdit={openEdit} onReview={setApprovalModal}
+          onChanged={onRefresh} showNotify={showNotify} />
+      )}
+
+      {approvalModal&&<ApprovalModal mrf={approvalModal} org={orgOf(approvalModal)}
+        onApprove={approveMRF} onReject={rejectMRF} onHold={holdMRF} onClose={()=>setApprovalModal(null)} />}
       {deleteConfirm&&(
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center' }}>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ background:'#fff', borderRadius:12, padding:24, width:340, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize:15, fontWeight:600, color:'#1E1B4B', marginBottom:8 }}>Delete MRF?</div>
-            <div style={{ fontSize:13, color:'#9CA3AF', marginBottom:20 }}>This action cannot be undone.</div>
+            <div style={{ fontSize:13, color:'#9CA3AF', marginBottom:20 }}>This action cannot be undone. Linked candidates are kept but unlinked from this requisition.</div>
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={()=>deleteMRF(deleteConfirm)} style={{ ...T.btn, background:'#DC2626', color:'#fff', flex:1 }}>Delete</button>
               <button onClick={()=>setDeleteConfirm(null)} style={{ ...T.btnOutline, flex:1 }}>Cancel</button>
@@ -751,34 +2013,572 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   )
 }
 
-function ApprovalModal({ mrf, onApprove, onReject, onClose }:any) {
-  const [mode, setMode] = useState<'approve'|'reject'>('approve')
-  const [recruiter, setRecruiter] = useState('')
-  const [reason, setReason] = useState('')
+function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
+  const [mode, setMode] = useState<'approve'|'reject'|'hold'>('approve')
+  const [recruiter, setRecruiter] = useState(mrf.assigned_recruiter||'')
+  const [actor, setActor] = useState('')
+  const [comments, setComments] = useState('')
+  const [busy, setBusy] = useState(false)
+  const openings = mrf.no_of_openings||mrf.openings||0
+  const emailOk = !recruiter || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recruiter.trim())
+  const chain = asArray(mrf.approval_chain)
+  const comp = compOf(mrf.employment_type)
+  const stepIdx = chain.findIndex((s:any)=>s.status!=='APPROVED')
+  const step = stepIdx>=0 ? chain[stepIdx] : null
+  const isLast = stepIdx<0 || stepIdx===chain.length-1
+
+  async function go(fn:()=>Promise<void>|void) { setBusy(true); await fn(); setBusy(false) }
+
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center' }}>
-      <div style={{ background:'#fff', borderRadius:12, padding:24, width:420, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-        <div style={{ fontSize:15, fontWeight:600, color:'#1E1B4B', marginBottom:4 }}>{mrf.designation||mrf.position}</div>
-        <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:16 }}>{mrf.no_of_openings||mrf.openings||0} openings · {mrf.employment_type}</div>
+    <div style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div style={{ background:'#fff', borderRadius:12, padding:24, width:'100%', maxWidth:480, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ fontSize:16, fontWeight:700, color:'#1E1B4B' }}>{mrf.job_title||mrf.designation||mrf.position}</div>
+        <div style={{ fontSize:11.5, color:'#9CA3AF', marginTop:3 }}>
+          {mrf.mrf_number||'No MRF number'}{org?` · ${org.company} · ${org.dept}`:''}
+        </div>
+
+        <div style={{ background:'#FAFAF8', border:'1px solid #EDE9FE', borderRadius:8, padding:'11px 13px', margin:'14px 0', fontSize:12, color:'#374151', display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>
+          <div><b>{openings}</b> opening{openings===1?'':'s'}</div>
+          <div>{mrf.employment_type||'—'}{mrf.work_mode?` · ${mrf.work_mode}`:''}</div>
+          <div>{comp.label}: {payAmount(mrf.budget_max, mrf.currency, comp.period)}</div>
+          <div>Priority: {mrf.urgency||'—'}</div>
+          {mrf.duration_months && <div>Duration: {mrf.duration_months} month{mrf.duration_months===1?'':'s'}</div>}
+          {mrf.target_joining_date && <div>Join by: {fmtDay(mrf.target_joining_date)}</div>}
+          {mrf.cost_center && <div>Cost centre: {mrf.cost_center}</div>}
+          {mrf.reason && <div>Reason: {mrf.reason}</div>}
+          {mrf.is_budgeted!=null && <div>{mrf.is_budgeted?'Budgeted':'Unbudgeted'}</div>}
+        </div>
+
+        {chain.length>0 && (
+          <div style={{ background:'#F3F0FF', borderRadius:8, padding:'10px 12px', marginBottom:14, fontSize:12, color:'#6D28D9' }}>
+            {step
+              ? <>Approving step <b>{stepIdx+1} of {chain.length}</b> — <b>{step.role}</b>.
+                  {!isLast && <div style={{ marginTop:3, color:'#7C3AED' }}>Later steps still have to approve before this MRF opens.</div>}</>
+              : <>All {chain.length} approval steps are already complete.</>}
+          </div>
+        )}
+
         <div style={{ display:'flex', gap:8, marginBottom:16 }}>
           <button onClick={()=>setMode('approve')} style={{ ...T.btn, flex:1, background:mode==='approve'?'#ECFDF5':'#F9FAFB', color:mode==='approve'?'#059669':'#9CA3AF', border:mode==='approve'?'1px solid #A7F3D0':'1px solid #E5E7EB' }}>✅ Approve</button>
+          <button onClick={()=>setMode('hold')} style={{ ...T.btn, flex:1, background:mode==='hold'?'#FFFBEB':'#F9FAFB', color:mode==='hold'?'#B45309':'#9CA3AF', border:mode==='hold'?'1px solid #FDE68A':'1px solid #E5E7EB' }}>⏸ Hold</button>
           <button onClick={()=>setMode('reject')} style={{ ...T.btn, flex:1, background:mode==='reject'?'#FEF2F2':'#F9FAFB', color:mode==='reject'?'#DC2626':'#9CA3AF', border:mode==='reject'?'1px solid #FCA5A5':'1px solid #E5E7EB' }}>❌ Reject</button>
         </div>
+
+        <label style={T.label}>Approver name</label>
+        <input style={{ ...T.input, marginBottom:11 }} value={actor} onChange={e=>setActor(e.target.value)}
+          placeholder={step?`Who is approving as ${step.role}?`:'Your name'} />
+
         {mode==='approve'?(
           <>
             <label style={T.label}>Assign Recruiter Email</label>
-            <input style={{ ...T.input, marginBottom:16 }} value={recruiter} onChange={e=>setRecruiter(e.target.value)} placeholder="recruiter@company.com" />
-            <button onClick={()=>onApprove(mrf.id,recruiter)} style={{ ...T.btnPrimary, width:'100%' }}>Approve & Assign</button>
+            <input style={{ ...T.input, marginBottom:4, ...(emailOk?{}:{ border:'1px solid #FCA5A5', background:'#FEF2F2' }) }}
+              value={recruiter} onChange={e=>setRecruiter(e.target.value)} placeholder="recruiter@company.com" />
+            <div style={{ fontSize:10.5, color: emailOk?'#9CA3AF':'#DC2626', marginBottom:11 }}>
+              {emailOk ? 'Optional — the MRF can be approved and assigned later.' : 'That does not look like a valid email.'}
+            </div>
+            <label style={T.label}>Approver comments</label>
+            <textarea style={{ ...T.textarea, marginBottom:16, minHeight:70 }} value={comments}
+              onChange={e=>setComments(e.target.value)} placeholder="Optional note for the record" />
+            <button onClick={()=>emailOk && go(()=>onApprove(mrf.id, recruiter.trim(), comments.trim(), actor.trim()))} disabled={busy||!emailOk}
+              style={{ ...T.btnPrimary, width:'100%', opacity: busy||!emailOk?.6:1 }}>
+              {busy?'Approving…':step&&!isLast?`Approve step ${stepIdx+1} of ${chain.length}`:'Approve & Assign'}
+            </button>
+          </>
+        ):mode==='hold'?(
+          <>
+            <label style={T.label}>Reason for hold *</label>
+            <textarea style={{ ...T.textarea, marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
+              placeholder="Why is this requisition being paused?" rows={3} />
+            <button onClick={()=>comments.trim() && go(()=>onHold(mrf.id, comments.trim()))} disabled={busy||!comments.trim()}
+              style={{ ...T.btn, background:'#B45309', color:'#fff', width:'100%', opacity: busy||!comments.trim()?.6:1 }}>
+              {busy?'Saving…':'Put on hold'}
+            </button>
           </>
         ):(
           <>
             <label style={T.label}>Rejection Reason *</label>
-            <textarea style={{ ...T.textarea, marginBottom:16 }} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Enter a reason..." rows={3} />
-            <button onClick={()=>reason&&onReject(mrf.id,reason)} style={{ ...T.btn, background:'#DC2626', color:'#fff', width:'100%' }}>Reject MRF</button>
+            <textarea style={{ ...T.textarea, marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
+              placeholder="Why is this requisition being rejected?" rows={3} />
+            <button onClick={()=>comments.trim() && go(()=>onReject(mrf.id, comments.trim(), actor.trim()))} disabled={busy||!comments.trim()}
+              style={{ ...T.btn, background:'#DC2626', color:'#fff', width:'100%', opacity: busy||!comments.trim()?.6:1 }}>
+              {busy?'Rejecting…':'Reject MRF'}
+            </button>
           </>
         )}
         <button onClick={onClose} style={{ ...T.btn, background:'transparent', color:'#9CA3AF', width:'100%', marginTop:8 }}>Cancel</button>
       </div>
+    </div>
+  )
+}
+
+// ══════════════════════════════════════════════════════════════════
+// JOB STATUS — MRF deadlines, expiries and recruiter accountability
+//
+// Built from the Recruiter Performance handoff (094/095 + the filterable
+// HTML reference). Those migrations were written against an ASSUMED `mrf`
+// table and the guide flags it: "reconcile the column names against your
+// actual mrf table before deploying". They do not match this codebase, so
+// none of that SQL is used. The mapping applied here:
+//
+//   handoff              →  actual
+//   mrf                  →  manpower_requisitions
+//   mrf_code             →  mrf_number
+//   recruiter_id (UUID)  →  assigned_recruiter (email text) — there is no
+//                           recruiters master, so rollups group by email
+//   positions_count      →  no_of_openings / openings
+//   expiry_date          →  validity_date        (migration 032a)
+//   status OPEN/FILLED/  →  DRAFT/SUBMITTED/ON_HOLD/APPROVED/REJECTED/
+//     EXPIRED/CANCELLED     CLOSED — the lifecycle outcome is DERIVED below
+//                           rather than overwriting the workflow status
+//   filled_at            →  earliest candidate offer_sent_at / doj
+//   first_shortlist_at   →  earliest linked candidate created_at
+//
+// Outcome is derived on read rather than written by a nightly
+// expire_overdue_mrfs() job: the workflow status column drives approvals and
+// must not be clobbered, and a derived flag can never drift out of date the
+// way a cron-written one does if the job stops running.
+// ══════════════════════════════════════════════════════════════════
+
+// Fill-rate bands. The handoff calls 60/35 arbitrary and asks HR to confirm —
+// kept here as named constants so they are a one-line change.
+const FILL_STRONG = 60
+const FILL_MID    = 35
+
+// Days-to-deadline bands for the live-requisition flags.
+const DUE_CRITICAL = 7
+const DUE_WATCH    = 21
+
+const JOB_FLAGS:Record<string,{ label:string; bg:string; fg:string; icon:string; help:string }> = {
+  FILLED:      { label:'Filled',      bg:'#ECFDF5', fg:'#059669', icon:'✅', help:'All openings have an offer out or a joiner' },
+  ON_TRACK:    { label:'On Track',    bg:'#ECFDF5', fg:'#059669', icon:'🟢', help:'Live, comfortably inside its deadline' },
+  WATCH:       { label:'Watch',       bg:'#FFFBEB', fg:'#B45309', icon:'🟡', help:'Deadline within three weeks' },
+  CRITICAL:    { label:'Critical',    bg:'#FFF7ED', fg:'#C2410C', icon:'🟠', help:'Deadline within a week' },
+  BREACHED:    { label:'Breached',    bg:'#FEF2F2', fg:'#DC2626', icon:'🔴', help:'Past its validity date and still unfilled' },
+  NO_DEADLINE: { label:'No Deadline', bg:'#F1F5F9', fg:'#64748B', icon:'⚪', help:'Live but no validity date was set' },
+  AWAITING:    { label:'Awaiting Approval', bg:'#EFF6FF', fg:'#1D4ED8', icon:'⏳', help:'Not yet released to a recruiter' },
+  CANCELLED:   { label:'Cancelled',   bg:'#F1F5F9', fg:'#64748B', icon:'⛔', help:'Rejected — excluded from performance' },
+}
+
+const dayDiff = (a:any, b:any) => Math.round((+new Date(a) - +new Date(b)) / 86400000)
+const daysTo  = (d?:string|null) => d ? dayDiff(d, new Date(new Date().toDateString())) : null
+
+/**
+ * One MRF's lifecycle outcome and deadline standing.
+ * `concluded` marks the MRFs that count toward fill rate — a live requisition
+ * is neither a success nor a failure yet, so including it would drag the rate
+ * in whichever direction happens to have more volume.
+ */
+function jobStatusOf(m:any, cands:Candidate[]) {
+  const openings = m.no_of_openings || m.openings || 0
+  const won = cands.filter(c=>c.stage==='Offer Sent'||c.stage==='Joined')
+  const filledCount = won.length
+  const isFilled = openings>0 && filledCount >= openings
+
+  // Earliest point the requisition was satisfied — offer out, or a joiner.
+  const fillDates = won.map(c=>c.offer_sent_at||c.doj).filter(Boolean).map(d=>+new Date(d as string))
+  const filledAt = fillDates.length ? new Date(Math.min(...fillDates)).toISOString() : null
+  const firstCand = cands.length
+    ? new Date(Math.min(...cands.map(c=>+new Date(c.created_at)))).toISOString() : null
+
+  const deadline = m.validity_date || m.target_joining_date || null
+  const left = daysTo(deadline)
+
+  let flag = 'NO_DEADLINE'
+  if (m.status==='REJECTED') flag = 'CANCELLED'
+  else if (m.status==='CLOSED' || isFilled) flag = 'FILLED'
+  else if (m.status!=='APPROVED') flag = 'AWAITING'
+  else if (left==null) flag = 'NO_DEADLINE'
+  else if (left < 0) flag = 'BREACHED'
+  else if (left <= DUE_CRITICAL) flag = 'CRITICAL'
+  else if (left <= DUE_WATCH) flag = 'WATCH'
+  else flag = 'ON_TRACK'
+
+  const concluded = flag==='FILLED' || flag==='BREACHED'
+  return {
+    flag, openings, filledCount, isFilled, filledAt, firstCand, deadline, daysLeft:left, concluded,
+    daysToFill:   filledAt  ? dayDiff(filledAt,  m.created_at) : null,
+    daysToFirst:  firstCand ? dayDiff(firstCand, m.created_at) : null,
+    ageDays:      dayDiff(new Date(), m.created_at),
+  }
+}
+
+function fillTone(rate:number|null) {
+  if (rate==null) return ['#F1F5F9','#64748B'] as [string,string]
+  if (rate >= FILL_STRONG) return ['#ECFDF5','#059669'] as [string,string]
+  if (rate >= FILL_MID)    return ['#FFFBEB','#B45309'] as [string,string]
+  return ['#FEF2F2','#DC2626'] as [string,string]
+}
+
+function JobFlag({ flag }:{ flag:string }) {
+  const f = JOB_FLAGS[flag] || JOB_FLAGS.NO_DEADLINE
+  return (
+    <span title={f.help} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:f.bg, color:f.fg,
+      fontWeight:600, whiteSpace:'nowrap' as const }}>{f.icon} {f.label}</span>
+  )
+}
+
+// ── Deadline board ────────────────────────────────────────────────
+function DeadlineBoard({ rows, orgOf }:any) {
+  if (!rows.length) return (
+    <div style={{ ...T.card, textAlign:'center' as const, padding:26, color:'#9CA3AF', fontSize:12.5 }}>
+      No live requisitions with a deadline. ✅
+    </div>
+  )
+  return (
+    <div style={{ ...T.card, padding:0, overflowX:'auto' }}>
+      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:820 }}>
+        <thead>
+          <tr>
+            {['Requisition','Department','Recruiter','Openings','Progress','Deadline','Days Left','Flag'].map((h,i)=>(
+              <th key={h} style={{ fontSize:10, color:'#6D28D9', fontWeight:600, textTransform:'uppercase' as const,
+                letterSpacing:'.05em', textAlign: i>=3&&i<=6 ? 'center':'left', padding:'8px 10px',
+                borderBottom:'1px solid #EDE9FE', whiteSpace:'nowrap' as const }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ m, js }:any)=>{
+            const org = orgOf(m)
+            const pct = js.openings ? Math.min(100,(js.filledCount/js.openings)*100) : 0
+            const late = js.daysLeft!=null && js.daysLeft < 0
+            return (
+              <tr key={m.id}>
+                <td style={{ fontSize:12, padding:'9px 10px', borderBottom:'1px solid #F3F0FF' }}>
+                  <div style={{ fontWeight:600 }}>{m.job_title||m.designation||m.position}</div>
+                  <div style={{ fontSize:10.5, color:'#9CA3AF' }}>{m.mrf_number||'—'}</div>
+                </td>
+                <td style={{ fontSize:12, color:'#6B7280', padding:'9px 10px', borderBottom:'1px solid #F3F0FF' }}>{org.dept}</td>
+                <td style={{ fontSize:12, color:'#6B7280', padding:'9px 10px', borderBottom:'1px solid #F3F0FF' }}>{m.assigned_recruiter||'— unassigned'}</td>
+                <td style={{ fontSize:12, textAlign:'center', padding:'9px 10px', borderBottom:'1px solid #F3F0FF' }}>{js.openings}</td>
+                <td style={{ padding:'9px 10px', borderBottom:'1px solid #F3F0FF', minWidth:110 }}>
+                  <div style={{ fontSize:10.5, color:'#9CA3AF', textAlign:'center', marginBottom:3 }}>{js.filledCount}/{js.openings}</div>
+                  <div style={{ background:'#F3F0FF', borderRadius:99, height:5, overflow:'hidden' }}>
+                    <div style={{ width:`${pct}%`, height:'100%', background:pct>=100?'#059669':'#7C3AED' }} />
+                  </div>
+                </td>
+                <td style={{ fontSize:12, color:'#6B7280', textAlign:'center', padding:'9px 10px', borderBottom:'1px solid #F3F0FF', whiteSpace:'nowrap' as const }}>{fmtDay(js.deadline)}</td>
+                <td style={{ fontSize:12.5, fontWeight:700, textAlign:'center', padding:'9px 10px',
+                  borderBottom:'1px solid #F3F0FF', color: late?'#DC2626': js.daysLeft<=DUE_CRITICAL?'#C2410C':'#059669', whiteSpace:'nowrap' as const }}>
+                  {js.daysLeft==null ? '—' : late ? `${Math.abs(js.daysLeft)}d over` : `${js.daysLeft}d`}
+                </td>
+                <td style={{ padding:'9px 10px', borderBottom:'1px solid #F3F0FF' }}><JobFlag flag={js.flag} /></td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ── Recruiter performance table ───────────────────────────────────
+function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:any) {
+  const th = (k:string, label:string, num=false):React.CSSProperties => ({
+    fontSize:10, color:'#6D28D9', fontWeight:600, textTransform:'uppercase', letterSpacing:'.05em',
+    textAlign: num?'right':'left', padding:'9px 10px', borderBottom:'1px solid #EDE9FE',
+    cursor:'pointer', whiteSpace:'nowrap',
+  })
+  const td:React.CSSProperties = { fontSize:12.5, padding:'10px', borderBottom:'1px solid #F3F0FF' }
+  const num:React.CSSProperties = { ...td, textAlign:'right' }
+  const arrow = (k:string) => sortKey===k ? (sortDir==='asc'?' ▲':' ▼') : ''
+  const COLS:[string,string,boolean][] = [
+    ['name','Recruiter',false], ['total','MRFs',true], ['filled','Filled',true],
+    ['expired','Breached',true], ['open','Live',true], ['rate','Fill Rate',true],
+    ['ttf','Avg Days to Fill',true], ['ttc','Avg Days to 1st CV',true],
+  ]
+  return (
+    <div style={{ ...T.card, padding:0, overflowX:'auto' }}>
+      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:860 }}>
+        <thead>
+          <tr>{COLS.map(([k,l,n])=>(
+            <th key={k} style={th(k,l,n)} onClick={()=>onSort(k)}>{l}{arrow(k)}</th>
+          ))}</tr>
+        </thead>
+        <tbody>
+          {rows.map((r:any)=>{
+            const [bg,fg] = fillTone(r.rate)
+            const on = selected===r.key
+            return (
+              <tr key={r.key} onClick={()=>onSelect(on?null:r.key)}
+                style={{ cursor:'pointer', background: on?'#FAF8FF':'transparent' }}>
+                <td style={td}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ width:26, height:26, borderRadius:'50%', background:'#F3F0FF', color:'#6D28D9',
+                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0 }}>
+                      {r.name.slice(0,2).toUpperCase()}
+                    </span>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontWeight:600 }}>{r.name}</div>
+                      {r.unassigned && <div style={{ fontSize:10, color:'#B45309' }}>no recruiter assigned</div>}
+                    </div>
+                  </div>
+                </td>
+                <td style={num}>{r.total}</td>
+                <td style={{ ...num, color:'#059669', fontWeight:600 }}>{r.filled}</td>
+                <td style={{ ...num, color: r.expired?'#DC2626':'#9CA3AF', fontWeight: r.expired?600:400 }}>{r.expired}</td>
+                <td style={num}>{r.open}</td>
+                <td style={num}>
+                  <span style={{ fontWeight:700, padding:'3px 10px', borderRadius:99, fontSize:11.5, background:bg, color:fg }}>
+                    {r.rate==null ? '—' : r.rate+'%'}
+                  </span>
+                </td>
+                <td style={num}>{r.ttf==null?'—':r.ttf}</td>
+                <td style={num}>{r.ttc==null?'—':r.ttc}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      {rows.length===0 && (
+        <div style={{ padding:26, textAlign:'center', color:'#9CA3AF', fontSize:12.5 }}>
+          No requisitions in this period.
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── JOB STATUS TAB ────────────────────────────────────────────────
+function JobStatusTab({ companies, locations, departments, mrfs, candidates }:any) {
+  const [fCompany, setFCompany] = useState('')
+  const [fLoc, setFLoc] = useState('')
+  const [fDept, setFDept] = useState('')
+  const [period, setPeriod] = useState('all')
+  const [sortKey, setSortKey] = useState('rate')
+  const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
+  const [selected, setSelected] = useState<string|null>(null)
+
+  const orgOf = (m:MRF) => ({
+    company: companies.find((c:Company)=>c.id===m.company_id)?.company_name
+      || companies.find((c:Company)=>c.id===m.company_id)?.company_code || '—',
+    dept: departments.find((d:Department)=>d.id===m.department_id)?.dept_name || '—',
+    loc: locations.find((l:Location)=>l.id===m.location_id)?.location_name || '—',
+  })
+
+  const cutoff = period==='all' ? null
+    : new Date(Date.now() - Number(period)*86400000).toISOString()
+
+  // Every MRF in scope, paired with its derived lifecycle standing.
+  const scoped = mrfs
+    .filter((m:MRF)=>
+      (!fCompany || m.company_id===fCompany) &&
+      (!fLoc || m.location_id===fLoc) &&
+      (!fDept || m.department_id===fDept) &&
+      (!cutoff || m.created_at >= cutoff))
+    .map((m:MRF)=>({ m, js: jobStatusOf(m, candidates.filter((c:Candidate)=>c.mrf_id===m.id)) }))
+
+  const counts = scoped.reduce((a:any,{js}:any)=>{ a[js.flag]=(a[js.flag]||0)+1; return a }, {})
+  const concluded = scoped.filter(({js}:any)=>js.concluded)
+  const filledN = concluded.filter(({js}:any)=>js.flag==='FILLED').length
+  const breachedN = concluded.filter(({js}:any)=>js.flag==='BREACHED').length
+  const overallRate = concluded.length ? Math.round(1000*filledN/concluded.length)/10 : null
+  const ttfAll = scoped.filter(({js}:any)=>js.daysToFill!=null).map(({js}:any)=>js.daysToFill)
+  const avgTtf = ttfAll.length ? Math.round(10*ttfAll.reduce((a:number,b:number)=>a+b,0)/ttfAll.length)/10 : null
+  const atRisk = scoped.filter(({js}:any)=>js.flag==='CRITICAL'||js.flag==='BREACHED').length
+  const noDeadline = scoped.filter(({js}:any)=>js.flag==='NO_DEADLINE').length
+
+  // Deadline board — live requisitions only, most urgent first.
+  const board = scoped
+    .filter(({js}:any)=>['BREACHED','CRITICAL','WATCH','ON_TRACK','NO_DEADLINE'].includes(js.flag))
+    .sort((a:any,b:any)=>{
+      const av = a.js.daysLeft==null ? 99999 : a.js.daysLeft
+      const bv = b.js.daysLeft==null ? 99999 : b.js.daysLeft
+      return av-bv
+    })
+
+  // Rollup per recruiter. No recruiters master exists, so the owner is the
+  // assigned_recruiter email; MRFs with none are grouped as Unassigned so the
+  // gap is visible rather than silently dropped.
+  const byRecruiter = new Map<string, any>()
+  for (const { m, js } of scoped) {
+    if (js.flag==='CANCELLED') continue           // rejected MRFs are nobody's failure
+    const key = (m.assigned_recruiter||'').trim().toLowerCase() || '__unassigned'
+    const cur = byRecruiter.get(key) || {
+      key, name: m.assigned_recruiter || 'Unassigned', unassigned: !m.assigned_recruiter,
+      total:0, filled:0, expired:0, open:0, ttfList:[] as number[], ttcList:[] as number[], items:[] as any[],
+    }
+    cur.total++
+    if (js.flag==='FILLED') cur.filled++
+    else if (js.flag==='BREACHED') cur.expired++
+    else if (js.flag!=='AWAITING') cur.open++
+    if (js.daysToFill!=null)  cur.ttfList.push(js.daysToFill)
+    if (js.daysToFirst!=null) cur.ttcList.push(js.daysToFirst)
+    cur.items.push({ m, js })
+    byRecruiter.set(key, cur)
+  }
+  const avg = (xs:number[]) => xs.length ? Math.round(10*xs.reduce((a,b)=>a+b,0)/xs.length)/10 : null
+  const recruiterRows = [...byRecruiter.values()].map(r=>({
+    ...r,
+    // Fill rate excludes live MRFs from the denominator — the handoff's
+    // deliberate design decision, kept.
+    rate: (r.filled+r.expired) ? Math.round(1000*r.filled/(r.filled+r.expired))/10 : null,
+    ttf: avg(r.ttfList), ttc: avg(r.ttcList),
+  })).sort((a,b)=>{
+    const dir = sortDir==='asc' ? 1 : -1
+    if (sortKey==='name') return dir * String(a.name).localeCompare(String(b.name))
+    const av = (a as any)[sortKey], bv = (b as any)[sortKey]
+    if (av==null && bv==null) return 0
+    if (av==null) return 1
+    if (bv==null) return -1
+    return dir * (av - bv)
+  })
+
+  function sort(k:string) {
+    if (sortKey===k) setSortDir(d=>d==='asc'?'desc':'asc')
+    else { setSortKey(k); setSortDir(k==='name'?'asc':'desc') }
+  }
+
+  const sel = recruiterRows.find(r=>r.key===selected)
+  const hasDeadlines = scoped.some(({m}:any)=>m.validity_date || m.target_joining_date)
+
+  const Tile = ({ label, value, sub, color }:any) => (
+    <div style={{ background:'#FFFFFF', border:'1px solid rgba(124,58,237,0.12)', borderRadius:10, padding:'11px 13px' }}>
+      <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
+      <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||'#1E1B4B' }}>{value}</div>
+      {sub && <div style={{ fontSize:10.5, color:'#9CA3AF', marginTop:1 }}>{sub}</div>}
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' as const }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:600, color:'#1E1B4B' }}>Job Status &amp; Recruiter Performance</div>
+          <div style={{ fontSize:11.5, color:'#9CA3AF', marginTop:2 }}>
+            MRF deadlines, expiries and whether hiring is closing before requisitions lapse
+          </div>
+        </div>
+      </div>
+
+      {!hasDeadlines && (
+        <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:7, padding:'9px 12px',
+          marginBottom:12, fontSize:12, color:'#B45309' }}>
+          No requisition has a validity or target joining date yet, so deadline flags cannot be calculated.
+          Those fields arrive with migration <b>032a</b>; set them on an MRF and this board fills in.
+        </div>
+      )}
+
+      {/* Filters */}
+      <div style={T.card}>
+        <div style={T.section}>Filters</div>
+        <div style={{ ...T.g4 }}>
+          <div>
+            <label style={T.label}>Company</label>
+            <select style={T.select} value={fCompany} onChange={e=>{ setFCompany(e.target.value); setFLoc(''); setFDept('') }}>
+              <option value="">All companies</option>
+              {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={T.label}>Branch / Location</label>
+            <select style={T.select} value={fLoc} onChange={e=>setFLoc(e.target.value)}>
+              <option value="">All branches</option>
+              {locations.filter((l:Location)=>!fCompany||l.company_id===fCompany).map((l:Location)=>(
+                <option key={l.id} value={l.id}>{l.location_name}</option>))}
+            </select>
+          </div>
+          <div>
+            <label style={T.label}>Department</label>
+            <select style={T.select} value={fDept} onChange={e=>setFDept(e.target.value)}>
+              <option value="">All departments</option>
+              {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=>(
+                <option key={d.id} value={d.id}>{d.dept_name}</option>))}
+            </select>
+          </div>
+          <div>
+            <label style={T.label}>Raised Within</label>
+            <select style={T.select} value={period} onChange={e=>setPeriod(e.target.value)}>
+              <option value="all">All time</option>
+              <option value="30">Last 30 days</option>
+              <option value="90">Last 90 days</option>
+              <option value="180">Last 6 months</option>
+              <option value="365">Last 12 months</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ fontSize:11.5, color:'#9CA3AF', marginTop:9 }}>
+          {scoped.length} requisition{scoped.length===1?'':'s'} in scope · {recruiterRows.length} recruiter{recruiterRows.length===1?'':'s'}
+          {(fCompany||fLoc||fDept||period!=='all') && (
+            <button onClick={()=>{ setFCompany(''); setFLoc(''); setFDept(''); setPeriod('all') }}
+              style={{ ...T.btnOutline, marginLeft:10, padding:'3px 10px' }}>Clear</button>
+          )}
+        </div>
+      </div>
+
+      {/* Headline numbers */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:9, marginBottom:10 }}>
+        <Tile label="Fill Rate" value={overallRate==null?'—':overallRate+'%'}
+          sub={`${filledN} filled of ${concluded.length} concluded`} color={fillTone(overallRate)[1]} />
+        <Tile label="Filled" value={filledN} sub="all openings covered" color="#059669" />
+        <Tile label="Breached" value={breachedN} sub="lapsed unfilled" color={breachedN?'#DC2626':'#9CA3AF'} />
+        <Tile label="At Risk" value={atRisk} sub="due ≤7d or overdue" color={atRisk?'#C2410C':'#9CA3AF'} />
+        <Tile label="Avg Days to Fill" value={avgTtf==null?'—':avgTtf} sub="raise → first offer" color="#7C3AED" />
+        {noDeadline>0 && <Tile label="No Deadline Set" value={noDeadline} sub="cannot be tracked" color="#B45309" />}
+      </div>
+
+      {/* Flag spread */}
+      <div style={{ ...T.card }}>
+        <div style={T.section}>Status Flags</div>
+        <div style={{ display:'flex', gap:7, flexWrap:'wrap' as const }}>
+          {Object.keys(JOB_FLAGS).map(k=>(
+            <span key={k} title={JOB_FLAGS[k].help} style={{ fontSize:11, padding:'4px 11px', borderRadius:99,
+              background:JOB_FLAGS[k].bg, color:JOB_FLAGS[k].fg, fontWeight:600,
+              opacity:(counts[k]||0)===0?.45:1 }}>
+              {JOB_FLAGS[k].icon} {JOB_FLAGS[k].label} <b>{counts[k]||0}</b>
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Deadline board */}
+      <div style={{ ...T.section, marginTop:14 }}>Deadline Board — live requisitions, most urgent first</div>
+      <DeadlineBoard rows={board} orgOf={orgOf} />
+
+      {/* Recruiter performance */}
+      <div style={{ ...T.section, marginTop:14, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
+        <span>Recruiter Performance</span>
+        <span style={{ fontSize:10, color:'#9CA3AF', textTransform:'none' as const, letterSpacing:0, fontWeight:400 }}>
+          Fill rate = filled ÷ (filled + breached). Live requisitions are excluded — they are neither yet.
+        </span>
+      </div>
+      <RecruiterTable rows={recruiterRows} sortKey={sortKey} sortDir={sortDir} onSort={sort}
+        selected={selected} onSelect={setSelected} />
+
+      {/* Drill-down */}
+      {sel && (
+        <div style={T.card}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4, gap:10, flexWrap:'wrap' as const }}>
+            <div style={T.section}>{sel.name} — every requisition behind these numbers</div>
+            <button onClick={()=>setSelected(null)} style={T.btnOutline}>✕ Close</button>
+          </div>
+          {sel.items.length===0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No requisitions.</div>}
+          {sel.items
+            .slice()
+            .sort((a:any,b:any)=>+new Date(b.m.created_at) - +new Date(a.m.created_at))
+            .map(({ m, js }:any)=>(
+            <div key={m.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center',
+              padding:'9px 0', borderBottom:'1px solid #F3F0FF', gap:10, flexWrap:'wrap' as const }}>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:12.5, fontWeight:600 }}>
+                  {m.job_title||m.designation||m.position} <span style={{ fontSize:10.5, color:'#9CA3AF' }}>{m.mrf_number||''}</span>
+                </div>
+                <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>
+                  {orgOf(m).dept} · raised {fmtDay(m.created_at)}
+                  {js.deadline?` · due ${fmtDay(js.deadline)}`:''} · {js.filledCount}/{js.openings} filled
+                </div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+                <span style={{ fontSize:11.5, color:'#6B7280' }}>
+                  {js.flag==='FILLED' && js.daysToFill!=null ? `${js.daysToFill}d to fill`
+                    : js.flag==='BREACHED' ? `${Math.abs(js.daysLeft??0)}d over`
+                    : js.daysLeft!=null ? `${js.daysLeft}d left` : `${js.ageDays}d open`}
+                </span>
+                <JobFlag flag={js.flag} />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
