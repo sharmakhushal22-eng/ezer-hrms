@@ -277,7 +277,7 @@ function PayModal({ co, onClose, onConfirm }: {
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div style={{ ...C.card, maxWidth:460, width:'100%', marginBottom:0 }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:14, fontWeight:600, marginBottom:4 }}>Confirm payment — {co.company_name}</div>
-        <div style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>Quarter advance. Paid-till roll forward hoga, account ACTIVE.</div>
+        <div style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>Advance by a quarter. Paid-till rolls forward and the account stays ACTIVE.</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           <div><div style={C.lbl}>Period</div><input style={{ ...C.input, width:'100%', marginTop:3 }} value={period} onChange={e => setPeriod(e.target.value)} /></div>
           <div><div style={C.lbl}>Amount (₹)</div><input type="number" style={{ ...C.input, width:'100%', marginTop:3 }} value={amount} onChange={e => setAmount(e.target.value)} /></div>
@@ -350,7 +350,7 @@ export default function CompanyProfilePage() {
         {loading ? (
           <div style={{ ...C.card, textAlign:'center', color:'#7C3AED', padding:40 }}>Loading…</div>
         ) : groups.length === 0 ? (
-          <div style={{ ...C.card, textAlign:'center', color:'#94A3B8', padding:40 }}>Koi group/company nahi mili. Pehle Company Setup se data add karo.</div>
+          <div style={{ ...C.card, textAlign:'center', color:'#94A3B8', padding:40 }}>No group or company found. Add data from Company Setup first.</div>
         ) : (
           <>
             {groups.map(g => (
@@ -367,7 +367,7 @@ export default function CompanyProfilePage() {
 
             <div style={C.card}>
               <div style={C.sec}>🕓 Audit log — recent changes</div>
-              {audit.length === 0 && <div style={{ fontSize:12, color:'#94A3B8' }}>Abhi tak koi change nahi.</div>}
+              {audit.length === 0 && <div style={{ fontSize:12, color:'#94A3B8' }}>No changes yet.</div>}
               {audit.map(a => (
                 <div key={a.id} style={{ display:'flex', gap:8, padding:'7px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}>
                   <span style={{ color:'#7C3AED' }}>•</span>

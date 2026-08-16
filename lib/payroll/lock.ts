@@ -29,7 +29,7 @@ export interface LockRow {
 }
 
 export interface LockFilter {
-  /** group mode mein hi kaam ka — ek mahina teen company ke teen run hota hai */
+  /** only meaningful in group mode — one month is three runs across three companies */
   company: string
   department: string
   designation: string
@@ -106,7 +106,13 @@ export async function assertEditable(runId: string, empCode: string): Promise<st
   const { error } = await supabase.rpc('guard_payroll_edit', { p_run_id: runId, p_employee_code: empCode })
   if (!error) return null
   // Migration not applied yet → let the edit through rather than blocking real work.
-  if (/schema cache|could not find|does not exist/i.test(error.message)) return null
+  //
+  // Narrow on purpose. This branch OPENS a lock: whatever matches here lets an edit
+  // proceed on a possibly-locked employee. `does not exist` used to match too, and
+  // Postgres says that for a bad column reference inside guard_payroll_edit as well —
+  // so a broken guard would have quietly waved every edit through instead of failing
+  // loudly. Only a function that genuinely is not there earns that.
+  if (/could not find the function|schema cache/i.test(error.message)) return null
   return error.message
 }
 

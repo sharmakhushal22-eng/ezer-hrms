@@ -141,7 +141,7 @@ function LeaveTypesTab({ types, onEdit, onAdd, onToggle, onDelete }: {
   return (
     <>
       <div style={{ display:'flex', alignItems:'center', marginBottom:12 }}>
-        <div style={{ fontSize:12, color:'#6B7280' }}>Leave types are <b>data</b> — naya type add karo, ek row insert hoti hai, koi code change nahi.</div>
+        <div style={{ fontSize:12, color:'#6B7280' }}>Leave types are <b>data</b> — add a new type and a row is inserted; no code changes.</div>
         <button style={{ ...T.pri, marginLeft:'auto' }} onClick={onAdd}>+ Add leave type</button>
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(330px,1fr))', gap:12 }}>
@@ -204,18 +204,18 @@ function BranchQuotaTab({ companies, branches, rows, company, branch, fy, onComp
           <div><label style={T.lbl}>Branch</label><select style={T.input} value={branch} onChange={e => onBranch(e.target.value)} disabled={!company || company === 'ALL'}><option value="">Company default (all branches)</option>{coBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
           <div><label style={T.lbl}>FY</label><input style={T.input} value={fy} onChange={e => onFy(e.target.value)} placeholder="2026-27" /></div>
         </div>
-        <div style={{ fontSize:11, color:'#9CA3AF', marginTop:8 }}>Branch-specific quota company default ko override karti hai. <b>source</b> column batata hai value kahan se aa rahi — branch / company / catalog. Save karne par is exact scope ke liye policy row banti/update hoti hai.</div>
+        <div style={{ fontSize:11, color:'#9CA3AF', marginTop:8 }}>A branch-specific quota overrides the company default. The <b>source</b> column shows where a value comes from — branch / company / catalog. Saving creates or updates the policy row for this exact scope.</div>
       </div>
 
       {company === 'ALL' && <div style={{ ...T.card, fontSize:12, color:'#1E40AF', background:'#EFF6FF', border:'1px solid #BFDBFE' }}>🌐 <b>All companies</b> — quotas below are shown from a template; clicking <b>Save</b> on a row applies that quota to <b>every</b> company (company-default scope).</div>}
-      {!company ? <div style={{ ...T.card, textAlign:'center', color:'#9CA3AF', padding:30 }}>Company chuno quota dekhne ke liye.</div> : (
+      {!company ? <div style={{ ...T.card, textAlign:'center', color:'#9CA3AF', padding:30 }}>Pick a company to see its quota.</div> : (
         <div style={{ ...T.card, overflowX:'auto', padding:0 }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead><tr style={{ background:'#FAFAF8' }}>
               {['Leave type', 'Annual quota', 'Carry-fwd max', 'Source', ''].map(h => <th key={h} style={{ padding:'9px', textAlign:'left', fontSize:10, fontWeight:600, color:'#6B7280', textTransform:'uppercase', letterSpacing:'.04em', borderBottom:'1px solid #EDE9FE' }}>{h}</th>)}
             </tr></thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={5} style={{ padding:24, textAlign:'center', color:'#9CA3AF' }}>Koi leave type active nahi.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={5} style={{ padding:24, textAlign:'center', color:'#9CA3AF' }}>No leave type is active.</td></tr>}
               {rows.map(r => <QuotaRow key={r.leave_type_id} row={r} onSave={onSave} />)}
             </tbody>
           </table>
@@ -393,7 +393,7 @@ export default function LeaveConfigPage() {
   }
   async function delType(t: LeaveType) {
     if (t.is_system) { notify('System type protected — deactivate instead.', 'error'); return }
-    if (!confirm(`Delete ${t.short_name}? Iski saari policy/balance bhi delete ho jayengi.`)) return
+    if (!confirm(`Delete ${t.short_name}? All of its policies and balances will be deleted too.`)) return
     const { error } = await deleteLeaveType(t.id)
     if (error) { notify('Delete failed: ' + error.message, 'error'); return }
     notify('Deleted.'); reload()

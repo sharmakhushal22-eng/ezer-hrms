@@ -202,12 +202,12 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
 
 
 // ── Sync filter ────────────────────────────────────────────────────────────
-// 300 employees hain par HR ko har baar poora month sync nahi karna. Company,
-// location, emp code ya naam se chhaanto — phir jo Sync dabao, woh SIRF unhi
-// employees ka data andar laayega. Filter kholne par counters bhi usi hisaab
-// se badal jaate hain, taaki badge jo dikhaye button wahi kare.
-// Parent ke BAHAR define hai, warna har keystroke pe remount ho kar search box
-// ka focus chala jaata.
+// There are 300 employees, but HR rarely wants to sync the whole month. Narrow by
+// company, location, emp code or name — whichever Sync is then pressed pulls in data
+// for ONLY those employees. Opening the filter also narrows the counters, so the badge
+// shows exactly what the button will do.
+// Defined OUTSIDE the parent — otherwise every keystroke remounts it and the search
+// box loses focus.
 function FilterBar({ pool, company, location, search, onCompany, onLocation, onSearch, onClear, matched }: {
   pool: SyncEmployee[]
   company: string; location: string; search: string
@@ -250,10 +250,10 @@ function FilterBar({ pool, company, location, search, onCompany, onLocation, onS
         {on && <button onClick={onClear} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: '#DC2626', fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer' }}>Clear</button>}
       </div>
       <div style={{ fontSize: 10.5, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
-        {!on ? <>Koi filter nahi — Sync <b>poore month</b> par chalega ({pool.length} employees).</>
+        {!on ? <>No filter — Sync will run on the <b>whole month</b> ({pool.length} employees).</>
           : matched.length === 0
-            ? <b style={{ color: '#DC2626' }}>Is filter se ek bhi employee match nahi hua — Sync band hai.</b>
-            : <>Filter chalu — <b>{matched.length}</b> of {pool.length} employees. Ab jo bhi Sync dabaoge woh <b>sirf inhi</b> par chalega, aur neeche ke counters bhi inhi ke hain.</>}
+            ? <b style={{ color: '#DC2626' }}>This filter matches no employees — Sync is disabled.</b>
+            : <>Filter on — <b>{matched.length}</b> of {pool.length} employees. Any Sync you press now runs on <b>these only</b>, and the counters below refer to them too.</>}
       </div>
     </div>
   )
@@ -264,6 +264,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   const [monthVal, setMonthVal] = useState('')        // month number — one entry per month, not per company
   const [status, setStatus] = useState<SyncStatus | null>(null)
   const [needsMigration, setNeedsMigration] = useState(false)
+  const [migrationDetail, setMigrationDetail] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState('')
   const [pool, setPool] = useState<SyncEmployee[]>([])
   const [fCompany, setFCompany] = useState('')
@@ -305,10 +306,10 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   const filterKey = matched === null ? '' : matched.join(',')
 
   const refresh = useCallback(async () => {
-    if (!runIds.length) { setStatus(null); setNeedsMigration(false); return }
+    if (!runIds.length) { setStatus(null); setNeedsMigration(false); setMigrationDetail(null); return }
     try {
-      const { status: s, missing } = await loadSyncStatus(runIds, matched)
-      setStatus(missing ? null : s); setNeedsMigration(missing)
+      const { status: s, missing, detail } = await loadSyncStatus(runIds, matched)
+      setStatus(missing ? null : s); setNeedsMigration(missing); setMigrationDetail(detail)
     } catch (e: any) { setErr(e.message || String(e)) }
   }, [runIds.join(','), filterKey])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { refresh() }, [refresh])
@@ -326,7 +327,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
     setBusyKey('')
     if (error) { setErr(error); return }
     setMsg(`${cat.label} synced — ${count} employee${count === 1 ? '' : 's'} refreshed from HRMS`
-      + (matched ? ` (filter ke andar wale ${matched.length} mein se)` : '')
+      + (matched ? ` (from the ${matched.length} inside the filter)` : '')
       + '. Every other category is untouched.')
     refresh()
   }
@@ -400,13 +401,15 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
 
         {status?.is_locked && (
           <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
-            Yeh month <b>locked / disbursed</b> hai — har category ka sync band hai. Locked month ko chhote se sync se chupke badalna nahi chahiye; pehle <b>Lock / Unlock</b> se formally reopen karein. (Database khud bhi mana kar dega.)
+            This month is <b>locked / disbursed</b> — every category sync is disabled. A locked month should not be changed quietly by a small sync; reopen it formally through <b>Lock / Unlock</b> first. (The database will refuse it anyway.)
           </div>
         )}
 
         {needsMigration && (
           <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
-            Category-wise sync needs migration <b>sql96</b> — it is not applied to this database yet, so the per-category buttons are off.
+            Category-wise sync is off — the database could not resolve one of its functions.
+            {migrationDetail && <div style={{ marginTop: 5, fontFamily: 'ui-monospace, monospace', fontSize: 10.5, opacity: .85 }}>{migrationDetail}</div>}
+            <div style={{ marginTop: 5 }}>Run the migration that creates that function, then reload.</div>
             <button onClick={syncEverything} disabled={busyKey === 'all' || !runIds.length}
               style={{ marginLeft: 10, padding: '5px 12px', borderRadius: 7, border: 'none', background: C.amber, color: '#fff', fontWeight: 700, fontSize: 11, fontFamily: font, cursor: 'pointer' }}>
               {busyKey === 'all' ? 'Syncing…' : 'Re-sync everything (old behaviour)'}

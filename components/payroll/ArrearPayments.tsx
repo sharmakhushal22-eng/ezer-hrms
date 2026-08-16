@@ -142,7 +142,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
   useEffect(() => { load() }, [load])
 
   function downloadArrear() {
-    if (!arrears.length) { setErr('Is month koi arrear nahi hai.'); return }
+    if (!arrears.length) { setErr('There is no arrear in this month.'); return }
     const sheet = arrears.map(r => ({
       ...(isGroup ? { Company: r.company } : {}),
       'Emp Code': r.employee_code, 'Name': r.full_name,
@@ -162,24 +162,24 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
     try {
       const rows: Record<string, string>[] = []
       for (const id of runIds) rows.push(...await buildNeftRows(id))
-      if (!rows.length) { setErr('Koi payable employee nahi mila — pehle month Calculate karein.'); return }
+      if (!rows.length) { setErr('No payable employee found — run Calculate for the month first.'); return }
       const header = Object.keys(rows[0])
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows, { header }), 'NEFT')
       XLSX.writeFile(wb, `NEFT_${safe(label)}.xlsx`.replace(/_+/g, '_'))
-      setMsg(`${rows.length} employees ki bank file ban gayi.`)
+      setMsg(`Bank file created for ${rows.length} employees.`)
     } catch (e: any) { setErr(e.message || String(e)) } finally { setBusy('') }
   }
 
   async function markDisbursed() {
-    if (!confirm(`${label} ko DISBURSED mark karein?\n\nIsse maana jaayega ki salary bank ko bhej di gayi hai. Uske baad month ko sync/edit karne ke liye formal reopen chahiye.`)) return
+    if (!confirm(`Mark ${label} as DISBURSED?\n\nThis records that the salary has been sent to the bank. After that, syncing or editing the month needs a formal reopen.`)) return
     setBusy('disburse'); setErr(''); setMsg('')
     for (const r of monthRuns) {
       const { error } = await setRunStatus(r, 'DISBURSED')
       if (error) { setErr(error); setBusy(''); return }
     }
     setBusy('')
-    setMsg(`${label} DISBURSED mark ho gaya.`)
+    setMsg(`${label} marked DISBURSED.`)
     loadRuns(companyId, fy).then(setRuns)
   }
 
@@ -195,7 +195,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Arrear &amp; Payments</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
-            Pichhle period ka bakaya jo is month mein diya ja raha hai, aur is month jo paisa bank se jaayega.
+            What is owed from earlier periods and being paid this month, and what leaves the bank this month.
           </div>
         </div>
       </div>
@@ -240,7 +240,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
 
           {arrears.length === 0 ? (
             <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, background: C.gray, borderRadius: 9, padding: '12px 14px' }}>
-              Is month koi arrear nahi hai. Arrear do jagah se aata hai — <b>Attendance → Arrear Days</b> (pichhle month ke din), aur <b>Bulk Uploader</b> mein <b>Arrear Addition / Arrear Deduction</b> heads (paisa). Dono yahan ek saath dikhte hain.
+              There is no arrear in this month. Arrear arrives from two places — <b>Attendance → Arrear Days</b> (days from an earlier month), and the <b>Arrear Addition / Arrear Deduction</b> heads in the <b>Bulk Uploader</b> (money). Both are shown together here.
             </div>
           ) : (
             <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'auto' }}>
@@ -273,7 +273,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
             </div>
           )}
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.55 }}>
-            Arrear <b>days</b> aur arrear <b>amount</b> alag alag raste se aate hain. Dono yahan ek saath isliye hain ki sirf ek dekhne se wahi arrear <b>do baar</b> chala jaata hai — ek baar dinon se, ek baar voucher se.
+            Arrear <b>days</b> and arrear <b>amounts</b> arrive by different routes. They are shown together because looking at only one is how the same arrear gets paid <b>twice</b> — once through days, once through a voucher.
           </div>
         </div>
       )}
@@ -283,17 +283,17 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
         <div style={S.card}>
           {!calculated ? (
             <div style={{ fontSize: 12.5, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 9, padding: '12px 14px', lineHeight: 1.6 }}>
-              <b>{label} abhi Calculate nahi hua.</b> Payment tabhi banta hai jab net pay nikal chuka ho — pehle <b>Run Cycle → ⚙️ Calculate</b> chalaiye.
+              <b>{label} has not been calculated yet.</b> A payment only exists once net pay has been worked out — run <b>Run Cycle → ⚙️ Calculate</b> first.
             </div>
           ) : (
             <>
               <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
                 <Stat label="Payable" value={pays.filter(p => p.net_pay > 0).length} color={C.navy} />
                 <Stat label="Total net" value={inr(totalNet)} color={C.green} />
-                {unbankable.length > 0 && <Stat label="Bank detail nahi" value={unbankable.length} color={C.red} />}
+                {unbankable.length > 0 && <Stat label="No bank detail" value={unbankable.length} color={C.red} />}
                 <div style={{ flex: 1 }} />
                 <button onClick={downloadNeft} disabled={busy === 'neft' || !pays.length} style={{ ...S.btnP, alignSelf: 'center', opacity: pays.length ? 1 : 0.5 }}>
-                  {busy === 'neft' ? 'Banate…' : '🏦 NEFT file'}
+                  {busy === 'neft' ? 'Building…' : '🏦 NEFT file'}
                 </button>
                 <button onClick={markDisbursed} disabled={busy === 'disburse' || !pays.length}
                   style={{ ...S.btnO, alignSelf: 'center', borderColor: C.green, color: C.green, fontWeight: 700 }}>
@@ -303,14 +303,14 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
 
               {unbankable.length > 0 && (
                 <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: '1px solid #FECACA', borderRadius: 9, padding: '11px 13px', marginBottom: 12, lineHeight: 1.6 }}>
-                  <b>{unbankable.length} employees ko paisa nahi bheja ja sakta</b> — inki salary bani hai par bank detail adhoori hai. Ye NEFT file mein nahi aayenge:
+                  <b>{unbankable.length} employees cannot be paid</b> — their salary is ready but their bank details are incomplete. They will not appear in the NEFT file:
                   <div style={{ marginTop: 6 }}>
                     {unbankable.slice(0, 8).map(u => (
-                      <div key={u.employee_code} style={{ fontSize: 11.5 }}>· <b>{u.employee_code}</b> {u.full_name} — {u.missing} nahi hai ({inr(u.net_pay)})</div>
+                      <div key={u.employee_code} style={{ fontSize: 11.5 }}>· <b>{u.employee_code}</b> {u.full_name} — {u.missing} missing ({inr(u.net_pay)})</div>
                     ))}
-                    {unbankable.length > 8 && <div style={{ fontSize: 11.5, marginTop: 3 }}>…aur {unbankable.length - 8} aur</div>}
+                    {unbankable.length > 8 && <div style={{ fontSize: 11.5, marginTop: 3 }}>…and {unbankable.length - 8} more</div>}
                   </div>
-                  <div style={{ marginTop: 6 }}>Employees &amp; CTC → <b>Bank Details</b> mein theek karke <b>Data Sync → Bank</b> chalaiye.</div>
+                  <div style={{ marginTop: 6 }}>Fix them under Employees &amp; CTC → <b>Bank Details</b>, then run <b>Data Sync → Bank</b>.</div>
                 </div>
               )}
 
@@ -332,7 +332,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
                 </table>
               </div>
               <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.55 }}>
-                NEFT file mein <b>poora account number</b> jaata hai (masked nahi, warna bank file chalti hi nahi), aur Excel usko text rakhta hai taaki shuru ke zero na udein. <b>Mark disbursed</b> dabane ke baad month ko badalne ke liye formal reopen chahiye.
+                The NEFT file carries the <b>full account number</b> (not masked — a masked file is rejected by the bank), and Excel keeps it as text so leading zeros survive. After <b>Mark disbursed</b>, changing the month needs a formal reopen.
               </div>
             </>
           )}

@@ -77,7 +77,7 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
 
       <div style={C.card}>
         <div style={C.sec}>Calendars ({calendars.length})</div>
-        {calendars.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>Koi calendar nahi. Upar se banao.</div>}
+        {calendars.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No calendars yet. Create one above.</div>}
         {calendars.map(c => (
           <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
             <span style={{ fontSize:13, fontWeight:600 }}>{c.name}</span>
@@ -90,7 +90,7 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
               {c.status === 'DRAFT'
                 ? <button style={C.out} onClick={() => onStatus(c.id, 'PUBLISHED')}>Publish</button>
                 : <button style={C.out} onClick={() => onStatus(c.id, 'DRAFT')}>Unpublish</button>}
-              <button style={C.danger} onClick={() => { if (confirm(`Delete "${c.name}"? Saare holidays bhi delete ho jayenge.`)) onDelete(c.id) }}>Delete</button>
+              <button style={C.danger} onClick={() => { if (confirm(`Delete "${c.name}"? All of its holidays will be deleted too.`)) onDelete(c.id) }}>Delete</button>
             </span>
           </div>
         ))}
@@ -98,8 +98,8 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
 
       <div style={C.card}>
         <div style={C.sec}>Company → calendar mapping</div>
-        <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:10 }}>Har company kaunsa holiday + leave calendar follow karti hai. (Holiday resolver isi mapping se chalega.)</div>
-        {companies.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>Koi company nahi mili.</div>}
+        <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:10 }}>Which holiday + leave calendar each company follows. (The holiday resolver runs off this mapping.)</div>
+        {companies.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No company found.</div>}
         {companies.map(co => {
           const m = maps.find(x => x.company_id === co.id)
           return (
@@ -147,7 +147,7 @@ function HolidaysTab({ calendars, companies, branches, weeklyOffs, selCal, setSe
       {selCal && (
         <div style={C.card}>
           <div style={C.sec}>Holidays ({holidays.length})</div>
-          {holidays.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>Is calendar mein abhi koi holiday nahi.</div>}
+          {holidays.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No holidays in this calendar yet.</div>}
           {holidays.map(h => {
             const rows = appl.filter(a => a.holiday_id === h.id)
             const [bg, col] = TYPE_COLOR[h.holiday_type]
@@ -260,14 +260,14 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
             <span style={{ cursor:'pointer', color:'#DC2626', fontWeight:700 }} onClick={() => setScopes(scopes.filter((_, j) => j !== i))}>×</span>
           </span>
         ))}
-        {scopes.length === 0 && <span style={{ fontSize:11, color:'#9CA3AF' }}>Koi scope nahi — kam se kam ek company add karo.</span>}
+        {scopes.length === 0 && <span style={{ fontSize:11, color:'#9CA3AF' }}>No scope — add at least one company.</span>}
       </div>
 
       {conflict.conflict && (
         <div style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:12, color:'#991B1B' }}>
-          ⚠️ {fmt(date)} {conflict.weekday} hai — is scope mein weekly off hai. Phir bhi add karein?
+          ⚠️ {fmt(date)} is a {conflict.weekday} — a weekly off in this scope. Add it anyway?
           <label style={{ display:'flex', alignItems:'center', gap:7, marginTop:7, cursor:'pointer', fontWeight:600 }}>
-            <input type="checkbox" checked={confirmWeekend} onChange={e => setConfirmWeekend(e.target.checked)} /> Haan, weekend override confirm (audit log mein jayega)
+            <input type="checkbox" checked={confirmWeekend} onChange={e => setConfirmWeekend(e.target.checked)} /> Yes, confirm the weekend override (it goes into the audit log)
           </label>
         </div>
       )}
@@ -350,7 +350,7 @@ function WeeklyOffTab({ calendars, companies, branches, departments, weeklyOffs,
 
       <div style={C.card}>
         <div style={C.sec}>Weekly-off rules ({weeklyOffs.length})</div>
-        {weeklyOffs.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>Koi rule nahi.</div>}
+        {weeklyOffs.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No rules.</div>}
         {weeklyOffs.map(w => (
           <div key={w.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
             <span style={{ fontWeight:600, width:90 }}>{WEEKDAYS[w.weekday]}</span>
@@ -408,7 +408,7 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
           <div><label style={C.lbl}>Month</label><input type="month" style={C.input} value={month} onChange={e => setMonth(e.target.value)} /></div>
           <button disabled={!empId || loading} style={{ ...C.pri, opacity: empId ? 1 : 0.5 }} onClick={run}>{loading ? '…' : 'Resolve'}</button>
         </div>
-        <div style={{ fontSize:11, color:'#9CA3AF', marginTop:8 }}>Resolver functions se live — company + branch ke hisaab se sirf PUBLISHED calendar ke holidays + scoped weekly offs.</div>
+        <div style={{ fontSize:11, color:'#9CA3AF', marginTop:8 }}>Live from the resolver functions — for this company + branch, only PUBLISHED calendar holidays plus scoped weekly offs.</div>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:10 }}>
@@ -434,7 +434,7 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
 
         <div style={C.card}>
           <div style={C.sec}>Holidays ({hols.length})</div>
-          {hols.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>{empId ? 'Resolve dabao ya koi mapped holiday nahi.' : 'Employee select karo.'}</div>}
+          {hols.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>{empId ? 'Press Resolve, or there is no mapped holiday.' : 'Select an employee.'}</div>}
           {hols.map((h, i) => {
             const [bg, col] = TYPE_COLOR[h.holiday_type]
             return (
@@ -506,7 +506,7 @@ export function HolidaysSection() {
   return (
     <>
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Holiday &amp; Weekly-off Configuration</div>
-        <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Attendance &amp; Leave config layer — calendars, holidays (branch-wise), weekly offs. Sirf PUBLISHED calendar ESS pe jaata hai.</div>
+        <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Attendance &amp; Leave config layer — calendars, holidays (branch-wise), weekly offs. Only a PUBLISHED calendar reaches ESS.</div>
 
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
           {tabs.map(([k, label]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{label}</button>)}

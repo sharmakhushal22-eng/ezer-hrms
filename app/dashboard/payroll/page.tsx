@@ -31,6 +31,7 @@ import RunCycle from '@/components/payroll/RunCycle'
 import Appraisal from '@/components/payroll/Appraisal'
 import LockUnlock from '@/components/payroll/LockUnlock'
 import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutoryPanel'
+import NpsReport from '@/components/payroll/NpsReport'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 
 // ── Palette (guide-mandated) ──────────────────────────────────────
@@ -371,7 +372,8 @@ function statutorySubs(fy: string): SubTab[] {
     // open would decide what they believed.
     { id: 'lwf', label: 'LWF', icon: '🏛️', built: true, render: () => <LwfConfig /> },
     { id: 'ptlwf', label: 'Professional Tax', icon: '⚖️', built: true, render: () => <PtConfig /> },
-    { id: 'nps', label: 'NPS', icon: '🏛️', built: true, href: '/dashboard/ess', desc: 'Corporate NPS enrolment via ESS; 80CCD(2) contribution is deducted in the engine.' },
+    // Enrolment itself happens in ESS; this is the report side — who is in, who is not.
+    { id: 'nps', label: 'NPS', icon: '🏛️', built: true, render: () => <NpsReport fy={fy} /> },
     { id: 'tds', label: 'TDS Calculation', icon: '🧮', built: true, desc: 'Monthly TDS from each employee’s investment declaration feeds directly into the payroll run.' },
     { id: 'form16', label: 'Form 16 / 24Q', icon: '📄', desc: 'Quarterly 24Q returns and annual Form 16 generation for employees.' },
     { id: 'perq', label: 'Perquisite Tax', icon: '🚗', built: true, render: () => <PerquisiteStatutoryPanel fy={fy} /> },

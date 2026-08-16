@@ -98,7 +98,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // adds whatever the Bulk Uploader posted. So it runs LAST, and running it again
     // after an attendance correction is the normal way to refresh the month's numbers.
     key: 'earnings', label: 'Earned salary', icon: '🧮', status: 'ready',
-    note: 'Earned amount for the month = frozen structure × paid days, plus Incentive / Variable / Bonus / Buyout and the Parking · Insurance · Canteen deductions from the Bulk Uploader. Attendance jinki nahi aayi, unka earned blank rehta hai — zero nahi, warna koi usi par salary process kar dega.',
+    note: 'Earned amount for the month = frozen structure × paid days, plus Incentive / Variable / Bonus / Buyout and the Parking · Insurance · Canteen deductions from the Bulk Uploader. Employees whose attendance has not arrived keep a blank earned amount — not zero, or somebody would process salary on it.',
     rpc: 'sync_month_earnings', countKey: 'with_earnings',
     columns: [
       'employee_code', 'full_name', 'payday', 'paid_days', 'total_days',
@@ -224,7 +224,7 @@ export interface SyncStatus {
   with_reject: number
   with_loan: number
   with_decl: number
-  /** attendance aa chuki = earned nikal sakta hai */
+  /** attendance has arrived = the earned amount can be worked out */
   with_earnings: number
   /** LOCKED / DISBURSED — the database refuses every sync until a formal reopen */
   is_locked: boolean
@@ -233,13 +233,19 @@ const ZERO: SyncStatus = { in_month: 0, eligible: 0, new_joiners: 0, leavers: 0,
 
 // Migration not applied yet → PostgREST can't resolve the function at all. The screen
 // says so plainly instead of rendering counters that would silently be zero.
-const MISSING = /schema cache|could not find|does not exist/i
+//
+// Only a genuinely absent FUNCTION counts. This used to also match `does not exist`,
+// which Postgres says for a bad column or table reference *inside* a function that is
+// present — so a broken function reported itself as a missing migration, and the screen
+// told HR to run sql96 when sql96 was already applied. Anything that is not a missing
+// function now surfaces with the database's own words instead of a guess.
+const FN_MISSING = /could not find the function|schema cache/i
 
 // ── Filter ────────────────────────────────────────────────────────────────
-// HR ko har baar poora month sync nahi karna. Company / location / emp code /
-// naam ke filter yahan emp-code ki list ban jaate hain, aur wahi list har RPC
-// ko jaati hai — server par p_codes ek hi saaf mechanism hai (sql98).
-// `null` ka matlab hai "koi filter nahi" = poora month, bilkul pehle jaisa.
+// HR rarely wants to sync the whole month. The company / location / emp code / name
+// filters collapse into a list of emp codes here, and that same list goes to every RPC
+// — p_codes is the one clean mechanism on the server (sql98).
+// `null` means "no filter" = the whole month, exactly as before.
 export interface SyncEmployee { code: string; name: string; location: string; company: string }
 
 /** Everyone HRMS could sync for this month — the pool the filter chooses from. */
@@ -262,13 +268,13 @@ export async function loadFilterCandidates(runs: { id: string; company_id?: stri
 }
 
 /** Summed across every run of the month — in Group mode one month spans several. */
-export async function loadSyncStatus(runIds: string[], codes: string[] | null = null): Promise<{ status: SyncStatus; missing: boolean }> {
-  if (!runIds.length) return { status: { ...ZERO }, missing: false }
+export async function loadSyncStatus(runIds: string[], codes: string[] | null = null): Promise<{ status: SyncStatus; missing: boolean; detail: string | null }> {
+  if (!runIds.length) return { status: { ...ZERO }, missing: false, detail: null }
   const total: SyncStatus = { ...ZERO }
   for (const id of runIds) {
     const { data, error } = await supabase.rpc('payroll_sync_status', codes ? { p_run_id: id, p_codes: codes } : { p_run_id: id })
     if (error) {
-      if (MISSING.test(error.message)) return { status: { ...ZERO }, missing: true }
+      if (FN_MISSING.test(error.message)) return { status: { ...ZERO }, missing: true, detail: error.message }
       throw new Error(error.message)
     }
     const row = ((data as any[]) || [])[0] || {}
@@ -279,7 +285,7 @@ export async function loadSyncStatus(runIds: string[], codes: string[] | null = 
       if (k !== 'is_locked') (total as any)[k] += Number(row[k]) || 0
     })
   }
-  return { status: total, missing: false }
+  return { status: total, missing: false, detail: null }
 }
 
 /** Run one category's sync across the month's runs. Returns rows touched. */
@@ -290,8 +296,10 @@ export async function runCategorySync(cat: SyncCategory, runIds: string[], codes
     const { data, error } = await supabase.rpc(cat.rpc, codes ? { p_run_id: id, p_codes: codes } : { p_run_id: id })
     if (error) {
       return {
-        error: MISSING.test(error.message)
-          ? 'This sync needs the migrations sql96 / sql98 / sql99 / sql100 — one of them is not applied to this database yet.'
+        // Name the function the database could not find, rather than guessing a migration
+        // number — the guess was wrong often enough to send HR after the wrong file.
+        error: FN_MISSING.test(error.message)
+          ? `${cat.rpc}() does not exist in this database — the migration that creates it has not been applied. (${error.message})`
           : error.message,
         count,
       }

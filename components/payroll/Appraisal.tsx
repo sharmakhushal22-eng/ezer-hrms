@@ -175,8 +175,11 @@ export default function Appraisal() {
     setRepBusy(true); setErr('')
     try { setReport(await loadAppraisals()) }
     catch (e: any) {
-      setErr(/does not exist|schema cache/i.test(e?.message || '')
-        ? 'Appraisal needs migration sql111 — it is not applied to this database yet.'
+      // Only a genuinely absent function means "migration not applied". `does not exist`
+      // on its own also covers a bad column inside a function that IS there, and blaming
+      // sql111 for that sends HR to re-run a file they have already run.
+      setErr(/could not find the function|schema cache/i.test(e?.message || '')
+        ? `Appraisal needs a migration that has not been applied to this database yet. (${e?.message || ''})`
         : (e?.message || String(e)))
     } finally { setRepBusy(false) }
   }
@@ -262,10 +265,10 @@ export default function Appraisal() {
               {months.length > 0 && (
                 <div style={{ marginTop: 12, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 9, padding: '11px 13px', fontSize: 11.5, color: '#92400E', lineHeight: 1.6 }}>
                   <b>{months.length} back month{months.length === 1 ? '' : 's'} → arrear:</b> {months.join(', ')}.
-                  <br />In sab mahino ki salary purane rate par ja chuki hai. Difference head-wise
-                  (Basic / HRA / Special) nikal kar <b>{payOut.slice(0, 7)}</b> ki salary ke arrear
-                  columns mein jaayega. Pay-out mahina khud isme nahi — usko naya rate regular
-                  salary mein hi milta hai.
+                  <br />All of those months were already paid at the old rate. The difference is
+                  worked out head-wise (Basic / HRA / Special) and lands in the arrear columns of
+                  the <b>{payOut.slice(0, 7)}</b> salary. The pay-out month itself is not in that
+                  list — it gets the new rate as regular salary.
                 </div>
               )}
               {effFrom && payOut && months.length === 0 && (
@@ -354,11 +357,11 @@ export default function Appraisal() {
       )}
 
       <div style={{ fontSize: 10.5, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
-        <b>Effective date aur pay-out month alag ho sakte hain.</b> Beech ke mahino ki salary purane
-        rate par ja chuki hoti hai, isliye unka difference <b>head-wise arrear</b> ban kar pay-out
-        mahine ki salary mein aata hai — Basic, HRA aur Special apne-apne arrear column mein.
-        <br />Har back month ka farak <b>us mahine ke asli frozen figures</b> se nikalta hai (anumaan
-        se nahi), aur <b>us mahine ke paid days</b> se prorate hota hai.
+        <b>The effective date and the pay-out month can differ.</b> The months in between were
+        already paid at the old rate, so their difference becomes <b>head-wise arrear</b> and is
+        added to the pay-out month&apos;s salary — Basic, HRA and Special each in their own arrear column.
+        <br />Every back month&apos;s difference is worked out from <b>that month&apos;s actual frozen figures</b>,
+        not an estimate, and is pro-rated by <b>that month&apos;s paid days</b>.
       </div>
     </div>
   )

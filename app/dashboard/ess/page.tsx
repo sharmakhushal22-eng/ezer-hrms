@@ -409,7 +409,7 @@ function RoleAssignTab({ users, roles, org, isMobile, onAssign }: {
             <option value="">All branches</option>
             {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
           </select>
-          {companyId && locations.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>Is company ki koi branch nahi mili.</div>}
+          {companyId && locations.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>No branch found for this company.</div>}
         </div>
 
         {/* Step 3 — Department */}
@@ -419,7 +419,7 @@ function RoleAssignTab({ users, roles, org, isMobile, onAssign }: {
             <option value="">All departments</option>
             {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
           </select>
-          {companyId && departments.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>Is company ka koi department nahi mila.</div>}
+          {companyId && departments.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>No department found for this company.</div>}
         </div>
 
         {/* Step 4 — Employee */}
@@ -427,7 +427,7 @@ function RoleAssignTab({ users, roles, org, isMobile, onAssign }: {
           <StepHead n={4} title="Select Employee" hint={`${emps.length} match`} done={!!empId} />
           <input style={{ ...T.input, marginBottom:8 }} placeholder="🔍 Search name / emp code" value={empQ} onChange={e => setEmpQ(e.target.value)} />
           <div style={{ maxHeight:300, overflowY:'auto' }}>
-            {emps.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF', padding:'8px 4px' }}>{companyId ? 'Koi employee match nahi.' : 'Pehle company chuno.'}</div>}
+            {emps.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF', padding:'8px 4px' }}>{companyId ? 'No employee matched.' : 'Pick a company first.'}</div>}
             {emps.map(u => (
               <div key={u.employee_id} onClick={() => setEmpId(u.employee_id)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, background: empId === u.employee_id ? '#F3F0FF' : 'transparent', border: empId === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
                 <div>
@@ -448,7 +448,7 @@ function RoleAssignTab({ users, roles, org, isMobile, onAssign }: {
       <div style={{ ...T.card, position: isMobile ? 'static' : 'sticky', top:10 }}>
         <StepHead n={5} title="Assign Role" done={picked.size > 0 && !!empId} />
         {!selEmp ? (
-          <div style={{ fontSize:12, color:'#9CA3AF', padding:'8px 0' }}>Steps 1–4 complete karke ek employee chuno.</div>
+          <div style={{ fontSize:12, color:'#9CA3AF', padding:'8px 0' }}>Complete steps 1–4, then pick an employee.</div>
         ) : (
           <>
             <div style={{ fontSize:13, fontWeight:600, marginBottom:2 }}>{selEmp.full_name}</div>
@@ -612,7 +612,7 @@ export default function ESSPage() {
           <div style={{ ...T.card, maxWidth:440, width:'100%', marginBottom:0 }}>
             {!deact.last_working_date ? (
               <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8, padding:'12px 14px', marginBottom:12, fontSize:12.5, color:'#92400E', lineHeight:1.6 }}>
-                ⚠️ Is employee ki <b>Date of Leaving set nahi hai</b>. Phir bhi deactivate karein? Employee login nahi kar payega aur password reset bhi nahi kar payega.
+                ⚠️ This employee has <b>no Date of Leaving set</b>. Deactivate anyway? They will not be able to log in, or reset their password.
               </div>
             ) : (
               <div style={{ fontSize:13, marginBottom:12 }}>Deactivate <b>{deact.full_name}</b>? They won&apos;t be able to log in or reset their password.</div>

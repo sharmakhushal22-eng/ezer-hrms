@@ -154,8 +154,11 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
       const present = new Set(data.map(r => r.employee_code))
       setSel(prev => new Set([...prev].filter(c => present.has(c))))
     } catch (e: any) {
-      setErr(/schema cache|could not find|does not exist/i.test(e?.message || '')
-        ? 'Lock / Unlock needs migration sql102 — it is not applied to this database yet.'
+      // See the note in lib/payroll/sync.ts: `does not exist` is also what Postgres says
+      // for a bad column inside a function that exists, so it cannot stand in for
+      // "migration missing" on its own.
+      setErr(/could not find the function|schema cache/i.test(e?.message || '')
+        ? `Lock / Unlock needs a migration that has not been applied to this database yet. (${e?.message || ''})`
         : (e?.message || String(e)))
       setRows([])
     } finally { setLoading(false) }
@@ -258,8 +261,8 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
       </div>
 
       <div style={{ ...card, background: C.purpleSoft, border: `1px solid #DDD6FE`, fontSize: 12, color: C.purpleD, lineHeight: 1.6 }}>
-        <b>Payroll jiski chal gayi, uska data lock ho jaata hai</b> — attendance, bank, salary, kuch bhi nahi badlega. Jiski nahi chali woh unlocked hai aur normally edit hota rahega.
-        Locked employee ki payroll <b>dobara nahi chalti</b> — pehle yahan se unlock karo, tabhi Run Payroll use uthayega. Isliye Run do baar dabane se koi payslip chupke nahi badalti.
+        <b>Once payroll has run for someone, their data locks</b> — attendance, bank, salary, none of it will change. Anyone it has not run for stays unlocked and can be edited normally.
+        Payroll <b>will not run again</b> for a locked employee — unlock them here first and only then will Run Payroll pick them up. That is why pressing Run twice cannot quietly change a payslip.
       </div>
 
       <div style={card}>

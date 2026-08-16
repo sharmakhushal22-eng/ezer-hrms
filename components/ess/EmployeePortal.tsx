@@ -1138,7 +1138,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Voluntary PF (VPF)</div>
-        <div style={{ fontSize: 12.5, color: V.muted, marginTop: 2 }}>Apni EPF wages se extra PF deduction — apna percentage set karo.</div>
+        <div style={{ fontSize: 12.5, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages — set your own percentage.</div>
       </div>
 
       {!e.has_ctc && (
@@ -1178,7 +1178,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
       {showHighAlert && (
         <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
           <span style={{ color: V.red }}>⚠</span>
-          <span style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.6 }}><strong>Itna zyada?</strong> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF — net in-hand bahut kam ho jayegi. Confirm karein.</span>
+          <span style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.6 }}><strong>That high?</strong> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.</span>
         </div>
       )}
       {capHit && (
@@ -1200,17 +1200,17 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
           <span style={{ fontSize: 12, fontWeight: 500, color: V.navy }}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span>
         </div>
         <div style={{ height: 8, background: '#E9E7F5', borderRadius: 20, overflow: 'hidden' }}><div style={{ height: '100%', width: `${barPct}%`, background: over80c ? '#EF9F27' : V.purple, borderRadius: 20 }} /></div>
-        <div style={{ fontSize: 11, color: '#9B9BA8', marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` — ${inr(total80c - e.c80_limit)} pe 80C benefit nahi` : ''}</div>
+        <div style={{ fontSize: 11, color: '#9B9BA8', marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` — no 80C benefit on ${inr(total80c - e.c80_limit)}` : ''}</div>
       </div>
 
       <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
         <span style={{ color: V.red }}>ⓘ</span>
-        <div style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.7 }}><strong>Dhyaan se select karein:</strong><br />• VPF se aapki <strong>net in-hand salary kam</strong> ho jayegi<br />• 80C exemption sirf <strong>₹1.5 lakh tak</strong> (EPF + VPF + baaki 80C)<br />• Ye har mahine deduct hoga jab tak aap band na karein</div>
+        <div style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.7 }}><strong>Choose carefully:</strong><br />• VPF will <strong>reduce your net in-hand salary</strong><br />• The 80C exemption only goes <strong>up to ₹1.5 lakh</strong> (EPF + VPF + your other 80C)<br />• It is deducted every month until you stop it</div>
       </div>
 
       <label style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: 'pointer' }}>
         <input type="checkbox" checked={ack} onChange={e2 => setAck(e2.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: V.purple }} />
-        <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>Main samajh gaya/gayi hoon ki isse meri net in-hand salary kam hogi aur 80C exemption ₹1.5L tak seemit hai. Main ye VPF deduction request karta/karti hoon.</span>
+        <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.</span>
       </label>
 
       <button disabled={!ack || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: ack ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: ack ? V.purple : '#F5F3FF', color: ack ? '#fff' : '#9B9BA8', cursor: ack ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>

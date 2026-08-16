@@ -178,11 +178,11 @@ This document is confidential and for internal approval only.`
 
   async function submitForApproval() {
     if (!prevForm.prev_company_name || !prevForm.prev_total_ctc) {
-      alert('Previous company name aur CTC zaroori hai')
+      alert('Previous company name and CTC are required')
       return
     }
     if (!joining.proposed_doj) {
-      alert('Proposed DOJ zaroori hai')
+      alert('Proposed DOJ is required')
       return
     }
     setSaving(true)
@@ -449,7 +449,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   }
 
   async function processApproval() {
-    if (action === 'reject' && !comment.trim()) { alert('Rejection reason zaroori hai'); return }
+    if (action === 'reject' && !comment.trim()) { alert('A rejection reason is required'); return }
     setProcessing(true)
     // DB CHECK constraint allows only 'APPROVED' / 'REJECTED' (not 'APPROVE'/'REJECT').
     const headAction = action === 'approve' ? 'APPROVED' : 'REJECTED'
@@ -470,7 +470,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
     setProcessing(false)
     if (error) { alert('Error: ' + error.message); return }
-    alert(action === 'approve' ? 'Approved! HR Manager ko notification gaya.' : 'Rejected. Recruiter ko notification gaya.')
+    alert(action === 'approve' ? 'Approved! The HR Manager has been notified.' : 'Rejected. The recruiter has been notified.')
     setSelected(null); setComment(''); loadRequests()
   }
 
@@ -656,7 +656,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                   {selected.hr_head_actioned_at ? new Date(selected.hr_head_actioned_at).toLocaleDateString('en-IN') : ''}
                 </div>
                 <div style={{ fontSize:12, color:'#059669', fontWeight:500, marginTop:8 }}>
-                  HR Manager ko notification bheja gaya — offer letter bhejna pending hai
+                  The HR Manager has been notified — sending the offer letter is still pending
                 </div>
               </div>
             )}
@@ -817,7 +817,7 @@ ${company} — Human Resources`)
   return (
     <div style={{ maxWidth:900, margin:'0 auto', padding:16 }}>
       <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Manager — Send Offer Letters</div>
-      <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:16 }}>HR Head approved requests — offer letter send karo</div>
+      <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:16 }}>Requests approved by the HR Head — send the offer letter</div>
       <SearchBar placeholder="Search candidate…" onApply={setSq} width={300} />
       <RecFilterBar companies={companies} departments={departments} locations={locations} positions={positionOpts} f={f} setF={setF} />
 

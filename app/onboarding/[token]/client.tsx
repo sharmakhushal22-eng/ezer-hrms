@@ -421,7 +421,7 @@ function PolicyCard({ policy, acked, onAck }: { policy: any; acked: boolean; onA
           {!scrolledEnd && <div style={{ fontSize: 10, color: '#D97706', marginTop: 6 }}>↓ Scroll to the bottom to enable acknowledgement</div>}
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 10, cursor: scrolledEnd ? 'pointer' : 'not-allowed', opacity: scrolledEnd ? 1 : 0.5, fontSize: 12 }}>
             <input type="checkbox" disabled={!scrolledEnd} checked={checked} onChange={e => setChecked(e.target.checked)} style={{ marginTop: 2 }} />
-            <span>Maine {policy.policy_title} poori padh li hai aur samajh li hai.</span>
+            <span>I have read and understood {policy.policy_title} in full.</span>
           </label>
           <button disabled={!checked || busy} onClick={async () => { setBusy(true); await onAck(); setBusy(false) }}
             style={{ ...S.btnP, marginTop: 10, padding: '8px 16px', opacity: checked && !busy ? 1 : 0.5, cursor: checked && !busy ? 'pointer' : 'not-allowed' }}>
@@ -460,7 +460,7 @@ function PolicyAckPhase({ token, onBack, onNext }: {
       <div style={S.card}>
         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Company Policies</div>
         <div style={{ fontSize: 12, color: '#6B7280' }}>
-          {loading ? 'Loading…' : policies.length === 0 ? 'Is company ke liye koi policy configure nahi hai — aap submit kar sakte hain.' : `Har policy padh kar acknowledge karein. ${ackedCount}/${policies.length} done.`}
+          {loading ? 'Loading…' : policies.length === 0 ? 'No policy is configured for this company — you can go ahead and submit.' : `Read and acknowledge each policy. ${ackedCount}/${policies.length} done.`}
         </div>
       </div>
       {policies.map(p => <PolicyCard key={p.id} policy={p} acked={acked.has(p.id)} onAck={() => ack(p)} />)}
@@ -495,7 +495,7 @@ function AckPreviewPhase({ token, onBack, onNext }: {
     <div>
       <div style={S.card}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>Acknowledgement Document</div>
-        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>Apni details verify karein. Submit ke baad ye document aur policies aapke email par bhi aa jayenge.</div>
+        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>Check your details. After you submit, this document and the policies will also be emailed to you.</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 14 }}>
           <Row l="Employee Name" v={d.employee_name} />
           <Row l="Father's Name" v={d.father_name} />
@@ -560,7 +560,7 @@ function ESignPhase({ token, onBack, onSubmit, submitting }: {
     <div>
       <div style={S.card}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>Aadhaar e-Verify &amp; Digital Signature</div>
-        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>Ek OTP se neeche ke saare forms + policies ek saath e-sign honge.</div>
+        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 12 }}>A single OTP e-signs all the forms and policies below at once.</div>
         <div style={{ background: '#FAFAF8', border: '1px solid #EDE9FE', borderRadius: 8, padding: '10px 14px' }}>
           {bundle.map(b => <div key={b} style={{ fontSize: 12, color: '#374151', padding: '3px 0' }}>📄 {b}</div>)}
         </div>

@@ -80,7 +80,7 @@ function CopyModal({ fys, onClose, onCopy }: { fys: string[]; onClose: () => voi
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div style={{ ...C.card, maxWidth:420, width:'100%', marginBottom:0 }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:15, fontWeight:600, marginBottom:4 }}>Copy to new FY</div>
-        <div style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>Saari rows naye FY mein copy hongi (re-verify required). Existing rows skip ho jayengi.</div>
+        <div style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>Every row is copied into the new FY (re-verification required). Existing rows are skipped.</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
           <div><label style={C.lbl}>From FY</label><select style={C.input} value={from} onChange={e => setFrom(e.target.value)}>{fys.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
           <div><label style={C.lbl}>To FY</label><input style={C.input} value={to} onChange={e => setTo(e.target.value)} placeholder="2027-28" /></div>
@@ -214,7 +214,7 @@ export default function StatutoryLeavePage() {
                 <Th>State</Th><Th>Act</Th><Th>FY</Th><Th n>EL</Th><Th n>CL</Th><Th n>SL</Th><Th>EL accrual</Th><Th n>CF cap</Th><Th>Notes</Th><Th>Status</Th><Th>Actions</Th>
               </tr></thead>
               <tbody>
-                {filtered.length === 0 && <tr><td colSpan={11} style={{ padding:24, textAlign:'center', color:'#94A3B8' }}>Koi row nahi. {rows.length === 0 ? 'Migration 029 chala? Ya + Add row.' : 'Filter clear karo.'}</td></tr>}
+                {filtered.length === 0 && <tr><td colSpan={11} style={{ padding:24, textAlign:'center', color:'#94A3B8' }}>No rows. {rows.length === 0 ? 'Has migration 029 been run? Or use + Add row.' : 'Clear the filter.'}</td></tr>}
                 {filtered.map((r, i) => (
                   <tr key={r.id} style={{ borderBottom:'1px solid #F1F5F9', background:i%2?'#F8FAFC':'#fff', opacity: r.is_active ? 1 : 0.55 }}>
                     <td style={{ padding:'8px 9px', fontWeight:600, whiteSpace:'nowrap' }}>{r.state}</td>

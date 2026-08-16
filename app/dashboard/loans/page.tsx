@@ -199,13 +199,13 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
 
   async function foreclose(l: any) {
     const left = Number(l.outstanding_principal) || 0
-    if (!confirm(`Foreclose ${l.loan_number}?\n\nBaaki ${inr(left)} ek saath recover maana jaayega aur agle month se koi EMI nahi kategi. Ye wapas nahi hota.`)) return
+    if (!confirm(`Foreclose ${l.loan_number}?\n\nThe remaining ${inr(left)} is treated as recovered in one go and no EMI is deducted from next month. This cannot be undone.`)) return
     setBusy(l.id); setErr(''); setMsg('')
     const { data, error } = await supabase.rpc('foreclose_loan', { p_loan_id: l.id })
     setBusy('')
     if (error) { setErr(error.message); return }
-    if (!data) { setErr('Ye loan chal hi nahi raha — sirf running loan foreclose hota hai.'); return }
-    setMsg(`${l.loan_number} foreclose ho gaya. Agle month se EMI nahi kategi.`)
+    if (!data) { setErr('This loan is not running — only a running loan can be foreclosed.'); return }
+    setMsg(`${l.loan_number} foreclosed. No EMI will be deducted from next month.`)
     load()
   }
   const th: React.CSSProperties = { fontSize:10, textAlign:'right', padding:'6px 8px', color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }
@@ -247,7 +247,7 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
         </div>
       )}
       <div style={{ fontSize:11, color:C.muted, marginTop:10, lineHeight:1.55 }}>
-        EMI <b>Payroll → Data Sync → Loan</b> se katti hai — ek payroll month mein ek hi baar, chahe sync kitni baar chalao. Aakhri EMI utni hi katti hai jitna balance bacha ho.
+        EMI is deducted through <b>Payroll → Data Sync → Loan</b> — once per payroll month, however many times you run the sync. The last EMI is only as large as the balance that is left.
       </div>
       {msg && <div style={{ fontSize:12, fontWeight:600, color:C.green, background:'#ECFDF5', borderRadius:8, padding:'9px 12px', marginTop:10 }}>✓ {msg}</div>}
       {err && <div style={{ fontSize:12, color:C.red, background:'#FEF2F2', borderRadius:8, padding:'9px 12px', marginTop:10 }}>{err}</div>}

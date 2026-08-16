@@ -166,7 +166,7 @@ export default function BulkUploadModal({ companies, departments, locations, onC
         <div style={{ background:'#1E293B', padding:'14px 20px', borderRadius:'12px 12px 0 0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
             <div style={{ fontSize:15, fontWeight:600, color:'#fff' }}>Bulk Employee Upload</div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,.55)', marginTop:2 }}>Step {step} of 3 · Excel se 100s employees ek saath</div>
+            <div style={{ fontSize:11, color:'rgba(255,255,255,.55)', marginTop:2 }}>Step {step} of 3 · hundreds of employees from one Excel file</div>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', color:'rgba(255,255,255,.7)', cursor:'pointer', fontSize:22 }}>×</button>
         </div>
@@ -182,7 +182,7 @@ export default function BulkUploadModal({ companies, departments, locations, onC
               </select>
 
               <div style={{ background:'#EFF6FF', border:'1px solid #BFDBFE', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:12, color:'#1E40AF', lineHeight:1.6 }}>
-                💡 <b>emp_code</b> blank chhodo → auto-generate (type-wise, e.g. {(company?.company_code || 'SSM')}0001, {(company?.company_code || 'SSM')}INT0001). Ya apne existing codes bharo (first-time setup) — duplicate hone par row skip ho jayegi.
+                💡 Leave <b>emp_code</b> blank → auto-generated per type (e.g. {(company?.company_code || 'SSM')}0001, {(company?.company_code || 'SSM')}INT0001). Or fill in your existing codes for a first-time setup — duplicate rows are skipped.
               </div>
 
               <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, marginBottom:16 }}>
@@ -197,7 +197,7 @@ export default function BulkUploadModal({ companies, departments, locations, onC
                   <input type="file" accept=".xlsx,.xls" style={{ display:'none' }} disabled={!companyId || busy} onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = '' }} />
                 </label>
               </div>
-              <div style={{ fontSize:11, color:'#94A3B8', marginTop:10 }}>Template ke andar Types / Departments / Locations reference sheets hote hain — valid values wahan se copy karo.</div>
+              <div style={{ fontSize:11, color:'#94A3B8', marginTop:10 }}>The template carries Types / Departments / Locations reference sheets — copy the valid values from there.</div>
             </div>
           )}
 

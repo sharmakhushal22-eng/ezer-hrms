@@ -109,12 +109,12 @@ export default function MasterSetupPage() {
   }
 
   const handleSaveValue = async () => {
-    if (!vf.code.trim() || !vf.label.trim()) { setError('Code aur Label required hain'); return }
+    if (!vf.code.trim() || !vf.label.trim()) { setError('Code and Label are required'); return }
     setSaving(true); setError('')
     try {
       let extra = null
       if (selType?.has_extra_data && vf.extra_data) {
-        try { extra = JSON.parse(vf.extra_data) } catch { setError('Extra Data valid JSON nahi hai'); setSaving(false); return }
+        try { extra = JSON.parse(vf.extra_data) } catch { setError('Extra Data is not valid JSON'); setSaving(false); return }
       }
       const payload: any = {
         ...(editValue ? { id: editValue.id } : {}),
@@ -137,14 +137,14 @@ export default function MasterSetupPage() {
   }
 
   const handleToggle = async (v: MasterValue) => {
-    if (v.is_system && v.is_active) { setError('System values disable nahi ho sakte'); return }
+    if (v.is_system && v.is_active) { setError('System values cannot be disabled'); return }
     await toggleActive(v.id, !v.is_active)
     const fresh = await getValues(selType!.id)
     setValues(fresh)
   }
 
   const handleSaveType = async () => {
-    if (!tf.code.trim() || !tf.name.trim()) { setError('Code aur Name required'); return }
+    if (!tf.code.trim() || !tf.name.trim()) { setError('Code and Name are required'); return }
     setSaving(true); setError('')
     try {
       const { error: err } = await saveType({ ...tf, code: tf.code.toLowerCase().trim(), category_id: selCat!.id, sort_order: types.length + 1, is_active: true })
@@ -251,7 +251,7 @@ export default function MasterSetupPage() {
               {selType ? selType.name : selCat ? selCat.name : 'Master Setup'}
             </div>
             <div style={{ fontSize:'11px', color:'#94A3B8', marginTop:'2px' }}>
-              {selType ? `${filteredValues.length} values · ${selType.description || ''}` : selCat ? 'Left mein master type select karo' : 'Left mein category select karo'}
+              {selType ? `${filteredValues.length} values · ${selType.description || ''}` : selCat ? 'Select a master type on the left' : 'Select a category on the left'}
             </div>
           </div>
           <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
@@ -280,7 +280,7 @@ export default function MasterSetupPage() {
             <div style={{ textAlign:'center' as const, padding:'60px 20px', color:'#94A3B8' }}>
               <div style={{ fontSize:'40px', marginBottom:'12px' }}>⚙️</div>
               <div style={{ fontSize:'16px', fontWeight:500, marginBottom:'6px', color:'#374151' }}>Master Setup</div>
-              <div style={{ fontSize:'13px' }}>Left mein category select karo — phir master type choose karo</div>
+              <div style={{ fontSize:'13px' }}>Select a category on the left, then choose a master type</div>
             </div>
           )}
 
@@ -427,7 +427,7 @@ export default function MasterSetupPage() {
           )}
           {editValue?.is_system && (
             <div style={{ padding:'8px 12px', background:'#FEF3C7', borderRadius:'8px', fontSize:'11px', color:'#D97706' }}>
-              ⚠️ System value — sirf Label aur Description edit ho sakti hai
+              ⚠️ System value — only Label and Description can be edited
             </div>
           )}
         </Modal>
@@ -437,7 +437,7 @@ export default function MasterSetupPage() {
       {showTypeForm && selCat && (
         <Modal title={`+ New Master Type — ${selCat.name}`} onClose={() => setShowTypeForm(false)} onSave={handleSaveType} saveLabel="Create Master Type">
           <div style={{ padding:'8px 12px', background:'#DBEAFE', borderRadius:'8px', fontSize:'11px', color:'#1D4ED8', marginBottom:'12px' }}>
-            💡 New master type create hone ke baad usme values add kar sakte ho. Ye master type phir sab forms mein available hoga.
+            💡 Once a new master type is created you can add values to it. The master type is then available in every form.
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
             <Fld label="Code (unique)" req>

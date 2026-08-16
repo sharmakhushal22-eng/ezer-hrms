@@ -90,10 +90,10 @@ function ModuleAccessTab({ roles, perms, selId, onSelect, onSet }: {
     <div style={{ display:'grid', gridTemplateColumns:'260px 1fr', gap:10, alignItems:'start' }}>
       <RoleList roles={roles} selId={selId} onSelect={onSelect} rightCount={r => `${perms.filter(p => p.role_id === r.id && p.access_level !== 'NONE').length}`} />
       <div style={C.card}>
-        {!sel ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Ek role chuno.</div> : (
+        {!sel ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Pick a role.</div> : (
           <>
             <div style={C.sec}>{sel.role_name} — module access</div>
-            <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:10 }}>Yeh ESS portal mein kaunse modules dikhenge woh control karta hai. Change turant save hota hai.</div>
+            <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:10 }}>This controls which modules appear in the ESS portal. Changes save immediately.</div>
             {PERM_MODULES.map(m => {
               const lvl = levelOf(m)
               const [bg, col] = ACCESS_COLOR[lvl]
@@ -125,7 +125,7 @@ function ApprovalRightsTab({ roles, rights, selId, onSelect, onSet }: {
     <div style={{ display:'grid', gridTemplateColumns:'260px 1fr', gap:10, alignItems:'start' }}>
       <RoleList roles={roles} selId={selId} onSelect={onSelect} rightCount={r => `${rights.filter(x => x.role_id === r.id && x.can_approve).length}`} />
       <div style={C.card}>
-        {!sel ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Ek role chuno.</div> : (
+        {!sel ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Pick a role.</div> : (
           <>
             <div style={C.sec}>{sel.role_name} — approval rights</div>
             <div style={{ display:'grid', gridTemplateColumns:'2fr repeat(3,70px)', gap:6, alignItems:'center', fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase', padding:'4px 0', borderBottom:'1px solid #EDE9FE' }}>
@@ -209,13 +209,13 @@ function RequestCard({ item, recruiters, onResolve }: { item: PendingItem; recru
                 ))}
               </div>
             )}
-            {recQ.trim() && matches.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:4 }}>Koi recruiter nahi mila (sirf RECRUITER role waale dikhte hain).</div>}
+            {recQ.trim() && matches.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:4 }}>No recruiter found (only people with the RECRUITER role appear here).</div>}
           </div>
         </div>
       )}
 
       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-        <input style={{ ...C.input, flex:1, minWidth:180 }} placeholder="Remark (reject ke liye zaroori)" value={remark} onChange={e => setRemark(e.target.value)} />
+        <input style={{ ...C.input, flex:1, minWidth:180 }} placeholder="Remark (required to reject)" value={remark} onChange={e => setRemark(e.target.value)} />
         <button disabled={busy} style={{ ...C.pri, background:'#059669' }} onClick={() => run('APPROVED')}>✓ Approve</button>
         <button disabled={busy || !remark.trim()} style={{ ...C.pri, background:'#DC2626', opacity: remark.trim() ? 1 : 0.5 }} onClick={() => run('REJECTED')}>✗ Reject</button>
       </div>
@@ -240,7 +240,7 @@ function ApprovalTab({ roles, selId, onSelect, pending, recruiters, onResolve }:
         {sel && (
           <div style={{ marginTop:10 }}>
             {pending.types.length === 0
-              ? <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#92400E' }}>⚠️ <b>{sel.role_name}</b> ke paas koi approval rights nahi hai.</div>
+              ? <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#92400E' }}>⚠️ <b>{sel.role_name}</b> has no approval rights.</div>
               : <div style={{ fontSize:11, color:'#6B7280' }}>Can approve: {pending.types.map(t => <Pill key={t} text={typeLabel(t)} bg="#ECFDF5" color="#059669" />)}<span style={{ display:'inline-block', width:6 }} /></div>}
           </div>
         )}
@@ -250,7 +250,7 @@ function ApprovalTab({ roles, selId, onSelect, pending, recruiters, onResolve }:
         <div style={C.card}>
           <div style={C.sec}>Pending approvals ({pending.items.length})</div>
           {pending.items.length === 0
-            ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Is role ke liye koi pending approval nahi. (MRF, Offer, aur Loan/Resignation/Profile-update yahan aate hain; Leave/Expense/Salary/PIP abhi apne module mein.)</div>
+            ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No pending approvals for this role. (MRF, Offer and Loan/Resignation/Profile-update land here; Leave/Expense/Salary/PIP are still inside their own modules.)</div>
             : pending.items.map(item => <RequestCard key={`${item.source}:${item.id}`} item={item} recruiters={recruiters} onResolve={(a, r, rec) => onResolve(item, a, r, rec)} />)}
         </div>
       )}
@@ -302,7 +302,7 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
     <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '240px 1fr', gap:10, alignItems:'start' }}>
       <RoleList roles={assignable} selId={selId} onSelect={onSelect} rightCount={r => `${users.filter(u => u.roles.some(x => x.id === r.id)).length}`} />
       <div>
-        {!sel ? <div style={C.card}><span style={{ fontSize:12, color:'#9CA3AF' }}>Ek role chuno — phir company, location/branch &amp; department se employee filter karke assign karo.</span></div> : (
+        {!sel ? <div style={C.card}><span style={{ fontSize:12, color:'#9CA3AF' }}>Pick a role — then filter employees by company, location/branch and department, and assign.</span></div> : (
           <>
             <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:8 }}>
@@ -345,7 +345,7 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
               <div style={C.card}>
                 <div style={C.sec}>Assigned ({assigned.length})</div>
                 <div style={{ maxHeight:'46vh', overflowY:'auto' }}>
-                  {assigned.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Abhi kisi ko assign nahi.</div> : assigned.map(u => <Row key={u.employee_id} u={u} add={false} />)}
+                  {assigned.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Not assigned to anyone yet.</div> : assigned.map(u => <Row key={u.employee_id} u={u} add={false} />)}
                 </div>
               </div>
               <div style={C.card}>
@@ -389,7 +389,7 @@ function ESSPortalTab({ users, perms, rights, selId, onSelect, isMobile }: {
         ))}
       </div>
       <div>
-        {!emp ? <div style={C.card}><span style={{ fontSize:12, color:'#9CA3AF' }}>Employee chuno — ESS portal ka preview dikhega.</span></div> : (
+        {!emp ? <div style={C.card}><span style={{ fontSize:12, color:'#9CA3AF' }}>Pick an employee — a preview of their ESS portal appears.</span></div> : (
           <>
             <div style={C.card}>
               <div style={{ fontSize:15, fontWeight:600 }}>{emp.full_name}</div>
@@ -414,11 +414,11 @@ function ESSPortalTab({ users, perms, rights, selId, onSelect, isMobile }: {
                     </div>
                   )
                 })}
-                {modules.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>Role-based module access set nahi — Module Access tab se configure karo.</div>}
+                {modules.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>Role-based module access is not set — configure it in the Module Access tab.</div>}
               </div>
               <div style={C.card}>
                 <div style={C.sec}>Approval rights</div>
-                {approvals.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Koi approval right active nahi.</div> : (
+                {approvals.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No approval right is active.</div> : (
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                     {approvals.map(t => <Pill key={t} text={typeLabel(t)} bg="#ECFDF5" color="#059669" />)}
                   </div>
@@ -503,7 +503,7 @@ export function RolesPermissionsSection() {
     const newIds = add ? [...new Set([...currentIds, role.id])] : currentIds.filter(id => id !== role.id)
     const { error } = await assignRoles(u, newIds, 'Admin')
     if (error) { notify('Failed: ' + error.message, 'error'); return }
-    notify(`${role.role_name} ${add ? 'assigned to' : 'removed from'} ${u.full_name}${add ? ' · ESS mein visible' : ''}`)
+    notify(`${role.role_name} ${add ? 'assigned to' : 'removed from'} ${u.full_name}${add ? ' · visible in ESS' : ''}`)
     setUsers(await loadUsers()) // refresh just the user→role view
   }
 
@@ -520,7 +520,7 @@ export function RolesPermissionsSection() {
   return (
     <>
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Roles &amp; Permissions</div>
-        <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Module access &amp; approval rights per role, plus a role-as-tester approval queue. (Employee→role assignment ESS ke 🧭 Assign Roles tab mein hai.)</div>
+        <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Module access &amp; approval rights per role, plus a role-as-tester approval queue. (Employee→role assignment lives in the ESS 🧭 Assign Roles tab.)</div>
 
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
           {tabs.map(([k, l]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}

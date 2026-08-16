@@ -220,13 +220,13 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
               <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 8, padding: '9px 11px', marginBottom: 8 }}>
                 <div style={{ fontSize: 11.5, fontWeight: 600, color: C.amber, marginBottom: 5 }}>Partial rejection (optional)</div>
                 <div style={{ fontSize: 11, color: C.amber, marginBottom: 6 }}>
-                  Bill {inr(claimed)} ka hai. Agar iska kuch hissa valid hai to yahan wahi amount likho — baaki taxable ho jaayega. Khaali chhodo to poora {inr(claimed)} taxable.
+                  The bill is for {inr(claimed)}. If only part of it is valid, enter that amount here — the rest becomes taxable. Leave it blank and the whole {inr(claimed)} is taxable.
                 </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input style={{ ...S.inp, width: 150 }} placeholder={`Valid amount (max ${claimed})`} inputMode="numeric"
                     value={partialAmt} onChange={e => setPartialAmt(e.target.value.replace(/[^0-9]/g, ''))} />
                   <span style={{ fontSize: 11.5, color: C.amber }}>
-                    → taxable <b>{inr(claimed - ok)}</b>{ok >= claimed && claimed > 0 ? ' — poora valid hai, ye approve ho jaayega' : ''}
+                    → taxable <b>{inr(claimed - ok)}</b>{ok >= claimed && claimed > 0 ? ' — fully valid, this will be approved' : ''}
                   </span>
                 </div>
               </div>

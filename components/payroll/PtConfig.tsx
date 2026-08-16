@@ -376,11 +376,11 @@ export default function PtConfig() {
       </div>
 
       <div style={{ fontSize: 10.5, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
-        <b>Yeh table hi payroll ka source hai.</b> Run Payroll har employee ka PT yahin se uthata hai — uske
-        <b> state</b>, us mahine ke <b>column</b> aur uske <b>gross</b> ke hisaab se. App mein koi rate likha hua
-        nahi hai, isliye yahan badla hua rate agle run mein apne aap lag jaata hai.
-        <br />PT ek <b>fixed monthly</b> amount hai — chhutti lene se kam nahi hota. Revise karne par purani row
-        mitti nahi, band hoti hai; isliye pichhla mahina dobara chalane par bhi wahi rate lagta hai jo tab tha.
+        <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s PT from here — by their
+        <b> state</b>, that month&apos;s <b>column</b> and their <b>gross</b>. No rate is written anywhere in the app,
+        so a rate changed here applies to the next run on its own.
+        <br />PT is a <b>fixed monthly</b> amount — taking leave does not reduce it. Revising does not delete the
+        old row, it closes it; so re-running an earlier month still applies the rate that was in force then.
       </div>
 
       {modal.open && <ReviseModal preset={modal.preset} onClose={() => setModal({ open: false })} onSaved={() => { setModal({ open: false }); load() }} />}

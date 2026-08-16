@@ -76,12 +76,12 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
 
       {!locked && shortfall > 0 && (
         <div style={{ fontSize: 11, color: C.amber, marginTop: 8 }}>
-          {inr(shortfall)} ka proof abhi baaki hai — itna hissa exempt nahi rahega.
+          Proof for {inr(shortfall)} is still pending — that much will not stay exempt.
         </div>
       )}
       {p.status === 'REJECTED' && p.rejection_reason && (
         <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 8 }}>
-          Reject kiya gaya: {p.rejection_reason}
+          Rejected: {p.rejection_reason}
         </div>
       )}
       {!locked && (
@@ -134,8 +134,8 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
     const { data, error } = await supabase.rpc('open_investment_proof_window', { p_employee_id: employeeId, p_fy: FY })
     setBusy('')
     if (error) { setErr(error.message); return }
-    if (!Number(data)) { setErr('Koi declared line nahi mili — pehle Investment Declaration bhar ke submit karein.'); return }
-    setMsg(`${data} line${Number(data) === 1 ? '' : 's'} ke liye proof window khul gayi.`)
+    if (!Number(data)) { setErr('No declared line found — fill in and submit the Investment Declaration first.'); return }
+    setMsg(`Proof window opened for ${data} line${Number(data) === 1 ? '' : 's'}.`)
     load()
   }
 
@@ -148,7 +148,7 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
     }).eq('id', p.id)
     setBusy('')
     if (error) { setErr(error.message); return }
-    setMsg(`${p.section} ka proof submit ho gaya — HR review karega.`)
+    setMsg(`${p.section} proof submitted — HR will review it.`)
     load()
   }
 
@@ -163,26 +163,26 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
     <div style={{ fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13, color: C.navy, maxWidth: 780 }}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 20, fontWeight: 800 }}>Investment Proofs</div>
-        <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>FY {FY} — jo declare kiya tha uske bill</div>
+        <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>FY {FY} — bills for what you declared</div>
       </div>
 
       {leaving && (
         <div style={{ background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.amber }}>Aapki proof window abhi khuli hai</div>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.amber }}>Your proof window is open now</div>
           <div style={{ fontSize: 11.5, color: C.amber, marginTop: 3, lineHeight: 1.55 }}>
-            Aapka last working day <b>{fmtDate(leaving)}</b> hai, isliye deadline saal ka aakhir nahi — <b>wahi din</b> hai.
-            Uske baad jo prove nahi hua, woh exempt nahi rahega aur final settlement mein tax lagega.
+            Your last working day is <b>{fmtDate(leaving)}</b>, so the deadline is not the end of the year — it is <b>that day</b>.
+            Anything not proved by then will not stay exempt and will be taxed in the final settlement.
           </div>
         </div>
       )}
 
       {!hasDecl ? (
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>
-          Is FY ki koi <b>Investment Declaration</b> nahi mili. Proof usi ke against diye jaate hain — pehle declaration bhar kar submit karein.
+          No <b>Investment Declaration</b> found for this FY. Proofs are submitted against it — fill in and submit the declaration first.
         </div>
       ) : regime === 'NEW' ? (
         <div style={{ background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: 12, padding: 20, fontSize: 12.5, color: C.green, lineHeight: 1.6 }}>
-          Aap <b>New regime</b> par hain — 80C/80D/HRA ki exemption milti hi nahi, isliye koi proof nahi chahiye.
+          You are on the <b>New regime</b> — the 80C/80D/HRA exemptions do not apply, so no proof is needed.
         </div>
       ) : (
         <>
@@ -204,7 +204,7 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
           {rows.length === 0 ? (
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
               <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>
-                Abhi proof window khuli nahi hai. Apni declaration ki har line ke liye window kholne ke liye neeche dabaiye.
+                The proof window is not open yet. Use the button below to open a window for each line of your declaration.
               </div>
               <button onClick={openWindow} disabled={busy === 'open'}
                 style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>

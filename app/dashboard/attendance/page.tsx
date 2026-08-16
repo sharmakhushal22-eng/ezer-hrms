@@ -81,7 +81,7 @@ function ShiftsTab({ companies, locations, departments, shifts, onCreate, onTogg
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
           <thead><tr style={{ background:'#FAFAF8' }}>{['Code','Type','Company','In → Out','Lunch','OT','Active',''].map(h => <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:'#6B7280', textTransform:'uppercase', borderBottom:'1px solid #EDE9FE', whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
           <tbody>
-            {shifts.length === 0 && <tr><td colSpan={8} style={{ padding:24, textAlign:'center', color:'#9CA3AF' }}>Koi shift nahi. Migration 036 chala? Ya upar se banao.</td></tr>}
+            {shifts.length === 0 && <tr><td colSpan={8} style={{ padding:24, textAlign:'center', color:'#9CA3AF' }}>No shifts. Has migration 036 been run? Or create one above.</td></tr>}
             {shifts.map(s => (
               <tr key={s.id} style={{ borderBottom:'1px solid #F3F0FF', opacity: s.is_active ? 1 : 0.5 }}>
                 <td style={{ padding:'8px 10px', fontWeight:700 }}>{s.shift_code}</td>
@@ -147,7 +147,7 @@ function AssignTab({ shifts, employees, assignments, onAssign }: {
 
       <div style={T.card}>
         <div style={T.sec}>Pending — no active shift ({pending.length})</div>
-        {pending.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Sab employees ko shift assign ho chuki hai.</div> : (
+        {pending.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Every employee already has a shift assigned.</div> : (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:6 }}>
             {pending.slice(0, 120).map(e => <div key={e.id} style={{ fontSize:12, padding:'5px 8px', background:'#FAFAF8', borderRadius:6, border:'1px solid #F3F0FF' }}>{e.full_name} <span style={{ color:'#9CA3AF', fontSize:10 }}>{e.emp_code}</span></div>)}
           </div>
@@ -173,7 +173,7 @@ function RecordsTab({ employees, records, from, to, onFrom, onTo }: {
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
           <thead><tr style={{ background:'#FAFAF8' }}>{['Date','Employee','In','Out','Worked','Late','OT','Status'].map(h => <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:'#6B7280', textTransform:'uppercase', borderBottom:'1px solid #EDE9FE', whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
           <tbody>
-            {records.length === 0 && <tr><td colSpan={8} style={{ padding:24, textAlign:'center', color:'#9CA3AF' }}>Is range mein koi processed attendance nahi. (Punches process hone par yahan aayega.)</td></tr>}
+            {records.length === 0 && <tr><td colSpan={8} style={{ padding:24, textAlign:'center', color:'#9CA3AF' }}>No processed attendance in this range. (It appears here once punches are processed.)</td></tr>}
             {records.map(r => {
               const e = emp(r.employee_id)
               const [bg, c] = STATUS_COLOR[r.status] || STATUS_COLOR.PRESENT

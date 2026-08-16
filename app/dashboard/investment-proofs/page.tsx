@@ -59,7 +59,7 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
         </div>
         {leaving && <span style={{ fontSize: 10, fontWeight: 700, color: C.amber, background: C.amberBg, border: `0.5px solid ${C.amberBd}`, borderRadius: 99, padding: '2px 9px' }}>Leaving {fmtDate(leaving)}</span>}
         <span style={{ fontSize: 10.5, fontWeight: 700, color: overdue && !done ? C.red : C.muted, background: overdue && !done ? C.redBg : '#F8F7FF', borderRadius: 99, padding: '3px 10px' }}>
-          {overdue && !done ? 'Deadline nikal gayi · ' : 'Deadline '}{fmtDate(r.deadline)}
+          {overdue && !done ? 'Deadline passed · ' : 'Deadline '}{fmtDate(r.deadline)}
         </span>
         <span style={{ fontSize: 10.5, fontWeight: 700, color: fg, background: bg, borderRadius: 99, padding: '3px 10px' }}>{r.status}</span>
       </div>
@@ -90,7 +90,7 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
 
       {!done && gap > 0 && (
         <div style={{ fontSize: 11, color: C.amber, marginTop: 8 }}>
-          {inr(gap)} unproven rahega — utna exempt nahi hoga, uspar tax lagega.
+          {inr(gap)} stays unproven — that much will not be exempt and will be taxed.
         </div>
       )}
       {r.status === 'REJECTED' && r.rejection_reason && (
@@ -144,8 +144,8 @@ export default function InvestmentProofsPage() {
     setErr(''); setMsg('')
     let reason: string | null = null
     if (!approve) {
-      reason = window.prompt('Reject karne ki wajah? (employee ko dikhegi)') || ''
-      if (!reason.trim()) { setErr('Rejection reason zaroori hai.'); return }
+      reason = window.prompt('Reason for rejection? (the employee will see this)') || ''
+      if (!reason.trim()) { setErr('A rejection reason is required.'); return }
     }
     setBusy(r.id)
     // The approved figure is what the tax computation may treat as exempt — anything
@@ -158,7 +158,7 @@ export default function InvestmentProofsPage() {
     }).eq('id', r.id)
     setBusy('')
     if (error) { setErr(error.message); return }
-    setMsg(approve ? `${r.section} approve — ${inr(num(draft[r.id]))} exempt maana jaayega.` : `${r.section} reject — poora amount taxable.`)
+    setMsg(approve ? `${r.section} approved — ${inr(num(draft[r.id]))} will be treated as exempt.` : `${r.section} rejected — the full amount is taxable.`)
     load()
   }
 
@@ -182,7 +182,7 @@ export default function InvestmentProofsPage() {
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 800 }}>Investment Proofs</div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
-          FY {FY} — declare kiya hua kitna sach mein prove hua. Jo prove nahi hua, woh exempt nahi rahega.
+          FY {FY} — how much of what was declared has actually been proved. Anything unproved will not stay exempt.
         </div>
       </div>
 
@@ -191,7 +191,7 @@ export default function InvestmentProofsPage() {
         {stat('Awaiting review', rows.filter(r => r.status === 'SUBMITTED').length, C.amber)}
         {stat('Approved', rows.filter(r => r.status === 'APPROVED').length, C.green)}
         {stat('Not yet submitted', rows.filter(r => r.status === 'PENDING').length, C.muted)}
-        {overdueCount > 0 && stat('Deadline nikal gayi', overdueCount, C.red)}
+        {overdueCount > 0 && stat('Deadline passed', overdueCount, C.red)}
       </div>
 
       <div style={{ ...S.card, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -211,8 +211,8 @@ export default function InvestmentProofsPage() {
           <div style={S.card}>
             <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>
               {rows.length === 0
-                ? <>Abhi koi proof line nahi hai. Ye tab banti hain jab employee declaration submit kare aur uski proof window khule — ya <b>Payroll → Data Sync → Investment proofs</b> se sabki window ek saath khol do.</>
-                : 'Is filter mein kuch nahi mila.'}
+                ? <>There are no proof lines yet. They appear once an employee submits a declaration and their proof window opens — or open everyone&apos;s at once from <b>Payroll → Data Sync → Investment proofs</b>.</>
+                : 'Nothing matched this filter.'}
             </div>
           </div>
         ) : filtered.map(r => (

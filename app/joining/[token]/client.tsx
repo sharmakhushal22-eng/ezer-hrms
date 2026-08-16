@@ -156,7 +156,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
           <div style={{ width: 72, height: 72, borderRadius: '50%', background: '#ECFDF5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', fontSize: 36 }}>🎉</div>
           <div style={{ fontSize: 22, fontWeight: 600, color: '#1E1B4B', marginBottom: 8 }}>Welcome to {company?.company_name || 'the family'}!</div>
           <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.8, marginBottom: 20 }}>
-            Joining form complete ho gayi!<br/>Saare documents digitally sign ho gaye hain.
+            Joining form complete!<br/>All documents have been digitally signed.
           </div>
           <div style={{ background: '#F3F0FF', borderRadius: 10, padding: 16, marginBottom: 20, textAlign: 'left' }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: PRI, marginBottom: 10 }}>Completed steps</div>
@@ -180,7 +180,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
         <div style={{ textAlign: 'center', marginBottom: 16 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>🔐</div>
           <div style={{ fontSize: 19, fontWeight: 600, color: '#1E1B4B' }}>Aadhaar OTP eSign</div>
-          <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Ek OTP se sab documents sign karo</div>
+          <div style={{ fontSize: 13, color: '#6B7280', marginTop: 4 }}>Sign every document with a single OTP</div>
         </div>
         <div style={S.cd}>
           <div style={{ background: '#EEEDFE', borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12, color: '#534AB7', lineHeight: 1.7 }}>
@@ -240,7 +240,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
             </div>
             <div style={{ background: '#EEEDFE', borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#534AB7', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <input type="checkbox" style={{ marginTop: 1, width: 15, height: 15, flexShrink: 0, cursor: 'pointer' }} readOnly checked={isAccepted}/>
-              <span>Maine yeh policy poori padh li hai. Main is policy ko follow karne ki consent deta/deti hun.</span>
+              <span>I have read this policy in full. I consent to following it.</span>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               {policyIdx > 0 && <button onClick={() => { setPolicyIdx(p => p - 1); setScrolled(false) }} style={S.btnO}>← Back</button>}
@@ -263,7 +263,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
     <div style={{ ...S.pg }}>
       <div style={{ background: `linear-gradient(135deg, ${PRI}, #4F46E5)`, padding: '12px 18px', color: '#fff' }}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>Statutory Compliance Forms</div>
-        <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)' }}>All forms AI pre-filled · Review aur accept karo</div>
+        <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)' }}>All forms AI pre-filled · Review and accept</div>
       </div>
       <div style={{ maxWidth: 680, margin: '0 auto', padding: 18 }}>
         {/* EPF Form 11 */}
@@ -453,7 +453,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
     3: (
       <div>
         <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '9px 12px', marginBottom: 14, fontSize: 12, color: '#92400E' }}>
-          🔒 Bank details encrypted — sirf Payroll team ko access hoga. Salary is account mein aayegi.
+          🔒 Bank details are encrypted — only the Payroll team can see them. Your salary will be credited to this account.
         </div>
         <div style={S.g2}>
           <Fld label="Account Number *" conf="manual"><input style={S.inp('manual')} type="password" value={form.bank_acc} onChange={e => F('bank_acc', e.target.value)} placeholder="Account number"/></Fld>
@@ -499,7 +499,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
     ),
     5: (
       <div>
-        <div style={{ fontSize: 13, fontWeight: 500, color: '#059669', marginBottom: 12 }}>✅ Pre-onboarding mein submit documents (no re-upload needed):</div>
+        <div style={{ fontSize: 13, fontWeight: 500, color: '#059669', marginBottom: 12 }}>✅ Documents already submitted during pre-onboarding (no re-upload needed):</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4, marginBottom: 16 }}>
           {['10th / 12th / Graduation marksheets','Appointment letter (prev employer)','Last 3 months salary slips','Bank proof (passbook / cheque)','Aadhaar + PAN copy','Relieving letter (if available)'].map(d => (
             <div key={d} style={{ fontSize: 11, color: '#059669', display: 'flex', alignItems: 'center', gap: 5 }}>✓ {d}</div>
@@ -525,7 +525,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
     ),
     6: (
       <div>
-        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 14 }}>Sab details verify karo. Kisi bhi section pe edit button se change karo.</div>
+        <div style={{ fontSize: 12, color: '#6B7280', marginBottom: 14 }}>Check every detail. Use the edit button on any section to change it.</div>
         {[
           { s: 0, label: 'Personal details', summary: `${form.full_name || '—'} · ${form.blood_group || 'Blood group missing'} · ${form.marital_status || 'Marital status missing'}` },
           { s: 1, label: 'Address details', summary: `${form.perm_city || 'City missing'}, ${form.perm_state || '—'} ${form.perm_pin || ''}` },
@@ -577,7 +577,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
         🤖 <span>
           <strong>AI Pre-fill Active:</strong> Pre-onboarding documents se <strong>{aiCount} fields auto-filled</strong>.
           <span style={{ background: '#D1FAE5', padding: '1px 5px', borderRadius: 99, fontSize: 10, fontWeight: 600, marginLeft: 4 }}>AI ✓</span> = verified.
-          {missingCount > 0 && <> <span style={{ background: '#FEE2E2', padding: '1px 5px', borderRadius: 99, fontSize: 10, fontWeight: 600, marginLeft: 4, color: '#991B1B' }}>Fill Required</span> = {missingCount} field(s) manually bharo.</>}
+          {missingCount > 0 && <> <span style={{ background: '#FEE2E2', padding: '1px 5px', borderRadius: 99, fontSize: 10, fontWeight: 600, marginLeft: 4, color: '#991B1B' }}>Fill Required</span> = {missingCount} field(s) to fill in manually.</>}
         </span>
       </div>
 

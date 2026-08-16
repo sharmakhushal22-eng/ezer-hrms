@@ -115,7 +115,7 @@ export default function CompanyPoliciesPage() {
                 {['#', 'Code', 'Title', 'Mandatory', 'Status', 'Actions'].map(h => <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:'#6B7280', textTransform:'uppercase', letterSpacing:'.04em', borderBottom:'1px solid #EDE9FE' }}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {policies.length === 0 && <tr><td colSpan={6} style={{ padding:24, textAlign:'center', color:'#9CA3AF' }}>Koi policy nahi. Migration 033 chala? Ya + Add policy.</td></tr>}
+                {policies.length === 0 && <tr><td colSpan={6} style={{ padding:24, textAlign:'center', color:'#9CA3AF' }}>No policies. Has migration 033 been run? Or use + Add policy.</td></tr>}
                 {policies.map(p => (
                   <tr key={p.id} style={{ borderBottom:'1px solid #F3F0FF', opacity: p.is_active ? 1 : 0.5 }}>
                     <td style={{ padding:'9px 10px', color:'#9CA3AF' }}>{p.sort_order}</td>

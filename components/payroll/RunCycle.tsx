@@ -246,10 +246,10 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
         )}
       </div>
       <div style={{ fontSize: 10.5, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
-        {!on ? <>Koi filter nahi — payroll <b>poore month</b> par chalegi ({rows.length} employees).</>
+        {!on ? <>No filter — payroll will run on the <b>whole month</b> ({rows.length} employees).</>
           : matched === 0
-            ? <b style={{ color: C.red }}>Is filter se ek bhi employee match nahi hua — chalane ko kuch hai hi nahi.</b>
-            : <>Filter chalu — payroll <b>sirf in {matched}</b> of {rows.length} employees par chalegi. Baaki {rows.length - matched} ki payslip jaisi hai waisi hi rahegi, aur mahina tab tak <b>CALCULATED nahi</b> hoga jab tak poora run na chale.</>}
+            ? <b style={{ color: C.red }}>This filter matches no employees — there is nothing to run.</b>
+            : <>Filter on — payroll will run on <b>only these {matched}</b> of {rows.length} employees. The other {rows.length - matched} payslips stay exactly as they are, and the month will <b>not be marked CALCULATED</b> until a full run happens.</>}
       </div>
     </div>
   )
@@ -390,7 +390,11 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       // no bank change, no second run. Only the ones this run actually paid — anybody
       // left out stays open so their problem can be fixed and they can be run after.
       const { error: lockErr } = await lockEmployees(r.id, codes)
-      if (lockErr && !/schema cache|could not find|does not exist/i.test(lockErr)) {
+      // Narrow on purpose — see lib/payroll/sync.ts. A match here SWALLOWS the failure,
+      // so payroll would report success while the employees it just paid stayed unlocked
+      // and open to a second run. `does not exist` also covers a bad column inside a
+      // lock function that is present, and that must be reported, not hidden.
+      if (lockErr && !/could not find the function|schema cache/i.test(lockErr)) {
         fails.push(`${r.company_name || label}: lock — ${lockErr}`)
       }
     }
@@ -494,7 +498,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       return {
         tone: 'amber' as const,
         title: `Ready to run for ${willRun.length} of ${inScope}`,
-        sub: `${excluded.length} will be left out — ${blockerSummary(blockers)}. Unki payslip nahi banegi, baaki sabki ban jaayegi.`,
+        sub: `${excluded.length} will be left out — ${blockerSummary(blockers)}. Their payslips will not be produced; everyone else's will.`,
       }
     }
     if (filtering) {

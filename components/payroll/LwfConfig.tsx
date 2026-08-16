@@ -400,11 +400,11 @@ export default function LwfConfig() {
       )}
 
       <div style={{ fontSize: 10.5, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
-        <b>Yeh table hi payroll ka source hai.</b> Run Payroll har employee ka LWF yahin se uthata hai — uske
-        <b> lwf_state</b> aur us mahine ke hisaab se. Dhyan rahe: LWF state aur PT state <b>alag</b> hote hain,
-        aur aapke 302 mein se 300 employees par woh alag hain hi.
-        <br />LWF ek <b>flat monthly</b> amount hai — gross ya paid days se koi farq nahi padta. Revise karne par
-        purani row mitti nahi, band hoti hai; isliye pichhla mahina dobara chalane par wahi rate lagta hai jo tab tha.
+        <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s LWF from here — by their
+        <b> lwf_state</b> and that month. Note that LWF state and PT state are <b>different</b> things, and for
+        300 of your 302 employees they genuinely differ.
+        <br />LWF is a <b>flat monthly</b> amount — gross and paid days make no difference to it. Revising does not
+        delete the old row, it closes it; so re-running an earlier month applies the rate that was in force then.
       </div>
 
       {modal.open && <ReviseModal preset={modal.preset} onClose={() => setModal({ open: false })} onSaved={() => { setModal({ open: false }); load() }} />}

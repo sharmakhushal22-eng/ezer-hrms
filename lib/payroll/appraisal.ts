@@ -114,8 +114,11 @@ export async function saveAppraisal(a: {
   })
   if (error) {
     return {
+      // The test is already narrow enough that this only fires when save_appraisal is
+      // genuinely absent, so naming sql111 is safe — but carry the database's own words
+      // too, in case what is missing is some other function this path calls.
       error: /could not find the function/i.test(error.message)
-        ? 'Appraisal needs migration sql111 — it is not applied to this database yet.'
+        ? `Appraisal needs migration sql111 — it is not applied to this database yet. (${error.message})`
         : error.message,
     }
   }

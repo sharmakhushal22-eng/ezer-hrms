@@ -310,7 +310,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
             </div>
 
             <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.5 }}>
-              Typing <b>Absent Days</b> sets <b>Paid Days = Max Days − Absent</b>{maxD != null && <> — abhi <b>{maxD} − {nn(f.absent_days)} = {maxD - nn(f.absent_days)}</b></>}. Type over it if the case needs something else; whatever is in the box is what gets saved.
+              Typing <b>Absent Days</b> sets <b>Paid Days = Max Days − Absent</b>{maxD != null && <> — right now <b>{maxD} − {nn(f.absent_days)} = {maxD - nn(f.absent_days)}</b></>}. Type over it if the case needs something else; whatever is in the box is what gets saved.
               <br />Clear the box entirely and the server falls back to the leave formula instead — that would give <b>{formulaPaid}</b> = (EL + CL + SL + Other) − Absent.
               <br />Total Days = Weekly Off + EL + CL + SL + Other + Paid Days − Absent. Both Paid Days and Total Days must be ≤ Max Days, exactly as on upload.
             </div>
