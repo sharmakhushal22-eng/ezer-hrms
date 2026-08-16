@@ -1,8 +1,12 @@
 'use client'
-// components/ess/EmployeePortal.tsx — ESS Employee Portal (Phase 2).
-// Responsive shell + functional low-dependency modules (Home, Profile, Documents/
-// Letters, Requests, Directory, Notifications). Payroll/Leave/Attendance/PMS show
-// labeled placeholders until those upstream modules exist (Phase 3/4).
+// components/ess/EmployeePortal.tsx — ESS Employee Portal.
+//
+// Six sections in the sidebar — Home, Profile, Payroll, Time, Workplace, Requests —
+// with everything else reached as a sub-tab inside one of them. See SECTIONS near the
+// bottom of this file for the map and why it is grouped that way.
+//
+// Anything not built yet renders a labelled placeholder naming the module it waits on,
+// rather than a screen that looks finished and does nothing.
 // All sub-components are defined OUTSIDE the parent (no focus-loss).
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import {
@@ -22,6 +26,7 @@ import * as HR from '@/lib/employees/hr-actions'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import { supabase } from '@/lib/supabase'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
+import FunZone from '@/components/ess/FunZone'
 import FlexiClaims from '@/components/ess/FlexiClaims'
 import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
 import InvestmentProofs from '@/components/ess/InvestmentProofs'
@@ -237,7 +242,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
         <button onClick={() => go('leave')} style={T.btnO}>🌴 Apply Leave</button>
-        <button onClick={() => go('payroll')} style={T.btnO}>💰 Download Payslip</button>
+        <button onClick={() => go('payslip')} style={T.btnO}>💰 Download Payslip</button>
         <button onClick={() => go('requests')} style={T.btnO}>✉️ Raise Ticket</button>
         <button onClick={() => go('directory')} style={T.btnO}>📒 View Team</button>
       </div>
@@ -637,12 +642,12 @@ function Directory({ isMobile }: { isMobile: boolean }) {
 // ════════════════════════════════════════════════════════════════
 // NOTIFICATIONS (B11)
 // ════════════════════════════════════════════════════════════════
-function Notifications({ emp }: { emp: EmployeeDetail }) {
+function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () => void }) {
   const [rows, setRows] = useState<EssNotification[]>([])
-  const load = useCallback(() => loadNotifications(emp.id).then(setRows), [emp.id])
+  const load = useCallback(() => loadNotifications(emp.id).then(r => { setRows(r); onChange?.() }), [emp.id, onChange])
   useEffect(() => { load() }, [load])
   return (
-    <div style={T.card}>
+    <div style={{ ...T.card, marginBottom:0, border:'none', boxShadow:'none' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
         <div style={T.section}>🔔 Notifications</div>
         <button onClick={async () => { await markAllNotifications(emp.id); load() }} style={T.btnO}>Mark all read</button>
@@ -1806,37 +1811,216 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
   )
 }
 
-const MODULES = [
-  { k:'home',          label:'Home',         icon:'🏠', phase:2 },
-  { k:'payroll',       label:'Payroll',      icon:'💰', phase:3, needs:'Payroll' },
-  { k:'vpf',           label:'Voluntary PF', icon:'🏦', phase:3, needs:'Payroll' },
-  { k:'nps',           label:'Corporate NPS',icon:'🏛️', phase:3, needs:'Payroll' },
-  { k:'loans',         label:'Loans',        icon:'💸', phase:3, needs:'Payroll' },
-  { k:'flexi',         label:'Flexi Benefits',icon:'🎛️', phase:3, needs:'Payroll' },
-  { k:'declaration',   label:'Investment Declaration', icon:'📄', phase:3, needs:'Payroll' },
-  { k:'proofs',        label:'Investment Proofs', icon:'✅', phase:3, needs:'Payroll' },
-  { k:'flexiclaims',   label:'Flexi Claims', icon:'💳', phase:3, needs:'Payroll' },
-  { k:'attendance',    label:'Attendance',   icon:'🗓️', phase:3, needs:'Attendance' },
-  { k:'leave',         label:'Leave',        icon:'🌴', phase:3, needs:'Leave' },
-  { k:'profile',       label:'Profile',      icon:'👤', phase:2 },
-  { k:'documents',     label:'Documents',    icon:'📄', phase:2 },
-  { k:'letters',       label:'My Letters',   icon:'🖋️', phase:2 },
-  { k:'claims',        label:'Travel Claims', icon:'🧾', phase:3, needs:'Claims/Payroll' },
-  { k:'pms',           label:'Performance',  icon:'📈', phase:4, needs:'Performance' },
-  { k:'statutory',     label:'Statutory',    icon:'🏛️', phase:3, needs:'Payroll' },
-  { k:'requests',      label:'Requests',     icon:'✉️', phase:2 },
-  { k:'directory',     label:'Directory',    icon:'📒', phase:2 },
-  { k:'notifications', label:'Notifications',icon:'🔔', phase:2 },
-  { k:'nayan',         label:'Nayan AI',     icon:'🤖', phase:4, needs:'Gemini AI' },
+// ── Navigation ──────────────────────────────────────────────────
+// The eleven tabs from ESS_Portal_New_Structure.html, in that file's order, with its
+// navy sidebar, status dots and per-tab feature grid. The old portal had 21 flat
+// entries; this replaces them. Modules that were separate rows (VPF, NPS, declaration,
+// proofs, claims…) are now sub-tabs of the tab they belong to — Payroll alone absorbed
+// eight of them, which is the whole point of the restructure.
+//
+// One thing is translated rather than copied. The mock's badges read "Built & Tested" /
+// "Partially Built" / "Not Started" — build-tracker language. An employee opening their
+// own portal should not be told a tab is "Not Started", so the same three states are
+// worded as Available / Partly available / Coming soon. The colours and dots are the
+// mock's.
+//
+// A tab that isn't built shows its feature grid — what is coming — instead of an empty
+// screen or a fake one.
+type Ready = 'ready' | 'partial' | 'soon'
+interface NavItem { k: string; label: string; phase?: number; needs?: string }
+interface Feature { icon: string; name: string; note: string }
+interface NavSection {
+  k: string; label: string; short: string; icon: string
+  desc: string; status: Ready
+  items: NavItem[]            // sub-tabs; a single entry means no pill row is drawn
+  features?: Feature[]        // shown instead of the module when status is 'soon'
+}
+
+const SECTIONS: NavSection[] = [
+  { k:'home', label:'Home', short:'Home', icon:'🏠', status:'ready',
+    desc:'The landing dashboard — everything at a glance',
+    items:[{ k:'home', label:'Dashboard' }] },
+
+  { k:'profile', label:'Profile', short:'Profile', icon:'👤', status:'ready',
+    desc:'Your personal details, documents and letters',
+    items:[
+      { k:'profile',     label:'My Details' },
+      { k:'documents',   label:'Letter Requests' },
+      { k:'letters',     label:'My Letters' },
+    ]},
+
+  { k:'team', label:'Team', short:'Team', icon:'👥', status:'soon',
+    desc:'For managers — see and manage your team',
+    items:[{ k:'team', label:'Team' }],
+    features:[
+      { icon:'📋', name:'Team List',          note:'Non-salary details visible' },
+      { icon:'✅', name:'Task Assign',        note:'Give tasks to team members' },
+      { icon:'📝', name:'TODO / Deliverables',note:'Track what is owed' },
+    ]},
+
+  { k:'payroll', label:'Payroll', short:'Payroll', icon:'💰', status:'partial',
+    desc:'Salary, benefits, declarations and claims — all in one place',
+    items:[
+      { k:'payslip',     label:'Salary Slip',            phase:3, needs:'Payslip generation' },
+      { k:'flexi',       label:'Flexi Benefits' },
+      // 'declaration' (InvestmentDeclaration) is not listed — nav entry removed on
+      // request. The component, its import and the render case below are untouched, so
+      // restoring it is this one line back. Don't delete them as dead code.
+      { k:'proofs',      label:'Investment Proofs' },
+      { k:'flexiclaims', label:'Flexi Claims' },
+      { k:'vpf',         label:'Voluntary PF' },
+      { k:'nps',         label:'Corporate NPS' },
+      { k:'loans',       label:'Loans' },
+      { k:'claims',      label:'Travel Claims',          phase:3, needs:'Claims/Payroll' },
+      { k:'statutory',   label:'Statutory',              phase:3, needs:'Payroll' },
+    ]},
+
+  { k:'attendance', label:'Attendance', short:'Attend', icon:'🕐', status:'ready',
+    desc:'Your own attendance, self-service',
+    items:[{ k:'attendance', label:'Attendance' }] },
+
+  { k:'leave', label:'Leave', short:'Leave', icon:'🌴', status:'ready',
+    desc:'Apply, track and plan leave',
+    items:[{ k:'leave', label:'Leave' }] },
+
+  { k:'hris', label:'HRIS', short:'HRIS', icon:'🗂️', status:'partial',
+    desc:'Directory, requests, approvals and the exit process',
+    items:[
+      { k:'directory',   label:'Team Directory' },
+      { k:'requests',    label:'Raise a Request' },
+      { k:'approvals',   label:'Tasks & Approvals',      phase:4, needs:'Approval workflow' },
+      { k:'exit',        label:'Exit Process',           phase:4, needs:'Exit & FnF' },
+    ]},
+
+  { k:'performance', label:'Performance', short:'PMS', icon:'⭐', status:'soon',
+    desc:'Review and rating submission',
+    items:[{ k:'performance', label:'Performance' }],
+    features:[
+      { icon:'📝', name:'Self Review',    note:'Employee assessment' },
+      { icon:'👔', name:'Manager Review', note:'Rating submission' },
+    ]},
+
+  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'🏆', status:'soon',
+    desc:'Peer-to-peer appreciation, casual and public',
+    items:[{ k:'wall', label:'Wall of Fame' }],
+    features:[
+      { icon:'💬', name:'Give a Shoutout', note:'Quick appreciation post' },
+      { icon:'📰', name:'Company Feed',    note:'See everyone’s shoutouts' },
+    ]},
+
+  { k:'rnr', label:'RNR', short:'RNR', icon:'🎖️', status:'soon',
+    desc:'Structured Reward & Recognition, points-based',
+    items:[{ k:'rnr', label:'RNR' }],
+    features:[
+      { icon:'📝', name:'Nominate',    note:'Pick a category, write why' },
+      { icon:'✅', name:'Approval',    note:'Manager / HR reviews' },
+      { icon:'💎', name:'Points',      note:'Credited on approval' },
+      { icon:'🎁', name:'Redeem',      note:'Vouchers, leave, merch' },
+      { icon:'🏅', name:'Leaderboard', note:'Top recognized employees' },
+    ]},
+
+  { k:'funzone', label:'Fun Zone', short:'Fun', icon:'🎉', status:'ready',
+    desc:'Take a break — play a quick game with your team',
+    items:[{ k:'funzone', label:'Fun Zone' }] },
 ]
-const MOBILE_PRIMARY = ['home','payroll','leave','profile']
+
+const VIEWS = SECTIONS.flatMap(s => s.items.map(i => ({ ...i, section: s.k })))
+const viewMeta = (k: string) => VIEWS.find(v => v.k === k) || VIEWS[0]
+/** The four an employee opens daily — these get the mobile thumb bar, rest go under More. */
+const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
+
+const DOT: Record<Ready, string> = { ready:'#059669', partial:'#B45309', soon:'#DC2626' }
+const BADGE: Record<Ready, [string, string, string]> = {
+  ready:   ['Available',        '#ECFDF5', '#059669'],
+  partial: ['Partly available', '#FFFBEB', '#B45309'],
+  soon:    ['Coming soon',      '#FEF2F2', '#DC2626'],
+}
+
+// ── Sidebar / sub-tab / feature-grid bits (outside the parent — no focus loss) ──
+function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean; onClick: () => void }) {
+  // The mock's `.tab-link:hover` can't be an inline style, so the hover tint is state.
+  const [hover, setHover] = useState(false)
+  const bg = active ? 'rgba(124,58,237,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
+  return (
+    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? '#fff' : '#C4BFEE', cursor:'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? '#7C3AED' : 'transparent'}` }}>
+      <span>{s.icon}</span>
+      <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
+      <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
+    </button>
+  )
+}
+
+function TabHeader({ s }: { s: NavSection }) {
+  const [label, bg, fg] = BADGE[s.status]
+  return (
+    <div style={{ marginBottom:16 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:4 }}>
+        <div style={{ fontSize:22, fontWeight:700 }}>{s.icon} {s.label}</div>
+        <span style={{ fontSize:10.5, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
+      </div>
+      <div style={{ fontSize:12.5, color:'#6B7280' }}>{s.desc}</div>
+    </div>
+  )
+}
+
+function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: string) => void }) {
+  if (items.length < 2) return null
+  return (
+    <div style={{ display:'flex', gap:7, flexWrap:'wrap', marginBottom:14 }}>
+      {items.map(i => {
+        const on = i.k === view
+        return (
+          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:12.5, fontWeight: on ? 600 : 500, border:`1px solid ${on ? '#7C3AED' : '#E9E7F5'}`, background: on ? '#7C3AED' : '#fff', color: on ? '#fff' : '#4B5563', whiteSpace:'nowrap' }}>
+            {i.label}{i.phase ? <span style={{ marginLeft:5, fontSize:9, opacity:.7 }}>soon</span> : null}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+/** What a tab will hold once it's built. Shown instead of the module, never alongside. */
+function FeatureGrid({ features }: { features: Feature[] }) {
+  return (
+    <div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12 }}>
+        {features.map(f => (
+          <div key={f.name} style={{ background:'#fff', border:'1px solid #ECEAFB', borderRadius:12, padding:16 }}>
+            <div style={{ fontSize:22, marginBottom:6 }}>{f.icon}</div>
+            <div style={{ fontWeight:700, fontSize:13, marginBottom:3 }}>{f.name}</div>
+            <div style={{ fontSize:11, color:'#6B7280' }}>{f.note}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ background:'#F3EEFF', borderRadius:10, padding:'12px 16px', marginTop:20, fontSize:12, color:'#6D28D9' }}>
+        This tab isn’t live yet. Everything above is what it will hold — nothing here is clickable so far.
+      </div>
+    </div>
+  )
+}
+
+function NotificationBell({ unread, open, onToggle }: { unread: number; open: boolean; onToggle: () => void }) {
+  return (
+    <button onClick={onToggle} title="Notifications" style={{ position:'relative', width:34, height:34, borderRadius:8, border:`1px solid ${open ? '#7C3AED' : '#E9E7F5'}`, background: open ? '#F5F3FF' : '#fff', cursor:'pointer', fontSize:16, lineHeight:1, fontFamily:'inherit', flexShrink:0 }}>
+      🔔
+      {unread > 0 && (
+        <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:99, background:'#DC2626', color:'#fff', fontSize:9.5, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
+          {unread > 9 ? '9+' : unread}
+        </span>
+      )}
+    </button>
+  )
+}
 
 export default function EmployeePortal({ employeeId, adminMode, onExit }: { employeeId: string; adminMode?: boolean; onExit?: () => void }) {
   const [emp, setEmp] = useState<EmployeeDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [view, setView] = useState('home')
   const [isMobile, setIsMobile] = useState(false)
+  const [bellOpen, setBellOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [unread, setUnread] = useState(0)
   const [toast, setToast] = useState<{ msg: string; type: 'success'|'error' } | null>(null)
   const notify = (msg: string, type: 'success'|'error' = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3000) }
 
@@ -1847,12 +2031,27 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   useEffect(() => { setLoading(true); loadEmployeeDetail(employeeId).then(e => { setEmp(e); setLoading(false) }) }, [employeeId])
   const reload = useCallback(() => loadEmployeeDetail(employeeId).then(setEmp), [employeeId])
 
-  const go = (k: string) => { setView(k); setMoreOpen(false) }
+  // Unread count for the bell. Refreshed on mount and whenever the open panel
+  // marks something read, so the badge never disagrees with the list behind it.
+  const refreshUnread = useCallback(() => {
+    loadNotifications(employeeId).then(r => setUnread(r.filter(n => !n.is_read).length)).catch(() => {})
+  }, [employeeId])
+  useEffect(() => { refreshUnread() }, [refreshUnread])
+
+  const go = (k: string) => { setView(k); setBellOpen(false); setMoreOpen(false) }
+  // Clicking a section lands on its first item — the section itself is never a
+  // destination, so there is no empty "section landing page" to design or maintain.
+  const goSection = (s: NavSection) => go(s.items.some(i => i.k === view) ? view : s.items[0].k)
   const salaryVisible = false // role-based salary visibility wired with auth in a later pass
+
+  const meta = viewMeta(view)
+  const section = SECTIONS.find(s => s.k === meta.section)!
 
   const renderView = () => {
     if (!emp) return null
-    const m = MODULES.find(x => x.k === view)!
+    const m = meta
+    // A tab with nothing behind it shows what it will hold, not an empty screen.
+    if (section.status === 'soon' && section.features) return <FeatureGrid features={section.features} />
     switch (view) {
       case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
       case 'profile':       return <Profile emp={emp} notify={notify} />
@@ -1869,8 +2068,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'letters':       return <MyLetters emp={emp} />
       case 'requests':      return <Requests emp={emp} notify={notify} />
       case 'directory':     return <Directory isMobile={isMobile} />
-      case 'notifications': return <Notifications emp={emp} />
-      default:              return <Placeholder title={m.label} phase={m.phase} needs={(m as any).needs || '—'} />
+      case 'funzone':       return <FunZone />
+      default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
     }
   }
 
@@ -1879,60 +2078,82 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   return (
     <div style={{ minHeight:'100vh', background:'#F5F3FF', fontFamily:'"DM Sans","Segoe UI",sans-serif', color:'#1E1B4B', display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
       {!isMobile && (
-        <div style={{ width:210, background:'#fff', borderRight:'1px solid #EDE9FE', padding:'16px 10px', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
-          <div style={{ fontSize:15, fontWeight:700, padding:'0 8px 12px' }}>EZER · ESS</div>
-          {MODULES.map(m => (
-            <button key={m.k} onClick={() => go(m.k)} style={{ width:'100%', textAlign:'left', padding:'9px 10px', borderRadius:8, border:'none', cursor:'pointer', fontFamily:'inherit', fontSize:13, marginBottom:2, background: view===m.k ? '#EDE9FE' : 'transparent', color: view===m.k ? '#6D28D9' : '#374151', fontWeight: view===m.k ? 600 : 500, display:'flex', alignItems:'center', gap:9 }}>
-              <span>{m.icon}</span>{m.label}{m.phase>2 && <span style={{ marginLeft:'auto', fontSize:8, color:'#9CA3AF' }}>P{m.phase}</span>}
-            </button>
+        <div style={{ width:220, background:'#1E1B4B', padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
+          <div style={{ padding:'0 18px 16px', color:'#fff', fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
+          {SECTIONS.map(s => (
+            <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
           ))}
         </div>
       )}
 
       <div style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 70 : 0 }}>
         {/* Top bar */}
-        <div style={{ background:'#fff', borderBottom:'1px solid #EDE9FE', padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:5 }}>
-          <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600 }}>{MODULES.find(m => m.k === view)?.label}</div>
-          {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'#FEF3C7', color:'#92400E', fontWeight:600 }}>Admin viewing {emp.first_name || emp.full_name}</span>}
+        <div style={{ background:'#fff', borderBottom:'1px solid #EDE9FE', padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:25 }}>
+          {/* The tab's own name and badge live in TabHeader below, so this bar carries
+              only what that header can't: the sub-tab you're on, and who you are. */}
+          <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+            {isMobile ? 'EZER ESS' : (section.items.length > 1 ? meta.label : '')}
+          </div>
+          {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'#FEF3C7', color:'#92400E', fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
           <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9 }}>
+            <NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} />
             <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
-            <div style={{ lineHeight:1.2, textAlign:'right' }}>
-              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:700, whiteSpace:'nowrap', maxWidth: isMobile ? 130 : 220, overflow:'hidden', textOverflow:'ellipsis' }}>{emp.full_name}</div>
-              <div style={{ fontSize:11, color:'#6B7280', fontFamily:'monospace' }}>{emp.emp_code}</div>
-            </div>
+            {!isMobile && (
+              <div style={{ lineHeight:1.2, textAlign:'right' }}>
+                <div style={{ fontSize:13, fontWeight:700, whiteSpace:'nowrap', maxWidth:220, overflow:'hidden', textOverflow:'ellipsis' }}>{emp.full_name}</div>
+                <div style={{ fontSize:11, color:'#6B7280', fontFamily:'monospace' }}>{emp.emp_code}</div>
+              </div>
+            )}
           </div>
-          {onExit && <button onClick={onExit} style={{ ...T.btnO }}>{adminMode ? 'Exit Admin Mode' : 'Close'}</button>}
+          {onExit && <button onClick={onExit} style={{ ...T.btnO, whiteSpace:'nowrap' }}>{adminMode ? 'Exit Admin' : 'Close'}</button>}
         </div>
 
-        <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>{renderView()}</div>
+        <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
+          <TabHeader s={section} />
+          <SubTabs items={section.items} view={view} go={go} />
+          {renderView()}
+        </div>
       </div>
 
-      {/* Mobile bottom bar */}
+      {/* Notification panel — anchored to the bell, not a sidebar entry */}
+      {bellOpen && (
+        <div onClick={() => setBellOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }}>
+          <div onClick={e => e.stopPropagation()} style={{ position:'absolute', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', background:'#fff', border:'1px solid #EDE9FE', borderRadius:12, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
+            <Notifications emp={emp} onChange={refreshUnread} />
+          </div>
+        </div>
+      )}
+
+      {/* Mobile bottom bar — eleven tabs don't fit a thumb bar, so the four an employee
+          opens daily sit here and the rest are one tap away under More. */}
       {isMobile && (
         <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'#fff', borderTop:'1px solid #EDE9FE', display:'flex', zIndex:20 }}>
-          {MOBILE_PRIMARY.map(k => { const m = MODULES.find(x => x.k === k)!; return (
-            <button key={k} onClick={() => go(k)} style={{ flex:1, padding:'9px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: view===k ? '#7C3AED' : '#9CA3AF', fontWeight: view===k ? 600 : 500 }}>
-              <div style={{ fontSize:18 }}>{m.icon}</div>{m.label}
+          {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
+            <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? '#7C3AED' : '#9CA3AF', fontWeight: on ? 600 : 500 }}>
+              <div style={{ fontSize:17, lineHeight:1.3 }}>{s.icon}</div>{s.short}
             </button>
           )})}
-          <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, padding:'9px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? '#7C3AED' : '#9CA3AF', fontWeight:500 }}>
-            <div style={{ fontSize:18 }}>⋯</div>More
+          <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? '#7C3AED' : '#9CA3AF', fontWeight: moreOpen ? 600 : 500 }}>
+            <div style={{ fontSize:17, lineHeight:1.3 }}>⋯</div>More
           </button>
         </div>
       )}
 
-      {/* Mobile "More" sheet */}
+      {/* Mobile "More" sheet — every tab, including the four in the bar, so nothing
+          is reachable from only one place. */}
       {isMobile && moreOpen && (
         <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:30, display:'flex', alignItems:'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'70vh', overflowY:'auto' }}>
-            <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All modules</div>
+          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
+            <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-              {MODULES.filter(m => !MOBILE_PRIMARY.includes(m.k)).map(m => (
-                <button key={m.k} onClick={() => go(m.k)} style={{ padding:'12px 10px', borderRadius:9, border:'1px solid #EDE9FE', background:'#FAFAF8', cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8 }}>
-                  <span style={{ fontSize:16 }}>{m.icon}</span>{m.label}
+              {SECTIONS.map(s => (
+                <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:9, border:`1px solid ${section.k === s.k ? '#7C3AED' : '#EDE9FE'}`, background: section.k === s.k ? '#F5F3FF' : '#FAFAF8', cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:'#1E1B4B' }}>
+                  <span style={{ fontSize:16 }}>{s.icon}</span>
+                  <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
+                  <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
                 </button>
               ))}
             </div>
