@@ -5,6 +5,7 @@
 // pattern in app/api/recruitment/upload-mrf-doc/route.ts.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireDashboardUser } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
@@ -15,14 +16,27 @@ const supa = createClient(
 
 const MAX_BYTES = 15 * 1024 * 1024
 const LINK_DAYS = 7
+// This endpoint hands back a public link to whatever it is given, so it accepts only the
+// report formats the export button produces. Without this it is a general-purpose file
+// host for anything at all — which is what an open upload endpoint becomes.
+const ALLOWED_EXT = ['xlsx', 'xls', 'csv']
 
 export async function POST(req: NextRequest) {
+  // Service-role writes with no check of their own are open to the whole internet.
+  const gate = await requireDashboardUser(req)
+  if (gate.error) return gate.error
+
   try {
     const fd = await req.formData()
     const file = fd.get('file') as File | null
     if (!file) return NextResponse.json({ error: 'file is required' }, { status: 400 })
     if (file.size > MAX_BYTES) {
       return NextResponse.json({ error: 'Report is larger than 15 MB' }, { status: 400 })
+    }
+
+    const ext = (file.name.split('.').pop() || '').toLowerCase()
+    if (!ALLOWED_EXT.includes(ext)) {
+      return NextResponse.json({ error: `Only ${ALLOWED_EXT.join(', ')} reports can be shared.` }, { status: 400 })
     }
 
     const safeName = file.name.replace(/[^\w.\-]+/g, '_').slice(-90)

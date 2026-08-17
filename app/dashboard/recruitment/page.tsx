@@ -562,6 +562,14 @@ function MasterSelect({ options, value, onChange, placeholder, style, useCode }:
   )
 }
 
+// The recruitment upload/share routes run on the service-role key, so they check for a
+// dashboard session of their own. The browser already holds one — this hands it over.
+async function authHeaders(supabase:any): Promise<Record<string,string>> {
+  const { data } = await supabase.auth.getSession()
+  const t = data?.session?.access_token
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
+
 // ── §7 CTQ QUESTION EDITOR ────────────────────────────────────────
 function CtqEditor({ items, onChange }:{ items:any[]; onChange:(v:any[])=>void }) {
   const add = () => onChange([...items, { id:`q${Date.now()}`, question:'', type:'YES_NO', expected:'Yes', knockout:true }])
@@ -665,7 +673,7 @@ function ChannelPicker({ options, value, onChange }:{ options:any[]; value:strin
 }
 
 // ── §10 ATTACHMENTS ───────────────────────────────────────────────
-function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify }:any) {
+function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase }:any) {
   const [kind, setKind] = useState('ORG_CHART')
   const [busy, setBusy] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -675,7 +683,7 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify }:any) {
     const fd = new FormData()
     fd.append('mrf_id', mrfId); fd.append('kind', kind); fd.append('file', file)
     try {
-      const r = await fetch('/api/recruitment/upload-mrf-doc', { method:'POST', body:fd })
+      const r = await fetch('/api/recruitment/upload-mrf-doc', { method:'POST', body:fd, headers: await authHeaders(supabase) })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error||'Upload failed')
       showNotify('File uploaded'); onChanged()
@@ -685,13 +693,13 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify }:any) {
   }
 
   async function open(path:string) {
-    const r = await fetch('/api/recruitment/upload-mrf-doc?path='+encodeURIComponent(path))
+    const r = await fetch('/api/recruitment/upload-mrf-doc?path='+encodeURIComponent(path), { headers: await authHeaders(supabase) })
     const j = await r.json()
     if (j.url) window.open(j.url,'_blank'); else showNotify(j.error||'Could not open file','error')
   }
 
   async function remove(path:string) {
-    const r = await fetch(`/api/recruitment/upload-mrf-doc?mrf_id=${mrfId}&path=${encodeURIComponent(path)}`, { method:'DELETE' })
+    const r = await fetch(`/api/recruitment/upload-mrf-doc?mrf_id=${mrfId}&path=${encodeURIComponent(path)}`, { method:'DELETE', headers: await authHeaders(supabase) })
     if (r.ok) { showNotify('File removed'); onChanged() } else showNotify('Could not remove file','error')
   }
 
@@ -1200,7 +1208,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
           {/* §10 Attachments */}
           <div style={T.card}>
             <div style={T.section}>Attachments</div>
-            <AttachmentsPanel mrfId={m.id} attachments={files} onChanged={onChanged} showNotify={showNotify} />
+            <AttachmentsPanel mrfId={m.id} attachments={files} onChanged={onChanged} showNotify={showNotify} supabase={supabase} />
           </div>
 
           {/* JD */}
@@ -1915,7 +1923,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <div style={{ marginBottom:14 }}>
             {editMRF ? (
               <AttachmentsPanel mrfId={editMRF.id} attachments={asArray((editMRF as any).attachments)}
-                onChanged={onRefresh} showNotify={showNotify} />
+                onChanged={onRefresh} showNotify={showNotify} supabase={supabase} />
             ) : (
               <div style={{ fontSize:11.5, color:'#9CA3AF' }}>
                 Save the requisition first — files attach to a saved MRF.
@@ -2341,7 +2349,7 @@ function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:a
 }
 
 // ── JOB STATUS TAB ────────────────────────────────────────────────
-function JobStatusTab({ companies, locations, departments, mrfs, candidates, showNotify }:any) {
+function JobStatusTab({ companies, locations, departments, mrfs, candidates, showNotify, supabase }:any) {
   const [fCompany, setFCompany] = useState('')
   const [fLoc, setFLoc] = useState('')
   const [fDept, setFDept] = useState('')
@@ -2557,7 +2565,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
     try {
       const { blob, name } = buildReport(exportFmt)
       const fd = new FormData(); fd.append('file', new File([blob], name, { type:blob.type }))
-      const r = await fetch('/api/recruitment/share-report', { method:'POST', body:fd })
+      const r = await fetch('/api/recruitment/share-report', { method:'POST', body:fd, headers: await authHeaders(supabase) })
       const j = await r.json()
       if (!r.ok || !j.url) throw new Error(j.error || 'Could not create a share link')
       setShareUrl(j.url)

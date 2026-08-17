@@ -4,6 +4,7 @@
 // `attachments` JSONB. Mirrors app/api/recruitment/upload-doc/route.ts.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireDashboardUser } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
@@ -16,6 +17,10 @@ const KINDS = ['ORG_CHART', 'BUDGET_DOC', 'OTHER']
 const MAX_BYTES = 10 * 1024 * 1024
 
 export async function POST(req: NextRequest) {
+  // Same hole as share-report had: a service-role upload with nothing guarding it.
+  const gate = await requireDashboardUser(req)
+  if (gate.error) return gate.error
+
   try {
     const fd = await req.formData()
     const mrfId = fd.get('mrf_id') as string
@@ -71,6 +76,11 @@ export async function POST(req: NextRequest) {
 
 // Signed URL for viewing an already-uploaded attachment (bucket is private).
 export async function GET(req: NextRequest) {
+  // A signed URL for any path is a read of any file in the bucket — guessing a path
+  // should not be enough.
+  const gate = await requireDashboardUser(req)
+  if (gate.error) return gate.error
+
   const path = req.nextUrl.searchParams.get('path')
   if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
   const { data, error } = await supa.storage
@@ -81,6 +91,10 @@ export async function GET(req: NextRequest) {
 
 // Remove an attachment from both storage and the requisition's JSONB.
 export async function DELETE(req: NextRequest) {
+  // Deleting somebody's document is the one that cannot be undone.
+  const gate = await requireDashboardUser(req)
+  if (gate.error) return gate.error
+
   const mrfId = req.nextUrl.searchParams.get('mrf_id')
   const path = req.nextUrl.searchParams.get('path')
   if (!mrfId || !path) return NextResponse.json({ error: 'mrf_id and path required' }, { status: 400 })
