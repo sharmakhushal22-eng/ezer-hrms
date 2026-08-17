@@ -1460,28 +1460,30 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     setShowForm(false); setEditMRF(null); setForm(EMPTY); setErrors({}); onRefresh()
   }
 
-  // §8 — advance the chain one step. Only when every step is approved (or when
-  // no chain is configured) does the requisition itself become APPROVED.
+  // §8 — single-click approval. One decision approves the requisition outright;
+  // any configured chain is stamped complete by the same approver so the
+  // recorded trail matches the decision, rather than leaving steps PENDING on
+  // an MRF that is already open for hiring.
   async function approveMRF(id:string, recruiter:string, comments:string, actor:string) {
     const mrf = mrfs.find((m:MRF)=>m.id===id); if (!mrf) return
     const chain = asArray((mrf as any).approval_chain)
-    const idx = chain.findIndex((s:any)=>s.status!=='APPROVED')
-    let nextChain = chain, finalStatus = 'APPROVED'
-    if (idx >= 0) {
-      nextChain = chain.map((s:any,i:number)=> i===idx
-        ? { ...s, status:'APPROVED', actor:actor||null, comments:comments||null, acted_at:new Date().toISOString() } : s)
-      finalStatus = nextChain.every((s:any)=>s.status==='APPROVED') ? 'APPROVED' : 'SUBMITTED'
-    }
-    const patch:any = { status:finalStatus, approval_chain:nextChain, remarks:comments||null }
+    const now = new Date().toISOString()
+    const nextChain = chain.map((s:any)=> s.status==='APPROVED' ? s : {
+      ...s, status:'APPROVED',
+      actor: actor || s.actor || null,
+      comments: comments || s.comments || null,
+      acted_at: s.acted_at || now,
+    })
+    const patch:any = { status:'APPROVED', approval_chain:nextChain, remarks:comments||null, approved_at:now }
     if (recruiter) patch.assigned_recruiter = recruiter
-    if (finalStatus==='APPROVED') patch.approved_at = new Date().toISOString()
     const { error } = await supabase.from('manpower_requisitions').update(patch).eq('id',id)
     if (error) { showNotify('Approval failed: '+error.message,'error'); return }
-    await logMrfAudit(supabase, mrf, finalStatus==='APPROVED'?'MRF_APPROVED':'MRF_APPROVAL_STEP',
-      { position:mrf.designation||mrf.position, step: idx>=0?chain[idx].role:'single', recruiter:recruiter||'unassigned' })
-    showNotify(finalStatus==='APPROVED'
-      ? (recruiter ? 'MRF approved — recruiter assigned.' : 'MRF fully approved.')
-      : `Step approved — ${nextChain.filter((s:any)=>s.status==='APPROVED').length}/${nextChain.length} done.`)
+    await logMrfAudit(supabase, mrf, 'MRF_APPROVED', {
+      position: mrf.designation||mrf.position,
+      steps: chain.length ? chain.map((s:any)=>s.role).join(' → ') : 'single',
+      recruiter: recruiter||'unassigned',
+    })
+    showNotify(recruiter ? 'MRF approved — recruiter assigned.' : 'MRF approved.')
     setApprovalModal(null); onRefresh()
   }
 
@@ -2028,9 +2030,6 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
   const emailOk = !recruiter || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(recruiter.trim())
   const chain = asArray(mrf.approval_chain)
   const comp = compOf(mrf.employment_type)
-  const stepIdx = chain.findIndex((s:any)=>s.status!=='APPROVED')
-  const step = stepIdx>=0 ? chain[stepIdx] : null
-  const isLast = stepIdx<0 || stepIdx===chain.length-1
 
   async function go(fn:()=>Promise<void>|void) { setBusy(true); await fn(); setBusy(false) }
 
@@ -2056,10 +2055,8 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
 
         {chain.length>0 && (
           <div style={{ background:'#F3F0FF', borderRadius:8, padding:'10px 12px', marginBottom:14, fontSize:12, color:'#6D28D9' }}>
-            {step
-              ? <>Approving step <b>{stepIdx+1} of {chain.length}</b> — <b>{step.role}</b>.
-                  {!isLast && <div style={{ marginTop:3, color:'#7C3AED' }}>Later steps still have to approve before this MRF opens.</div>}</>
-              : <>All {chain.length} approval steps are already complete.</>}
+            Approving opens this requisition straight away and records the full chain
+            — <b>{chain.map((s:any)=>s.role).join(' → ')}</b> — against your name.
           </div>
         )}
 
@@ -2071,7 +2068,7 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
 
         <label style={T.label}>Approver name</label>
         <input style={{ ...T.input, marginBottom:11 }} value={actor} onChange={e=>setActor(e.target.value)}
-          placeholder={step?`Who is approving as ${step.role}?`:'Your name'} />
+          placeholder="Your name" />
 
         {mode==='approve'?(
           <>
@@ -2086,7 +2083,7 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
               onChange={e=>setComments(e.target.value)} placeholder="Optional note for the record" />
             <button onClick={()=>emailOk && go(()=>onApprove(mrf.id, recruiter.trim(), comments.trim(), actor.trim()))} disabled={busy||!emailOk}
               style={{ ...T.btnPrimary, width:'100%', opacity: busy||!emailOk?.6:1 }}>
-              {busy?'Approving…':step&&!isLast?`Approve step ${stepIdx+1} of ${chain.length}`:'Approve & Assign'}
+              {busy?'Approving…':'Approve & Assign'}
             </button>
           </>
         ):mode==='hold'?(
@@ -2344,7 +2341,7 @@ function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:a
 }
 
 // ── JOB STATUS TAB ────────────────────────────────────────────────
-function JobStatusTab({ companies, locations, departments, mrfs, candidates }:any) {
+function JobStatusTab({ companies, locations, departments, mrfs, candidates, showNotify }:any) {
   const [fCompany, setFCompany] = useState('')
   const [fLoc, setFLoc] = useState('')
   const [fDept, setFDept] = useState('')
@@ -2352,6 +2349,9 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates }:an
   const [sortKey, setSortKey] = useState('rate')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
   const [selected, setSelected] = useState<string|null>(null)
+  const [exportFmt, setExportFmt] = useState('xlsx')
+  const [sharing, setSharing] = useState(false)
+  const [shareUrl, setShareUrl] = useState('')
 
   const orgOf = (m:MRF) => ({
     company: companies.find((c:Company)=>c.id===m.company_id)?.company_name
@@ -2444,6 +2444,129 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates }:an
     </div>
   )
 
+  // ── Export ────────────────────────────────────────────────────
+  // The report is built from `scoped`, so whatever filters are on screen are
+  // exactly what leaves the building — a report that quietly covered a
+  // different set than the dashboard would be worse than no report.
+  const stamp = new Date().toISOString().slice(0,10)
+  const filterLine = [
+    fCompany ? companies.find((c:Company)=>c.id===fCompany)?.company_name : null,
+    fLoc ? locations.find((l:Location)=>l.id===fLoc)?.location_name : null,
+    fDept ? departments.find((d:Department)=>d.id===fDept)?.dept_name : null,
+    period==='all' ? 'All time' : `Raised in last ${period} days`,
+  ].filter(Boolean).join(' · ')
+
+  function reportSheets() {
+    const summary = [
+      ['EZER HRMS — Job Status Report'], [],
+      ['Generated', new Date().toLocaleString('en-IN')],
+      ['Scope', filterLine || 'All companies · all time'],
+      ['Requisitions in scope', scoped.length],
+      ['Recruiters', recruiterRows.length], [],
+      ['HEADLINE'],
+      ['Fill rate %', overallRate==null?'—':overallRate],
+      ['Filled', filledN], ['Breached', breachedN],
+      ['Concluded (filled + breached)', concluded.length],
+      ['At risk (due <=7d or overdue)', atRisk],
+      ['Avg days to fill', avgTtf==null?'—':avgTtf],
+      ['No deadline set', noDeadline], [],
+      ['STATUS FLAGS'],
+      ...Object.keys(JOB_FLAGS).map(k=>[JOB_FLAGS[k].label, counts[k]||0]),
+    ]
+    const requisitions = scoped.map(({m,js}:any)=>{
+      const org = orgOf(m), c = compOf(m.employment_type)
+      return {
+        'MRF No': m.mrf_number||'', 'Job Title': m.job_title||m.designation||m.position||'',
+        'Designation': m.designation||m.position||'', 'Company': org.company,
+        'Department': org.dept, 'Location': org.loc, 'Business Unit': m.business_unit||'',
+        'Grade': m.grade||'', 'Employment Type': m.employment_type||'', 'Work Mode': m.work_mode||'',
+        'Form Type': m.mrf_type||'', 'Priority': m.urgency||'', 'Workflow Status': m.status,
+        'Job Status Flag': JOB_FLAGS[js.flag].label,
+        'Openings': js.openings, 'Filled': js.filledCount,
+        'Remaining': Math.max(0, js.openings - js.filledCount),
+        'Recruiter': m.assigned_recruiter||'Unassigned',
+        'Raised On': m.created_at ? new Date(m.created_at).toLocaleDateString('en-IN') : '',
+        'Target Joining': m.target_joining_date||'', 'Validity / Expiry': m.validity_date||'',
+        'Days Left': js.daysLeft==null?'':js.daysLeft,
+        'Days Open': js.ageDays==null?'':js.ageDays,
+        'Days To Fill': js.daysToFill==null?'':js.daysToFill,
+        'Days To First CV': js.daysToFirst==null?'':js.daysToFirst,
+        'Pay Basis': `${c.label} (${c.period==='ANNUAL'?'per annum':'per month'})`,
+        'Budget Min': m.budget_min??'', 'Budget Max': m.budget_max??'', 'Currency': m.currency||'',
+        'Cost Center': m.cost_center||'', 'Budgeted': m.is_budgeted==null?'':(m.is_budgeted?'Yes':'No'),
+        'Reason': m.reason||m.reason_for_hire||'',
+        'Approval Progress': (()=>{ const ch = asArray(m.approval_chain)
+          return ch.length ? `${ch.filter((s:any)=>s.status==='APPROVED').length}/${ch.length}` : '—' })(),
+      }
+    })
+    const performance = recruiterRows.map((r:any)=>({
+      'Recruiter': r.name, 'Total MRFs': r.total, 'Filled': r.filled, 'Breached': r.expired,
+      'Live': r.open, 'Fill Rate %': r.rate==null?'':r.rate,
+      'Avg Days To Fill': r.ttf==null?'':r.ttf, 'Avg Days To First CV': r.ttc==null?'':r.ttc,
+    }))
+    const deadlines = board.map(({m,js}:any)=>({
+      'MRF No': m.mrf_number||'', 'Requisition': m.job_title||m.designation||m.position||'',
+      'Department': orgOf(m).dept, 'Recruiter': m.assigned_recruiter||'Unassigned',
+      'Openings': js.openings, 'Filled': js.filledCount,
+      'Deadline': m.validity_date||m.target_joining_date||'',
+      'Days Left': js.daysLeft==null?'':js.daysLeft,
+      'Status': JOB_FLAGS[js.flag].label,
+    }))
+    return { summary, requisitions, performance, deadlines }
+  }
+
+  /** Build the report as a Blob in the chosen format. */
+  function buildReport(fmt:string): { blob:Blob; name:string } {
+    const { summary, requisitions, performance, deadlines } = reportSheets()
+    const base = `EZER_Job_Status_${stamp}`
+    if (fmt === 'csv') {
+      const ws = XLSX.utils.json_to_sheet(requisitions)
+      const csv = XLSX.utils.sheet_to_csv(ws)
+      return { blob:new Blob([csv], { type:'text/csv;charset=utf-8' }), name:`${base}.csv` }
+    }
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summary), 'Summary')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(requisitions), 'Requisitions')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(performance), 'Recruiter Performance')
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(deadlines), 'Deadline Board')
+    const legacy = fmt === 'xls'
+    const out = XLSX.write(wb, { bookType: legacy ? 'xls' : 'xlsx', type:'array' })
+    // Legacy .xls is an OLE2 container, not OOXML — mislabelling it makes strict
+    // consumers (mail gateways, some viewers) reject an otherwise valid file.
+    return {
+      blob: new Blob([out], { type: legacy
+        ? 'application/vnd.ms-excel'
+        : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }),
+      name: `${base}.${legacy ? 'xls' : 'xlsx'}`,
+    }
+  }
+
+  function downloadReport() {
+    if (!scoped.length) { showNotify('Nothing to export for the current filters','error'); return }
+    const { blob, name } = buildReport(exportFmt)
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url; a.download = name; a.click()
+    setTimeout(()=>URL.revokeObjectURL(url), 2000)
+    showNotify(`Report downloaded — ${name}`)
+  }
+
+  async function shareReport() {
+    if (!scoped.length) { showNotify('Nothing to export for the current filters','error'); return }
+    setSharing(true); setShareUrl('')
+    try {
+      const { blob, name } = buildReport(exportFmt)
+      const fd = new FormData(); fd.append('file', new File([blob], name, { type:blob.type }))
+      const r = await fetch('/api/recruitment/share-report', { method:'POST', body:fd })
+      const j = await r.json()
+      if (!r.ok || !j.url) throw new Error(j.error || 'Could not create a share link')
+      setShareUrl(j.url)
+      try { await navigator.clipboard.writeText(j.url); showNotify(`Link copied — valid ${j.expiresInDays} days`) }
+      catch { showNotify(`Share link ready — valid ${j.expiresInDays} days`) }
+    } catch (e:any) { showNotify(e.message||'Could not share the report','error') }
+    setSharing(false)
+  }
+
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' as const }}>
@@ -2453,7 +2576,34 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates }:an
             MRF deadlines, expiries and whether hiring is closing before requisitions lapse
           </div>
         </div>
+        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' as const }}>
+          <select value={exportFmt} onChange={e=>{ setExportFmt(e.target.value); setShareUrl('') }}
+            style={{ ...T.select, width:'auto', padding:'7px 10px', fontSize:12 }}>
+            <option value="xlsx">Excel (.xlsx)</option>
+            <option value="xls">Excel 97–2003 (.xls)</option>
+            <option value="csv">CSV (.csv)</option>
+          </select>
+          <button onClick={downloadReport} style={T.btnPrimary}>⬇ Export Report</button>
+          <button onClick={shareReport} disabled={sharing} style={{ ...T.btnOutline, opacity: sharing?.6:1 }}>
+            {sharing ? 'Preparing…' : '🔗 Share link'}
+          </button>
+        </div>
       </div>
+
+      {shareUrl && (
+        <div style={{ ...T.card, background:'#ECFDF5', border:'1px solid #A7F3D0' }}>
+          <div style={{ fontSize:12, fontWeight:600, color:'#059669', marginBottom:6 }}>
+            Shareable link ready — anyone with it can download the report for 7 days
+          </div>
+          <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' as const }}>
+            <input readOnly value={shareUrl} onFocus={e=>e.currentTarget.select()}
+              style={{ ...T.input, flex:'1 1 340px', fontSize:11.5, background:'#fff' }} />
+            <button onClick={()=>{ navigator.clipboard?.writeText(shareUrl); showNotify('Link copied') }} style={T.btnOutline}>Copy</button>
+            <a href={shareUrl} target="_blank" rel="noreferrer" style={{ ...T.btnOutline, textDecoration:'none' }}>Open</a>
+            <button onClick={()=>setShareUrl('')} style={{ ...T.btnOutline, color:'#6B7280' }}>Dismiss</button>
+          </div>
+        </div>
+      )}
 
       {!hasDeadlines && (
         <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:7, padding:'9px 12px',
