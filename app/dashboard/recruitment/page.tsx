@@ -548,11 +548,16 @@ function MrfMeta({ label, value }:{ label:string; value:React.ReactNode }) {
 }
 
 // Reusable master-driven dropdown; falls back to a hint when the lookup is empty.
-function MasterSelect({ options, value, onChange, placeholder, style }:any) {
+// `useCode` makes the option values the master's CODE instead of its label. Currency
+// needs that: the column stores INR, not "INR - Indian Rupee". Without it the select
+// held labels while the form held a code, nothing ever matched, and the box snapped
+// back to "Select…" every time somebody picked a currency.
+function MasterSelect({ options, value, onChange, placeholder, style, useCode }:any) {
   return (
     <select style={style||T.select} value={value||''} onChange={e=>onChange(e.target.value)}>
       <option value="">{options?.length ? (placeholder||'Select…') : 'No options configured'}</option>
-      {(options||[]).map((o:any)=><option key={o.code} value={o.label}>{o.label}</option>)}
+      {(options||[]).map((o:any)=>
+        <option key={o.code} value={useCode ? o.code : o.label}>{o.label}</option>)}
     </select>
   )
 }
@@ -1727,7 +1732,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Currency">
               {masters.currency?.length
-                ? <MasterSelect options={masters.currency} value={form.currency} onChange={(v:string)=>F('currency',(v.split(' ')[0]||v))} />
+                ? <MasterSelect useCode options={masters.currency} value={form.currency} onChange={(v:string)=>F('currency', v)} />
                 : <input style={T.input} value={form.currency} onChange={e=>F('currency',e.target.value)} />}
             </Field>
             <Field label={`${comp.label} Range — Min`} hint={perLabel(comp.period)}>

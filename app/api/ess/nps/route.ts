@@ -66,7 +66,12 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { employee_id, has_existing_pran, pran_number, pran_holder_name, tier_type, acknowledged } = await req.json()
+  // `source` lets Payroll → Statutory & Tax → NPS enrol on an employee's behalf through
+  // this same route. Sharing it is the point: two enrolment paths that each did their own
+  // arithmetic would eventually disagree about the same person's contribution.
+  const { employee_id, has_existing_pran, pran_number, pran_holder_name, tier_type, acknowledged,
+          source, performed_by_name } = await req.json()
+  const src = String(source || '').toUpperCase() === 'HR' ? 'HR' : 'ESS'
   if (!acknowledged) return NextResponse.json({ error: 'Acknowledgement required' }, { status: 400 })
 
   if (has_existing_pran) {
@@ -106,8 +111,10 @@ export async function POST(req: NextRequest) {
 
   await supabase.from('nps_audit_log').insert({
     declaration_id: created.id, employee_id, employee_code: (emp as any).emp_code, company_id: (emp as any).company_id,
-    action: 'DECLARED', new_value: { has_existing_pran, regime, percent, monthly_nps: monthlyNps, status: created.status },
-    monthly_nps_amount: monthlyNps, performed_by: employee_id, source: 'ESS',
+    action: 'DECLARED',
+    new_value: { has_existing_pran, regime, percent, monthly_nps: monthlyNps, status: created.status,
+                 ...(src === 'HR' ? { enrolled_by: performed_by_name || 'HR' } : {}) },
+    monthly_nps_amount: monthlyNps, performed_by: employee_id, source: src,
   })
 
   if (isPending) {
@@ -115,14 +122,15 @@ export async function POST(req: NextRequest) {
     try { if (to) await sendPranCreationEmail({ to, employeeName: emp.full_name, deadline: deadline! }) } catch { /* email best-effort */ }
     await supabase.from('nps_audit_log').insert({
       declaration_id: created.id, employee_id, employee_code: (emp as any).emp_code,
-      action: 'PRAN_EMAIL_SENT', new_value: { deadline }, source: 'ESS',
+      action: 'PRAN_EMAIL_SENT', new_value: { deadline }, source: src,
     })
   }
   return NextResponse.json({ success: true, declaration: created, pending_pran: isPending, deadline })
 }
 
 export async function PATCH(req: NextRequest) {
-  const { employee_id, action, pran_number, stopped_reason } = await req.json()
+  const { employee_id, action, pran_number, stopped_reason, source: pSource, performed_by_name } = await req.json()
+  const pSrc = String(pSource || '').toUpperCase() === 'HR' ? 'HR' : 'ESS'
   const { data: rec } = await supabase.from('nps_declarations').select('*')
     .eq('employee_id', employee_id).in('status', ['ACTIVE', 'PENDING_PRAN']).maybeSingle()
   if (!rec) return NextResponse.json({ error: 'No NPS declaration found' }, { status: 404 })
@@ -133,12 +141,22 @@ export async function PATCH(req: NextRequest) {
     await supabase.from('nps_declarations').update({
       pran_number: clean, has_existing_pran: true, status: 'ACTIVE', pran_generated_at: new Date().toISOString(),
     }).eq('id', rec.id)
-    await supabase.from('nps_audit_log').insert({ declaration_id: rec.id, employee_id, action: 'PRAN_SUBMITTED', new_value: { pran_number: clean }, source: 'ESS' })
+    await supabase.from('nps_audit_log').insert({ declaration_id: rec.id, employee_id, action: 'PRAN_SUBMITTED', new_value: { pran_number: clean }, source: pSrc })
     return NextResponse.json({ success: true, status: 'ACTIVE' })
   }
   if (action === 'STOP') {
-    await supabase.from('nps_declarations').update({ status: 'STOPPED', stopped_at: new Date().toISOString(), stopped_reason }).eq('id', rec.id)
-    await supabase.from('nps_audit_log').insert({ declaration_id: rec.id, employee_id, action: 'STOPPED', old_value: { monthly_nps: rec.monthly_nps_amount }, source: 'ESS' })
+    // A reason is required when Payroll stops it on somebody's behalf. Their pay goes up
+    // and their retirement contribution goes away — six months later, 'why' is the only
+    // question anyone asks, and 'the system did it' is not an answer.
+    const reason = String(stopped_reason || '').trim()
+    if (pSrc === 'HR' && !reason) return NextResponse.json({ error: 'A reason is required to stop NPS on an employee\'s behalf.' }, { status: 400 })
+    await supabase.from('nps_declarations').update({ status: 'STOPPED', stopped_at: new Date().toISOString(), stopped_reason: reason || stopped_reason }).eq('id', rec.id)
+    await supabase.from('nps_audit_log').insert({
+      declaration_id: rec.id, employee_id, action: 'STOPPED',
+      old_value: { monthly_nps: rec.monthly_nps_amount, status: rec.status },
+      new_value: { reason, ...(pSrc === 'HR' ? { stopped_by: performed_by_name || 'HR' } : {}) },
+      source: pSrc,
+    })
     return NextResponse.json({ success: true, status: 'STOPPED' })
   }
   return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
