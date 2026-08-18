@@ -29,24 +29,22 @@ export const DOL_COLUMN = 'date_of_leaving';
 // ---------------------------------------------------------------------------
 // Service client — server-side only. Never import this into a 'use client' file.
 //
-// SUPABASE_SERVICE_ROLE_KEY is not set in this deployment yet, and the travel
-// tables ship with the blanket EZER RLS policy (anon + authenticated, using
-// true), so the anon key can do everything these routes need. Fall back to it
-// rather than 500-ing on every request. Once RLS is tightened — which the
-// module's own handover notes flag as required before pilot ends — the service
-// key becomes mandatory and this fallback stops being sufficient.
+// Same key pattern as the other 39 places in this repo: service-role if the
+// environment has it, anon otherwise. The app never announces a missing
+// service-role key and never fails because of one. Written on one line so a
+// grep for the pattern finds this file too.
+//
+// The anon key is sufficient here because the travel tables ship with the
+// permissive EZER RLS policy. If those policies are tightened — and they should
+// be, expense data is more sensitive than attendance — this stops being enough,
+// and the fix is to rethink the route, not to hand out the key.
 // ---------------------------------------------------------------------------
 export function serviceClient(): SupabaseClient {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key =
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) {
-    throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_URL or a Supabase key in .env.local'
-    );
-  }
-  return createClient(url, key, { auth: { persistSession: false } });
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
+    { auth: { persistSession: false } },
+  );
 }
 
 // ---------------------------------------------------------------------------
