@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { resolveEmployee, hashPassword, verifyPassword } from '@/lib/ess-auth'
+import { issueEssToken } from '@/lib/ess-session'
 
 export const runtime = 'nodejs'
 
@@ -35,5 +36,18 @@ export async function POST(req: NextRequest) {
     .update({ password_hash: hash, password_salt: salt, must_change_password: false }).eq('id', account.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ ok: true, employee_id: employee.id, name: employee.full_name })
+  // A forced change is part of signing in, not a separate errand: ess-login
+  // stores the session from THIS response when the employee arrived on a temp
+  // password. Without a token here those 128 accounts would finish the change
+  // and land in the portal with no session, which is the same 401 the login
+  // fix addresses.
+  const token = issueEssToken(employee.id)
+
+  return NextResponse.json({
+    ok: true,
+    employee_id: employee.id,
+    name: employee.full_name,
+    token,
+    session_available: !!token,
+  })
 }
