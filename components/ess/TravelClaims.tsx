@@ -534,6 +534,10 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   const [parking, setParking] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // A bill can only be attached to a journey that exists, so one picked on the
+  // entry form is held here and uploaded the moment the log is created.
+  const [pendingBill, setPendingBill] = useState<File | null>(null)
+  const newBillRef = useRef<HTMLInputElement | null>(null)
 
   const { journey, start, end, reset } = useJourneyRecorder()
   // The route as the server measures it — shown once the journey ends, so the
@@ -643,6 +647,8 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
     setToll(''); setParking(''); setRoundTrip(false)
     reset()
     setRoute(null)
+    setPendingBill(null)
+    if (newBillRef.current) newBillRef.current.value = ''
   }
 
   const addExpense = async () => {
@@ -706,9 +712,19 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
       }
 
       setFlags((json.flags ?? []) as Flag[])
+
+      // The expense exists now, so the slip picked on the form can be attached.
+      // A failure here is reported but does not undo the expense — the bill can
+      // still be added from the list below.
+      let billNote = ''
+      if (pendingBill && json.log?.id) {
+        const up = await uploadBill(json.log.id, pendingBill)
+        billNote = up.ok ? ' Bill attached.' : ` The expense saved, but the bill did not: ${up.message}`
+      }
+
       setMsg({
         tone: (json.flags ?? []).length ? 'warn' : 'ok',
-        text: json.message || 'Expense logged.',
+        text: (json.message || 'Expense logged.') + billNote,
       })
       resetForm()
       await load()
@@ -938,6 +954,49 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                 A bill is required above {inr(num(selectedType?.bill_threshold))}.
               </div>
             )}
+          </div>
+        )}
+
+        {/* Attach the receipt here, with the expense, rather than having to
+            find the entry again afterwards. A recorded journey is its own
+            proof and gets no picker. */}
+        {!needsGps && selectedType?.bill_required !== false && (
+          <div style={{ marginBottom: 12 }}>
+            <label style={lbl}>Bill slip</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <input ref={newBillRef} type="file" accept="image/*,application/pdf" hidden
+                     onChange={e => setPendingBill(e.target.files?.[0] ?? null)} />
+              <button type="button" onClick={() => newBillRef.current?.click()}
+                      style={{ padding: '8px 15px', borderRadius: 7,
+                               border: `1px dashed ${pendingBill ? V.green : V.border}`,
+                               background: pendingBill ? V.greenBg : V.field,
+                               color: pendingBill ? V.green : V.purpleDark,
+                               fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                {pendingBill ? '✓ ' + pendingBill.name : '📎 Choose Uber / Ola / taxi bill'}
+              </button>
+
+              {pendingBill && (
+                <>
+                  <span style={{ fontSize: 11, color: V.muted }}>{kb(pendingBill.size)}</span>
+                  <button type="button"
+                          onClick={() => { setPendingBill(null); if (newBillRef.current) newBillRef.current.value = '' }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer',
+                                   color: V.muted, fontSize: 12, fontFamily: 'inherit' }}>
+                    remove
+                  </button>
+                </>
+              )}
+
+              {!pendingBill && num(selectedType?.bill_threshold) > 0
+                && num(amount) > num(selectedType?.bill_threshold) && (
+                <span style={{ fontSize: 11.5, color: V.amber }}>
+                  This amount needs a bill — attach it now or from the list below.
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: V.muted, marginTop: 5 }}>
+              A photo or the PDF the app emails you. Up to 10 MB.
+            </div>
           </div>
         )}
 
