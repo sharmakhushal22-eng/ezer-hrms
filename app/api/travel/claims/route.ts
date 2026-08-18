@@ -146,21 +146,23 @@ export async function GET(req: NextRequest) {
     }
 
     // ---- my claims -------------------------------------------------------
-    if (!employeeId) {
-      return NextResponse.json(
-        { error: 'employee_id or approver_id is required' },
-        { status: 400 }
-      );
-    }
+      // requireReadAccess checks the employee is active and the month is open. It
+      // does not check WHO is asking — so the id comes from the signed ESS session,
+      // and a supplied one is only honoured for a dashboard user.
+      const actor = await resolveActor(req, employeeId);
+      if (!actor.ok) return actor.response;
+      const actingEmployeeId = actor.employeeId;
 
-    const access = await requireReadAccess(sb, employeeId);
+    const access = await requireReadAccess(sb, actingEmployeeId);
     if (!access.ok) return guardResponse(access.guard);
 
     const { data, error } = await sb
       .from('v_travel_claim_summary')
       .select('*')
-      .eq('employee_id', employeeId)
-      .order('created_at', { ascending: false });
+      .eq('employee_id', actingEmployeeId)
+      // The view exposes submitted_at, not created_at. Ordering on a column the
+      // view does not have made every "my claims" call a 500.
+      .order('submitted_at', { ascending: false, nullsFirst: false });
 
     if (error) throw error;
     return NextResponse.json({ claims: data ?? [] });
