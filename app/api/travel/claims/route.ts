@@ -36,6 +36,7 @@ import {
 } from '@/lib/travel/access';
 import type { ClaimPendingStatus } from '@/lib/travel/access';
 import { requireDashboardUser } from '@/lib/api-auth';
+import { resolveActor } from '@/lib/travel/actor';
 
 export const dynamic = 'force-dynamic';
 
@@ -178,15 +179,21 @@ export async function POST(req: NextRequest) {
   try {
     const sb = serviceClient();
     const {
-      employee_id,
+      employee_id: bodyEmployeeId,
       log_ids = [],
       trip_id = null,
       claim_type = trip_id ? 'TRIP_SETTLEMENT' : 'MONTHLY_LOCAL',
     } = (await req.json()) ?? {};
 
-    if (!employee_id || !Array.isArray(log_ids) || log_ids.length === 0) {
+    // Submitting a claim is always an employee acting for themselves. From here
+    // employee_id is the verified one — the body's copy is not used again.
+    const claimActor = await resolveActor(req, bodyEmployeeId, { selfOnly: true });
+    if (!claimActor.ok) return claimActor.response;
+    const employee_id = claimActor.employeeId;
+
+    if (!Array.isArray(log_ids) || log_ids.length === 0) {
       return NextResponse.json(
-        { error: 'employee_id and at least one travel log are required' },
+        { error: 'At least one travel log is required' },
         { status: 400 }
       );
     }

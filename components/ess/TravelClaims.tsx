@@ -23,6 +23,7 @@
 // The live distance shown while driving is a courtesy readout; the server
 // re-measures the submitted trail and that figure is what gets paid.
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { essAuthHeaders } from '@/lib/ess-session-client';
 import { supabase } from '@/lib/supabase'
 import { measureTrail, isValidPoint, type GpsPoint } from '@/lib/travel/gps'
 
@@ -485,8 +486,8 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
       const monthStart = today().slice(0, 8) + '01'
       const [logRes, claimRes] = await Promise.all([
-        fetch(`/api/travel/logs?employee_id=${employeeId}&from=${monthStart}&to=${today()}`),
-        fetch(`/api/travel/claims?employee_id=${employeeId}`),
+        fetch(`/api/travel/logs?employee_id=${employeeId}&from=${monthStart}&to=${today()}`, { headers: essAuthHeaders() }),
+        fetch(`/api/travel/claims?employee_id=${employeeId}`, { headers: essAuthHeaders() }),
       ])
 
       if (logRes.status === 403) {
@@ -537,7 +538,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
       if (needsGps) {
         const g = await fetch('/api/travel/gps-distance', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
           body: JSON.stringify({
             points: journey.points, type_code: typeCode,
             employee_id: employeeId, log_date: date, vehicle_id: vehicleId || null,
@@ -548,7 +549,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
       const res = await fetch('/api/travel/logs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
         body: JSON.stringify({
           employee_id: employeeId,
           log_date: date,
@@ -594,7 +595,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   }
 
   const removeLog = async (id: string) => {
-    const res = await fetch(`/api/travel/logs?id=${id}&employee_id=${employeeId}`, { method: 'DELETE' })
+    const res = await fetch(`/api/travel/logs?id=${id}&employee_id=${employeeId}`, { method: 'DELETE', headers: essAuthHeaders() })
     if (!res.ok) {
       const j = await res.json().catch(() => ({}))
       setMsg({ tone: 'err', text: j.error || 'Could not remove that entry.' })
@@ -610,7 +611,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
     try {
       const res = await fetch('/api/travel/claims', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
         body: JSON.stringify({ employee_id: employeeId, log_ids: Array.from(picked) }),
       })
       const json = await res.json().catch(() => ({}))

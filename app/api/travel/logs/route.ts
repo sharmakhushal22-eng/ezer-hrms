@@ -15,6 +15,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveActor } from '@/lib/travel/actor';
 import {
   serviceClient,
   requireWriteAccess,
@@ -48,10 +49,10 @@ export async function GET(req: NextRequest) {
   try {
     const sb = serviceClient();
     const p = req.nextUrl.searchParams;
-    const employeeId = p.get('employee_id');
-    if (!employeeId) {
-      return NextResponse.json({ error: 'employee_id is required' }, { status: 400 });
-    }
+    // Who is asking. An employee's own token wins; HR may name someone.
+    const actor = await resolveActor(req, p.get('employee_id'));
+    if (!actor.ok) return actor.response;
+    const employeeId = actor.employeeId;
 
     // exited employees see nothing — not even their own history
     const access = await requireReadAccess(sb, employeeId);
@@ -106,7 +107,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const {
-      employee_id,
+      employee_id: bodyEmployeeId,
       trip_id = null,
       log_date,
       purpose,
@@ -137,9 +138,16 @@ export async function POST(req: NextRequest) {
       gps_ended_at = null,
     } = body ?? {};
 
-    if (!employee_id || !log_date || !type_code || !purpose) {
+    // Filing a log is always somebody acting for themselves — never on behalf.
+    // From here on employee_id IS the verified one; the body's copy is not used
+    // again, so nothing downstream can quietly write to another employee.
+    const actor = await resolveActor(req, bodyEmployeeId, { selfOnly: true });
+    if (!actor.ok) return actor.response;
+    const employee_id = actor.employeeId;
+
+    if (!log_date || !type_code || !purpose) {
       return NextResponse.json(
-        { error: 'employee_id, log_date, type_code and purpose are required' },
+        { error: 'log_date, type_code and purpose are required' },
         { status: 400 }
       );
     }
@@ -525,10 +533,12 @@ export async function DELETE(req: NextRequest) {
   try {
     const sb = serviceClient();
     const id = req.nextUrl.searchParams.get('id');
-    const employeeId = req.nextUrl.searchParams.get('employee_id');
+    const actor = await resolveActor(req, req.nextUrl.searchParams.get('employee_id'), { selfOnly: true });
+    if (!actor.ok) return actor.response;
+    const employeeId = actor.employeeId;
 
-    if (!id || !employeeId) {
-      return NextResponse.json({ error: 'id and employee_id are required' }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
     const { data: log } = await sb

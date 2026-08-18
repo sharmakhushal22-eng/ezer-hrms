@@ -19,6 +19,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveActor } from '@/lib/travel/actor';
 import { serviceClient, getEmployeeContext, getActivePolicy, todayISO } from '@/lib/travel/access';
 import { measureTrail, assessTrail, compactTrail, haversineM, isValidPoint } from '@/lib/travel/gps';
 import type { GpsPoint } from '@/lib/travel/gps';
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
     const {
       points = [],
       type_code = null,
-      employee_id = null,
+      employee_id: bodyEmployeeId = null,
       log_date = todayISO(),
       vehicle_id = null,
     } = body ?? {};
@@ -125,6 +126,12 @@ export async function POST(req: NextRequest) {
     let ratePerKm: number | null = null;
     let rateLabel: string | null = null;
     let mapsConfigured = !!key;
+
+    // Pricing a route reads the caller's own entitlements, so it needs the same proof
+    // as filing the log it feeds. Without a session there is nobody to price for.
+    const gpsActor = await resolveActor(req, bodyEmployeeId, { selfOnly: true });
+    if (!gpsActor.ok) return gpsActor.response;
+    const employee_id = gpsActor.employeeId;
 
     if (type_code && employee_id) {
       const sb = serviceClient();

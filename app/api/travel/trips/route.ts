@@ -12,6 +12,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { resolveActor } from '@/lib/travel/actor';
 import {
   serviceClient,
   requireWriteAccess,
@@ -34,7 +35,9 @@ interface TravellerInput {
 export async function GET(req: NextRequest) {
   try {
     const sb = serviceClient();
-    const employeeId = req.nextUrl.searchParams.get('employee_id');
+    const actor = await resolveActor(req, req.nextUrl.searchParams.get('employee_id'));
+    if (!actor.ok) return actor.response;
+    const employeeId = actor.employeeId;
     const status = req.nextUrl.searchParams.get('status');
 
     if (!employeeId) {
@@ -81,7 +84,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
 
     const {
-      employee_id,
+      employee_id: bodyEmployeeId,
       trip_type = 'OUTSTATION',
       purpose,
       client_name = null,
@@ -96,9 +99,15 @@ export async function POST(req: NextRequest) {
       travellers = [] as TravellerInput[],
     } = body ?? {};
 
-    if (!employee_id || !purpose || !from_date || !to_date) {
+    // The raiser of a trip is always themselves. From here employee_id is verified,
+    // and the body's copy is never used again.
+    const tripActor = await resolveActor(req, bodyEmployeeId, { selfOnly: true });
+    if (!tripActor.ok) return tripActor.response;
+    const employee_id = tripActor.employeeId;
+
+    if (!purpose || !from_date || !to_date) {
       return NextResponse.json(
-        { error: 'employee_id, purpose, from_date and to_date are required' },
+        { error: 'purpose, from_date and to_date are required' },
         { status: 400 }
       );
     }

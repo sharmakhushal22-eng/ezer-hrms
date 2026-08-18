@@ -57,8 +57,8 @@ export default function ESSLoginPage() {
   const [error, setError] = useState('')
   const idValue = () => email.trim()
 
-  const finish = (data: { employee_id: string; name: string }) => {
-    localStorage.setItem('ezer_ess_session', JSON.stringify({ employee_id: data.employee_id, name: data.name, email: idValue().toLowerCase() }))
+  const finish = (data: { employee_id: string; name: string; token?: string | null }) => {
+    localStorage.setItem('ezer_ess_session', JSON.stringify({ employee_id: data.employee_id, name: data.name, email: idValue().toLowerCase(), token: data.token || null }))
     window.location.href = '/ess-portal'
   }
 

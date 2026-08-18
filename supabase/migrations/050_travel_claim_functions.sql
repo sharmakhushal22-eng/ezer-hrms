@@ -505,7 +505,7 @@ end;
 $$;
 
 comment on function travel_rate_for is
-  'Rate per km for a mode on a date. Mode rate beats vehicle rate;
+  'Rate per km for a mode on a date. Mode rate beats vehicle rate; the newest effective_from on or before the expense date wins.';
 
 -- ============================================================================
 -- SECTION 11 — RATE CARD VIEW
