@@ -24,6 +24,34 @@
 // re-measures the submitted trail and that figure is what gets paid.
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { essAuthHeaders } from '@/lib/ess-session-client';
+
+// This screen renders in two places, and they authenticate differently:
+//
+//   /ess-portal     the employee, signed in at /ess-login, holding a signed ESS
+//                   session token
+//   /dashboard/ess  an admin previewing somebody's portal, holding a Supabase
+//                   dashboard session and NO ESS token
+//
+// Sending only the ESS header meant every call from the dashboard preview went
+// out unauthenticated and came back 401 — the lists showed empty and nothing
+// worked, with no indication why. Fall back to the dashboard session so an
+// admin can at least read what the employee sees.
+//
+// Writes stay refused for the admin: the travel routes mark them selfOnly, so
+// only the employee can file their own expense. That is deliberate and this
+// does not change it — see the notice on the form.
+async function travelAuthHeaders(): Promise<Record<string, string>> {
+  const ess = essAuthHeaders()
+  if (ess.Authorization) return ess
+  const { data } = await supabase.auth.getSession()
+  const t = data?.session?.access_token
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
+
+/** True when this is an admin preview rather than the employee themselves. */
+function isPreview(): boolean {
+  return !essAuthHeaders().Authorization
+}
 import { supabase } from '@/lib/supabase'
 import { measureTrail, isValidPoint, type GpsPoint } from '@/lib/travel/gps'
 import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
@@ -88,7 +116,7 @@ async function uploadBill(logId: string, file: File): Promise<{ ok: boolean; mes
   fd.append('file', file)
   fd.append('attachment_type', 'BILL')
   const r = await fetch('/api/travel/upload-bill', {
-    method: 'POST', headers: essAuthHeaders(), body: fd,
+    method: 'POST', headers: await travelAuthHeaders(), body: fd,
   })
   const j = await r.json().catch(() => ({}))
   return { ok: r.ok, message: j.error || j.message || (r.ok ? 'Bill attached.' : 'Upload failed.') }
@@ -378,7 +406,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
   // Loaded per row rather than for the whole list — most rows never get opened,
   // and each bill needs its own signed URL minted server-side.
   const loadBills = useCallback(async () => {
-    const r = await fetch(`/api/travel/upload-bill?travel_log_id=${log.id}`, { headers: essAuthHeaders() })
+    const r = await fetch(`/api/travel/upload-bill?travel_log_id=${log.id}`, { headers: await travelAuthHeaders() })
     if (r.ok) setBills(((await r.json()).attachments ?? []) as Bill[])
     setLoaded(true)
   }, [log.id])
@@ -397,7 +425,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
 
   const removeBill = async (id: string) => {
     setBusy(true)
-    const r = await fetch(`/api/travel/upload-bill?id=${id}`, { method: 'DELETE', headers: essAuthHeaders() })
+    const r = await fetch(`/api/travel/upload-bill?id=${id}`, { method: 'DELETE', headers: await travelAuthHeaders() })
     const j = await r.json().catch(() => ({}))
     if (!r.ok) notify('err', j.error || 'Could not remove that bill.')
     else { await loadBills(); onAttached() }
@@ -540,6 +568,9 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   const newBillRef = useRef<HTMLInputElement | null>(null)
 
   const { journey, start, end, reset } = useJourneyRecorder()
+  // Admin preview vs the employee themselves. Read once — localStorage does not
+  // change under a mounted component.
+  const [preview] = useState(isPreview)
   // The route as the server measures it — shown once the journey ends, so the
   // employee sees the same figure the approver will.
   const [route, setRoute] = useState<RouteData | null>(null)
@@ -595,8 +626,8 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
       const monthStart = today().slice(0, 8) + '01'
       const [logRes, claimRes] = await Promise.all([
-        fetch(`/api/travel/logs?employee_id=${employeeId}&from=${monthStart}&to=${today()}`, { headers: essAuthHeaders() }),
-        fetch(`/api/travel/claims?employee_id=${employeeId}`, { headers: essAuthHeaders() }),
+        fetch(`/api/travel/logs?employee_id=${employeeId}&from=${monthStart}&to=${today()}`, { headers: await travelAuthHeaders() }),
+        fetch(`/api/travel/claims?employee_id=${employeeId}`, { headers: await travelAuthHeaders() }),
       ])
 
       if (logRes.status === 403) {
@@ -629,15 +660,21 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
     if (journey.state !== 'RECORDED' || journey.points.length < 2) { setRoute(null); return }
     let live = true
     setRouteLoading(true)
-    fetch('/api/travel/route', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
-      body: JSON.stringify({ points: journey.points }),
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (live && d) setRoute(d as RouteData) })
-      .catch(() => { /* the map is a bonus; saving must still work without it */ })
-      .finally(() => { if (live) setRouteLoading(false) })
+    // Wrapped rather than awaited inline — useEffect's callback cannot be async.
+    ;(async () => {
+      try {
+        const r = await fetch('/api/travel/route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(await travelAuthHeaders()) },
+          body: JSON.stringify({ points: journey.points }),
+        })
+        if (live && r.ok) setRoute((await r.json()) as RouteData)
+      } catch {
+        // the map is a bonus; saving must still work without it
+      } finally {
+        if (live) setRouteLoading(false)
+      }
+    })()
     return () => { live = false }
   }, [journey.state, journey.points])
 
@@ -652,6 +689,12 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   }
 
   const addExpense = async () => {
+    if (preview) {
+      setMsg({ tone: 'warn', text:
+        'You are previewing this portal as an admin, so you cannot file an expense here — ' +
+        'the employee has to log in and add it themselves.' })
+      return
+    }
     if (!purpose.trim()) { setMsg({ tone: 'err', text: 'Say what the journey was for.' }); return }
     if (!typeCode) { setMsg({ tone: 'err', text: 'Pick an expense type.' }); return }
     if (needsGps && journey.state !== 'RECORDED') {
@@ -669,7 +712,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
       if (needsGps) {
         const g = await fetch('/api/travel/gps-distance', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
+          headers: { 'Content-Type': 'application/json', ...(await travelAuthHeaders()) },
           body: JSON.stringify({
             points: journey.points, type_code: typeCode,
             employee_id: employeeId, log_date: date, vehicle_id: vehicleId || null,
@@ -680,7 +723,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
       const res = await fetch('/api/travel/logs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...(await travelAuthHeaders()) },
         body: JSON.stringify({
           employee_id: employeeId,
           log_date: date,
@@ -736,7 +779,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   }
 
   const removeLog = async (id: string) => {
-    const res = await fetch(`/api/travel/logs?id=${id}&employee_id=${employeeId}`, { method: 'DELETE', headers: essAuthHeaders() })
+    const res = await fetch(`/api/travel/logs?id=${id}&employee_id=${employeeId}`, { method: 'DELETE', headers: await travelAuthHeaders() })
     if (!res.ok) {
       const j = await res.json().catch(() => ({}))
       setMsg({ tone: 'err', text: j.error || 'Could not remove that entry.' })
@@ -752,7 +795,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
     try {
       const res = await fetch('/api/travel/claims', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...(await travelAuthHeaders()) },
         body: JSON.stringify({ employee_id: employeeId, log_ids: Array.from(picked) }),
       })
       const json = await res.json().catch(() => ({}))
@@ -847,6 +890,16 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
         <div style={{ fontSize: 13, fontWeight: 700, color: V.navy, marginBottom: 12 }}>
           Log a travel expense
         </div>
+
+        {preview && (
+          <Banner tone="warn">
+            <b>Admin preview.</b> You are seeing this employee&apos;s portal from the dashboard,
+            so their claims are visible but nothing can be filed from here — an expense is
+            always entered by the employee themselves. To add one, sign in at{' '}
+            <a href="/ess-login" style={{ color: 'inherit', textDecoration: 'underline' }}>/ess-login</a>{' '}
+            as them.
+          </Banner>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))',
                       gap: 11, marginBottom: 11 }}>
@@ -1000,12 +1053,13 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
           </div>
         )}
 
-        <button onClick={addExpense} disabled={saving}
+        <button onClick={addExpense} disabled={saving || preview}
+                title={preview ? 'Only the employee can file their own expense' : undefined}
                 style={{ padding: '9px 20px', borderRadius: 7, border: 'none',
-                         background: saving ? V.muted : V.purple, color: '#fff',
+                         background: saving || preview ? V.muted : V.purple, color: '#fff',
                          fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-                         cursor: saving ? 'default' : 'pointer' }}>
-          {saving ? 'Saving…' : 'Add expense'}
+                         cursor: saving || preview ? 'not-allowed' : 'pointer' }}>
+          {saving ? 'Saving…' : preview ? 'Add expense — employee only' : 'Add expense'}
         </button>
       </div>
 
