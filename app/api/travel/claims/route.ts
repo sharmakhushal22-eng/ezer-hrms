@@ -459,7 +459,7 @@ export async function PATCH(req: NextRequest) {
           return NextResponse.json({ error: 'Employee record not found' }, { status: 404 });
         }
 
-        const next = nextClaimStage(expected, emp);
+        const next = nextClaimStage(expected, emp, policy);
         patch.status = next;
         patch[action === 'RM_APPROVE' ? 'rm_actioned_at' : 'hr_actioned_at'] = now;
 

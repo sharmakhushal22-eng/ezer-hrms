@@ -89,8 +89,10 @@ export interface TravelPolicy {
 
   post_exit_grace_days: number;
 
-  /** Off by default: routes claims straight to the HR Head. */
+  /** Reporting Manager reviews first. Needs employees.l1_manager_id populated. */
   rm_stage_enabled: boolean;
+  /** HR Head reviews before Finance. */
+  hr_stage_enabled: boolean;
   rm_sla_days: number;
   hr_sla_days: number;
   finance_sla_days: number;

@@ -147,7 +147,16 @@ export function resolveApprover(
   return approver && approver !== emp.id ? approver : null;
 }
 
-/** Where a freshly submitted claim lands. Finance is always the last stop. */
+/**
+ * Where a freshly submitted claim lands.
+ *
+ * Walks the enabled stages in order. A stage runs only if the policy enables it
+ * AND somebody is mapped to it — an enabled stage with no approver is skipped
+ * rather than stalling the claim on nobody. Finance is always last and is never
+ * skipped, so a claim cannot end up owned by no one.
+ *
+ * Mirrors travel_first_claim_stage() in migration 052.
+ */
 export function firstClaimStage(
   emp: EmployeeContext,
   policy: TravelPolicy | null
@@ -155,22 +164,36 @@ export function firstClaimStage(
   if (policy?.rm_stage_enabled && resolveApprover(emp, 'CLAIM_RM')) {
     return 'PENDING_RM';
   }
-  if (resolveApprover(emp, 'CLAIM_HR')) return 'PENDING_HR';
-  // Nobody mapped upstream — Finance still has to see it rather than the claim
-  // parking in a state no one owns.
+  // Defaults to true when no policy row is loaded, matching the column default:
+  // losing a review stage because a lookup returned null is the wrong failure.
+  if ((policy?.hr_stage_enabled ?? true) && resolveApprover(emp, 'CLAIM_HR')) {
+    return 'PENDING_HR';
+  }
   return 'PENDING_FINANCE';
 }
 
 /** Where a claim goes after the stage that just approved it. */
 export function nextClaimStage(
   current: ClaimPendingStatus,
-  emp: EmployeeContext
+  emp: EmployeeContext,
+  policy?: TravelPolicy | null
 ): ClaimPendingStatus | 'APPROVED' {
   if (current === 'PENDING_RM') {
-    return resolveApprover(emp, 'CLAIM_HR') ? 'PENDING_HR' : 'PENDING_FINANCE';
+    return (policy?.hr_stage_enabled ?? true) && resolveApprover(emp, 'CLAIM_HR')
+      ? 'PENDING_HR'
+      : 'PENDING_FINANCE';
   }
   if (current === 'PENDING_HR') return 'PENDING_FINANCE';
   return 'APPROVED'; // Finance approved — nothing after it
+}
+
+/** The chain in words, for UI copy that should not hardcode a stage name. */
+export function describeChain(policy: TravelPolicy | null): string {
+  const stages: string[] = [];
+  if (policy?.rm_stage_enabled) stages.push('your reporting manager');
+  if (policy?.hr_stage_enabled ?? true) stages.push('the HR Head');
+  stages.push('Finance');
+  return stages.join(' → ');
 }
 
 // ---------------------------------------------------------------------------

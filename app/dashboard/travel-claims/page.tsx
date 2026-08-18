@@ -613,6 +613,7 @@ export default function TravelClaimsAdmin() {
   const [tab, setTab] = useState<'HR' | 'FINANCE' | 'RM' | 'PERIODS' | 'RATES'>('HR')
 
   const [rmEnabled, setRmEnabled] = useState(false)
+  const [hrEnabled, setHrEnabled] = useState(true)
   const [approvers, setApprovers] = useState<Approver[]>([])
   const [actingId, setActingId] = useState('')
 
@@ -640,10 +641,13 @@ export default function TravelClaimsAdmin() {
     let live = true
     ;(async () => {
       const { data: pol } = await supabase.from('travel_policies')
-        .select('rm_stage_enabled').eq('company_id', companyId).eq('is_active', true)
+        .select('rm_stage_enabled, hr_stage_enabled').eq('company_id', companyId).eq('is_active', true)
         .order('effective_from', { ascending: false }).limit(1)
       if (!live) return
       setRmEnabled(!!(pol?.[0] as any)?.rm_stage_enabled)
+      // Defaults to true so a policy row missing the column does not read as
+      // "HR is out of the chain" before migration 052 is applied.
+      setHrEnabled((pol?.[0] as any)?.hr_stage_enabled ?? true)
 
       // Anyone named as an hr_head_id (or l1_manager_id) for this company is a
       // possible approver. Derived rather than hardcoded, so it tracks the
@@ -822,10 +826,17 @@ export default function TravelClaimsAdmin() {
     } finally { setBusy(false) }
   }
 
+  // The chain in words, built from the policy rather than assumed.
+  const chain = [
+    ...(rmEnabled ? ['Reporting Manager'] : []),
+    ...(hrEnabled ? ['HR Head'] : []),
+    'Finance',
+  ].join(' → ')
+
   const TABS: { k: typeof tab; label: string }[] = [
-    { k: 'HR', label: 'HR Head' },
-    { k: 'FINANCE', label: 'Finance' },
     ...(rmEnabled ? [{ k: 'RM' as const, label: 'Manager' }] : []),
+    ...(hrEnabled ? [{ k: 'HR' as const, label: 'HR Head' }] : []),
+    { k: 'FINANCE', label: 'Finance' },
     { k: 'RATES', label: 'Rate card' },
     { k: 'PERIODS', label: 'Expense months' },
   ]
@@ -835,7 +846,7 @@ export default function TravelClaimsAdmin() {
                   fontFamily: '"DM Sans","Segoe UI",sans-serif', color: V.navy, fontSize: 13 }}>
       <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 3 }}>Travel Claims</div>
       <div style={{ fontSize: 12.5, color: V.muted, marginBottom: 14 }}>
-        Reimbursement requests route {rmEnabled ? 'manager → HR Head → Finance' : 'HR Head → Finance'}.
+        Reimbursement requests route {chain}.
       </div>
 
       {/* ---- controls ---- */}
