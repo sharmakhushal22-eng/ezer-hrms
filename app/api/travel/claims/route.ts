@@ -67,9 +67,27 @@ export async function GET(req: NextRequest) {
     // Approvers need the individual expense lines to action anything: Finance
     // approves line by line, and HR wants to see what it is signing off.
     if (claimId) {
+      // Refuse before the lookup when there is no token at all, so a stranger
+      // cannot tell a missing claim from one they are not allowed to see.
+      if (!req.headers.get('authorization')) {
+        return NextResponse.json({ error: 'Sign in to continue.' }, { status: 401 });
+      }
+
       const { data: claim } = await sb
         .from('v_travel_claim_summary').select('*').eq('id', claimId).maybeSingle();
       if (!claim) return NextResponse.json({ error: 'Claim not found' }, { status: 404 });
+
+      // A claim is somebody's expense detail — amounts, dates, places they were.
+      // An employee may open their own; a dashboard user may open any, which is
+      // how HR and Finance review one.
+      const actor = await resolveActor(req, claim.employee_id);
+      if (!actor.ok) return actor.response;
+      if (!actor.onBehalf && actor.employeeId !== claim.employee_id) {
+        return NextResponse.json(
+          { error: 'You can only open your own claims.' },
+          { status: 403 },
+        );
+      }
 
       const { data: lines } = await sb
         .from('travel_claim_lines').select('*')
@@ -94,9 +112,8 @@ export async function GET(req: NextRequest) {
 
     // ---- approval inbox --------------------------------------------------
     // An inbox exposes other people's expense claims, so it needs a dashboard
-    // session. "My claims" further down does not — ESS employees are not
-    // Supabase auth users and cannot satisfy this gate (see lib/api-auth.ts);
-    // that path is guarded by requireReadAccess instead.
+    // session. "My claims" further down goes through resolveActor instead,
+    // because an ESS employee cannot satisfy this gate.
     if (approverId) {
       const gate = await requireDashboardUser(req);
       if (gate.error) return gate.error;
