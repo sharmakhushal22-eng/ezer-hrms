@@ -334,6 +334,26 @@ export async function POST(req: NextRequest) {
         .from('travel_claim_line_shares')
         .update({ claim_line_id: sl.id })
         .eq('travel_log_id', sl.travel_log_id);
+
+      // Point each journey's flags at the claim line, so the approver screen —
+      // which reads flags by claim_line_id — actually finds them.
+      await sb
+        .from('travel_flags')
+        .update({ claim_line_id: sl.id })
+        .eq('travel_log_id', sl.travel_log_id);
+    }
+
+    // flag_count drives the "⚑ n to review" badge on the claim. Unresolved
+    // only: a MISSING_BILL that has since been satisfied is not a concern.
+    const { count: openFlags } = await sb
+      .from('travel_flags')
+      .select('id', { count: 'exact', head: true })
+      .in('travel_log_id', logs.map((l) => l.id))
+      .is('resolved_at', null);
+
+    if (openFlags && openFlags > 0) {
+      await sb.from('travel_claims').update({ flag_count: openFlags }).eq('id', claim.id);
+      claim.flag_count = openFlags;
     }
 
     // ---- first approval task ---------------------------------------------

@@ -71,7 +71,15 @@ interface Line {
   // set for GPS-priced lines, so the approver can open the route
   travel_log_id: string | null
 }
-interface FlagRow { id: string; claim_line_id: string | null; severity: string; message: string }
+interface FlagRow {
+  id: string; claim_line_id: string | null; severity: string; message: string
+  flag_type: string; resolved_at: string | null
+}
+interface Bill {
+  id: string; file_name: string | null; mime_type: string | null
+  file_size: number | null; url: string | null; attachment_type: string
+  uploaded_at: string | null
+}
 interface Period {
   id: string; period_month: string; period_label: string; status: string
   claim_counts: { draft: number; pending: number; total: number }
@@ -140,6 +148,21 @@ function LineRow({ line, editable, value, onChange, flags }: {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [noTrail, setNoTrail] = useState(false)
+  const [bills, setBills] = useState<Bill[] | null>(null)
+
+  // The proof for a billed expense. Fetched once per line, on mount, because an
+  // approver's first question on any line is "is there a receipt".
+  useEffect(() => {
+    if (!line.travel_log_id) { setBills([]); return }
+    let live = true
+    ;(async () => {
+      const r = await fetch(`/api/travel/upload-bill?travel_log_id=${line.travel_log_id}`,
+                            { headers: await authHeaders() })
+      if (!live) return
+      setBills(r.ok ? ((await r.json()).attachments ?? []) : [])
+    })()
+    return () => { live = false }
+  }, [line.travel_log_id])
 
   const showRoute = async () => {
     if (open) { setOpen(false); return }
@@ -167,17 +190,39 @@ function LineRow({ line, editable, value, onChange, flags }: {
           {line.entitlement_limit != null && ` · limit ${inr(line.entitlement_limit)}`}
         </div>
         {flags.map(f => (
-          <div key={f.id} style={{ fontSize: 11, color: f.severity === 'BLOCK' ? V.red : V.amber, marginTop: 3 }}>
-            ⚑ {f.message}
+          <div key={f.id} style={{ fontSize: 11, marginTop: 3,
+                                   color: f.resolved_at ? V.muted
+                                        : f.severity === 'BLOCK' ? V.red : V.amber,
+                                   textDecoration: f.resolved_at ? 'line-through' : 'none' }}>
+            ⚑ {f.message}{f.resolved_at ? ' — resolved' : ''}
           </div>
         ))}
-        {line.travel_log_id && (
-          <button onClick={showRoute}
-                  style={{ background: 'none', border: 'none', padding: '3px 0 0', cursor: 'pointer',
-                           fontSize: 11, fontWeight: 600, color: V.purpleDark, fontFamily: 'inherit' }}>
-            {open ? '▲ Hide route' : '📍 View route on map'}
-          </button>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', paddingTop: 3 }}>
+          {line.travel_log_id && (
+            <button onClick={showRoute}
+                    style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+                             fontSize: 11, fontWeight: 600, color: V.purpleDark, fontFamily: 'inherit' }}>
+              {open ? '▲ Hide route' : '📍 View route on map'}
+            </button>
+          )}
+
+          {/* Proof of travel. A missing slip is stated plainly rather than left
+              as an absence the approver has to notice. */}
+          {bills?.map(b => (
+            <a key={b.id} href={b.url ?? '#'} target="_blank" rel="noreferrer"
+               style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11,
+                        fontWeight: 600, color: V.green, textDecoration: 'none',
+                        background: V.greenBg, border: `1px solid ${V.green}33`,
+                        borderRadius: 99, padding: '2px 9px' }}>
+              {b.mime_type === 'application/pdf' ? '📄' : '🧾'} {b.file_name || 'bill'}
+            </a>
+          ))}
+          {bills !== null && bills.length === 0 && (
+            <span style={{ fontSize: 11, color: V.amber, fontWeight: 500 }}>
+              ⚠ no bill attached
+            </span>
+          )}
+        </div>
       </div>
       <div style={{ fontSize: 12.5, fontWeight: 600, color: V.navy, width: 84,
                     textAlign: 'right', flexShrink: 0, paddingTop: 1 }}>

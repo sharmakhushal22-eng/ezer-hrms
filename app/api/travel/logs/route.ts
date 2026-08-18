@@ -476,6 +476,26 @@ export async function POST(req: NextRequest) {
 
     if (error) throw error;
 
+    // ---- persist the flags -----------------------------------------------
+    // These were computed above and returned to the employee, but never stored.
+    // travel_flags was read-only in practice, so MISSING_BILL, OVER_LIMIT and
+    // the GPS concerns disappeared the moment the employee dismissed the
+    // banner — an approver saw a clean claim. They are written against the
+    // journey here, and carried onto the claim line at submission.
+    if (flags.length > 0) {
+      await sb.from('travel_flags').insert(
+        flags.map((f) => ({
+          travel_log_id: log.id,
+          flag_type: f.flag_type,
+          severity: f.severity,
+          policy_value: f.policy_value ?? null,
+          actual_value: f.actual_value ?? null,
+          message: f.message,
+          employee_reason: variance_reason ?? null,
+        })),
+      );
+    }
+
     // ---- share ledger ----------------------------------------------------
     if (pooled && Array.isArray(shared_with) && shared_with.length > 0) {
       const perHead = fare.total_amount / (shared_with.length + 1);
