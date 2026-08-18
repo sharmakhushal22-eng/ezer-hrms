@@ -15,6 +15,7 @@
 // inbox by, so a person only ever sees claims genuinely routed to them.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
 
 // These endpoints require a signed-in dashboard session (lib/api-auth.ts).
 // Mirrors the helper added to the recruitment page in 5220d59.
@@ -67,6 +68,8 @@ interface Line {
   description: string | null; amount_claimed: number
   amount_approved: number | null; entitlement_limit: number | null
   line_status: string; finance_remarks: string | null
+  // set for GPS-priced lines, so the approver can open the route
+  travel_log_id: string | null
 }
 interface FlagRow { id: string; claim_line_id: string | null; severity: string; message: string }
 interface Period {
@@ -123,14 +126,38 @@ function Note({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: React
 }
 
 /** One expense line. Finance can edit the approved amount; HR sees it read-only. */
+/**
+ * One expense line. For a bill-less journey there is no receipt to check, so
+ * the approver gets the recorded route instead — loaded on demand, because a
+ * claim can hold twenty lines and fetching every trail up front would be slow
+ * and mostly wasted.
+ */
 function LineRow({ line, editable, value, onChange, flags }: {
   line: Line; editable: boolean; value: string
   onChange: (v: string) => void; flags: FlagRow[]
 }) {
+  const [route, setRoute] = useState<RouteData | null>(null)
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [noTrail, setNoTrail] = useState(false)
+
+  const showRoute = async () => {
+    if (open) { setOpen(false); return }
+    setOpen(true)
+    if (route || noTrail) return
+    setLoading(true)
+    try {
+      const r = await fetch(`/api/travel/route?log_id=${line.travel_log_id}`,
+                            { headers: await authHeaders() })
+      if (!r.ok) { setNoTrail(true); return }
+      setRoute(await r.json() as RouteData)
+    } catch { setNoTrail(true) } finally { setLoading(false) }
+  }
+
   const trimmed = editable && value !== '' && num(value) < num(line.amount_claimed)
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0',
-                  borderBottom: `1px solid ${V.border}` }}>
+    <div style={{ borderBottom: `1px solid ${V.border}` }}>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 12.5, color: V.navy, fontWeight: 500 }}>
           {line.description || line.type_code}
@@ -144,6 +171,13 @@ function LineRow({ line, editable, value, onChange, flags }: {
             ⚑ {f.message}
           </div>
         ))}
+        {line.travel_log_id && (
+          <button onClick={showRoute}
+                  style={{ background: 'none', border: 'none', padding: '3px 0 0', cursor: 'pointer',
+                           fontSize: 11, fontWeight: 600, color: V.purpleDark, fontFamily: 'inherit' }}>
+            {open ? '▲ Hide route' : '📍 View route on map'}
+          </button>
+        )}
       </div>
       <div style={{ fontSize: 12.5, fontWeight: 600, color: V.navy, width: 84,
                     textAlign: 'right', flexShrink: 0, paddingTop: 1 }}>
@@ -159,6 +193,19 @@ function LineRow({ line, editable, value, onChange, flags }: {
           {line.amount_approved != null ? inr(line.amount_approved) : '—'}
         </div>
       )}
+    </div>
+
+    {open && (
+      <div style={{ padding: '0 0 10px' }}>
+        {loading && <div style={{ fontSize: 12, color: V.muted, padding: '6px 0' }}>Loading the route…</div>}
+        {noTrail && !loading && (
+          <div style={{ fontSize: 12, color: V.muted, padding: '6px 0' }}>
+            No recorded trail for this expense — it was not a GPS-priced journey.
+          </div>
+        )}
+        {route && <RouteMap route={route} height={280} />}
+      </div>
+    )}
     </div>
   )
 }
