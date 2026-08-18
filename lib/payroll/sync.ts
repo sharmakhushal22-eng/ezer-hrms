@@ -168,6 +168,18 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
+    // Employer NPS is a percentage of EARNED basic, not structured basic, so it has to
+    // wait for the earnings pass. It sat in the database unwired since sql124 — the
+    // function existed, nothing called it, and every month's employer_nps stayed blank.
+    key: 'nps', label: 'Employer NPS', icon: '🏛️', status: 'ready',
+    note: 'Only for employees whose NPS status is enrolled. Employer contribution = Earned Basic × 10% under the old regime, × 14% under the new one — the rate follows the regime, so an employee who switches regimes changes rate from that month. Anyone not enrolled keeps a blank, not a zero, so that "no NPS" and "NPS of nil" stay distinguishable on the sheet.',
+    rpc: 'sync_month_nps', countKey: 'with_earnings',
+    columns: [
+      'employee_code', 'full_name', 'nps_opted', 'nps_regime_used', 'nps_percent',
+      'earn_basic_monthly', 'employer_nps', 'nps_reason',
+    ],
+  },
+  {
     // Runs last of all: arrear is the difference between what a back month actually paid
     // and what the revised structure says it should have, so every other figure for those
     // months has to be settled first.
