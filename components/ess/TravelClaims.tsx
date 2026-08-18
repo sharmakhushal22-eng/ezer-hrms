@@ -26,6 +26,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { essAuthHeaders } from '@/lib/ess-session-client';
 import { supabase } from '@/lib/supabase'
 import { measureTrail, isValidPoint, type GpsPoint } from '@/lib/travel/gps'
+import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
 
 const V = {
   navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489', border: '#E9E7F5', muted: '#6B6B7B',
@@ -435,6 +436,10 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   const [submitting, setSubmitting] = useState(false)
 
   const { journey, start, end, reset } = useJourneyRecorder()
+  // The route as the server measures it — shown once the journey ends, so the
+  // employee sees the same figure the approver will.
+  const [route, setRoute] = useState<RouteData | null>(null)
+  const [routeLoading, setRouteLoading] = useState(false)
 
   const selectedType = types.find(t => t.type_code === typeCode) ?? null
   const needsGps = !!selectedType?.requires_gps
@@ -513,11 +518,31 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
   useEffect(() => { load() }, [load])
 
+  // Build the route as soon as recording stops. Doing it here rather than at
+  // save means the employee can see the path and distance before committing —
+  // and can discard a journey the phone clearly mis-recorded.
+  useEffect(() => {
+    if (journey.state !== 'RECORDED' || journey.points.length < 2) { setRoute(null); return }
+    let live = true
+    setRouteLoading(true)
+    fetch('/api/travel/route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
+      body: JSON.stringify({ points: journey.points }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (live && d) setRoute(d as RouteData) })
+      .catch(() => { /* the map is a bonus; saving must still work without it */ })
+      .finally(() => { if (live) setRouteLoading(false) })
+    return () => { live = false }
+  }, [journey.state, journey.points])
+
   // -------------------------------------------------------------------------
   const resetForm = () => {
     setPurpose(''); setCity(''); setAmount('')
     setToll(''); setParking(''); setRoundTrip(false)
     reset()
+    setRoute(null)
   }
 
   const addExpense = async () => {
@@ -752,6 +777,13 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
             <JourneyPanel journey={journey} liveKm={liveKm} rate={liveRate}
                           typeName={selectedType?.type_name ?? ''}
                           onStart={start} onEnd={end} onReset={reset} />
+
+            {routeLoading && (
+              <div style={{ fontSize: 12, color: V.muted, padding: '4px 0 12px' }}>
+                Working out the route you took…
+              </div>
+            )}
+            {route && <RouteMap route={route} title="Your route" height={260} />}
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
                           gap: 11, marginBottom: 11 }}>
