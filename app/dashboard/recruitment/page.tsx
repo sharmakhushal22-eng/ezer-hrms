@@ -1391,10 +1391,17 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         method:'POST', headers:{'Content-Type':'application/json'},
         body:JSON.stringify({ designation:form.designation||form.job_title, department:dept?.dept_name||'', experience:[form.experience_min,form.experience_max].filter(Boolean).join('-')+(form.experience_min||form.experience_max?' years':''), employee_type:form.employment_type, education:[form.education_min,form.education_max].filter(Boolean).join(' to '), skills:form.skills_required })
       })
-      const { jd } = await res.json()
-      if (jd) F('job_description', jd)
+      const data = await res.json()
+      // Only claim success when text actually came back — an unconfigured key
+      // used to surface as "JD generated!" over an untouched textarea.
+      if (!res.ok || !data.jd) {
+        showNotify(data.message || 'Could not generate JD', 'error')
+        setAiLoading(false)
+        return
+      }
+      F('job_description', data.jd)
       showNotify('JD generated!')
-    } catch { showNotify('Could not generate JD','error') }
+    } catch { showNotify('Could not reach the AI service','error') }
     setAiLoading(false)
   }
 
