@@ -18,7 +18,8 @@ import {
   type ServiceRequest, type LetterRequest, type Announcement, type Kudo,
 } from '@/lib/supabase-ess'
 import {
-  loadMonthlyAttendance, loadDayPunches, loadRegularisationRequests, submitRegularisation,
+  loadMonthlyAttendance, loadDayPunches, loadRegularisationRequests,
+  submitRegularisation, submitRegularisationBulk,
   resolveDay, computeSummary,
   type MonthlyData, type DayPunch, type RegularisationRequest,
 } from '@/lib/supabase-attendance'
@@ -1292,6 +1293,200 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
 }
 
 // 4) Regularisation form ─────────────────────────────────────────
+/**
+ * Regularise a range of days in one submission.
+ *
+ * The single-day form is right when one punch was missed. It is the wrong shape
+ * for "I was on site all last week and the biometric never picked me up" —
+ * that was seven identical forms.
+ *
+ * The preview is the important half. A date range will always contain days that
+ * must not be regularised: weekly offs, holidays, approved leave, and days
+ * already recorded properly. Submitting those would put work on HR that should
+ * never have reached them, and could overwrite a correct record with a guess.
+ * So the range is filtered against the same rules resolveDay() uses, and every
+ * skipped day says why before anything is sent.
+ */
+function BulkRegularisationForm({ emp, onDone, onCancel }: {
+  emp: EmployeeDetail; onDone: () => void; onCancel: () => void
+}) {
+  const localYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const todayStr = localYMD(new Date())
+  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate()-1); return localYMD(d) })()
+  const weekAgo   = (() => { const d = new Date(); d.setDate(d.getDate()-7); return localYMD(d) })()
+
+  const [from, setFrom] = useState(weekAgo)
+  const [to, setTo] = useState(yesterday)
+  const [actualIn, setActualIn] = useState('09:00')
+  const [actualOut, setActualOut] = useState('18:00')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [preview, setPreview] = useState<{
+    eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[]
+    skipped: { date: string; why: string }[]
+  } | null>(null)
+
+  const MAX_DAYS = 62   // two months: enough for a real backlog, not a whole year
+
+  // Walk the range, pulling each month's attendance once, and decide day by day.
+  const scan = useCallback(async () => {
+    setPreview(null); setMsg(null)
+    if (!from || !to) return
+    if (from > to) { setMsg({ text: 'The start date is after the end date.', ok: false }); return }
+    if (to >= todayStr) { setMsg({ text: 'Regularisation is for past days only — the end date must be before today.', ok: false }); return }
+
+    const days: string[] = []
+    for (const d = new Date(from + 'T00:00:00'); localYMD(d) <= to; d.setDate(d.getDate() + 1)) {
+      days.push(localYMD(d))
+      if (days.length > MAX_DAYS) break
+    }
+    if (days.length > MAX_DAYS) {
+      setMsg({ text: `That range is longer than ${MAX_DAYS} days. Split it into smaller periods.`, ok: false }); return
+    }
+
+    setScanning(true)
+    const months = Array.from(new Set(days.map(d => d.slice(0, 7))))
+    const data = new Map<string, MonthlyData>()
+    for (const ym of months) {
+      const [y, mo] = ym.split('-').map(Number)
+      data.set(ym, await loadMonthlyAttendance(emp.id, y, mo))
+    }
+
+    const eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[] = []
+    const skipped: { date: string; why: string }[] = []
+
+    for (const date of days) {
+      const md = data.get(date.slice(0, 7))
+      if (!md) { skipped.push({ date, why: 'could not load that month' }); continue }
+      const info = resolveDay(date, md, todayStr)
+
+      if (info.status === 'HOLIDAY')      { skipped.push({ date, why: info.holiday?.description ? `holiday — ${info.holiday.description}` : 'holiday' }); continue }
+      if (info.status === 'WEEKLY_OFF')   { skipped.push({ date, why: 'weekly off' }); continue }
+      if (info.status === 'ON_LEAVE')     { skipped.push({ date, why: 'on approved leave' }); continue }
+      if (info.status === 'PRESENT' && info.rec?.work_in && info.rec?.work_out) {
+        skipped.push({ date, why: 'already recorded in full' }); continue
+      }
+      eligible.push({
+        date,
+        recordedIn: info.rec?.work_in || null,
+        recordedOut: info.rec?.work_out || null,
+        why: info.status === 'MISS_PUNCH' ? 'missing a punch'
+           : info.status === 'ABSENT' ? 'marked absent'
+           : info.status.toLowerCase().replace(/_/g, ' '),
+      })
+    }
+
+    setScanning(false)
+    setPreview({ eligible, skipped })
+  }, [from, to, emp.id, todayStr])
+
+  useEffect(() => { scan() }, [scan])
+
+  const submit = async () => {
+    if (!preview || preview.eligible.length === 0) { setMsg({ text: 'Nothing in that range needs regularising.', ok: false }); return }
+    if (!actualIn || !actualOut) { setMsg({ text: 'Enter both actual IN and OUT times', ok: false }); return }
+    if (actualIn >= actualOut) { setMsg({ text: 'Actual IN must be before Actual OUT', ok: false }); return }
+    if (!reason.trim()) { setMsg({ text: 'Reason is required', ok: false }); return }
+
+    setBusy(true); setMsg(null)
+    const { inserted, error } = await submitRegularisationBulk(emp.id, preview.eligible, actualIn, actualOut, reason.trim())
+    setBusy(false)
+    if (error) { setMsg({ text: error, ok: false }); return }
+    setMsg({ text: `✓ ${inserted} day${inserted === 1 ? '' : 's'} sent to HR for approval`, ok: true })
+    onDone()
+  }
+
+  const short = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+
+  return (
+    <div style={T.card}>
+      <div style={T.section}>📅 Regularise a date range</div>
+      <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
+        For a stretch of days with the same story — biometric down, on site, working from home.
+        Weekly offs, holidays, leave and days already recorded are left out automatically.
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+        <div><label style={T.label}>From *</label>
+          <input type="date" max={yesterday} style={T.input} value={from} onChange={e => setFrom(e.target.value)} /></div>
+        <div><label style={T.label}>To *</label>
+          <input type="date" max={yesterday} style={T.input} value={to} onChange={e => setTo(e.target.value)} /></div>
+        <div><label style={T.label}>Actual IN *</label>
+          <input type="time" style={T.input} value={actualIn} onChange={e => setActualIn(e.target.value)} /></div>
+        <div><label style={T.label}>Actual OUT *</label>
+          <input type="time" style={T.input} value={actualOut} onChange={e => setActualOut(e.target.value)} /></div>
+        <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(applies to every day)</span></label>
+          <input style={T.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Biometric device was down all week" /></div>
+      </div>
+
+      {scanning && <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>Checking those dates…</div>}
+
+      {preview && !scanning && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 9 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 99,
+                           background: preview.eligible.length ? '#ECFDF5' : '#FEF2F2',
+                           color: preview.eligible.length ? '#059669' : '#DC2626' }}>
+              {preview.eligible.length} day{preview.eligible.length === 1 ? '' : 's'} will be sent
+            </span>
+            {preview.skipped.length > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99,
+                             background: '#F3F0FF', color: '#6D28D9' }}>
+                {preview.skipped.length} skipped
+              </span>
+            )}
+          </div>
+
+          {preview.eligible.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 9 }}>
+              {preview.eligible.map(d => (
+                <span key={d.date} title={d.why}
+                      style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
+                               background: '#ECFDF5', color: '#059669',
+                               border: '1px solid #A7F3D0', fontWeight: 600 }}>
+                  {short(d.date)} <span style={{ fontWeight: 400, opacity: .8 }}>· {d.why}</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {preview.skipped.length > 0 && (
+            <details>
+              <summary style={{ fontSize: 11.5, color: '#6B7280', cursor: 'pointer', marginBottom: 6 }}>
+                Why {preview.skipped.length} day{preview.skipped.length === 1 ? ' was' : 's were'} left out
+              </summary>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {preview.skipped.map(d => (
+                  <span key={d.date} style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
+                                              background: '#F8FAFC', color: '#9CA3AF',
+                                              border: '1px solid #E9E7F5' }}>
+                    {short(d.date)} · {d.why}
+                  </span>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+
+      {msg && <div style={{ fontSize: 12, marginBottom: 10, color: msg.ok ? '#059669' : '#DC2626' }}>{msg.text}</div>}
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onCancel} style={{ ...T.btnO, flex: 1 }}>Cancel</button>
+        <button onClick={submit} disabled={busy || scanning || !preview?.eligible.length}
+                style={{ ...T.btnP, flex: 2, opacity: busy || scanning || !preview?.eligible.length ? .5 : 1 }}>
+          {busy ? 'Sending…'
+            : preview?.eligible.length
+              ? `Send ${preview.eligible.length} day${preview.eligible.length === 1 ? '' : 's'} to HR`
+              : 'Nothing to send'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
   emp: EmployeeDetail; date: string; rec: MonthlyData['records'][number] | null; editable?: boolean
   onDone: () => void; onCancel: () => void
@@ -1377,6 +1572,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [raiseDate, setRaiseDate] = useState<string | null>(null)
   const [manualRaise, setManualRaise] = useState(false)
+  const [bulkRaise, setBulkRaise] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [loading, setLoading] = useState(true)
   const todayStr = new Date().toISOString().slice(0, 10)
@@ -1427,14 +1623,20 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
       {raiseDate && <RegularisationForm emp={emp} date={raiseDate} rec={raiseRec} onDone={() => { loadRegs(); loadMonth(); setRaiseDate(null) }} onCancel={() => setRaiseDate(null)} />}
 
       {/* (F) raise regularisation + list */}
-      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: (manualRaise && !raiseDate) ? 0 : undefined }}>
+      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: ((manualRaise || bulkRaise) && !raiseDate) ? 0 : undefined }}>
         <div>
           <div style={{ fontSize:13, fontWeight:600 }}>Attendance Regularisation</div>
-          <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>Forgot to punch or wrong time? Raise a correction for any day → HR approval.</div>
+          <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>Forgot to punch or wrong time? Raise a correction → HR approval. Use a range when several days share the same reason.</div>
         </div>
-        {!manualRaise && !raiseDate && <button onClick={() => setManualRaise(true)} style={T.btnP}>+ Raise Regularisation</button>}
+        {!manualRaise && !bulkRaise && !raiseDate && (
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <button onClick={() => setManualRaise(true)} style={T.btnO}>+ Single day</button>
+            <button onClick={() => setBulkRaise(true)} style={T.btnP}>📅 Date range</button>
+          </div>
+        )}
       </div>
       {manualRaise && !raiseDate && <RegularisationForm emp={emp} date={todayStr} rec={null} editable onDone={() => { loadRegs(); loadMonth(); setManualRaise(false) }} onCancel={() => setManualRaise(false)} />}
+      {bulkRaise && !raiseDate && <BulkRegularisationForm emp={emp} onDone={() => { loadRegs(); loadMonth(); setBulkRaise(false) }} onCancel={() => setBulkRaise(false)} />}
       <RegularisationList requests={regs} />
     </div>
   )
