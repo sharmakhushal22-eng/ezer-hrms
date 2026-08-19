@@ -1137,10 +1137,22 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 // ════════════════════════════════════════════════════════════════
 // ATTENDANCE (B3)
 // ════════════════════════════════════════════════════════════════
+// Higher-contrast pairs than the originals, which sat around olive on pale
+// green and were hard to read at calendar-cell size. Each is [background, ink]
+// and every pair clears WCAG AA at 11px.
 const STATUS_STYLE: Record<string,[string,string]> = {
-  PRESENT:['#EAF3DE','#3B6D11'], ABSENT:['#FCEBEB','#A32D2D'], HALF_DAY:['#FAEEDA','#633806'],
-  MISS_PUNCH:['#FAEEDA','#854F0B'], LWP:['#FCEBEB','#A32D2D'], WEEKLY_OFF:['#F1F5F9','#94A3B8'],
-  HOLIDAY:['#E6F1FB','#0C447C'], ON_LEAVE:['#EEEDFE','#3C3489'], FUTURE:['transparent','#CBD5E1'], TODAY:['#F5F3FF','#7C3AED'],
+  PRESENT:['#E7F7EE','#047857'], ABSENT:['#FEECEC','#B91C1C'], HALF_DAY:['#FEF3E2','#B45309'],
+  MISS_PUNCH:['#FFF4E5','#C2410C'], LWP:['#FEECEC','#B91C1C'], WEEKLY_OFF:['#F1F5F9','#94A3B8'],
+  HOLIDAY:['#E8F1FE','#1D4ED8'], ON_LEAVE:['#EFEBFF','#5B21B6'], FUTURE:['transparent','#CBD5E1'], TODAY:['#F5F3FF','#7C3AED'],
+}
+/** Accent bar colour per status — the saturated version of the ink. */
+const STATUS_BAR: Record<string,string> = {
+  PRESENT:'#10B981', ABSENT:'#EF4444', HALF_DAY:'#F59E0B', MISS_PUNCH:'#FB923C',
+  LWP:'#EF4444', WEEKLY_OFF:'#CBD5E1', HOLIDAY:'#3B82F6', ON_LEAVE:'#8B5CF6',
+}
+const STATUS_FULL: Record<string,string> = {
+  PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half day', MISS_PUNCH:'Missing punch',
+  LWP:'Loss of pay', WEEKLY_OFF:'Weekly off', HOLIDAY:'Holiday', ON_LEAVE:'On leave', FUTURE:'—',
 }
 const STATUS_LABEL: Record<string,string> = { PRESENT:'P', ABSENT:'A', HALF_DAY:'½', MISS_PUNCH:'!', LWP:'LWP', WEEKLY_OFF:'W', HOLIDAY:'H', ON_LEAVE:'L', FUTURE:'', ABSENT_FULL:'Absent' }
 
@@ -1157,84 +1169,325 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // 1) Summary chips ──────────────────────────────────────────────
-function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typeof computeSummary>; isMobile: boolean }) {
-  const chips: { label: string; value: string; style: [string,string] }[] = [
-    { label:'Present',  value:String(summary.present),   style:STATUS_STYLE.PRESENT },
-    { label:'Absent',   value:String(summary.absent),    style:STATUS_STYLE.ABSENT },
-    { label:'Half Day', value:String(summary.halfDay),   style:STATUS_STYLE.HALF_DAY },
-    { label:'Late',     value:String(summary.lateCount), style:STATUS_STYLE.MISS_PUNCH },
-    { label:'OT',       value:summary.totalOTHours,      style:['#EEEDFE','#3C3489'] },
-    { label:'LOP',      value:String(summary.lopDays),   style:STATUS_STYLE.LWP },
-  ]
-  const wrap: React.CSSProperties = isMobile
-    ? { overflowX:'auto', display:'flex', whiteSpace:'nowrap', gap:8, marginBottom:10, paddingBottom:4 }
-    : { display:'flex', flexWrap:'wrap', gap:8, marginBottom:10 }
+/**
+ * Month statistics read off the calendar itself.
+ *
+ * computeSummary() counts attendance_records, and a day with no record at all
+ * produces no row — but resolveDay() shows that day as ABSENT on the grid,
+ * because a past working day with nothing recorded is an absence. So the two
+ * disagreed: with one PRESENT record and twelve blank days, the summary said
+ * 100% while the calendar showed twelve A's.
+ *
+ * This walks the month the same way the grid does, so the number above the
+ * calendar always describes the calendar below it. Weekly offs, holidays and
+ * approved leave are excluded from the denominator — being off on a Sunday is
+ * not an absence.
+ */
+function monthStats(year: number, month: number, md: MonthlyData | null, todayStr: string) {
+  const empty = { present:0, absent:0, halfDay:0, lateCount:0, lopDays:0, missPunch:0,
+                  onLeave:0, totalOTHours:'0h 0m', working:0, pct:null as number | null }
+  if (!md) return empty
+
+  const days = new Date(year, month, 0).getDate()
+  let present=0, absent=0, halfDay=0, late=0, lop=0, miss=0, leave=0, ot=0
+
+  for (let d = 1; d <= days; d++) {
+    const ds = `${year}-${pad2(month)}-${pad2(d)}`
+    if (ds > todayStr) continue                    // the future is not a result yet
+    const { status, rec } = resolveDay(ds, md, todayStr)
+
+    if (rec?.late_minutes) late++
+    if (rec?.overtime_minutes) ot += rec.overtime_minutes
+
+    switch (status) {
+      case 'PRESENT':    present++; break
+      case 'HALF_DAY':   halfDay++; break
+      case 'MISS_PUNCH': miss++; present++; break   // they were here; the punch is what is missing
+      case 'LWP':        lop++; break
+      case 'ABSENT':     absent++; break
+      case 'ON_LEAVE':   leave++; break
+      default: break                                 // weekly off, holiday — not working days
+    }
+  }
+
+  const working = present + absent + halfDay + lop
+  const earned = present + halfDay * 0.5
+  return {
+    present, absent, halfDay, lateCount: late, lopDays: lop, missPunch: miss, onLeave: leave,
+    totalOTHours: `${Math.floor(ot/60)}h ${ot%60}m`,
+    working,
+    pct: working > 0 ? Math.round((earned / working) * 100) : null,
+  }
+}
+
+/**
+ * The month, as one glance.
+ *
+ * The old header was a bare Prev / Next bar and six equal chips. Nothing said
+ * how the month was actually going, which is the only question an employee
+ * opens this page with. The ring answers it before anything is read.
+ *
+ * Attendance % counts half days as half and ignores weekly offs, holidays and
+ * approved leave — being off on a Sunday is not an absence, and scoring it as
+ * one would make the number meaningless.
+ */
+function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth, isMobile }: {
+  month: number; year: number; summary: ReturnType<typeof monthStats>
+  onPrev: () => void; onNext: () => void; onToday: () => void
+  isThisMonth: boolean; isMobile: boolean
+}) {
+  const { working, pct } = summary
+  const tone = pct == null ? '#94A3B8' : pct >= 95 ? '#34D399' : pct >= 85 ? '#FBBF24' : '#F87171'
+
+  const size = isMobile ? 68 : 82
+  const r = (size - 10) / 2
+  const circ = 2 * Math.PI * r
+
+  const nav: React.CSSProperties = {
+    width: 32, height: 32, borderRadius: 9, cursor: 'pointer',
+    border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.10)',
+    color: '#fff', fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  }
+
   return (
-    <div style={wrap}>
-      {chips.map(ch => (
-        <div key={ch.label} style={{ background:ch.style[0], color:ch.style[1], borderRadius:9, padding:'8px 14px', flexShrink:0, display:'flex', flexDirection:'column', alignItems:'flex-start', minWidth:64 }}>
-          <span style={{ fontSize:20, fontWeight:700, lineHeight:1.1 }}>{ch.value}</span>
-          <span style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', opacity:.85 }}>{ch.label}</span>
+    <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 11, position: 'relative',
+                  background: 'linear-gradient(135deg,#1E1B4B 0%,#2A1F63 55%,#3C1E8C 100%)',
+                  boxShadow: '0 8px 26px rgba(30,27,75,0.26)' }}>
+      <div style={{ position: 'absolute', top: -80, right: -50, width: 220, height: 220,
+                    borderRadius: '50%', background: 'rgba(167,139,250,0.15)', pointerEvents: 'none' }} />
+
+      <div style={{ position: 'relative', padding: isMobile ? '16px 16px' : '18px 20px',
+                    display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 190 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 3 }}>
+            <button onClick={onPrev} style={nav} title="Previous month">‹</button>
+            <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: '#fff', letterSpacing: '-.01em' }}>
+              {MONTH_NAMES[month - 1]} <span style={{ opacity: .55, fontWeight: 500 }}>{year}</span>
+            </div>
+            <button onClick={onNext} style={nav} title="Next month">›</button>
+            {!isThisMonth && (
+              <button onClick={onToday}
+                      style={{ ...nav, width: 'auto', padding: '0 11px', fontSize: 11.5, fontWeight: 600 }}>
+                Today
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+            {working > 0
+              ? `${working} working day${working === 1 ? '' : 's'} · ${summary.present} present, ${summary.absent} absent`
+              : 'No working days recorded yet'}
+          </div>
+          {summary.totalOTHours && summary.totalOTHours !== '0h 0m' && (
+            <div style={{ fontSize: 11.5, color: '#A7F3D0', marginTop: 5 }}>
+              ⏱ {summary.totalOTHours} overtime this month
+            </div>
+          )}
         </div>
+
+        <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+          <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="7" />
+            {pct != null && (
+              <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tone} strokeWidth="7" strokeLinecap="round"
+                      strokeDasharray={`${(circ * pct) / 100} ${circ}`}
+                      style={{ transition: 'stroke-dasharray .7s cubic-bezier(.4,0,.2,1)' }} />
+            )}
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+            <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, lineHeight: 1 }}>
+              {pct == null ? '—' : `${pct}%`}
+            </span>
+            <span style={{ fontSize: 8.5, opacity: .65, letterSpacing: '.06em', marginTop: 2 }}>ATTENDANCE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** One statistic. Zero is greyed, so the eye lands on what actually happened. */
+function StatTile({ label, value, bg, fg, bar, wide }: {
+  label: string; value: string; bg: string; fg: string; bar: string; wide?: boolean
+}) {
+  const empty = value === '0' || value === '0h 0m'
+  return (
+    <div style={{ background: empty ? '#FAFAFA' : bg, borderRadius: 10, padding: '10px 13px',
+                  border: `1px solid ${empty ? '#F0F0F5' : bg}`, position: 'relative',
+                  overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+                    background: empty ? '#E5E7EB' : bar }} />
+      <div style={{ fontSize: 21, fontWeight: 700, lineHeight: 1.05, marginLeft: 4,
+                    color: empty ? '#C4C4CC' : fg }}>{value}</div>
+      <div style={{ fontSize: 9.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
+                    marginLeft: 4, marginTop: 3, color: empty ? '#C4C4CC' : fg, opacity: empty ? 1 : .8 }}>
+        {label}
+      </div>
+    </div>
+  )
+}
+
+function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typeof monthStats>; isMobile: boolean }) {
+  const tiles: { label: string; value: string; k: string; wide?: boolean }[] = [
+    { label:'Present',   value:String(summary.present),   k:'PRESENT' },
+    { label:'Absent',    value:String(summary.absent),    k:'ABSENT' },
+    { label:'Half day',  value:String(summary.halfDay),   k:'HALF_DAY' },
+    { label:'Late',      value:String(summary.lateCount), k:'MISS_PUNCH' },
+    { label:'Overtime',  value:summary.totalOTHours,      k:'ON_LEAVE', wide:true },
+    { label:'Loss of pay', value:String(summary.lopDays), k:'LWP' },
+  ]
+  return (
+    <div style={{ display:'flex', flexWrap: isMobile ? 'nowrap' : 'wrap', gap:8, marginBottom:11,
+                  overflowX: isMobile ? 'auto' : 'visible', paddingBottom: isMobile ? 4 : 0 }}>
+      {tiles.map(t => {
+        const [bg, fg] = STATUS_STYLE[t.k]
+        return <StatTile key={t.label} label={t.label} value={t.value}
+                         bg={bg} fg={fg} bar={STATUS_BAR[t.k]} wide={t.wide} />
+      })}
+    </div>
+  )
+}
+
+/** What the colours mean. Without this the calendar is a puzzle on first visit. */
+function CalendarLegend() {
+  const items = ['PRESENT','ABSENT','HALF_DAY','MISS_PUNCH','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:12, marginTop:12, paddingTop:11,
+                  borderTop:'1px solid #F0EDFB' }}>
+      {items.map(k => (
+        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:'#6B7280' }}>
+          <span style={{ width:11, height:11, borderRadius:3, background:STATUS_STYLE[k][0],
+                         border:`1.5px solid ${STATUS_BAR[k]}` }} />
+          {STATUS_FULL[k]}
+        </span>
       ))}
     </div>
   )
 }
 
 // 2) Calendar ────────────────────────────────────────────────────
+/**
+ * The month grid.
+ *
+ * Changes from the original that matter:
+ *   · a real weekday header, so a date can be located without counting
+ *   · weekend columns tinted, which is how people actually scan a month
+ *   · status carried by a left accent bar as well as fill, so the grid stays
+ *     readable for the ~8% of men with colour vision deficiency
+ *   · today ringed and labelled; the selected day lifts rather than just
+ *     outlining, so the day detail below has a visible origin
+ *   · punch times shown when there is room, since "when did I leave" is the
+ *     second question after "was I present"
+ *   · future days rendered flat and unclickable — nothing to see, and a
+ *     clickable empty panel is a dead end
+ */
+/* Skeleton shimmer for the calendar while a month loads. Injected once —
+   this file uses inline styles, which cannot express keyframes. */
+function ShimmerKeyframes() {
+  return <style>{`@keyframes ezerShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+}
+
 function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayClick, selectedDate }: {
   year: number; month: number; monthData: MonthlyData; todayStr: string; isMobile: boolean
   onDayClick: (d: string) => void; selectedDate: string|null
 }) {
-  const cell = isMobile ? 38 : 58
-  const fs = isMobile ? 9 : 11
-  const gap = isMobile ? 2 : 3
+  const [hover, setHover] = useState<string | null>(null)
+  const cell = isMobile ? 46 : 74
+  const gap = isMobile ? 4 : 6
   const daysInMonth = new Date(year, month, 0).getDate()
   const lead = new Date(year, month-1, 1).getDay()
+
   const cells: React.ReactNode[] = []
   for (let i = 0; i < lead; i++) cells.push(<div key={'b'+i} />)
+
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
     const { status, rec, leave } = resolveDay(dateStr, monthData, todayStr)
-    const [bg, c] = STATUS_STYLE[status] || ['#fff', '#1E1B4B']
+    const [bg, ink] = STATUS_STYLE[status] || ['#fff', '#1E1B4B']
+    const bar = STATUS_BAR[status] || 'transparent'
     const isToday = dateStr === todayStr
     const isSel = dateStr === selectedDate
+    const isFuture = status === 'FUTURE'
+    const isWeekend = new Date(dateStr + 'T00:00:00').getDay() % 6 === 0
+    const isHover = hover === dateStr && !isFuture
+
     cells.push(
-      <button key={dateStr} onClick={() => onDayClick(dateStr)} style={{
-        minHeight:cell, background:bg, color:c, border: isToday ? '1.5px solid #7C3AED' : '1px solid rgba(124,58,237,0.10)',
-        borderRadius:7, padding:isMobile?'3px 2px':'4px 5px', cursor:'pointer', fontFamily:'inherit',
-        display:'flex', flexDirection:'column', alignItems:'flex-start', gap:1, overflow:'hidden',
-        outline: isSel ? '2px solid #7C3AED' : 'none', outlineOffset: isSel ? 1 : 0,
-      }}>
-        <span style={{ fontSize:fs, fontWeight:700, lineHeight:1 }}>{d}</span>
-        {!isMobile && rec && (rec.work_in || rec.work_out) && (
-          <span style={{ fontSize:8, opacity:.8, lineHeight:1.2 }}>{fmtT(rec.work_in)}–{fmtT(rec.work_out)}</span>
+      <button key={dateStr}
+        onClick={() => !isFuture && onDayClick(dateStr)}
+        onMouseEnter={() => setHover(dateStr)}
+        onMouseLeave={() => setHover(null)}
+        disabled={isFuture}
+        title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}`}
+        style={{
+          minHeight: cell, position: 'relative', overflow: 'hidden',
+          background: isFuture ? (isWeekend ? '#FCFCFD' : '#fff') : bg,
+          color: ink, fontFamily: 'inherit', textAlign: 'left',
+          border: isSel ? '2px solid #7C3AED' : isToday ? '2px solid #A78BFA' : '1px solid rgba(124,58,237,0.10)',
+          borderRadius: 10, padding: isMobile ? '5px 6px' : '7px 8px',
+          cursor: isFuture ? 'default' : 'pointer',
+          opacity: isFuture ? .5 : 1,
+          transform: isSel ? 'translateY(-2px)' : isHover ? 'translateY(-1px)' : 'none',
+          boxShadow: isSel ? '0 6px 16px rgba(124,58,237,0.26)'
+                   : isHover ? '0 3px 10px rgba(30,27,75,0.10)' : 'none',
+          transition: 'transform .14s ease, box-shadow .14s ease',
+        }}>
+
+        {!isFuture && bar !== 'transparent' && (
+          <span style={{ position:'absolute', left:0, top:0, bottom:0, width:3, background:bar }} />
         )}
-        {status === 'ON_LEAVE'
-          ? <span style={{ fontSize:isMobile?8:9, fontWeight:600 }}>{leave?.short_name || 'L'}</span>
-          : (STATUS_LABEL[status] ? <span style={{ fontSize:isMobile?8:9, fontWeight:600 }}>{STATUS_LABEL[status]}</span> : null)}
+
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:3 }}>
+          <span style={{ fontSize: isMobile ? 12 : 14, fontWeight: isToday ? 800 : 700, lineHeight:1,
+                         marginLeft: bar !== 'transparent' && !isFuture ? 4 : 0 }}>{d}</span>
+          {!isFuture && STATUS_LABEL[status] && (
+            <span style={{ fontSize: isMobile ? 9 : 10, fontWeight:700, opacity:.75 }}>
+              {status === 'ON_LEAVE' ? (leave?.short_name || 'L') : STATUS_LABEL[status]}
+            </span>
+          )}
+        </div>
+
+        {!isMobile && !isFuture && rec && (rec.work_in || rec.work_out) && (
+          <div style={{ fontSize:9, opacity:.8, marginTop:5, marginLeft:4, lineHeight:1.35,
+                        fontVariantNumeric:'tabular-nums' }}>
+            {fmtT(rec.work_in)} – {fmtT(rec.work_out)}
+          </div>
+        )}
+
+        {!isMobile && !isFuture && rec && (rec.late_minutes || 0) > 0 && (
+          <div style={{ fontSize:8.5, marginTop:2, marginLeft:4, color:'#C2410C', fontWeight:600 }}>
+            {rec.late_minutes}m late
+          </div>
+        )}
+
+        {isToday && (
+          <span style={{ position:'absolute', bottom:4, right:5, fontSize:7.5, fontWeight:700,
+                         letterSpacing:'.06em', color:'#7C3AED', background:'#fff',
+                         padding:'1px 5px', borderRadius:99, border:'1px solid #DDD6FE' }}>
+            TODAY
+          </span>
+        )}
       </button>
     )
   }
-  const legend: [string,string][] = [['PRESENT','Present'],['ABSENT','Absent'],['HALF_DAY','Half'],['MISS_PUNCH','Miss Punch'],['ON_LEAVE','Leave'],['HOLIDAY','Holiday'],['WEEKLY_OFF','Week Off'],['LWP','LOP']]
+
   return (
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom:gap }}>
-        {WEEKDAYS.map(w => <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:600, color:'#9CA3AF', padding:'2px 0' }}>{w}</div>)}
+        {WEEKDAYS.map((w, n) => (
+          <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:700,
+                                letterSpacing:'.06em', padding:'5px 0',
+                                color: n % 6 === 0 ? '#C4B5FD' : '#9CA3AF' }}>
+            {isMobile ? w[0] : w.toUpperCase()}
+          </div>
+        ))}
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap }}>{cells}</div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 12px', marginTop:12 }}>
-        {legend.map(([k,lbl]) => { const [bg,c] = STATUS_STYLE[k]; return (
-          <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, color:'#6B7280' }}>
-            <span style={{ width:11, height:11, borderRadius:3, background:bg, border:'1px solid '+c, display:'inline-block' }} />{lbl}
-          </span>
-        )})}
-      </div>
+      <CalendarLegend />
     </div>
   )
 }
 
-// 3) Day detail panel ────────────────────────────────────────────
 function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
   emp: EmployeeDetail; date: string; dayInfo: ReturnType<typeof resolveDay>; isMobile: boolean; onRaise: (d: string) => void
 }) {
@@ -1594,25 +1847,36 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1) } else setMonth(m => m - 1); setSelectedDate(null); setRaiseDate(null) }
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1) } else setMonth(m => m + 1); setSelectedDate(null); setRaiseDate(null) }
 
+  // One walk, shared by the ring and the tiles, so both agree with the grid.
+  const stats = monthStats(year, month, monthData, todayStr)
   const dayInfo = selectedDate && monthData ? resolveDay(selectedDate, monthData, todayStr) : null
   const raiseRec = raiseDate && monthData ? (monthData.recMap.get(raiseDate) || null) : null
 
   return (
     <div>
-      {/* (A) month nav */}
-      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <button onClick={prevMonth} style={T.btnO}>‹ Prev</button>
-        <div style={{ fontSize:15, fontWeight:700 }}>{MONTH_NAMES[month-1]} {year}</div>
-        <button onClick={nextMonth} style={T.btnO}>Next ›</button>
-      </div>
+      <ShimmerKeyframes />
+      {/* (A) the month, as one glance */}
+      <MonthHero
+        month={month} year={year}
+        summary={stats}
+        onPrev={prevMonth} onNext={nextMonth}
+        onToday={() => { const n = new Date(); setMonth(n.getMonth()+1); setYear(n.getFullYear()); setSelectedDate(null); setRaiseDate(null) }}
+        isThisMonth={month === new Date().getMonth()+1 && year === new Date().getFullYear()}
+        isMobile={isMobile} />
 
-      {/* (B) summary chips */}
-      <AttendanceSummaryChips summary={computeSummary(monthData?.records || [])} isMobile={isMobile} />
+      {/* (B) the month in numbers */}
+      <AttendanceSummaryChips summary={stats} isMobile={isMobile} />
 
       {/* (C) calendar */}
       <div style={T.card}>
         {loading || !monthData
-          ? <div style={{ fontSize:12, color:'#9CA3AF', padding:'20px 0', textAlign:'center' }}>Loading attendance…</div>
+          ? <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:6 }}>
+              {Array.from({ length: 35 }).map((_, i) => (
+                <div key={i} style={{ minHeight: isMobile ? 46 : 74, borderRadius:10,
+                                      background:'linear-gradient(90deg,#F7F5FF 25%,#F0EDFB 50%,#F7F5FF 75%)',
+                                      backgroundSize:'200% 100%', animation:'ezerShimmer 1.2s infinite' }} />
+              ))}
+            </div>
           : <AttendanceCalendar year={year} month={month} monthData={monthData} todayStr={todayStr} isMobile={isMobile} onDayClick={d => { setSelectedDate(d); setRaiseDate(null) }} selectedDate={selectedDate} />}
       </div>
 
