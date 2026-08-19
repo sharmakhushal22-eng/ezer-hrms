@@ -47,6 +47,55 @@ const STAGE_OF: Record<ClaimPendingStatus, string> = {
   PENDING_FINANCE: 'CLAIM_FINANCE',
 };
 
+/**
+ * Tell finance a claim is theirs, or that it no longer is.
+ *
+ * The finance dashboard reads one queue table rather than joining every module
+ * that might need it, so a claim announces itself on arriving at
+ * PENDING_FINANCE and settles when it is approved, rejected or paid.
+ *
+ * Deliberately never throws. Migration 053 may not be applied, and a claim must
+ * not fail to progress because the finance queue is unavailable — finance can
+ * still work from the travel screen. Failure is logged and swallowed.
+ */
+async function notifyFinance(
+  sb: ReturnType<typeof serviceClient>,
+  claim: Record<string, any>,
+  action: 'enqueue' | 'APPROVED' | 'REJECTED' | 'SETTLED',
+  actedBy?: string | null,
+  note?: string | null,
+) {
+  try {
+    if (action === 'enqueue') {
+      const { data: emp } = await sb
+        .from('employees').select('full_name, emp_code').eq('id', claim.employee_id).maybeSingle();
+      await sb.rpc('finance_enqueue', {
+        p_company_id: claim.company_id,
+        p_module: 'TRAVEL',
+        p_ref_table: 'travel_claims',
+        p_ref_id: claim.id,
+        p_title: `${claim.claim_no} — ${emp?.full_name ?? 'employee'}`,
+        p_subtitle: `${emp?.emp_code ?? ''} · ${claim.period_from ?? ''} to ${claim.period_to ?? ''}`.trim(),
+        p_employee_id: claim.employee_id,
+        p_amount: claim.total_claimed,
+        p_flag_count: claim.flag_count ?? 0,
+        p_due_at: null,
+        p_meta: { claim_no: claim.claim_no, claim_type: claim.claim_type },
+      });
+    } else {
+      await sb.rpc('finance_settle', {
+        p_module: 'TRAVEL',
+        p_ref_id: claim.id,
+        p_status: action,
+        p_by: actedBy ?? null,
+        p_note: note ?? null,
+      });
+    }
+  } catch {
+    // 053 not applied, or the queue is unavailable. The claim is unaffected.
+  }
+}
+
 function slaDaysFor(stage: string, policy: { rm_sla_days?: number; hr_sla_days?: number; finance_sla_days?: number } | null): number {
   if (stage === 'CLAIM_RM') return policy?.rm_sla_days ?? 3;
   if (stage === 'CLAIM_HR') return policy?.hr_sla_days ?? 3;
@@ -373,6 +422,9 @@ export async function POST(req: NextRequest) {
       sla_due_at: due.toISOString(),
     });
 
+    // If it went straight to finance, they need to know now.
+    if (entryStatus === 'PENDING_FINANCE') await notifyFinance(sb, claim, 'enqueue');
+
     const withWhom =
       entryStatus === 'PENDING_RM' ? 'your reporting manager'
       : entryStatus === 'PENDING_HR' ? 'the HR Head'
@@ -477,6 +529,10 @@ export async function PATCH(req: NextRequest) {
           });
         }
 
+        if (next === 'PENDING_FINANCE') {
+          await notifyFinance(sb, { ...claim, ...patch, id: claim_id }, 'enqueue');
+        }
+
         await closeTask(sb, claim_id, STAGE_OF[expected], actioned_by, 'APPROVED', remarks);
         break;
       }
@@ -550,6 +606,7 @@ export async function PATCH(req: NextRequest) {
         patch.net_payable = Math.max(approved - advance, 0);
         patch.recovery_amount = Math.max(advance - approved, 0);
 
+        await notifyFinance(sb, { ...claim, id: claim_id }, 'APPROVED', actioned_by, remarks);
         await closeTask(sb, claim_id, 'CLAIM_FINANCE', actioned_by, 'APPROVED', remarks);
         break;
       }
@@ -573,6 +630,7 @@ export async function PATCH(req: NextRequest) {
           .from('travel_logs')
           .update({ claim_id: null, status: 'LOGGED' })
           .eq('claim_id', claim_id);
+        await notifyFinance(sb, { ...claim, id: claim_id }, 'REJECTED', actioned_by, remarks);
         await closeTask(sb, claim_id, null, actioned_by, 'REJECTED', remarks);
         break;
       }
@@ -591,6 +649,7 @@ export async function PATCH(req: NextRequest) {
         }
         patch.status = 'PAID';
         patch.paid_at = now;
+        await notifyFinance(sb, { ...claim, id: claim_id }, 'SETTLED', actioned_by, remarks);
         patch.payroll_run_id = payroll_run_id ?? null;
         break;
       }

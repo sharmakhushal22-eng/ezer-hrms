@@ -17,6 +17,7 @@ const nav = [
   { icon: '💰', label: 'Payroll', href: '/dashboard/payroll' },
   { icon: '💳', label: 'Flexi Claims', href: '/dashboard/flexi-claims' },
   { icon: '✈️', label: 'Travel Claims', href: '/dashboard/travel-claims' },
+  { icon: '🏦', label: 'Finance', href: '/dashboard/finance' },
   { icon: '💸', label: 'Loans', href: '/dashboard/loans' },
   { icon: '⚖️', label: 'Compliance', href: '/dashboard/compliance' },
   { icon: '📝', label: 'HR Letters', href: '/dashboard/letters' },
