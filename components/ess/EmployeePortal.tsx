@@ -292,12 +292,287 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 // ════════════════════════════════════════════════════════════════
 // PROFILE & KYC (B4)
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// PROFILE
+// Rebuilt from a flat list of 21 label/value rows into something an employee
+// can actually use. Three ideas drive it:
+//
+//   1. Identity first. A person opening their own profile wants to see
+//      themselves, not a table. The hero carries the photo, the name, and the
+//      four facts that place someone in a company.
+//   2. Completeness is a prompt, not a decoration. The ring is computed from
+//      fields that are genuinely missing, and names them — HR chases these,
+//      and the employee is the only one who can supply them.
+//   3. Sensitive values stay covered. PAN, Aadhaar and UAN are masked until
+//      asked for, and copy is one tap because the reason people reveal them is
+//      to paste them somewhere.
+//
+// Palette and inline-style convention follow T, as the rest of this file does.
+// ════════════════════════════════════════════════════════════════
+
+const P = {
+  navy: '#1E1B4B', navyDeep: '#15123A', purple: '#7C3AED', purpleD: '#6D28D9',
+  purpleLite: '#F3F0FF', line: '#EDE9FE', muted: '#6B7280', dim: '#9CA3AF',
+  green: '#059669', greenBg: '#ECFDF5', amber: '#B45309', amberBg: '#FFFBEB',
+  red: '#DC2626', white: '#FFFFFF',
+}
+
+/** Years and months since a date, in words. */
+function tenureOf(doj?: string | null): string {
+  if (!doj) return '—'
+  const from = new Date(doj), now = new Date()
+  if (isNaN(from.getTime()) || from > now) return '—'
+  let months = (now.getFullYear() - from.getFullYear()) * 12 + (now.getMonth() - from.getMonth())
+  if (now.getDate() < from.getDate()) months--
+  const y = Math.floor(months / 12), m = months % 12
+  if (y <= 0 && m <= 0) return 'Joined this month'
+  return [y ? `${y} year${y > 1 ? 's' : ''}` : '', m ? `${m} month${m > 1 ? 's' : ''}` : ''].filter(Boolean).join(', ')
+}
+
+/** Days until the next occurrence of a day/month, ignoring the year. */
+function daysUntilAnniversary(d?: string | null): number | null {
+  if (!d) return null
+  const src = new Date(d)
+  if (isNaN(src.getTime())) return null
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let next = new Date(today.getFullYear(), src.getMonth(), src.getDate())
+  if (next < today) next = new Date(today.getFullYear() + 1, src.getMonth(), src.getDate())
+  return Math.round((next.getTime() - today.getTime()) / 86400000)
+}
+
+/** Which fields are missing, so the ring can name them rather than just score. */
+function completenessOf(emp: EmployeeDetail): { pct: number; missing: string[]; total: number } {
+  const checks: [string, unknown][] = [
+    ['Date of birth', emp.date_of_birth], ['Gender', emp.gender],
+    ['Blood group', emp.blood_group], ['Marital status', emp.marital_status],
+    ['Mobile number', emp.mobile], ['Personal email', emp.personal_email],
+    ['PAN', emp.pan_number], ['Aadhaar', emp.aadhar_last4],
+    ['UAN', emp.uan_number], ['Profile photo', emp.profile_photo],
+  ]
+  const missing = checks.filter(([, v]) => !v).map(([k]) => k)
+  return {
+    pct: Math.round(((checks.length - missing.length) / checks.length) * 100),
+    missing, total: checks.length,
+  }
+}
+
+// ── sub-components, defined outside Profile so they keep their state ──────────
+
+function Ring({ pct, size = 76 }: { pct: number; size?: number }) {
+  const r = (size - 9) / 2
+  const c = 2 * Math.PI * r
+  const tone = pct >= 90 ? P.green : pct >= 60 ? P.purple : P.amber
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none"
+                stroke="rgba(255,255,255,0.18)" strokeWidth="6" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none"
+                stroke={tone} strokeWidth="6" strokeLinecap="round"
+                strokeDasharray={`${(c * pct) / 100} ${c}`}
+                style={{ transition: 'stroke-dasharray .7s cubic-bezier(.4,0,.2,1)' }} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+        <span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1 }}>{pct}%</span>
+        <span style={{ fontSize: 8.5, opacity: .7, letterSpacing: '.05em', marginTop: 1 }}>DONE</span>
+      </div>
+    </div>
+  )
+}
+
+function Avatar({ emp, size = 84 }: { emp: EmployeeDetail; size?: number }) {
+  const [broken, setBroken] = useState(false)
+  const show = emp.profile_photo && !broken
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0,
+                  background: show ? '#fff' : 'linear-gradient(135deg,#7C3AED,#A78BFA)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontSize: size * 0.34, fontWeight: 700, letterSpacing: '.02em',
+                  border: '3px solid rgba(255,255,255,0.25)',
+                  boxShadow: '0 6px 20px rgba(0,0,0,0.22)', overflow: 'hidden' }}>
+      {show
+        ? <img src={emp.profile_photo!} alt="" onError={() => setBroken(true)}
+               style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : initials(emp.full_name || '?')}
+    </div>
+  )
+}
+
+function Chip({ icon, children }: { icon: string; children: React.ReactNode }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px',
+                   borderRadius: 99, background: 'rgba(255,255,255,0.12)',
+                   border: '1px solid rgba(255,255,255,0.16)', color: '#fff',
+                   fontSize: 11.5, fontWeight: 500, whiteSpace: 'nowrap' }}>
+      <span style={{ opacity: .85 }}>{icon}</span>{children}
+    </span>
+  )
+}
+
+/**
+ * One field. Copy appears on hover because it is useful often but never the
+ * point; sensitive values stay masked until asked for.
+ */
+function Field({ label, value, icon, copyable, sensitive, notify }: {
+  label: string; value?: string | null; icon?: string
+  copyable?: boolean; sensitive?: boolean
+  notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const [hover, setHover] = useState(false)
+  const [shown, setShown] = useState(false)
+  const has = !!value && value !== '—'
+  const masked = sensitive && !shown && has
+  const display = !has ? '—' : masked ? '•'.repeat(Math.min(String(value).length, 12)) : String(value)
+
+  return (
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px',
+                  borderRadius: 8, background: hover ? P.purpleLite : 'transparent',
+                  transition: 'background .15s' }}>
+      {icon && <span style={{ fontSize: 14, width: 18, textAlign: 'center', opacity: .8 }}>{icon}</span>}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: P.dim,
+                      textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: has ? P.navy : P.dim,
+                      marginTop: 2, fontVariantNumeric: 'tabular-nums',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {display}
+        </div>
+      </div>
+
+      {sensitive && has && (
+        <button onClick={() => setShown(v => !v)} title={shown ? 'Hide' : 'Reveal'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3,
+                         fontSize: 13, opacity: hover || shown ? 1 : .35, transition: 'opacity .15s' }}>
+          {shown ? '🙈' : '👁️'}
+        </button>
+      )}
+      {copyable && has && (
+        <button title="Copy"
+                onClick={() => {
+                  navigator.clipboard?.writeText(String(value))
+                    .then(() => notify(`${label} copied`))
+                    .catch(() => notify('Could not copy', 'error'))
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3,
+                         fontSize: 12.5, opacity: hover ? 1 : 0, transition: 'opacity .15s' }}>
+          📋
+        </button>
+      )}
+    </div>
+  )
+}
+
+function Panel({ title, icon, children, accent }: {
+  title: string; icon: string; children: React.ReactNode; accent?: string
+}) {
+  return (
+    <div style={{ background: P.white, borderRadius: 12, border: `1px solid ${P.line}`,
+                  padding: '15px 14px', boxShadow: '0 1px 3px rgba(124,58,237,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+                    paddingBottom: 9, borderBottom: `1px solid ${P.line}` }}>
+        <span style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                       background: accent || P.purpleLite, display: 'flex',
+                       alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>{icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: P.navy,
+                       letterSpacing: '.02em' }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function ProfileHero({ emp, notify }: {
+  emp: EmployeeDetail; notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const c = completenessOf(emp)
+  const bday = daysUntilAnniversary(emp.date_of_birth)
+  const work = daysUntilAnniversary(emp.group_doj)
+
+  return (
+    <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 12,
+                  background: `linear-gradient(135deg, ${P.navy} 0%, #2A1F63 55%, #3C1E8C 100%)`,
+                  boxShadow: '0 8px 28px rgba(30,27,75,0.28)', position: 'relative' }}>
+      {/* soft light, so the band is not a flat rectangle */}
+      <div style={{ position: 'absolute', top: -90, right: -60, width: 260, height: 260,
+                    borderRadius: '50%', background: 'rgba(167,139,250,0.16)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: -110, left: -40, width: 220, height: 220,
+                    borderRadius: '50%', background: 'rgba(124,58,237,0.14)', pointerEvents: 'none' }} />
+
+      <div style={{ position: 'relative', padding: '22px 22px 20px',
+                    display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <Avatar emp={emp} />
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#fff', lineHeight: 1.15,
+                        letterSpacing: '-.02em' }}>{emp.full_name || '—'}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', marginTop: 3 }}>
+            {emp.designation || 'Designation not set'}
+            {emp.dept_name ? ` · ${emp.dept_name}` : ''}
+          </div>
+
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 13 }}>
+            <Chip icon="🆔">{emp.emp_code || '—'}</Chip>
+            <Chip icon="🏢">{emp.company_name || '—'}</Chip>
+            {(emp.location_name || emp.city) && (
+              <Chip icon="📍">{[emp.location_name, emp.city].filter(Boolean).join(', ')}</Chip>
+            )}
+            <Chip icon="⏳">{tenureOf(emp.group_doj)}</Chip>
+          </div>
+
+          {/* Only worth the space when it is actually near. */}
+          {(bday !== null && bday <= 30) || (work !== null && work <= 30) ? (
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 9 }}>
+              {bday !== null && bday <= 30 && (
+                <Chip icon="🎂">{bday === 0 ? 'Birthday today' : `Birthday in ${bday} day${bday > 1 ? 's' : ''}`}</Chip>
+              )}
+              {work !== null && work <= 30 && (
+                <Chip icon="🎉">{work === 0 ? 'Work anniversary today' : `Work anniversary in ${work} day${work > 1 ? 's' : ''}`}</Chip>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
+                      minWidth: 120 }}>
+          <Ring pct={c.pct} />
+          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
+            {c.missing.length === 0
+              ? 'Profile complete'
+              : `${c.missing.length} of ${c.total} still missing`}
+          </div>
+        </div>
+      </div>
+
+      {/* Naming what is missing turns a score into something actionable. */}
+      {c.missing.length > 0 && (
+        <div style={{ background: 'rgba(0,0,0,0.22)', padding: '10px 22px',
+                      display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.7)' }}>Still needed:</span>
+          {c.missing.map(m => (
+            <span key={m} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99,
+                                   background: 'rgba(255,255,255,0.1)', color: '#FBBF24',
+                                   border: '1px solid rgba(251,191,36,0.28)' }}>{m}</span>
+          ))}
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 'auto' }}>
+            Request an update below
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const [tab, setTab] = useState<'OVERVIEW' | 'PERSONAL' | 'UPDATE'>('OVERVIEW')
   const [field, setField] = useState('Personal Details')
   const [detail, setDetail] = useState('')
   const [busy, setBusy] = useState(false)
   const FIELDS = ['Personal Details','PAN Card','Aadhaar','Bank Account','Emergency Contact','Family / Dependents','Nominee','Education']
   const [bank, setBank] = useState({ account_number:'', confirm:'', ifsc:'', bank_name:'', branch:'', holder_name: emp.full_name || '', account_type:'Savings' })
+
   const lookupIfsc = async (ifsc: string) => {
     if (ifsc.length < 11) return
     try {
@@ -305,9 +580,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
       if (r.ok) { const d = await r.json(); setBank(b => ({ ...b, bank_name: d.BANK || b.bank_name, branch: d.BRANCH || b.branch })) }
     } catch { /* IFSC lookup is best-effort */ }
   }
-  const Row = ({ k, v }: { k: string; v: any }) => (
-    <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid #F3F0FF', fontSize:12.5 }}><span style={{ color:'#6B7280' }}>{k}</span><span style={{ fontWeight:600 }}>{v || '—'}</span></div>
-  )
+
   async function submit() {
     if (field === 'Bank Account') {
       if (!bank.ifsc.trim() || !bank.account_number.trim() || !bank.holder_name.trim()) { notify('Fill IFSC, account number and holder name', 'error'); return }
@@ -328,47 +601,126 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
     if (error) { notify('Failed: ' + error.message, 'error'); return }
     setDetail(''); notify('Update request sent to HR for approval.')
   }
-  return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:10 }}>
-      <div style={T.card}>
-        <div style={T.section}>👤 My Profile</div>
-        <Row k="Name" v={emp.full_name} /><Row k="Employee Code" v={emp.emp_code} />
-        <Row k="Designation" v={emp.designation} /><Row k="Department" v={emp.dept_name} />
-        <Row k="Company" v={emp.company_name} /><Row k="Location" v={[emp.location_name, emp.city].filter(Boolean).join(', ')} />
-        <Row k="Date of Joining" v={fmt(emp.group_doj)} /><Row k="Employment Type" v={emp.employment_type} />
-        <Row k="Reporting Manager" v={emp.l1_manager_name} /><Row k="HR" v={emp.hr_manager_name} />
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>🪪 KYC & Personal</div>
-        <Row k="Gender" v={emp.gender} /><Row k="Date of Birth" v={fmt(emp.date_of_birth)} />
-        <Row k="Blood Group" v={emp.blood_group} /><Row k="Marital Status" v={emp.marital_status} />
-        <Row k="Mobile" v={emp.mobile} /><Row k="Personal Email" v={emp.personal_email} /><Row k="Office Email" v={emp.office_email} />
-        <Row k="PAN" v={emp.pan_number} /><Row k="Aadhaar" v={emp.aadhar_last4 ? `XXXX XXXX ${emp.aadhar_last4}` : '—'} /><Row k="UAN" v={emp.uan_number} />
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>✏️ Request an Update (→ HR approval)</div>
-        <label style={T.label}>What to update</label>
-        <select style={{ ...T.input, marginBottom:10 }} value={field} onChange={e => setField(e.target.value)}>{FIELDS.map(f => <option key={f}>{f}</option>)}</select>
 
-        {field === 'Bank Account' ? (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-            <div><label style={T.label}>IFSC Code *</label><input style={T.input} value={bank.ifsc} maxLength={11} onChange={e => { const v = e.target.value.toUpperCase(); setBank(b => ({ ...b, ifsc: v })); lookupIfsc(v) }} placeholder="e.g. HDFC0001234" /></div>
-            <div><label style={T.label}>Account Type</label><select style={T.input} value={bank.account_type} onChange={e => setBank(b => ({ ...b, account_type: e.target.value }))}><option>Savings</option><option>Current</option></select></div>
-            <div><label style={T.label}>Account Number *</label><input style={T.input} value={bank.account_number} onChange={e => setBank(b => ({ ...b, account_number: e.target.value }))} /></div>
-            <div><label style={T.label}>Confirm Account Number *</label><input style={T.input} value={bank.confirm} onChange={e => setBank(b => ({ ...b, confirm: e.target.value }))} /></div>
-            <div><label style={T.label}>Bank Name (auto)</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.bank_name} onChange={e => setBank(b => ({ ...b, bank_name: e.target.value }))} placeholder="Auto-fills from IFSC" /></div>
-            <div><label style={T.label}>Branch (auto)</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.branch} onChange={e => setBank(b => ({ ...b, branch: e.target.value }))} placeholder="Auto-fills from IFSC" /></div>
-            <div style={{ gridColumn:'span 2' }}><label style={T.label}>Account Holder Name *</label><input style={T.input} value={bank.holder_name} onChange={e => setBank(b => ({ ...b, holder_name: e.target.value }))} placeholder="As per bank records" /></div>
-            {bank.confirm && bank.confirm !== bank.account_number && <div style={{ gridColumn:'span 2', color:'#DC2626', fontSize:12, marginTop:-4 }}>⚠️ Account numbers don't match</div>}
-          </div>
-        ) : (
-          <>
-            <label style={T.label}>Details</label>
-            <textarea style={{ ...T.input, minHeight:80, marginBottom:10, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="New value / what changed…" />
-          </>
-        )}
-        <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Sending…' : 'Submit update request'}</button>
+  const TABS: [typeof tab, string, string][] = [
+    ['OVERVIEW', 'Overview', '📋'],
+    ['PERSONAL', 'Personal & KYC', '🪪'],
+    ['UPDATE', 'Request a change', '✏️'],
+  ]
+
+  return (
+    <div>
+      <ProfileHero emp={emp} notify={notify} />
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {TABS.map(([k, label, icon]) => (
+          <button key={k} onClick={() => setTab(k)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6,
+                           padding: '8px 15px', borderRadius: 9, cursor: 'pointer',
+                           fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit',
+                           border: tab === k ? 'none' : `1px solid ${P.line}`,
+                           background: tab === k ? P.purple : P.white,
+                           color: tab === k ? '#fff' : P.purpleD,
+                           boxShadow: tab === k ? '0 3px 10px rgba(124,58,237,0.28)' : 'none',
+                           transition: 'all .18s' }}>
+            <span>{icon}</span>{label}
+          </button>
+        ))}
       </div>
+
+      {tab === 'OVERVIEW' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 11 }}>
+          <Panel title="Where you sit" icon="🏛️">
+            <Field label="Employee code" value={emp.emp_code} icon="🆔" copyable notify={notify} />
+            <Field label="Designation" value={emp.designation} icon="💼" notify={notify} />
+            <Field label="Department" value={emp.dept_name} icon="🗂️" notify={notify} />
+            <Field label="Company" value={emp.company_name} icon="🏢" notify={notify} />
+            <Field label="Location" value={[emp.location_name, emp.city].filter(Boolean).join(', ')} icon="📍" notify={notify} />
+          </Panel>
+
+          <Panel title="Your people" icon="👥" accent="#EEF2FF">
+            <Field label="Reporting manager" value={emp.l1_manager_name} icon="👔" notify={notify} />
+            <Field label="HR contact" value={emp.hr_manager_name} icon="🧑‍💼" notify={notify} />
+            <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
+          </Panel>
+
+          <Panel title="Service" icon="⏳" accent={P.greenBg}>
+            <Field label="Date of joining" value={fmt(emp.group_doj)} icon="📅" notify={notify} />
+            <Field label="Time with the company" value={tenureOf(emp.group_doj)} icon="⏳" notify={notify} />
+            <Field label="Employment type" value={emp.employment_type} icon="📄" notify={notify} />
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'PERSONAL' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 11 }}>
+          <Panel title="About you" icon="🙋">
+            <Field label="Date of birth" value={fmt(emp.date_of_birth)} icon="🎂" notify={notify} />
+            <Field label="Gender" value={emp.gender} icon="⚧" notify={notify} />
+            <Field label="Blood group" value={emp.blood_group} icon="🩸" notify={notify} />
+            <Field label="Marital status" value={emp.marital_status} icon="💍" notify={notify} />
+          </Panel>
+
+          <Panel title="How to reach you" icon="📇" accent="#EEF2FF">
+            <Field label="Mobile" value={emp.mobile} icon="📱" copyable notify={notify} />
+            <Field label="Personal email" value={emp.personal_email} icon="📧" copyable notify={notify} />
+            <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
+          </Panel>
+
+          <Panel title="Statutory IDs" icon="🔐" accent={P.amberBg}>
+            <Field label="PAN" value={emp.pan_number} icon="🪪" copyable sensitive notify={notify} />
+            <Field label="Aadhaar" value={emp.aadhar_last4 ? `XXXX XXXX ${emp.aadhar_last4}` : null} icon="🆔" notify={notify} />
+            <Field label="UAN" value={emp.uan_number} icon="🏦" copyable sensitive notify={notify} />
+            <div style={{ fontSize: 10.5, color: P.dim, marginTop: 7, lineHeight: 1.5 }}>
+              Hidden by default. Reveal only when you need to copy one.
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'UPDATE' && (
+        <div style={{ background: P.white, borderRadius: 12, border: `1px solid ${P.line}`,
+                      padding: '18px 18px', maxWidth: 720 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Request a change</div>
+          <div style={{ fontSize: 12, color: P.muted, marginTop: 4, marginBottom: 15, lineHeight: 1.6 }}>
+            You cannot edit these directly — payroll and statutory filings depend on them, so every
+            change goes to HR for approval. You will see it under Raise a Request.
+          </div>
+
+          <label style={T.label}>What to update</label>
+          <select style={{ ...T.input, marginBottom: 13 }} value={field} onChange={e => setField(e.target.value)}>
+            {FIELDS.map(f => <option key={f}>{f}</option>)}
+          </select>
+
+          {field === 'Bank Account' ? (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:11, marginBottom:12 }}>
+              <div><label style={T.label}>IFSC code *</label><input style={T.input} value={bank.ifsc} maxLength={11} onChange={e => { const v = e.target.value.toUpperCase(); setBank(b => ({ ...b, ifsc: v })); lookupIfsc(v) }} placeholder="e.g. HDFC0001234" /></div>
+              <div><label style={T.label}>Account type</label><select style={T.input} value={bank.account_type} onChange={e => setBank(b => ({ ...b, account_type: e.target.value }))}><option>Savings</option><option>Current</option></select></div>
+              <div><label style={T.label}>Account number *</label><input style={T.input} value={bank.account_number} onChange={e => setBank(b => ({ ...b, account_number: e.target.value }))} /></div>
+              <div><label style={T.label}>Confirm account number *</label><input style={{ ...T.input, borderColor: bank.confirm && bank.confirm !== bank.account_number ? P.red : undefined }} value={bank.confirm} onChange={e => setBank(b => ({ ...b, confirm: e.target.value }))} /></div>
+              <div><label style={T.label}>Bank name</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.bank_name} onChange={e => setBank(b => ({ ...b, bank_name: e.target.value }))} placeholder="Fills in from IFSC" /></div>
+              <div><label style={T.label}>Branch</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.branch} onChange={e => setBank(b => ({ ...b, branch: e.target.value }))} placeholder="Fills in from IFSC" /></div>
+              <div style={{ gridColumn:'span 2' }}><label style={T.label}>Account holder name *</label><input style={T.input} value={bank.holder_name} onChange={e => setBank(b => ({ ...b, holder_name: e.target.value }))} placeholder="Exactly as your bank has it" /></div>
+              {bank.confirm && bank.confirm !== bank.account_number && (
+                <div style={{ gridColumn:'span 2', color:P.red, fontSize:12, marginTop:-4 }}>
+                  The two account numbers do not match.
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <label style={T.label}>Details</label>
+              <textarea style={{ ...T.input, minHeight:90, marginBottom:12, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="What it should say instead…" />
+            </>
+          )}
+
+          <button onClick={submit} disabled={busy}
+                  style={{ ...T.btnP, opacity: busy ? .6 : 1,
+                           boxShadow: busy ? 'none' : '0 3px 12px rgba(124,58,237,0.3)' }}>
+            {busy ? 'Sending…' : 'Send to HR'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
