@@ -211,6 +211,8 @@ export default function FinanceDepartment() {
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<{ tone: 'ok' | 'warn' | 'err'; text: string } | null>(null)
+  // Set when the schema is not in place yet — a setup step, not a failure.
+  const [pending, setPending] = useState<string | null>(null)
 
   useEffect(() => {
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
@@ -235,14 +237,21 @@ export default function FinanceDepartment() {
 
       if (!qr.ok) {
         const j = await qr.json().catch(() => ({}))
-        // 053 not applied yet reads as a missing table, which is worth saying
-        // plainly rather than showing an empty queue that looks like "no work".
-        setNote({ tone: 'err', text: j.error?.includes('finance_work_items')
-          ? 'The finance tables do not exist yet — migration 053 has not been run.'
-          : (j.error || 'Could not load the finance queue.') })
         setItems([]); setModules([])
+        // The API now names the cause instead of a generic sentence. An unrun
+        // migration comes back as MIGRATION_PENDING, which is a state to
+        // explain, not an error to apologise for.
+        if (j.code === 'MIGRATION_PENDING') {
+          setPending(j.error || 'The finance tables have not been created yet.')
+          setNote(null)
+        } else if (qr.status === 401) {
+          setNote({ tone: 'warn', text: 'Your dashboard session has expired — sign in again.' })
+        } else {
+          setNote({ tone: 'err', text: j.error || `Could not load the finance queue (HTTP ${qr.status}).` })
+        }
         return
       }
+      setPending(null)
       const q = await qr.json()
       setItems((q.items ?? []) as Item[])
       setModules((q.modules ?? []) as Mod[])
@@ -356,7 +365,28 @@ export default function FinanceDepartment() {
 
       {note && <Note tone={note.tone}>{note.text}</Note>}
 
-      {tab === 'QUEUE' && (
+      {pending && (
+        <div style={{ ...S.card, padding: '22px 24px' }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, marginBottom: 8 }}>
+            Finance is not installed yet
+          </div>
+          <div style={{ fontSize: 12.5, color: V.muted, lineHeight: 1.7, maxWidth: 620 }}>
+            {pending}
+            <br /><br />
+            The department, its authority rules and the shared work queue all live in
+            that migration. Until it is applied there is nothing to read — this is a
+            setup step, not a fault. The screens below are already built and will fill
+            in as soon as it runs.
+          </div>
+          <div style={{ marginTop: 14, padding: '10px 13px', background: V.field,
+                        border: `1px solid ${V.border}`, borderRadius: 8,
+                        fontFamily: 'ui-monospace, monospace', fontSize: 12, color: V.navy }}>
+            supabase/migrations/053_finance_department.sql
+          </div>
+        </div>
+      )}
+
+      {!pending && tab === 'QUEUE' && (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))',
                         gap: 10, marginBottom: 12 }}>
@@ -408,7 +438,7 @@ export default function FinanceDepartment() {
         </>
       )}
 
-      {tab === 'TEAM' && (
+      {!pending && tab === 'TEAM' && (
         <div style={S.card}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Finance team</div>
           <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
@@ -422,7 +452,7 @@ export default function FinanceDepartment() {
         </div>
       )}
 
-      {tab === 'MODULES' && (
+      {!pending && tab === 'MODULES' && (
         <>
           <div style={S.card}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Routing work here</div>

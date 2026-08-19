@@ -39,6 +39,7 @@ import {
 } from '@/lib/travel/gps';
 import type { GpsPoint } from '@/lib/travel/gps';
 import type { Consumer, ExpenseType, Flag, MileageRate } from '@/lib/travel/types';
+import { errorResponse } from '@/lib/travel/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,10 +92,8 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to load logs' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to load logs',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -539,10 +538,8 @@ export async function POST(req: NextRequest) {
           : 'Travel logged.',
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to save travel log' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to save travel log',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -586,9 +583,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to delete log' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to delete log',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }

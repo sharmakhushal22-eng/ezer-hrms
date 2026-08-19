@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireDashboardUser } from '@/lib/api-auth';
+import { errorResponse } from '@/lib/travel/errors';
 import { serviceClient, monthStart } from '@/lib/travel/access';
 
 export const dynamic = 'force-dynamic';
@@ -83,10 +84,8 @@ export async function GET(req: NextRequest) {
       })),
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to load periods' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to load periods',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -161,10 +160,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ period: data });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to create period' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to create period',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -297,10 +294,8 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ period: updated });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to update period' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to update period',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 

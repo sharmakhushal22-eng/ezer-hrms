@@ -37,6 +37,7 @@ import {
 import type { ClaimPendingStatus } from '@/lib/travel/access';
 import { requireDashboardUser } from '@/lib/api-auth';
 import { resolveActor } from '@/lib/travel/actor';
+import { errorResponse } from '@/lib/travel/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -233,10 +234,8 @@ export async function GET(req: NextRequest) {
     if (error) throw error;
     return NextResponse.json({ claims: data ?? [] });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to load claims' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to load claims',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -436,10 +435,8 @@ export async function POST(req: NextRequest) {
       message: `${claim.claim_no} submitted — now with ${withWhom} for approval.`,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to submit claim' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to submit claim',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -668,10 +665,8 @@ export async function PATCH(req: NextRequest) {
     if (error) throw error;
     return NextResponse.json({ claim: updated });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to action claim' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to action claim',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 

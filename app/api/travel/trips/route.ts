@@ -21,6 +21,7 @@ import {
   getActivePolicy,
 } from '@/lib/travel/access';
 import { findEntitlement } from '@/lib/travel/calc';
+import { errorResponse } from '@/lib/travel/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,10 +71,8 @@ export async function GET(req: NextRequest) {
       joined_trips: (asTraveller ?? []).map((r) => r.travel_trips).filter(Boolean),
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to load trips' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to load trips',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -301,10 +300,8 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to create trip' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to create trip',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -413,9 +410,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ trip: updated });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to update trip' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to update trip',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }

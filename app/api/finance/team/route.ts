@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { serviceClient } from '@/lib/travel/access';
 import { requireDashboardUser } from '@/lib/api-auth';
+import { errorResponse } from '@/lib/travel/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,10 +36,8 @@ export async function GET(req: NextRequest) {
       team: (team ?? []).map((t) => ({ ...t, employee: byId.get(t.employee_id) ?? null })),
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not load the finance team' },
-      { status: 500 },
-    );
+    return errorResponse(e, 'Could not load the finance team',
+      'The finance tables do not exist yet — migration 053_finance_department.sql has not been run.');
   }
 }
 
@@ -68,9 +67,7 @@ export async function PATCH(req: NextRequest) {
     if (error) throw error;
     return NextResponse.json({ member: data });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not update that member' },
-      { status: 500 },
-    );
+    return errorResponse(e, 'Could not update that member',
+      'The finance tables do not exist yet — migration 053_finance_department.sql has not been run.');
   }
 }

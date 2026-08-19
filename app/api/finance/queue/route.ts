@@ -18,6 +18,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { serviceClient } from '@/lib/travel/access';
 import { requireDashboardUser } from '@/lib/api-auth';
+import { errorResponse } from '@/lib/travel/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,10 +66,8 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not load the finance queue' },
-      { status: 500 },
-    );
+    return errorResponse(e, 'Could not load the finance queue',
+      'The finance tables do not exist yet — migration 053_finance_department.sql has not been run.');
   }
 }
 
@@ -185,9 +184,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ ok: true, status: settleAs });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not action that item' },
-      { status: 500 },
-    );
+    return errorResponse(e, 'Could not action that item',
+      'The finance tables do not exist yet — migration 053_finance_department.sql has not been run.');
   }
 }

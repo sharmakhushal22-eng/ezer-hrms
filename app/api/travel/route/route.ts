@@ -41,6 +41,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { errorResponse } from '@/lib/travel/errors';
 import { serviceClient } from '@/lib/travel/access';
 import { resolveActor } from '@/lib/travel/actor';
 import { measureTrail, assessTrail, haversineM, isValidPoint } from '@/lib/travel/gps';
@@ -240,10 +241,8 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json(result);
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not build the route' },
-      { status: 500 },
-    );
+    return errorResponse(e, 'Could not build the route',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -326,9 +325,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not load the route' },
-      { status: 500 },
-    );
+    return errorResponse(e, 'Could not load the route',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }

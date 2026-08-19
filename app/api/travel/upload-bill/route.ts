@@ -36,6 +36,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
+import { errorResponse } from '@/lib/travel/errors';
 import { serviceClient } from '@/lib/travel/access';
 import { resolveActor } from '@/lib/travel/actor';
 
@@ -252,10 +253,8 @@ export async function POST(req: NextRequest) {
         : 'Bill attached.',
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not attach the bill' },
-      { status: 500 },
-    );
+    return errorResponse(e, 'Could not attach the bill',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -313,10 +312,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ attachments });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not load the bills' },
-      { status: 500 },
-    );
+    return errorResponse(e, 'Could not load the bills',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -371,9 +368,7 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not remove the bill' },
-      { status: 500 },
-    );
+    return errorResponse(e, 'Could not remove the bill',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }

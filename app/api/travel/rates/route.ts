@@ -15,6 +15,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
+import { errorResponse } from '@/lib/travel/errors';
 import { serviceClient, getActivePolicy, todayISO } from '@/lib/travel/access';
 import { requireDashboardUser } from '@/lib/api-auth';
 
@@ -73,10 +74,8 @@ export async function GET(req: NextRequest) {
       rates: withNames,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to load the rate card' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to load the rate card',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -202,10 +201,8 @@ export async function POST(req: NextRequest) {
           : `${type.type_name} is now ₹${rate}/km.`,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to set the rate' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to set the rate',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -257,9 +254,7 @@ export async function PATCH(req: NextRequest) {
     if (error) throw error;
     return NextResponse.json({ type: data });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to update the expense type' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to update the expense type',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
