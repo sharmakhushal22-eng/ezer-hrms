@@ -26,6 +26,7 @@ import {
 import * as HR from '@/lib/employees/hr-actions'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import { supabase } from '@/lib/supabase'
+import { essAuthHeaders } from '@/lib/ess-session-client'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
 import FunZone from '@/components/ess/FunZone'
 import FlexiClaims from '@/components/ess/FlexiClaims'
@@ -190,6 +191,145 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
   )
 }
 
+/**
+ * Where the employee's travel claims currently sit.
+ *
+ * A claim leaves the employee's hands and then goes quiet — the only way to
+ * find out where it had reached was to open Travel Claims and read a status
+ * word. This puts the chain on the dashboard as a stepper, so "who has it now"
+ * is answerable at a glance, and shows the wait in days, because that is the
+ * actual question behind asking.
+ *
+ * The steps are derived from each claim's own status rather than assumed, so
+ * this stays correct whether the company routes through a reporting manager,
+ * an HR head, both, or neither.
+ */
+const CLAIM_STEP: Record<string, { step: number; label: string; tone: string }> = {
+  DRAFT:           { step: 0, label: 'Draft',              tone: '#9CA3AF' },
+  SUBMITTED:       { step: 1, label: 'Submitted',          tone: '#B45309' },
+  PENDING_RM:      { step: 1, label: 'With your manager',  tone: '#B45309' },
+  PENDING_HR:      { step: 2, label: 'With HR',            tone: '#B45309' },
+  PENDING_FINANCE: { step: 3, label: 'With Finance',       tone: '#6D28D9' },
+  APPROVED:        { step: 4, label: 'Approved, awaiting payment', tone: '#047857' },
+  PAID:            { step: 5, label: 'Paid',               tone: '#047857' },
+  SENT_BACK:       { step: 1, label: 'Sent back to you',   tone: '#B91C1C' },
+  REJECTED:        { step: 0, label: 'Rejected',           tone: '#B91C1C' },
+}
+
+function ClaimStepper({ status }: { status: string }) {
+  const here = CLAIM_STEP[status]?.step ?? 0
+  const done = status === 'PAID'
+  const dead = status === 'REJECTED' || status === 'SENT_BACK'
+  const steps = ['Raised', 'Manager', 'Finance', 'Paid']
+  const reached = [1, 2, 4, 5]   // status step at which each label is satisfied
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginTop: 8 }}>
+      {steps.map((label, i) => {
+        const on = !dead && here >= reached[i]
+        const colour = dead ? '#FCA5A5' : on ? (done ? '#059669' : '#7C3AED') : '#E5E7EB'
+        return (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : '0 0 auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+              <div style={{ width: 15, height: 15, borderRadius: '50%', background: on ? colour : '#fff',
+                            border: `2px solid ${colour}`, display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: 8, color: '#fff', fontWeight: 700 }}>
+                {on ? '✓' : ''}
+              </div>
+              <span style={{ fontSize: 8.5, fontWeight: 600, color: on ? colour : '#C4C4CC',
+                             whiteSpace: 'nowrap' }}>{label}</span>
+            </div>
+            {i < steps.length - 1 && (
+              <div style={{ flex: 1, height: 2, margin: '0 4px', marginBottom: 13,
+                            background: !dead && here >= reached[i + 1] ? colour : '#E5E7EB' }} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TravelClaimStatus({ emp, go }: { emp: EmployeeDetail; go: (k: string) => void }) {
+  const [claims, setClaims] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      try {
+        // No ESS token means this is the dashboard preview; fall back to the
+        // dashboard session so an admin previewing a portal still sees it.
+        let headers: Record<string, string> = essAuthHeaders()
+        if (!headers.Authorization) {
+          const { data } = await supabase.auth.getSession()
+          const t = data?.session?.access_token
+          headers = t ? { Authorization: `Bearer ${t}` } : {}
+        }
+        const r = await fetch(`/api/travel/claims?employee_id=${emp.id}`, { headers })
+        if (live) setClaims(r.ok ? ((await r.json()).claims ?? []) : [])
+      } catch { if (live) setClaims([]) }
+    })()
+    return () => { live = false }
+  }, [emp.id])
+
+  if (claims === null || claims.length === 0) return null
+
+  const open = claims.filter(c => !['PAID', 'REJECTED'].includes(c.status))
+  const show = (open.length ? open : claims).slice(0, 3)
+  const owed = open.reduce((s, c) => s + (Number(c.total_claimed) || 0), 0)
+  const daysSince = (d: string | null) =>
+    d ? Math.max(0, Math.round((Date.now() - new Date(d).getTime()) / 86400000)) : null
+
+  return (
+    <div style={T.card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+        <div style={T.section}>✈️ My Travel Claims</div>
+        <button onClick={() => go('claims')} style={{ ...T.btnO, padding: '5px 11px', fontSize: 11.5 }}>
+          Open
+        </button>
+      </div>
+      {open.length > 0 && (
+        <div style={{ fontSize: 11.5, color: '#6B7280', marginBottom: 10 }}>
+          ₹{Math.round(owed).toLocaleString('en-IN')} across {open.length} claim
+          {open.length === 1 ? '' : 's'} still moving through approval
+        </div>
+      )}
+
+      {show.map(c => {
+        const st = CLAIM_STEP[c.status] ?? { label: c.status, tone: '#6B7280' }
+        const waited = daysSince(c.submitted_at)
+        return (
+          <div key={c.id} style={{ padding: '10px 0', borderTop: '1px solid #F3F0FF' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1E1B4B' }}>{c.claim_no}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#1E1B4B' }}>
+                ₹{Math.round(Number(c.total_claimed) || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: st.tone }}>● {st.label}</span>
+              {waited != null && !['PAID', 'REJECTED'].includes(c.status) && (
+                <span style={{ fontSize: 10.5, color: waited > 5 ? '#B45309' : '#9CA3AF' }}>
+                  {waited === 0 ? 'submitted today' : `waiting ${waited} day${waited === 1 ? '' : 's'}`}
+                </span>
+              )}
+            </div>
+            <ClaimStepper status={c.status} />
+          </div>
+        )
+      })}
+
+      {claims.length > show.length && (
+        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>
+          + {claims.length - show.length} more in Travel Claims
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: EmployeeDetail; isMobile: boolean; go: (k: string) => void; salaryVisible: boolean; notify: (m: string, t?: 'success'|'error') => void; reload: () => void }) {
   const [editOpen, setEditOpen] = useState(false)
   const [ann, setAnn] = useState<Announcement[]>([])
@@ -241,6 +381,9 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <Stat label="Attendance %" value="—" color="#9CA3AF" />
         <Stat label="Pending Actions" value={String(pending)} color={pending ? '#D97706' : '#059669'} />
       </div>
+
+      {/* where the employee's travel claims currently sit */}
+      <TravelClaimStatus emp={emp} go={go} />
 
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
         <button onClick={() => go('leave')} style={T.btnO}>🌴 Apply Leave</button>
