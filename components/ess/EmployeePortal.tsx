@@ -1496,12 +1496,12 @@ function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typ
 function CalendarLegend() {
   const items = ['PRESENT','ABSENT','HALF_DAY','MISS_PUNCH','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
   return (
-    <div style={{ display:'flex', flexWrap:'wrap', gap:12, marginTop:12, paddingTop:11,
-                  borderTop:'1px solid #F0EDFB' }}>
+    <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 13px', marginTop:11, paddingTop:9,
+                  borderTop:'1px solid #F3F0FF' }}>
       {items.map(k => (
-        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:6, fontSize:11, color:'#6B7280' }}>
-          <span style={{ width:11, height:11, borderRadius:3, background:STATUS_STYLE[k][0],
-                         border:`1.5px solid ${STATUS_BAR[k]}` }} />
+        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5,
+                               fontSize:10, color:'#9CA3AF' }}>
+          <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_BAR[k] }} />
           {STATUS_FULL[k]}
         </span>
       ))}
@@ -1531,13 +1531,66 @@ function ShimmerKeyframes() {
   return <style>{`@keyframes ezerShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
 }
 
+/**
+ * The month grid.
+ *
+ * Sized deliberately. The previous version used `repeat(7, 1fr)` with 74px
+ * cells and no width cap, so on a wide screen the columns stretched to fill the
+ * content area and the calendar became a wall of oversized boxes. A month is a
+ * fixed shape — it should not grow just because the window did. The grid is
+ * capped at 476px (7 x 60 + gaps), which is about as wide as a month wants to
+ * be before the eye stops reading it as a unit.
+ *
+ * Density follows from that: the grid is for scanning, the panel below is for
+ * detail. Each cell carries the date, a status dot, and — only where it fits
+ * and matters — the punch times. Everything else moved to the day panel.
+ *
+ * Status is a coloured dot plus a tinted fill rather than a heavy accent bar,
+ * so the grid reads as a calendar instead of a bar chart, and still works
+ * without relying on colour alone.
+ */
+/** The right column before a day is picked. An empty panel reads as broken. */
+function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }) {
+  const rows: [string, string, string][] = [
+    ['Present',   String(summary.present),   STATUS_BAR.PRESENT],
+    ['Absent',    String(summary.absent),    STATUS_BAR.ABSENT],
+    ['Half day',  String(summary.halfDay),   STATUS_BAR.HALF_DAY],
+    ['On leave',  String(summary.onLeave),   STATUS_BAR.ON_LEAVE],
+  ]
+  return (
+    <div style={{ ...T.card, height: '100%', display: 'flex', flexDirection: 'column',
+                  justifyContent: 'center', marginBottom: 0 }}>
+      <div style={{ textAlign: 'center', padding: '6px 0 16px' }}>
+        <div style={{ fontSize: 26, marginBottom: 6 }}>📆</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1E1B4B' }}>Pick a day</div>
+        <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 3, lineHeight: 1.55 }}>
+          Its punches, hours and status appear here.
+        </div>
+      </div>
+      <div style={{ borderTop: '1px solid #F3F0FF', paddingTop: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '.06em',
+                      textTransform: 'uppercase', marginBottom: 8 }}>This month so far</div>
+        {rows.map(([k, v, c]) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: c }} />
+            <span style={{ fontSize: 12, color: '#6B7280', flex: 1 }}>{k}</span>
+            <span style={{ fontSize: 13, fontWeight: 700,
+                           color: v === '0' ? '#C4C4CC' : '#1E1B4B' }}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayClick, selectedDate }: {
   year: number; month: number; monthData: MonthlyData; todayStr: string; isMobile: boolean
   onDayClick: (d: string) => void; selectedDate: string|null
 }) {
   const [hover, setHover] = useState<string | null>(null)
-  const cell = isMobile ? 46 : 74
-  const gap = isMobile ? 4 : 6
+  const cell = isMobile ? 40 : 56
+  const gap = 4
+  const maxW = isMobile ? '100%' : 7 * 60 + gap * 6   // a month, not a banner
   const daysInMonth = new Date(year, month, 0).getDate()
   const lead = new Date(year, month-1, 1).getDay()
 
@@ -1548,12 +1601,12 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
     const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
     const { status, rec, leave } = resolveDay(dateStr, monthData, todayStr)
     const [bg, ink] = STATUS_STYLE[status] || ['#fff', '#1E1B4B']
-    const bar = STATUS_BAR[status] || 'transparent'
+    const dot = STATUS_BAR[status]
     const isToday = dateStr === todayStr
     const isSel = dateStr === selectedDate
     const isFuture = status === 'FUTURE'
-    const isWeekend = new Date(dateStr + 'T00:00:00').getDay() % 6 === 0
     const isHover = hover === dateStr && !isFuture
+    const hasTimes = !isMobile && !isFuture && rec && (rec.work_in || rec.work_out)
 
     cells.push(
       <button key={dateStr}
@@ -1561,67 +1614,64 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
         onMouseEnter={() => setHover(dateStr)}
         onMouseLeave={() => setHover(null)}
         disabled={isFuture}
-        title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}`}
+        title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}`}
         style={{
-          minHeight: cell, position: 'relative', overflow: 'hidden',
-          background: isFuture ? (isWeekend ? '#FCFCFD' : '#fff') : bg,
-          color: ink, fontFamily: 'inherit', textAlign: 'left',
-          border: isSel ? '2px solid #7C3AED' : isToday ? '2px solid #A78BFA' : '1px solid rgba(124,58,237,0.10)',
-          borderRadius: 10, padding: isMobile ? '5px 6px' : '7px 8px',
+          height: cell, position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
+          background: isSel ? '#7C3AED' : isFuture ? 'transparent' : bg,
+          color: isSel ? '#fff' : ink,
+          border: isSel ? '1px solid #7C3AED'
+                : isToday ? '1.5px solid #A78BFA'
+                : '1px solid rgba(124,58,237,0.09)',
+          borderRadius: 8, padding: 0,
           cursor: isFuture ? 'default' : 'pointer',
-          opacity: isFuture ? .5 : 1,
-          transform: isSel ? 'translateY(-2px)' : isHover ? 'translateY(-1px)' : 'none',
-          boxShadow: isSel ? '0 6px 16px rgba(124,58,237,0.26)'
-                   : isHover ? '0 3px 10px rgba(30,27,75,0.10)' : 'none',
-          transition: 'transform .14s ease, box-shadow .14s ease',
+          opacity: isFuture ? .45 : 1,
+          boxShadow: isSel ? '0 3px 10px rgba(124,58,237,0.3)'
+                   : isHover ? '0 2px 6px rgba(30,27,75,0.10)' : 'none',
+          transform: isHover && !isSel ? 'translateY(-1px)' : 'none',
+          transition: 'transform .12s ease, box-shadow .12s ease, background .12s ease',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 1,
         }}>
 
-        {!isFuture && bar !== 'transparent' && (
-          <span style={{ position:'absolute', left:0, top:0, bottom:0, width:3, background:bar }} />
+        <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: isToday ? 800 : 600, lineHeight: 1 }}>
+          {d}
+        </span>
+
+        {/* the status, as a dot — small, and never the only signal */}
+        {!isFuture && dot && (
+          <span style={{ width: 5, height: 5, borderRadius: '50%', marginTop: 1,
+                         background: isSel ? 'rgba(255,255,255,0.9)' : dot }} />
         )}
 
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:3 }}>
-          <span style={{ fontSize: isMobile ? 12 : 14, fontWeight: isToday ? 800 : 700, lineHeight:1,
-                         marginLeft: bar !== 'transparent' && !isFuture ? 4 : 0 }}>{d}</span>
-          {!isFuture && STATUS_LABEL[status] && (
-            <span style={{ fontSize: isMobile ? 9 : 10, fontWeight:700, opacity:.75 }}>
-              {status === 'ON_LEAVE' ? (leave?.short_name || 'L') : STATUS_LABEL[status]}
-            </span>
-          )}
-        </div>
-
-        {!isMobile && !isFuture && rec && (rec.work_in || rec.work_out) && (
-          <div style={{ fontSize:9, opacity:.8, marginTop:5, marginLeft:4, lineHeight:1.35,
-                        fontVariantNumeric:'tabular-nums' }}>
-            {fmtT(rec.work_in)} – {fmtT(rec.work_out)}
-          </div>
-        )}
-
-        {!isMobile && !isFuture && rec && (rec.late_minutes || 0) > 0 && (
-          <div style={{ fontSize:8.5, marginTop:2, marginLeft:4, color:'#C2410C', fontWeight:600 }}>
-            {rec.late_minutes}m late
-          </div>
-        )}
-
-        {isToday && (
-          <span style={{ position:'absolute', bottom:4, right:5, fontSize:7.5, fontWeight:700,
-                         letterSpacing:'.06em', color:'#7C3AED', background:'#fff',
-                         padding:'1px 5px', borderRadius:99, border:'1px solid #DDD6FE' }}>
-            TODAY
+        {hasTimes && (
+          <span style={{ fontSize: 7.5, lineHeight: 1, opacity: .75, marginTop: 1,
+                         fontVariantNumeric: 'tabular-nums' }}>
+            {fmtT(rec!.work_in)}
           </span>
+        )}
+
+        {!isFuture && status === 'ON_LEAVE' && leave?.short_name && (
+          <span style={{ fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 1 }}>
+            {leave.short_name}
+          </span>
+        )}
+
+        {isToday && !isSel && (
+          <span style={{ position: 'absolute', top: 3, right: 4, width: 4, height: 4,
+                         borderRadius: '50%', background: '#7C3AED' }} />
         )}
       </button>
     )
   }
 
   return (
-    <div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom:gap }}>
+    <div style={{ maxWidth: maxW }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom: 3 }}>
         {WEEKDAYS.map((w, n) => (
-          <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:700,
-                                letterSpacing:'.06em', padding:'5px 0',
-                                color: n % 6 === 0 ? '#C4B5FD' : '#9CA3AF' }}>
-            {isMobile ? w[0] : w.toUpperCase()}
+          <div key={w} style={{ textAlign:'center', fontSize:9.5, fontWeight:700,
+                                letterSpacing:'.05em', padding:'3px 0',
+                                color: n % 6 === 0 ? '#C4B5FD' : '#B9BCC6' }}>
+            {w[0]}{isMobile ? '' : w[1]}
           </div>
         ))}
       </div>
@@ -2010,21 +2060,31 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
       {/* (B) the month in numbers */}
       <AttendanceSummaryChips summary={stats} isMobile={isMobile} />
 
-      {/* (C) calendar */}
-      <div style={T.card}>
-        {loading || !monthData
-          ? <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:6 }}>
-              {Array.from({ length: 35 }).map((_, i) => (
-                <div key={i} style={{ minHeight: isMobile ? 46 : 74, borderRadius:10,
-                                      background:'linear-gradient(90deg,#F7F5FF 25%,#F0EDFB 50%,#F7F5FF 75%)',
-                                      backgroundSize:'200% 100%', animation:'ezerShimmer 1.2s infinite' }} />
-              ))}
-            </div>
-          : <AttendanceCalendar year={year} month={month} monthData={monthData} todayStr={todayStr} isMobile={isMobile} onDayClick={d => { setSelectedDate(d); setRaiseDate(null) }} selectedDate={selectedDate} />}
-      </div>
+      {/* (C+D) calendar and the selected day, side by side.
+           The month is a fixed shape, so it keeps its width and the detail
+           takes the rest — clicking a day fills the right column instead of
+           pushing the grid down the page. */}
+      <div style={{ display:'flex', gap:11, alignItems:'stretch',
+                    flexWrap: isMobile ? 'wrap' : 'nowrap', marginBottom:10 }}>
+        <div style={{ ...T.card, flex:'0 0 auto', marginBottom:0,
+                      width: isMobile ? '100%' : 'auto' }}>
+          {loading || !monthData
+            ? <div style={{ display:'grid', gridTemplateColumns:'repeat(7,60px)', gap:4 }}>
+                {Array.from({ length: 35 }).map((_, i) => (
+                  <div key={i} style={{ height: isMobile ? 40 : 56, borderRadius:8,
+                                        background:'linear-gradient(90deg,#F7F5FF 25%,#F0EDFB 50%,#F7F5FF 75%)',
+                                        backgroundSize:'200% 100%', animation:'ezerShimmer 1.2s infinite' }} />
+                ))}
+              </div>
+            : <AttendanceCalendar year={year} month={month} monthData={monthData} todayStr={todayStr} isMobile={isMobile} onDayClick={d => { setSelectedDate(d); setRaiseDate(null) }} selectedDate={selectedDate} />}
+        </div>
 
-      {/* (D) day detail */}
-      {selectedDate && dayInfo && <DayDetailPanel emp={emp} date={selectedDate} dayInfo={dayInfo} isMobile={isMobile} onRaise={d => setRaiseDate(d)} />}
+        <div style={{ flex:'1 1 300px', minWidth: isMobile ? '100%' : 280 }}>
+          {selectedDate && dayInfo
+            ? <DayDetailPanel emp={emp} date={selectedDate} dayInfo={dayInfo} isMobile={isMobile} onRaise={d => setRaiseDate(d)} />
+            : <DayPanelResting summary={stats} />}
+        </div>
+      </div>
 
       {/* (E) regularisation form */}
       {raiseDate && <RegularisationForm emp={emp} date={raiseDate} rec={raiseRec} onDone={() => { loadRegs(); loadMonth(); setRaiseDate(null) }} onCancel={() => setRaiseDate(null)} />}
