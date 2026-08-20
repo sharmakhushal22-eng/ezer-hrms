@@ -70,6 +70,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       policy_id: policy.id,
       rm_stage_enabled: policy.rm_stage_enabled,
+      hr_fallback_only: policy.hr_fallback_only ?? false,
       types: types ?? [],
       rates: withNames,
     });

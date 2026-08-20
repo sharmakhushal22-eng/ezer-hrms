@@ -641,7 +641,7 @@ export default function TravelClaimsAdmin() {
     let live = true
     ;(async () => {
       const { data: pol } = await supabase.from('travel_policies')
-        .select('rm_stage_enabled, hr_stage_enabled').eq('company_id', companyId).eq('is_active', true)
+        .select('rm_stage_enabled, hr_stage_enabled, hr_fallback_only').eq('company_id', companyId).eq('is_active', true)
         .order('effective_from', { ascending: false }).limit(1)
       if (!live) return
       setRmEnabled(!!(pol?.[0] as any)?.rm_stage_enabled)
