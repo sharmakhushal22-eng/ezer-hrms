@@ -8,7 +8,7 @@
 // Anything not built yet renders a labelled placeholder naming the module it waits on,
 // rather than a screen that looks finished and does nothing.
 // All sub-components are defined OUTSIDE the parent (no focus-loss).
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   loadEmployeeDetail, updateEmployeePhoto, loadDirectory, loadNotifications, markNotification, markAllNotifications,
   loadServiceRequests, createServiceRequest, loadLetterRequests, createLetterRequest,
@@ -1636,6 +1636,86 @@ function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }
   )
 }
 
+// The calendar card as a physical object: it sits above the page at rest and
+// turns to face the cursor. The tilt is written straight to the node on a
+// rAF — routing it through useState would re-render all 31 cells per pointer
+// move, which is exactly what made the per-cell tilt stutter.
+const TILT_MAX = 7          // degrees; past ~9 the type starts to smear
+const LIFT_REST = 8         // px off the page when idle
+const LIFT_HOVER = 26
+
+function TiltCard({ children, disabled, style }: {
+  children: React.ReactNode; disabled?: boolean; style?: React.CSSProperties
+}) {
+  const wrap  = useRef<HTMLDivElement | null>(null)
+  const card  = useRef<HTMLDivElement | null>(null)
+  const sheen = useRef<HTMLDivElement | null>(null)
+  const frame = useRef<number | null>(null)
+
+  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current) }, [])
+
+  // Someone who has asked for less motion gets the depth (shadow, lift) but
+  // not the movement.
+  const still = () => typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+  const rest = () => {
+    const el = card.current
+    if (!el) return
+    el.style.transform = `translateZ(${LIFT_REST}px)`
+    el.style.boxShadow = '0 2px 6px rgba(30,27,75,.07), 0 14px 34px -18px rgba(30,27,75,.30)'
+    if (sheen.current) sheen.current.style.opacity = '0'
+  }
+
+  const track = (e: React.MouseEvent) => {
+    if (disabled || still()) return
+    const w = wrap.current, el = card.current
+    if (!w || !el) return
+    const r = w.getBoundingClientRect()
+    const px = (e.clientX - r.left) / r.width      // 0..1 across the card
+    const py = (e.clientY - r.top) / r.height
+    const rx = (0.5 - py) * 2 * TILT_MAX           // cursor high -> top leans back
+    const ry = (px - 0.5) * 2 * TILT_MAX
+    if (frame.current !== null) cancelAnimationFrame(frame.current)
+    frame.current = requestAnimationFrame(() => {
+      el.style.transform = `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateZ(${LIFT_HOVER}px)`
+      // The shadow is cast by a light above and behind the viewer, so it slides
+      // opposite the tilt. A shadow that does not move gives the trick away.
+      el.style.boxShadow = `${(-ry * 1.7).toFixed(1)}px ${(20 + rx * 1.7).toFixed(1)}px 46px -20px rgba(30,27,75,.42), 0 2px 6px rgba(30,27,75,.10)`
+      if (sheen.current) {
+        sheen.current.style.opacity = '1'
+        sheen.current.style.background =
+          `radial-gradient(340px circle at ${(px * 100).toFixed(1)}% ${(py * 100).toFixed(1)}%, rgba(167,139,250,.16), rgba(124,58,237,.05) 45%, rgba(124,58,237,0) 70%)`
+      }
+    })
+  }
+
+  if (disabled) return <div style={style}>{children}</div>
+
+  return (
+    <div ref={wrap}
+         onMouseMove={track}
+         onMouseLeave={rest}
+         style={{ perspective: 1300, perspectiveOrigin: '50% 45%', flex: '0 0 auto' }}>
+      <div ref={card}
+           style={{
+             ...style,
+             position: 'relative',
+             transformStyle: 'preserve-3d',
+             transform: `translateZ(${LIFT_REST}px)`,
+             boxShadow: '0 2px 6px rgba(30,27,75,.07), 0 14px 34px -18px rgba(30,27,75,.30)',
+             transition: 'transform .34s cubic-bezier(.22,1,.36,1), box-shadow .34s cubic-bezier(.22,1,.36,1)',
+           }}>
+        {children}
+        {/* Specular highlight. Sits above the content but takes no clicks. */}
+        <div ref={sheen} aria-hidden
+             style={{ position: 'absolute', inset: 0, borderRadius: 10, opacity: 0,
+                      pointerEvents: 'none', transition: 'opacity .28s ease' }} />
+      </div>
+    </div>
+  )
+}
+
 function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayClick, selectedDate }: {
   year: number; month: number; monthData: MonthlyData; todayStr: string; isMobile: boolean
   onDayClick: (d: string) => void; selectedDate: string|null
@@ -1724,7 +1804,8 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
 
   return (
     <div style={{ maxWidth: maxW }}>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom: 3 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom: 3,
+                    transform: 'translateZ(14px)' }}>
         {WEEKDAYS.map((w, n) => (
           <div key={w} style={{ textAlign:'center', fontSize:9.5, fontWeight:700,
                                 letterSpacing:'.05em', padding:'3px 0',
@@ -1738,10 +1819,14 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           on the month so changing it replays the entrance. */}
       <div key={`${year}-${month}`}
            style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap,
-                    perspective: 700, perspectiveOrigin: '50% 40%' }}>
+                    perspective: 700, perspectiveOrigin: '50% 40%',
+                    // Lifted off the card face. Combined with the card's own
+                    // tilt this is what parallaxes — the grid moves further
+                    // than the legend beneath it.
+                    transform: 'translateZ(26px)' }}>
         {cells}
       </div>
-      <CalendarLegend />
+      <div style={{ transform: 'translateZ(6px)' }}><CalendarLegend /></div>
     </div>
   )
 }
@@ -2131,8 +2216,9 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
            pushing the grid down the page. */}
       <div style={{ display:'flex', gap:11, alignItems:'stretch',
                     flexWrap: isMobile ? 'wrap' : 'nowrap', marginBottom:10 }}>
-        <div style={{ ...T.card, flex:'0 0 auto', marginBottom:0,
-                      width: isMobile ? '100%' : 'auto' }}>
+        <TiltCard disabled={isMobile}
+                  style={{ ...T.card, marginBottom:0,
+                           width: isMobile ? '100%' : 'auto' }}>
           {loading || !monthData
             ? <div style={{ display:'grid', gridTemplateColumns:'repeat(7,60px)', gap:4 }}>
                 {Array.from({ length: 35 }).map((_, i) => (
@@ -2142,7 +2228,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
                 ))}
               </div>
             : <AttendanceCalendar year={year} month={month} monthData={monthData} todayStr={todayStr} isMobile={isMobile} onDayClick={d => { setSelectedDate(d); setRaiseDate(null) }} selectedDate={selectedDate} />}
-        </div>
+        </TiltCard>
 
         <div key={selectedDate || 'resting'} className="ezer-day-panel"
              style={{ flex:'1 1 300px', minWidth: isMobile ? '100%' : 280 }}>
