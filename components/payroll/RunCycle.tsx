@@ -46,6 +46,8 @@ const EPF_CAT = SYNC_CATEGORIES.find(c => c.key === 'epf')
 const ESIC_CAT = SYNC_CATEGORIES.find(c => c.key === 'esic')
 const PT_CAT = SYNC_CATEGORIES.find(c => c.key === 'pt')
 const LWF_CAT = SYNC_CATEGORIES.find(c => c.key === 'lwf')
+// Employer NPS reads earned basic, so it runs with the other post-earnings passes.
+const NPS_CAT = SYNC_CATEGORIES.find(c => c.key === 'nps')
 // Last: arrear differences a back month against what it actually paid, so it needs the
 // other categories for this month settled first.
 const ARREAR_CAT = SYNC_CATEGORIES.find(c => c.key === 'arrear')
@@ -370,7 +372,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       // breaking used to abort the whole run, so a single bad step meant nobody got paid
       // and no sheet came out. Now the error is reported and payroll still runs.
       let prereqFailed = false
-      for (const [what, cat] of [['earnings', EARN_CAT], ['EPF', EPF_CAT], ['ESIC', ESIC_CAT], ['PT', PT_CAT], ['LWF', LWF_CAT], ['arrear', ARREAR_CAT]] as const) {
+      for (const [what, cat] of [['earnings', EARN_CAT], ['EPF', EPF_CAT], ['ESIC', ESIC_CAT], ['PT', PT_CAT], ['LWF', LWF_CAT], ['employer NPS', NPS_CAT], ['arrear', ARREAR_CAT]] as const) {
         if (!cat) continue
         const { error } = await runCategorySync(cat, [r.id], codes)
         if (!error) continue
