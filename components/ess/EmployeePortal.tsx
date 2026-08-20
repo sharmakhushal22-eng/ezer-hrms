@@ -1391,6 +1391,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
     border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.10)',
     color: '#fff', fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background .15s ease, transform .12s ease',
   }
 
   return (
@@ -1404,13 +1405,13 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
                     display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 190 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 3 }}>
-            <button onClick={onPrev} style={nav} title="Previous month">‹</button>
+            <button onClick={onPrev} className="ezer-nav" style={nav} title="Previous month">‹</button>
             <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: '#fff', letterSpacing: '-.01em' }}>
               {MONTH_NAMES[month - 1]} <span style={{ opacity: .55, fontWeight: 500 }}>{year}</span>
             </div>
-            <button onClick={onNext} style={nav} title="Next month">›</button>
+            <button onClick={onNext} className="ezer-nav" style={nav} title="Next month">›</button>
             {!isThisMonth && (
-              <button onClick={onToday}
+              <button onClick={onToday} className="ezer-nav"
                       style={{ ...nav, width: 'auto', padding: '0 11px', fontSize: 11.5, fontWeight: 600 }}>
                 Today
               </button>
@@ -1434,7 +1435,8 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
             {pct != null && (
               <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tone} strokeWidth="7" strokeLinecap="round"
                       strokeDasharray={`${(circ * pct) / 100} ${circ}`}
-                      style={{ transition: 'stroke-dasharray .7s cubic-bezier(.4,0,.2,1)' }} />
+                      style={{ transition: 'stroke-dasharray .9s cubic-bezier(.22,1,.36,1), stroke .4s ease',
+                               filter: `drop-shadow(0 0 5px ${tone}66)` }} />
             )}
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
@@ -1456,7 +1458,7 @@ function StatTile({ label, value, bg, fg, bar, wide }: {
 }) {
   const empty = value === '0' || value === '0h 0m'
   return (
-    <div style={{ background: empty ? '#FAFAFA' : bg, borderRadius: 10, padding: '10px 13px',
+    <div className="ezer-tile" style={{ background: empty ? '#FAFAFA' : bg, borderRadius: 10, padding: '10px 13px',
                   border: `1px solid ${empty ? '#F0F0F5' : bg}`, position: 'relative',
                   overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
@@ -1525,10 +1527,61 @@ function CalendarLegend() {
  *   · future days rendered flat and unclickable — nothing to see, and a
  *     clickable empty panel is a dead end
  */
-/* Skeleton shimmer for the calendar while a month loads. Injected once —
-   this file uses inline styles, which cannot express keyframes. */
+/* Keyframes for the calendar. Injected once — this file uses inline styles,
+   which cannot express @keyframes or :active, and a media query for reduced
+   motion cannot be written inline either.
+
+   The last block is the important one. Motion here is decorative: it tells you
+   a month changed and which cell you are on. For anyone who has asked their OS
+   to reduce motion — vestibular disorders, migraine triggers — the same
+   information has to arrive without the movement, so every animation collapses
+   to a near-instant fade and the 3D tilt is dropped entirely. */
 function ShimmerKeyframes() {
-  return <style>{`@keyframes ezerShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}`}</style>
+  return <style>{`
+    @keyframes ezerShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+    /* Cells arrive as a wave across the grid, so a month reads as one object
+       being dealt rather than 31 things appearing at once. */
+    @keyframes ezerCellIn{
+      from{opacity:0;transform:translateY(6px) scale(.94)}
+      to  {opacity:1;transform:none}
+    }
+    @keyframes ezerPanelIn{
+      from{opacity:0;transform:translateX(8px)}
+      to  {opacity:1;transform:none}
+    }
+    .ezer-cell{
+      animation:ezerCellIn .32s cubic-bezier(.22,1,.36,1) both;
+      transform-origin:center;
+      will-change:transform;
+    }
+    /* The lift is a real one — the cell rises toward the viewer and tips very
+       slightly, which is what makes it read as a tile rather than a rectangle
+       that changed colour. */
+    .ezer-cell:not(:disabled):hover{
+      transform:translateZ(16px) translateY(-2px) rotateX(6deg);
+      z-index:2;
+    }
+    .ezer-cell:not(:disabled):active{
+      transform:translateZ(2px) scale(.95);
+      transition-duration:.06s;
+    }
+    .ezer-day-panel{animation:ezerPanelIn .3s cubic-bezier(.22,1,.36,1) both}
+
+    /* Month navigation. Inline styles cannot express :hover or :active. */
+    .ezer-nav:hover{background:rgba(255,255,255,.2)!important}
+    .ezer-nav:active{transform:scale(.9)}
+
+    /* Stat tiles rise very slightly, enough to say they are a group of objects. */
+    .ezer-tile{transition:transform .16s cubic-bezier(.22,1,.36,1), box-shadow .16s ease}
+    .ezer-tile:hover{transform:translateY(-2px);box-shadow:0 6px 16px -6px rgba(30,27,75,.22)}
+
+    @media (prefers-reduced-motion: reduce){
+      .ezer-cell,.ezer-day-panel{animation-duration:.01ms!important;animation-delay:0ms!important}
+      .ezer-cell:not(:disabled):hover{transform:translateY(-1px);}
+      .ezer-cell:not(:disabled):active{transform:none}
+    }
+  `}</style>
 }
 
 /**
@@ -1587,7 +1640,6 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
   year: number; month: number; monthData: MonthlyData; todayStr: string; isMobile: boolean
   onDayClick: (d: string) => void; selectedDate: string|null
 }) {
-  const [hover, setHover] = useState<string | null>(null)
   const cell = isMobile ? 40 : 56
   const gap = 4
   const maxW = isMobile ? '100%' : 7 * 60 + gap * 6   // a month, not a banner
@@ -1605,30 +1657,36 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
     const isToday = dateStr === todayStr
     const isSel = dateStr === selectedDate
     const isFuture = status === 'FUTURE'
-    const isHover = hover === dateStr && !isFuture
     const hasTimes = !isMobile && !isFuture && rec && (rec.work_in || rec.work_out)
+    // Wave across the grid rather than a uniform fade. Capped so the last cell
+    // of a 31-day month is not still arriving half a second later.
+    const delay = Math.min((lead + d - 1) * 9, 260)
 
     cells.push(
       <button key={dateStr}
+        className="ezer-cell"
         onClick={() => !isFuture && onDayClick(dateStr)}
-        onMouseEnter={() => setHover(dateStr)}
-        onMouseLeave={() => setHover(null)}
         disabled={isFuture}
         title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}`}
         style={{
           height: cell, position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
-          background: isSel ? '#7C3AED' : isFuture ? 'transparent' : bg,
+          background: isSel ? 'linear-gradient(145deg,#8B5CF6,#6D28D9)'
+                    : isFuture ? 'transparent' : bg,
           color: isSel ? '#fff' : ink,
-          border: isSel ? '1px solid #7C3AED'
+          border: isSel ? '1px solid #6D28D9'
                 : isToday ? '1.5px solid #A78BFA'
                 : '1px solid rgba(124,58,237,0.09)',
           borderRadius: 8, padding: 0,
           cursor: isFuture ? 'default' : 'pointer',
           opacity: isFuture ? .45 : 1,
-          boxShadow: isSel ? '0 3px 10px rgba(124,58,237,0.3)'
-                   : isHover ? '0 2px 6px rgba(30,27,75,0.10)' : 'none',
-          transform: isHover && !isSel ? 'translateY(-1px)' : 'none',
-          transition: 'transform .12s ease, box-shadow .12s ease, background .12s ease',
+          animationDelay: `${delay}ms`,
+          // Two-layer shadow: a tight contact shadow plus a softer cast one.
+          // A single blur reads as a glow; two read as height.
+          boxShadow: isSel
+            ? '0 1px 2px rgba(76,29,149,.4), 0 8px 20px -4px rgba(124,58,237,.45)'
+            : isToday ? '0 1px 2px rgba(124,58,237,.12)' : 'none',
+          transition: 'box-shadow .18s ease, background .18s ease, transform .18s cubic-bezier(.22,1,.36,1)',
+          transformStyle: 'preserve-3d',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center', gap: 1,
         }}>
@@ -1675,7 +1733,14 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           </div>
         ))}
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap }}>{cells}</div>
+      {/* The perspective lives on the container, so a hovered cell tilts within
+          a shared vanishing point instead of each one having its own. Re-keyed
+          on the month so changing it replays the entrance. */}
+      <div key={`${year}-${month}`}
+           style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap,
+                    perspective: 700, perspectiveOrigin: '50% 40%' }}>
+        {cells}
+      </div>
       <CalendarLegend />
     </div>
   )
@@ -2079,7 +2144,8 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
             : <AttendanceCalendar year={year} month={month} monthData={monthData} todayStr={todayStr} isMobile={isMobile} onDayClick={d => { setSelectedDate(d); setRaiseDate(null) }} selectedDate={selectedDate} />}
         </div>
 
-        <div style={{ flex:'1 1 300px', minWidth: isMobile ? '100%' : 280 }}>
+        <div key={selectedDate || 'resting'} className="ezer-day-panel"
+             style={{ flex:'1 1 300px', minWidth: isMobile ? '100%' : 280 }}>
           {selectedDate && dayInfo
             ? <DayDetailPanel emp={emp} date={selectedDate} dayInfo={dayInfo} isMobile={isMobile} onRaise={d => setRaiseDate(d)} />
             : <DayPanelResting summary={stats} />}
