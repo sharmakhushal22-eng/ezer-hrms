@@ -2,21 +2,25 @@
 
 **For:** Nayan  
 **From:** Tushar  
-**Status:** written, not run
+**Status:** applied — 049 through 053 are all live  
+**Last verified against the database:** 2026-08-20
 
-Everything needed is in this one file. The SQL for both migrations is included
-in full below, so it can be copied straight into the Supabase SQL editor
-without opening anything else.
+**Do not re-run anything in this file.** Nayan applied 052 and 053; 049, 050
+and 051 were already in before that. This is now a record of what is in the
+database, not a set of instructions.
 
-Two files, in this order. Both are written but **not run**.
+The full SQL of both migrations is reproduced below, exactly as executed. It
+is kept verbatim on purpose — including its inline commentary, which was
+written *before* the migrations ran and quotes pre-run estimates for the
+manager backfill. Those estimates turned out to be wrong. The real figures,
+measured against the live database, are in the section immediately below and
+in *After running both* at the end. Where the two disagree, the measured
+numbers are correct.
 
-    1.  052_travel_approval_chain.sql
-    2.  053_finance_department.sql
-
-049, 050 and 051 are already applied — do not re-run them.
-
-Each file ends with a verification query. Run it and check the output rather
-than trusting the absence of an error.
+One thing did **not** happen, deliberately: section 4 of 052, the actual
+switch to Reporting Manager, is still commented out. It is now carried as its
+own file, `054_enable_rm_stage.sql`, which is waiting on a decision from
+Tushar rather than on Nayan.
 
 ---
 
@@ -36,10 +40,12 @@ migration.
 Tushar asked for **Reporting Manager → Finance**, replacing HR Head. The data
 does not support that yet:
 
+Measured after 052 ran, on 2026-08-20:
+
 | column                | populated |
 |-----------------------|-----------|
-| `l1_manager_id`       | 0 / 397   |
-| `reporting_manager`   | 390 / 397 — but a **text name**, not an id |
+| `l1_manager_id`       | 28 / 398  |
+| `reporting_manager`   | 390 / 398 — but a **text name**, not an id |
 
 `reporting_manager` holds 10 distinct names. Only **2** match a real employee:
 
@@ -48,11 +54,23 @@ does not support that yet:
 * Rekha Pillai, Sanjay Gupta, Sunita Rao, Anjali Sharma, Vikram Mehta,
   Rajesh Khanna, Deepak Nair, Neha Kapoor → **no employee row exists**
 
-So switching today sends **73 of 397** employees to a manager and **324
-straight to Finance with no first review** — worse than the current HR Head
-chain, which routes all 397.
+There is a second reason the match rate is low, beyond the missing names:
+section 3 requires the manager to be in the **same company**
+(`m.company_id = e.company_id`). A manager at another group company must not
+approve your claim. So even the two names that resolve only resolve partly:
 
-Section 3 backfills the 73 that resolve, on **exact full-name match only**. No
+| manager | reports by name | same company | routed |
+|---|---|---|---|
+| Priya Iyer (SRS9032) | 49 | 21 | 21 |
+| Manoj Bose (SRS9012) | 24 | 7 | 7 |
+
+The cross-company remainder is not a failure. It is that check working.
+
+So switching today sends **28 of 398** employees to a manager and **370
+straight to Finance with no first review** — worse than the current HR Head
+chain, which routes all 398.
+
+Section 3 backfills only what resolves, on **exact full-name match only**. No
 fuzzy matching: "Rekha Pillai" against "Rekha Chopra" is a different person, and
 routing a claim to the wrong approver is worse than leaving it unmapped.
 
@@ -110,7 +128,7 @@ seeds the team from that department with rights graded by designation:
 
 Approving an amount and releasing the money are separate rights.
 
-Everyone's `finance_spoc_id` is added too, since all 397 employees point at one.
+Everyone's `finance_spoc_id` is added too, since all 398 employees point at one.
 
 ### RLS — a decision, not a paste
 
@@ -140,10 +158,10 @@ The application checks for the schema and degrades honestly:
 **No role check on approvals.** `requireDashboardUser` proves only that someone
 is signed in. Any Supabase auth user can approve travel claims, rewrite the
 rate card and lock payroll months. `user_roles` exists but has 0 rows.
-`employees.hr_head_id` and `finance_spoc_id` are both populated 397/397, so
+`employees.hr_head_id` and `finance_spoc_id` are both populated 398/398, so
 gating on them is straightforward if wanted.
 
-**One HR Head for all 397 employees**, across all three companies — and that
+**One HR Head for all 398 employees**, across all three companies — and that
 person is their own `hr_head_id`, so their own claims correctly skip to Finance.
 Every travel claim in the company currently routes to one inbox.
 
@@ -834,15 +852,63 @@ select 'chain in force',
           from travel_policies where is_active limit 1);
 ```
 
-Expected straight after running, with section 4 of 052 still commented out:
+What the database actually returned on **2026-08-20**, with section 4 of 052
+still commented out:
 
 | object | value |
 |---|---|
 | `travel_policies.hr_stage_enabled` | 1 |
 | finance tables | 3 |
-| `finance_team` seeded | ~58 |
-| `l1_manager_id` populated | 73 |
+| `finance_team` seeded | 59 |
+| `l1_manager_id` populated | 28 |
 | chain in force | `HR -> Finance` |
 
-`l1_manager_id` at 73 rather than 397 is expected — see the note on 052 above.
-The chain stays `HR -> Finance` until section 4 is deliberately uncommented.
+`l1_manager_id` at 28 rather than 398 is expected — see the note on 052 above.
+The earlier draft of this document predicted 73 here; that estimate did not
+account for the same-company requirement in the backfill, so it was too
+optimistic. 28 is correct.
+
+The chain stays `HR -> Finance` until `054_enable_rm_stage.sql` is run with its
+section 3 uncommented.
+
+### Other tables, same check
+
+| table | rows |
+|---|---|
+| `travel_policies` | 3 — one per active company |
+| `travel_expense_types` | 105 |
+| `travel_claims` | 0 — nothing filed yet |
+| `finance_modules` | 5 |
+| `finance_work_items` | 0 — nothing enqueued yet |
+| `employees` | 398 |
+
+The mileage rate card is `travel_mileage_rates`. Naming it here because it is
+easy to look for `travel_mode_rates`, not find it, and conclude a table failed
+to create. It did not.
+
+---
+
+## Still open
+
+**`054_enable_rm_stage.sql`** — the RM switch, waiting on Tushar. It re-runs
+the backfill (safe to repeat), reports the remaining gap *before* changing
+anything, and keeps the flag flip commented out. Reversing it is two flags, no
+code change.
+
+**RLS.** All 22 new tables are RLS-enabled with `using (true)` — anyone holding
+the anon key can read every travel claim and every finance queue item, and the
+anon key ships to the browser. This was deliberate rather than careless: ESS
+employees are not Supabase auth users, so `auth.uid()` is null for them and a
+policy like `employee_id = auth.uid()` would match zero rows, locking ESS out
+while dashboard users still saw everything. Enforcement currently sits in the
+API layer (`requireDashboardUser`, `resolveActor`). Nayan's call on where it
+should sit instead; revoking `anon` on these tables and giving the ESS routes a
+server-side key is the smallest change that would make the policies mean
+something.
+
+**No role check on approvals.** `requireDashboardUser` proves only that someone
+is signed in. Any dashboard user can approve a travel claim, rewrite the
+mileage rate card, and lock a payroll month. `user_roles` has 0 rows;
+`hr_head_id` and `finance_spoc_id` are 398/398, and `finance_team` already
+carries `can_approve` / `approval_limit` / `can_release_payment`. Application
+change, not schema — blocked on which source is authoritative.
