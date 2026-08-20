@@ -104,10 +104,10 @@ on conflict (module_code) do nothing;
 -- to be built. Enable each as its module starts enqueuing work.
 insert into finance_modules (module_code, module_name, description, icon, detail_route, is_enabled, sort_order)
 values
-  ('PAYROLL',       'Payroll Runs',      'Sign-off before a payroll run is released.',        'wallet',  '/dashboard/payroll',      20, false),
-  ('ADVANCE',       'Travel Advances',   'Advances requested before a trip, recovered after.', 'cash',   '/dashboard/travel-claims', 30, false),
-  ('VENDOR',        'Vendor Invoices',   'Supplier invoices awaiting verification and payment.','invoice', null,                     40, false),
-  ('REIMBURSEMENT', 'Other Reimbursements','Flexi and non-travel employee claims.',            'receipt', '/dashboard/flexi-claims', 50, false)
+  ('PAYROLL',       'Payroll Runs',      'Sign-off before a payroll run is released.',        'wallet',  '/dashboard/payroll',      false, 20),
+  ('ADVANCE',       'Travel Advances',   'Advances requested before a trip, recovered after.', 'cash',   '/dashboard/travel-claims', false, 30),
+  ('VENDOR',        'Vendor Invoices',   'Supplier invoices awaiting verification and payment.','invoice', null,                     false, 40),
+  ('REIMBURSEMENT', 'Other Reimbursements','Flexi and non-travel employee claims.',            'receipt', '/dashboard/flexi-claims', false, 50)
 on conflict (module_code) do nothing;
 
 
