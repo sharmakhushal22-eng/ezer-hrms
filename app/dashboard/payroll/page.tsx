@@ -34,39 +34,59 @@ import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutory
 import NpsReport from '@/components/payroll/NpsReport'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 
+// The design system. This file owns C, S and F already, so the tokens are
+// aliased: TK for colour, TF for type, SP for spacing.
+import {
+  C as TK, F as TF, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
+
 // ── Palette (guide-mandated) ──────────────────────────────────────
+// This file already owns the name C, so the design tokens come in as TK and
+// every value below is bound to them. Nothing here is a private hex any more.
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B6B7B',
-  success: '#059669', amber: '#B45309', red: '#DC2626',
-  font: '"DM Sans","Segoe UI",sans-serif',
+  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted,
+  success: TK.positive, amber: TK.warning, red: TK.critical,
+  font: TF.family,
 }
 const S = {
-  page: { background: C.bg, minHeight: '100vh', padding: 20, color: C.navy, fontFamily: C.font, fontSize: 13 } as React.CSSProperties,
-  content: { maxWidth: 1100, margin: '0 auto' } as React.CSSProperties,
-  card: { background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  label: { fontSize: 11, fontWeight: 600, color: C.purple, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  input: { width: '100%', padding: '8px 11px', background: '#FAFAF8', border: `1px solid ${C.border}`, borderRadius: 8, color: C.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
-  btnPrimary: { padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', background: C.purple, color: '#fff', whiteSpace: 'nowrap' } as React.CSSProperties,
-  btnOutline: { padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: C.purple, whiteSpace: 'nowrap' } as React.CSSProperties,
-  btnDanger: { padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.red}`, cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'inherit', background: '#fff', color: C.red } as React.CSSProperties,
-  h1: { fontSize: 22, fontWeight: 700, color: C.navy, margin: 0 } as React.CSSProperties,
-  sub: { fontSize: 12, color: C.muted, marginTop: 2 } as React.CSSProperties,
-  cardTitle: { fontSize: 14, fontWeight: 600, color: C.navy, marginBottom: 12 } as React.CSSProperties,
-  note: { background: 'rgba(124,58,237,0.05)', border: `1px dashed ${C.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.muted } as React.CSSProperties,
+  page: { background: C.bg, minHeight: '100vh', padding: `${SP.xl}px ${SP.xl}px ${SP.huge}px`,
+          color: C.navy, fontFamily: C.font, fontSize: TF.body } as React.CSSProperties,
+  // Payroll is read across the row — a wider column than the old 1100 keeps
+  // the month tables from wrapping.
+  content: { maxWidth: 1320, margin: '0 auto' } as React.CSSProperties,
+  card: { background: C.card, borderRadius: R.lg, border: `1px solid ${C.border}`,
+          padding: '16px 18px', marginBottom: SP.lg, boxShadow: E.raised } as React.CSSProperties,
+  label: { ...eyebrow, display: 'block', marginBottom: 5 } as React.CSSProperties,
+  input: { ...inputStyle() } as React.CSSProperties,
+  btnPrimary: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${TK.violetDeep}`,
+          cursor: 'pointer', fontSize: TF.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: `linear-gradient(180deg, ${TK.violet}, ${TK.violetDeep})`, color: '#fff',
+          whiteSpace: 'nowrap', boxShadow: E.violet } as React.CSSProperties,
+  btnOutline: { height: 34, padding: '0 13px', borderRadius: R.md, border: `1px solid ${TK.lineStrong}`,
+          cursor: 'pointer', fontSize: TF.small, fontWeight: W.medium, fontFamily: 'inherit',
+          background: TK.surface, color: TK.ink, whiteSpace: 'nowrap', boxShadow: E.flat } as React.CSSProperties,
+  btnDanger: { height: 30, padding: '0 12px', borderRadius: R.md, border: `1px solid ${tone('critical').edge}`,
+          cursor: 'pointer', fontSize: TF.tiny, fontWeight: W.semi, fontFamily: 'inherit',
+          background: TK.surface, color: TK.critical } as React.CSSProperties,
+  h1: { fontSize: TF.page, fontWeight: W.bold, color: C.navy, margin: 0, letterSpacing: '-.02em' } as React.CSSProperties,
+  sub: { fontSize: TF.small, color: C.muted, marginTop: 5 } as React.CSSProperties,
+  cardTitle: { fontSize: TF.lead, fontWeight: W.semi, color: C.navy, marginBottom: SP.md } as React.CSSProperties,
+  note: { background: TK.violetTint, border: `1px solid ${TK.violetEdge}`, borderRadius: R.md,
+          padding: `${SP.md}px ${SP.lg}px`, fontSize: TF.small, color: TK.inkSoft } as React.CSSProperties,
 }
 
 const TABS: { id: string; label: string; title: string; subtitle: string }[] = [
-  { id: 'dashboard', label: '📊 Dashboard', title: 'Dashboard', subtitle: 'Headcount, cost, compliance deadlines & recent activity at a glance' },
-  { id: 'config', label: '🔧 Configuration', title: 'Configuration', subtitle: 'Group setup, pay heads, statutory slabs & tax rules' },
-  { id: 'attendance', label: '📤 Attendance', title: 'Attendance', subtitle: 'Upload attendance / leave / OT into the month snapshot' },
-  { id: 'employees', label: '👥 Employees & CTC', title: 'Employees & CTC', subtitle: 'Payroll view of the workforce, CTC master and bank details' },
-  { id: 'run', label: '▶️ Payroll Run', title: 'Payroll Run', subtitle: 'The heart — month create → sync → calculate → approve → disburse → lock' },
-  { id: 'statutory', label: '⚖️ Statutory & Tax', title: 'Statutory & Tax', subtitle: 'Compliance-by-design — PF, ESIC, PT, LWF, NPS and TDS' },
-  { id: 'benefits', label: '🎁 Benefits & Loans', title: 'Benefits & Loans', subtitle: 'Flexi benefits, NPS, insurance and the full loan lifecycle' },
-  { id: 'offcycle', label: '🔁 Off-cycle · Bonus · FNF', title: 'Off-cycle · Bonus · FNF', subtitle: 'Ad-hoc payments, bonus registers and full & final settlement' },
-  { id: 'reports', label: '📊 Outputs & Reports', title: 'Outputs & Reports', subtitle: 'Payslips, registers, bank files, challans and dashboards' },
-  { id: 'admin', label: '🛡️ Admin & Controls', title: 'Admin & Controls', subtitle: 'Access control, approvals and the full audit trail' },
+  { id: 'dashboard', label: 'Dashboard', title: 'Dashboard', subtitle: 'Headcount, cost, compliance deadlines & recent activity at a glance' },
+  { id: 'config', label: 'Configuration', title: 'Configuration', subtitle: 'Group setup, pay heads, statutory slabs & tax rules' },
+  { id: 'attendance', label: 'Attendance', title: 'Attendance', subtitle: 'Upload attendance / leave / OT into the month snapshot' },
+  { id: 'employees', label: 'Employees & CTC', title: 'Employees & CTC', subtitle: 'Payroll view of the workforce, CTC master and bank details' },
+  { id: 'run', label: 'Payroll Run', title: 'Payroll Run', subtitle: 'The heart — month create → sync → calculate → approve → disburse → lock' },
+  { id: 'statutory', label: 'Statutory & Tax', title: 'Statutory & Tax', subtitle: 'Compliance-by-design — PF, ESIC, PT, LWF, NPS and TDS' },
+  { id: 'benefits', label: 'Benefits & Loans', title: 'Benefits & Loans', subtitle: 'Flexi benefits, NPS, insurance and the full loan lifecycle' },
+  { id: 'offcycle', label: 'Off-cycle · Bonus · FNF', title: 'Off-cycle · Bonus · FNF', subtitle: 'Ad-hoc payments, bonus registers and full & final settlement' },
+  { id: 'reports', label: 'Outputs & Reports', title: 'Outputs & Reports', subtitle: 'Payslips, registers, bank files, challans and dashboards' },
+  { id: 'admin', label: 'Admin & Controls', title: 'Admin & Controls', subtitle: 'Access control, approvals and the full audit trail' },
 ]
 
 // ── Small shared bits ─────────────────────────────────────────────
@@ -306,21 +326,21 @@ function configSubs(companyId: string, subView: string, fy: string): SubTab[] {
   return [
     { id: 'payheads', label: 'Pay Heads', icon: '🧾', built: true,
       children: [
-        { id: 'catalog', label: '📋 Standard Pay Heads' },
-        { id: 'flexi', label: '🎛️ Flexi / FBP' },
-        { id: 'nonstd', label: '👥 Non-standard Types' },
-        { id: 'rules', label: '⚖️ Business Rules' },
+        { id: 'catalog', label: 'Standard Pay Heads' },
+        { id: 'flexi', label: 'Flexi / FBP' },
+        { id: 'nonstd', label: 'Non-standard Types' },
+        { id: 'rules', label: 'Business Rules' },
       ],
       render: () => <PayHeadCatalog view={['flexi', 'nonstd', 'rules'].includes(subView) ? subView : 'catalog'} /> },
     { id: 'group', label: 'Group & Company', icon: '🏢', built: true, groupGlobal: true, render: () => <CompanyProfileView /> },
     { id: 'fymonth', label: 'Payroll Month', icon: '🗓️', built: true,
       children: [
-        { id: 'create', label: '📅 Create Month' },
-        { id: 'freeze', label: '❄️ Freeze Month' },
-        { id: 'unfreeze', label: '☀️ Unfreeze Month' },
+        { id: 'create', label: 'Create Month' },
+        { id: 'freeze', label: 'Freeze Month' },
+        { id: 'unfreeze', label: 'Unfreeze Month' },
         // PayrollMonthTab always supported this mode; it just had no menu entry, so the
         // only way to lock a month was the Advance button that Run Cycle no longer has.
-        { id: 'lock', label: '🔒 Lock / Unlock Month' },
+        { id: 'lock', label: 'Lock / Unlock Month' },
       ],
       render: () => <PayrollMonthTab companyId={companyId} fy={fy} mode={(['create', 'freeze', 'unfreeze'].includes(subView) ? subView : 'create') as PmMode} /> },
     { id: 'categories', label: 'Department · Sub-dept · Location', icon: '🗂️', built: true, render: () => <CompanyStructureView companyId={companyId} /> },
@@ -663,7 +683,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
         </div>
         {mode === 'create' && (
           <>
-            {allCo && <div style={{ fontSize: 12, color: C.purpleD, marginTop: 10, background: '#EEEDFE', borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
+            {allCo && <div style={{ fontSize: 12, color: C.purpleDark, marginTop: 10, background: '#EEEDFE', borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
             <div style={{ marginTop: 12 }}>
               <button style={{ ...S.btnPrimary }} onClick={() => setShowCreate(true)}>➕ {allCo ? 'Create for all companies' : 'Create month'}</button>
             </div>
@@ -832,7 +852,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
               </>
             ) : (
               <>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 6 }}>Month · FY {fy}</label>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 6 }}>Month · FY {fy}</label>
                 <select style={{ ...S.input, width: '100%', marginBottom: 20 }} value={month} onChange={e => setMonth(Number(e.target.value))}>
                   {availableMonths.map(m => <option key={m} value={m}>{MONTHS[m - 1]} {calYearOf(m - 1)}</option>)}
                 </select>

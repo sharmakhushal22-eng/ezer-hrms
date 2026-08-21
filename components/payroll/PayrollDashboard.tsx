@@ -172,8 +172,19 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
       const { data: allDepts } = await supabase.from('departments').select('id, dept_name')
       ;(allDepts || []).forEach((d: any) => { deptName[d.id] = d.dept_name })
     } catch { /* ignore */ }
-    const deptCostArr = Object.entries(deptCostMap)
-      .map(([id, cost]) => ({ name: id === 'unassigned' ? 'Unassigned' : (deptName[id] || '—'), cost }))
+    // Costs accumulate per department ID, but each company has its own
+    // departments row — so "Sales & Marketing" exists several times with
+    // different IDs. Mapping IDs straight to names produced two rows with the
+    // same label and different figures, which read as a bug and gave React
+    // duplicate keys. Fold by name once the names are known: in a group view
+    // "Sales & Marketing" means the function across the group.
+    const byName: Record<string, number> = {}
+    Object.entries(deptCostMap).forEach(([id, cost]) => {
+      const name = id === 'unassigned' ? 'Unassigned' : (deptName[id] || '—')
+      byName[name] = (byName[name] || 0) + cost
+    })
+    const deptCostArr = Object.entries(byName)
+      .map(([name, cost]) => ({ name, cost }))
       .sort((a, b) => b.cost - a.cost).slice(0, 6)
 
     // ── Bonus (empty today → 0) ──
