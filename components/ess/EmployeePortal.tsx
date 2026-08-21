@@ -34,14 +34,23 @@ import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
 import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
 
+// The design system — see lib/ui/tokens.ts. This file has no colliding names,
+// so the tokens come in under their own.
+import {
+  C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle, UIKeyframes,
+  IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
+  IconLetters, IconReports, IconRecruitment, IconAi,
+} from '@/lib/ui'
+
 // ── Styles ─────────────────────────────────────────────────────────
+// Bound to the design system. See lib/ui/tokens.ts.
 const T = {
-  card:  { background:'#FFFFFF', borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  label: { fontSize:11, fontWeight:600, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'9px 11px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  btnP:  { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:'#7C3AED', color:'#fff' } as React.CSSProperties,
-  btnO:  { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#6D28D9' } as React.CSSProperties,
-  section: { fontSize:12, fontWeight:600, color:'#7C3AED', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
+  card:  { background:C.surface, borderRadius:R.lg, border:`1px solid ${C.line}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
+  label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
+  input: { ...inputStyle() } as React.CSSProperties,
+  btnP:  { height:36, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.violetDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', background:`linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color:'#fff', boxShadow:E.violet } as React.CSSProperties,
+  btnO:  { height:34, padding:'0 13px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat } as React.CSSProperties,
+  section: { ...eyebrow, marginBottom:S.md, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
 const fmt = (s?: string|null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
 const fmtDT = (s?: string|null) => s ? new Date(s).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : '—'
@@ -124,10 +133,10 @@ function PunchButton({ employeeId }: { employeeId: string }) {
   const isOut = punchedToday === true
   return (
     <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? '#DC2626' : '#059669'}` }}>
-      <div style={T.section}>🕐 Attendance</div>
+      <div style={T.section}>Attendance</div>
       <button onClick={punch} disabled={busy || punchedToday === null}
         style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: '#fff', background: isOut ? '#DC2626' : '#059669', opacity: (busy || punchedToday === null) ? .6 : 1 }}>
-        {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? '🔴 Punch Out' : '🟢 Punch In')}
+        {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? 'Punch Out' : 'Punch In')}
       </button>
       {msg && <div style={{ fontSize: 12, color: msg.startsWith('✓') ? '#059669' : '#DC2626', marginTop: 8, textAlign: 'center' }}>{msg}</div>}
       <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6, textAlign: 'center' }}>{isOut ? 'Punched in today · resets to “Punch In” at 12 AM.' : 'Tap to punch in for the day.'}</div>
@@ -174,7 +183,7 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div style={{ ...T.card, maxWidth:380, width:'100%', marginBottom:0 }} onClick={e => e.stopPropagation()}>
-        <div style={T.section}>✏️ Edit Profile Picture</div>
+        <div style={T.section}>Edit Profile Picture</div>
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
           <div style={{ width:120, height:120, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, fontWeight:700 }}>
             {preview ? <img src={preview} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}
@@ -284,7 +293,7 @@ function TravelClaimStatus({ emp, go }: { emp: EmployeeDetail; go: (k: string) =
     <div style={T.card}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-        <div style={T.section}>✈️ My Travel Claims</div>
+        <div style={T.section}>My Travel Claims</div>
         <button onClick={() => go('claims')} style={{ ...T.btnO, padding: '5px 11px', fontSize: 11.5 }}>
           Open
         </button>
@@ -377,7 +386,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:10 }}>
         <Stat label="Leave Balance" value="—" color="#9CA3AF" />
-        <Stat label="Net Salary" value={salaryVisible ? '—' : '🔒 Hidden'} color="#9CA3AF" />
+        <Stat label="Net Salary" value={salaryVisible ? '—' : 'Hidden'} color="#9CA3AF" />
         <Stat label="Attendance %" value="—" color="#9CA3AF" />
         <Stat label="Pending Actions" value={String(pending)} color={pending ? '#D97706' : '#059669'} />
       </div>
@@ -395,7 +404,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:10 }}>
         {/* Birthday / Anniversary */}
         <div style={T.card}>
-          <div style={T.section}>🎉 Birthday & Anniversary</div>
+          <div style={T.section}>Birthday & Anniversary</div>
           {bdaySoon !== null
             ? <div style={{ fontSize:13 }}>🎂 Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s)`} — wishing you ahead!</div>
             : <div style={{ fontSize:12, color:'#9CA3AF' }}>No upcoming birthdays in the next 30 days.</div>}
@@ -404,7 +413,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 
         {/* My Journey */}
         <div style={T.card}>
-          <div style={T.section}>🚀 My Journey</div>
+          <div style={T.section}>My Journey</div>
           <div style={{ fontSize:12, color:'#374151', lineHeight:1.9 }}>
             <div>📅 Joined: <b>{fmt(emp.group_doj)}</b></div>
             <div>🏷️ Designation: <b>{emp.designation || '—'}</b></div>
@@ -417,14 +426,14 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 
         {/* Kudos */}
         <div style={T.card}>
-          <div style={T.section}>👏 Recognition & Kudos</div>
+          <div style={T.section}>Recognition & Kudos</div>
           {kudos.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No kudos yet — appreciation from peers will show here.</div>}
           {kudos.map(k => <div key={k.id} style={{ fontSize:12, padding:'6px 0', borderBottom:'1px solid #F3F0FF' }}>{k.badge ? `🏆 ${k.badge} — ` : ''}{k.message || 'Kudos!'}<span style={{ color:'#9CA3AF', fontSize:10, marginLeft:6 }}>{fmt(k.created_at)}</span></div>)}
         </div>
 
         {/* Announcements */}
         <div style={T.card}>
-          <div style={T.section}>📣 Announcements</div>
+          <div style={T.section}>Announcements</div>
           {ann.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No announcements right now.</div>}
           {ann.map(a => <div key={a.id} style={{ padding:'7px 0', borderBottom:'1px solid #F3F0FF' }}><div style={{ fontSize:12.5, fontWeight:600 }}>{a.title}</div>{a.body && <div style={{ fontSize:11.5, color:'#6B7280', marginTop:2 }}>{a.body}</div>}<div style={{ fontSize:10, color:'#9CA3AF', marginTop:2 }}>{fmt(a.published_at)}</div></div>)}
         </div>
@@ -455,10 +464,10 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 // ════════════════════════════════════════════════════════════════
 
 const P = {
-  navy: '#1E1B4B', navyDeep: '#15123A', purple: '#7C3AED', purpleD: '#6D28D9',
-  purpleLite: '#F3F0FF', line: '#EDE9FE', muted: '#6B7280', dim: '#9CA3AF',
-  green: '#059669', greenBg: '#ECFDF5', amber: '#B45309', amberBg: '#FFFBEB',
-  red: '#DC2626', white: '#FFFFFF',
+  navy: C.ink, navyDeep: C.dark, purple: C.violet, purpleD: C.violetDeep,
+  purpleLite: C.violetTint, line: C.violetEdge, muted: C.muted, dim: C.faint,
+  green: C.positive, greenBg: C.positiveTint, amber: C.warning, amberBg: C.warningTint,
+  red: C.critical, white: C.surface,
 }
 
 /** Years and months since a date, in words. */
@@ -890,7 +899,7 @@ function Documents({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t
   return (
     <div>
       <div style={T.card}>
-        <div style={T.section}>📄 Request a Letter (HR generates on approval)</div>
+        <div style={T.section}>Request a Letter (HR generates on approval)</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
           <div><label style={T.label}>Letter type</label><select style={T.input} value={type} onChange={e => setType(e.target.value)}>{LETTER_TYPES.map(l => <option key={l}>{l}</option>)}</select></div>
           <div><label style={T.label}>Purpose</label><input style={T.input} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="e.g. bank loan, visa…" /></div>
@@ -898,7 +907,7 @@ function Documents({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Sending…' : 'Request letter'}</button>
       </div>
       <div style={T.card}>
-        <div style={T.section}>🗂️ My Letter Requests</div>
+        <div style={T.section}>My Letter Requests</div>
         {rows.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No requests yet.</div>}
         {rows.map(r => (
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
@@ -943,7 +952,7 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
   return (
     <div>
       <div style={T.card}>
-        <div style={T.section}>✉️ Raise a Request</div>
+        <div style={T.section}>Raise a Request</div>
         <label style={T.label}>Type</label>
         <select style={{ ...T.input, marginBottom:10 }} value={type} onChange={e => setType(e.target.value)}>{REQ_TYPES.map(r => <option key={r.k} value={r.k}>{r.label}</option>)}</select>
         {def.confidential && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:'#B91C1C' }}>🔒 This is confidential and routes only to the Internal Committee — not regular HR.</div>}
@@ -952,7 +961,7 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
       </div>
       <div style={T.card}>
-        <div style={T.section}>📋 My Requests</div>
+        <div style={T.section}>My Requests</div>
         {rows.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No requests yet.</div>}
         {rows.map(r => (
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
@@ -1146,7 +1155,7 @@ function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () =
   return (
     <div style={{ ...T.card, marginBottom:0, border:'none', boxShadow:'none' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-        <div style={T.section}>🔔 Notifications</div>
+        <div style={T.section}>Notifications</div>
         <button onClick={async () => { await markAllNotifications(emp.id); load() }} style={T.btnO}>Mark all read</button>
       </div>
       {rows.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF', padding:'8px 0' }}>You're all caught up. 🎉</div>}
@@ -1201,7 +1210,7 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   return (
     <div>
       <div style={T.card}>
-        <div style={T.section}>🌴 Leave Balance · FY 2026-27</div>
+        <div style={T.section}>Leave Balance · FY 2026-27</div>
         {balances.length === 0 ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>No leave balances yet — contact HR.</div> :
           balances.map((b: any) => { const total = Number(b.opening || 0) + Number(b.accrued || 0); const av = avail(b); const pct = total > 0 ? Math.round(av / total * 100) : 0; return (
             <div key={b.id} style={{ background: '#FAFAF8', borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}>
@@ -1262,7 +1271,7 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
           )})}
       </div>
       <div style={T.card}>
-        <div style={T.section}>📅 Upcoming Holidays</div>
+        <div style={T.section}>Upcoming Holidays</div>
         {upcoming.length === 0 ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>No upcoming holidays.</div> :
           upcoming.map((h: any) => { const [bg, c] = HOL_STYLE[h.holiday_type] || ['#F3F4F6', '#6B7280']; return (
             <div key={h.holiday_date + h.description} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F3F0FF', fontSize: 12 }}>
@@ -1998,7 +2007,7 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
 
   return (
     <div style={T.card}>
-      <div style={T.section}>📅 Regularise a date range</div>
+      <div style={T.section}>Regularise a date range</div>
       <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
         For a stretch of days with the same story — biometric down, on site, working from home.
         Weekly offs, holidays, leave and days already recorded are left out automatically.
@@ -2115,7 +2124,7 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
   const dateLbl = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
   return (
     <div style={T.card}>
-      <div style={T.section}>⚠ Raise Regularisation</div>
+      <div style={T.section}>Raise Regularisation</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
         <div style={{ gridColumn:'1/-1' }}><label style={T.label}>Attendance date * <span style={{ fontWeight:400, color:'#9CA3AF' }}>(past dates only)</span></label>{editable
           ? <input type="date" max={yesterdayStr} style={T.input} value={dateVal} onChange={e => setDateVal(e.target.value)} />
@@ -2140,7 +2149,7 @@ function RegularisationList({ requests }: { requests: RegularisationRequest[] })
   const STY: Record<string,[string,string]> = { PENDING:['#FEF3C7','#D97706'], APPROVED:['#ECFDF5','#059669'], REJECTED:['#FEF2F2','#DC2626'] }
   return (
     <div style={T.card}>
-      <div style={T.section}>🗂️ My Regularisation Requests</div>
+      <div style={T.section}>My Regularisation Requests</div>
       {requests.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No regularisation requests yet.</div>}
       {requests.map(r => { const [bg,c] = STY[r.status] || ['#F3F0FF','#6D28D9']; return (
         <div key={r.id} style={{ padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
@@ -2968,7 +2977,7 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
   }
   return (
     <div style={T.card}>
-      <div style={T.section}>🖋️ My Letters</div>
+      <div style={T.section}>My Letters</div>
       {loading ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Loading…</div> :
         rows.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No letters have been shared with you yet. HR-issued letters (offer, confirmation, etc.) will appear here.</div> :
         rows.map(r => (
@@ -3008,6 +3017,25 @@ interface NavSection {
   desc: string; status: Ready
   items: NavItem[]            // sub-tabs; a single entry means no pill row is drawn
   features?: Feature[]        // shown instead of the module when status is 'soon'
+}
+
+/**
+ * Section key → interface icon.
+ *
+ * The ESS rail used the same emoji the dashboard rail did, for the same
+ * reasons it should not: they render differently per OS, sit off the text
+ * baseline, and cannot take the colour of the state they are in. The emoji
+ * remain in SECTIONS.features, where they illustrate a not-yet-built feature
+ * rather than label a control.
+ */
+const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => React.ReactElement> = {
+  home: IconHome, profile: IconEmployees, team: IconEmployees, payroll: IconPayroll,
+  attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
+  wall: IconRecruitment, rnr: IconAi, funzone: IconAi,
+}
+function EssIcon({ k, size = 17, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
+  const I = ESS_ICON[k]
+  return I ? <I size={size} strokeWidth={strokeWidth} /> : null
 }
 
 const SECTIONS: NavSection[] = [
@@ -3118,7 +3146,7 @@ function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean;
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? '#fff' : '#C4BFEE', cursor:'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? '#7C3AED' : 'transparent'}` }}>
-      <span>{s.icon}</span>
+      <EssIcon k={s.k} size={15} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
     </button>
@@ -3130,7 +3158,10 @@ function TabHeader({ s }: { s: NavSection }) {
   return (
     <div style={{ marginBottom:16 }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:4 }}>
-        <div style={{ fontSize:22, fontWeight:700 }}>{s.icon} {s.label}</div>
+        <div style={{ fontSize:F.page, fontWeight:W.bold, letterSpacing:'-.02em',
+                      display:'flex', alignItems:'center', gap:9 }}>
+          <EssIcon k={s.k} size={21} strokeWidth={1.8} />{s.label}
+        </div>
         <span style={{ fontSize:10.5, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
       </div>
       <div style={{ fontSize:12.5, color:'#6B7280' }}>{s.desc}</div>
@@ -3308,7 +3339,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'#fff', borderTop:'1px solid #EDE9FE', display:'flex', zIndex:20 }}>
           {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
             <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? '#7C3AED' : '#9CA3AF', fontWeight: on ? 600 : 500 }}>
-              <div style={{ fontSize:17, lineHeight:1.3 }}>{s.icon}</div>{s.short}
+              <EssIcon k={s.k} size={17} />{s.short}
             </button>
           )})}
           <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? '#7C3AED' : '#9CA3AF', fontWeight: moreOpen ? 600 : 500 }}>
@@ -3326,7 +3357,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
               {SECTIONS.map(s => (
                 <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:9, border:`1px solid ${section.k === s.k ? '#7C3AED' : '#EDE9FE'}`, background: section.k === s.k ? '#F5F3FF' : '#FAFAF8', cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:'#1E1B4B' }}>
-                  <span style={{ fontSize:16 }}>{s.icon}</span>
+                  <span style={{ display:'flex' }}><EssIcon k={s.k} size={16} /></span>
                   <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
                   <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
                 </button>
