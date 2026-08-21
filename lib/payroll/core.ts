@@ -395,6 +395,11 @@ export const RUN_SHEET_COLS: string[] = [
   'lwf_state_used', 'lwf_month_applicable', 'lwf_exit_exempt', 'lwf_rate_found',
   'lwf_employee', 'lwf_employer', 'lwf_reason',
 
+  // Employer NPS. The rate and the regime it came from sit beside the amount because
+  // 10% and 14% look like an error to anyone who does not know the regime decides it,
+  // and nps_reason says in words why a row is blank rather than nil.
+  'nps_opted', 'nps_regime_used', 'nps_percent', 'employer_nps', 'nps_reason',
+
   // Appraisal arrear, head by head. arrear_months is here so the employee's first
   // question — "which months is this for?" — is answered on the row itself rather than
   // by someone re-deriving it from an effective date months later.

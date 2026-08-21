@@ -1,5 +1,6 @@
 // app/api/ess-auth/login/route.ts — ESS login (email OR emp_code) with password verification.
 import { NextRequest, NextResponse } from 'next/server'
+import { issueEssToken } from '@/lib/ess-session'
 import { createClient } from '@supabase/supabase-js'
 import { resolveEmployee, verifyPassword } from '@/lib/ess-auth'
 

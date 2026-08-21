@@ -30,6 +30,7 @@ import FunZone from '@/components/ess/FunZone'
 import FlexiClaims from '@/components/ess/FlexiClaims'
 import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
 import InvestmentProofs from '@/components/ess/InvestmentProofs'
+import TravelClaims from '@/components/ess/TravelClaims'
 
 // ── Styles ─────────────────────────────────────────────────────────
 const T = {
@@ -1871,7 +1872,7 @@ const SECTIONS: NavSection[] = [
       { k:'vpf',         label:'Voluntary PF' },
       { k:'nps',         label:'Corporate NPS' },
       { k:'loans',       label:'Loans' },
-      { k:'claims',      label:'Travel Claims',          phase:3, needs:'Claims/Payroll' },
+      { k:'claims',      label:'Travel Claims' },
       { k:'statutory',   label:'Statutory',              phase:3, needs:'Payroll' },
     ]},
 
@@ -2063,6 +2064,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'declaration':   return <InvestmentDeclaration employeeId={emp.id} empName={emp.full_name} empCode={emp.emp_code} />
       case 'proofs':        return <InvestmentProofs employeeId={emp.id} />
       case 'flexiclaims':   return <FlexiClaims employeeId={emp.id} />
+      case 'claims':        return <TravelClaims employeeId={emp.id} />
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
