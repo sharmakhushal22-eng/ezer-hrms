@@ -2,19 +2,26 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+// The design system, aliased around this file's own S.
+import {
+  C as TK, F as TF, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
+
 // ── STYLES ───────────────────────────────────────────────────────
+// Bound to the design system. This file owns the name S, so the tokens are
+// aliased: TK colour, TF type, SP spacing.
 const S = {
-  page: { background:'#F5F3FF', minHeight:'100vh', fontFamily:'"DM Sans","Segoe UI",sans-serif', color:'#1E1B4B' } as React.CSSProperties,
-  card: { background:'#fff', borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(124,58,237,0.05)' } as React.CSSProperties,
-  cardP: { background:'#fff', borderRadius:10, border:'1.5px solid #7C3AED', padding:'14px 16px', marginBottom:12 } as React.CSSProperties,
-  label: { fontSize:11, fontWeight:600 as const, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'8px 10px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  select: { width:'100%', padding:'8px 10px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  textarea: { width:'100%', padding:'9px 11px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', resize:'vertical' as const, fontFamily:'inherit', boxSizing:'border-box' as const },
-  btn: (bg: string, c: string) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600 as const, fontFamily:'inherit', background:bg, color:c, whiteSpace:'nowrap' as const }) as React.CSSProperties,
-  g2: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 } as React.CSSProperties,
-  g3: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 } as React.CSSProperties,
-  sec: { fontSize:10, fontWeight:600 as const, color:'#7C3AED', textTransform:'uppercase' as const, letterSpacing:'.06em', display:'flex', alignItems:'center', gap:8, marginBottom:10, marginTop:4 } as React.CSSProperties,
+  page: { background:TK.canvas, minHeight:'100vh', fontFamily:TF.family, color:TK.ink } as React.CSSProperties,
+  card: { background:TK.surface, borderRadius:R.lg, border:`1px solid ${TK.line}`, padding:'14px 16px', marginBottom:SP.md, boxShadow:E.raised } as React.CSSProperties,
+  cardP: { background:TK.surface, borderRadius:R.lg, border:`1.5px solid ${TK.violet}`, padding:'14px 16px', marginBottom:SP.md, boxShadow:E.floating } as React.CSSProperties,
+  label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
+  input: { ...inputStyle() } as React.CSSProperties,
+  select: { ...inputStyle(), cursor:'pointer' } as React.CSSProperties,
+  textarea: { ...inputStyle(), height:'auto', minHeight:80, padding:'9px 11px', resize:'vertical' as const, lineHeight:1.5 } as React.CSSProperties,
+  btn: (bg: string, c: string) => ({ height:36, padding:'0 16px', borderRadius:R.md, border:'none', cursor:'pointer', fontSize:TF.small, fontWeight:W.semi, fontFamily:'inherit', background:bg, color:c, whiteSpace:'nowrap' as const }) as React.CSSProperties,
+  g2: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:SP.md } as React.CSSProperties,
+  g3: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:SP.md } as React.CSSProperties,
+  sec: { ...eyebrow, display:'flex', alignItems:'center', gap:8, marginBottom:SP.md, marginTop:SP.xs } as React.CSSProperties,
 }
 const fmt = (n: number) => Math.round(n).toLocaleString('en-IN')
 const daysDiff = (d: string) => Math.max(0, Math.ceil((new Date(d).getTime() - Date.now()) / 86400000))
@@ -22,7 +29,7 @@ const daysDiff = (d: string) => Math.max(0, Math.ceil((new Date(d).getTime() - D
 function SecLine({ title }: { title: string }) {
   return (
     <div style={S.sec}>
-      {title} <div style={{ flex:1, height:1, background:'#EDE9FE' }} />
+      {title} <div style={{ flex:1, height:1, background:TK.line }} />
     </div>
   )
 }

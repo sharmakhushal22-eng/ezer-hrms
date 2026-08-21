@@ -5,6 +5,12 @@ import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
 
+// The design system. This file declares its own Badge and Field, so those are
+// deliberately not imported.
+import {
+  C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
+
 // ── TYPES ────────────────────────────────────────────────────────
 interface Company { id:string; company_code:string; company_name?:string }
 interface Location { id:string; location_code:string; location_name:string; company_id:string }
@@ -35,32 +41,44 @@ interface Candidate {
 }
 
 const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted','Offer Sent','Joined','Rejected']
+// A hiring pipeline is ordered — Applied is not "a different kind of thing"
+// from Shortlisted, it is earlier. So colour follows the funnel: violet
+// deepening as a candidate advances, green once the outcome is good, red when
+// it is not. The old map gave ten stages ten unrelated hues, which made a
+// ranked sequence look like ten categories and drew the eye equally to all of
+// them. Same ramp as the dashboard pipeline chart, so the two agree.
 const STAGE_COLOR:Record<string,string> = {
-  'Applied':'#7C3AED','AI Screened':'#6D28D9','Telephonic':'#D97706',
-  'L1':'#DB2777','L2':'#059669','Optional Round':'#4F46E5',
-  'Shortlisted':'#16A34A','Offer Sent':'#0891B2','Joined':'#15803D','Rejected':'#DC2626'
+  'Applied':'#B39BF5', 'AI Screened':'#9B7BF0', 'Telephonic':'#8A66EC',
+  'L1':'#7B54E8', 'L2':'#6D3BEF', 'Optional Round':'#5F30D4',
+  'Shortlisted':'#0B7A5B', 'Offer Sent':'#0B7A5B', 'Joined':'#0B7A5B',
+  'Rejected':'#C42B32',
 }
 const EMP_TYPES = ['Employee','Intern','Contract','Consultant','NAPS','NATS','Live Project']
 const EDUCATION_OPTIONS = ['Any Graduate','Bachelors','B.Tech/B.E.','MBA/PGDM','M.Tech','B.Com/M.Com','BCA/MCA','Diploma','12th Pass','Any Post Graduate','Masters']
 const SOURCES = ['Direct','Naukri','LinkedIn','Referral','Campus','WhatsApp','Consultancy','Other']
 
 // ── LIGHT THEME STYLES ───────────────────────────────────────────
+// Bound to the design system — see lib/ui/tokens.ts. One object drives all 620
+// inline style blocks on this page, so this is where the whole module's look
+// is decided.
 const T = {
-  page: { background:'#F5F3FF', minHeight:'100vh', color:'#1E1B4B', fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
-  card: { background:'#FFFFFF', borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  cardPurple: { background:'#FFFFFF', borderRadius:10, border:'1.5px solid #7C3AED', padding:'14px 16px', marginBottom:10, boxShadow:'0 2px 12px rgba(124,58,237,0.1)' } as React.CSSProperties,
-  label: { fontSize:11, fontWeight:600, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'9px 11px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  select: { width:'100%', padding:'9px 11px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  textarea: { width:'100%', padding:'9px 11px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', resize:'vertical' as const, minHeight:90, fontFamily:'inherit', boxSizing:'border-box' as const },
-  btn: { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  btnPrimary: { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:'#7C3AED', color:'#fff' } as React.CSSProperties,
-  btnOutline: { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#6D28D9' } as React.CSSProperties,
-  g2: { display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 } as React.CSSProperties,
-  g3: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 } as React.CSSProperties,
-  g4: { display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10 } as React.CSSProperties,
-  row: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:'1px solid #F3F0FF' } as React.CSSProperties,
-  section: { fontSize:12, fontWeight:600, color:'#7C3AED', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10, marginTop:4, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
+  page: { background:C.canvas, minHeight:'100vh', color:C.ink, fontFamily:F.family } as React.CSSProperties,
+  card: { background:C.surface, borderRadius:R.lg, border:`1px solid ${C.line}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
+  cardPurple: { background:C.surface, borderRadius:R.lg, border:`1.5px solid ${C.violet}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.floating } as React.CSSProperties,
+  label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
+  input: { ...inputStyle() } as React.CSSProperties,
+  select: { ...inputStyle(), cursor:'pointer' } as React.CSSProperties,
+  textarea: { ...inputStyle(), height:'auto', minHeight:90, padding:'9px 11px', resize:'vertical' as const, lineHeight:1.5 } as React.CSSProperties,
+  btn: { height:36, padding:'0 16px', borderRadius:R.md, border:'none', cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', whiteSpace:'nowrap' as const } as React.CSSProperties,
+  btnPrimary: { height:36, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.violetDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', background:`linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color:'#fff', boxShadow:E.violet, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  btnOutline: { height:34, padding:'0 13px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  // Fixed 2/3/4-column grids collapsed badly on a laptop at the app's 130%
+  // zoom. auto-fit lets each row find its own column count instead.
+  g2: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:S.md } as React.CSSProperties,
+  g3: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:S.md } as React.CSSProperties,
+  g4: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:S.md } as React.CSSProperties,
+  row: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${C.line}` } as React.CSSProperties,
+  section: { ...eyebrow, marginBottom:S.md, marginTop:S.xs, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
 
 // ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
@@ -200,18 +218,21 @@ export default function RecruitmentPage() {
 
   useEffect(() => { loadAll() }, [loadAll])
 
+  // Eleven tabs is a lot to scan, and eleven different emoji in front of them
+  // made it harder rather than easier — each one drew the eye equally. The
+  // words are the signal; they are also already in pipeline order.
   const TABS = [
-    { k:'dashboard', l:'📊 Dashboard' },
-    { k:'mrf', l:'📝 MRF' },
-    { k:'screening', l:'🤖 AI Screening' },
-    { k:'pipeline', l:'🔀 Pipeline' },
-    { k:'negotiation', l:'💰 Negotiation' },
-    { k:'offerapproval', l:'📋 Offer Approval' },
-    { k:'hrhead', l:'✅ HR Head' },
-    { k:'sendoffer', l:'📨 Send Offers' },
-    { k:'offers', l:'📄 Offers' },
-    { k:'preonboarding', l:'🎉 Pre-onboarding' },
-    { k:'jobstatus', l:'📈 Job Status' },
+    { k:'dashboard', l:'Dashboard' },
+    { k:'mrf', l:'MRF' },
+    { k:'screening', l:'AI Screening' },
+    { k:'pipeline', l:'Pipeline' },
+    { k:'negotiation', l:'Negotiation' },
+    { k:'offerapproval', l:'Offer Approval' },
+    { k:'hrhead', l:'HR Head' },
+    { k:'sendoffer', l:'Send Offers' },
+    { k:'offers', l:'Offers' },
+    { k:'preonboarding', l:'Pre-onboarding' },
+    { k:'jobstatus', l:'Job Status' },
   ]
   const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify }
 
@@ -224,13 +245,19 @@ export default function RecruitmentPage() {
   return (
     <div style={T.page}>
       {/* Header */}
-      <div style={{ background:'linear-gradient(135deg,#7C3AED,#4F46E5)', padding:'16px 24px' }}>
-        <div style={{ fontSize:18, fontWeight:600, color:'#fff', marginBottom:2 }}>Recruitment & ATS</div>
-        <div style={{ fontSize:12, color:'rgba(255,255,255,0.6)' }}>MRF → AI Screening → Pipeline → Negotiation → Offer → Pre-onboarding</div>
+      <div style={{ padding:`${S.xl}px ${S.xl}px ${S.lg}px` }}>
+        <h1 style={{ margin:0, fontSize:F.page, fontWeight:W.bold, color:C.ink, letterSpacing:'-.02em' }}>
+          Recruitment &amp; ATS
+        </h1>
+        <div style={{ marginTop:5, fontSize:F.small, color:C.muted }}>
+          MRF → AI Screening → Pipeline → Negotiation → Offer → Pre-onboarding
+        </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ background:'#fff', display:'flex', gap:8, padding:'10px 24px', borderBottom:'1px solid #EDE9FE', overflowX:'auto', boxShadow:'0 1px 4px rgba(124,58,237,0.08)' }}>
+      <div className="ez-scroll" style={{ background:C.surface, display:'flex', gap:6, padding:`10px ${S.xl}px`,
+                    borderTop:`1px solid ${C.line}`, borderBottom:`1px solid ${C.line}`,
+                    overflowX:'auto', position:'sticky', top:0, zIndex:30, boxShadow:E.flat }}>
         {TABS.map(t => {
           const on = tab === t.k
           return (
@@ -274,19 +301,29 @@ function DashTab({ mrfs, candidates }:any) {
   return (
     <div>
       <div style={T.g4}>
-        {[{l:'Total MRFs',v:mrfs.length,c:'#7C3AED',bg:'#F3F0FF'},{l:'Active Openings',v:openings,c:'#1D4ED8',bg:'#EFF6FF'},{l:'In Pipeline',v:candidates.length,c:'#D97706',bg:'#FFFBEB'},{l:'Joined This Month',v:joined.length,c:'#059669',bg:'#ECFDF5'}].map(s=>(
-          <div key={s.l} style={{ ...T.card, textAlign:'center' as const, background:s.bg, border:`1px solid ${s.c}20` }}>
-            <div style={{ fontSize:28, fontWeight:600, color:s.c }}>{s.v}</div>
-            <div style={{ fontSize:11, color:'#6B7280', marginTop:3 }}>{s.l}</div>
+        {[{l:'Total MRFs',v:mrfs.length,c:C.ink},
+          {l:'Active Openings',v:openings,c:C.ink},
+          {l:'In Pipeline',v:candidates.length,c:C.violetDeep},
+          {l:'Joined This Month',v:joined.length,c:C.positive}].map(s=>(
+          <div key={s.l} style={{ ...T.card, boxShadow:E.flat }}>
+            <div style={{ ...eyebrow, lineHeight:1.3, minHeight:27 }}>{s.l}</div>
+            <div style={{ fontSize:F.display, fontWeight:W.bold, color:s.c, marginTop:4,
+                          letterSpacing:'-.02em', lineHeight:1.05, ...numeric }}>{s.v}</div>
           </div>
         ))}
       </div>
       <div style={T.card}>
         <div style={T.section}>Pipeline Overview</div>
-        <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
+        {/* Ten stages, five columns — a deliberate 5x2. auto-fit gave nine and
+            stranded "Rejected" alone on the second row; ten across does not
+            fit the content column at the app's 130% zoom. */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(5, minmax(0, 1fr))', gap:8 }}>
           {STAGES.map(s=>(
-            <div key={s} style={{ background:STAGE_COLOR[s]+'12', borderRadius:8, padding:'8px 12px', textAlign:'center' as const, minWidth:72, border:`1px solid ${STAGE_COLOR[s]}25` }}>
-              <div style={{ fontSize:20, fontWeight:600, color:STAGE_COLOR[s] }}>{stageCount[s]||0}</div>
+            <div key={s} style={{ background:C.surface, borderRadius:R.md, padding:'9px 12px',
+                                  textAlign:'center' as const, minWidth:76,
+                                  border:`1px solid ${C.line}`,
+                                  borderTop:`2px solid ${STAGE_COLOR[s]}` }}>
+              <div style={{ fontSize:F.title, fontWeight:W.bold, color:STAGE_COLOR[s], ...numeric }}>{stageCount[s]||0}</div>
               <div style={{ fontSize:9, color:'#6B7280', marginTop:2, lineHeight:1.3 }}>{s}</div>
             </div>
           ))}
@@ -1881,7 +1918,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
                   <label style={{ ...T.label, marginBottom:0 }}>Job Description</label>
                   <button onClick={generateJD} disabled={aiLoading} style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', border:'1px solid #DDD6FE', fontSize:11 }}>
-                    {aiLoading?'⏳ Generating...':'🤖 Generate JD with AI'}
+                    {aiLoading?'⏳ Generating...':'Generate JD with AI'}
                   </button>
                 </div>
                 <textarea style={{ ...T.textarea, minHeight:150 }} value={form.job_description}
@@ -2860,7 +2897,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <button onClick={runScreening} disabled={screening||!selMRF||!files.length} style={{ ...T.btnPrimary, padding:'9px 20px', opacity:screening||!selMRF||!files.length?0.5:1 }}>
-            {screening?`⏳ ${progress}% (${results.length}/${files.length})` :'🚀 Start AI Screening'}
+            {screening?`⏳ ${progress}% (${results.length}/${files.length})` :'Start AI Screening'}
           </button>
           {results.length>0&&<button onClick={downloadExcel} style={{ ...T.btn, background:'#059669', color:'#fff' }}>📥 Excel Download</button>}
           {strong.filter(r=>!r.added).length>0&&(
@@ -3264,7 +3301,7 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
       <SectionLine title="Interview Questions" />
       <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:7 }}>
         <button onClick={()=>onGetQuestions(c)} disabled={aiQLoading} style={{ ...T.btn, background:'#EDE9FE', color:'#6D28D9', border:'1px solid #DDD6FE', fontSize:11 }}>
-          {aiQLoading?'⏳...':'🤖 AI Questions Generate'}
+          {aiQLoading?'⏳...':'AI Questions Generate'}
         </button>
       </div>
       {(aiQs.length?aiQs:(c.ai_questions||[])).map((q:string,i:number)=>(
@@ -3277,7 +3314,7 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
       <SectionLine title="Interview Notes & Feedback" />
       <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:6 }}>
         <button onClick={()=>onGetFeedback(c,notes)} disabled={aiFbLoading} style={{ ...T.btn, background:'#ECFDF5', color:'#059669', border:'1px solid #A7F3D0', fontSize:11 }}>
-          {aiFbLoading?'⏳...':'🤖 AI Feedback Generate'}
+          {aiFbLoading?'⏳...':'AI Feedback Generate'}
         </button>
       </div>
       <textarea style={{ ...T.textarea, minHeight:140 }} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Write interview notes..." />
