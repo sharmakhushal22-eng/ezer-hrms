@@ -55,11 +55,16 @@ function isPreview(): boolean {
 import { supabase } from '@/lib/supabase'
 import { measureTrail, isValidPoint, type GpsPoint } from '@/lib/travel/gps'
 import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
+// Local S / Field names exist here, so spacing is imported as SP.
+import {
+  C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
 
+// Bound to the design system — see lib/ui/tokens.ts.
 const V = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489', border: '#E9E7F5', muted: '#6B6B7B',
-  card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5', red: '#DC2626', redBg: '#FEF2F2',
-  amber: '#D97706', amberBg: '#FFFBEB', purpleBg: '#EEEDFE', field: '#FAFAF8',
+  navy: C.ink, purple: C.violet, purpleDark: C.violetDeep, border: C.line, muted: C.muted,
+  card: C.surface, green: C.positive, greenBg: C.positiveTint, red: C.critical, redBg: C.criticalTint,
+  amber: C.warning, amberBg: C.warningTint, purpleBg: C.violetTint, field: C.sunken,
 }
 
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -267,18 +272,11 @@ function useJourneyRecorder() {
 // Sub-components live outside the parent — defined inside, they remount on
 // every keystroke and the form loses focus mid-word.
 // ---------------------------------------------------------------------------
-const lbl: React.CSSProperties = {
-  fontSize: 11, fontWeight: 600, color: '#6D28D9', textTransform: 'uppercase',
-  letterSpacing: '.05em', display: 'block', marginBottom: 4,
-}
-const inp: React.CSSProperties = {
-  width: '100%', padding: '9px 11px', background: V.field, border: `1px solid ${V.border}`,
-  borderRadius: 7, color: V.navy, fontSize: 13, outline: 'none',
-  fontFamily: 'inherit', boxSizing: 'border-box',
-}
+const lbl: React.CSSProperties = { ...eyebrow, display: 'block', marginBottom: 5 }
+const inp: React.CSSProperties = { ...inputStyle() }
 const card: React.CSSProperties = {
-  background: V.card, borderRadius: 10, border: `1px solid ${V.border}`,
-  padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)',
+  background: V.card, borderRadius: R.lg, border: `1px solid ${V.border}`,
+  padding: '16px 18px', marginBottom: SP.lg, boxShadow: E.raised,
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {

@@ -15,6 +15,10 @@
 // inbox by, so a person only ever sees claims genuinely routed to them.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Local S / Field names exist here, so spacing is imported as SP.
+import {
+  C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
 import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
 
 // These endpoints require a signed-in dashboard session (lib/api-auth.ts).
@@ -25,11 +29,12 @@ async function authHeaders(): Promise<Record<string, string>> {
   return t ? { Authorization: `Bearer ${t}` } : {}
 }
 
+// Bound to the design system — see lib/ui/tokens.ts.
 const V = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#6D28D9', border: 'rgba(124,58,237,0.12)',
-  muted: '#6B7280', card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5',
-  red: '#DC2626', redBg: '#FEF2F2', amber: '#B45309', amberBg: '#FFFBEB',
-  purpleBg: '#EDE9FE', field: '#FAFAF8', page: '#F5F3FF',
+  navy: C.ink, purple: C.violet, purpleDark: C.violetDeep, border: C.line,
+  muted: C.muted, card: C.surface, green: C.positive, greenBg: C.positiveTint,
+  red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint,
+  purpleBg: C.violetTint, field: C.sunken, page: C.canvas,
 }
 
 const inr = (n: unknown) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -38,20 +43,23 @@ const dmy = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
 const S = {
-  card: { background: V.card, borderRadius: 10, border: `1px solid ${V.border}`,
-          padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  inp:  { padding: '9px 11px', background: V.field, border: '1px solid #DDD6FE', borderRadius: 7,
-          color: V.navy, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' } as React.CSSProperties,
-  lbl:  { fontSize: 11, fontWeight: 600, color: V.purpleDark, textTransform: 'uppercase',
-          letterSpacing: '.05em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  btnP: { padding: '8px 17px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
-          fontWeight: 600, fontFamily: 'inherit', background: V.purple, color: '#fff' } as React.CSSProperties,
-  btnG: { padding: '8px 17px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
-          fontWeight: 600, fontFamily: 'inherit', background: V.green, color: '#fff' } as React.CSSProperties,
-  btnO: { padding: '7px 14px', borderRadius: 7, border: '1px solid #DDD6FE', cursor: 'pointer',
-          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: V.purpleDark } as React.CSSProperties,
-  btnR: { padding: '7px 14px', borderRadius: 7, border: `1px solid ${V.red}33`, cursor: 'pointer',
-          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: V.red } as React.CSSProperties,
+  card: { background: V.card, borderRadius: R.lg, border: `1px solid ${V.border}`,
+          padding: '16px 18px', marginBottom: SP.md, boxShadow: E.raised } as React.CSSProperties,
+  inp:  { ...inputStyle(), width: 'auto' } as React.CSSProperties,
+  lbl:  { ...eyebrow, display: 'block', marginBottom: 5 } as React.CSSProperties,
+  btnP: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${C.violetDeep}`,
+          cursor: 'pointer', fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: `linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color: '#fff',
+          boxShadow: E.violet } as React.CSSProperties,
+  btnG: { height: 36, padding: '0 16px', borderRadius: R.md, border: 'none', cursor: 'pointer',
+          fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: C.positive, color: '#fff' } as React.CSSProperties,
+  btnO: { height: 32, padding: '0 13px', borderRadius: R.md, border: `1px solid ${C.lineStrong}`,
+          cursor: 'pointer', fontSize: F.tiny, fontWeight: W.medium, fontFamily: 'inherit',
+          background: C.surface, color: C.ink, boxShadow: E.flat } as React.CSSProperties,
+  btnR: { height: 32, padding: '0 13px', borderRadius: R.md, border: `1px solid ${tone('critical').edge}`,
+          cursor: 'pointer', fontSize: F.tiny, fontWeight: W.medium, fontFamily: 'inherit',
+          background: C.surface, color: C.critical, boxShadow: E.flat } as React.CSSProperties,
 }
 
 interface Company { id: string; company_name: string }
@@ -614,6 +622,18 @@ export default function TravelClaimsAdmin() {
 
   const [rmEnabled, setRmEnabled] = useState(false)
   const [hrEnabled, setHrEnabled] = useState(true)
+
+  // Keep the selected tab valid against the policy.
+  //
+  // `tab` starts at 'HR', but a company can have the HR stage switched off —
+  // and then its tab is not rendered while the selection still points at it.
+  // The result was a screen headed "Awaiting your approval as HR Head" with
+  // Manager showing as the selected tab: two different answers to "whose
+  // queue am I looking at?" on one screen, about approvals.
+  useEffect(() => {
+    if (tab === 'HR' && !hrEnabled) setTab(rmEnabled ? 'RM' : 'FINANCE')
+    else if (tab === 'RM' && !rmEnabled) setTab(hrEnabled ? 'HR' : 'FINANCE')
+  }, [rmEnabled, hrEnabled, tab])
   const [approvers, setApprovers] = useState<Approver[]>([])
   const [actingId, setActingId] = useState('')
 
@@ -842,11 +862,15 @@ export default function TravelClaimsAdmin() {
   ]
 
   return (
-    <div style={{ background: V.page, minHeight: '100vh', padding: 20,
-                  fontFamily: '"DM Sans","Segoe UI",sans-serif', color: V.navy, fontSize: 13 }}>
-      <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 3 }}>Travel Claims</div>
-      <div style={{ fontSize: 12.5, color: V.muted, marginBottom: 14 }}>
-        Reimbursement requests route {chain}.
+    <div style={{ background: V.page, minHeight: '100vh',
+                  padding: `${SP.xl}px ${SP.xl}px ${SP.huge}px`, maxWidth: 1440, margin: '0 auto',
+                  fontFamily: F.family, color: C.ink, fontSize: F.body }}>
+      <div style={{ marginBottom: SP.xl }}>
+        <h1 style={{ margin: 0, fontSize: F.page, fontWeight: W.bold, color: C.ink,
+                     letterSpacing: '-.02em' }}>Travel Claims</h1>
+        <div style={{ marginTop: 5, fontSize: F.small, color: C.muted }}>
+          Reimbursement requests route {chain}
+        </div>
       </div>
 
       {/* ---- controls ---- */}
@@ -967,7 +991,7 @@ export default function TravelClaimsAdmin() {
       ) : (
         <>
           <div style={S.card}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+            <div style={{ fontSize: F.lead, fontWeight: W.semi, marginBottom: SP.md, color: C.ink }}>
               {tab === 'FINANCE' ? 'Awaiting Finance verification'
                 : tab === 'HR' ? 'Awaiting your approval as HR Head'
                 : 'Awaiting your approval as reporting manager'}
