@@ -11,6 +11,11 @@
 // "connect the next module" is a row in a table, not an edit here.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// This file declares its own S, Stat, Empty and Note, so the system's spacing
+// scale is imported as SP and the colliding components are not imported at all.
+import {
+  C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession()
@@ -18,11 +23,13 @@ async function authHeaders(): Promise<Record<string, string>> {
   return t ? { Authorization: `Bearer ${t}` } : {}
 }
 
+// Bound to the design system. Every style below reads from here, so this page
+// follows lib/ui/tokens.ts rather than restating a palette.
 const V = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#6D28D9', border: 'rgba(124,58,237,0.12)',
-  muted: '#6B7280', card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5',
-  red: '#DC2626', redBg: '#FEF2F2', amber: '#B45309', amberBg: '#FFFBEB',
-  purpleBg: '#EDE9FE', field: '#FAFAF8', page: '#F5F3FF',
+  navy: C.ink, purple: C.violet, purpleDark: C.violetDeep, border: C.line,
+  muted: C.muted, card: C.surface, green: C.positive, greenBg: C.positiveTint,
+  red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint,
+  purpleBg: C.violetTint, field: C.sunken, page: C.canvas,
 }
 const inr = (n: unknown) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const num = (v: unknown) => Number(v) || 0
@@ -30,20 +37,25 @@ const dmy = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
 const S = {
-  card: { background: V.card, borderRadius: 10, border: `1px solid ${V.border}`,
-          padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  inp:  { padding: '9px 11px', background: V.field, border: '1px solid #DDD6FE', borderRadius: 7,
-          color: V.navy, fontSize: 13, outline: 'none', fontFamily: 'inherit' } as React.CSSProperties,
-  lbl:  { fontSize: 11, fontWeight: 600, color: V.purpleDark, textTransform: 'uppercase',
-          letterSpacing: '.05em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  btnP: { padding: '8px 17px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
-          fontWeight: 600, fontFamily: 'inherit', background: V.purple, color: '#fff' } as React.CSSProperties,
-  btnG: { padding: '8px 17px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
-          fontWeight: 600, fontFamily: 'inherit', background: V.green, color: '#fff' } as React.CSSProperties,
-  btnO: { padding: '7px 14px', borderRadius: 7, border: '1px solid #DDD6FE', cursor: 'pointer',
-          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: V.purpleDark } as React.CSSProperties,
-  btnR: { padding: '7px 14px', borderRadius: 7, border: `1px solid ${V.red}33`, cursor: 'pointer',
-          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: V.red } as React.CSSProperties,
+  card: { background: V.card, borderRadius: R.lg, border: `1px solid ${V.border}`,
+          padding: '16px 18px', marginBottom: SP.md, boxShadow: E.raised } as React.CSSProperties,
+  inp:  { ...inputStyle(), width: 'auto' } as React.CSSProperties,
+  lbl:  { ...eyebrow, display: 'block', marginBottom: 5 } as React.CSSProperties,
+  btnP: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${C.violetDeep}`,
+          cursor: 'pointer', fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: `linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color: '#fff',
+          boxShadow: E.violet } as React.CSSProperties,
+  // Approving money is the consequential action on this screen, so it is the
+  // only green button — and green here means "settled", not "branded".
+  btnG: { height: 36, padding: '0 16px', borderRadius: R.md, border: 'none', cursor: 'pointer',
+          fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: C.positive, color: '#fff' } as React.CSSProperties,
+  btnO: { height: 32, padding: '0 13px', borderRadius: R.md, border: `1px solid ${C.lineStrong}`,
+          cursor: 'pointer', fontSize: F.tiny, fontWeight: W.medium, fontFamily: 'inherit',
+          background: C.surface, color: C.ink, boxShadow: E.flat } as React.CSSProperties,
+  btnR: { height: 32, padding: '0 13px', borderRadius: R.md, border: `1px solid ${tone('critical').edge}`,
+          cursor: 'pointer', fontSize: F.tiny, fontWeight: W.medium, fontFamily: 'inherit',
+          background: C.surface, color: C.critical, boxShadow: E.flat } as React.CSSProperties,
 }
 
 interface Company { id: string; company_name: string }
@@ -69,21 +81,22 @@ interface Member {
 // Sub-components outside the parent — inside, they remount on every render.
 // ---------------------------------------------------------------------------
 function Empty({ text }: { text: string }) {
-  return <div style={{ textAlign: 'center', padding: '34px 0', color: V.muted, fontSize: 12.5 }}>{text}</div>
+  return <div style={{ textAlign: 'center', padding: '40px 0', color: C.muted, fontSize: F.small }}>{text}</div>
 }
 
-function Note({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
-  const [bg, fg] = tone === 'ok' ? [V.greenBg, V.green] : tone === 'warn' ? [V.amberBg, V.amber] : [V.redBg, V.red]
-  return <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 8,
-                       padding: '10px 13px', fontSize: 12, marginBottom: 12, lineHeight: 1.55 }}>{children}</div>
+function Note({ tone: t, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
+  const k = tone(t === 'ok' ? 'positive' : t === 'warn' ? 'warning' : 'critical')
+  return <div style={{ background: k.bg, color: C.inkSoft, border: `1px solid ${k.edge}`,
+                       borderRadius: R.md, padding: `${SP.md}px ${SP.lg}px`, fontSize: F.small,
+                       marginBottom: SP.md, lineHeight: 1.55 }}>{children}</div>
 }
 
 function Stat({ label, value, colour }: { label: string; value: string; colour?: string }) {
   return (
-    <div style={{ ...S.card, marginBottom: 0, padding: '13px 15px' }}>
-      <div style={{ fontSize: 10.5, fontWeight: 600, color: V.muted,
-                    textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
-      <div style={{ fontSize: 19, fontWeight: 700, color: colour || V.navy, marginTop: 3 }}>{value}</div>
+    <div style={{ ...S.card, marginBottom: 0, padding: '13px 15px', boxShadow: E.flat }}>
+      <div style={{ ...eyebrow, lineHeight: 1.3, minHeight: 27 }}>{label}</div>
+      <div style={{ fontSize: F.display, fontWeight: W.bold, color: colour || C.ink,
+                    marginTop: 4, letterSpacing: '-.02em', lineHeight: 1.05, ...numeric }}>{value}</div>
     </div>
   )
 }
@@ -314,12 +327,16 @@ export default function FinanceDepartment() {
   const planned = modules.filter(m => !m.is_enabled)
 
   return (
-    <div style={{ background: V.page, minHeight: '100vh', padding: 20,
-                  fontFamily: '"DM Sans","Segoe UI",sans-serif', color: V.navy, fontSize: 13 }}>
-      <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 3 }}>Finance</div>
-      <div style={{ fontSize: 12.5, color: V.muted, marginBottom: 14 }}>
-        Approvals and payouts across the company. {enabled.length} module
-        {enabled.length === 1 ? '' : 's'} currently route work here.
+    <div style={{ background: V.page, minHeight: '100vh',
+                  padding: `${SP.xl}px ${SP.xl}px ${SP.huge}px`, maxWidth: 1440, margin: '0 auto',
+                  fontFamily: F.family, color: C.ink, fontSize: F.body }}>
+      <div style={{ marginBottom: SP.xl }}>
+        <h1 style={{ margin: 0, fontSize: F.page, fontWeight: W.bold, color: C.ink,
+                     letterSpacing: '-.02em' }}>Finance</h1>
+        <div style={{ marginTop: 5, fontSize: F.small, color: C.muted }}>
+          Approvals and payouts across the company · {enabled.length} module
+          {enabled.length === 1 ? '' : 's'} routing work here
+        </div>
       </div>
 
       <div style={{ ...S.card, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
