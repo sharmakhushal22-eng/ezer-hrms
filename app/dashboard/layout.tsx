@@ -19,6 +19,7 @@ const nav: { icon: string; label: string; href: string; module: Module | null }[
   { icon: '🕒', label: 'Attendance Reports', href: '/dashboard/attendance-reports', module: 'Attendance Reports' },
   { icon: '🌴', label: 'Leave & Holiday Config', href: '/dashboard/leave-upload', module: 'Leave Config' },
   { icon: '💰', label: 'Payroll', href: '/dashboard/payroll', module: 'Payroll' },
+  { icon: '🏦', label: 'Finance Department', href: '/dashboard/finance', module: 'Finance' },
   { icon: '💳', label: 'Flexi Claims', href: '/dashboard/flexi-claims', module: 'Flexi Claims' },
   { icon: '✈️', label: 'Travel Claims', href: '/dashboard/travel-claims', module: 'Travel Claims' },
   { icon: '💸', label: 'Loans', href: '/dashboard/loans', module: 'Loans' },

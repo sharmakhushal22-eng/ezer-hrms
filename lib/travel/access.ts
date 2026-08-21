@@ -81,6 +81,8 @@ export interface EmployeeContext {
   date_of_leaving: string | null;
   reporting_manager_l1: string | null;
   hr_head_id: string | null;
+  /** Day-to-day HR contact. Used only when hr_head_id cannot take the claim. */
+  hr_manager_id: string | null;
   is_active_for_travel: boolean;
   exited_on: string | null;
 }
@@ -116,7 +118,12 @@ export async function getEmployeeContext(
     reporting_manager_l1: row.l1_manager_id ?? null,
     // hr_head_id is the HR Head who signs off travel spend; hr_manager_id is
     // the day-to-day HR contact and only stands in when no head is mapped.
-    hr_head_id: row.hr_head_id ?? row.hr_manager_id ?? null,
+    // Kept apart rather than coalesced here. Collapsing them with ?? means
+    // that when hr_head_id is set but cannot approve — the HR Head filing
+    // their own claim — hr_manager_id is never reached, and the claim falls
+    // through to Finance unreviewed. resolveApprover tries them in order.
+    hr_head_id: row.hr_head_id ?? null,
+    hr_manager_id: row.hr_manager_id ?? null,
     is_active_for_travel: true, // recomputed below by checkEmployeeActive
     exited_on: dol ?? null,
   };
@@ -138,39 +145,77 @@ export function resolveApprover(
   emp: EmployeeContext,
   stage: ClaimStage
 ): string | null {
-  const approver =
-    stage === 'CLAIM_RM' ? emp.reporting_manager_l1
-    : stage === 'CLAIM_HR' ? emp.hr_head_id
-    : null;
+  // In preference order. The HR Head signs off travel spend; the HR manager
+  // is the fallback, and is what catches the HR Head's own claim.
+  const candidates =
+    stage === 'CLAIM_RM' ? [emp.reporting_manager_l1]
+    : stage === 'CLAIM_HR' ? [emp.hr_head_id, emp.hr_manager_id]
+    : [];
 
   // never route a claim back to the person who raised it
-  return approver && approver !== emp.id ? approver : null;
+  return candidates.find(c => c && c !== emp.id) ?? null;
 }
 
-/** Where a freshly submitted claim lands. Finance is always the last stop. */
+/**
+ * Where a freshly submitted claim lands.
+ *
+ * Walks the enabled stages in order. A stage runs only if the policy enables it
+ * AND somebody is mapped to it — an enabled stage with no approver is skipped
+ * rather than stalling the claim on nobody. Finance is always last and is never
+ * skipped, so a claim cannot end up owned by no one.
+ *
+ * Mirrors travel_first_claim_stage() in migration 052.
+ */
 export function firstClaimStage(
   emp: EmployeeContext,
   policy: TravelPolicy | null
 ): ClaimPendingStatus {
-  if (policy?.rm_stage_enabled && resolveApprover(emp, 'CLAIM_RM')) {
-    return 'PENDING_RM';
+  const rmOn = !!policy?.rm_stage_enabled;
+  const hasRm = !!resolveApprover(emp, 'CLAIM_RM');
+  if (rmOn && hasRm) return 'PENDING_RM';
+
+  // The HR Head reviews when HR is a stage in its own right, or when it is the
+  // configured fallback and this employee has no manager to review instead.
+  // The second case is what stops a claim falling through to Finance with
+  // nobody having looked at it.
+  //
+  // hr_stage_enabled defaults to true when no policy row is loaded, matching
+  // the column default: losing a review stage because a lookup returned null
+  // is the wrong way to fail.
+  const hrIsStage = policy?.hr_stage_enabled ?? true;
+  const hrCatches = !!policy?.hr_fallback_only && rmOn && !hasRm;
+  if ((hrIsStage || hrCatches) && resolveApprover(emp, 'CLAIM_HR')) {
+    return 'PENDING_HR';
   }
-  if (resolveApprover(emp, 'CLAIM_HR')) return 'PENDING_HR';
-  // Nobody mapped upstream — Finance still has to see it rather than the claim
-  // parking in a state no one owns.
   return 'PENDING_FINANCE';
 }
 
 /** Where a claim goes after the stage that just approved it. */
 export function nextClaimStage(
   current: ClaimPendingStatus,
-  emp: EmployeeContext
+  emp: EmployeeContext,
+  policy?: TravelPolicy | null
 ): ClaimPendingStatus | 'APPROVED' {
   if (current === 'PENDING_RM') {
-    return resolveApprover(emp, 'CLAIM_HR') ? 'PENDING_HR' : 'PENDING_FINANCE';
+    // A fallback is not a stage. Once the manager has approved, the claim goes
+    // to Finance — it does not also collect an HR signature on the way.
+    if (policy?.hr_fallback_only) return 'PENDING_FINANCE';
+    return (policy?.hr_stage_enabled ?? true) && resolveApprover(emp, 'CLAIM_HR')
+      ? 'PENDING_HR'
+      : 'PENDING_FINANCE';
   }
   if (current === 'PENDING_HR') return 'PENDING_FINANCE';
   return 'APPROVED'; // Finance approved — nothing after it
+}
+
+/** The chain in words, for UI copy that should not hardcode a stage name. */
+export function describeChain(policy: TravelPolicy | null): string {
+  const stages: string[] = [];
+  if (policy?.rm_stage_enabled) stages.push('your reporting manager');
+  if (policy?.hr_stage_enabled ?? true) stages.push('the HR Head');
+  else if (policy?.hr_fallback_only) stages.push('the HR Head if you have no manager on record');
+  stages.push('Finance');
+  return stages.join(' → ');
 }
 
 // ---------------------------------------------------------------------------

@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveActor } from '@/lib/travel/actor';
+import { errorResponse } from '@/lib/travel/errors';
 import { serviceClient, getEmployeeContext, getActivePolicy, todayISO } from '@/lib/travel/access';
 import { measureTrail, assessTrail, compactTrail, haversineM, isValidPoint } from '@/lib/travel/gps';
 import type { GpsPoint } from '@/lib/travel/gps';
@@ -198,9 +199,7 @@ export async function POST(req: NextRequest) {
       compacted_track: clean,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Could not measure the journey' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Could not measure the journey',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }

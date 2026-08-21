@@ -37,6 +37,7 @@ import {
 import type { ClaimPendingStatus } from '@/lib/travel/access';
 import { requireDashboardUser } from '@/lib/api-auth';
 import { resolveActor } from '@/lib/travel/actor';
+import { errorResponse } from '@/lib/travel/errors';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +47,55 @@ const STAGE_OF: Record<ClaimPendingStatus, string> = {
   PENDING_HR: 'CLAIM_HR',
   PENDING_FINANCE: 'CLAIM_FINANCE',
 };
+
+/**
+ * Tell finance a claim is theirs, or that it no longer is.
+ *
+ * The finance dashboard reads one queue table rather than joining every module
+ * that might need it, so a claim announces itself on arriving at
+ * PENDING_FINANCE and settles when it is approved, rejected or paid.
+ *
+ * Deliberately never throws. Migration 053 may not be applied, and a claim must
+ * not fail to progress because the finance queue is unavailable — finance can
+ * still work from the travel screen. Failure is logged and swallowed.
+ */
+async function notifyFinance(
+  sb: ReturnType<typeof serviceClient>,
+  claim: Record<string, any>,
+  action: 'enqueue' | 'APPROVED' | 'REJECTED' | 'SETTLED',
+  actedBy?: string | null,
+  note?: string | null,
+) {
+  try {
+    if (action === 'enqueue') {
+      const { data: emp } = await sb
+        .from('employees').select('full_name, emp_code').eq('id', claim.employee_id).maybeSingle();
+      await sb.rpc('finance_enqueue', {
+        p_company_id: claim.company_id,
+        p_module: 'TRAVEL',
+        p_ref_table: 'travel_claims',
+        p_ref_id: claim.id,
+        p_title: `${claim.claim_no} — ${emp?.full_name ?? 'employee'}`,
+        p_subtitle: `${emp?.emp_code ?? ''} · ${claim.period_from ?? ''} to ${claim.period_to ?? ''}`.trim(),
+        p_employee_id: claim.employee_id,
+        p_amount: claim.total_claimed,
+        p_flag_count: claim.flag_count ?? 0,
+        p_due_at: null,
+        p_meta: { claim_no: claim.claim_no, claim_type: claim.claim_type },
+      });
+    } else {
+      await sb.rpc('finance_settle', {
+        p_module: 'TRAVEL',
+        p_ref_id: claim.id,
+        p_status: action,
+        p_by: actedBy ?? null,
+        p_note: note ?? null,
+      });
+    }
+  } catch {
+    // 053 not applied, or the queue is unavailable. The claim is unaffected.
+  }
+}
 
 function slaDaysFor(stage: string, policy: { rm_sla_days?: number; hr_sla_days?: number; finance_sla_days?: number } | null): number {
   if (stage === 'CLAIM_RM') return policy?.rm_sla_days ?? 3;
@@ -67,9 +117,27 @@ export async function GET(req: NextRequest) {
     // Approvers need the individual expense lines to action anything: Finance
     // approves line by line, and HR wants to see what it is signing off.
     if (claimId) {
+      // Refuse before the lookup when there is no token at all, so a stranger
+      // cannot tell a missing claim from one they are not allowed to see.
+      if (!req.headers.get('authorization')) {
+        return NextResponse.json({ error: 'Sign in to continue.' }, { status: 401 });
+      }
+
       const { data: claim } = await sb
         .from('v_travel_claim_summary').select('*').eq('id', claimId).maybeSingle();
       if (!claim) return NextResponse.json({ error: 'Claim not found' }, { status: 404 });
+
+      // A claim is somebody's expense detail — amounts, dates, places they were.
+      // An employee may open their own; a dashboard user may open any, which is
+      // how HR and Finance review one.
+      const actor = await resolveActor(req, claim.employee_id);
+      if (!actor.ok) return actor.response;
+      if (!actor.onBehalf && actor.employeeId !== claim.employee_id) {
+        return NextResponse.json(
+          { error: 'You can only open your own claims.' },
+          { status: 403 },
+        );
+      }
 
       const { data: lines } = await sb
         .from('travel_claim_lines').select('*')
@@ -94,9 +162,8 @@ export async function GET(req: NextRequest) {
 
     // ---- approval inbox --------------------------------------------------
     // An inbox exposes other people's expense claims, so it needs a dashboard
-    // session. "My claims" further down does not — ESS employees are not
-    // Supabase auth users and cannot satisfy this gate (see lib/api-auth.ts);
-    // that path is guarded by requireReadAccess instead.
+    // session. "My claims" further down goes through resolveActor instead,
+    // because an ESS employee cannot satisfy this gate.
     if (approverId) {
       const gate = await requireDashboardUser(req);
       if (gate.error) return gate.error;
@@ -167,10 +234,8 @@ export async function GET(req: NextRequest) {
     if (error) throw error;
     return NextResponse.json({ claims: data ?? [] });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to load claims' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to load claims',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -317,6 +382,26 @@ export async function POST(req: NextRequest) {
         .from('travel_claim_line_shares')
         .update({ claim_line_id: sl.id })
         .eq('travel_log_id', sl.travel_log_id);
+
+      // Point each journey's flags at the claim line, so the approver screen —
+      // which reads flags by claim_line_id — actually finds them.
+      await sb
+        .from('travel_flags')
+        .update({ claim_line_id: sl.id })
+        .eq('travel_log_id', sl.travel_log_id);
+    }
+
+    // flag_count drives the "⚑ n to review" badge on the claim. Unresolved
+    // only: a MISSING_BILL that has since been satisfied is not a concern.
+    const { count: openFlags } = await sb
+      .from('travel_flags')
+      .select('id', { count: 'exact', head: true })
+      .in('travel_log_id', logs.map((l) => l.id))
+      .is('resolved_at', null);
+
+    if (openFlags && openFlags > 0) {
+      await sb.from('travel_claims').update({ flag_count: openFlags }).eq('id', claim.id);
+      claim.flag_count = openFlags;
     }
 
     // ---- first approval task ---------------------------------------------
@@ -336,6 +421,9 @@ export async function POST(req: NextRequest) {
       sla_due_at: due.toISOString(),
     });
 
+    // If it went straight to finance, they need to know now.
+    if (entryStatus === 'PENDING_FINANCE') await notifyFinance(sb, claim, 'enqueue');
+
     const withWhom =
       entryStatus === 'PENDING_RM' ? 'your reporting manager'
       : entryStatus === 'PENDING_HR' ? 'the HR Head'
@@ -347,10 +435,8 @@ export async function POST(req: NextRequest) {
       message: `${claim.claim_no} submitted — now with ${withWhom} for approval.`,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to submit claim' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to submit claim',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 
@@ -422,7 +508,7 @@ export async function PATCH(req: NextRequest) {
           return NextResponse.json({ error: 'Employee record not found' }, { status: 404 });
         }
 
-        const next = nextClaimStage(expected, emp);
+        const next = nextClaimStage(expected, emp, policy);
         patch.status = next;
         patch[action === 'RM_APPROVE' ? 'rm_actioned_at' : 'hr_actioned_at'] = now;
 
@@ -438,6 +524,10 @@ export async function PATCH(req: NextRequest) {
               nextStage === 'CLAIM_HR' ? resolveApprover(emp, 'CLAIM_HR') : null,
             sla_due_at: due.toISOString(),
           });
+        }
+
+        if (next === 'PENDING_FINANCE') {
+          await notifyFinance(sb, { ...claim, ...patch, id: claim_id }, 'enqueue');
         }
 
         await closeTask(sb, claim_id, STAGE_OF[expected], actioned_by, 'APPROVED', remarks);
@@ -513,6 +603,7 @@ export async function PATCH(req: NextRequest) {
         patch.net_payable = Math.max(approved - advance, 0);
         patch.recovery_amount = Math.max(advance - approved, 0);
 
+        await notifyFinance(sb, { ...claim, id: claim_id }, 'APPROVED', actioned_by, remarks);
         await closeTask(sb, claim_id, 'CLAIM_FINANCE', actioned_by, 'APPROVED', remarks);
         break;
       }
@@ -536,6 +627,7 @@ export async function PATCH(req: NextRequest) {
           .from('travel_logs')
           .update({ claim_id: null, status: 'LOGGED' })
           .eq('claim_id', claim_id);
+        await notifyFinance(sb, { ...claim, id: claim_id }, 'REJECTED', actioned_by, remarks);
         await closeTask(sb, claim_id, null, actioned_by, 'REJECTED', remarks);
         break;
       }
@@ -554,6 +646,7 @@ export async function PATCH(req: NextRequest) {
         }
         patch.status = 'PAID';
         patch.paid_at = now;
+        await notifyFinance(sb, { ...claim, id: claim_id }, 'SETTLED', actioned_by, remarks);
         patch.payroll_run_id = payroll_run_id ?? null;
         break;
       }
@@ -572,10 +665,8 @@ export async function PATCH(req: NextRequest) {
     if (error) throw error;
     return NextResponse.json({ claim: updated });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Failed to action claim' },
-      { status: 500 }
-    );
+    return errorResponse(e, 'Failed to action claim',
+      'The travel tables are not fully migrated — check 049, 050 and 051 have all been run.');
   }
 }
 

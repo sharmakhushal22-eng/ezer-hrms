@@ -24,6 +24,34 @@
 // re-measures the submitted trail and that figure is what gets paid.
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { essAuthHeaders } from '@/lib/ess-session-client';
+
+// This screen renders in two places, and they authenticate differently:
+//
+//   /ess-portal     the employee, signed in at /ess-login, holding a signed ESS
+//                   session token
+//   /dashboard/ess  an admin previewing somebody's portal, holding a Supabase
+//                   dashboard session and NO ESS token
+//
+// Sending only the ESS header meant every call from the dashboard preview went
+// out unauthenticated and came back 401 — the lists showed empty and nothing
+// worked, with no indication why. Fall back to the dashboard session so an
+// admin can at least read what the employee sees.
+//
+// Writes stay refused for the admin: the travel routes mark them selfOnly, so
+// only the employee can file their own expense. That is deliberate and this
+// does not change it — see the notice on the form.
+async function travelAuthHeaders(): Promise<Record<string, string>> {
+  const ess = essAuthHeaders()
+  if (ess.Authorization) return ess
+  const { data } = await supabase.auth.getSession()
+  const t = data?.session?.access_token
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
+
+/** True when this is an admin preview rather than the employee themselves. */
+function isPreview(): boolean {
+  return !essAuthHeaders().Authorization
+}
 import { supabase } from '@/lib/supabase'
 import { measureTrail, isValidPoint, type GpsPoint } from '@/lib/travel/gps'
 import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
@@ -72,6 +100,27 @@ interface Claim {
   line_count: number; flag_count: number
 }
 interface Flag { flag_type: string; severity: 'WARN' | 'BLOCK'; message: string }
+interface Bill {
+  id: string; file_name: string | null; mime_type: string | null
+  file_size: number | null; url: string | null; attachment_type: string
+}
+
+const kb = (n: number | null) => n == null ? '' : n < 1024 ? `${n} B`
+  : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`
+
+/** Upload one slip against a journey. Content-Type is left unset on purpose —
+ *  the browser must add the multipart boundary itself. */
+async function uploadBill(logId: string, file: File): Promise<{ ok: boolean; message: string }> {
+  const fd = new FormData()
+  fd.append('travel_log_id', logId)
+  fd.append('file', file)
+  fd.append('attachment_type', 'BILL')
+  const r = await fetch('/api/travel/upload-bill', {
+    method: 'POST', headers: await travelAuthHeaders(), body: fd,
+  })
+  const j = await r.json().catch(() => ({}))
+  return { ok: r.ok, message: j.error || j.message || (r.ok ? 'Bill attached.' : 'Upload failed.') }
+}
 
 const CATEGORY_LABEL: Record<string, string> = {
   CONVEYANCE: 'Local conveyance',
@@ -342,15 +391,53 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
 }
 
 // A single logged-but-unclaimed expense, with its selection checkbox.
-function LogRow({ log, typeName, checked, onToggle, onDelete }: {
+function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttached, notify }: {
   log: TravelLog; typeName: string; checked: boolean
   onToggle: () => void; onDelete: () => void
+  needsBill: number | false   // the threshold in rupees, or false
+  onAttached: () => void
+  notify: (tone: 'ok' | 'warn' | 'err', text: string) => void
 }) {
+  const [bills, setBills] = useState<Bill[]>([])
+  const [busy, setBusy] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const fileRef = useRef<HTMLInputElement | null>(null)
+
+  // Loaded per row rather than for the whole list — most rows never get opened,
+  // and each bill needs its own signed URL minted server-side.
+  const loadBills = useCallback(async () => {
+    const r = await fetch(`/api/travel/upload-bill?travel_log_id=${log.id}`, { headers: await travelAuthHeaders() })
+    if (r.ok) setBills(((await r.json()).attachments ?? []) as Bill[])
+    setLoaded(true)
+  }, [log.id])
+
+  useEffect(() => { loadBills() }, [loadBills])
+
+  const pick = async (f: File | null) => {
+    if (!f) return
+    setBusy(true)
+    const res = await uploadBill(log.id, f)
+    notify(res.ok ? (res.message.includes('same file') ? 'warn' : 'ok') : 'err', res.message)
+    if (res.ok) { await loadBills(); onAttached() }
+    setBusy(false)
+    if (fileRef.current) fileRef.current.value = ''
+  }
+
+  const removeBill = async (id: string) => {
+    setBusy(true)
+    const r = await fetch(`/api/travel/upload-bill?id=${id}`, { method: 'DELETE', headers: await travelAuthHeaders() })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) notify('err', j.error || 'Could not remove that bill.')
+    else { await loadBills(); onAttached() }
+    setBusy(false)
+  }
+
   const gps = log.distance_source === 'GPS_TRACKED' || log.distance_source === 'GPS_SNAPPED'
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 12px',
-                  border: `1px solid ${checked ? V.purple : V.border}`, borderRadius: 8,
-                  background: checked ? V.purpleBg : V.card, marginBottom: 7 }}>
+    <div style={{ border: `1px solid ${checked ? V.purple : V.border}`, borderRadius: 8,
+                  background: checked ? V.purpleBg : V.card, marginBottom: 7,
+                  padding: '10px 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
       <input type="checkbox" checked={checked} onChange={onToggle}
              style={{ width: 15, height: 15, accentColor: V.purple, cursor: 'pointer', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -372,6 +459,47 @@ function LogRow({ log, typeName, checked, onToggle, onDelete }: {
       <button onClick={onDelete} title="Remove this entry"
               style={{ background: 'none', border: 'none', color: V.muted, cursor: 'pointer',
                        fontSize: 17, lineHeight: 1, padding: '0 2px', flexShrink: 0 }}>×</button>
+      </div>
+
+      {/* A recorded journey is its own proof; a billed one needs the slip. */}
+      {!gps && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                      paddingLeft: 26, marginTop: 2 }}>
+          {bills.map(b => (
+            <span key={b.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 5,
+                                      fontSize: 11, background: V.greenBg, color: V.green,
+                                      border: `1px solid ${V.green}33`, borderRadius: 99,
+                                      padding: '3px 9px' }}>
+              {b.mime_type === 'application/pdf' ? '📄' : '🧾'}
+              {b.url
+                ? <a href={b.url} target="_blank" rel="noreferrer"
+                     style={{ color: V.green, textDecoration: 'underline' }}>
+                    {b.file_name || 'bill'}
+                  </a>
+                : (b.file_name || 'bill')}
+              <span style={{ color: V.muted }}>{kb(b.file_size)}</span>
+              <button onClick={() => removeBill(b.id)} disabled={busy} title="Remove this bill"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer',
+                               color: V.muted, fontSize: 13, lineHeight: 1, padding: 0 }}>×</button>
+            </span>
+          ))}
+
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" hidden
+                 onChange={e => pick(e.target.files?.[0] ?? null)} />
+          <button onClick={() => fileRef.current?.click()} disabled={busy}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
+                           fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
+                           color: busy ? V.muted : V.purpleDark }}>
+            {busy ? 'Uploading…' : bills.length ? '+ another bill' : '📎 Attach bill slip'}
+          </button>
+
+          {loaded && bills.length === 0 && needsBill !== false && (
+            <span style={{ fontSize: 11, color: V.amber }}>
+              Needs a slip — {typeName} above {inr(needsBill)} must show a bill
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -434,8 +562,15 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   const [parking, setParking] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  // A bill can only be attached to a journey that exists, so one picked on the
+  // entry form is held here and uploaded the moment the log is created.
+  const [pendingBill, setPendingBill] = useState<File | null>(null)
+  const newBillRef = useRef<HTMLInputElement | null>(null)
 
   const { journey, start, end, reset } = useJourneyRecorder()
+  // Admin preview vs the employee themselves. Read once — localStorage does not
+  // change under a mounted component.
+  const [preview] = useState(isPreview)
   // The route as the server measures it — shown once the journey ends, so the
   // employee sees the same figure the approver will.
   const [route, setRoute] = useState<RouteData | null>(null)
@@ -491,8 +626,8 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
       const monthStart = today().slice(0, 8) + '01'
       const [logRes, claimRes] = await Promise.all([
-        fetch(`/api/travel/logs?employee_id=${employeeId}&from=${monthStart}&to=${today()}`, { headers: essAuthHeaders() }),
-        fetch(`/api/travel/claims?employee_id=${employeeId}`, { headers: essAuthHeaders() }),
+        fetch(`/api/travel/logs?employee_id=${employeeId}&from=${monthStart}&to=${today()}`, { headers: await travelAuthHeaders() }),
+        fetch(`/api/travel/claims?employee_id=${employeeId}`, { headers: await travelAuthHeaders() }),
       ])
 
       if (logRes.status === 403) {
@@ -525,15 +660,21 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
     if (journey.state !== 'RECORDED' || journey.points.length < 2) { setRoute(null); return }
     let live = true
     setRouteLoading(true)
-    fetch('/api/travel/route', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
-      body: JSON.stringify({ points: journey.points }),
-    })
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (live && d) setRoute(d as RouteData) })
-      .catch(() => { /* the map is a bonus; saving must still work without it */ })
-      .finally(() => { if (live) setRouteLoading(false) })
+    // Wrapped rather than awaited inline — useEffect's callback cannot be async.
+    ;(async () => {
+      try {
+        const r = await fetch('/api/travel/route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...(await travelAuthHeaders()) },
+          body: JSON.stringify({ points: journey.points }),
+        })
+        if (live && r.ok) setRoute((await r.json()) as RouteData)
+      } catch {
+        // the map is a bonus; saving must still work without it
+      } finally {
+        if (live) setRouteLoading(false)
+      }
+    })()
     return () => { live = false }
   }, [journey.state, journey.points])
 
@@ -543,9 +684,17 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
     setToll(''); setParking(''); setRoundTrip(false)
     reset()
     setRoute(null)
+    setPendingBill(null)
+    if (newBillRef.current) newBillRef.current.value = ''
   }
 
   const addExpense = async () => {
+    if (preview) {
+      setMsg({ tone: 'warn', text:
+        'You are previewing this portal as an admin, so you cannot file an expense here — ' +
+        'the employee has to log in and add it themselves.' })
+      return
+    }
     if (!purpose.trim()) { setMsg({ tone: 'err', text: 'Say what the journey was for.' }); return }
     if (!typeCode) { setMsg({ tone: 'err', text: 'Pick an expense type.' }); return }
     if (needsGps && journey.state !== 'RECORDED') {
@@ -563,7 +712,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
       if (needsGps) {
         const g = await fetch('/api/travel/gps-distance', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
+          headers: { 'Content-Type': 'application/json', ...(await travelAuthHeaders()) },
           body: JSON.stringify({
             points: journey.points, type_code: typeCode,
             employee_id: employeeId, log_date: date, vehicle_id: vehicleId || null,
@@ -574,7 +723,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
       const res = await fetch('/api/travel/logs', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...(await travelAuthHeaders()) },
         body: JSON.stringify({
           employee_id: employeeId,
           log_date: date,
@@ -606,9 +755,19 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
       }
 
       setFlags((json.flags ?? []) as Flag[])
+
+      // The expense exists now, so the slip picked on the form can be attached.
+      // A failure here is reported but does not undo the expense — the bill can
+      // still be added from the list below.
+      let billNote = ''
+      if (pendingBill && json.log?.id) {
+        const up = await uploadBill(json.log.id, pendingBill)
+        billNote = up.ok ? ' Bill attached.' : ` The expense saved, but the bill did not: ${up.message}`
+      }
+
       setMsg({
         tone: (json.flags ?? []).length ? 'warn' : 'ok',
-        text: json.message || 'Expense logged.',
+        text: (json.message || 'Expense logged.') + billNote,
       })
       resetForm()
       await load()
@@ -620,7 +779,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   }
 
   const removeLog = async (id: string) => {
-    const res = await fetch(`/api/travel/logs?id=${id}&employee_id=${employeeId}`, { method: 'DELETE', headers: essAuthHeaders() })
+    const res = await fetch(`/api/travel/logs?id=${id}&employee_id=${employeeId}`, { method: 'DELETE', headers: await travelAuthHeaders() })
     if (!res.ok) {
       const j = await res.json().catch(() => ({}))
       setMsg({ tone: 'err', text: j.error || 'Could not remove that entry.' })
@@ -636,7 +795,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
     try {
       const res = await fetch('/api/travel/claims', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...essAuthHeaders() },
+        headers: { 'Content-Type': 'application/json', ...(await travelAuthHeaders()) },
         body: JSON.stringify({ employee_id: employeeId, log_ids: Array.from(picked) }),
       })
       const json = await res.json().catch(() => ({}))
@@ -680,6 +839,16 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   const inFlight = claims.filter(c => c.status.startsWith('PENDING') || c.status === 'SUBMITTED')
   const nameOf = (code: string) => types.find(t => t.type_code === code)?.type_name ?? code
 
+  // Mirrors the server's rule in logs/route.ts: a bill is required once the
+  // amount passes the type's threshold. Shown here so the employee finds out
+  // while they can still act on it, not at approval.
+  const billNeededFor = (l: TravelLog): number | false => {
+    const t = types.find(x => x.type_code === l.type_code)
+    if (!t || !t.bill_required || t.requires_gps) return false
+    const th = num(t.bill_threshold)
+    return th > 0 && num(l.total_amount) > th ? th : false
+  }
+
   // Grouped so a 30-entry list stays navigable.
   const grouped = CATEGORY_ORDER
     .map(cat => ({ cat, items: types.filter(t => (t.category ?? 'OTHER') === cat) }))
@@ -721,6 +890,16 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
         <div style={{ fontSize: 13, fontWeight: 700, color: V.navy, marginBottom: 12 }}>
           Log a travel expense
         </div>
+
+        {preview && (
+          <Banner tone="warn">
+            <b>Admin preview.</b> You are seeing this employee&apos;s portal from the dashboard,
+            so their claims are visible but nothing can be filed from here — an expense is
+            always entered by the employee themselves. To add one, sign in at{' '}
+            <a href="/ess-login" style={{ color: 'inherit', textDecoration: 'underline' }}>/ess-login</a>{' '}
+            as them.
+          </Banner>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(180px,1fr))',
                       gap: 11, marginBottom: 11 }}>
@@ -831,12 +1010,56 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
           </div>
         )}
 
-        <button onClick={addExpense} disabled={saving}
+        {/* Attach the receipt here, with the expense, rather than having to
+            find the entry again afterwards. A recorded journey is its own
+            proof and gets no picker. */}
+        {!needsGps && selectedType?.bill_required !== false && (
+          <div style={{ marginBottom: 12 }}>
+            <label style={lbl}>Bill slip</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <input ref={newBillRef} type="file" accept="image/*,application/pdf" hidden
+                     onChange={e => setPendingBill(e.target.files?.[0] ?? null)} />
+              <button type="button" onClick={() => newBillRef.current?.click()}
+                      style={{ padding: '8px 15px', borderRadius: 7,
+                               border: `1px dashed ${pendingBill ? V.green : V.border}`,
+                               background: pendingBill ? V.greenBg : V.field,
+                               color: pendingBill ? V.green : V.purpleDark,
+                               fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                {pendingBill ? '✓ ' + pendingBill.name : '📎 Choose Uber / Ola / taxi bill'}
+              </button>
+
+              {pendingBill && (
+                <>
+                  <span style={{ fontSize: 11, color: V.muted }}>{kb(pendingBill.size)}</span>
+                  <button type="button"
+                          onClick={() => { setPendingBill(null); if (newBillRef.current) newBillRef.current.value = '' }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer',
+                                   color: V.muted, fontSize: 12, fontFamily: 'inherit' }}>
+                    remove
+                  </button>
+                </>
+              )}
+
+              {!pendingBill && num(selectedType?.bill_threshold) > 0
+                && num(amount) > num(selectedType?.bill_threshold) && (
+                <span style={{ fontSize: 11.5, color: V.amber }}>
+                  This amount needs a bill — attach it now or from the list below.
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: 11, color: V.muted, marginTop: 5 }}>
+              A photo or the PDF the app emails you. Up to 10 MB.
+            </div>
+          </div>
+        )}
+
+        <button onClick={addExpense} disabled={saving || preview}
+                title={preview ? 'Only the employee can file their own expense' : undefined}
                 style={{ padding: '9px 20px', borderRadius: 7, border: 'none',
-                         background: saving ? V.muted : V.purple, color: '#fff',
+                         background: saving || preview ? V.muted : V.purple, color: '#fff',
                          fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-                         cursor: saving ? 'default' : 'pointer' }}>
-          {saving ? 'Saving…' : 'Add expense'}
+                         cursor: saving || preview ? 'not-allowed' : 'pointer' }}>
+          {saving ? 'Saving…' : preview ? 'Add expense — employee only' : 'Add expense'}
         </button>
       </div>
 
@@ -870,6 +1093,9 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
             {unclaimed.map(l => (
               <LogRow key={l.id} log={l} typeName={nameOf(l.type_code)}
                       checked={picked.has(l.id)}
+                      needsBill={billNeededFor(l)}
+                      onAttached={load}
+                      notify={(tone, text) => setMsg({ tone, text })}
                       onToggle={() => setPicked(prev => {
                         const n = new Set(prev)
                         n.has(l.id) ? n.delete(l.id) : n.add(l.id)

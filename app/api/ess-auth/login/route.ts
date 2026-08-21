@@ -52,8 +52,10 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // issueEssToken was imported here but never called, so every ESS session ran without
-  // a signed token and any route that verified one turned the employee away.
+  // The signed session token. issueEssToken was imported in 9cb7f8c but never called, so
+  // this response carried no token: ess-login stored null, essAuthHeaders() sent no
+  // Authorization header, and every travel route answered 401 for every signed-in
+  // employee. The gate was working — there was simply nothing to present to it.
   const token = issueEssToken(employee.id)
 
   return NextResponse.json({
@@ -63,7 +65,7 @@ export async function POST(req: NextRequest) {
     must_change_password: false,
     token,
     // Null means no signing secret is configured on this deployment. Said out loud
-    // rather than left to surface later as a 401 the employee cannot act on.
+    // rather than left to surface as a 401 the employee cannot act on.
     session_available: !!token,
   })
 }

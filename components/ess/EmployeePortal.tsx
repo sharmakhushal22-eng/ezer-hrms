@@ -8,7 +8,7 @@
 // Anything not built yet renders a labelled placeholder naming the module it waits on,
 // rather than a screen that looks finished and does nothing.
 // All sub-components are defined OUTSIDE the parent (no focus-loss).
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   loadEmployeeDetail, updateEmployeePhoto, loadDirectory, loadNotifications, markNotification, markAllNotifications,
   loadServiceRequests, createServiceRequest, loadLetterRequests, createLetterRequest,
@@ -18,7 +18,8 @@ import {
   type ServiceRequest, type LetterRequest, type Announcement, type Kudo,
 } from '@/lib/supabase-ess'
 import {
-  loadMonthlyAttendance, loadDayPunches, loadRegularisationRequests, submitRegularisation,
+  loadMonthlyAttendance, loadDayPunches, loadRegularisationRequests,
+  submitRegularisation, submitRegularisationBulk,
   resolveDay, computeSummary,
   type MonthlyData, type DayPunch, type RegularisationRequest,
 } from '@/lib/supabase-attendance'
@@ -27,6 +28,7 @@ import { useGrant } from '@/lib/rms-client'
 import { hasAdminAccess } from '@/lib/permissions'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import { supabase } from '@/lib/supabase'
+import { essAuthHeaders } from '@/lib/ess-session-client'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
 import FunZone from '@/components/ess/FunZone'
 import FlexiClaims from '@/components/ess/FlexiClaims'
@@ -191,6 +193,145 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
   )
 }
 
+/**
+ * Where the employee's travel claims currently sit.
+ *
+ * A claim leaves the employee's hands and then goes quiet — the only way to
+ * find out where it had reached was to open Travel Claims and read a status
+ * word. This puts the chain on the dashboard as a stepper, so "who has it now"
+ * is answerable at a glance, and shows the wait in days, because that is the
+ * actual question behind asking.
+ *
+ * The steps are derived from each claim's own status rather than assumed, so
+ * this stays correct whether the company routes through a reporting manager,
+ * an HR head, both, or neither.
+ */
+const CLAIM_STEP: Record<string, { step: number; label: string; tone: string }> = {
+  DRAFT:           { step: 0, label: 'Draft',              tone: '#9CA3AF' },
+  SUBMITTED:       { step: 1, label: 'Submitted',          tone: '#B45309' },
+  PENDING_RM:      { step: 1, label: 'With your manager',  tone: '#B45309' },
+  PENDING_HR:      { step: 2, label: 'With HR',            tone: '#B45309' },
+  PENDING_FINANCE: { step: 3, label: 'With Finance',       tone: '#6D28D9' },
+  APPROVED:        { step: 4, label: 'Approved, awaiting payment', tone: '#047857' },
+  PAID:            { step: 5, label: 'Paid',               tone: '#047857' },
+  SENT_BACK:       { step: 1, label: 'Sent back to you',   tone: '#B91C1C' },
+  REJECTED:        { step: 0, label: 'Rejected',           tone: '#B91C1C' },
+}
+
+function ClaimStepper({ status }: { status: string }) {
+  const here = CLAIM_STEP[status]?.step ?? 0
+  const done = status === 'PAID'
+  const dead = status === 'REJECTED' || status === 'SENT_BACK'
+  const steps = ['Raised', 'Manager', 'Finance', 'Paid']
+  const reached = [1, 2, 4, 5]   // status step at which each label is satisfied
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginTop: 8 }}>
+      {steps.map((label, i) => {
+        const on = !dead && here >= reached[i]
+        const colour = dead ? '#FCA5A5' : on ? (done ? '#059669' : '#7C3AED') : '#E5E7EB'
+        return (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : '0 0 auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+              <div style={{ width: 15, height: 15, borderRadius: '50%', background: on ? colour : '#fff',
+                            border: `2px solid ${colour}`, display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: 8, color: '#fff', fontWeight: 700 }}>
+                {on ? '✓' : ''}
+              </div>
+              <span style={{ fontSize: 8.5, fontWeight: 600, color: on ? colour : '#C4C4CC',
+                             whiteSpace: 'nowrap' }}>{label}</span>
+            </div>
+            {i < steps.length - 1 && (
+              <div style={{ flex: 1, height: 2, margin: '0 4px', marginBottom: 13,
+                            background: !dead && here >= reached[i + 1] ? colour : '#E5E7EB' }} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TravelClaimStatus({ emp, go }: { emp: EmployeeDetail; go: (k: string) => void }) {
+  const [claims, setClaims] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      try {
+        // No ESS token means this is the dashboard preview; fall back to the
+        // dashboard session so an admin previewing a portal still sees it.
+        let headers: Record<string, string> = essAuthHeaders()
+        if (!headers.Authorization) {
+          const { data } = await supabase.auth.getSession()
+          const t = data?.session?.access_token
+          headers = t ? { Authorization: `Bearer ${t}` } : {}
+        }
+        const r = await fetch(`/api/travel/claims?employee_id=${emp.id}`, { headers })
+        if (live) setClaims(r.ok ? ((await r.json()).claims ?? []) : [])
+      } catch { if (live) setClaims([]) }
+    })()
+    return () => { live = false }
+  }, [emp.id])
+
+  if (claims === null || claims.length === 0) return null
+
+  const open = claims.filter(c => !['PAID', 'REJECTED'].includes(c.status))
+  const show = (open.length ? open : claims).slice(0, 3)
+  const owed = open.reduce((s, c) => s + (Number(c.total_claimed) || 0), 0)
+  const daysSince = (d: string | null) =>
+    d ? Math.max(0, Math.round((Date.now() - new Date(d).getTime()) / 86400000)) : null
+
+  return (
+    <div style={T.card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+        <div style={T.section}>✈️ My Travel Claims</div>
+        <button onClick={() => go('claims')} style={{ ...T.btnO, padding: '5px 11px', fontSize: 11.5 }}>
+          Open
+        </button>
+      </div>
+      {open.length > 0 && (
+        <div style={{ fontSize: 11.5, color: '#6B7280', marginBottom: 10 }}>
+          ₹{Math.round(owed).toLocaleString('en-IN')} across {open.length} claim
+          {open.length === 1 ? '' : 's'} still moving through approval
+        </div>
+      )}
+
+      {show.map(c => {
+        const st = CLAIM_STEP[c.status] ?? { label: c.status, tone: '#6B7280' }
+        const waited = daysSince(c.submitted_at)
+        return (
+          <div key={c.id} style={{ padding: '10px 0', borderTop: '1px solid #F3F0FF' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1E1B4B' }}>{c.claim_no}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#1E1B4B' }}>
+                ₹{Math.round(Number(c.total_claimed) || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: st.tone }}>● {st.label}</span>
+              {waited != null && !['PAID', 'REJECTED'].includes(c.status) && (
+                <span style={{ fontSize: 10.5, color: waited > 5 ? '#B45309' : '#9CA3AF' }}>
+                  {waited === 0 ? 'submitted today' : `waiting ${waited} day${waited === 1 ? '' : 's'}`}
+                </span>
+              )}
+            </div>
+            <ClaimStepper status={c.status} />
+          </div>
+        )
+      })}
+
+      {claims.length > show.length && (
+        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>
+          + {claims.length - show.length} more in Travel Claims
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: EmployeeDetail; isMobile: boolean; go: (k: string) => void; salaryVisible: boolean; notify: (m: string, t?: 'success'|'error') => void; reload: () => void }) {
   const [editOpen, setEditOpen] = useState(false)
   const [ann, setAnn] = useState<Announcement[]>([])
@@ -243,6 +384,9 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <Stat label="Pending Actions" value={String(pending)} color={pending ? '#D97706' : '#059669'} />
       </div>
 
+      {/* where the employee's travel claims currently sit */}
+      <TravelClaimStatus emp={emp} go={go} />
+
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
         <button onClick={() => go('leave')} style={T.btnO}>🌴 Apply Leave</button>
         <button onClick={() => go('payslip')} style={T.btnO}>💰 Download Payslip</button>
@@ -294,12 +438,287 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 // ════════════════════════════════════════════════════════════════
 // PROFILE & KYC (B4)
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// PROFILE
+// Rebuilt from a flat list of 21 label/value rows into something an employee
+// can actually use. Three ideas drive it:
+//
+//   1. Identity first. A person opening their own profile wants to see
+//      themselves, not a table. The hero carries the photo, the name, and the
+//      four facts that place someone in a company.
+//   2. Completeness is a prompt, not a decoration. The ring is computed from
+//      fields that are genuinely missing, and names them — HR chases these,
+//      and the employee is the only one who can supply them.
+//   3. Sensitive values stay covered. PAN, Aadhaar and UAN are masked until
+//      asked for, and copy is one tap because the reason people reveal them is
+//      to paste them somewhere.
+//
+// Palette and inline-style convention follow T, as the rest of this file does.
+// ════════════════════════════════════════════════════════════════
+
+const P = {
+  navy: '#1E1B4B', navyDeep: '#15123A', purple: '#7C3AED', purpleD: '#6D28D9',
+  purpleLite: '#F3F0FF', line: '#EDE9FE', muted: '#6B7280', dim: '#9CA3AF',
+  green: '#059669', greenBg: '#ECFDF5', amber: '#B45309', amberBg: '#FFFBEB',
+  red: '#DC2626', white: '#FFFFFF',
+}
+
+/** Years and months since a date, in words. */
+function tenureOf(doj?: string | null): string {
+  if (!doj) return '—'
+  const from = new Date(doj), now = new Date()
+  if (isNaN(from.getTime()) || from > now) return '—'
+  let months = (now.getFullYear() - from.getFullYear()) * 12 + (now.getMonth() - from.getMonth())
+  if (now.getDate() < from.getDate()) months--
+  const y = Math.floor(months / 12), m = months % 12
+  if (y <= 0 && m <= 0) return 'Joined this month'
+  return [y ? `${y} year${y > 1 ? 's' : ''}` : '', m ? `${m} month${m > 1 ? 's' : ''}` : ''].filter(Boolean).join(', ')
+}
+
+/** Days until the next occurrence of a day/month, ignoring the year. */
+function daysUntilAnniversary(d?: string | null): number | null {
+  if (!d) return null
+  const src = new Date(d)
+  if (isNaN(src.getTime())) return null
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let next = new Date(today.getFullYear(), src.getMonth(), src.getDate())
+  if (next < today) next = new Date(today.getFullYear() + 1, src.getMonth(), src.getDate())
+  return Math.round((next.getTime() - today.getTime()) / 86400000)
+}
+
+/** Which fields are missing, so the ring can name them rather than just score. */
+function completenessOf(emp: EmployeeDetail): { pct: number; missing: string[]; total: number } {
+  const checks: [string, unknown][] = [
+    ['Date of birth', emp.date_of_birth], ['Gender', emp.gender],
+    ['Blood group', emp.blood_group], ['Marital status', emp.marital_status],
+    ['Mobile number', emp.mobile], ['Personal email', emp.personal_email],
+    ['PAN', emp.pan_number], ['Aadhaar', emp.aadhar_last4],
+    ['UAN', emp.uan_number], ['Profile photo', emp.profile_photo],
+  ]
+  const missing = checks.filter(([, v]) => !v).map(([k]) => k)
+  return {
+    pct: Math.round(((checks.length - missing.length) / checks.length) * 100),
+    missing, total: checks.length,
+  }
+}
+
+// ── sub-components, defined outside Profile so they keep their state ──────────
+
+function Ring({ pct, size = 76 }: { pct: number; size?: number }) {
+  const r = (size - 9) / 2
+  const c = 2 * Math.PI * r
+  const tone = pct >= 90 ? P.green : pct >= 60 ? P.purple : P.amber
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none"
+                stroke="rgba(255,255,255,0.18)" strokeWidth="6" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none"
+                stroke={tone} strokeWidth="6" strokeLinecap="round"
+                strokeDasharray={`${(c * pct) / 100} ${c}`}
+                style={{ transition: 'stroke-dasharray .7s cubic-bezier(.4,0,.2,1)' }} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+        <span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1 }}>{pct}%</span>
+        <span style={{ fontSize: 8.5, opacity: .7, letterSpacing: '.05em', marginTop: 1 }}>DONE</span>
+      </div>
+    </div>
+  )
+}
+
+function Avatar({ emp, size = 84 }: { emp: EmployeeDetail; size?: number }) {
+  const [broken, setBroken] = useState(false)
+  const show = emp.profile_photo && !broken
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0,
+                  background: show ? '#fff' : 'linear-gradient(135deg,#7C3AED,#A78BFA)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#fff', fontSize: size * 0.34, fontWeight: 700, letterSpacing: '.02em',
+                  border: '3px solid rgba(255,255,255,0.25)',
+                  boxShadow: '0 6px 20px rgba(0,0,0,0.22)', overflow: 'hidden' }}>
+      {show
+        ? <img src={emp.profile_photo!} alt="" onError={() => setBroken(true)}
+               style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : initials(emp.full_name || '?')}
+    </div>
+  )
+}
+
+function Chip({ icon, children }: { icon: string; children: React.ReactNode }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px',
+                   borderRadius: 99, background: 'rgba(255,255,255,0.12)',
+                   border: '1px solid rgba(255,255,255,0.16)', color: '#fff',
+                   fontSize: 11.5, fontWeight: 500, whiteSpace: 'nowrap' }}>
+      <span style={{ opacity: .85 }}>{icon}</span>{children}
+    </span>
+  )
+}
+
+/**
+ * One field. Copy appears on hover because it is useful often but never the
+ * point; sensitive values stay masked until asked for.
+ */
+function Field({ label, value, icon, copyable, sensitive, notify }: {
+  label: string; value?: string | null; icon?: string
+  copyable?: boolean; sensitive?: boolean
+  notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const [hover, setHover] = useState(false)
+  const [shown, setShown] = useState(false)
+  const has = !!value && value !== '—'
+  const masked = sensitive && !shown && has
+  const display = !has ? '—' : masked ? '•'.repeat(Math.min(String(value).length, 12)) : String(value)
+
+  return (
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px',
+                  borderRadius: 8, background: hover ? P.purpleLite : 'transparent',
+                  transition: 'background .15s' }}>
+      {icon && <span style={{ fontSize: 14, width: 18, textAlign: 'center', opacity: .8 }}>{icon}</span>}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: P.dim,
+                      textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: has ? P.navy : P.dim,
+                      marginTop: 2, fontVariantNumeric: 'tabular-nums',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {display}
+        </div>
+      </div>
+
+      {sensitive && has && (
+        <button onClick={() => setShown(v => !v)} title={shown ? 'Hide' : 'Reveal'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3,
+                         fontSize: 13, opacity: hover || shown ? 1 : .35, transition: 'opacity .15s' }}>
+          {shown ? '🙈' : '👁️'}
+        </button>
+      )}
+      {copyable && has && (
+        <button title="Copy"
+                onClick={() => {
+                  navigator.clipboard?.writeText(String(value))
+                    .then(() => notify(`${label} copied`))
+                    .catch(() => notify('Could not copy', 'error'))
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3,
+                         fontSize: 12.5, opacity: hover ? 1 : 0, transition: 'opacity .15s' }}>
+          📋
+        </button>
+      )}
+    </div>
+  )
+}
+
+function Panel({ title, icon, children, accent }: {
+  title: string; icon: string; children: React.ReactNode; accent?: string
+}) {
+  return (
+    <div style={{ background: P.white, borderRadius: 12, border: `1px solid ${P.line}`,
+                  padding: '15px 14px', boxShadow: '0 1px 3px rgba(124,58,237,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+                    paddingBottom: 9, borderBottom: `1px solid ${P.line}` }}>
+        <span style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                       background: accent || P.purpleLite, display: 'flex',
+                       alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>{icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: P.navy,
+                       letterSpacing: '.02em' }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function ProfileHero({ emp, notify }: {
+  emp: EmployeeDetail; notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const c = completenessOf(emp)
+  const bday = daysUntilAnniversary(emp.date_of_birth)
+  const work = daysUntilAnniversary(emp.group_doj)
+
+  return (
+    <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 12,
+                  background: `linear-gradient(135deg, ${P.navy} 0%, #2A1F63 55%, #3C1E8C 100%)`,
+                  boxShadow: '0 8px 28px rgba(30,27,75,0.28)', position: 'relative' }}>
+      {/* soft light, so the band is not a flat rectangle */}
+      <div style={{ position: 'absolute', top: -90, right: -60, width: 260, height: 260,
+                    borderRadius: '50%', background: 'rgba(167,139,250,0.16)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: -110, left: -40, width: 220, height: 220,
+                    borderRadius: '50%', background: 'rgba(124,58,237,0.14)', pointerEvents: 'none' }} />
+
+      <div style={{ position: 'relative', padding: '22px 22px 20px',
+                    display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <Avatar emp={emp} />
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: '#fff', lineHeight: 1.15,
+                        letterSpacing: '-.02em' }}>{emp.full_name || '—'}</div>
+          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', marginTop: 3 }}>
+            {emp.designation || 'Designation not set'}
+            {emp.dept_name ? ` · ${emp.dept_name}` : ''}
+          </div>
+
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 13 }}>
+            <Chip icon="🆔">{emp.emp_code || '—'}</Chip>
+            <Chip icon="🏢">{emp.company_name || '—'}</Chip>
+            {(emp.location_name || emp.city) && (
+              <Chip icon="📍">{[emp.location_name, emp.city].filter(Boolean).join(', ')}</Chip>
+            )}
+            <Chip icon="⏳">{tenureOf(emp.group_doj)}</Chip>
+          </div>
+
+          {/* Only worth the space when it is actually near. */}
+          {(bday !== null && bday <= 30) || (work !== null && work <= 30) ? (
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 9 }}>
+              {bday !== null && bday <= 30 && (
+                <Chip icon="🎂">{bday === 0 ? 'Birthday today' : `Birthday in ${bday} day${bday > 1 ? 's' : ''}`}</Chip>
+              )}
+              {work !== null && work <= 30 && (
+                <Chip icon="🎉">{work === 0 ? 'Work anniversary today' : `Work anniversary in ${work} day${work > 1 ? 's' : ''}`}</Chip>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
+                      minWidth: 120 }}>
+          <Ring pct={c.pct} />
+          <div style={{ fontSize: 10.5, color: 'rgba(255,255,255,0.6)', textAlign: 'center' }}>
+            {c.missing.length === 0
+              ? 'Profile complete'
+              : `${c.missing.length} of ${c.total} still missing`}
+          </div>
+        </div>
+      </div>
+
+      {/* Naming what is missing turns a score into something actionable. */}
+      {c.missing.length > 0 && (
+        <div style={{ background: 'rgba(0,0,0,0.22)', padding: '10px 22px',
+                      display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.7)' }}>Still needed:</span>
+          {c.missing.map(m => (
+            <span key={m} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99,
+                                   background: 'rgba(255,255,255,0.1)', color: '#FBBF24',
+                                   border: '1px solid rgba(251,191,36,0.28)' }}>{m}</span>
+          ))}
+          <span style={{ fontSize: 11, color: 'rgba(255,255,255,0.5)', marginLeft: 'auto' }}>
+            Request an update below
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const [tab, setTab] = useState<'OVERVIEW' | 'PERSONAL' | 'UPDATE'>('OVERVIEW')
   const [field, setField] = useState('Personal Details')
   const [detail, setDetail] = useState('')
   const [busy, setBusy] = useState(false)
   const FIELDS = ['Personal Details','PAN Card','Aadhaar','Bank Account','Emergency Contact','Family / Dependents','Nominee','Education']
   const [bank, setBank] = useState({ account_number:'', confirm:'', ifsc:'', bank_name:'', branch:'', holder_name: emp.full_name || '', account_type:'Savings' })
+
   const lookupIfsc = async (ifsc: string) => {
     if (ifsc.length < 11) return
     try {
@@ -307,9 +726,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
       if (r.ok) { const d = await r.json(); setBank(b => ({ ...b, bank_name: d.BANK || b.bank_name, branch: d.BRANCH || b.branch })) }
     } catch { /* IFSC lookup is best-effort */ }
   }
-  const Row = ({ k, v }: { k: string; v: any }) => (
-    <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid #F3F0FF', fontSize:12.5 }}><span style={{ color:'#6B7280' }}>{k}</span><span style={{ fontWeight:600 }}>{v || '—'}</span></div>
-  )
+
   async function submit() {
     if (field === 'Bank Account') {
       if (!bank.ifsc.trim() || !bank.account_number.trim() || !bank.holder_name.trim()) { notify('Fill IFSC, account number and holder name', 'error'); return }
@@ -330,47 +747,126 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
     if (error) { notify('Failed: ' + error.message, 'error'); return }
     setDetail(''); notify('Update request sent to HR for approval.')
   }
-  return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:10 }}>
-      <div style={T.card}>
-        <div style={T.section}>👤 My Profile</div>
-        <Row k="Name" v={emp.full_name} /><Row k="Employee Code" v={emp.emp_code} />
-        <Row k="Designation" v={emp.designation} /><Row k="Department" v={emp.dept_name} />
-        <Row k="Company" v={emp.company_name} /><Row k="Location" v={[emp.location_name, emp.city].filter(Boolean).join(', ')} />
-        <Row k="Date of Joining" v={fmt(emp.group_doj)} /><Row k="Employment Type" v={emp.employment_type} />
-        <Row k="Reporting Manager" v={emp.l1_manager_name} /><Row k="HR" v={emp.hr_manager_name} />
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>🪪 KYC & Personal</div>
-        <Row k="Gender" v={emp.gender} /><Row k="Date of Birth" v={fmt(emp.date_of_birth)} />
-        <Row k="Blood Group" v={emp.blood_group} /><Row k="Marital Status" v={emp.marital_status} />
-        <Row k="Mobile" v={emp.mobile} /><Row k="Personal Email" v={emp.personal_email} /><Row k="Office Email" v={emp.office_email} />
-        <Row k="PAN" v={emp.pan_number} /><Row k="Aadhaar" v={emp.aadhar_last4 ? `XXXX XXXX ${emp.aadhar_last4}` : '—'} /><Row k="UAN" v={emp.uan_number} />
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>✏️ Request an Update (→ HR approval)</div>
-        <label style={T.label}>What to update</label>
-        <select style={{ ...T.input, marginBottom:10 }} value={field} onChange={e => setField(e.target.value)}>{FIELDS.map(f => <option key={f}>{f}</option>)}</select>
 
-        {field === 'Bank Account' ? (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-            <div><label style={T.label}>IFSC Code *</label><input style={T.input} value={bank.ifsc} maxLength={11} onChange={e => { const v = e.target.value.toUpperCase(); setBank(b => ({ ...b, ifsc: v })); lookupIfsc(v) }} placeholder="e.g. HDFC0001234" /></div>
-            <div><label style={T.label}>Account Type</label><select style={T.input} value={bank.account_type} onChange={e => setBank(b => ({ ...b, account_type: e.target.value }))}><option>Savings</option><option>Current</option></select></div>
-            <div><label style={T.label}>Account Number *</label><input style={T.input} value={bank.account_number} onChange={e => setBank(b => ({ ...b, account_number: e.target.value }))} /></div>
-            <div><label style={T.label}>Confirm Account Number *</label><input style={T.input} value={bank.confirm} onChange={e => setBank(b => ({ ...b, confirm: e.target.value }))} /></div>
-            <div><label style={T.label}>Bank Name (auto)</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.bank_name} onChange={e => setBank(b => ({ ...b, bank_name: e.target.value }))} placeholder="Auto-fills from IFSC" /></div>
-            <div><label style={T.label}>Branch (auto)</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.branch} onChange={e => setBank(b => ({ ...b, branch: e.target.value }))} placeholder="Auto-fills from IFSC" /></div>
-            <div style={{ gridColumn:'span 2' }}><label style={T.label}>Account Holder Name *</label><input style={T.input} value={bank.holder_name} onChange={e => setBank(b => ({ ...b, holder_name: e.target.value }))} placeholder="As per bank records" /></div>
-            {bank.confirm && bank.confirm !== bank.account_number && <div style={{ gridColumn:'span 2', color:'#DC2626', fontSize:12, marginTop:-4 }}>⚠️ Account numbers don't match</div>}
-          </div>
-        ) : (
-          <>
-            <label style={T.label}>Details</label>
-            <textarea style={{ ...T.input, minHeight:80, marginBottom:10, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="New value / what changed…" />
-          </>
-        )}
-        <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Sending…' : 'Submit update request'}</button>
+  const TABS: [typeof tab, string, string][] = [
+    ['OVERVIEW', 'Overview', '📋'],
+    ['PERSONAL', 'Personal & KYC', '🪪'],
+    ['UPDATE', 'Request a change', '✏️'],
+  ]
+
+  return (
+    <div>
+      <ProfileHero emp={emp} notify={notify} />
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {TABS.map(([k, label, icon]) => (
+          <button key={k} onClick={() => setTab(k)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6,
+                           padding: '8px 15px', borderRadius: 9, cursor: 'pointer',
+                           fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit',
+                           border: tab === k ? 'none' : `1px solid ${P.line}`,
+                           background: tab === k ? P.purple : P.white,
+                           color: tab === k ? '#fff' : P.purpleD,
+                           boxShadow: tab === k ? '0 3px 10px rgba(124,58,237,0.28)' : 'none',
+                           transition: 'all .18s' }}>
+            <span>{icon}</span>{label}
+          </button>
+        ))}
       </div>
+
+      {tab === 'OVERVIEW' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 11 }}>
+          <Panel title="Where you sit" icon="🏛️">
+            <Field label="Employee code" value={emp.emp_code} icon="🆔" copyable notify={notify} />
+            <Field label="Designation" value={emp.designation} icon="💼" notify={notify} />
+            <Field label="Department" value={emp.dept_name} icon="🗂️" notify={notify} />
+            <Field label="Company" value={emp.company_name} icon="🏢" notify={notify} />
+            <Field label="Location" value={[emp.location_name, emp.city].filter(Boolean).join(', ')} icon="📍" notify={notify} />
+          </Panel>
+
+          <Panel title="Your people" icon="👥" accent="#EEF2FF">
+            <Field label="Reporting manager" value={emp.l1_manager_name} icon="👔" notify={notify} />
+            <Field label="HR contact" value={emp.hr_manager_name} icon="🧑‍💼" notify={notify} />
+            <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
+          </Panel>
+
+          <Panel title="Service" icon="⏳" accent={P.greenBg}>
+            <Field label="Date of joining" value={fmt(emp.group_doj)} icon="📅" notify={notify} />
+            <Field label="Time with the company" value={tenureOf(emp.group_doj)} icon="⏳" notify={notify} />
+            <Field label="Employment type" value={emp.employment_type} icon="📄" notify={notify} />
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'PERSONAL' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 11 }}>
+          <Panel title="About you" icon="🙋">
+            <Field label="Date of birth" value={fmt(emp.date_of_birth)} icon="🎂" notify={notify} />
+            <Field label="Gender" value={emp.gender} icon="⚧" notify={notify} />
+            <Field label="Blood group" value={emp.blood_group} icon="🩸" notify={notify} />
+            <Field label="Marital status" value={emp.marital_status} icon="💍" notify={notify} />
+          </Panel>
+
+          <Panel title="How to reach you" icon="📇" accent="#EEF2FF">
+            <Field label="Mobile" value={emp.mobile} icon="📱" copyable notify={notify} />
+            <Field label="Personal email" value={emp.personal_email} icon="📧" copyable notify={notify} />
+            <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
+          </Panel>
+
+          <Panel title="Statutory IDs" icon="🔐" accent={P.amberBg}>
+            <Field label="PAN" value={emp.pan_number} icon="🪪" copyable sensitive notify={notify} />
+            <Field label="Aadhaar" value={emp.aadhar_last4 ? `XXXX XXXX ${emp.aadhar_last4}` : null} icon="🆔" notify={notify} />
+            <Field label="UAN" value={emp.uan_number} icon="🏦" copyable sensitive notify={notify} />
+            <div style={{ fontSize: 10.5, color: P.dim, marginTop: 7, lineHeight: 1.5 }}>
+              Hidden by default. Reveal only when you need to copy one.
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'UPDATE' && (
+        <div style={{ background: P.white, borderRadius: 12, border: `1px solid ${P.line}`,
+                      padding: '18px 18px', maxWidth: 720 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Request a change</div>
+          <div style={{ fontSize: 12, color: P.muted, marginTop: 4, marginBottom: 15, lineHeight: 1.6 }}>
+            You cannot edit these directly — payroll and statutory filings depend on them, so every
+            change goes to HR for approval. You will see it under Raise a Request.
+          </div>
+
+          <label style={T.label}>What to update</label>
+          <select style={{ ...T.input, marginBottom: 13 }} value={field} onChange={e => setField(e.target.value)}>
+            {FIELDS.map(f => <option key={f}>{f}</option>)}
+          </select>
+
+          {field === 'Bank Account' ? (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:11, marginBottom:12 }}>
+              <div><label style={T.label}>IFSC code *</label><input style={T.input} value={bank.ifsc} maxLength={11} onChange={e => { const v = e.target.value.toUpperCase(); setBank(b => ({ ...b, ifsc: v })); lookupIfsc(v) }} placeholder="e.g. HDFC0001234" /></div>
+              <div><label style={T.label}>Account type</label><select style={T.input} value={bank.account_type} onChange={e => setBank(b => ({ ...b, account_type: e.target.value }))}><option>Savings</option><option>Current</option></select></div>
+              <div><label style={T.label}>Account number *</label><input style={T.input} value={bank.account_number} onChange={e => setBank(b => ({ ...b, account_number: e.target.value }))} /></div>
+              <div><label style={T.label}>Confirm account number *</label><input style={{ ...T.input, borderColor: bank.confirm && bank.confirm !== bank.account_number ? P.red : undefined }} value={bank.confirm} onChange={e => setBank(b => ({ ...b, confirm: e.target.value }))} /></div>
+              <div><label style={T.label}>Bank name</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.bank_name} onChange={e => setBank(b => ({ ...b, bank_name: e.target.value }))} placeholder="Fills in from IFSC" /></div>
+              <div><label style={T.label}>Branch</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.branch} onChange={e => setBank(b => ({ ...b, branch: e.target.value }))} placeholder="Fills in from IFSC" /></div>
+              <div style={{ gridColumn:'span 2' }}><label style={T.label}>Account holder name *</label><input style={T.input} value={bank.holder_name} onChange={e => setBank(b => ({ ...b, holder_name: e.target.value }))} placeholder="Exactly as your bank has it" /></div>
+              {bank.confirm && bank.confirm !== bank.account_number && (
+                <div style={{ gridColumn:'span 2', color:P.red, fontSize:12, marginTop:-4 }}>
+                  The two account numbers do not match.
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <label style={T.label}>Details</label>
+              <textarea style={{ ...T.input, minHeight:90, marginBottom:12, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="What it should say instead…" />
+            </>
+          )}
+
+          <button onClick={submit} disabled={busy}
+                  style={{ ...T.btnP, opacity: busy ? .6 : 1,
+                           boxShadow: busy ? 'none' : '0 3px 12px rgba(124,58,237,0.3)' }}>
+            {busy ? 'Sending…' : 'Send to HR'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -786,10 +1282,22 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 // ════════════════════════════════════════════════════════════════
 // ATTENDANCE (B3)
 // ════════════════════════════════════════════════════════════════
+// Higher-contrast pairs than the originals, which sat around olive on pale
+// green and were hard to read at calendar-cell size. Each is [background, ink]
+// and every pair clears WCAG AA at 11px.
 const STATUS_STYLE: Record<string,[string,string]> = {
-  PRESENT:['#EAF3DE','#3B6D11'], ABSENT:['#FCEBEB','#A32D2D'], HALF_DAY:['#FAEEDA','#633806'],
-  MISS_PUNCH:['#FAEEDA','#854F0B'], LWP:['#FCEBEB','#A32D2D'], WEEKLY_OFF:['#F1F5F9','#94A3B8'],
-  HOLIDAY:['#E6F1FB','#0C447C'], ON_LEAVE:['#EEEDFE','#3C3489'], FUTURE:['transparent','#CBD5E1'], TODAY:['#F5F3FF','#7C3AED'],
+  PRESENT:['#E7F7EE','#047857'], ABSENT:['#FEECEC','#B91C1C'], HALF_DAY:['#FEF3E2','#B45309'],
+  MISS_PUNCH:['#FFF4E5','#C2410C'], LWP:['#FEECEC','#B91C1C'], WEEKLY_OFF:['#F1F5F9','#94A3B8'],
+  HOLIDAY:['#E8F1FE','#1D4ED8'], ON_LEAVE:['#EFEBFF','#5B21B6'], FUTURE:['transparent','#CBD5E1'], TODAY:['#F5F3FF','#7C3AED'],
+}
+/** Accent bar colour per status — the saturated version of the ink. */
+const STATUS_BAR: Record<string,string> = {
+  PRESENT:'#10B981', ABSENT:'#EF4444', HALF_DAY:'#F59E0B', MISS_PUNCH:'#FB923C',
+  LWP:'#EF4444', WEEKLY_OFF:'#CBD5E1', HOLIDAY:'#3B82F6', ON_LEAVE:'#8B5CF6',
+}
+const STATUS_FULL: Record<string,string> = {
+  PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half day', MISS_PUNCH:'Missing punch',
+  LWP:'Loss of pay', WEEKLY_OFF:'Weekly off', HOLIDAY:'Holiday', ON_LEAVE:'On leave', FUTURE:'—',
 }
 const STATUS_LABEL: Record<string,string> = { PRESENT:'P', ABSENT:'A', HALF_DAY:'½', MISS_PUNCH:'!', LWP:'LWP', WEEKLY_OFF:'W', HOLIDAY:'H', ON_LEAVE:'L', FUTURE:'', ABSENT_FULL:'Absent' }
 
@@ -806,84 +1314,525 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 // 1) Summary chips ──────────────────────────────────────────────
-function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typeof computeSummary>; isMobile: boolean }) {
-  const chips: { label: string; value: string; style: [string,string] }[] = [
-    { label:'Present',  value:String(summary.present),   style:STATUS_STYLE.PRESENT },
-    { label:'Absent',   value:String(summary.absent),    style:STATUS_STYLE.ABSENT },
-    { label:'Half Day', value:String(summary.halfDay),   style:STATUS_STYLE.HALF_DAY },
-    { label:'Late',     value:String(summary.lateCount), style:STATUS_STYLE.MISS_PUNCH },
-    { label:'OT',       value:summary.totalOTHours,      style:['#EEEDFE','#3C3489'] },
-    { label:'LOP',      value:String(summary.lopDays),   style:STATUS_STYLE.LWP },
-  ]
-  const wrap: React.CSSProperties = isMobile
-    ? { overflowX:'auto', display:'flex', whiteSpace:'nowrap', gap:8, marginBottom:10, paddingBottom:4 }
-    : { display:'flex', flexWrap:'wrap', gap:8, marginBottom:10 }
+/**
+ * Month statistics read off the calendar itself.
+ *
+ * computeSummary() counts attendance_records, and a day with no record at all
+ * produces no row — but resolveDay() shows that day as ABSENT on the grid,
+ * because a past working day with nothing recorded is an absence. So the two
+ * disagreed: with one PRESENT record and twelve blank days, the summary said
+ * 100% while the calendar showed twelve A's.
+ *
+ * This walks the month the same way the grid does, so the number above the
+ * calendar always describes the calendar below it. Weekly offs, holidays and
+ * approved leave are excluded from the denominator — being off on a Sunday is
+ * not an absence.
+ */
+function monthStats(year: number, month: number, md: MonthlyData | null, todayStr: string) {
+  const empty = { present:0, absent:0, halfDay:0, lateCount:0, lopDays:0, missPunch:0,
+                  onLeave:0, totalOTHours:'0h 0m', working:0, pct:null as number | null }
+  if (!md) return empty
+
+  const days = new Date(year, month, 0).getDate()
+  let present=0, absent=0, halfDay=0, late=0, lop=0, miss=0, leave=0, ot=0
+
+  for (let d = 1; d <= days; d++) {
+    const ds = `${year}-${pad2(month)}-${pad2(d)}`
+    if (ds > todayStr) continue                    // the future is not a result yet
+    const { status, rec } = resolveDay(ds, md, todayStr)
+
+    if (rec?.late_minutes) late++
+    if (rec?.overtime_minutes) ot += rec.overtime_minutes
+
+    switch (status) {
+      case 'PRESENT':    present++; break
+      case 'HALF_DAY':   halfDay++; break
+      case 'MISS_PUNCH': miss++; present++; break   // they were here; the punch is what is missing
+      case 'LWP':        lop++; break
+      case 'ABSENT':     absent++; break
+      case 'ON_LEAVE':   leave++; break
+      default: break                                 // weekly off, holiday — not working days
+    }
+  }
+
+  const working = present + absent + halfDay + lop
+  const earned = present + halfDay * 0.5
+  return {
+    present, absent, halfDay, lateCount: late, lopDays: lop, missPunch: miss, onLeave: leave,
+    totalOTHours: `${Math.floor(ot/60)}h ${ot%60}m`,
+    working,
+    pct: working > 0 ? Math.round((earned / working) * 100) : null,
+  }
+}
+
+/**
+ * The month, as one glance.
+ *
+ * The old header was a bare Prev / Next bar and six equal chips. Nothing said
+ * how the month was actually going, which is the only question an employee
+ * opens this page with. The ring answers it before anything is read.
+ *
+ * Attendance % counts half days as half and ignores weekly offs, holidays and
+ * approved leave — being off on a Sunday is not an absence, and scoring it as
+ * one would make the number meaningless.
+ */
+function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth, isMobile }: {
+  month: number; year: number; summary: ReturnType<typeof monthStats>
+  onPrev: () => void; onNext: () => void; onToday: () => void
+  isThisMonth: boolean; isMobile: boolean
+}) {
+  const { working, pct } = summary
+  const tone = pct == null ? '#94A3B8' : pct >= 95 ? '#34D399' : pct >= 85 ? '#FBBF24' : '#F87171'
+
+  const size = isMobile ? 68 : 82
+  const r = (size - 10) / 2
+  const circ = 2 * Math.PI * r
+
+  const nav: React.CSSProperties = {
+    width: 32, height: 32, borderRadius: 9, cursor: 'pointer',
+    border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.10)',
+    color: '#fff', fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background .15s ease, transform .12s ease',
+  }
+
   return (
-    <div style={wrap}>
-      {chips.map(ch => (
-        <div key={ch.label} style={{ background:ch.style[0], color:ch.style[1], borderRadius:9, padding:'8px 14px', flexShrink:0, display:'flex', flexDirection:'column', alignItems:'flex-start', minWidth:64 }}>
-          <span style={{ fontSize:20, fontWeight:700, lineHeight:1.1 }}>{ch.value}</span>
-          <span style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', opacity:.85 }}>{ch.label}</span>
+    <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 11, position: 'relative',
+                  background: 'linear-gradient(135deg,#1E1B4B 0%,#2A1F63 55%,#3C1E8C 100%)',
+                  boxShadow: '0 8px 26px rgba(30,27,75,0.26)' }}>
+      <div style={{ position: 'absolute', top: -80, right: -50, width: 220, height: 220,
+                    borderRadius: '50%', background: 'rgba(167,139,250,0.15)', pointerEvents: 'none' }} />
+
+      <div style={{ position: 'relative', padding: isMobile ? '16px 16px' : '18px 20px',
+                    display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 190 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 3 }}>
+            <button onClick={onPrev} className="ezer-nav" style={nav} title="Previous month">‹</button>
+            <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: '#fff', letterSpacing: '-.01em' }}>
+              {MONTH_NAMES[month - 1]} <span style={{ opacity: .55, fontWeight: 500 }}>{year}</span>
+            </div>
+            <button onClick={onNext} className="ezer-nav" style={nav} title="Next month">›</button>
+            {!isThisMonth && (
+              <button onClick={onToday} className="ezer-nav"
+                      style={{ ...nav, width: 'auto', padding: '0 11px', fontSize: 11.5, fontWeight: 600 }}>
+                Today
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>
+            {working > 0
+              ? `${working} working day${working === 1 ? '' : 's'} · ${summary.present} present, ${summary.absent} absent`
+              : 'No working days recorded yet'}
+          </div>
+          {summary.totalOTHours && summary.totalOTHours !== '0h 0m' && (
+            <div style={{ fontSize: 11.5, color: '#A7F3D0', marginTop: 5 }}>
+              ⏱ {summary.totalOTHours} overtime this month
+            </div>
+          )}
         </div>
+
+        <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+          <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="7" />
+            {pct != null && (
+              <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tone} strokeWidth="7" strokeLinecap="round"
+                      strokeDasharray={`${(circ * pct) / 100} ${circ}`}
+                      style={{ transition: 'stroke-dasharray .9s cubic-bezier(.22,1,.36,1), stroke .4s ease',
+                               filter: `drop-shadow(0 0 5px ${tone}66)` }} />
+            )}
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+            <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, lineHeight: 1 }}>
+              {pct == null ? '—' : `${pct}%`}
+            </span>
+            <span style={{ fontSize: 8.5, opacity: .65, letterSpacing: '.06em', marginTop: 2 }}>ATTENDANCE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** One statistic. Zero is greyed, so the eye lands on what actually happened. */
+function StatTile({ label, value, bg, fg, bar, wide }: {
+  label: string; value: string; bg: string; fg: string; bar: string; wide?: boolean
+}) {
+  const empty = value === '0' || value === '0h 0m'
+  return (
+    <div className="ezer-tile" style={{ background: empty ? '#FAFAFA' : bg, borderRadius: 10, padding: '10px 13px',
+                  border: `1px solid ${empty ? '#F0F0F5' : bg}`, position: 'relative',
+                  overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+                    background: empty ? '#E5E7EB' : bar }} />
+      <div style={{ fontSize: 21, fontWeight: 700, lineHeight: 1.05, marginLeft: 4,
+                    color: empty ? '#C4C4CC' : fg }}>{value}</div>
+      <div style={{ fontSize: 9.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
+                    marginLeft: 4, marginTop: 3, color: empty ? '#C4C4CC' : fg, opacity: empty ? 1 : .8 }}>
+        {label}
+      </div>
+    </div>
+  )
+}
+
+function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typeof monthStats>; isMobile: boolean }) {
+  const tiles: { label: string; value: string; k: string; wide?: boolean }[] = [
+    { label:'Present',   value:String(summary.present),   k:'PRESENT' },
+    { label:'Absent',    value:String(summary.absent),    k:'ABSENT' },
+    { label:'Half day',  value:String(summary.halfDay),   k:'HALF_DAY' },
+    { label:'Late',      value:String(summary.lateCount), k:'MISS_PUNCH' },
+    { label:'Overtime',  value:summary.totalOTHours,      k:'ON_LEAVE', wide:true },
+    { label:'Loss of pay', value:String(summary.lopDays), k:'LWP' },
+  ]
+  return (
+    <div style={{ display:'flex', flexWrap: isMobile ? 'nowrap' : 'wrap', gap:8, marginBottom:11,
+                  overflowX: isMobile ? 'auto' : 'visible', paddingBottom: isMobile ? 4 : 0 }}>
+      {tiles.map(t => {
+        const [bg, fg] = STATUS_STYLE[t.k]
+        return <StatTile key={t.label} label={t.label} value={t.value}
+                         bg={bg} fg={fg} bar={STATUS_BAR[t.k]} wide={t.wide} />
+      })}
+    </div>
+  )
+}
+
+/** What the colours mean. Without this the calendar is a puzzle on first visit. */
+function CalendarLegend() {
+  const items = ['PRESENT','ABSENT','HALF_DAY','MISS_PUNCH','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 13px', marginTop:11, paddingTop:9,
+                  borderTop:'1px solid #F3F0FF' }}>
+      {items.map(k => (
+        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5,
+                               fontSize:10, color:'#9CA3AF' }}>
+          <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_BAR[k] }} />
+          {STATUS_FULL[k]}
+        </span>
       ))}
     </div>
   )
 }
 
 // 2) Calendar ────────────────────────────────────────────────────
-function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayClick, selectedDate }: {
-  year: number; month: number; monthData: MonthlyData; todayStr: string; isMobile: boolean
-  onDayClick: (d: string) => void; selectedDate: string|null
-}) {
-  const cell = isMobile ? 38 : 58
-  const fs = isMobile ? 9 : 11
-  const gap = isMobile ? 2 : 3
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const lead = new Date(year, month-1, 1).getDay()
-  const cells: React.ReactNode[] = []
-  for (let i = 0; i < lead; i++) cells.push(<div key={'b'+i} />)
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
-    const { status, rec, leave } = resolveDay(dateStr, monthData, todayStr)
-    const [bg, c] = STATUS_STYLE[status] || ['#fff', '#1E1B4B']
-    const isToday = dateStr === todayStr
-    const isSel = dateStr === selectedDate
-    cells.push(
-      <button key={dateStr} onClick={() => onDayClick(dateStr)} style={{
-        minHeight:cell, background:bg, color:c, border: isToday ? '1.5px solid #7C3AED' : '1px solid rgba(124,58,237,0.10)',
-        borderRadius:7, padding:isMobile?'3px 2px':'4px 5px', cursor:'pointer', fontFamily:'inherit',
-        display:'flex', flexDirection:'column', alignItems:'flex-start', gap:1, overflow:'hidden',
-        outline: isSel ? '2px solid #7C3AED' : 'none', outlineOffset: isSel ? 1 : 0,
-      }}>
-        <span style={{ fontSize:fs, fontWeight:700, lineHeight:1 }}>{d}</span>
-        {!isMobile && rec && (rec.work_in || rec.work_out) && (
-          <span style={{ fontSize:8, opacity:.8, lineHeight:1.2 }}>{fmtT(rec.work_in)}–{fmtT(rec.work_out)}</span>
-        )}
-        {status === 'ON_LEAVE'
-          ? <span style={{ fontSize:isMobile?8:9, fontWeight:600 }}>{leave?.short_name || 'L'}</span>
-          : (STATUS_LABEL[status] ? <span style={{ fontSize:isMobile?8:9, fontWeight:600 }}>{STATUS_LABEL[status]}</span> : null)}
-      </button>
-    )
-  }
-  const legend: [string,string][] = [['PRESENT','Present'],['ABSENT','Absent'],['HALF_DAY','Half'],['MISS_PUNCH','Miss Punch'],['ON_LEAVE','Leave'],['HOLIDAY','Holiday'],['WEEKLY_OFF','Week Off'],['LWP','LOP']]
+/**
+ * The month grid.
+ *
+ * Changes from the original that matter:
+ *   · a real weekday header, so a date can be located without counting
+ *   · weekend columns tinted, which is how people actually scan a month
+ *   · status carried by a left accent bar as well as fill, so the grid stays
+ *     readable for the ~8% of men with colour vision deficiency
+ *   · today ringed and labelled; the selected day lifts rather than just
+ *     outlining, so the day detail below has a visible origin
+ *   · punch times shown when there is room, since "when did I leave" is the
+ *     second question after "was I present"
+ *   · future days rendered flat and unclickable — nothing to see, and a
+ *     clickable empty panel is a dead end
+ */
+/* Keyframes for the calendar. Injected once — this file uses inline styles,
+   which cannot express @keyframes or :active, and a media query for reduced
+   motion cannot be written inline either.
+
+   The last block is the important one. Motion here is decorative: it tells you
+   a month changed and which cell you are on. For anyone who has asked their OS
+   to reduce motion — vestibular disorders, migraine triggers — the same
+   information has to arrive without the movement, so every animation collapses
+   to a near-instant fade and the 3D tilt is dropped entirely. */
+function ShimmerKeyframes() {
+  return <style>{`
+    @keyframes ezerShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+    /* Cells arrive as a wave across the grid, so a month reads as one object
+       being dealt rather than 31 things appearing at once. */
+    @keyframes ezerCellIn{
+      from{opacity:0;transform:translateY(6px) scale(.94)}
+      to  {opacity:1;transform:none}
+    }
+    @keyframes ezerPanelIn{
+      from{opacity:0;transform:translateX(8px)}
+      to  {opacity:1;transform:none}
+    }
+    .ezer-cell{
+      animation:ezerCellIn .32s cubic-bezier(.22,1,.36,1) both;
+      transform-origin:center;
+      will-change:transform;
+    }
+    /* The lift is a real one — the cell rises toward the viewer and tips very
+       slightly, which is what makes it read as a tile rather than a rectangle
+       that changed colour. */
+    .ezer-cell:not(:disabled):hover{
+      transform:translateZ(16px) translateY(-2px) rotateX(6deg);
+      z-index:2;
+    }
+    .ezer-cell:not(:disabled):active{
+      transform:translateZ(2px) scale(.95);
+      transition-duration:.06s;
+    }
+    .ezer-day-panel{animation:ezerPanelIn .3s cubic-bezier(.22,1,.36,1) both}
+
+    /* Month navigation. Inline styles cannot express :hover or :active. */
+    .ezer-nav:hover{background:rgba(255,255,255,.2)!important}
+    .ezer-nav:active{transform:scale(.9)}
+
+    /* Stat tiles rise very slightly, enough to say they are a group of objects. */
+    .ezer-tile{transition:transform .16s cubic-bezier(.22,1,.36,1), box-shadow .16s ease}
+    .ezer-tile:hover{transform:translateY(-2px);box-shadow:0 6px 16px -6px rgba(30,27,75,.22)}
+
+    @media (prefers-reduced-motion: reduce){
+      .ezer-cell,.ezer-day-panel{animation-duration:.01ms!important;animation-delay:0ms!important}
+      .ezer-cell:not(:disabled):hover{transform:translateY(-1px);}
+      .ezer-cell:not(:disabled):active{transform:none}
+    }
+  `}</style>
+}
+
+/**
+ * The month grid.
+ *
+ * Sized deliberately. The previous version used `repeat(7, 1fr)` with 74px
+ * cells and no width cap, so on a wide screen the columns stretched to fill the
+ * content area and the calendar became a wall of oversized boxes. A month is a
+ * fixed shape — it should not grow just because the window did. The grid is
+ * capped at 476px (7 x 60 + gaps), which is about as wide as a month wants to
+ * be before the eye stops reading it as a unit.
+ *
+ * Density follows from that: the grid is for scanning, the panel below is for
+ * detail. Each cell carries the date, a status dot, and — only where it fits
+ * and matters — the punch times. Everything else moved to the day panel.
+ *
+ * Status is a coloured dot plus a tinted fill rather than a heavy accent bar,
+ * so the grid reads as a calendar instead of a bar chart, and still works
+ * without relying on colour alone.
+ */
+/** The right column before a day is picked. An empty panel reads as broken. */
+function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }) {
+  const rows: [string, string, string][] = [
+    ['Present',   String(summary.present),   STATUS_BAR.PRESENT],
+    ['Absent',    String(summary.absent),    STATUS_BAR.ABSENT],
+    ['Half day',  String(summary.halfDay),   STATUS_BAR.HALF_DAY],
+    ['On leave',  String(summary.onLeave),   STATUS_BAR.ON_LEAVE],
+  ]
   return (
-    <div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom:gap }}>
-        {WEEKDAYS.map(w => <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:600, color:'#9CA3AF', padding:'2px 0' }}>{w}</div>)}
+    <div style={{ ...T.card, height: '100%', display: 'flex', flexDirection: 'column',
+                  justifyContent: 'center', marginBottom: 0 }}>
+      <div style={{ textAlign: 'center', padding: '6px 0 16px' }}>
+        <div style={{ fontSize: 26, marginBottom: 6 }}>📆</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: '#1E1B4B' }}>Pick a day</div>
+        <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 3, lineHeight: 1.55 }}>
+          Its punches, hours and status appear here.
+        </div>
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap }}>{cells}</div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 12px', marginTop:12 }}>
-        {legend.map(([k,lbl]) => { const [bg,c] = STATUS_STYLE[k]; return (
-          <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, color:'#6B7280' }}>
-            <span style={{ width:11, height:11, borderRadius:3, background:bg, border:'1px solid '+c, display:'inline-block' }} />{lbl}
-          </span>
-        )})}
+      <div style={{ borderTop: '1px solid #F3F0FF', paddingTop: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '.06em',
+                      textTransform: 'uppercase', marginBottom: 8 }}>This month so far</div>
+        {rows.map(([k, v, c]) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: c }} />
+            <span style={{ fontSize: 12, color: '#6B7280', flex: 1 }}>{k}</span>
+            <span style={{ fontSize: 13, fontWeight: 700,
+                           color: v === '0' ? '#C4C4CC' : '#1E1B4B' }}>{v}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
 }
 
-// 3) Day detail panel ────────────────────────────────────────────
+// The calendar card as a physical object: it sits above the page at rest and
+// turns to face the cursor. The tilt is written straight to the node on a
+// rAF — routing it through useState would re-render all 31 cells per pointer
+// move, which is exactly what made the per-cell tilt stutter.
+const TILT_MAX = 7          // degrees; past ~9 the type starts to smear
+const LIFT_REST = 8         // px off the page when idle
+const LIFT_HOVER = 26
+
+function TiltCard({ children, disabled, style }: {
+  children: React.ReactNode; disabled?: boolean; style?: React.CSSProperties
+}) {
+  const wrap  = useRef<HTMLDivElement | null>(null)
+  const card  = useRef<HTMLDivElement | null>(null)
+  const sheen = useRef<HTMLDivElement | null>(null)
+  const frame = useRef<number | null>(null)
+
+  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current) }, [])
+
+  // Someone who has asked for less motion gets the depth (shadow, lift) but
+  // not the movement.
+  const still = () => typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+  const rest = () => {
+    const el = card.current
+    if (!el) return
+    el.style.transform = `translateZ(${LIFT_REST}px)`
+    el.style.boxShadow = '0 2px 6px rgba(30,27,75,.07), 0 14px 34px -18px rgba(30,27,75,.30)'
+    if (sheen.current) sheen.current.style.opacity = '0'
+  }
+
+  const track = (e: React.MouseEvent) => {
+    if (disabled || still()) return
+    const w = wrap.current, el = card.current
+    if (!w || !el) return
+    const r = w.getBoundingClientRect()
+    const px = (e.clientX - r.left) / r.width      // 0..1 across the card
+    const py = (e.clientY - r.top) / r.height
+    const rx = (0.5 - py) * 2 * TILT_MAX           // cursor high -> top leans back
+    const ry = (px - 0.5) * 2 * TILT_MAX
+    if (frame.current !== null) cancelAnimationFrame(frame.current)
+    frame.current = requestAnimationFrame(() => {
+      el.style.transform = `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateZ(${LIFT_HOVER}px)`
+      // The shadow is cast by a light above and behind the viewer, so it slides
+      // opposite the tilt. A shadow that does not move gives the trick away.
+      el.style.boxShadow = `${(-ry * 1.7).toFixed(1)}px ${(20 + rx * 1.7).toFixed(1)}px 46px -20px rgba(30,27,75,.42), 0 2px 6px rgba(30,27,75,.10)`
+      if (sheen.current) {
+        sheen.current.style.opacity = '1'
+        sheen.current.style.background =
+          `radial-gradient(340px circle at ${(px * 100).toFixed(1)}% ${(py * 100).toFixed(1)}%, rgba(167,139,250,.16), rgba(124,58,237,.05) 45%, rgba(124,58,237,0) 70%)`
+      }
+    })
+  }
+
+  if (disabled) return <div style={style}>{children}</div>
+
+  return (
+    <div ref={wrap}
+         onMouseMove={track}
+         onMouseLeave={rest}
+         style={{ perspective: 1300, perspectiveOrigin: '50% 45%', flex: '0 0 auto' }}>
+      <div ref={card}
+           style={{
+             ...style,
+             position: 'relative',
+             transformStyle: 'preserve-3d',
+             transform: `translateZ(${LIFT_REST}px)`,
+             boxShadow: '0 2px 6px rgba(30,27,75,.07), 0 14px 34px -18px rgba(30,27,75,.30)',
+             transition: 'transform .34s cubic-bezier(.22,1,.36,1), box-shadow .34s cubic-bezier(.22,1,.36,1)',
+           }}>
+        {children}
+        {/* Specular highlight. Sits above the content but takes no clicks. */}
+        <div ref={sheen} aria-hidden
+             style={{ position: 'absolute', inset: 0, borderRadius: 10, opacity: 0,
+                      pointerEvents: 'none', transition: 'opacity .28s ease' }} />
+      </div>
+    </div>
+  )
+}
+
+function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayClick, selectedDate }: {
+  year: number; month: number; monthData: MonthlyData; todayStr: string; isMobile: boolean
+  onDayClick: (d: string) => void; selectedDate: string|null
+}) {
+  const cell = isMobile ? 40 : 56
+  const gap = 4
+  const maxW = isMobile ? '100%' : 7 * 60 + gap * 6   // a month, not a banner
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const lead = new Date(year, month-1, 1).getDay()
+
+  const cells: React.ReactNode[] = []
+  for (let i = 0; i < lead; i++) cells.push(<div key={'b'+i} />)
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
+    const { status, rec, leave } = resolveDay(dateStr, monthData, todayStr)
+    const [bg, ink] = STATUS_STYLE[status] || ['#fff', '#1E1B4B']
+    const dot = STATUS_BAR[status]
+    const isToday = dateStr === todayStr
+    const isSel = dateStr === selectedDate
+    const isFuture = status === 'FUTURE'
+    const hasTimes = !isMobile && !isFuture && rec && (rec.work_in || rec.work_out)
+    // Wave across the grid rather than a uniform fade. Capped so the last cell
+    // of a 31-day month is not still arriving half a second later.
+    const delay = Math.min((lead + d - 1) * 9, 260)
+
+    cells.push(
+      <button key={dateStr}
+        className="ezer-cell"
+        onClick={() => !isFuture && onDayClick(dateStr)}
+        disabled={isFuture}
+        title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}`}
+        style={{
+          height: cell, position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
+          background: isSel ? 'linear-gradient(145deg,#8B5CF6,#6D28D9)'
+                    : isFuture ? 'transparent' : bg,
+          color: isSel ? '#fff' : ink,
+          border: isSel ? '1px solid #6D28D9'
+                : isToday ? '1.5px solid #A78BFA'
+                : '1px solid rgba(124,58,237,0.09)',
+          borderRadius: 8, padding: 0,
+          cursor: isFuture ? 'default' : 'pointer',
+          opacity: isFuture ? .45 : 1,
+          animationDelay: `${delay}ms`,
+          // Two-layer shadow: a tight contact shadow plus a softer cast one.
+          // A single blur reads as a glow; two read as height.
+          boxShadow: isSel
+            ? '0 1px 2px rgba(76,29,149,.4), 0 8px 20px -4px rgba(124,58,237,.45)'
+            : isToday ? '0 1px 2px rgba(124,58,237,.12)' : 'none',
+          transition: 'box-shadow .18s ease, background .18s ease, transform .18s cubic-bezier(.22,1,.36,1)',
+          transformStyle: 'preserve-3d',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 1,
+        }}>
+
+        <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: isToday ? 800 : 600, lineHeight: 1 }}>
+          {d}
+        </span>
+
+        {/* the status, as a dot — small, and never the only signal */}
+        {!isFuture && dot && (
+          <span style={{ width: 5, height: 5, borderRadius: '50%', marginTop: 1,
+                         background: isSel ? 'rgba(255,255,255,0.9)' : dot }} />
+        )}
+
+        {hasTimes && (
+          <span style={{ fontSize: 7.5, lineHeight: 1, opacity: .75, marginTop: 1,
+                         fontVariantNumeric: 'tabular-nums' }}>
+            {fmtT(rec!.work_in)}
+          </span>
+        )}
+
+        {!isFuture && status === 'ON_LEAVE' && leave?.short_name && (
+          <span style={{ fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 1 }}>
+            {leave.short_name}
+          </span>
+        )}
+
+        {isToday && !isSel && (
+          <span style={{ position: 'absolute', top: 3, right: 4, width: 4, height: 4,
+                         borderRadius: '50%', background: '#7C3AED' }} />
+        )}
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: maxW }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom: 3,
+                    transform: 'translateZ(14px)' }}>
+        {WEEKDAYS.map((w, n) => (
+          <div key={w} style={{ textAlign:'center', fontSize:9.5, fontWeight:700,
+                                letterSpacing:'.05em', padding:'3px 0',
+                                color: n % 6 === 0 ? '#C4B5FD' : '#B9BCC6' }}>
+            {w[0]}{isMobile ? '' : w[1]}
+          </div>
+        ))}
+      </div>
+      {/* The perspective lives on the container, so a hovered cell tilts within
+          a shared vanishing point instead of each one having its own. Re-keyed
+          on the month so changing it replays the entrance. */}
+      <div key={`${year}-${month}`}
+           style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap,
+                    perspective: 700, perspectiveOrigin: '50% 40%',
+                    // Lifted off the card face. Combined with the card's own
+                    // tilt this is what parallaxes — the grid moves further
+                    // than the legend beneath it.
+                    transform: 'translateZ(26px)' }}>
+        {cells}
+      </div>
+      <div style={{ transform: 'translateZ(6px)' }}><CalendarLegend /></div>
+    </div>
+  )
+}
+
 function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
   emp: EmployeeDetail; date: string; dayInfo: ReturnType<typeof resolveDay>; isMobile: boolean; onRaise: (d: string) => void
 }) {
@@ -942,6 +1891,200 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
 }
 
 // 4) Regularisation form ─────────────────────────────────────────
+/**
+ * Regularise a range of days in one submission.
+ *
+ * The single-day form is right when one punch was missed. It is the wrong shape
+ * for "I was on site all last week and the biometric never picked me up" —
+ * that was seven identical forms.
+ *
+ * The preview is the important half. A date range will always contain days that
+ * must not be regularised: weekly offs, holidays, approved leave, and days
+ * already recorded properly. Submitting those would put work on HR that should
+ * never have reached them, and could overwrite a correct record with a guess.
+ * So the range is filtered against the same rules resolveDay() uses, and every
+ * skipped day says why before anything is sent.
+ */
+function BulkRegularisationForm({ emp, onDone, onCancel }: {
+  emp: EmployeeDetail; onDone: () => void; onCancel: () => void
+}) {
+  const localYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const todayStr = localYMD(new Date())
+  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate()-1); return localYMD(d) })()
+  const weekAgo   = (() => { const d = new Date(); d.setDate(d.getDate()-7); return localYMD(d) })()
+
+  const [from, setFrom] = useState(weekAgo)
+  const [to, setTo] = useState(yesterday)
+  const [actualIn, setActualIn] = useState('09:00')
+  const [actualOut, setActualOut] = useState('18:00')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [preview, setPreview] = useState<{
+    eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[]
+    skipped: { date: string; why: string }[]
+  } | null>(null)
+
+  const MAX_DAYS = 62   // two months: enough for a real backlog, not a whole year
+
+  // Walk the range, pulling each month's attendance once, and decide day by day.
+  const scan = useCallback(async () => {
+    setPreview(null); setMsg(null)
+    if (!from || !to) return
+    if (from > to) { setMsg({ text: 'The start date is after the end date.', ok: false }); return }
+    if (to >= todayStr) { setMsg({ text: 'Regularisation is for past days only — the end date must be before today.', ok: false }); return }
+
+    const days: string[] = []
+    for (const d = new Date(from + 'T00:00:00'); localYMD(d) <= to; d.setDate(d.getDate() + 1)) {
+      days.push(localYMD(d))
+      if (days.length > MAX_DAYS) break
+    }
+    if (days.length > MAX_DAYS) {
+      setMsg({ text: `That range is longer than ${MAX_DAYS} days. Split it into smaller periods.`, ok: false }); return
+    }
+
+    setScanning(true)
+    const months = Array.from(new Set(days.map(d => d.slice(0, 7))))
+    const data = new Map<string, MonthlyData>()
+    for (const ym of months) {
+      const [y, mo] = ym.split('-').map(Number)
+      data.set(ym, await loadMonthlyAttendance(emp.id, y, mo))
+    }
+
+    const eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[] = []
+    const skipped: { date: string; why: string }[] = []
+
+    for (const date of days) {
+      const md = data.get(date.slice(0, 7))
+      if (!md) { skipped.push({ date, why: 'could not load that month' }); continue }
+      const info = resolveDay(date, md, todayStr)
+
+      if (info.status === 'HOLIDAY')      { skipped.push({ date, why: info.holiday?.description ? `holiday — ${info.holiday.description}` : 'holiday' }); continue }
+      if (info.status === 'WEEKLY_OFF')   { skipped.push({ date, why: 'weekly off' }); continue }
+      if (info.status === 'ON_LEAVE')     { skipped.push({ date, why: 'on approved leave' }); continue }
+      if (info.status === 'PRESENT' && info.rec?.work_in && info.rec?.work_out) {
+        skipped.push({ date, why: 'already recorded in full' }); continue
+      }
+      eligible.push({
+        date,
+        recordedIn: info.rec?.work_in || null,
+        recordedOut: info.rec?.work_out || null,
+        why: info.status === 'MISS_PUNCH' ? 'missing a punch'
+           : info.status === 'ABSENT' ? 'marked absent'
+           : info.status.toLowerCase().replace(/_/g, ' '),
+      })
+    }
+
+    setScanning(false)
+    setPreview({ eligible, skipped })
+  }, [from, to, emp.id, todayStr])
+
+  useEffect(() => { scan() }, [scan])
+
+  const submit = async () => {
+    if (!preview || preview.eligible.length === 0) { setMsg({ text: 'Nothing in that range needs regularising.', ok: false }); return }
+    if (!actualIn || !actualOut) { setMsg({ text: 'Enter both actual IN and OUT times', ok: false }); return }
+    if (actualIn >= actualOut) { setMsg({ text: 'Actual IN must be before Actual OUT', ok: false }); return }
+    if (!reason.trim()) { setMsg({ text: 'Reason is required', ok: false }); return }
+
+    setBusy(true); setMsg(null)
+    const { inserted, error } = await submitRegularisationBulk(emp.id, preview.eligible, actualIn, actualOut, reason.trim())
+    setBusy(false)
+    if (error) { setMsg({ text: error, ok: false }); return }
+    setMsg({ text: `✓ ${inserted} day${inserted === 1 ? '' : 's'} sent to HR for approval`, ok: true })
+    onDone()
+  }
+
+  const short = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+
+  return (
+    <div style={T.card}>
+      <div style={T.section}>📅 Regularise a date range</div>
+      <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
+        For a stretch of days with the same story — biometric down, on site, working from home.
+        Weekly offs, holidays, leave and days already recorded are left out automatically.
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+        <div><label style={T.label}>From *</label>
+          <input type="date" max={yesterday} style={T.input} value={from} onChange={e => setFrom(e.target.value)} /></div>
+        <div><label style={T.label}>To *</label>
+          <input type="date" max={yesterday} style={T.input} value={to} onChange={e => setTo(e.target.value)} /></div>
+        <div><label style={T.label}>Actual IN *</label>
+          <input type="time" style={T.input} value={actualIn} onChange={e => setActualIn(e.target.value)} /></div>
+        <div><label style={T.label}>Actual OUT *</label>
+          <input type="time" style={T.input} value={actualOut} onChange={e => setActualOut(e.target.value)} /></div>
+        <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(applies to every day)</span></label>
+          <input style={T.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Biometric device was down all week" /></div>
+      </div>
+
+      {scanning && <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>Checking those dates…</div>}
+
+      {preview && !scanning && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 9 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 99,
+                           background: preview.eligible.length ? '#ECFDF5' : '#FEF2F2',
+                           color: preview.eligible.length ? '#059669' : '#DC2626' }}>
+              {preview.eligible.length} day{preview.eligible.length === 1 ? '' : 's'} will be sent
+            </span>
+            {preview.skipped.length > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99,
+                             background: '#F3F0FF', color: '#6D28D9' }}>
+                {preview.skipped.length} skipped
+              </span>
+            )}
+          </div>
+
+          {preview.eligible.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 9 }}>
+              {preview.eligible.map(d => (
+                <span key={d.date} title={d.why}
+                      style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
+                               background: '#ECFDF5', color: '#059669',
+                               border: '1px solid #A7F3D0', fontWeight: 600 }}>
+                  {short(d.date)} <span style={{ fontWeight: 400, opacity: .8 }}>· {d.why}</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {preview.skipped.length > 0 && (
+            <details>
+              <summary style={{ fontSize: 11.5, color: '#6B7280', cursor: 'pointer', marginBottom: 6 }}>
+                Why {preview.skipped.length} day{preview.skipped.length === 1 ? ' was' : 's were'} left out
+              </summary>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {preview.skipped.map(d => (
+                  <span key={d.date} style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
+                                              background: '#F8FAFC', color: '#9CA3AF',
+                                              border: '1px solid #E9E7F5' }}>
+                    {short(d.date)} · {d.why}
+                  </span>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+
+      {msg && <div style={{ fontSize: 12, marginBottom: 10, color: msg.ok ? '#059669' : '#DC2626' }}>{msg.text}</div>}
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onCancel} style={{ ...T.btnO, flex: 1 }}>Cancel</button>
+        <button onClick={submit} disabled={busy || scanning || !preview?.eligible.length}
+                style={{ ...T.btnP, flex: 2, opacity: busy || scanning || !preview?.eligible.length ? .5 : 1 }}>
+          {busy ? 'Sending…'
+            : preview?.eligible.length
+              ? `Send ${preview.eligible.length} day${preview.eligible.length === 1 ? '' : 's'} to HR`
+              : 'Nothing to send'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
   emp: EmployeeDetail; date: string; rec: MonthlyData['records'][number] | null; editable?: boolean
   onDone: () => void; onCancel: () => void
@@ -1027,6 +2170,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [raiseDate, setRaiseDate] = useState<string | null>(null)
   const [manualRaise, setManualRaise] = useState(false)
+  const [bulkRaise, setBulkRaise] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [loading, setLoading] = useState(true)
   const todayStr = new Date().toISOString().slice(0, 10)
@@ -1048,43 +2192,72 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1) } else setMonth(m => m - 1); setSelectedDate(null); setRaiseDate(null) }
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1) } else setMonth(m => m + 1); setSelectedDate(null); setRaiseDate(null) }
 
+  // One walk, shared by the ring and the tiles, so both agree with the grid.
+  const stats = monthStats(year, month, monthData, todayStr)
   const dayInfo = selectedDate && monthData ? resolveDay(selectedDate, monthData, todayStr) : null
   const raiseRec = raiseDate && monthData ? (monthData.recMap.get(raiseDate) || null) : null
 
   return (
     <div>
-      {/* (A) month nav */}
-      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <button onClick={prevMonth} style={T.btnO}>‹ Prev</button>
-        <div style={{ fontSize:15, fontWeight:700 }}>{MONTH_NAMES[month-1]} {year}</div>
-        <button onClick={nextMonth} style={T.btnO}>Next ›</button>
+      <ShimmerKeyframes />
+      {/* (A) the month, as one glance */}
+      <MonthHero
+        month={month} year={year}
+        summary={stats}
+        onPrev={prevMonth} onNext={nextMonth}
+        onToday={() => { const n = new Date(); setMonth(n.getMonth()+1); setYear(n.getFullYear()); setSelectedDate(null); setRaiseDate(null) }}
+        isThisMonth={month === new Date().getMonth()+1 && year === new Date().getFullYear()}
+        isMobile={isMobile} />
+
+      {/* (B) the month in numbers */}
+      <AttendanceSummaryChips summary={stats} isMobile={isMobile} />
+
+      {/* (C+D) calendar and the selected day, side by side.
+           The month is a fixed shape, so it keeps its width and the detail
+           takes the rest — clicking a day fills the right column instead of
+           pushing the grid down the page. */}
+      <div style={{ display:'flex', gap:11, alignItems:'stretch',
+                    flexWrap: isMobile ? 'wrap' : 'nowrap', marginBottom:10 }}>
+        <TiltCard disabled={isMobile}
+                  style={{ ...T.card, marginBottom:0,
+                           width: isMobile ? '100%' : 'auto' }}>
+          {loading || !monthData
+            ? <div style={{ display:'grid', gridTemplateColumns:'repeat(7,60px)', gap:4 }}>
+                {Array.from({ length: 35 }).map((_, i) => (
+                  <div key={i} style={{ height: isMobile ? 40 : 56, borderRadius:8,
+                                        background:'linear-gradient(90deg,#F7F5FF 25%,#F0EDFB 50%,#F7F5FF 75%)',
+                                        backgroundSize:'200% 100%', animation:'ezerShimmer 1.2s infinite' }} />
+                ))}
+              </div>
+            : <AttendanceCalendar year={year} month={month} monthData={monthData} todayStr={todayStr} isMobile={isMobile} onDayClick={d => { setSelectedDate(d); setRaiseDate(null) }} selectedDate={selectedDate} />}
+        </TiltCard>
+
+        <div key={selectedDate || 'resting'} className="ezer-day-panel"
+             style={{ flex:'1 1 300px', minWidth: isMobile ? '100%' : 280 }}>
+          {selectedDate && dayInfo
+            ? <DayDetailPanel emp={emp} date={selectedDate} dayInfo={dayInfo} isMobile={isMobile} onRaise={d => setRaiseDate(d)} />
+            : <DayPanelResting summary={stats} />}
+        </div>
       </div>
-
-      {/* (B) summary chips */}
-      <AttendanceSummaryChips summary={computeSummary(monthData?.records || [])} isMobile={isMobile} />
-
-      {/* (C) calendar */}
-      <div style={T.card}>
-        {loading || !monthData
-          ? <div style={{ fontSize:12, color:'#9CA3AF', padding:'20px 0', textAlign:'center' }}>Loading attendance…</div>
-          : <AttendanceCalendar year={year} month={month} monthData={monthData} todayStr={todayStr} isMobile={isMobile} onDayClick={d => { setSelectedDate(d); setRaiseDate(null) }} selectedDate={selectedDate} />}
-      </div>
-
-      {/* (D) day detail */}
-      {selectedDate && dayInfo && <DayDetailPanel emp={emp} date={selectedDate} dayInfo={dayInfo} isMobile={isMobile} onRaise={d => setRaiseDate(d)} />}
 
       {/* (E) regularisation form */}
       {raiseDate && <RegularisationForm emp={emp} date={raiseDate} rec={raiseRec} onDone={() => { loadRegs(); loadMonth(); setRaiseDate(null) }} onCancel={() => setRaiseDate(null)} />}
 
       {/* (F) raise regularisation + list */}
-      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: (manualRaise && !raiseDate) ? 0 : undefined }}>
+      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: ((manualRaise || bulkRaise) && !raiseDate) ? 0 : undefined }}>
         <div>
           <div style={{ fontSize:13, fontWeight:600 }}>Attendance Regularisation</div>
-          <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>Forgot to punch or wrong time? Raise a correction for any day → HR approval.</div>
+          <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>Forgot to punch or wrong time? Raise a correction → HR approval. Use a range when several days share the same reason.</div>
         </div>
-        {!manualRaise && !raiseDate && <button onClick={() => setManualRaise(true)} style={T.btnP}>+ Raise Regularisation</button>}
+        {!manualRaise && !bulkRaise && !raiseDate && (
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <button onClick={() => setManualRaise(true)} style={T.btnO}>+ Single day</button>
+            <button onClick={() => setBulkRaise(true)} style={T.btnP}>📅 Date range</button>
+          </div>
+        )}
       </div>
       {manualRaise && !raiseDate && <RegularisationForm emp={emp} date={todayStr} rec={null} editable onDone={() => { loadRegs(); loadMonth(); setManualRaise(false) }} onCancel={() => setManualRaise(false)} />}
+      {bulkRaise && !raiseDate && <BulkRegularisationForm emp={emp} onDone={() => { loadRegs(); loadMonth(); setBulkRaise(false) }} onCancel={() => setBulkRaise(false)} />}
       <RegularisationList requests={regs} />
     </div>
   )
