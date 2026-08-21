@@ -6,12 +6,15 @@ import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { loadRuns, loadCompanies, MONTHS, type PayrollRun } from '@/lib/payroll/core'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 export const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  greenBd: '#BBF7D0', red: '#DC2626', redBg: '#FEF2F2', amber: '#B45309', amberBg: '#FFFBEB',
-  purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  greenBd: '#BBF7D0', red: TK.critical, redBg: TK.criticalTint, amber: TK.warning, amberBg: TK.warningTint,
+  purpleBg: TK.violetTint, gray: TK.sunken,
 }
 export const font = '"DM Sans","Segoe UI",sans-serif'
 export const num = (v: any) => { const n = Number(v); return isNaN(n) ? null : n }
@@ -34,9 +37,9 @@ export function SearchSelect({ value, options, placeholder, onChange, disabled }
   return (
     <div style={{ position: 'relative' }}>
       <div onClick={() => { if (!disabled) { setOpen(o => !o); setQ('') } }}
-        style={{ ...ddInp, cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'center', color: sel ? C.navy : '#94A3B8', background: disabled ? '#F1F5F9' : '#fff' }}>
+        style={{ ...ddInp, cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'center', color: sel ? C.navy : TK.faint, background: disabled ? TK.sunken : '#fff' }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sel ? sel.label : placeholder}</span>
-        <span style={{ color: '#94A3B8', fontSize: 11 }}>▾</span>
+        <span style={{ color: TK.faint, fontSize: 11 }}></span>
       </div>
       {open && !disabled && (
         <>
@@ -44,7 +47,7 @@ export function SearchSelect({ value, options, placeholder, onChange, disabled }
           <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: '#fff', border: '1px solid #DDD6FE', borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid #EEF', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
             <div style={{ maxHeight: 210, overflowY: 'auto' }}>
-              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: '#94A3B8' }}>No matches</div>}
+              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
                   style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o.value === value ? '#EEF2FF' : '#fff', color: C.navy }}>{o.label}</div>
@@ -84,11 +87,11 @@ export function MultiSelect({ values, options, placeholder, onChange }: { values
     <div style={{ position: 'relative' }}>
       <div onClick={() => { setOpen(o => !o); setQ('') }}
         style={{ ...ddInp, cursor: 'pointer', minHeight: 36, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-        {values.length === 0 && <span style={{ color: '#94A3B8' }}>{placeholder}</span>}
+        {values.length === 0 && <span style={{ color: TK.faint }}>{placeholder}</span>}
         {values.map(v => (
           <span key={v} onClick={e => { e.stopPropagation(); toggle(v) }} style={{ fontSize: 11, background: C.purpleBg, color: C.purpleD, borderRadius: 99, padding: '2px 8px', fontWeight: 700 }}>{v} ✕</span>
         ))}
-        <span style={{ marginLeft: 'auto', color: '#94A3B8', fontSize: 11 }}>▾</span>
+        <span style={{ marginLeft: 'auto', color: TK.faint, fontSize: 11 }}></span>
       </div>
       {open && (
         <>
@@ -101,12 +104,12 @@ export function MultiSelect({ values, options, placeholder, onChange }: { values
               placeholder="Search or paste codes (comma / newline separated)…"
               style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid #EEF', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
             <div style={{ maxHeight: 210, overflowY: 'auto' }}>
-              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: '#94A3B8' }}>Press Enter to add “{q.trim()}”</div>}
+              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>Press Enter to add “{q.trim()}”</div>}
               {filtered.map(o => (
                 <div key={o.value} onClick={() => toggle(o.value)}
                   style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 8, background: values.includes(o.value) ? '#EEF2FF' : '#fff', color: C.navy }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.label}</span>
-                  {values.includes(o.value) && <span style={{ color: C.green }}>✓</span>}
+                  {values.includes(o.value) && <span style={{ color: C.green }}></span>}
                 </div>
               ))}
             </div>
@@ -283,12 +286,12 @@ export function DownloadCard({ companyId, fy, heading, note, filePrefix, sheetNa
   return (
     <div style={{ background: C.card, border: `1px solid ${C.greenBd}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(5,150,105,0.08)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ width: 26, height: 26, borderRadius: 8, background: C.greenBg, border: `1px solid ${C.greenBd}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>⬇</span>
+        <span style={{ width: 26, height: 26, borderRadius: 8, background: C.greenBg, border: `1px solid ${C.greenBd}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}></span>
         <span style={{ fontSize: 12.5, fontWeight: 800, color: C.navy }}>{heading}</span>
         <span style={{ fontSize: 10.5, color: C.muted }}>{note}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
-        <div><label style={lbl}>Company</label><SearchSelect value={dlCompany} options={[{ value: GROUP, label: '🏛️ Group Companies (all)' }, ...companies]} placeholder="Select company" onChange={setDlCompany} /></div>
+        <div><label style={lbl}>Company</label><SearchSelect value={dlCompany} options={[{ value: GROUP, label: 'Group Companies (all)' }, ...companies]} placeholder="Select company" onChange={setDlCompany} /></div>
         <div><label style={lbl}>Month</label><SearchSelect value={dlRunId} options={dlRunOptions} placeholder={dlRunOptions.length ? 'Select month' : 'No month created'} onChange={setDlRunId} /></div>
         <div><label style={lbl}>Location</label><SearchSelect value={dlLoc} options={[{ value: '', label: 'All locations' }, ...locOpts]} placeholder="All locations" onChange={setDlLoc} /></div>
         <div><label style={lbl}>Department</label><SearchSelect value={dlDept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDlDept} /></div>
@@ -331,7 +334,7 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
       <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>
         {checking ? `Checking ${kind} sheet…` : blocked ? 'Validation failed' : `Ready to process · ${total} rows`}
       </div>
-      <div style={{ height: 10, borderRadius: 99, background: '#EDE9FE', overflow: 'hidden', marginBottom: 8 }}>
+      <div style={{ height: 10, borderRadius: 99, background: TK.violetTint, overflow: 'hidden', marginBottom: 8 }}>
         <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: blocked && !checking ? 'linear-gradient(90deg,#F87171,#DC2626)' : `linear-gradient(90deg,#10B981,${C.green})`, transition: 'width .15s linear' }} />
       </div>
       <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: C.muted, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>

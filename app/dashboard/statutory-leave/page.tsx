@@ -9,26 +9,29 @@ import {
   loadStatutory, loadFYs, upsertStatutory, deleteStatutory, copyToFy,
   type StatutoryLeave, type ActType,
 } from '@/lib/supabase-statutory-leave'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  page:  { background:'#F0F4F8', minHeight:'100vh', color:'#0F172A', fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
-  card:  { background:'#FFFFFF', borderRadius:10, border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
-  lbl:   { fontSize:10, fontWeight:600, color:'#64748B', textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:3 } as React.CSSProperties,
-  input: { padding:'7px 9px', background:'#F8FAFC', border:'1px solid #CBD5E1', borderRadius:8, color:'#0F172A', fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const, width:'100%' } as React.CSSProperties,
-  pri:   { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:'#7C3AED', color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:   { padding:'7px 12px', borderRadius:8, border:'1px solid #CBD5E1', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#475569', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  danger:{ padding:'5px 10px', borderRadius:8, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#DC2626' } as React.CSSProperties,
-  sec:   { fontSize:11, fontWeight:600, color:'#475569', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
+  page:  { background:'#F0F4F8', minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
+  lbl:   { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:3 } as React.CSSProperties,
+  input: { padding:'7px 9px', background:TK.sunken, border:'1px solid #CBD5E1', borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const, width:'100%' } as React.CSSProperties,
+  pri:   { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
+  out:   { padding:'7px 12px', borderRadius:8, border:'1px solid #CBD5E1', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.inkSoft, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  danger:{ padding:'5px 10px', borderRadius:8, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.critical } as React.CSSProperties,
+  sec:   { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
 }
 const numShow = (v: number | null) => v === null || v === undefined ? '—' : String(v)
 const fmtDate = (s?: string | null) => s ? new Date(s + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : null
 
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
-  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'✓':'✗'} {msg}</div>
+  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'':''} {msg}</div>
 }
 function ActBadge({ a }: { a: ActType }) {
-  const [bg, c, l] = a === 'FACTORY' ? ['#FEF3C7', '#92400E', 'Factories Act'] : ['#E0E7FF', '#3730A3', 'Shops & Estab']
+  const [bg, c, l] = a === 'FACTORY' ? [TK.warningTint, TK.warning, 'Factories Act'] : ['#E0E7FF', '#3730A3', 'Shops & Estab']
   return <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99, background:bg, color:c }}>{l}</span>
 }
 
@@ -80,7 +83,7 @@ function CopyModal({ fys, onClose, onCopy }: { fys: string[]; onClose: () => voi
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div style={{ ...C.card, maxWidth:420, width:'100%', marginBottom:0 }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:15, fontWeight:600, marginBottom:4 }}>Copy to new FY</div>
-        <div style={{ fontSize:12, color:'#64748B', marginBottom:14 }}>Every row is copied into the new FY (re-verification required). Existing rows are skipped.</div>
+        <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Every row is copied into the new FY (re-verification required). Existing rows are skipped.</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
           <div><label style={C.lbl}>From FY</label><select style={C.input} value={from} onChange={e => setFrom(e.target.value)}>{fys.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
           <div><label style={C.lbl}>To FY</label><input style={C.input} value={to} onChange={e => setTo(e.target.value)} placeholder="2027-28" /></div>
@@ -180,17 +183,17 @@ export default function StatutoryLeavePage() {
   }
 
   const Th = ({ children, n }: { children: React.ReactNode; n?: boolean }) => (
-    <th style={{ padding:'8px 9px', textAlign: n ? 'center' : 'left', fontSize:10, fontWeight:600, color:'#64748B', textTransform:'uppercase', letterSpacing:'.04em', borderBottom:'1px solid #E2E8F0', whiteSpace:'nowrap' }}>{children}</th>
+    <th style={{ padding:'8px 9px', textAlign: n ? 'center' : 'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', letterSpacing:'.04em', borderBottom:'1px solid #E2E8F0', whiteSpace:'nowrap' }}>{children}</th>
   )
 
   return (
     <div style={{ ...C.page, padding:'20px 24px' }}>
       <div style={{ maxWidth:1280, margin:'0 auto' }}>
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Statutory Leave Reference</div>
-        <div style={{ fontSize:12, color:'#64748B', marginBottom:12 }}>State-wise minimum EL/CL/SL (Shops &amp; Establishments + Factories Act 1948). Reference for setting Leave Policy quotas at or above the statutory floor.</div>
+        <div style={{ fontSize:12, color:TK.muted, marginBottom:12 }}>State-wise minimum EL/CL/SL (Shops &amp; Establishments + Factories Act 1948). Reference for setting Leave Policy quotas at or above the statutory floor.</div>
 
         {/* Legal disclaimer (mandatory per spec §7) */}
-        <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:12, color:'#92400E', lineHeight:1.5 }}>
+        <div style={{ background:TK.warningTint, border:'1px solid #FDE68A', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:12, color:TK.warning, lineHeight:1.5 }}>
           ⚠️ <b>Reference values — verify against the current state Act.</b> EZER is not a legal authority; Acts get amended. Confirm each row before relying on it (mark it verified once checked).
         </div>
 
@@ -207,29 +210,29 @@ export default function StatutoryLeavePage() {
           </div>
         </div>
 
-        {loading ? <div style={{ ...C.card, textAlign:'center', color:'#7C3AED', padding:40 }}>Loading…</div> : (
+        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.violet, padding:40 }}>Loading…</div> : (
           <div style={{ ...C.card, overflowX:'auto', padding:0 }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-              <thead><tr style={{ background:'#F8FAFC' }}>
+              <thead><tr style={{ background:TK.sunken }}>
                 <Th>State</Th><Th>Act</Th><Th>FY</Th><Th n>EL</Th><Th n>CL</Th><Th n>SL</Th><Th>EL accrual</Th><Th n>CF cap</Th><Th>Notes</Th><Th>Status</Th><Th>Actions</Th>
               </tr></thead>
               <tbody>
-                {filtered.length === 0 && <tr><td colSpan={11} style={{ padding:24, textAlign:'center', color:'#94A3B8' }}>No rows. {rows.length === 0 ? 'Has migration 029 been run? Or use + Add row.' : 'Clear the filter.'}</td></tr>}
+                {filtered.length === 0 && <tr><td colSpan={11} style={{ padding:24, textAlign:'center', color:TK.faint }}>No rows. {rows.length === 0 ? 'Has migration 029 been run? Or use + Add row.' : 'Clear the filter.'}</td></tr>}
                 {filtered.map((r, i) => (
-                  <tr key={r.id} style={{ borderBottom:'1px solid #F1F5F9', background:i%2?'#F8FAFC':'#fff', opacity: r.is_active ? 1 : 0.55 }}>
+                  <tr key={r.id} style={{ borderBottom:'1px solid #F1F5F9', background:i%2?TK.sunken:'#fff', opacity: r.is_active ? 1 : 0.55 }}>
                     <td style={{ padding:'8px 9px', fontWeight:600, whiteSpace:'nowrap' }}>{r.state}</td>
                     <td style={{ padding:'8px 9px' }}><ActBadge a={r.act_type} /></td>
-                    <td style={{ padding:'8px 9px', color:'#64748B' }}>{r.fy}</td>
+                    <td style={{ padding:'8px 9px', color:TK.muted }}>{r.fy}</td>
                     <td style={{ padding:'8px 9px', textAlign:'center', fontWeight:600 }}>{numShow(r.el_days)}</td>
                     <td style={{ padding:'8px 9px', textAlign:'center' }}>{numShow(r.cl_days)}</td>
                     <td style={{ padding:'8px 9px', textAlign:'center' }}>{numShow(r.sl_days)}</td>
-                    <td style={{ padding:'8px 9px', color:'#64748B', maxWidth:160 }}>{r.el_accrual_basis || '—'}</td>
-                    <td style={{ padding:'8px 9px', textAlign:'center', color:'#64748B' }}>{numShow(r.el_carry_forward_max)}</td>
-                    <td style={{ padding:'8px 9px', color:'#94A3B8', maxWidth:180, fontSize:11 }}>{r.notes || '—'}</td>
+                    <td style={{ padding:'8px 9px', color:TK.muted, maxWidth:160 }}>{r.el_accrual_basis || '—'}</td>
+                    <td style={{ padding:'8px 9px', textAlign:'center', color:TK.muted }}>{numShow(r.el_carry_forward_max)}</td>
+                    <td style={{ padding:'8px 9px', color:TK.faint, maxWidth:180, fontSize:11 }}>{r.notes || '—'}</td>
                     <td style={{ padding:'8px 9px', whiteSpace:'nowrap' }}>
                       {r.verified_on
-                        ? <span style={{ fontSize:10, fontWeight:600, color:'#059669' }} title={`by ${r.verified_by} on ${fmtDate(r.verified_on)}`}>✓ verified</span>
-                        : <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99, background:'#FEF3C7', color:'#92400E' }}>VERIFY</span>}
+                        ? <span style={{ fontSize:10, fontWeight:600, color:TK.positive }} title={`by ${r.verified_by} on ${fmtDate(r.verified_on)}`}>✓ verified</span>
+                        : <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99, background:TK.warningTint, color:TK.warning }}>VERIFY</span>}
                     </td>
                     <td style={{ padding:'8px 9px', whiteSpace:'nowrap' }}>
                       <div style={{ display:'flex', gap:6 }}>

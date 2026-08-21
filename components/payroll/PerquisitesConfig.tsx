@@ -15,25 +15,28 @@ import {
 } from '@/lib/perquisites/actions'
 import { VALUATION_METHOD_LABELS } from '@/lib/perquisites/types'
 import type { PerquisiteConfigRow, PerquisiteSlab, ValuationMethod, PerquisiteUnit } from '@/lib/perquisites/types'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280',
-  green: '#059669', greenBg: '#ECFDF5', greenBd: '#BBF7D0',
-  amber: '#D97706', amberBg: '#FFFBEB',
-  purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: '#BBF7D0',
+  amber: TK.warning, amberBg: TK.warningTint,
+  purpleBg: TK.violetTint, gray: TK.sunken,
 }
 
 const METHOD_COLOR: Record<ValuationMethod, string> = {
   FLAT_AMOUNT: C.purple, PERCENT_OF_SALARY: '#0F6E56', PERCENT_OF_COST: '#0F6E56',
-  SLAB_BASED: C.amber, FMV_BASED: '#1D4ED8', MANUAL: C.muted,
+  SLAB_BASED: C.amber, FMV_BASED: TK.info, MANUAL: C.muted,
 }
 
 const CATEGORY_ICON: Record<string, string> = {
-  Accommodation: '🏠', Conveyance: '🚗', Financial: '💰', Medical: '🩺', Staff: '🧹',
-  Meals: '🍽️', Assets: '💻', Utilities: '💡', Education: '🎓', Retirement: '🏦', Other: '🎁',
+  Accommodation: '', Conveyance: '', Financial: '', Medical: '', Staff: '',
+  Meals: '', Assets: '', Utilities: '', Education: '', Retirement: '', Other: '',
 }
-const catIcon = (cat: string) => CATEGORY_ICON[cat] || '📋'
+const catIcon = (cat: string) => CATEGORY_ICON[cat] || ''
 
 const UNITS: PerquisiteUnit[] = ['PER_MONTH', 'PER_YEAR', 'PER_MEAL', 'PER_TRANSACTION', 'LUMP_SUM']
 
@@ -147,7 +150,7 @@ function SlabRow({ slab, onChange, onDelete }: { slab: Partial<PerquisiteSlab> &
       <input value={slab.slab_label ?? ''} onChange={e => onChange({ slab_label: e.target.value })} placeholder="Slab label" style={cellStyle} />
       <input type="number" value={slab.rate_amount ?? ''} onChange={e => onChange({ rate_amount: e.target.value ? Number(e.target.value) : null })} placeholder="₹ amount" style={cellStyle} />
       <input type="number" value={slab.rate_percent ?? ''} onChange={e => onChange({ rate_percent: e.target.value ? Number(e.target.value) : null })} placeholder="% rate" style={cellStyle} />
-      <button onClick={onDelete} style={{ background: 'none', border: 'none', color: '#DC2626', cursor: 'pointer', fontSize: 16 }}>×</button>
+      <button onClick={onDelete} style={{ background: 'none', border: 'none', color: TK.critical, cursor: 'pointer', fontSize: 16 }}>×</button>
     </div>
   )
 }
@@ -255,7 +258,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
       {/* ── List ── */}
       <div style={{ width: 300, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>🎁</div>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Perquisites</div>
             <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
@@ -363,7 +366,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
                 onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
                 style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)', transition: 'filter .12s' }}>
-                {saving ? 'Saving…' : '💾 Save value'}
+                {saving ? 'Saving…' : 'Save value'}
               </button>
             </div>
           </>

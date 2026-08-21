@@ -7,15 +7,18 @@
 // — a leaderboard or personal history would need a new table and is an open question.
 //
 // Hub-and-spoke (brief §8): a grid of four cards, each opening its game in the same
-// panel behind a "← Back" button. Open to every employee, no role check (brief §9).
+// panel behind a "Back" button. Open to every employee, no role check (brief §9).
 //
 // All sub-components are defined OUTSIDE the parent (no focus-loss).
 import { useState, useEffect, useRef, useCallback } from 'react'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const F = {
-  navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#6D28D9', purpleSoft:'#F3EEFF',
-  muted:'#6B7280', border:'#ECEAFB', green:'#059669', greenBg:'#ECFDF5',
-  pink:'#DB2777', pinkBg:'#FDF2F8', blue:'#2563EB', blueBg:'#EFF6FF', red:'#DC2626',
+  navy:TK.ink, purple:TK.violet, purpleDark:TK.violetDeep, purpleSoft:'#F3EEFF',
+  muted:TK.muted, border:'#ECEAFB', green:TK.positive, greenBg:TK.positiveTint,
+  pink:'#DB2777', pinkBg:'#FDF2F8', blue:TK.info, blueBg:TK.infoTint, red:TK.critical,
 }
 const panel: React.CSSProperties = { background:'#fff', borderRadius:16, padding:24, boxShadow:'0 2px 8px rgba(124,58,237,0.08)' }
 const btnPrimary: React.CSSProperties = { fontFamily:'inherit', fontSize:13.5, fontWeight:700, color:'#fff', background:F.purple, border:'none', borderRadius:10, padding:'10px 24px', cursor:'pointer' }
@@ -23,14 +26,14 @@ const gameTitle: React.CSSProperties = { fontSize:18, fontWeight:700, marginBott
 const gameSub: React.CSSProperties = { fontSize:12, color:F.muted, marginBottom:18 }
 
 const GAMES = [
-  { k:'ttt',   icon:'⭕', name:'Tic-Tac-Toe',    desc:'Classic 2-player, take turns on this screen', badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
-  { k:'mem',   icon:'🧠', name:'Memory Match',   desc:'Flip cards, find all the pairs',              badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
-  { k:'quiz',  icon:'💡', name:'EZER Trivia',    desc:'How well do you know company policy?',        badge:'Quiz',   bg:F.blueBg,     fg:F.blue },
-  { k:'wheel', icon:'🎡', name:'Spin the Wheel', desc:'Daily spin — win a fun shoutout or a treat',  badge:'Social', bg:F.pinkBg,     fg:F.pink },
+  { k:'ttt',   icon:'', name:'Tic-Tac-Toe',    desc:'Classic 2-player, take turns on this screen', badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
+  { k:'mem',   icon:'', name:'Memory Match',   desc:'Flip cards, find all the pairs',              badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
+  { k:'quiz',  icon:'', name:'EZER Trivia',    desc:'How well do you know company policy?',        badge:'Quiz',   bg:F.blueBg,     fg:F.blue },
+  { k:'wheel', icon:'', name:'Spin the Wheel', desc:'Daily spin — win a fun shoutout or a treat',  badge:'Social', bg:F.pinkBg,     fg:F.pink },
 ]
 
 function BackBtn({ onClick }: { onClick: () => void }) {
-  return <button onClick={onClick} style={{ fontFamily:'inherit', fontSize:12, fontWeight:700, color:F.purpleDark, background:F.purpleSoft, border:'none', borderRadius:8, padding:'7px 14px', cursor:'pointer', marginBottom:16 }}>← Back</button>
+  return <button onClick={onClick} style={{ fontFamily:'inherit', fontSize:12, fontWeight:700, color:F.purpleDark, background:F.purpleSoft, border:'none', borderRadius:8, padding:'7px 14px', cursor:'pointer', marginBottom:16 }}>Back</button>
 }
 
 // ── Tic-Tac-Toe ─────────────────────────────────────────────────
@@ -76,7 +79,7 @@ function TicTacToe({ onBack }: { onBack: () => void }) {
 }
 
 // ── Memory Match ────────────────────────────────────────────────
-const MEM_EMOJIS = ['🎯','🚀','💼','📊','🎉','⭐','🏆','💡']
+const MEM_EMOJIS = ['','','','','','','','']
 // Fisher–Yates. sort(() => Math.random() - 0.5) — what the prototype used — is not a
 // uniform shuffle; some layouts come up far more often than others.
 function shuffleDeck(): string[] {
@@ -115,8 +118,8 @@ function MemoryMatch({ onBack }: { onBack: () => void }) {
   return (
     <div style={panel}>
       <BackBtn onClick={onBack} />
-      <div style={gameTitle}>🧠 Memory Match</div>
-      <div style={gameSub}>{pairs === MEM_EMOJIS.length ? '🎉 You found them all!' : `Find all 8 pairs — ${pairs} found`}</div>
+      <div style={gameTitle}>Memory Match</div>
+      <div style={gameSub}>{pairs === MEM_EMOJIS.length ? 'You found them all!' : `Find all 8 pairs — ${pairs} found`}</div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,70px)', gap:8, margin:'0 auto 16px', justifyContent:'center' }}>
         {cards.map((emoji, i) => {
           const isUp = flipped.includes(i), isDone = matched.includes(i)
@@ -161,11 +164,11 @@ function Trivia({ onBack }: { onBack: () => void }) {
   return (
     <div style={panel}>
       <BackBtn onClick={onBack} />
-      <div style={gameTitle}>💡 EZER Trivia</div>
+      <div style={gameTitle}>EZER Trivia</div>
       <div style={{ textAlign:'right', fontWeight:700, color:F.purple, fontSize:13, marginBottom:14 }}>Score: {score} / {QUIZ.length}</div>
       {done ? (
         <>
-          <div style={{ textAlign:'center', fontSize:16, fontWeight:700, color:F.purpleDark, margin:'10px 0 16px' }}>🎉 Quiz done! You scored {score}/{QUIZ.length}</div>
+          <div style={{ textAlign:'center', fontSize:16, fontWeight:700, color:F.purpleDark, margin:'10px 0 16px' }}>Quiz done! You scored {score}/{QUIZ.length}</div>
           <div style={{ textAlign:'center' }}><button onClick={restart} style={btnPrimary}>Play Again</button></div>
         </>
       ) : (
@@ -176,7 +179,7 @@ function Trivia({ onBack }: { onBack: () => void }) {
             const isCorrect = reveal && i === item!.correct
             const isWrong = reveal && i === picked && i !== item!.correct
             return (
-              <button key={i} onClick={() => answer(i)} style={{ display:'block', width:'100%', textAlign:'left', borderRadius:10, padding:'10px 14px', marginBottom:8, cursor: reveal ? 'default' : 'pointer', fontFamily:'inherit', fontSize:13, color:F.navy, background: isCorrect ? F.greenBg : isWrong ? '#FEF2F2' : F.purpleSoft, border:`2px solid ${isCorrect ? F.green : isWrong ? F.red : 'transparent'}` }}>{o}</button>
+              <button key={i} onClick={() => answer(i)} style={{ display:'block', width:'100%', textAlign:'left', borderRadius:10, padding:'10px 14px', marginBottom:8, cursor: reveal ? 'default' : 'pointer', fontFamily:'inherit', fontSize:13, color:F.navy, background: isCorrect ? F.greenBg : isWrong ? TK.criticalTint : F.purpleSoft, border:`2px solid ${isCorrect ? F.green : isWrong ? F.red : 'transparent'}` }}>{o}</button>
             )
           })}
         </>
@@ -213,7 +216,7 @@ function SpinWheel({ onBack }: { onBack: () => void }) {
   return (
     <div style={panel}>
       <BackBtn onClick={onBack} />
-      <div style={gameTitle}>🎡 Spin the Wheel</div>
+      <div style={gameTitle}>Spin the Wheel</div>
       <div style={gameSub}>Tap spin for today&apos;s surprise</div>
       <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
         <div style={{ width:0, height:0, borderLeft:'14px solid transparent', borderRight:'14px solid transparent', borderTop:`22px solid ${F.navy}`, marginBottom:-6, zIndex:2 }} />

@@ -1,8 +1,11 @@
 'use client'
 // app/dashboard/db-export/page.tsx — one-click full database export to Excel.
 import { useState } from 'react'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
-const C = { bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', muted: '#6B7280', border: '#E9E7F5', green: '#059669', red: '#DC2626' }
+const C = { bg: TK.canvas, navy: TK.ink, purple: TK.violet, muted: TK.muted, border: TK.line, green: TK.positive, red: TK.critical }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 export default function DbExportPage() {
@@ -32,7 +35,7 @@ export default function DbExportPage() {
   return (
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: font, color: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 18, padding: '38px 40px', maxWidth: 520, width: '100%', textAlign: 'center', boxShadow: '0 10px 40px rgba(30,27,75,0.10)' }}>
-        <div style={{ width: 66, height: 66, borderRadius: 18, background: 'linear-gradient(135deg,#1E1B4B,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 18px' }}>🗄️</div>
+        <div style={{ width: 66, height: 66, borderRadius: 18, background: 'linear-gradient(135deg,#1E1B4B,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 18px' }}></div>
         <div style={{ fontSize: 22, fontWeight: 700 }}>Database Export</div>
         <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.6 }}>
           Download the <b>entire HRMS database</b> — every table, every column, all rows — into one Excel workbook (a sheet per table, with column headers). Nothing is left out.
@@ -40,15 +43,15 @@ export default function DbExportPage() {
 
         <button onClick={download} disabled={busy} style={{
           marginTop: 24, padding: '14px 28px', borderRadius: 12, border: 'none',
-          background: busy ? '#9CA3AF' : 'linear-gradient(120deg,#059669,#047857)', color: '#fff',
+          background: busy ? TK.faint : 'linear-gradient(120deg,#059669,#047857)', color: '#fff',
           fontWeight: 700, fontSize: 15, cursor: busy ? 'not-allowed' : 'pointer', width: '100%',
           boxShadow: busy ? 'none' : '0 6px 18px rgba(5,150,105,0.32)',
         }}>
-          {busy ? '⏳ Exporting the whole database…' : '⬇ Download entire database (Excel)'}
+          {busy ? 'Exporting the whole database…' : '⬇ Download entire database (Excel)'}
         </button>
 
         {busy && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 12 }}>This can take a while for large databases — please keep this tab open.</div>}
-        {done && <div style={{ fontSize: 12.5, color: C.green, marginTop: 14, fontWeight: 600 }}>✓ Export downloaded.</div>}
+        {done && <div style={{ fontSize: 12.5, color: C.green, marginTop: 14, fontWeight: 600 }}>Export downloaded.</div>}
         {err && <div style={{ fontSize: 12.5, color: C.red, marginTop: 14 }}>⚠ {err}</div>}
 
         <div style={{ fontSize: 11, color: C.muted, marginTop: 22, borderTop: `1px dashed ${C.border}`, paddingTop: 14, lineHeight: 1.6 }}>

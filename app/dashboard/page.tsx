@@ -164,10 +164,10 @@ export default function Dashboard() {
       }
       return map[a.action_type] || (a.action_type || 'Activity').replace(/_/g,' ').toLowerCase().replace(/^\w/, (c: string) => c.toUpperCase()) + (who?` — ${who}`:'')
     }
-    let activity = audit.map((a: any) => ({ icon:'📌', text: actText(a), time: timeAgo(a.created_at) }))
+    let activity = audit.map((a: any) => ({ icon:'', text: actText(a), time: timeAgo(a.created_at) }))
     if (!activity.length) {
       activity = [...cands].sort((a: any,b: any) => new Date(b.created_at).getTime()-new Date(a.created_at).getTime()).slice(0,6)
-        .map((c: any) => ({ icon:'👤', text:`Candidate added — ${c.full_name}${c.designation?` (${c.designation})`:''}`, time: timeAgo(c.created_at) }))
+        .map((c: any) => ({ icon:'', text:`Candidate added — ${c.full_name}${c.designation?` (${c.designation})`:''}`, time: timeAgo(c.created_at) }))
     }
 
     // (see sendWish below — the Wish button writes a real ESS notification)
@@ -203,7 +203,7 @@ export default function Dashboard() {
     const { error } = await supabase.from('ess_notifications').insert({
       employee_id: c.id,
       category: isBday ? 'BIRTHDAY' : 'ANNIVERSARY',
-      title: isBday ? '🎂 Happy Birthday!' : `🌟 Happy Work Anniversary — ${c.years} year${c.years > 1 ? 's' : ''}!`,
+      title: isBday ? 'Happy Birthday!' : `🌟 Happy Work Anniversary — ${c.years} year${c.years > 1 ? 's' : ''}!`,
       body: isBday
         ? `Wishing you a very happy birthday, ${c.name}! Have a wonderful year ahead. — Team HR`
         : `Congratulations on completing ${c.years} year${c.years > 1 ? 's' : ''} with us, ${c.name}. Thank you for everything you do! — Team HR`,
@@ -423,7 +423,7 @@ export default function Dashboard() {
               display:'flex', alignItems:'center', gap:S.sm, padding:'7px 0',
               borderBottom:`1px solid ${C.line}`,
             }}>
-              <span style={{ fontSize:17, lineHeight:1 }}>{c.type === 'birthday' ? '🎂' : '🌟'}</span>
+              <span style={{ fontSize:17, lineHeight:1 }}>{c.type === 'birthday' ? '' : ''}</span>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:F.small, fontWeight:W.semi, color:C.ink }}>{c.name}</div>
                 <div style={{ fontSize:F.micro, color:C.muted }}>
@@ -452,7 +452,7 @@ export default function Dashboard() {
               display:'flex', alignItems:'center', gap:S.sm, padding:'6px 0',
               borderBottom: i < d.week.length - 1 ? `1px solid ${C.line}` : 'none',
             }}>
-              <span style={{ fontSize:14, lineHeight:1, opacity:.85 }}>{c.type === 'birthday' ? '🎂' : '🌟'}</span>
+              <span style={{ fontSize:14, lineHeight:1, opacity:.85 }}>{c.type === 'birthday' ? '' : ''}</span>
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontSize:F.small, color:C.inkSoft }}>{c.name}</div>
                 <div style={{ fontSize:F.micro, color:C.faint }}>

@@ -8,11 +8,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getCurrentEsicConfig } from '@/lib/esic/actions'
 import type { EsicConfig as EsicCfg } from '@/lib/esic/types'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  greenBd: '#BBF7D0', amber: '#B45309', amberBg: '#FFFBEB', purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`
@@ -77,13 +80,13 @@ export default function EsicConfig() {
     }
   })()
 
-  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: '#FAFAF8', color: C.navy }
+  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 680 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>🏥</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>ESIC</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Employees&apos; State Insurance — wage ceiling, contributions &amp; mid-period coverage continuity</div>
@@ -95,15 +98,15 @@ export default function EsicConfig() {
       {cfg && (
         <>
           <GroupCard title="Contribution rates">
-            <InfoTile icon="🧑‍💼" label="Employee share" value={`${cfg.employee_contribution_percent}%`} accent="#7C3AED" />
-            <InfoTile icon="🏢" label="Employer share" value={`${cfg.employer_contribution_percent}%`} accent="#7C3AED" />
-            <InfoTile icon="♿" label="Employer (PWD)" value={`${cfg.employer_contribution_percent_pwd}%`} hint="reduced rate" accent="#059669" />
-            <InfoTile icon="🪙" label="Low-wage exemption" value={`≤ ₹${cfg.daily_wage_exemption_threshold}/day`} hint="employee share waived" accent="#D97706" />
+            <InfoTile icon="🧑‍💼" label="Employee share" value={`${cfg.employee_contribution_percent}%`} accent={TK.violet} />
+            <InfoTile icon="🏢" label="Employer share" value={`${cfg.employer_contribution_percent}%`} accent={TK.violet} />
+            <InfoTile icon="♿" label="Employer (PWD)" value={`${cfg.employer_contribution_percent_pwd}%`} hint="reduced rate" accent={TK.positive} />
+            <InfoTile icon="🪙" label="Low-wage exemption" value={`≤ ₹${cfg.daily_wage_exemption_threshold}/day`} hint="employee share waived" accent={TK.warning} />
           </GroupCard>
 
           <GroupCard title="Coverage & deadlines">
-            <InfoTile icon="📊" label="Wage ceiling" value={inr(cfg.wage_ceiling)} hint="standard" accent="#7C3AED" />
-            <InfoTile icon="♿" label="PWD ceiling" value={inr(cfg.wage_ceiling_pwd)} hint="persons with disability" accent="#059669" />
+            <InfoTile icon="📊" label="Wage ceiling" value={inr(cfg.wage_ceiling)} hint="standard" accent={TK.violet} />
+            <InfoTile icon="♿" label="PWD ceiling" value={inr(cfg.wage_ceiling_pwd)} hint="persons with disability" accent={TK.positive} />
             <InfoTile icon="📝" label="New-employee registration" value={`${cfg.new_employee_registration_days} days`} hint="from joining" accent="#0891B2" />
             <InfoTile icon="🗓️" label="Monthly deposit due" value={`${cfg.monthly_deposit_due_day}th`} hint="of next month" accent="#0891B2" />
           </GroupCard>
@@ -134,8 +137,8 @@ export default function EsicConfig() {
             {est && (
               <div style={{ background: est.covered ? C.greenBg : C.gray, border: `1px solid ${est.covered ? C.greenBd : C.border}`, borderRadius: 11, padding: '13px 15px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: est.covered ? 12 : 0 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 800, color: '#fff', background: est.covered ? C.green : '#9CA3AF', borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase', letterSpacing: '.03em' }}>
-                    {est.covered ? '✓ Covered' : '✗ Not covered'}
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: '#fff', background: est.covered ? C.green : TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase', letterSpacing: '.03em' }}>
+                    {est.covered ? 'Covered' : 'Not covered'}
                   </span>
                   {!est.covered && <span style={{ fontSize: 11.5, color: C.muted }}>wage above {inr(est.ceiling)} ceiling</span>}
                   {est.lowWaged && est.covered && <span style={{ fontSize: 9.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 99, padding: '2px 8px' }}>low-wage: employee share waived</span>}

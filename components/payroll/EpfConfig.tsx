@@ -7,15 +7,18 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getCurrentEpfConfig, calculateEpfContribution, calculateEpfCharges } from '@/lib/epf/actions'
 import type { EpfConfig as EpfCfg, EpfCalculationResult, EpfChargesResult } from '@/lib/epf/types'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  greenBd: '#BBF7D0', amber: '#B45309', amberBg: '#FFFBEB', purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-const inputStyle: React.CSSProperties = { padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: '#FAFAF8', color: C.navy, width: '100%' }
+const inputStyle: React.CSSProperties = { padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy, width: '100%' }
 const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }
 
 function InfoTile({ icon, label, value, hint, accent }: { icon: string; label: string; value: string; hint?: string; accent?: string }) {
@@ -50,7 +53,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
         background: checked ? C.purpleBg : '#fff', color: checked ? C.purpleD : C.muted,
         transition: 'all .12s',
       }}>
-      <span style={{ fontSize: 11 }}>{checked ? '✓' : '＋'}</span>{label}
+      <span style={{ fontSize: 11 }}>{checked ? '' : '＋'}</span>{label}
     </button>
   )
 }
@@ -66,7 +69,7 @@ function SplitBar({ eps, epf }: { eps: number; epf: number }) {
         <div style={{ flex: 1, background: 'linear-gradient(90deg,#7C3AED,#5B21B6)' }} title={`EPF ₹${epf}`} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, fontWeight: 700, color: C.muted, marginTop: 4 }}>
-        <span style={{ color: '#0891B2' }}>■ EPS (pension) {epsPct}%</span>
+        <span style={{ color: '#0891B2' }}>EPS (pension) {epsPct}%</span>
         <span style={{ color: C.purpleD }}>EPF-proper {100 - epsPct}% ■</span>
       </div>
     </div>
@@ -118,7 +121,7 @@ export default function EpfConfig() {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 720 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>🏦</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>EPF</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Provident Fund — EPF Wages = Gross − HRA, capped at each employee&apos;s PF limit</div>
@@ -130,15 +133,15 @@ export default function EpfConfig() {
       {cfg && (
         <>
           <GroupCard title="Contribution split">
-            <InfoTile icon="🧑‍💼" label="Employee" value={`${cfg.employee_contribution_percent}%`} accent="#7C3AED" />
-            <InfoTile icon="🏢" label="Employer" value={`${cfg.employer_contribution_percent}%`} accent="#7C3AED" />
+            <InfoTile icon="🧑‍💼" label="Employee" value={`${cfg.employee_contribution_percent}%`} accent={TK.violet} />
+            <InfoTile icon="🏢" label="Employer" value={`${cfg.employer_contribution_percent}%`} accent={TK.violet} />
             <InfoTile icon="👵" label="EPS (pension)" value={`${cfg.eps_percent}%`} hint={`capped at ${inr(cfg.eps_max_amount)}`} accent="#0891B2" />
-            <InfoTile icon="📉" label="Reduced rate" value={`${cfg.reduced_rate_percent}%`} hint={`under ${cfg.reduced_rate_headcount_threshold} employees`} accent="#D97706" />
+            <InfoTile icon="📉" label="Reduced rate" value={`${cfg.reduced_rate_percent}%`} hint={`under ${cfg.reduced_rate_headcount_threshold} employees`} accent={TK.warning} />
           </GroupCard>
 
           <GroupCard title="Employer charges (on ₹15,000 base, pro-rated)">
-            <InfoTile icon="🛡️" label="EDLI" value={`${cfg.edli_percent}%`} hint={`max ${inr(cfg.edli_max_amount)}/mo`} accent="#059669" />
-            <InfoTile icon="🧾" label="Admin charges" value={`${cfg.admin_charges_percent}%`} hint={`min ${inr(cfg.admin_charges_minimum)} (${inr(cfg.admin_charges_minimum_no_members)} if nil)`} accent="#059669" />
+            <InfoTile icon="🛡️" label="EDLI" value={`${cfg.edli_percent}%`} hint={`max ${inr(cfg.edli_max_amount)}/mo`} accent={TK.positive} />
+            <InfoTile icon="🧾" label="Admin charges" value={`${cfg.admin_charges_percent}%`} hint={`min ${inr(cfg.admin_charges_minimum)} (${inr(cfg.admin_charges_minimum_no_members)} if nil)`} accent={TK.positive} />
             <InfoTile icon="🌏" label="IW-1 return" value={`${cfg.iw_return_due_days} days`} hint="after month-end" accent="#0891B2" />
           </GroupCard>
 
@@ -167,7 +170,7 @@ export default function EpfConfig() {
 
             {result && (result.is_excluded_employee ? (
               <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 11, padding: '13px 15px' }}>
-                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#fff', background: '#9CA3AF', borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase' }}>Excluded employee</span>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#fff', background: TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase' }}>Excluded employee</span>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>COC-holding International Worker — zero EPF applies in India.</div>
               </div>
             ) : (

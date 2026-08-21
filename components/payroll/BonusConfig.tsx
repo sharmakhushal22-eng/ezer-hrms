@@ -8,14 +8,17 @@ import { useState, useEffect, useCallback } from 'react'
 import { getBonusConfig, saveBonusConfig } from '@/lib/bonus/actions'
 import { STATUTORY_MIN_PERCENT, STATUTORY_MAX_PERCENT } from '@/lib/bonus/types'
 import type { PaymentFrequency, PercentPreset } from '@/lib/bonus/types'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', gray: '#F8F7FF',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE8C8', purpleBg: '#EEEDFE',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, gray: TK.sunken,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE8C8', purpleBg: TK.violetTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: '#FAFAF8', color: C.navy }
+const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 
 function ToggleButton({ label, sub, active, onClick }: { label: string; sub?: string; active: boolean; onClick: () => void }) {
   return (
@@ -99,7 +102,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 580 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>🎯</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Statutory Bonus</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -165,7 +168,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
         onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
         onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
         style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)', transition: 'filter .12s' }}>
-        {saving ? 'Saving…' : '💾 Save bonus configuration'}
+        {saving ? 'Saving…' : 'Save bonus configuration'}
       </button>
 
       {toast && (

@@ -5,6 +5,9 @@
 // parent to avoid the re-mount/focus-loss bug. Loads/saves to `interview_rounds`.
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 // ── Types ──────────────────────────────────────────────────────────
 export type RoundType = string
@@ -37,13 +40,13 @@ export interface Candidate {
 
 // ── Styles (C constant — matches project palette) ──────────────────
 const C = {
-  page:  { background: '#F5F3FF', minHeight: '100vh', color: '#1E1B4B', fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: '13px' } as React.CSSProperties,
-  card:  { background: '#FFFFFF', borderRadius: 10, border: '1px solid rgba(124,58,237,0.12)', padding: '14px 16px', marginBottom: 10, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  btnP:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: '#7C3AED', color: '#fff' } as React.CSSProperties,
-  btnG:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: '#059669', color: '#fff' } as React.CSSProperties,
-  btnO:  { padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(124,58,237,0.2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: '#7C3AED' } as React.CSSProperties,
-  inp:   { width: '100%', padding: '9px 11px', background: '#FAFAF8', border: '1px solid rgba(124,58,237,0.12)', borderRadius: 7, color: '#1E1B4B', fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const },
-  lbl:   { fontSize: 11, fontWeight: 600, color: '#6D28D9', textTransform: 'uppercase' as const, letterSpacing: '.05em', display: 'block', marginBottom: 4 },
+  page:  { background: TK.canvas, minHeight: '100vh', color: TK.ink, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: '13px' } as React.CSSProperties,
+  card:  { background: TK.surface, borderRadius: 10, border: '1px solid rgba(124,58,237,0.12)', padding: '14px 16px', marginBottom: 10, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
+  btnP:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.violet, color: '#fff' } as React.CSSProperties,
+  btnG:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.positive, color: '#fff' } as React.CSSProperties,
+  btnO:  { padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(124,58,237,0.2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: TK.violet } as React.CSSProperties,
+  inp:   { width: '100%', padding: '9px 11px', background: TK.sunken, border: '1px solid rgba(124,58,237,0.12)', borderRadius: 7, color: TK.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const },
+  lbl:   { fontSize: 11, fontWeight: 600, color: TK.violetDeep, textTransform: 'uppercase' as const, letterSpacing: '.05em', display: 'block', marginBottom: 4 },
   g2:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as React.CSSProperties,
   g3:    { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } as React.CSSProperties,
   pill:  (bg: string, color: string): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: bg, color }),
@@ -61,28 +64,28 @@ const ROUND_CONFIGS: Record<string, RoundConfig> = {
     { id: 'avail',      label: 'Availability',      tags: ['Immediate', '30-day notice', '60+ days'] },
     { id: 'impression', label: 'First impression',  tags: ['Very positive', 'Average', 'Some concerns'] },
   ]},
-  'L1 Interview': { badge: 'L1', color: '#059669', lightBg: '#ECFDF5', params: [
+  'L1 Interview': { badge: 'L1', color: TK.positive, lightBg: TK.positiveTint, params: [
     { id: 'tech',       label: 'Technical depth',    tags: ['Strong fundamentals', 'Some gaps', 'Excellent'] },
     { id: 'problem',    label: 'Problem solving',    tags: ['Structured approach', 'Needs guidance', 'Creative'] },
     { id: 'domain',     label: 'Domain knowledge',   tags: ['Deep', 'Surface-level', 'Solid'] },
     { id: 'comm',       label: 'Communication',      tags: ['Clear', 'Hesitant', 'Confident'] },
     { id: 'leadership', label: 'Leadership signals', tags: ['Visible', 'Emerging', 'Not evident'] },
   ]},
-  'L2 Interview': { badge: 'L2', color: '#D97706', lightBg: '#FFFBEB', params: [
+  'L2 Interview': { badge: 'L2', color: TK.warning, lightBg: TK.warningTint, params: [
     { id: 'design',    label: 'System design',            tags: ['Scalable thinking', 'Basic', 'Strong'] },
     { id: 'ownership', label: 'Ownership & leadership',   tags: ['High ownership', 'Needs nudging', 'Proactive'] },
     { id: 'crossfn',   label: 'Cross-functional thinking',tags: ['Collaborative', 'Siloed', 'Strategic'] },
     { id: 'tech',      label: 'Technical depth',          tags: ['Expert', 'Adequate', 'Gaps'] },
     { id: 'culture',   label: 'Cultural fit',             tags: ['Great fit', 'Neutral', 'Risk'] },
   ]},
-  'HOD Round': { badge: 'HOD', color: '#DC2626', lightBg: '#FEF2F2', params: [
+  'HOD Round': { badge: 'HOD', color: TK.critical, lightBg: TK.criticalTint, params: [
     { id: 'strategic', label: 'Strategic alignment',  tags: ['Aligned', 'Partial', 'Misaligned'] },
     { id: 'chemistry', label: 'Team chemistry',       tags: ['Strong', 'Neutral', 'Concern'] },
     { id: 'potential', label: 'Leadership potential',  tags: ['High', 'Moderate', 'Limited'] },
     { id: 'vision',    label: 'Vision alignment',     tags: ['Shared vision', 'Unclear', 'Divergent'] },
     { id: 'orgfit',    label: 'Org fit',              tags: ['Excellent', 'Average', 'Risk'] },
   ]},
-  'Final HR Round': { badge: 'FHR', color: '#7C3AED', lightBg: '#EDE9FE', params: [
+  'Final HR Round': { badge: 'FHR', color: TK.violet, lightBg: TK.violetTint, params: [
     { id: 'comp',      label: 'Compensation alignment', tags: ['Agreed', 'Negotiating', 'Gap'] },
     { id: 'joining',   label: 'Joining & timeline',     tags: ['Immediate', 'Notice period', 'Delayed'] },
     { id: 'bgv',       label: 'BGV readiness',          tags: ['Docs ready', 'Pending', 'Concern'] },
@@ -102,7 +105,7 @@ const RATING_LABELS = ['', 'Poor', 'Below average', 'Average', 'Good', 'Excellen
 const MODES = ['In-person', 'Video call', 'Telephonic']
 
 const cfgFor = (t: string): RoundConfig =>
-  ROUND_CONFIGS[t] || { badge: t.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'RND', color: '#7C3AED', lightBg: '#EDE9FE', params: GENERIC_PARAMS }
+  ROUND_CONFIGS[t] || { badge: t.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'RND', color: TK.violet, lightBg: TK.violetTint, params: GENERIC_PARAMS }
 const scoreOf = (params: ParamFeedback[]): number => {
   const rated = params.filter(p => p.rating > 0)
   if (!rated.length) return 0
@@ -133,22 +136,22 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
       <div style={{ display: 'flex', gap: 3 }}>
         {[1, 2, 3, 4, 5].map(n => (
           <span key={n} onClick={() => onChange(n)} onMouseEnter={() => setHover(n)} onMouseLeave={() => setHover(0)}
-            style={{ cursor: 'pointer', fontSize: 22, lineHeight: 1, color: n <= shown ? '#F59E0B' : '#E5E7EB', transition: 'transform .1s', transform: hover === n ? 'scale(1.15)' : 'none' }}>
+            style={{ cursor: 'pointer', fontSize: 22, lineHeight: 1, color: n <= shown ? TK.warning : TK.line, transition: 'transform .1s', transform: hover === n ? 'scale(1.15)' : 'none' }}>
             ★
           </span>
         ))}
       </div>
-      <span style={{ fontSize: 11, color: '#6B7280', minWidth: 80 }}>{shown ? RATING_LABELS[shown] : 'Not rated'}</span>
+      <span style={{ fontSize: 11, color: TK.muted, minWidth: 80 }}>{shown ? RATING_LABELS[shown] : 'Not rated'}</span>
     </div>
   )
 }
 
 function StatusPill({ status }: { status: RoundStatus }) {
   const map: Record<RoundStatus, [string, string, string]> = {
-    pending:   ['#F3F4F6', '#6B7280', '○ Pending'],
-    scheduled: ['#FFFBEB', '#B45309', '⏳ Scheduled'],
-    done:      ['#ECFDF5', '#059669', '✓ Done'],
-    rejected:  ['#FEF2F2', '#DC2626', '✗ Rejected'],
+    pending:   ['#F3F4F6', TK.muted, 'Pending'],
+    scheduled: [TK.warningTint, TK.warning, 'Scheduled'],
+    done:      [TK.positiveTint, TK.positive, 'Done'],
+    rejected:  [TK.criticalTint, TK.critical, 'Rejected'],
   }
   const [bg, color, label] = map[status]
   return <span style={C.pill(bg, color)}>{label}</span>
@@ -158,17 +161,17 @@ function RoundNode({ round, isLast }: { round: Round; isLast: boolean }) {
   const cfg = cfgFor(round.round_type)
   const done = round.status === 'done'
   const rejected = round.status === 'rejected'
-  const dot = rejected ? '#DC2626' : done ? cfg.color : round.status === 'scheduled' ? '#B45309' : '#D1D5DB'
+  const dot = rejected ? TK.critical : done ? cfg.color : round.status === 'scheduled' ? TK.warning : '#D1D5DB'
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
         <div style={{ width: 30, height: 30, borderRadius: '50%', background: done || rejected ? dot : '#fff', border: `2px solid ${dot}`, color: done || rejected ? '#fff' : dot, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>
           {cfg.badge}
         </div>
-        <div style={{ fontSize: 9, color: '#6B7280', whiteSpace: 'nowrap', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{round.round_type.replace(' Interview', '').replace(' Round', '')}</div>
+        <div style={{ fontSize: 9, color: TK.muted, whiteSpace: 'nowrap', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{round.round_type.replace(' Interview', '').replace(' Round', '')}</div>
         {done && <div style={{ fontSize: 9, fontWeight: 700, color: cfg.color }}>{round.overall_score ?? 0}</div>}
       </div>
-      {!isLast && <div style={{ width: 26, height: 2, background: '#EDE9FE', margin: '0 2px', marginBottom: 18 }} />}
+      {!isLast && <div style={{ width: 26, height: 2, background: TK.violetTint, margin: '0 2px', marginBottom: 18 }} />}
     </div>
   )
 }
@@ -190,7 +193,7 @@ function RoundCard({ round, onSchedule, onAssess, onView }: {
             <StatusPill status={round.status} />
             {round.status === 'done' && <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color }}>Score: {round.overall_score ?? 0}/100</span>}
           </div>
-          <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4 }}>
+          <div style={{ fontSize: 11, color: TK.muted, marginTop: 4 }}>
             {round.interviewer_name ? `Interviewer: ${round.interviewer_name}` : 'No interviewer assigned'}
             {round.scheduled_at ? ` · ${fmtDate(round.scheduled_at)}` : ''}
             {round.interview_mode ? ` · ${round.interview_mode}` : ''}
@@ -211,10 +214,10 @@ function PrevFeedbackBlock({ rounds }: { rounds: Round[] }) {
   const done = rounds.filter(r => r.status === 'done')
   if (!done.length) return null
   return (
-    <div style={{ ...C.card, background: '#FAFAF8' }}>
+    <div style={{ ...C.card, background: TK.sunken }}>
       <div onClick={() => setOpen(o => !o)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#6D28D9' }}>📋 Previous rounds feedback ({done.length}) — read-only</span>
-        <span style={{ fontSize: 12, color: '#6B7280' }}>{open ? '▲ Hide' : '▼ Show'}</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: TK.violetDeep }}>Previous rounds feedback ({done.length}) — read-only</span>
+        <span style={{ fontSize: 12, color: TK.muted }}>{open ? 'Hide' : 'Show'}</span>
       </div>
       {open && (
         <div style={{ marginTop: 12 }}>
@@ -226,14 +229,14 @@ function PrevFeedbackBlock({ rounds }: { rounds: Round[] }) {
                   <span style={C.pill(cfg.lightBg, cfg.color)}>{cfg.badge}</span>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>{r.round_type}</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: cfg.color }}>{r.overall_score ?? 0}/100</span>
-                  <span style={{ fontSize: 11, color: '#6B7280' }}>by {r.interviewer_name || '—'}</span>
+                  <span style={{ fontSize: 11, color: TK.muted }}>by {r.interviewer_name || '—'}</span>
                 </div>
                 {(r.params || []).map(p => (
-                  <div key={p.param_id} style={{ fontSize: 11, color: '#374151', marginBottom: 3 }}>
-                    <strong>{p.param_label}:</strong> {'★'.repeat(p.rating)}{'☆'.repeat(5 - p.rating)} {p.text ? `— ${p.text}` : ''}
+                  <div key={p.param_id} style={{ fontSize: 11, color: TK.inkSoft, marginBottom: 3 }}>
+                    <strong>{p.param_label}:</strong> {''.repeat(p.rating)}{''.repeat(5 - p.rating)} {p.text ? `— ${p.text}` : ''}
                   </div>
                 ))}
-                {r.notes_for_recruiter && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4, fontStyle: 'italic' }}>Note: {r.notes_for_recruiter}</div>}
+                {r.notes_for_recruiter && <div style={{ fontSize: 11, color: TK.muted, marginTop: 4, fontStyle: 'italic' }}>Note: {r.notes_for_recruiter}</div>}
               </div>
             )
           })}
@@ -320,7 +323,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
           {defs.map((d, i) => (
             <button key={d.id} onClick={() => setTab(i)} style={{
               padding: '6px 11px', borderRadius: 7, border: `1px solid ${i === tab ? cfg.color : 'rgba(124,58,237,0.15)'}`,
-              background: i === tab ? cfg.color : '#fff', color: i === tab ? '#fff' : '#6B7280',
+              background: i === tab ? cfg.color : '#fff', color: i === tab ? '#fff' : TK.muted,
               fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
             }}>
               {params[i].rating > 0 ? '★ ' : ''}{d.label}
@@ -335,7 +338,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0' }}>
             {def.tags.map(tg => (
               <button key={tg} onClick={() => setParam(tab, { text: clampWords((cur.text ? cur.text + ' ' : '') + tg, 100) })}
-                style={{ padding: '3px 9px', borderRadius: 99, border: '1px solid rgba(124,58,237,0.2)', background: '#FAFAF8', color: '#6D28D9', fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '3px 9px', borderRadius: 99, border: '1px solid rgba(124,58,237,0.2)', background: TK.sunken, color: TK.violetDeep, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
                 + {tg}
               </button>
             ))}
@@ -343,7 +346,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
           <textarea style={{ ...C.inp, minHeight: 80, resize: 'vertical' }} value={cur.text}
             onChange={e => setParam(tab, { text: clampWords(e.target.value, 100) })}
             placeholder={`Feedback on ${def.label.toLowerCase()} (max 100 words)`} />
-          <div style={{ fontSize: 10, color: words(cur.text) >= 100 ? '#DC2626' : '#9CA3AF', textAlign: 'right', marginTop: 2 }}>{words(cur.text)}/100 words</div>
+          <div style={{ fontSize: 10, color: words(cur.text) >= 100 ? TK.critical : TK.faint, textAlign: 'right', marginTop: 2 }}>{words(cur.text)}/100 words</div>
         </div>
       </div>
 
@@ -351,9 +354,9 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
       <div style={C.card}>
         <label style={C.lbl}>Recommendation</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-          <button onClick={() => setRec('yes')} style={{ ...C.btnO, ...(rec === 'yes' ? { background: '#059669', color: '#fff', borderColor: '#059669' } : {}) }}>✅ Proceed to next round</button>
-          <button onClick={() => setRec('hold')} style={{ ...C.btnO, ...(rec === 'hold' ? { background: '#B45309', color: '#fff', borderColor: '#B45309' } : {}) }}>⏸ On hold</button>
-          <button onClick={() => setRec('no')} style={{ ...C.btnO, ...(rec === 'no' ? { background: '#DC2626', color: '#fff', borderColor: '#DC2626' } : {}) }}>❌ Do not proceed</button>
+          <button onClick={() => setRec('yes')} style={{ ...C.btnO, ...(rec === 'yes' ? { background: TK.positive, color: '#fff', borderColor: TK.positive } : {}) }}>Proceed to next round</button>
+          <button onClick={() => setRec('hold')} style={{ ...C.btnO, ...(rec === 'hold' ? { background: TK.warning, color: '#fff', borderColor: TK.warning } : {}) }}>On hold</button>
+          <button onClick={() => setRec('no')} style={{ ...C.btnO, ...(rec === 'no' ? { background: TK.critical, color: '#fff', borderColor: TK.critical } : {}) }}>Do not proceed</button>
         </div>
         {rec === 'yes' && (
           <div style={C.g2}>
@@ -386,27 +389,27 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
 
 function DetailView({ round, onBack }: { round: Round; onBack: () => void }) {
   const cfg = cfgFor(round.round_type)
-  const recLabel = round.recommendation === 'yes' ? '✅ Proceed' : round.recommendation === 'hold' ? '⏸ On hold' : round.recommendation === 'no' ? '❌ Do not proceed' : '—'
+  const recLabel = round.recommendation === 'yes' ? 'Proceed' : round.recommendation === 'hold' ? 'On hold' : round.recommendation === 'no' ? 'Do not proceed' : '—'
   return (
     <div>
-      <button onClick={onBack} style={{ ...C.btnO, marginBottom: 12 }}>← Back to pipeline</button>
+      <button onClick={onBack} style={{ ...C.btnO, marginBottom: 12 }}>Back to pipeline</button>
       <div style={C.card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <span style={C.pill(cfg.lightBg, cfg.color)}>{cfg.badge}</span>
           <span style={{ fontSize: 15, fontWeight: 600 }}>{round.round_type}</span>
           <span style={{ fontSize: 13, fontWeight: 700, color: cfg.color }}>{round.overall_score ?? 0}/100</span>
         </div>
-        <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: TK.muted, marginBottom: 12 }}>
           {round.interviewer_name || '—'} · {fmtDate(round.scheduled_at)} · {round.interview_mode || '—'} · Recommendation: <strong>{recLabel}</strong>
         </div>
         {(round.params || []).map(p => (
           <div key={p.param_id} style={{ borderTop: '1px solid #EDE9FE', paddingTop: 8, marginTop: 8 }}>
-            <div style={{ fontSize: 12, fontWeight: 600 }}>{p.param_label} <span style={{ color: '#F59E0B' }}>{'★'.repeat(p.rating)}{'☆'.repeat(5 - p.rating)}</span></div>
-            {p.text && <div style={{ fontSize: 12, color: '#374151', marginTop: 2 }}>{p.text}</div>}
+            <div style={{ fontSize: 12, fontWeight: 600 }}>{p.param_label} <span style={{ color: TK.warning }}>{''.repeat(p.rating)}{''.repeat(5 - p.rating)}</span></div>
+            {p.text && <div style={{ fontSize: 12, color: TK.inkSoft, marginTop: 2 }}>{p.text}</div>}
           </div>
         ))}
-        {round.next_round_suggestion && <div style={{ fontSize: 12, color: '#6D28D9', marginTop: 12 }}>Suggested next: <strong>{round.next_round_suggestion}</strong>{round.suggested_interviewer ? ` (by ${round.suggested_interviewer})` : ''}</div>}
-        {round.notes_for_recruiter && <div style={{ fontSize: 12, color: '#6B7280', marginTop: 6, fontStyle: 'italic' }}>Note: {round.notes_for_recruiter}</div>}
+        {round.next_round_suggestion && <div style={{ fontSize: 12, color: TK.violetDeep, marginTop: 12 }}>Suggested next: <strong>{round.next_round_suggestion}</strong>{round.suggested_interviewer ? ` (by ${round.suggested_interviewer})` : ''}</div>}
+        {round.notes_for_recruiter && <div style={{ fontSize: 12, color: TK.muted, marginTop: 6, fontStyle: 'italic' }}>Note: {round.notes_for_recruiter}</div>}
       </div>
     </div>
   )
@@ -491,7 +494,7 @@ export default function InterviewPipeline({ candidate, initialRounds }: { candid
   // ── SCHEDULE ──
   if (view === 'schedule' && activeRound) {
     return <div style={{ ...C.page, padding: 20 }}><div style={{ maxWidth: 760, margin: '0 auto' }}>
-      <button onClick={() => { setActiveRound(null); setView('pipeline') }} style={{ ...C.btnO, marginBottom: 12 }}>← Back to pipeline</button>
+      <button onClick={() => { setActiveRound(null); setView('pipeline') }} style={{ ...C.btnO, marginBottom: 12 }}>Back to pipeline</button>
       <ScheduleForm round={activeRound} onCancel={() => { setActiveRound(null); setView('pipeline') }} onSave={saveSchedule} />
     </div></div>
   }
@@ -499,7 +502,7 @@ export default function InterviewPipeline({ candidate, initialRounds }: { candid
   if (view === 'feedback' && activeRound) {
     const prev = rounds.filter(r => r.round_number < activeRound.round_number)
     return <div style={{ ...C.page, padding: 20 }}><div style={{ maxWidth: 760, margin: '0 auto' }}>
-      <button onClick={() => { setActiveRound(null); setView('pipeline') }} style={{ ...C.btnO, marginBottom: 12 }}>← Back to pipeline</button>
+      <button onClick={() => { setActiveRound(null); setView('pipeline') }} style={{ ...C.btnO, marginBottom: 12 }}>Back to pipeline</button>
       <AssessmentForm round={activeRound} prevRounds={prev} onCancel={() => { setActiveRound(null); setView('pipeline') }} onSubmit={submitFeedback} />
     </div></div>
   }
@@ -519,11 +522,11 @@ export default function InterviewPipeline({ candidate, initialRounds }: { candid
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
             <div>
               <div style={{ fontSize: 16, fontWeight: 600 }}>{candidate.full_name}</div>
-              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>{candidate.designation || '—'}{candidate.department ? ` · ${candidate.department}` : ''}</div>
+              <div style={{ fontSize: 12, color: TK.muted, marginTop: 2 }}>{candidate.designation || '—'}{candidate.department ? ` · ${candidate.department}` : ''}</div>
             </div>
             <div style={{ display: 'flex', gap: 16 }}>
-              {candidate.ai_score != null && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, color: '#9CA3AF' }}>AI SCORE</div><div style={{ fontSize: 18, fontWeight: 700, color: '#7C3AED' }}>{candidate.ai_score}</div></div>}
-              {avgScore != null && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, color: '#9CA3AF' }}>AVG ROUNDS</div><div style={{ fontSize: 18, fontWeight: 700, color: '#059669' }}>{avgScore}</div></div>}
+              {candidate.ai_score != null && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, color: TK.faint }}>AI SCORE</div><div style={{ fontSize: 18, fontWeight: 700, color: TK.violet }}>{candidate.ai_score}</div></div>}
+              {avgScore != null && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, color: TK.faint }}>AVG ROUNDS</div><div style={{ fontSize: 18, fontWeight: 700, color: TK.positive }}>{avgScore}</div></div>}
             </div>
           </div>
         </div>
@@ -544,7 +547,7 @@ export default function InterviewPipeline({ candidate, initialRounds }: { candid
             onAssess={(rr) => { setActiveRound(rr); setView('feedback') }}
             onView={(rr) => { setActiveRound(rr); setView('detail') }} />
         ))}
-        {rounds.length === 0 && <div style={{ ...C.card, textAlign: 'center', color: '#9CA3AF', padding: 28 }}>No interview rounds yet. Add the first round below.</div>}
+        {rounds.length === 0 && <div style={{ ...C.card, textAlign: 'center', color: TK.faint, padding: 28 }}>No interview rounds yet. Add the first round below.</div>}
 
         {/* Add round */}
         {!picking ? (

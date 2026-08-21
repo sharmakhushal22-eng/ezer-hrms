@@ -14,11 +14,14 @@
 import { useState, useEffect } from 'react'
 import { getEmployeePerquisites, getTaxableIncomeWithPerquisites, computeTaxSTUB } from '@/lib/perquisites/employeeActions'
 import type { TaxableIncomeResult, TaxBreakdown } from '@/lib/perquisites/employeeActions'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280',
-  green: '#059669', greenBg: '#ECFDF5', purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, purpleBg: TK.violetTint, gray: TK.sunken,
 }
 
 function Row({ label, value, bold, indent }: { label: string; value: string; bold?: boolean; indent?: boolean }) {

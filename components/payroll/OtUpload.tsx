@@ -89,7 +89,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 760 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#D97706,#B45309)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(217,119,6,0.28)' }}>⏱️</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#D97706,#B45309)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(217,119,6,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>OT Upload</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Overtime hours only — a separate sheet that never overwrites leave or paid days</div>
@@ -109,7 +109,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
         })} />
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>📤 Upload filled OT</div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Upload filled OT</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
           <div>
             <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>

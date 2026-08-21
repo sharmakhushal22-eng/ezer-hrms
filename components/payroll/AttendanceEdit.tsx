@@ -113,7 +113,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 780 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: mode === 'arrear' ? 'linear-gradient(135deg,#10B981,#059669)' : 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(124,58,237,0.28)' }}>{mode === 'arrear' ? '📌' : '✏️'}</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: mode === 'arrear' ? 'linear-gradient(135deg,#10B981,#059669)' : 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(124,58,237,0.28)' }}>{mode === 'arrear' ? '' : ''}</div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>{mode === 'arrear' ? 'Arrear Days' : 'Attendance Edit'}</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -147,7 +147,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
           {/* edit form */}
           {mode === 'edit' && (
           <div style={card}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>✏️ Edit attendance — {cur.employee_code} · {cur.full_name}</div>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Edit attendance — {cur.employee_code} · {cur.full_name}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
               <NumField label="Earned Leave" value={f.earned_leave} onChange={v => setF({ ...f, earned_leave: v })} />
               <NumField label="Casual Leave" value={f.casual_leave} onChange={v => setF({ ...f, casual_leave: v })} />
@@ -185,7 +185,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
           {/* arrear form */}
           {mode === 'arrear' && (
           <div style={{ ...card, borderColor: C.greenBd }}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 4 }}>📌 Arrear days</div>
+            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 4 }}>Arrear days</div>
             <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 12 }}>Days owed from a prior month land in THIS run — the source month is only recorded for audit and is never reopened.</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
               <div><label style={lbl}>Arrear days</label><input type="number" step="0.5" value={arrDays} onChange={e => setArrDays(e.target.value)} style={ddInp} /></div>

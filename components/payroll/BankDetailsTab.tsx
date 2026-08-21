@@ -61,7 +61,7 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1100 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>🏦</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Bank Details</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Salary account per employee — maintained in the Employee Master, shown here for payroll</div>

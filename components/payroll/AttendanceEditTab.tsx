@@ -194,7 +194,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1000 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>✏️</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Edit</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Only employees whose attendance is already processed — Unprocess to reopen, then Process to re-apply the upload checks</div>
@@ -204,7 +204,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
       {/* filters */}
       <div style={card}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Company</label><SearchSelect value={coId} options={[{ value: GROUP, label: '🏛️ Group Companies (all)' }, ...companies]} placeholder="Select company" onChange={setCoId} /></div>
+          <div><label style={lbl}>Company</label><SearchSelect value={coId} options={[{ value: GROUP, label: 'Group Companies (all)' }, ...companies]} placeholder="Select company" onChange={setCoId} /></div>
           <div><label style={lbl}>Month</label><SearchSelect value={monthVal} options={monthOpts} placeholder={monthOpts.length ? 'Select month' : 'No month created'} onChange={setMonthVal} /></div>
           <div><label style={lbl}>Location / Branch</label><SearchSelect value={loc} options={[{ value: '', label: 'All locations' }, ...locOpts]} placeholder="All locations" onChange={setLoc} /></div>
           <div><label style={lbl}>Department</label><SearchSelect value={dept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDept} /></div>
@@ -215,7 +215,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
         </div>
         <button onClick={search} disabled={busy || !monthVal}
           style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: busy || !monthVal ? 'not-allowed' : 'pointer', opacity: busy || !monthVal ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
-          {busy ? 'Searching…' : '🔍 Search'}
+          {busy ? 'Searching…' : 'Search'}
         </button>
         {err && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 10 }}>{err}</div>}
       </div>
@@ -265,8 +265,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
                         <td style={td}>{nn(r.ot_hours)}</td>
                         <td style={{ ...td, textAlign: 'center' }}>
                           <button onClick={() => unprocess(r)}
-                            style={{ padding: '5px 12px', borderRadius: 99, border: `0.5px solid ${C.amber}`, background: C.amberBg, color: C.amber, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-                            ↺ Unprocess
+                            style={{ padding: '5px 12px', borderRadius: 99, border: `0.5px solid ${C.amber}`, background: C.amberBg, color: C.amber, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Unprocess
                           </button>
                         </td>
                       </tr>
@@ -284,8 +283,8 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
           <div onClick={() => setEditing(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 600 }} />
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(680px, 94vw)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', borderRadius: 14, boxShadow: '0 24px 70px rgba(30,27,75,0.35)', zIndex: 601, padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <span style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>↺ Unprocessed — {editing.employee_code} · {editing.full_name}</span>
-              <button onClick={() => setEditing(null)} style={{ marginLeft: 'auto', border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.muted }}>✕</button>
+              <span style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>Unprocessed — {editing.employee_code} · {editing.full_name}</span>
+              <button onClick={() => setEditing(null)} style={{ marginLeft: 'auto', border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.muted }}></button>
             </div>
             <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 14 }}>
               {editing.companyName ? editing.companyName + ' · ' : ''}{editing.department || '—'}{editing.location ? ' · ' + editing.location : ''} — edit the values, then Process to re-apply the upload checks.
@@ -325,7 +324,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={process} disabled={saveBusy || violations.length > 0}
                 style={{ padding: '10px 24px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: saveBusy || violations.length ? 'not-allowed' : 'pointer', opacity: saveBusy || violations.length ? 0.5 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
-                {saveBusy ? 'Processing…' : '✓ Process'}
+                {saveBusy ? 'Processing…' : 'Process'}
               </button>
               <button onClick={() => setEditing(null)} disabled={saveBusy}
                 style={{ padding: '10px 20px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', color: C.muted, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>

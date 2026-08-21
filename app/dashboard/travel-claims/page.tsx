@@ -210,7 +210,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
             <button onClick={showRoute}
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                              fontSize: 11, fontWeight: 600, color: V.purpleDark, fontFamily: 'inherit' }}>
-              {open ? '▲ Hide route' : '📍 View route on map'}
+              {open ? 'Hide route' : 'View route on map'}
             </button>
           )}
 
@@ -222,7 +222,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
                         fontWeight: 600, color: V.green, textDecoration: 'none',
                         background: V.greenBg, border: `1px solid ${V.green}33`,
                         borderRadius: 99, padding: '2px 9px' }}>
-              {b.mime_type === 'application/pdf' ? '📄' : '🧾'} {b.file_name || 'bill'}
+              {b.mime_type === 'application/pdf' ? '' : ''} {b.file_name || 'bill'}
             </a>
           ))}
           {bills !== null && bills.length === 0 && (
@@ -329,7 +329,7 @@ function ClaimCard({ claim, stage, onAction, busy }: {
           {inr(claim.total_claimed)}
         </div>
         <Pill status={claim.status} />
-        <span style={{ color: V.muted, fontSize: 12, flexShrink: 0 }}>{open ? '▲' : '▼'}</span>
+        <span style={{ color: V.muted, fontSize: 12, flexShrink: 0 }}>{open ? '' : ''}</span>
       </div>
 
       {open && (

@@ -306,7 +306,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 820 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>📤</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Upload</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Leave · absent days into the frozen month snapshot — Paid Days is computed as (EL+CL+SL+Other) − Absent</div>
@@ -330,11 +330,11 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
 
       {/* ── Upload attendance — always group-wide ── */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>📤 Upload filled attendance</div>
+        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Upload filled attendance</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
           <div>
             <label style={lbl}>Company</label>
-            <SearchSelect value="__group__" options={[{ value: '__group__', label: '🏛️ Group Companies (all)' }]}
+            <SearchSelect value="__group__" options={[{ value: '__group__', label: 'Group Companies (all)' }]}
               placeholder="Group Companies" onChange={() => {}} />
           </div>
           <div>

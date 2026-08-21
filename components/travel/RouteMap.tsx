@@ -17,11 +17,14 @@
 // Rendering nothing would hide a journey that was genuinely recorded.
 import { useEffect, useRef, useState } from 'react'
 import { decodePolyline, projectToViewBox, type LatLng } from '@/lib/travel/polyline'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const V = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#6D28D9', border: '#E9E7F5',
-  muted: '#6B6B7B', card: '#FFFFFF', green: '#059669', amber: '#D97706',
-  red: '#DC2626', field: '#FAFAF8', grey: '#9CA3AF',
+  navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line,
+  muted: TK.muted, card: TK.surface, green: TK.positive, amber: TK.warning,
+  red: TK.critical, field: TK.sunken, grey: TK.faint,
 }
 
 export interface RouteData {

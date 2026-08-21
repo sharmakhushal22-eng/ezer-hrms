@@ -6,15 +6,18 @@ import { useState, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { REPORTS, runReport, type ReportOutput, type ReportGroup } from '@/lib/attendance/reports'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280', green: '#059669', amber: '#B45309', red: '#DC2626', purpleBg: '#EEEDFE',
+  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted, green: TK.positive, amber: TK.warning, red: TK.critical, purpleBg: TK.violetTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const lbl: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
-const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: '#FAFAF8', color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
-const GROUP_ICON: Record<ReportGroup, string> = { Attendance: '🕒', Exceptions: '⚠️', Leave: '🌴', Summary: '📊' }
+const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const GROUP_ICON: Record<ReportGroup, string> = { Attendance: '', Exceptions: '', Leave: '', Summary: '' }
 
 const today = () => new Date().toISOString().slice(0, 10)
 const monthStart = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10) }
@@ -125,7 +128,7 @@ export default function AttendanceReportsPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
                 <div>
                   <label style={lbl}>Company</label>
-                  <select style={inp} value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">🏛️ All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
+                  <select style={inp} value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
                 </div>
                 <div>
                   <label style={lbl}>Department</label>
@@ -153,14 +156,14 @@ export default function AttendanceReportsPage() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14 }}>
-                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(124,58,237,0.28)' }}>{busy ? 'Generating…' : '⚙ Generate report'}</button>
+                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(124,58,237,0.28)' }}>{busy ? 'Generating…' : 'Generate report'}</button>
                 {err && <span style={{ fontSize: 12, color: C.red }}>⚠ {err}</span>}
               </div>
             </div>
 
             {out && (
               <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', boxShadow: '0 1px 4px rgba(124,58,237,0.06)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                <div style={{ width: 46, height: 46, borderRadius: 12, background: out.rows.length ? 'rgba(5,150,105,0.10)' : '#F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{out.rows.length ? '📊' : '🔍'}</div>
+                <div style={{ width: 46, height: 46, borderRadius: 12, background: out.rows.length ? 'rgba(5,150,105,0.10)' : TK.sunken, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{out.rows.length ? '' : ''}</div>
                 <div style={{ flex: 1, minWidth: 180 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{out.rows.length ? `${report.label} ready` : 'No matching data'}</div>
                   <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{out.rows.length ? <><b style={{ color: C.navy }}>{out.rows.length}</b> row{out.rows.length !== 1 ? 's' : ''}{out.note ? ` · ${out.note}` : ''} · {out.columns.length} columns</> : 'No records for these filters — try a wider date range or different filters.'}</div>

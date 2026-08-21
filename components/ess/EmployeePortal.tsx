@@ -80,11 +80,11 @@ function TransferAckCard({ empId, onAck }: { empId: string; onAck: () => void })
   if (!transfers.length) return null
   return (<>{transfers.map(tr => (
     <div key={tr.id} style={{ background:'#FAEEDA', border:'1px solid #EF9F27', borderRadius:10, padding:'12px 16px', marginBottom:10 }}>
-      <div style={{ fontSize:13, fontWeight:600, color:'#633806' }}>🔄 Transfer Letter — action required</div>
+      <div style={{ fontSize:13, fontWeight:600, color:'#633806' }}>Transfer Letter — action required</div>
       <div style={{ fontSize:11, color:'#854F0B', marginTop:3 }}>You are being transferred, effective {tr.effective_date}.</div>
       <div style={{ display:'flex', gap:8, marginTop:10 }}>
-        {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:'#fff', border:'1px solid #EF9F27', borderRadius:7, fontSize:11, color:'#633806', textDecoration:'none' }}>📄 View Letter</a>}
-        <button onClick={async () => { await HR.acknowledgeTransfer(tr.id); setTransfers(t=>t.filter(x=>x.id!==tr.id)); onAck() }} style={{ padding:'7px 14px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:7, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>✓ Acknowledge & Accept</button>
+        {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:'#fff', border:'1px solid #EF9F27', borderRadius:7, fontSize:11, color:'#633806', textDecoration:'none' }}>View Letter</a>}
+        <button onClick={async () => { await HR.acknowledgeTransfer(tr.id); setTransfers(t=>t.filter(x=>x.id!==tr.id)); onAck() }} style={{ padding:'7px 14px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:7, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Acknowledge & Accept</button>
       </div>
     </div>
   ))}</>)
@@ -138,7 +138,7 @@ function PunchButton({ employeeId }: { employeeId: string }) {
         style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: '#fff', background: isOut ? '#DC2626' : '#059669', opacity: (busy || punchedToday === null) ? .6 : 1 }}>
         {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? 'Punch Out' : 'Punch In')}
       </button>
-      {msg && <div style={{ fontSize: 12, color: msg.startsWith('✓') ? '#059669' : '#DC2626', marginTop: 8, textAlign: 'center' }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12, color: msg.startsWith('') ? '#059669' : '#DC2626', marginTop: 8, textAlign: 'center' }}>{msg}</div>}
       <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6, textAlign: 'center' }}>{isOut ? 'Punched in today · resets to “Punch In” at 12 AM.' : 'Tap to punch in for the day.'}</div>
     </div>
   )
@@ -188,7 +188,7 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
           <div style={{ width:120, height:120, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, fontWeight:700 }}>
             {preview ? <img src={preview} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}
           </div>
-          <label style={{ ...T.btnO, cursor:'pointer' }}>📷 Choose photo<input type="file" accept="image/*" style={{ display:'none' }} onChange={onFile} /></label>
+          <label style={{ ...T.btnO, cursor:'pointer' }}>Choose photo<input type="file" accept="image/*" style={{ display:'none' }} onChange={onFile} /></label>
           {preview && <button onClick={() => setPreview(null)} style={{ ...T.btnO, color:'#DC2626', borderColor:'#FCA5A5' }}>Remove photo</button>}
         </div>
         <div style={{ display:'flex', gap:10, marginTop:16 }}>
@@ -243,7 +243,7 @@ function ClaimStepper({ status }: { status: string }) {
               <div style={{ width: 15, height: 15, borderRadius: '50%', background: on ? colour : '#fff',
                             border: `2px solid ${colour}`, display: 'flex', alignItems: 'center',
                             justifyContent: 'center', fontSize: 8, color: '#fff', fontWeight: 700 }}>
-                {on ? '✓' : ''}
+                {on ? '' : ''}
               </div>
               <span style={{ fontSize: 8.5, fontWeight: 600, color: on ? colour : '#C4C4CC',
                              whiteSpace: 'nowrap' }}>{label}</span>
@@ -353,7 +353,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 
   const h = new Date().getHours()
   const greet = h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : h < 21 ? 'Good Evening' : 'Working late'
-  const emoji = h < 12 ? '☀️' : h < 17 ? '🌤️' : h < 21 ? '🌆' : '🌙'
+  const emoji = h < 12 ? '' : h < 17 ? '' : h < 21 ? '' : ''
   const quote = QUOTES[new Date().getDate() % QUOTES.length]
   const tenureYrs = emp.group_doj ? Math.floor((Date.now() - new Date(emp.group_doj).getTime()) / (365.25*24*3600*1000)) : 0
   const dob = emp.date_of_birth ? new Date(emp.date_of_birth) : null
@@ -379,7 +379,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <div style={{ flex:'3 1 280px' }}><PunchButton employeeId={emp.id} /></div>
         <button onClick={() => setEditOpen(true)} style={{ flex:'1 1 160px', ...T.card, marginBottom:10, cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, fontFamily:'inherit' }}>
           <div style={{ width:46, height:46, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
-          <span style={{ fontSize:13, fontWeight:600, color:'#6D28D9' }}>✏️ Edit Profile</span>
+          <span style={{ fontSize:13, fontWeight:600, color:'#6D28D9' }}>Edit Profile</span>
         </button>
       </div>
       {editOpen && <EditProfileModal emp={emp} onClose={() => setEditOpen(false)} onSaved={reload} notify={notify} />}
@@ -395,10 +395,10 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
       <TravelClaimStatus emp={emp} go={go} />
 
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
-        <button onClick={() => go('leave')} style={T.btnO}>🌴 Apply Leave</button>
-        <button onClick={() => go('payslip')} style={T.btnO}>💰 Download Payslip</button>
-        <button onClick={() => go('requests')} style={T.btnO}>✉️ Raise Ticket</button>
-        <button onClick={() => go('directory')} style={T.btnO}>📒 View Team</button>
+        <button onClick={() => go('leave')} style={T.btnO}>Apply Leave</button>
+        <button onClick={() => go('payslip')} style={T.btnO}>Download Payslip</button>
+        <button onClick={() => go('requests')} style={T.btnO}>Raise Ticket</button>
+        <button onClick={() => go('directory')} style={T.btnO}>View Team</button>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:10 }}>
@@ -406,7 +406,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <div style={T.card}>
           <div style={T.section}>Birthday & Anniversary</div>
           {bdaySoon !== null
-            ? <div style={{ fontSize:13 }}>🎂 Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s)`} — wishing you ahead!</div>
+            ? <div style={{ fontSize:13 }}>Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s)`} — wishing you ahead!</div>
             : <div style={{ fontSize:12, color:'#9CA3AF' }}>No upcoming birthdays in the next 30 days.</div>}
           {emp.group_doj && <div style={{ fontSize:12, color:'#6B7280', marginTop:6 }}>Joined {fmt(emp.group_doj)} · {tenureYrs} yr{tenureYrs===1?'':'s'} with us 🎊</div>}
         </div>
@@ -415,11 +415,11 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <div style={T.card}>
           <div style={T.section}>My Journey</div>
           <div style={{ fontSize:12, color:'#374151', lineHeight:1.9 }}>
-            <div>📅 Joined: <b>{fmt(emp.group_doj)}</b></div>
-            <div>🏷️ Designation: <b>{emp.designation || '—'}</b></div>
-            <div>⏳ Tenure: <b>{tenureYrs} year{tenureYrs===1?'':'s'}</b></div>
+            <div>Joined: <b>{fmt(emp.group_doj)}</b></div>
+            <div>Designation: <b>{emp.designation || '—'}</b></div>
+            <div>Tenure: <b>{tenureYrs} year{tenureYrs===1?'':'s'}</b></div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' }}>
-              {[1,3,5].map(y => <span key={y} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, fontWeight:600, background: tenureYrs>=y?'#ECFDF5':'#F1F5F9', color: tenureYrs>=y?'#059669':'#9CA3AF' }}>{tenureYrs>=y?'🏅':'🔒'} {y}-yr</span>)}
+              {[1,3,5].map(y => <span key={y} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, fontWeight:600, background: tenureYrs>=y?'#ECFDF5':'#F1F5F9', color: tenureYrs>=y?'#059669':'#9CA3AF' }}>{tenureYrs>=y?'':''} {y}-yr</span>)}
             </div>
           </div>
         </div>
@@ -599,7 +599,7 @@ function Field({ label, value, icon, copyable, sensitive, notify }: {
         <button onClick={() => setShown(v => !v)} title={shown ? 'Hide' : 'Reveal'}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3,
                          fontSize: 13, opacity: hover || shown ? 1 : .35, transition: 'opacity .15s' }}>
-          {shown ? '🙈' : '👁️'}
+          {shown ? '' : ''}
         </button>
       )}
       {copyable && has && (
@@ -756,9 +756,9 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
   }
 
   const TABS: [typeof tab, string, string][] = [
-    ['OVERVIEW', 'Overview', '📋'],
-    ['PERSONAL', 'Personal & KYC', '🪪'],
-    ['UPDATE', 'Request a change', '✏️'],
+    ['OVERVIEW', 'Overview', ''],
+    ['PERSONAL', 'Personal & KYC', ''],
+    ['UPDATE', 'Request a change', ''],
   ]
 
   return (
@@ -955,7 +955,7 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
         <div style={T.section}>Raise a Request</div>
         <label style={T.label}>Type</label>
         <select style={{ ...T.input, marginBottom:10 }} value={type} onChange={e => setType(e.target.value)}>{REQ_TYPES.map(r => <option key={r.k} value={r.k}>{r.label}</option>)}</select>
-        {def.confidential && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:'#B91C1C' }}>🔒 This is confidential and routes only to the Internal Committee — not regular HR.</div>}
+        {def.confidential && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:'#B91C1C' }}>This is confidential and routes only to the Internal Committee — not regular HR.</div>}
         <label style={T.label}>Details</label>
         <textarea style={{ ...T.input, minHeight:90, marginBottom:10, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="Describe your request…" />
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
@@ -1006,8 +1006,8 @@ function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () =
           <DirDetailRow label="Company Name" value={e.company_name} />
         </div>
         <div style={{ padding:'0 20px 18px', display:'flex', gap:8, flexWrap:'wrap' }}>
-          {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} style={{ ...T.btnO, textDecoration:'none' }}>📧 Email</a>}
-          {e.mobile && <a href={`tel:${e.mobile}`} style={{ ...T.btnO, textDecoration:'none' }}>📱 Call</a>}
+          {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} style={{ ...T.btnO, textDecoration:'none' }}>Email</a>}
+          {e.mobile && <a href={`tel:${e.mobile}`} style={{ ...T.btnO, textDecoration:'none' }}>Call</a>}
           {e.mobile && <a href={`https://wa.me/91${(e.mobile||'').replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration:'none' }}>WhatsApp</a>}
           <button onClick={onClose} style={{ ...T.btnO, marginLeft:'auto' }}>Close</button>
         </div>
@@ -1064,7 +1064,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
       {/* header + filters */}
       <div style={{ ...T.card, marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📇</div>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: '#1E1B4B' }}>Employee Directory</div>
             <div style={{ fontSize: 11, color: '#9CA3AF' }}>
@@ -1073,7 +1073,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input style={{ ...T.input, flex: 1, minWidth: 200 }} placeholder="🔍 Search name, code, designation, department or email" value={q} onChange={e => setQ(e.target.value)} />
+          <input style={{ ...T.input, flex: 1, minWidth: 200 }} placeholder="Search name, code, designation, department or email" value={q} onChange={e => setQ(e.target.value)} />
           <select style={sel2} value={dept} onChange={e => setDept(e.target.value)}>
             <option value="">All departments</option>
             {depts.map(d => <option key={d} value={d}>{d}</option>)}
@@ -1124,16 +1124,16 @@ function Directory({ isMobile }: { isMobile: boolean }) {
                   {e.location_name && chip('📍 ' + e.location_name, '#F8FAFC', '#475569')}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: '1px solid #F1F5F9', paddingTop: 8 }} onClick={ev => ev.stopPropagation()}>
-                  {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} title={e.office_email || e.personal_email || ''} style={{ ...T.btnO, textDecoration: 'none' }}>📧 Email</a>}
-                  {e.mobile && <a href={`tel:${e.mobile}`} title={e.mobile} style={{ ...T.btnO, textDecoration: 'none' }}>📱 Call</a>}
-                  {e.mobile && <a href={`https://wa.me/91${(e.mobile || '').replace(/\D/g, '').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration: 'none' }}>💬 WhatsApp</a>}
+                  {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} title={e.office_email || e.personal_email || ''} style={{ ...T.btnO, textDecoration: 'none' }}>Email</a>}
+                  {e.mobile && <a href={`tel:${e.mobile}`} title={e.mobile} style={{ ...T.btnO, textDecoration: 'none' }}>Call</a>}
+                  {e.mobile && <a href={`https://wa.me/91${(e.mobile || '').replace(/\D/g, '').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration: 'none' }}>WhatsApp</a>}
                 </div>
               </div>
             )
           })}
           {filtered.length === 0 && !err && (
             <div style={{ ...T.card, gridColumn: '1 / -1', textAlign: 'center', padding: '30px 16px' }}>
-              <div style={{ fontSize: 30, marginBottom: 6 }}>🔍</div>
+              <div style={{ fontSize: 30, marginBottom: 6 }}></div>
               <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1B4B', marginBottom: 3 }}>No colleagues match that search</div>
               <div style={{ fontSize: 11.5, color: '#9CA3AF' }}>Try a different name, code or department{(dept || loc) ? ', or clear the filters' : ''}.</div>
             </div>
@@ -1623,7 +1623,7 @@ function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }
     <div style={{ ...T.card, height: '100%', display: 'flex', flexDirection: 'column',
                   justifyContent: 'center', marginBottom: 0 }}>
       <div style={{ textAlign: 'center', padding: '6px 0 16px' }}>
-        <div style={{ fontSize: 26, marginBottom: 6 }}>📆</div>
+        <div style={{ fontSize: 26, marginBottom: 6 }}></div>
         <div style={{ fontSize: 13, fontWeight: 700, color: '#1E1B4B' }}>Pick a day</div>
         <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 3, lineHeight: 1.55 }}>
           Its punches, hours and status appear here.
@@ -1891,7 +1891,7 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
         ))}
 
       {status === 'MISS_PUNCH' && (
-        <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:'#D97706' }}>⚠ Raise regularisation</button>
+        <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:'#D97706' }}>Raise regularisation</button>
       )}
     </div>
   )
@@ -2118,7 +2118,7 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
     const { error } = await submitRegularisation(emp.id, dateVal, rec?.work_in || null, rec?.work_out || null, actualIn, actualOut, reason.trim())
     setBusy(false)
     if (error) { setMsg({ text: error, ok:false }); return }
-    setMsg({ text:'✓ Regularisation request submitted', ok:true })
+    setMsg({ text:'Regularisation request submitted', ok:true })
     onDone()
   }
   const dateLbl = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
@@ -2259,7 +2259,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
         {!manualRaise && !bulkRaise && !raiseDate && (
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             <button onClick={() => setManualRaise(true)} style={T.btnO}>+ Single day</button>
-            <button onClick={() => setBulkRaise(true)} style={T.btnP}>📅 Date range</button>
+            <button onClick={() => setBulkRaise(true)} style={T.btnP}>Date range</button>
           </div>
         )}
       </div>
@@ -2326,7 +2326,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 
       {!e.has_ctc && (
         <div style={{ ...card, background: V.amberBg, border: '1px solid #EFD9A8' }}>
-          <span style={{ fontSize: 12, color: '#633806' }}>ⓘ Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master) — then VPF will calculate correctly.</span>
+          <span style={{ fontSize: 12, color: '#633806' }}>Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master) — then VPF will calculate correctly.</span>
         </div>
       )}
 
@@ -2360,13 +2360,13 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 
       {showHighAlert && (
         <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
-          <span style={{ color: V.red }}>⚠</span>
+          <span style={{ color: V.red }}></span>
           <span style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.6 }}><strong>That high?</strong> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.</span>
         </div>
       )}
       {capHit && (
         <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
-          <span style={{ color: V.amber }}>ⓘ</span>
+          <span style={{ color: V.amber }}></span>
           <span style={{ fontSize: 12, color: '#633806', lineHeight: 1.6 }}>Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.</span>
         </div>
       )}
@@ -2387,7 +2387,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
       </div>
 
       <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
-        <span style={{ color: V.red }}>ⓘ</span>
+        <span style={{ color: V.red }}></span>
         <div style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.7 }}><strong>Choose carefully:</strong><br />• VPF will <strong>reduce your net in-hand salary</strong><br />• The 80C exemption only goes <strong>up to ₹1.5 lakh</strong> (EPF + VPF + your other 80C)<br />• It is deducted every month until you stop it</div>
       </div>
 
@@ -2461,7 +2461,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 
       {!e.has_ctc && (
         <div style={{ ...card, background: V.amberBg, border: '1px solid #EFD9A8' }}>
-          <span style={{ fontSize: 12, color: '#633806' }}>ⓘ Your CTC (Basic) isn't configured yet, so NPS shows ₹0. Ask HR to set your CTC (ctc_master).</span>
+          <span style={{ fontSize: 12, color: '#633806' }}>Your CTC (Basic) isn't configured yet, so NPS shows ₹0. Ask HR to set your CTC (ctc_master).</span>
         </div>
       )}
 
@@ -2523,14 +2523,14 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
       ) : (
         <div style={{ background: V.blueBg, borderRadius: 12, padding: 16, marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <span style={{ color: V.blue }}>✉</span>
+            <span style={{ color: V.blue }}></span>
             <div style={{ fontSize: 12, color: '#0C447C', lineHeight: 1.7 }}><strong>A new PRAN will be created for you.</strong><br />On submit, we'll email you the PRAN creation form. Generate your PRAN <strong>within 3 days</strong>, then resubmit here. For help, contact the <strong>Payroll team</strong>.</div>
           </div>
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
-        <span style={{ color: V.amber }}>ⓘ</span>
+        <span style={{ color: V.amber }}></span>
         <div style={{ fontSize: 12, color: '#633806', lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product — locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
       </div>
 
@@ -2617,7 +2617,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
         <div style={{ fontSize:14, fontWeight:600, color:V.navy }}>Sign agreement — {agr.agreement_number}</div>
         <div style={{ display:'flex', gap:8 }}>
-          <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, textDecoration:'none', fontSize:11 }}>📄 View / print</a>
+          <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, textDecoration:'none', fontSize:11 }}>View / print</a>
           <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
         </div>
       </div>
@@ -2642,8 +2642,8 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
         </table>
       </div>
       <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-        <button onClick={() => setMode('ESIGN')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='ESIGN' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='ESIGN' ? V.bg : '#fff', color: mode==='ESIGN' ? V.purpleDark : V.navy }}>✍️ E-sign</button>
-        <button onClick={() => setMode('UPLOAD')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='UPLOAD' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='UPLOAD' ? V.bg : '#fff', color: mode==='UPLOAD' ? V.purpleDark : V.navy }}>📎 Upload signed PDF</button>
+        <button onClick={() => setMode('ESIGN')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='ESIGN' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='ESIGN' ? V.bg : '#fff', color: mode==='ESIGN' ? V.purpleDark : V.navy }}>E-sign</button>
+        <button onClick={() => setMode('UPLOAD')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='UPLOAD' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='UPLOAD' ? V.bg : '#fff', color: mode==='UPLOAD' ? V.purpleDark : V.navy }}>Upload signed PDF</button>
       </div>
       {mode === 'ESIGN' ? (
         <div style={{ marginBottom:12 }}>
@@ -2737,7 +2737,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 
       {!hasCtc && (
         <div style={{ ...card, background:V.amberBg, border:'1px solid #EFD9A8' }}>
-          <span style={{ fontSize:12, color:'#633806' }}>ⓘ CTC not configured — eligibility shows ₹0; ask HR to set CTC.</span>
+          <span style={{ fontSize:12, color:'#633806' }}>CTC not configured — eligibility shows ₹0; ask HR to set CTC.</span>
         </div>
       )}
 
@@ -2837,7 +2837,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 function Placeholder({ title, phase, needs }: { title: string; phase: number; needs: string }) {
   return (
     <div style={{ ...T.card, textAlign:'center', padding:40 }}>
-      <div style={{ fontSize:38, marginBottom:8 }}>🚧</div>
+      <div style={{ fontSize:38, marginBottom:8 }}></div>
       <div style={{ fontSize:16, fontWeight:600 }}>{title}</div>
       <div style={{ fontSize:13, color:'#6B7280', marginTop:6, lineHeight:1.7 }}>Coming in Phase {phase}. This module needs the <b>{needs}</b> module's data, which isn't built yet.</div>
     </div>
@@ -2900,7 +2900,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
   if (status === 'loading') return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading flexi policy…</div>
   if (status === 'nopolicy') return (
     <div style={card}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>🎛️ Flexi Benefit Plan</div>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Flexi Benefit Plan</div>
       <div style={{ fontSize: 12.5, color: V.muted }}>No flexi (FBP) policy is configured for {companyName || 'your company'}{annualFixed ? ` at your salary band (${inr(annualFixed)} annual fixed)` : ''} yet. Please check with HR / Payroll.</div>
     </div>
   )
@@ -2921,7 +2921,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
     <div>
       <div style={{ ...card, background: V.purpleBg, borderColor: '#DDD6FE' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>🎛️ Flexi Benefit Plan (FBP)</div>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Flexi Benefit Plan (FBP)</div>
           <span style={{ fontSize: 11, background: '#EEEDFE', color: V.purpleDark, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>{companyName}</span>
         </div>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 10, fontSize: 12 }}>
@@ -2982,7 +2982,7 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
         rows.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No letters have been shared with you yet. HR-issued letters (offer, confirmation, etc.) will appear here.</div> :
         rows.map(r => (
           <div key={r.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 0', borderBottom:'1px solid #F3F0FF' }}>
-            <span style={{ fontSize:20 }}>📄</span>
+            <span style={{ fontSize:20 }}></span>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:13, fontWeight:600 }}>{r.letter_name}</div>
               <div style={{ fontSize:11, color:'#9CA3AF' }}>{new Date(r.letter_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</div>
@@ -3039,11 +3039,11 @@ function EssIcon({ k, size = 17, strokeWidth = 1.6 }: { k: string; size?: number
 }
 
 const SECTIONS: NavSection[] = [
-  { k:'home', label:'Home', short:'Home', icon:'🏠', status:'ready',
+  { k:'home', label:'Home', short:'Home', icon:'', status:'ready',
     desc:'The landing dashboard — everything at a glance',
     items:[{ k:'home', label:'Dashboard' }] },
 
-  { k:'profile', label:'Profile', short:'Profile', icon:'👤', status:'ready',
+  { k:'profile', label:'Profile', short:'Profile', icon:'', status:'ready',
     desc:'Your personal details, documents and letters',
     items:[
       { k:'profile',     label:'My Details' },
@@ -3051,16 +3051,16 @@ const SECTIONS: NavSection[] = [
       { k:'letters',     label:'My Letters' },
     ]},
 
-  { k:'team', label:'Team', short:'Team', icon:'👥', status:'soon',
+  { k:'team', label:'Team', short:'Team', icon:'', status:'soon',
     desc:'For managers — see and manage your team',
     items:[{ k:'team', label:'Team' }],
     features:[
-      { icon:'📋', name:'Team List',          note:'Non-salary details visible' },
-      { icon:'✅', name:'Task Assign',        note:'Give tasks to team members' },
-      { icon:'📝', name:'TODO / Deliverables',note:'Track what is owed' },
+      { icon:'', name:'Team List',          note:'Non-salary details visible' },
+      { icon:'', name:'Task Assign',        note:'Give tasks to team members' },
+      { icon:'', name:'TODO / Deliverables',note:'Track what is owed' },
     ]},
 
-  { k:'payroll', label:'Payroll', short:'Payroll', icon:'💰', status:'partial',
+  { k:'payroll', label:'Payroll', short:'Payroll', icon:'', status:'partial',
     desc:'Salary, benefits, declarations and claims — all in one place',
     items:[
       { k:'payslip',     label:'Salary Slip',            phase:3, needs:'Payslip generation' },
@@ -3077,15 +3077,15 @@ const SECTIONS: NavSection[] = [
       { k:'statutory',   label:'Statutory',              phase:3, needs:'Payroll' },
     ]},
 
-  { k:'attendance', label:'Attendance', short:'Attend', icon:'🕐', status:'ready',
+  { k:'attendance', label:'Attendance', short:'Attend', icon:'', status:'ready',
     desc:'Your own attendance, self-service',
     items:[{ k:'attendance', label:'Attendance' }] },
 
-  { k:'leave', label:'Leave', short:'Leave', icon:'🌴', status:'ready',
+  { k:'leave', label:'Leave', short:'Leave', icon:'', status:'ready',
     desc:'Apply, track and plan leave',
     items:[{ k:'leave', label:'Leave' }] },
 
-  { k:'hris', label:'HRIS', short:'HRIS', icon:'🗂️', status:'partial',
+  { k:'hris', label:'HRIS', short:'HRIS', icon:'', status:'partial',
     desc:'Directory, requests, approvals and the exit process',
     items:[
       { k:'directory',   label:'Team Directory' },
@@ -3094,34 +3094,34 @@ const SECTIONS: NavSection[] = [
       { k:'exit',        label:'Exit Process',           phase:4, needs:'Exit & FnF' },
     ]},
 
-  { k:'performance', label:'Performance', short:'PMS', icon:'⭐', status:'soon',
+  { k:'performance', label:'Performance', short:'PMS', icon:'', status:'soon',
     desc:'Review and rating submission',
     items:[{ k:'performance', label:'Performance' }],
     features:[
-      { icon:'📝', name:'Self Review',    note:'Employee assessment' },
-      { icon:'👔', name:'Manager Review', note:'Rating submission' },
+      { icon:'', name:'Self Review',    note:'Employee assessment' },
+      { icon:'', name:'Manager Review', note:'Rating submission' },
     ]},
 
-  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'🏆', status:'soon',
+  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'soon',
     desc:'Peer-to-peer appreciation, casual and public',
     items:[{ k:'wall', label:'Wall of Fame' }],
     features:[
-      { icon:'💬', name:'Give a Shoutout', note:'Quick appreciation post' },
-      { icon:'📰', name:'Company Feed',    note:'See everyone’s shoutouts' },
+      { icon:'', name:'Give a Shoutout', note:'Quick appreciation post' },
+      { icon:'', name:'Company Feed',    note:'See everyone’s shoutouts' },
     ]},
 
-  { k:'rnr', label:'RNR', short:'RNR', icon:'🎖️', status:'soon',
+  { k:'rnr', label:'RNR', short:'RNR', icon:'', status:'soon',
     desc:'Structured Reward & Recognition, points-based',
     items:[{ k:'rnr', label:'RNR' }],
     features:[
-      { icon:'📝', name:'Nominate',    note:'Pick a category, write why' },
-      { icon:'✅', name:'Approval',    note:'Manager / HR reviews' },
-      { icon:'💎', name:'Points',      note:'Credited on approval' },
-      { icon:'🎁', name:'Redeem',      note:'Vouchers, leave, merch' },
-      { icon:'🏅', name:'Leaderboard', note:'Top recognized employees' },
+      { icon:'', name:'Nominate',    note:'Pick a category, write why' },
+      { icon:'', name:'Approval',    note:'Manager / HR reviews' },
+      { icon:'', name:'Points',      note:'Credited on approval' },
+      { icon:'', name:'Redeem',      note:'Vouchers, leave, merch' },
+      { icon:'', name:'Leaderboard', note:'Top recognized employees' },
     ]},
 
-  { k:'funzone', label:'Fun Zone', short:'Fun', icon:'🎉', status:'ready',
+  { k:'funzone', label:'Fun Zone', short:'Fun', icon:'', status:'ready',
     desc:'Take a break — play a quick game with your team',
     items:[{ k:'funzone', label:'Fun Zone' }] },
 ]
@@ -3367,7 +3367,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         </div>
       )}
 
-      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'✓':'✗'} {toast.msg}</div>}
+      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
     </div>
   )
 }

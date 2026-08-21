@@ -5,10 +5,13 @@
 // Source: EZER-PayHead-Section-Reference.md.
 import { useState } from 'react'
 import SubSectionDropdown from '@/components/payroll/SubSectionDropdown'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489', border: '#E9E7F5', muted: '#6B7280',
-  card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5', red: '#DC2626', redBg: '#FEF2F2', amber: '#B45309', amberBg: '#FFFBEB', purpleBg: '#EEEDFE',
+  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line, muted: TK.muted,
+  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -57,9 +60,9 @@ const FLEXI: { code: string; name: string; bill: string; regime: string; source:
   { code: 'HOSTEL', name: 'Hostel Allowance', bill: 'Yes', regime: 'Old only', source: '₹300 / child / mo' },
 ]
 const NONSTD: { type: string; icon: string; heads: [string, string][] }[] = [
-  { type: 'Intern / NAPS / NATS', icon: '🎓', heads: [['Stipend', 'Monthly fixed — no PF / ESIC / PT'], ['TDS on stipend', '@10% Sec 194J if annual > ₹2.5L']] },
-  { type: 'Consultant', icon: '💼', heads: [['Professional fees', 'Monthly fixed'], ['GST', "18% — consultant's liability"], ['TDS', '@10% Sec 194J']] },
-  { type: 'Contract worker', icon: '🛠️', heads: [['Wages', 'Monthly'], ['Employee PF', '12% — mandatory'], ['Employer PF', '12% — mandatory'], ['ESIC', 'If gross ≤ ₹21,000']] },
+  { type: 'Intern / NAPS / NATS', icon: '', heads: [['Stipend', 'Monthly fixed — no PF / ESIC / PT'], ['TDS on stipend', '@10% Sec 194J if annual > ₹2.5L']] },
+  { type: 'Consultant', icon: '', heads: [['Professional fees', 'Monthly fixed'], ['GST', "18% — consultant's liability"], ['TDS', '@10% Sec 194J']] },
+  { type: 'Contract worker', icon: '', heads: [['Wages', 'Monthly'], ['Employee PF', '12% — mandatory'], ['Employer PF', '12% — mandatory'], ['ESIC', 'If gross ≤ ₹21,000']] },
 ]
 const RULES: string[] = [
   'Basic ≥ 50% of fixed CTC — Code on Wages 2019. System warns if Basic < 50%.',
@@ -73,18 +76,18 @@ const RULES: string[] = [
 ]
 
 function toneColor(t?: Row['tone']) {
-  if (t === 'total') return { bg: '#F5F3FF', color: C.purple }
+  if (t === 'total') return { bg: TK.canvas, color: C.purple }
   if (t === 'net') return { bg: C.greenBg, color: C.green }
   return { bg: 'transparent', color: C.navy }
 }
 function TypeBadge({ t }: { t: string }) {
   const map: Record<string, [string, string]> = {
     'Fixed earning': [C.greenBg, C.green], 'Balancing': ['#FEF9C3', '#854D0E'], 'Variable': ['#FFF7ED', '#C2410C'],
-    'Reimbursement': [C.purpleBg, C.purpleDark], 'Statutory': [C.redBg, C.red], 'Voluntary': ['#EFF6FF', '#1D4ED8'],
-    'Recovery': ['#FEF2F2', '#B91C1C'], 'Employer': [C.purpleBg, C.purpleDark], 'Accrual': ['#F0FDFA', '#0F766E'],
-    'Computed total': ['#F1F5F9', '#475569'], 'Computed': ['#F1F5F9', '#475569'],
+    'Reimbursement': [C.purpleBg, C.purpleDark], 'Statutory': [C.redBg, C.red], 'Voluntary': [TK.infoTint, TK.info],
+    'Recovery': [TK.criticalTint, TK.critical], 'Employer': [C.purpleBg, C.purpleDark], 'Accrual': ['#F0FDFA', '#0F766E'],
+    'Computed total': [TK.sunken, TK.inkSoft], 'Computed': [TK.sunken, TK.inkSoft],
   }
-  const [bg, color] = map[t] || ['#F1F5F9', '#475569']
+  const [bg, color] = map[t] || [TK.sunken, TK.inkSoft]
   return <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: bg, color, whiteSpace: 'nowrap' }}>{t}</span>
 }
 
@@ -100,7 +103,7 @@ function Table({ rows }: { rows: Row[] }) {
             <tr key={r.label} style={{ borderTop: `1px solid ${C.border}`, background: tc.bg }}>
               <td style={{ padding: '9px 12px', fontWeight: r.tone === 'total' || r.tone === 'net' ? 700 : 600, color: tc.color }}>{r.label}</td>
               <td style={{ padding: '9px 12px' }}><TypeBadge t={r.type} /></td>
-              <td style={{ padding: '9px 12px', color: '#475569' }}>{r.rule}</td>
+              <td style={{ padding: '9px 12px', color: TK.inkSoft }}>{r.rule}</td>
               <td style={{ padding: '9px 12px', color: C.muted, fontSize: 11.5 }}>{r.trigger || '—'}</td>
             </tr>
           )})}
@@ -129,7 +132,7 @@ export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {
   // Controlled when a `view` prop is passed (selection handled by the Configuration dropdown);
   // uncontrolled fallback keeps its own dropdown.
   const view = (viewProp as 'catalog' | 'flexi' | 'nonstd' | 'rules') || viewState
-  const TABS: [typeof view, string][] = [['catalog', '📋 Standard Pay Heads'], ['flexi', '🎛️ Flexi / FBP'], ['nonstd', '👥 Non-standard Types'], ['rules', '⚖️ Business Rules']]
+  const TABS: [typeof view, string][] = [['catalog', 'Standard Pay Heads'], ['flexi', 'Flexi / FBP'], ['nonstd', 'Non-standard Types'], ['rules', 'Business Rules']]
 
   return (
     <div>
@@ -152,7 +155,7 @@ export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {
                     <td style={{ padding: '9px 12px' }}><span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: C.purpleBg, color: C.purpleDark }}>{f.code}</span></td>
                     <td style={{ padding: '9px 12px', fontWeight: 600, color: C.navy }}>{f.name}</td>
                     <td style={{ padding: '9px 12px' }}><span style={{ fontSize: 11, color: f.bill.startsWith('No') ? C.green : C.amber }}>{f.bill}</span></td>
-                    <td style={{ padding: '9px 12px', color: '#475569' }}>{f.regime}</td>
+                    <td style={{ padding: '9px 12px', color: TK.inkSoft }}>{f.regime}</td>
                     <td style={{ padding: '9px 12px', color: C.muted, fontSize: 11.5 }}>{f.source}</td>
                   </tr>
                 ))}
@@ -187,7 +190,7 @@ export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {
             {RULES.map((r, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: i < RULES.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                 <span style={{ width: 22, height: 22, borderRadius: 99, background: C.purpleBg, color: C.purpleDark, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
-                <span style={{ fontSize: 12.5, color: '#374151', lineHeight: 1.55 }}>{r}</span>
+                <span style={{ fontSize: 12.5, color: TK.inkSoft, lineHeight: 1.55 }}>{r}</span>
               </div>
             ))}
           </div>

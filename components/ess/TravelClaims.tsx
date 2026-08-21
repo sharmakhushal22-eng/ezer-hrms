@@ -350,7 +350,7 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
             </div>
           )}
           {tracking && (
-            <span style={{ fontSize: 11, color: V.purpleDark, fontWeight: 600 }}>● Recording</span>
+            <span style={{ fontSize: 11, color: V.purpleDark, fontWeight: 600 }}>Recording</span>
           )}
         </div>
       )}
@@ -372,8 +372,7 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
         )}
         {recorded && (
           <>
-            <span style={{ fontSize: 12, color: V.green, fontWeight: 600, alignSelf: 'center' }}>
-              ✓ Journey recorded — add the details below and save.
+            <span style={{ fontSize: 12, color: V.green, fontWeight: 600, alignSelf: 'center' }}>Journey recorded — add the details below and save.
             </span>
             <button onClick={onReset}
                     style={{ padding: '7px 14px', borderRadius: 7, border: `1px solid ${V.border}`,
@@ -468,7 +467,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
                                       fontSize: 11, background: V.greenBg, color: V.green,
                                       border: `1px solid ${V.green}33`, borderRadius: 99,
                                       padding: '3px 9px' }}>
-              {b.mime_type === 'application/pdf' ? '📄' : '🧾'}
+              {b.mime_type === 'application/pdf' ? '' : ''}
               {b.url
                 ? <a href={b.url} target="_blank" rel="noreferrer"
                      style={{ color: V.green, textDecoration: 'underline' }}>
@@ -488,7 +487,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
                            fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
                            color: busy ? V.muted : V.purpleDark }}>
-            {busy ? 'Uploading…' : bills.length ? '+ another bill' : '📎 Attach bill slip'}
+            {busy ? 'Uploading…' : bills.length ? '+ another bill' : 'Attach bill slip'}
           </button>
 
           {loaded && bills.length === 0 && needsBill !== false && (
@@ -821,7 +820,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   if (blocked) {
     return (
       <div style={{ ...card, textAlign: 'center', padding: '38px 22px' }}>
-        <div style={{ fontSize: 30, marginBottom: 10 }}>🚫</div>
+        <div style={{ fontSize: 30, marginBottom: 10 }}></div>
         <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, marginBottom: 6 }}>
           Travel claims are not available
         </div>
@@ -1023,7 +1022,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                                background: pendingBill ? V.greenBg : V.field,
                                color: pendingBill ? V.green : V.purpleDark,
                                fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
-                {pendingBill ? '✓ ' + pendingBill.name : '📎 Choose Uber / Ola / taxi bill'}
+                {pendingBill ? '✓ ' + pendingBill.name : 'Choose Uber / Ola / taxi bill'}
               </button>
 
               {pendingBill && (

@@ -10,22 +10,25 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 // ─── EZER Palette ────────────────────────────────────────────
 const C = {
-  bg: '#F5F3FF',
-  navy: '#1E1B4B',
-  purple: '#7C3AED',
-  purpleDark: '#3C3489',
-  purpleBg: '#EEEDFE',
-  card: '#FFFFFF',
-  border: '#E9E7F5',
-  muted: '#6B6B7B',
-  green: '#059669',
-  greenBg: '#ECFDF5',
-  amber: '#D97706',
-  amberBg: '#FFFBEB',
-  red: '#DC2626',
+  bg: TK.canvas,
+  navy: TK.ink,
+  purple: TK.violet,
+  purpleDark: TK.violetDeep,
+  purpleBg: TK.violetTint,
+  card: TK.surface,
+  border: TK.line,
+  muted: TK.muted,
+  green: TK.positive,
+  greenBg: TK.positiveTint,
+  amber: TK.warning,
+  amberBg: TK.warningTint,
+  red: TK.critical,
 };
 
 // ─── Types ────────────────────────────────────────────────────
@@ -65,7 +68,7 @@ const REPORTS: ReportConfig[] = [
     id: 'emp_master',
     label: 'Employee Master',
     description: 'Complete employee profile — identity, employment, contact, statutory details',
-    icon: '👤',
+    icon: '',
     category: 'Employee',
     scope: 'all',
     filters: [
@@ -151,7 +154,7 @@ const REPORTS: ReportConfig[] = [
     id: 'ctc_report',
     label: 'CTC Report',
     description: 'Annual CTC breakup — fixed, variable, basic, HRA, EPF wage limit per employee',
-    icon: '💰',
+    icon: '',
     category: 'Salary',
     join: 'ctc_master',
     scope: 'all',
@@ -215,7 +218,7 @@ const REPORTS: ReportConfig[] = [
     id: 'bank_report',
     label: 'Bank Details Report',
     description: 'Employee bank account details (masked) — for salary disbursement & NEFT file',
-    icon: '🏦',
+    icon: '',
     category: 'Employee',
     scope: 'all',
     filters: [
@@ -242,7 +245,7 @@ const REPORTS: ReportConfig[] = [
     id: 'branch_wise',
     label: 'Branch / Location-wise Employee',
     description: 'Headcount and employee list by branch, location, or state',
-    icon: '🏢',
+    icon: '',
     category: 'Employee',
     scope: 'all',
     filters: [
@@ -272,7 +275,7 @@ const REPORTS: ReportConfig[] = [
     id: 'blood_group',
     label: 'Blood Group Report',
     description: 'Employee list with blood group — useful for emergency & medical records',
-    icon: '🩸',
+    icon: '',
     category: 'Employee',
     scope: 'active',
     filters: [
@@ -324,7 +327,7 @@ const REPORTS: ReportConfig[] = [
     id: 'leave_report',
     label: 'Leave Report',
     description: 'Leave balance, accrued, used & closing per employee — all leave types',
-    icon: '🌴',
+    icon: '',
     category: 'Leave',
     join: 'leave_balances',
     scope: 'all',
@@ -349,7 +352,7 @@ const REPORTS: ReportConfig[] = [
     id: 'flexi_report',
     label: 'Flexi Declaration Report',
     description: 'Employee-wise flexi (FBP) component declarations — old & new regime amounts',
-    icon: '💼',
+    icon: '',
     category: 'Salary',
     join: 'flexi_tds_forms',
     scope: 'all',
@@ -377,7 +380,7 @@ const REPORTS: ReportConfig[] = [
     id: 'investment_report',
     label: 'Investment Declaration Report',
     description: 'Employee 80C, 80D, HRA, NPS declarations — for TDS computation',
-    icon: '📋',
+    icon: '',
     category: 'Tax',
     join: 'tds_declarations',
     scope: 'all',
@@ -412,7 +415,7 @@ const REPORTS: ReportConfig[] = [
     id: 'statutory_report',
     label: 'Statutory Details Report',
     description: 'PF, ESIC, PT, LWF applicability and IDs per employee',
-    icon: '⚖️',
+    icon: '',
     category: 'Statutory',
     scope: 'all',
     filters: [
@@ -444,7 +447,7 @@ const REPORTS: ReportConfig[] = [
     id: 'birthday_report',
     label: 'Birthday & Anniversary Report',
     description: 'Employee birthdays and work anniversaries by month',
-    icon: '🎂',
+    icon: '',
     category: 'Employee',
     scope: 'active',
     filters: [
@@ -468,7 +471,7 @@ const REPORTS: ReportConfig[] = [
     id: 'confirmation_due',
     label: 'Confirmation Due Report',
     description: 'Active employees not yet confirmed — probation review pending',
-    icon: '✅',
+    icon: '',
     category: 'Employee',
     scope: 'confirmation_due',
     filters: [
@@ -492,7 +495,7 @@ const REPORTS: ReportConfig[] = [
     id: 'attrition_report',
     label: 'Attrition / Exit Report',
     description: 'Resigned, terminated, or absconded employees with exit details',
-    icon: '🚪',
+    icon: '',
     category: 'Employee',
     scope: 'exited',
     filters: [
@@ -521,7 +524,7 @@ const REPORTS: ReportConfig[] = [
     id: 'new_joiners',
     label: 'New Joiners Report',
     description: 'Employees who joined in the selected date range',
-    icon: '🆕',
+    icon: '',
     category: 'Employee',
     scope: 'all',
     filters: [
@@ -550,7 +553,7 @@ const REPORTS: ReportConfig[] = [
     id: 'vpf_report',
     label: 'VPF Declaration Report',
     description: 'Employees who have opted for Voluntary Provident Fund',
-    icon: '📦',
+    icon: '',
     category: 'Statutory',
     join: 'vpf_declarations',
     scope: 'all',
@@ -578,7 +581,7 @@ const REPORTS: ReportConfig[] = [
     id: 'nps_report',
     label: 'NPS Enrolment Report',
     description: 'Employees enrolled in corporate NPS — PRAN, regime, monthly contribution',
-    icon: '🏛️',
+    icon: '',
     category: 'Statutory',
     join: 'nps_declarations',
     scope: 'all',
@@ -622,19 +625,19 @@ function formatCell(value: any, format?: string): string {
 // ─── Badge Component ──────────────────────────────────────────
 function Badge({ value }: { value: string }) {
   const colorMap: Record<string, [string, string]> = {
-    Active: ['#ECFDF5', '#059669'], Resigned: ['#FEF2F2', '#DC2626'],
-    Terminated: ['#FEF2F2', '#DC2626'], Absconded: ['#FEF2F2', '#DC2626'],
-    ACTIVE: ['#ECFDF5', '#059669'], STOPPED: ['#FEF2F2', '#DC2626'],
-    SUBMITTED: ['#ECFDF5', '#059669'], DRAFT: ['#FFFBEB', '#D97706'],
-    APPROVED: ['#ECFDF5', '#059669'], LOCKED: ['#EEF2FF', '#4F46E5'],
-    OLD: ['#EEF2FF', '#4F46E5'], NEW: ['#F0FDF4', '#15803D'],
-    Employee: ['#EEEDFE', '#3C3489'], Intern: ['#FFF7ED', '#C2410C'],
+    Active: [TK.positiveTint, TK.positive], Resigned: [TK.criticalTint, TK.critical],
+    Terminated: [TK.criticalTint, TK.critical], Absconded: [TK.criticalTint, TK.critical],
+    ACTIVE: [TK.positiveTint, TK.positive], STOPPED: [TK.criticalTint, TK.critical],
+    SUBMITTED: [TK.positiveTint, TK.positive], DRAFT: [TK.warningTint, TK.warning],
+    APPROVED: [TK.positiveTint, TK.positive], LOCKED: ['#EEF2FF', '#4F46E5'],
+    OLD: ['#EEF2FF', '#4F46E5'], NEW: [TK.positiveTint, TK.positive],
+    Employee: [TK.violetTint, TK.violetDeep], Intern: ['#FFF7ED', '#C2410C'],
     Contract: ['#F0F9FF', '#0369A1'], Consultant: ['#FDF4FF', '#9333EA'],
-    Male: ['#EFF6FF', '#1D4ED8'], Female: ['#FDF2F8', '#C026D3'],
-    Confirmed: ['#ECFDF5', '#059669'], Probation: ['#FFFBEB', '#D97706'],
-    PENDING_PRAN: ['#FFFBEB', '#D97706'],
+    Male: [TK.infoTint, TK.info], Female: ['#FDF2F8', '#C026D3'],
+    Confirmed: [TK.positiveTint, TK.positive], Probation: [TK.warningTint, TK.warning],
+    PENDING_PRAN: [TK.warningTint, TK.warning],
   };
-  const [bg, color] = colorMap[value] || ['#F1F5F9', '#475569'];
+  const [bg, color] = colorMap[value] || [TK.sunken, TK.inkSoft];
   return (
     <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 20, background: bg, color, fontWeight: 500, whiteSpace: 'nowrap' }}>
       {value}
@@ -972,7 +975,7 @@ export default function ReportsPage() {
       <div style={s.page}>
         {/* Header — sticky */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 4, paddingBottom: 8 }}>
-          <button onClick={() => { setActiveReport(null); setRawRows([]); setFilters({}); }} style={{ ...s.secBtn, padding: '6px 12px' }}>← Back</button>
+          <button onClick={() => { setActiveReport(null); setRawRows([]); setFilters({}); }} style={{ ...s.secBtn, padding: '6px 12px' }}>Back</button>
           <div>
             <div style={{ fontSize: 18, fontWeight: 600, color: C.navy }}>{activeReport.icon} {activeReport.label}</div>
             <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{activeReport.description}</div>
@@ -1083,7 +1086,7 @@ export default function ReportsPage() {
 
       {/* Search + Category + Company */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input placeholder='🔍 Search reports…' style={{ ...s.inp, minWidth: 240 }} value={search} onChange={e => setSearch(e.target.value)} />
+        <input placeholder='Search reports…' style={{ ...s.inp, minWidth: 240 }} value={search} onChange={e => setSearch(e.target.value)} />
         <div style={{ display: 'flex', gap: 4 }}>
           {CATEGORIES.map(c => (
             <button key={c} onClick={() => setCategory(c)} style={s.btn(category === c)}>{c}</button>

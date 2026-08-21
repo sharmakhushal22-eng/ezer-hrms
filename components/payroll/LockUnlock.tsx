@@ -15,13 +15,16 @@ import {
   loadLockList, lockFilterOptions, unlockEmployees, lockEmployees, loadLockAudit,
   EMPTY_LOCK_FILTER, type LockRow, type LockFilter, type LockAudit,
 } from '@/lib/payroll/lock'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#6D28D9', purpleSoft: '#F3EEFF',
-  card: '#FFFFFF', border: '#ECEAFB', muted: '#6B7280',
-  green: '#059669', greenBg: '#ECFDF5', greenBd: '#A7F3D0',
-  amber: '#B45309', amberBg: '#FFFBEB',
-  red: '#DC2626', redBg: '#FEF2F2', redBd: '#FECACA',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, purpleSoft: '#F3EEFF',
+  card: TK.surface, border: '#ECEAFB', muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: '#A7F3D0',
+  amber: TK.warning, amberBg: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, redBd: '#FECACA',
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -88,7 +91,7 @@ function EmpRow({ r, checked, onToggle, isGroup }: {
           fontSize: 10.5, fontWeight: 700, padding: '4px 11px', borderRadius: 999,
           display: 'inline-flex', alignItems: 'center', gap: 5,
           background: r.is_locked ? C.redBg : C.greenBg, color: r.is_locked ? C.red : C.green,
-        }}>{r.is_locked ? '🔒 Locked' : '🔓 Unlocked'}</span>
+        }}>{r.is_locked ? 'Locked' : 'Unlocked'}</span>
         {/* Why it was reopened, on the row itself — the audit trail below scrolls away,
             this does not. */}
         {!r.is_locked && r.unlock_reason && (
@@ -255,7 +258,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         </div>
         <select value={monthVal} onChange={e => { setMonthVal(e.target.value); setSel(new Set()); setMsg('') }}
           style={{ ...inp, width: 'auto', borderRadius: 999, padding: '7px 16px', fontWeight: 600, color: C.purpleD, cursor: 'pointer' }}>
-          {monthOpts.length === 0 && <option value="">📅 No month created</option>}
+          {monthOpts.length === 0 && <option value="">No month created</option>}
           {monthOpts.map(r => <option key={r.month} value={String(r.month)}>📅 {periodLabel(r)}</option>)}
         </select>
       </div>
@@ -392,12 +395,11 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           <button onClick={lockSelected} disabled={busy || toLock.length === 0}
             style={{
               fontFamily: font, fontSize: 13.5, fontWeight: 700,
-              color: toLock.length && !busy ? C.red : '#9CA3AF',
+              color: toLock.length && !busy ? C.red : TK.faint,
               background: '#fff', border: `1px solid ${toLock.length && !busy ? C.redBd : C.border}`,
               borderRadius: 10, padding: '12px 22px',
               cursor: toLock.length && !busy ? 'pointer' : 'not-allowed',
-            }}>
-            🔒 Lock Selected ({toLock.length})
+            }}>Lock Selected ({toLock.length})
           </button>
           {picked.length === 0 && (
             <span style={{ fontSize: 11.5, color: C.muted }}>Tick a row above to enable these.</span>
@@ -420,8 +422,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               <span style={{ color: C.muted }}>{r.full_name}</span>
               {r.unlock_reason && <span style={{ color: C.muted, fontSize: 11 }}>— “{r.unlock_reason}”</span>}
               <button onClick={() => relock(r)} disabled={busy}
-                style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11, fontWeight: 700, color: C.red, background: '#fff', border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '5px 12px', cursor: busy ? 'not-allowed' : 'pointer' }}>
-                🔒 Lock again
+                style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11, fontWeight: 700, color: C.red, background: '#fff', border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '5px 12px', cursor: busy ? 'not-allowed' : 'pointer' }}>Lock again
               </button>
             </div>
           ))}

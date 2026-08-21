@@ -7,20 +7,23 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getSlabs, getSurchargeSlabs, getRegimeConfig, computeIncomeTax } from '@/lib/income-tax/actions'
 import type { TaxSlab, SurchargeSlab, TaxRegimeConfig, TaxCalculationResult, Regime, AgeCategory } from '@/lib/income-tax/types'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  greenBd: '#BBF7D0', purpleBg: '#EEEDFE', gray: '#F8F7FF', amber: '#B45309', amberBg: '#FFFBEB',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  greenBd: '#BBF7D0', purpleBg: TK.violetTint, gray: TK.sunken, amber: TK.warning, amberBg: TK.warningTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`
 
 function ratePill(rate: number) {
-  const [bg, fg] = rate === 0 ? ['#ECFDF5', '#059669']
+  const [bg, fg] = rate === 0 ? [TK.positiveTint, TK.positive]
     : rate <= 10 ? ['#EEF2FF', '#4F46E5']
-    : rate <= 20 ? ['#FFFBEB', '#B45309']
-    : ['#FEF2F2', '#DC2626']
+    : rate <= 20 ? [TK.warningTint, TK.warning]
+    : [TK.criticalTint, TK.critical]
   return <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: bg, color: fg, minWidth: 40, display: 'inline-block', textAlign: 'center' }}>{rate}%</span>
 }
 
@@ -37,7 +40,7 @@ function RegimeCard({ regime, slabs, surcharge, config }: {
       <div style={{ height: 4, background: accent }} />
       <div style={{ padding: '14px 16px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ width: 30, height: 30, borderRadius: 9, background: isNew ? C.greenBg : C.purpleBg, color: isNew ? C.green : C.purpleD, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isNew ? '✨' : '📜'}</span>
+          <span style={{ width: 30, height: 30, borderRadius: 9, background: isNew ? C.greenBg : C.purpleBg, color: isNew ? C.green : C.purpleD, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isNew ? '' : ''}</span>
           <span style={{ fontSize: 14, fontWeight: 800, color: C.navy }}>{isNew ? 'New Regime' : 'Old Regime'}</span>
           {isNew && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 99, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '.03em' }}>Default</span>}
         </div>
@@ -131,13 +134,13 @@ export default function IncomeTaxConfig() {
     } catch (e: any) { setError(e.message) } finally { setCalculating(false) }
   }
 
-  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: '#FAFAF8', color: C.navy }
+  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 800 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>🧮</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Income Tax — Old vs New</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -192,7 +195,7 @@ export default function IncomeTaxConfig() {
                 ))}
               </div>
               <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, padding: '11px 14px', background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, fontSize: 13, color: C.green, fontWeight: 800 }}>
-                <span style={{ fontSize: 15 }}>🏆</span>
+                <span style={{ fontSize: 15 }}></span>
                 {newWins
                   ? `New regime is better — saves ${inr(oldResult.total_tax - newResult.total_tax)} vs Old`
                   : `Old regime is better — saves ${inr(newResult.total_tax - oldResult.total_tax)} vs New`}

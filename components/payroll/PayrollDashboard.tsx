@@ -8,12 +8,15 @@
 // one missing source never blanks the whole page.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FAC775', pink: '#D4537E',
-  purpleBg: '#EEEDFE', gray: '#F8F7FF', teal: '#0891B2',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FAC775', pink: '#D4537E',
+  purpleBg: TK.violetTint, gray: TK.sunken, teal: '#0891B2',
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const num = (v: any) => (v == null || v === '' ? 0 : Number(v) || 0)
@@ -75,7 +78,7 @@ function GenderDonut({ male, female, other }: { male: number; female: number; ot
   const segs = [
     { v: male, c: C.purple, label: 'Male' },
     { v: female, c: C.pink, label: 'Female' },
-    { v: other, c: '#94A3B8', label: 'Other' },
+    { v: other, c: TK.faint, label: 'Other' },
   ].filter(s => s.v > 0)
   let offset = 0
   return (
@@ -91,7 +94,7 @@ function GenderDonut({ male, female, other }: { male: number; female: number; ot
         <text x="44" y="48" textAnchor="middle" fontSize="15" fontWeight="800" fill={C.navy}>{total}</text>
       </svg>
       <div>
-        {[['Male', male, C.purple], ['Female', female, C.pink], ['Other', other, '#94A3B8']].filter(r => (r[1] as number) > 0).map(([l, v, c]) => (
+        {[['Male', male, C.purple], ['Female', female, C.pink], ['Other', other, TK.faint]].filter(r => (r[1] as number) > 0).map(([l, v, c]) => (
           <div key={l as string} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5, fontSize: 12, color: C.navy }}>
             <span style={{ width: 9, height: 9, borderRadius: 2, background: c as string }} />{l as string} — <b>{v as number}</b>
           </div>

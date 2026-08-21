@@ -21,13 +21,16 @@ import {
   EMPTY_FILTER, isFiltered, NOT_ACTIVE,
   type Readiness, type ReadinessCheck, type ReadinessFilter, type SnapshotRow,
 } from '@/lib/payroll/readiness'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#6D28D9', purpleSoft: '#F3EEFF',
-  card: '#FFFFFF', border: '#ECEAFB', muted: '#6B7280',
-  green: '#059669', greenBg: '#ECFDF5', greenBd: '#A7F3D0',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A',
-  red: '#DC2626', redBg: '#FEF2F2', redBd: '#FECACA', redDark: '#B91C1C',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, purpleSoft: '#F3EEFF',
+  card: TK.surface, border: '#ECEAFB', muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: '#A7F3D0',
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
+  red: TK.critical, redBg: TK.criticalTint, redBd: '#FECACA', redDark: TK.critical,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -104,7 +107,7 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
 
       {check.rows.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: C.green }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>✓</div>
+          <div style={{ fontSize: 32, marginBottom: 8 }}></div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Nobody in this month has this problem.</div>
         </div>
       ) : (
@@ -148,10 +151,10 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
 // ── Banner ─────────────────────────────────────────────────────────────────
 function Banner({ tone, title, sub }: { tone: 'red' | 'green' | 'amber'; title: string; sub: string }) {
   const t = tone === 'red'
-    ? { bg: 'linear-gradient(135deg,#FEF2F2,#FFF5F5)', bd: C.redBd, dot: C.red, fg: C.red, sub: C.redDark, ic: '⚠️' }
+    ? { bg: 'linear-gradient(135deg,#FEF2F2,#FFF5F5)', bd: C.redBd, dot: C.red, fg: C.red, sub: C.redDark, ic: '' }
     : tone === 'green'
-      ? { bg: 'linear-gradient(135deg,#ECFDF5,#F3FDF8)', bd: C.greenBd, dot: C.green, fg: C.green, sub: '#047857', ic: '✓' }
-      : { bg: 'linear-gradient(135deg,#FFFBEB,#FFFDF5)', bd: C.amberBd, dot: C.amber, fg: C.amber, sub: '#92400E', ic: '⏳' }
+      ? { bg: 'linear-gradient(135deg,#ECFDF5,#F3FDF8)', bd: C.greenBd, dot: C.green, fg: C.green, sub: '#047857', ic: '' }
+      : { bg: 'linear-gradient(135deg,#FFFBEB,#FFFDF5)', bd: C.amberBd, dot: C.amber, fg: C.amber, sub: TK.warning, ic: '' }
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12, borderRadius: 14, padding: '16px 20px',
@@ -192,7 +195,7 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
   const lbl: React.CSSProperties = { fontSize: 9.5, color: C.muted, display: 'block', marginBottom: 3 }
   return (
     <div style={{
-      background: on ? C.purpleSoft : '#F8F7FF', border: `1px solid ${on ? '#DDD6FE' : C.border}`,
+      background: on ? C.purpleSoft : TK.sunken, border: `1px solid ${on ? TK.violetEdge : C.border}`,
       borderRadius: 12, padding: '10px 12px', marginBottom: 14,
     }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
@@ -545,7 +548,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
             fontSize: 12.5, fontWeight: 600, color: C.purpleD, fontFamily: font, cursor: 'pointer', outline: 'none',
             boxShadow: '0 1px 3px rgba(124,58,237,0.06)',
           }}>
-          {monthOpts.length === 0 && <option value="">📅 No month created</option>}
+          {monthOpts.length === 0 && <option value="">No month created</option>}
           {monthOpts.map(r => <option key={r.month} value={String(r.month)}>📅 {periodLabel(r)}</option>)}
         </select>
       </div>
@@ -588,11 +591,11 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
             display: 'flex', alignItems: 'center', gap: 8,
             boxShadow: canRun ? '0 4px 14px rgba(124,58,237,0.25)' : 'none',
           }}>
-          {busy ? '⏳ Running…'
-            : willRun.length === 0 ? '▶️ Run Payroll'
+          {busy ? 'Running…'
+            : willRun.length === 0 ? 'Run Payroll'
               : (filtering || excluded.length)
                 ? `▶️ Run Payroll for ${willRun.length} employee${willRun.length === 1 ? '' : 's'}`
-                : calculated ? '▶️ Re-run Payroll' : '▶️ Run Payroll'}
+                : calculated ? 'Re-run Payroll' : 'Run Payroll'}
         </button>
         {/* Available whenever the month has rows, not only after a clean run. The sheet
             was previously produced only as the last step of a successful run, so any
@@ -604,14 +607,14 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
               fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.purpleD, background: C.card,
               border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px',
               cursor: busy ? 'not-allowed' : 'pointer',
-            }}>📄 Download sheet</button>
+            }}>Download sheet</button>
         )}
         {calculated && (
           <button onClick={downloadRegister} disabled={busy}
             style={{
               fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.purpleD, background: C.card,
               border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px', cursor: busy ? 'not-allowed' : 'pointer',
-            }}>📥 Register</button>
+            }}>Register</button>
         )}
         <span style={{ fontSize: 12, color: C.muted }}>{hint}</span>
       </div>

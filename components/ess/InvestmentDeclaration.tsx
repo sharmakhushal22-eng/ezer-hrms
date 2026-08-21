@@ -13,12 +13,15 @@
 // The UI mirrors them so the employee finds out before pressing Submit, not after.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#6D28D9', card: '#FFFFFF',
-  border: 'rgba(124,58,237,0.12)', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A', red: '#DC2626', redBg: '#FEF2F2',
-  purpleBg: '#F3EEFF', soft: '#FAFAF8',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: 'rgba(124,58,237,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
+  purpleBg: '#F3EEFF', soft: TK.sunken,
 }
 const FY = '2026-27'
 const CAP_80C = 150000
@@ -231,7 +234,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
                   Zaroori hai — saal ka rent {inr(100000)} se zyada hai
                 </div>
               </div>
-              <input style={{ ...S.inp, textTransform: 'uppercase', border: `1px solid ${panMissing ? C.red : '#DDD6FE'}` }}
+              <input style={{ ...S.inp, textTransform: 'uppercase', border: `1px solid ${panMissing ? C.red : TK.violetEdge}` }}
                 value={pan} maxLength={10} placeholder="ABCDE1234F"
                 onChange={e => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
             </div>
@@ -252,8 +255,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         </div>
       )}
 
-      <div style={{ fontSize: 11.5, color: C.muted, background: '#F8F7FF', borderRadius: 9, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>
-        🔒 Proof submission saal ke aakhir mein khulti hai — ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
+      <div style={{ fontSize: 11.5, color: C.muted, background: TK.sunken, borderRadius: 9, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission saal ke aakhir mein khulti hai — ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
       </div>
 
       {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}

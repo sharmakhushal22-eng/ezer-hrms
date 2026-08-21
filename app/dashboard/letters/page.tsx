@@ -5,13 +5,16 @@
 import { useState } from 'react'
 import LetterheadConfig from '@/components/letters/LetterheadConfig'
 import LetterTemplates from '@/components/letters/LetterTemplates'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
-const C = { bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', border: '#E9E7F5', muted: '#6B7280' }
+const C = { bg: TK.canvas, navy: TK.ink, purple: TK.violet, border: TK.line, muted: TK.muted }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 const TABS: { id: string; label: string; icon: string; soon?: boolean }[] = [
-  { id: 'letterhead', label: 'Letterhead & Signatory', icon: '🖋️' },
-  { id: 'letters', label: 'Design & Generate Letters', icon: '📄' },
+  { id: 'letterhead', label: 'Letterhead & Signatory', icon: '' },
+  { id: 'letters', label: 'Design & Generate Letters', icon: '' },
 ]
 
 export default function LettersPage() {
@@ -22,7 +25,7 @@ export default function LettersPage() {
       <div style={{ background: 'linear-gradient(120deg,#1E1B4B 0%,#4C1D95 55%,#7C3AED 100%)', padding: '22px 24px 20px', color: '#fff' }}>
         <div style={{ maxWidth: 940, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 13, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}>🖋️</div>
+            <div style={{ width: 46, height: 46, borderRadius: 13, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}></div>
             <div>
               <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>HR Letters</div>
               <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)', marginTop: 2 }}>Configure letterheads &amp; signatories once, then draft and issue HR letters on branded stationery.</div>

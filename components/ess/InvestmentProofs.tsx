@@ -10,12 +10,15 @@
 // an employee who does not know that only finds out in their final settlement.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#6D28D9', card: '#FFFFFF',
-  border: 'rgba(124,58,237,0.12)', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A', red: '#DC2626', redBg: '#FEF2F2',
-  soft: '#FAFAF8', purpleBg: '#F3EEFF',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: 'rgba(124,58,237,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
+  soft: TK.sunken, purpleBg: '#F3EEFF',
 }
 const FY = '2026-27'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -33,10 +36,10 @@ interface Proof {
 }
 
 const TONE: Record<string, { bg: string; fg: string; label: string }> = {
-  PENDING:   { bg: '#F3F4F6', fg: '#6B7280', label: 'Proof pending' },
-  SUBMITTED: { bg: '#FFFBEB', fg: '#B45309', label: 'Under review' },
-  APPROVED:  { bg: '#ECFDF5', fg: '#059669', label: 'Approved' },
-  REJECTED:  { bg: '#FEF2F2', fg: '#DC2626', label: 'Rejected' },
+  PENDING:   { bg: '#F3F4F6', fg: TK.muted, label: 'Proof pending' },
+  SUBMITTED: { bg: TK.warningTint, fg: TK.warning, label: 'Under review' },
+  APPROVED:  { bg: TK.positiveTint, fg: TK.positive, label: 'Approved' },
+  REJECTED:  { bg: TK.criticalTint, fg: TK.critical, label: 'Rejected' },
 }
 
 // Outside the parent so typing in an amount box never remounts the row.
@@ -188,13 +191,13 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
         <>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
             {[['Declared', inr(declared), C.navy], ['Proven', inr(proven), C.green], ['Not yet proven', inr(Math.max(0, declared - proven)), declared - proven > 0 ? C.amber : C.muted]].map(([l, v, col]) => (
-              <div key={l} style={{ background: '#F8F7FF', border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 120 }}>
+              <div key={l} style={{ background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 120 }}>
                 <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{l}</div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: col as string }}>{v}</div>
               </div>
             ))}
             {deadline && (
-              <div style={{ background: overdue ? C.redBg : '#F8F7FF', border: `1px solid ${overdue ? '#FECACA' : C.border}`, borderRadius: 9, padding: '9px 14px' }}>
+              <div style={{ background: overdue ? C.redBg : TK.sunken, border: `1px solid ${overdue ? '#FECACA' : C.border}`, borderRadius: 9, padding: '9px 14px' }}>
                 <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Deadline</div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: overdue ? C.red : C.navy }}>{fmtDate(deadline)}</div>
               </div>

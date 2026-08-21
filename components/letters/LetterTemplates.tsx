@@ -18,14 +18,17 @@ import { MERGE_FIELDS, sampleMergeFields } from '@/lib/letters/mergeFields'
 import { renderTemplate, extractTokens } from '@/lib/letters/renderTemplate'
 import { getGeneratedLetterDownloadUrl, publishLetterToEss } from '@/lib/letters/actions'
 import type { MergeField } from '@/lib/letters/mergeFields'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280',
-  green: '#059669', greenBg: '#ECFDF5', greenBd: '#BBF7D0',
-  amber: '#D97706', amberBg: '#FFFBEB', amberBd: '#FDE68A',
-  red: '#DC2626', redBg: '#FEF2F2', redBd: '#FCA5A5',
-  purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: '#BBF7D0',
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
+  red: TK.critical, redBg: TK.criticalTint, redBd: '#FCA5A5',
+  purpleBg: TK.violetTint, gray: TK.sunken,
 }
 
 interface Template {
@@ -41,7 +44,7 @@ interface GenResult {
 
 function TabBar({ active, onChange }: { active: 'templates' | 'generate'; onChange: (t: 'templates' | 'generate') => void }) {
   const tabs: ['templates', 'generate'] = ['templates', 'generate']
-  const labels = { templates: '📝 Letter Templates', generate: '⚡ Generate Letters' }
+  const labels = { templates: 'Letter Templates', generate: 'Generate Letters' }
   return (
     <div style={{ display: 'flex', gap: 4, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
       {tabs.map(t => (
@@ -111,11 +114,11 @@ function ResultRow({ r }: { r: GenResult }) {
   const [published, setPublished] = useState(false)
 
   const statusMeta: Record<string, [string, string, string]> = {
-    GENERATED: [C.greenBg, C.green, '✓ Generated'],
-    SKIPPED_NOT_FOUND: [C.redBg, C.red, '✗ Code not found'],
-    SKIPPED_NO_LETTERHEAD: [C.amberBg, C.amber, '⚠ No letterhead configured for branch'],
-    SKIPPED_UNKNOWN_TOKENS: [C.amberBg, C.amber, '⚠ Template has unknown fields'],
-    ERROR: [C.redBg, C.red, '✗ Error'],
+    GENERATED: [C.greenBg, C.green, 'Generated'],
+    SKIPPED_NOT_FOUND: [C.redBg, C.red, 'Code not found'],
+    SKIPPED_NO_LETTERHEAD: [C.amberBg, C.amber, 'No letterhead configured for branch'],
+    SKIPPED_UNKNOWN_TOKENS: [C.amberBg, C.amber, 'Template has unknown fields'],
+    ERROR: [C.redBg, C.red, 'Error'],
   }
   const [bg, fg, label] = statusMeta[r.status] ?? [C.gray, C.muted, r.status]
 
@@ -163,11 +166,11 @@ function ResultRow({ r }: { r: GenResult }) {
             </button>
             <button onClick={handleEmail} disabled={emailing}
               style={{ padding: '4px 9px', fontSize: 10, borderRadius: 6, border: `1px solid ${C.border}`, background: '#fff', cursor: 'pointer' }}>
-              {emailing ? '…' : '✉ Email'}
+              {emailing ? '…' : 'Email'}
             </button>
             <button onClick={handlePublish} disabled={publishing || published}
               style={{ padding: '4px 9px', fontSize: 10, borderRadius: 6, border: `1px solid ${published ? C.greenBd : C.border}`, background: published ? C.greenBg : '#fff', color: published ? C.green : C.navy, cursor: published ? 'default' : 'pointer' }}>
-              {published ? '✓ Published to ESS' : publishing ? '…' : '📤 Publish to ESS'}
+              {published ? 'Published to ESS' : publishing ? '…' : 'Publish to ESS'}
             </button>
           </div>
         )}
@@ -263,7 +266,7 @@ export default function LetterTemplates() {
     setGenerating(false)
   }
 
-  const selStyle: React.CSSProperties = { padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 12, background: '#F8F7FF', color: C.navy, outline: 'none', width: '100%', boxSizing: 'border-box' }
+  const selStyle: React.CSSProperties = { padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, color: C.navy, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (
     <div style={{ padding: '16px 24px 24px', fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13 }}>
@@ -302,8 +305,7 @@ export default function LetterTemplates() {
                   style={{ width: '100%', height: 280, padding: '14px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, lineHeight: 1.6, fontFamily: 'Georgia, serif', boxSizing: 'border-box', resize: 'vertical' }} />
 
                 {unknownInEditor.length > 0 && (
-                  <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '6px 10px', borderRadius: 6, marginTop: 6 }}>
-                    ⚠ Unknown field{unknownInEditor.length > 1 ? 's' : ''}: {unknownInEditor.map(t => `{{${t}}}`).join(', ')} — these will print literally on the letter.
+                  <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '6px 10px', borderRadius: 6, marginTop: 6 }}>Unknown field{unknownInEditor.length > 1 ? 's' : ''}: {unknownInEditor.map(t => `{{${t}}}`).join(', ')} — these will print literally on the letter.
                   </div>
                 )}
 
@@ -314,12 +316,11 @@ export default function LetterTemplates() {
                   </button>
                   <button onClick={previewSample} disabled={previewing}
                     style={{ padding: '9px 18px', borderRadius: 8, border: `1px solid ${C.purple}`, background: '#fff', color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    {previewing ? 'Rendering…' : '👁 Preview sample'}
+                    {previewing ? 'Rendering…' : 'Preview sample'}
                   </button>
                   {previewUrl && (
                     <a href={previewUrl} target="_blank" rel="noreferrer"
-                      style={{ padding: '9px 18px', borderRadius: 8, border: `1px solid ${C.greenBd}`, background: C.greenBg, color: C.green, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>
-                      ↗ Open preview PDF
+                      style={{ padding: '9px 18px', borderRadius: 8, border: `1px solid ${C.greenBd}`, background: C.greenBg, color: C.green, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>Open preview PDF
                     </a>
                   )}
                 </div>
@@ -354,7 +355,7 @@ export default function LetterTemplates() {
               style={{ width: '100%', height: 110, padding: '10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontFamily: 'monospace', boxSizing: 'border-box', resize: 'vertical' }} />
             <button onClick={handleGenerate} disabled={generating || !genCompanyId || !genTemplateId || !codesText.trim()}
               style={{ marginTop: 10, padding: '10px 20px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: (generating || !genCompanyId || !genTemplateId || !codesText.trim()) ? 0.5 : 1 }}>
-              {generating ? 'Generating…' : '⚡ Generate letters'}
+              {generating ? 'Generating…' : 'Generate letters'}
             </button>
           </div>
 

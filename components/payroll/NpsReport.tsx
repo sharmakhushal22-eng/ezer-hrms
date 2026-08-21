@@ -13,12 +13,15 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A',
-  red: '#DC2626', redBg: '#FEF2F2', purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
+  red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.violetTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
@@ -50,7 +53,7 @@ function npsEffectiveDate(doj: string | null, mStart: string): string {
 
 const S = {
   card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.07)' } as React.CSSProperties,
-  sel: { padding: '8px 10px', border: `1px solid #DDD6FE`, borderRadius: 7, fontSize: 12.5, fontFamily: font, background: '#FAFAF8', color: C.navy, outline: 'none', minWidth: 150 } as React.CSSProperties,
+  sel: { padding: '8px 10px', border: `1px solid #DDD6FE`, borderRadius: 7, fontSize: 12.5, fontFamily: font, background: TK.sunken, color: C.navy, outline: 'none', minWidth: 150 } as React.CSSProperties,
   btnP: { padding: '9px 16px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
   btnO: { padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
   th: { padding: '9px 10px', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase' as const, letterSpacing: '.04em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const, background: C.gray, borderBottom: `1px solid ${C.border}` },
@@ -87,19 +90,19 @@ function Stat({ label, value, color }: { label: string; value: string | number; 
 
 function YesNo({ yes }: { yes: boolean }) {
   return (
-    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 10px', borderRadius: 99, background: yes ? C.greenBg : '#F1F5F9', color: yes ? C.green : '#64748B' }}>
+    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 10px', borderRadius: 99, background: yes ? C.greenBg : TK.sunken, color: yes ? C.green : TK.muted }}>
       {yes ? 'Y' : 'N'}
     </span>
   )
 }
 
 const STATUS_STYLE: Record<string, [string, string]> = {
-  ACTIVE: [C.greenBg, C.green], PENDING_PRAN: ['#EFF6FF', '#1D4ED8'],
-  STOPPED: [C.redBg, C.red], SUPERSEDED: ['#F1F5F9', '#64748B'],
+  ACTIVE: [C.greenBg, C.green], PENDING_PRAN: [TK.infoTint, TK.info],
+  STOPPED: [C.redBg, C.red], SUPERSEDED: [TK.sunken, TK.muted],
 }
 function StatusPill({ s }: { s: string }) {
   if (!s || s === '—') return <span style={{ color: C.muted }}>—</span>
-  const [bg, fg] = STATUS_STYLE[s] || ['#F3F0FF', C.purpleD]
+  const [bg, fg] = STATUS_STYLE[s] || [TK.violetTint, C.purpleD]
   return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 99, background: bg, color: fg }}>{s.replace('_', ' ')}</span>
 }
 
@@ -221,7 +224,7 @@ function NpsDialog({ rows, onClose, onDone }: {
       style={{ flex: 1, padding: '10px 8px', borderRadius: 9, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: font, fontSize: 13, fontWeight: 700,
         border: on ? `2px solid ${v === 'y' ? C.green : C.red}` : `1px solid ${C.border}`,
         background: on ? (v === 'y' ? C.greenBg : C.redBg) : '#fff',
-        color: disabled ? '#CBD5E1' : on ? (v === 'y' ? C.green : C.red) : C.navy, opacity: disabled ? .6 : 1 }}>
+        color: disabled ? TK.lineStrong : on ? (v === 'y' ? C.green : C.red) : C.navy, opacity: disabled ? .6 : 1 }}>
       {label}
     </button>
   )
@@ -233,7 +236,7 @@ function NpsDialog({ rows, onClose, onDone }: {
         {/* header */}
         <div style={{ background: 'linear-gradient(135deg,#7C3AED,#4F46E5)', padding: '16px 20px', color: '#fff', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ fontSize: 20 }}>🏛️</div>
+            <div style={{ fontSize: 20 }}></div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15.5, fontWeight: 800 }}>Corporate NPS</div>
               <div style={{ fontSize: 11.5, opacity: .8, marginTop: 1 }}>
@@ -253,7 +256,7 @@ function NpsDialog({ rows, onClose, onDone }: {
 
               {terms.length < 2 ? (
                 <div style={{ textAlign: 'center', padding: '34px 20px', color: C.muted }}>
-                  <div style={{ fontSize: 30, marginBottom: 8 }}>🔍</div>
+                  <div style={{ fontSize: 30, marginBottom: 8 }}></div>
                   <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
                     Type at least two characters to search.<br />
                     <span style={{ fontSize: 11.5, opacity: .8 }}>{rows.length} employees on record.</span>
@@ -304,8 +307,8 @@ function NpsDialog({ rows, onClose, onDone }: {
               {/* Y / N */}
               <div style={{ fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 7px' }}>Set NPS</div>
               <div style={{ display: 'flex', gap: 9 }}>
-                {seg('y', '✓  Yes — enrol', mode === 'y', sel.opted)}
-                {seg('n', '✕  No — stop', mode === 'n', !sel.opted)}
+                {seg('y', 'Yes — enrol', mode === 'y', sel.opted)}
+                {seg('n', 'No — stop', mode === 'n', !sel.opted)}
               </div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 6, lineHeight: 1.5 }}>
                 {sel.opted
@@ -330,7 +333,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                     <>
                       <input value={pran} maxLength={pranLen} placeholder={`${pranLen}-digit PRAN`}
                         onChange={ev => setPran(ev.target.value.replace(/\D/g, ''))}
-                        style={{ ...S.sel, width: '100%', marginTop: 9, letterSpacing: 2, borderColor: pran && !pranOk ? C.red : '#DDD6FE' }} />
+                        style={{ ...S.sel, width: '100%', marginTop: 9, letterSpacing: 2, borderColor: pran && !pranOk ? C.red : TK.violetEdge }} />
                       {pran && !pranOk && <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>{pranLen - pranClean.length} more digit(s) needed</div>}
                     </>
                   ) : (
@@ -568,17 +571,15 @@ export default function NpsReport({ fy }: { fy: string }) {
           <Stat label="Employees" value={shown.length} />
           <Stat label="NPS opted" value={optedCount} color={optedCount ? C.green : C.muted} />
           <Stat label="Not opted" value={shown.length - optedCount} color={C.muted} />
-          {pending > 0 && <Stat label="PRAN pending" value={pending} color="#1D4ED8" />}
+          {pending > 0 && <Stat label="PRAN pending" value={pending} color={TK.info} />}
           {stopped > 0 && <Stat label="Stopped" value={stopped} color={C.red} />}
           <Stat label="Monthly NPS" value={inr(monthlyTotal)} color={C.purpleD} />
           <div style={{ flex: 1 }} />
-          <button onClick={() => setPicker(true)} style={{ ...S.btnP, alignSelf: 'center', background: C.green }}>
-            🏛️ Set NPS for an employee
+          <button onClick={() => setPicker(true)} style={{ ...S.btnP, alignSelf: 'center', background: C.green }}>Set NPS for an employee
           </button>
-          <button onClick={download} disabled={!shown.length} style={{ ...S.btnP, alignSelf: 'center', opacity: shown.length ? 1 : 0.5 }}>
-            📄 Download Excel
+          <button onClick={download} disabled={!shown.length} style={{ ...S.btnP, alignSelf: 'center', opacity: shown.length ? 1 : 0.5 }}>Download Excel
           </button>
-          <button onClick={load} style={{ ...S.btnO, alignSelf: 'center' }}>↻ Refresh</button>
+          <button onClick={load} style={{ ...S.btnO, alignSelf: 'center' }}>Refresh</button>
         </div>
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -600,7 +601,7 @@ export default function NpsReport({ fy }: { fy: string }) {
             <option value="y">NPS opted only (Y)</option>
             <option value="n">Not opted only (N)</option>
           </select>
-          <input style={{ ...S.sel, flex: 1, minWidth: 200 }} placeholder="🔍 Employee code or name" value={q} onChange={e => setQ(e.target.value)} />
+          <input style={{ ...S.sel, flex: 1, minWidth: 200 }} placeholder="Employee code or name" value={q} onChange={e => setQ(e.target.value)} />
           {(fCompany || fDept || fLoc || fOpt !== 'all' || q) && (
             <button onClick={() => { setFCompany(''); setFDept(''); setFLoc(''); setFOpt('all'); setQ('') }} style={S.btnO}>Clear</button>
           )}
@@ -614,8 +615,8 @@ export default function NpsReport({ fy }: { fy: string }) {
               {pendingRows.slice(0, 6).map(r => r.emp_code).join(', ')}{pending > 6 ? `, …and ${pending - 6} more` : ''}.
             </div>
             <button onClick={sendReminders} disabled={mailing}
-              style={{ ...S.btnP, background: '#1D4ED8', whiteSpace: 'nowrap', opacity: mailing ? 0.6 : 1, cursor: mailing ? 'wait' : 'pointer' }}>
-              {mailing ? 'Sending…' : '✉️ Send PRAN reminder'}
+              style={{ ...S.btnP, background: TK.info, whiteSpace: 'nowrap', opacity: mailing ? 0.6 : 1, cursor: mailing ? 'wait' : 'pointer' }}>
+              {mailing ? 'Sending…' : 'Send PRAN reminder'}
             </button>
           </div>
         )}

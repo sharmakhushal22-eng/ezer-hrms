@@ -5,14 +5,17 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { COMP_NAMES } from '@/lib/flexi/claims'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489', border: '#E9E7F5', muted: '#6B7280',
-  card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5', amber: '#B45309', purpleBg: '#EEEDFE',
+  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line, muted: TK.muted,
+  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, amber: TK.warning, purpleBg: TK.violetTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
-const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: '#FAFAF8', color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
 const pri: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: font }
 const sec: React.CSSProperties = { padding: '7px 13px', background: '#fff', color: C.purpleDark, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontFamily: font }
 
@@ -157,7 +160,7 @@ export default function FlexiInvoicesPage() {
             <div style={{ fontSize: 20, fontWeight: 700, color: c as string, marginTop: 2 }}>{v}</div>
           </div>
         ))}
-        {rows.length > 0 && <button style={{ ...pri, alignSelf: 'flex-end', padding: '11px 18px' }} onClick={() => print(rows)}>🧾 Generate all vouchers ({rows.length})</button>}
+        {rows.length > 0 && <button style={{ ...pri, alignSelf: 'flex-end', padding: '11px 18px' }} onClick={() => print(rows)}>Generate all vouchers ({rows.length})</button>}
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
@@ -169,7 +172,7 @@ export default function FlexiInvoicesPage() {
             <div><div style={{ fontWeight: 600 }}>{r.full_name}</div><div style={{ fontSize: 11, color: C.muted }}>{r.emp_code}{r.department ? ` · ${r.department}` : ''}</div></div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>{r.components.map((c, i) => <span key={i} style={{ fontSize: 10, padding: '2px 7px', borderRadius: 99, background: C.purpleBg, color: C.purpleDark, fontWeight: 500 }}>{c.code} {inr(c.amount)}</span>)}</div>
             <div style={{ fontWeight: 700 }}>{inr(r.total)}</div>
-            <div style={{ textAlign: 'right' }}><button style={sec} onClick={() => print([r])}>🧾 Voucher</button></div>
+            <div style={{ textAlign: 'right' }}><button style={sec} onClick={() => print([r])}>Voucher</button></div>
           </div>
         ))}
       </div>

@@ -16,15 +16,18 @@ import { getCurrentLwfRates, reviseLwfConfig, calculateLwfDeduction } from '@/li
 import { MONTH_NAMES } from '@/lib/lwf/types'
 import type { LwfConfig as LwfRow } from '@/lib/lwf/types'
 import { INDIAN_STATES } from '@/lib/geo/india-states-districts'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#D97706', amberBg: '#FFFBEB', purpleBg: '#EEEDFE', gray: '#F8F7FF',
-  red: '#DC2626', redBg: '#FEF2F2',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint, gray: TK.sunken,
+  red: TK.critical, redBg: TK.criticalTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: '#FAFAF8', color: C.navy }
+const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 const labelStyle: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }
 
 // ── Searchable dropdown ─────────────────────────────────────────────
@@ -37,9 +40,9 @@ function SearchSelect({ value, options, placeholder, onChange }: {
   return (
     <div style={{ position: 'relative' }}>
       <div onClick={() => { setOpen(o => !o); setQ('') }}
-        style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, color: value ? C.navy : '#94A3B8' }}>
+        style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, color: value ? C.navy : TK.faint }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value || placeholder}</span>
-        <span style={{ color: '#94A3B8', fontSize: 11 }}>▾</span>
+        <span style={{ color: TK.faint, fontSize: 11 }}></span>
       </div>
       {open && (
         <>
@@ -48,10 +51,10 @@ function SearchSelect({ value, options, placeholder, onChange }: {
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
               style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid #EEF', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: '#94A3B8' }}>No matches</div>}
+              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o} onClick={() => { onChange(o); setOpen(false) }}
-                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = '#F5F3FF'}
+                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
                   onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? '#EEF2FF' : '#fff'}
                   style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o === value ? '#EEF2FF' : '#fff', color: C.navy }}>
                   {o}
@@ -125,7 +128,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: font }}>
       <div style={{ background: '#fff', borderRadius: 14, padding: 22, width: '100%', maxWidth: 500, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(30,27,75,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🏛️</div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise LWF config' : 'Add LWF state'}</div>
             <div style={{ fontSize: 10.5, color: C.muted }}>Applicable months + contributions</div>
@@ -171,7 +174,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
         <div style={{ display: 'flex', gap: 8 }}>
           <button disabled={!valid || saving} onClick={handleSave}
             style={{ flex: 1, padding: '11px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
-            {saving ? 'Saving…' : '💾 Save'}
+            {saving ? 'Saving…' : 'Save'}
           </button>
           <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
         </div>
@@ -247,7 +250,7 @@ export default function LwfConfig() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
           <span style={{
             fontSize: 9, fontWeight: 800, letterSpacing: '.05em', padding: '2px 8px', borderRadius: 99,
-            background: isEmp ? C.purpleBg : '#ECFDF5', color: isEmp ? C.purpleD : C.green,
+            background: isEmp ? C.purpleBg : TK.positiveTint, color: isEmp ? C.purpleD : C.green,
           }}>{isEmp ? 'EMPLOYEE' : 'EMPLOYER'}</span>
           <span style={{ fontSize: 13.5, fontWeight: 700, color: C.navy }}>Contribution Table</span>
         </div>
@@ -279,7 +282,7 @@ export default function LwfConfig() {
                     <td style={{ ...td, textAlign: 'left' }}>
                       <span style={{
                         fontSize: 9.5, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
-                        background: r.exit_exemption_if_before_period_end ? '#ECFDF5' : C.gray,
+                        background: r.exit_exemption_if_before_period_end ? TK.positiveTint : C.gray,
                         color: r.exit_exemption_if_before_period_end ? C.green : C.muted,
                       }}>{r.exit_exemption_if_before_period_end ? 'Yes' : 'No'}</span>
                     </td>
@@ -313,7 +316,7 @@ export default function LwfConfig() {
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1200 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>🏛️</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 19, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Labour Welfare Fund Configuration</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
@@ -369,7 +372,7 @@ export default function LwfConfig() {
                 : `${MONTH_NAMES[qMonth - 1]} is a deduction month in ${qState}.`
           const box: React.CSSProperties = {
             flex: 1, minWidth: 150, borderRadius: 10, padding: '13px 15px',
-            background: found ? '#ECFDF5' : C.amberBg,
+            background: found ? TK.positiveTint : C.amberBg,
             border: `1px solid ${found ? '#A7F3D0' : '#FDE8C8'}`,
           }
           return (
@@ -384,7 +387,7 @@ export default function LwfConfig() {
                   <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${er}` : '—'}</div>
                 </div>
               </div>
-              <div style={{ fontSize: 11.5, color: found ? '#047857' : '#92400E', marginTop: 8 }}>{why}</div>
+              <div style={{ fontSize: 11.5, color: found ? '#047857' : TK.warning, marginTop: 8 }}>{why}</div>
             </div>
           )
         })()}

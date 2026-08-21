@@ -5,6 +5,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import ActivationWizard from '@/components/onboarding/ActivationWizard'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 // ── Types ─────────────────────────────────────────────────────────
 type Stage = 'NOT_INVITED'|'INVITED'|'IN_PROGRESS'|'SUBMITTED'|'HR_REVIEW'|'APPROVED'|'EMPLOYEE_CREATED'
@@ -27,14 +30,14 @@ interface Candidate {
 }
 
 // ── EZER theme constants ───────────────────────────────────────────
-const P = '#7C3AED'
+const P = TK.violet
 const STAGE_META: Record<Stage, {label:string; bg:string; color:string}> = {
-  NOT_INVITED:      { label:'Not invited',       bg:'#F3F4F6', color:'#6B7280' },
-  INVITED:          { label:'Link sent',        bg:'#FFFBEB', color:'#D97706' },
+  NOT_INVITED:      { label:'Not invited',       bg:'#F3F4F6', color:TK.muted },
+  INVITED:          { label:'Link sent',        bg:TK.warningTint, color:TK.warning },
   IN_PROGRESS:      { label:'In progress',      bg:'#EEF2FF', color:'#4338CA' },
-  SUBMITTED:        { label:'Submitted',         bg:'#EEEDFE', color:P        },
-  HR_REVIEW:        { label:'HR review',         bg:'#DBEAFE', color:'#1D4ED8' },
-  APPROVED:         { label:'Approved',          bg:'#ECFDF5', color:'#059669' },
+  SUBMITTED:        { label:'Submitted',         bg:TK.violetTint, color:P        },
+  HR_REVIEW:        { label:'HR review',         bg:TK.infoTint, color:TK.info },
+  APPROVED:         { label:'Approved',          bg:TK.positiveTint, color:TK.positive },
   EMPLOYEE_CREATED: { label:'Employee created',  bg:'#EAF3DE', color:'#3B6D11' },
 }
 const STEP_LABELS = ['','Welcome','OTP','Personal','Contact','Emergency','Documents','Statutory','Declaration']
@@ -64,15 +67,15 @@ const RiskBadge = ({ risk }: {risk?: RiskLevel}) => {
   if (!risk) return null
   const m: Record<RiskLevel,{bg:string;color:string}> = {
     LOW:    {bg:'#EAF3DE',color:'#3B6D11'},
-    MEDIUM: {bg:'#FFFBEB',color:'#D97706'},
-    HIGH:   {bg:'#FCEBEB',color:'#B91C1C'},
+    MEDIUM: {bg:TK.warningTint,color:TK.warning},
+    HIGH:   {bg:'#FCEBEB',color:TK.critical},
   }
   return <Badge label={`${risk === 'HIGH' ? '⚠ ' : ''}${risk} risk`} {...m[risk]}/>
 }
 
 function Toast({msg,type,onClose}:{msg:string;type:'ok'|'err';onClose:()=>void}) {
   useEffect(()=>{const t=setTimeout(onClose,3500);return()=>clearTimeout(t)},[onClose])
-  return <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,borderRadius:10,padding:'12px 20px',fontSize:13,fontWeight:500,background:type==='ok'?'#059669':'#DC2626',color:'#fff',boxShadow:'0 8px 24px rgba(0,0,0,.18)',maxWidth:320}}>{type==='ok'?'✓':'⚠'} {msg}</div>
+  return <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,borderRadius:10,padding:'12px 20px',fontSize:13,fontWeight:500,background:type==='ok'?TK.positive:TK.critical,color:'#fff',boxShadow:'0 8px 24px rgba(0,0,0,.18)',maxWidth:320}}>{type==='ok'?'':''} {msg}</div>
 }
 
 function ProgressBar({pct,color=P}:{pct:number;color?:string}) {
@@ -442,8 +445,8 @@ export default function OnboardingDashboard() {
   // ── Shared section header ──────────────────────────────────────
   const SH = ({title,sub}:{title:string;sub?:string}) => (
     <div style={{marginBottom:14}}>
-      <div style={{fontSize:14,fontWeight:500,color:'#1E1B4B'}}>{title}</div>
-      {sub && <div style={{fontSize:11,color:'#6B7280',marginTop:2}}>{sub}</div>}
+      <div style={{fontSize:14,fontWeight:500,color:TK.ink}}>{title}</div>
+      {sub && <div style={{fontSize:11,color:TK.muted,marginTop:2}}>{sub}</div>}
     </div>
   )
 
@@ -455,13 +458,13 @@ export default function OnboardingDashboard() {
         {[
           {label:'Total pipeline',    val:total,     color:P},
           {label:'Active onboarding', val:active,    color:'#185FA5'},
-          {label:'Joining this week', val:thisWeek,  color:'#D97706'},
-          {label:'Awaiting code',     val:submitted, color:'#7C3AED'},
-          {label:'High risk',         val:highRisk,  color:'#DC2626'},
-          {label:'Completed',         val:joined,    color:'#059669'},
+          {label:'Joining this week', val:thisWeek,  color:TK.warning},
+          {label:'Awaiting code',     val:submitted, color:TK.violet},
+          {label:'High risk',         val:highRisk,  color:TK.critical},
+          {label:'Completed',         val:joined,    color:TK.positive},
         ].map(({label,val,color})=>(
-          <div key={label} style={{background:'#FAFAF8',borderRadius:'8px',padding:'12px 14px',borderTop:`2.5px solid ${color}`}}>
-            <div style={{fontSize:10,color:'#6B7280',fontWeight:500,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>{label}</div>
+          <div key={label} style={{background:TK.sunken,borderRadius:'8px',padding:'12px 14px',borderTop:`2.5px solid ${color}`}}>
+            <div style={{fontSize:10,color:TK.muted,fontWeight:500,textTransform:'uppercase',letterSpacing:'.05em',marginBottom:4}}>{label}</div>
             <div style={{fontSize:26,fontWeight:500,color}}>{val}</div>
           </div>
         ))}
@@ -476,10 +479,10 @@ export default function OnboardingDashboard() {
             <button onClick={()=>setTab('candidates')} style={{padding:'11px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
               <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/> Send onboarding links (All candidates)
             </button>
-            <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'#1E1B4B'}}>
-              <i className="ti ti-list-check" style={{fontSize:16,color:'#D97706'}} aria-hidden="true"/> View {pendingActions.filter(a=>a.priority==='HIGH').length} urgent pending actions
+            <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:TK.ink}}>
+              <i className="ti ti-list-check" style={{fontSize:16,color:TK.warning}} aria-hidden="true"/> View {pendingActions.filter(a=>a.priority==='HIGH').length} urgent pending actions
             </button>
-            <button onClick={()=>setTab('compliance')} style={{padding:'11px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:'#1E1B4B'}}>
+            <button onClick={()=>setTab('compliance')} style={{padding:'11px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:TK.ink}}>
               <i className="ti ti-shield-check" style={{fontSize:16,color:'#185FA5'}} aria-hidden="true"/> Review PF / ESI / BGV compliance status
             </button>
           </div>
@@ -492,7 +495,7 @@ export default function OnboardingDashboard() {
                 AI flagged {highRisk} high-risk joining{highRisk>1?'s':''}
               </div>
               {candidates.filter(c=>c.ai_risk==='HIGH').slice(0,3).map(c=>(
-                <div key={c.id} style={{fontSize:11,color:'#B91C1C',marginBottom:4,display:'flex',alignItems:'center',gap:5}}>
+                <div key={c.id} style={{fontSize:11,color:TK.critical,marginBottom:4,display:'flex',alignItems:'center',gap:5}}>
                   <i className="ti ti-user" style={{fontSize:12}} aria-hidden="true"/> {c.full_name} — {c.ai_risk_reason}
                 </div>
               ))}
@@ -504,27 +507,27 @@ export default function OnboardingDashboard() {
         <div>
           <SH title="Joining this week" sub="D-7 to today"/>
           {candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).length === 0
-            ? <div style={{padding:20,textAlign:'center',color:'#6B7280',fontSize:12}}>No joinings this week</div>
+            ? <div style={{padding:20,textAlign:'center',color:TK.muted,fontSize:12}}>No joinings this week</div>
             : candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).map(c=>{
               const days = daysLeft(c.date_of_joining)!
               const pct  = progressPct(c)
               const sm   = STAGE_META[c.status]
               return (
-                <div key={c.id} style={{background:'#FFFFFF',border:'0.5px solid rgba(124,58,237,0.12)',borderRadius:'8px',padding:'10px 12px',marginBottom:8,borderLeft:`3px solid ${days<=1?'#DC2626':days<=3?'#D97706':P}`}}>
+                <div key={c.id} style={{background:TK.surface,border:'0.5px solid rgba(124,58,237,0.12)',borderRadius:'8px',padding:'10px 12px',marginBottom:8,borderLeft:`3px solid ${days<=1?TK.critical:days<=3?TK.warning:P}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                     <div>
                       <div style={{fontSize:13,fontWeight:500}}>{c.full_name}</div>
-                      <div style={{fontSize:11,color:'#6B7280',marginTop:1}}>{c.designation}</div>
+                      <div style={{fontSize:11,color:TK.muted,marginTop:1}}>{c.designation}</div>
                     </div>
                     <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:11,fontWeight:600,color:days<=1?'#DC2626':days<=3?'#D97706':P}}>
+                      <div style={{fontSize:11,fontWeight:600,color:days<=1?TK.critical:days<=3?TK.warning:P}}>
                         {days===0?'Today!':days===1?'Tomorrow':`D-${days}`}
                       </div>
                       <Badge {...sm} label={sm.label}/>
                     </div>
                   </div>
-                  <ProgressBar pct={pct} color={pct===100?'#059669':days<=3?'#DC2626':P}/>
-                  <div style={{display:'flex',justifyContent:'space-between',marginTop:5,fontSize:10,color:'#6B7280'}}>
+                  <ProgressBar pct={pct} color={pct===100?TK.positive:days<=3?TK.critical:P}/>
+                  <div style={{display:'flex',justifyContent:'space-between',marginTop:5,fontSize:10,color:TK.muted}}>
                     <span>Step {c.current_step||1}/8 · {pct}% complete</span>
                     {c.status==='SUBMITTED' && (
                       <button onClick={()=>{openCodeModal(c)}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:'#fff',fontFamily:'inherit'}}>
@@ -546,7 +549,7 @@ export default function OnboardingDashboard() {
     <div>
       {/* Joining-window filter */}
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
-        <span style={{fontSize:11,color:'#6B7280',marginRight:2}}>Joining:</span>
+        <span style={{fontSize:11,color:TK.muted,marginRight:2}}>Joining:</span>
         {([
           {k:'all',   label:'All'},
           {k:'today', label:'Today'},
@@ -555,30 +558,30 @@ export default function OnboardingDashboard() {
           {k:'month', label:'This month'},
         ] as {k:typeof joinWindow;label:string}[]).map(w=>(
           <button key={w.k} onClick={()=>setJoinWindow(w.k)}
-            style={{padding:'6px 13px',borderRadius:99,border:'0.5px solid '+(joinWindow===w.k?P:'#EDE9FE'),cursor:'pointer',fontSize:11.5,fontWeight:joinWindow===w.k?600:500,fontFamily:'inherit',background:joinWindow===w.k?P:'#FAFAF8',color:joinWindow===w.k?'#fff':'#1E1B4B'}}>
+            style={{padding:'6px 13px',borderRadius:99,border:'0.5px solid '+(joinWindow===w.k?P:TK.violetTint),cursor:'pointer',fontSize:11.5,fontWeight:joinWindow===w.k?600:500,fontFamily:'inherit',background:joinWindow===w.k?P:TK.sunken,color:joinWindow===w.k?'#fff':TK.ink}}>
             {w.label}
           </button>
         ))}
       </div>
       {/* Filters — frozen (sticky) so they stay visible while the list scrolls */}
-      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap',alignItems:'center',position:'sticky',top:0,zIndex:30,background:'#F5F3FF',padding:'10px 12px',borderRadius:10,boxShadow:'0 2px 8px rgba(15,23,42,0.06)'}}>
+      <div style={{display:'flex',gap:10,marginBottom:14,flexWrap:'wrap',alignItems:'center',position:'sticky',top:0,zIndex:30,background:TK.canvas,padding:'10px 12px',borderRadius:10,boxShadow:'0 2px 8px rgba(15,23,42,0.06)'}}>
         <input value={searchQ} onChange={e=>setSearchQ(e.target.value)}
           placeholder="Search name, designation..."
-          style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',color:'#1E1B4B',background:'#FAFAF8',outline:'none',minWidth:200}}/>
+          style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',color:TK.ink,background:TK.sunken,outline:'none',minWidth:200}}/>
         <select value={filterStage} onChange={e=>setFilterStage(e.target.value as any)}
-          style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',background:'#FAFAF8',color:'#1E1B4B',outline:'none'}}>
+          style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',background:TK.sunken,color:TK.ink,outline:'none'}}>
           <option value="ALL">All stages</option>
           {(Object.keys(STAGE_META) as Stage[]).map(s=><option key={s} value={s}>{STAGE_META[s].label}</option>)}
         </select>
         <select value={filterRisk} onChange={e=>setFilterRisk(e.target.value as any)}
-          style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',background:'#FAFAF8',color:'#1E1B4B',outline:'none'}}>
+          style={{padding:'7px 11px',borderRadius:'8px',border:'0.5px solid #EDE9FE',fontSize:12,fontFamily:'inherit',background:TK.sunken,color:TK.ink,outline:'none'}}>
           <option value="ALL">All risk levels</option>
           <option value="HIGH">High risk only</option>
           <option value="MEDIUM">Medium risk</option>
           <option value="LOW">Low risk</option>
         </select>
-        <div style={{marginLeft:'auto',fontSize:11,color:'#6B7280'}}>{filtered.length} of {total} shown</div>
-        <button onClick={()=>{ const ni = filtered.filter(c=>c.status==='NOT_INVITED'); const all = ni.length>0 && ni.every(c=>selIds.has(c.id)); setSelIds(prev=>{ const n=new Set(prev); ni.forEach(c=>all?n.delete(c.id):n.add(c.id)); return n }) }} style={{padding:'7px 12px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#6D28D9'}}>☑ Select all (not invited)</button>
+        <div style={{marginLeft:'auto',fontSize:11,color:TK.muted}}>{filtered.length} of {total} shown</div>
+        <button onClick={()=>{ const ni = filtered.filter(c=>c.status==='NOT_INVITED'); const all = ni.length>0 && ni.every(c=>selIds.has(c.id)); setSelIds(prev=>{ const n=new Set(prev); ni.forEach(c=>all?n.delete(c.id):n.add(c.id)); return n }) }} style={{padding:'7px 12px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.violetDeep}}>Select all (not invited)</button>
         {filtered.some(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)) && (
           <button onClick={bulkSend} disabled={saving} style={{padding:'7px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:12,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1,display:'flex',alignItems:'center',gap:5}}>
             <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send link to {filtered.filter(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)).length} selected
@@ -591,15 +594,15 @@ export default function OnboardingDashboard() {
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
             <thead>
-              <tr style={{background:'#FAFAF8'}}>
+              <tr style={{background:TK.sunken}}>
                 {['','Candidate','Stage','Progress','DOJ','Docs','Statutory','BGV','Risk','Actions'].map((h,hi)=>(
-                  <th key={hi} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:'#6B7280',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
+                  <th key={hi} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:TK.muted,textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 && (
-                <tr><td colSpan={10} style={{padding:32,textAlign:'center',color:'#6B7280'}}>No candidates found</td></tr>
+                <tr><td colSpan={10} style={{padding:32,textAlign:'center',color:TK.muted}}>No candidates found</td></tr>
               )}
               {filtered.map((c,i)=>{
                 const sm  = STAGE_META[c.status]
@@ -607,56 +610,56 @@ export default function OnboardingDashboard() {
                 const pct = notInvited ? 0 : progressPct(c)
                 const days = daysLeft(c.date_of_joining)
                 return (
-                  <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?'#FFFFFF':'#FAFAF8'}}>
+                  <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?TK.surface:TK.sunken}}>
                     <td style={{padding:'10px 12px'}}>
                       {notInvited && <input type="checkbox" checked={selIds.has(c.id)} onChange={()=>setSelIds(prev=>{ const n=new Set(prev); n.has(c.id)?n.delete(c.id):n.add(c.id); return n })} />}
                     </td>
                     <td style={{padding:'10px 12px',minWidth:160}}>
                       <div style={{fontWeight:500}}>{c.full_name}</div>
-                      <div style={{fontSize:10,color:'#6B7280',marginTop:1}}>{c.designation || '—'}</div>
-                      {c.employee_code && <div style={{fontSize:10,color:'#059669',marginTop:1,fontWeight:600}}>{c.employee_code}</div>}
+                      <div style={{fontSize:10,color:TK.muted,marginTop:1}}>{c.designation || '—'}</div>
+                      {c.employee_code && <div style={{fontSize:10,color:TK.positive,marginTop:1,fontWeight:600}}>{c.employee_code}</div>}
                     </td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><Badge {...sm} label={sm.label}/></td>
                     <td style={{padding:'10px 12px',minWidth:100}}>
-                      {notInvited ? <span style={{fontSize:11,color:'#9CA3AF'}}>—</span> : <>
-                      <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:'#6B7280',marginBottom:2}}>
+                      {notInvited ? <span style={{fontSize:11,color:TK.faint}}>—</span> : <>
+                      <div style={{display:'flex',justifyContent:'space-between',fontSize:10,color:TK.muted,marginBottom:2}}>
                         <span>Step {c.current_step||1}/8</span><span>{pct}%</span>
                       </div>
-                      <ProgressBar pct={pct} color={pct===100?'#059669':pct>=60?P:'#D97706'}/>
+                      <ProgressBar pct={pct} color={pct===100?TK.positive:pct>=60?P:TK.warning}/>
                       </>}
                     </td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap',fontSize:11}}>
                       {fmt(c.date_of_joining)}
-                      {days !== null && <div style={{fontSize:10,fontWeight:600,color:days<=3?'#DC2626':days<=7?'#D97706':'#059669'}}>{days<0?`${Math.abs(days)}d ago`:days===0?'Today!':days===1?'Tomorrow':`D-${days}`}</div>}
+                      {days !== null && <div style={{fontSize:10,fontWeight:600,color:days<=3?TK.critical:days<=7?TK.warning:TK.positive}}>{days<0?`${Math.abs(days)}d ago`:days===0?'Today!':days===1?'Tomorrow':`D-${days}`}</div>}
                     </td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
-                      {notInvited ? <span style={{fontSize:11,color:'#9CA3AF'}}>—</span> : <>
+                      {notInvited ? <span style={{fontSize:11,color:TK.faint}}>—</span> : <>
                       <span style={{fontSize:11}}>{c.docs_uploaded||0}/{DOCS_REQ.length}</span>
-                      {(c.docs_ai_flagged||0)>0 && <div style={{fontSize:10,color:'#D97706',marginTop:1}}>⚠ {c.docs_ai_flagged} flagged</div>}
+                      {(c.docs_ai_flagged||0)>0 && <div style={{fontSize:10,color:TK.warning,marginTop:1}}>⚠ {c.docs_ai_flagged} flagged</div>}
                       </>}
                     </td>
                     <td style={{padding:'10px 12px'}}>
-                      {notInvited ? <span style={{fontSize:11,color:'#9CA3AF'}}>—</span> : <>
+                      {notInvited ? <span style={{fontSize:11,color:TK.faint}}>—</span> : <>
                       <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form11?'#EAF3DE':'#FCEBEB',color:c.form11?'#3B6D11':'#B91C1C',fontWeight:600}}>F11</span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form2?'#EAF3DE':'#FCEBEB',color:c.form2?'#3B6D11':'#B91C1C',fontWeight:600}}>F2</span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.bank?'#EAF3DE':'#FCEBEB',color:c.bank?'#3B6D11':'#B91C1C',fontWeight:600}}>Bank</span>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form11?'#EAF3DE':'#FCEBEB',color:c.form11?'#3B6D11':TK.critical,fontWeight:600}}>F11</span>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.form2?'#EAF3DE':'#FCEBEB',color:c.form2?'#3B6D11':TK.critical,fontWeight:600}}>F2</span>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.bank?'#EAF3DE':'#FCEBEB',color:c.bank?'#3B6D11':TK.critical,fontWeight:600}}>Bank</span>
                       </div>
                       <div style={{display:'flex',gap:3,marginTop:3}}>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.laptop_issued?'#EAF3DE':'#EEEDFE',color:c.laptop_issued?'#3B6D11':P,fontWeight:600}}>
-                          {c.laptop_issued?'💻✓':'💻'}
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.laptop_issued?'#EAF3DE':TK.violetTint,color:c.laptop_issued?'#3B6D11':P,fontWeight:600}}>
+                          {c.laptop_issued?'':''}
                         </span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.id_card_issued?'#EAF3DE':'#EEEDFE',color:c.id_card_issued?'#3B6D11':P,fontWeight:600}}>
-                          {c.id_card_issued?'🪪✓':'🪪'}
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.id_card_issued?'#EAF3DE':TK.violetTint,color:c.id_card_issued?'#3B6D11':P,fontWeight:600}}>
+                          {c.id_card_issued?'':''}
                         </span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.policy_ack?'#EAF3DE':'#EEEDFE',color:c.policy_ack?'#3B6D11':P,fontWeight:600}}>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.policy_ack?'#EAF3DE':TK.violetTint,color:c.policy_ack?'#3B6D11':P,fontWeight:600}}>
                           {c.policy_ack?'Policy✓':'Policy'}
                         </span>
                       </div>
                       </>}
                     </td>
                     <td style={{padding:'10px 12px'}}>
-                      <span style={{fontSize:10,fontWeight:600,color:'#6B7280'}}>—</span>
+                      <span style={{fontSize:10,fontWeight:600,color:TK.muted}}>—</span>
                     </td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}><RiskBadge risk={c.ai_risk}/></td>
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
@@ -667,7 +670,7 @@ export default function OnboardingDashboard() {
                           </button>
                         )}
                         {notInvited && (
-                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit</button>
+                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.violetDeep}}>Edit</button>
                         )}
                         {c.status==='SUBMITTED' && (
                           <button onClick={()=>{openCodeModal(c)}} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
@@ -679,7 +682,7 @@ export default function OnboardingDashboard() {
                             const link=`${window.location.origin}/onboarding/${c.magic_link_token}`
                             await navigator.clipboard.writeText(link).catch(()=>{})
                             showToast('Link copied!')
-                          }} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#1E1B4B'}}>
+                          }} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>
                             <i className="ti ti-copy" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Link
                           </button>
                         )}
@@ -689,19 +692,17 @@ export default function OnboardingDashboard() {
                           </button>
                         )}
                         {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
-                          <button onClick={()=>extendValidity(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#1E1B4B'}}>⏱ Extend</button>
+                          <button onClick={()=>extendValidity(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>Extend</button>
                         )}
                         {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
-                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:10,fontFamily:'inherit',color:'#6D28D9'}}>✏️ Edit</button>
+                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.violetDeep}}>Edit</button>
                         )}
                         {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.laptop_issued && (
-                          <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FFFBEB',fontSize:10,fontFamily:'inherit',color:'#633806'}}>
-                            💻 Issue
+                          <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.warningTint,fontSize:10,fontFamily:'inherit',color:'#633806'}}>Issue
                           </button>
                         )}
                         {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.id_card_issued && (
-                          <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#EEF2FF',fontSize:10,fontFamily:'inherit',color:'#4338CA'}}>
-                            🪪 Issue
+                          <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#EEF2FF',fontSize:10,fontFamily:'inherit',color:'#4338CA'}}>Issue
                           </button>
                         )}
                       </div>
@@ -724,16 +725,16 @@ export default function OnboardingDashboard() {
       LOW:    pendingActions.filter(a=>a.priority==='LOW'),
     }
     const gMeta = {
-      HIGH:   {label:'Urgent — do today',     bg:'#FCEBEB', color:'#B91C1C', border:'#F09595'},
-      MEDIUM: {label:'Important — this week',  bg:'#FFFBEB', color:'#D97706', border:'#FDE68A'},
+      HIGH:   {label:'Urgent — do today',     bg:'#FCEBEB', color:TK.critical, border:'#F09595'},
+      MEDIUM: {label:'Important — this week',  bg:TK.warningTint, color:TK.warning, border:'#FDE68A'},
       LOW:    {label:'When possible',          bg:'#EEF2FF', color:'#4338CA', border:'#C7D2FE'},
     }
     return (
       <div>
         <SH title="Pending actions" sub="Priority-sorted. Resolve High first."/>
         {pendingActions.length === 0 && (
-          <div style={{padding:40,textAlign:'center',color:'#6B7280'}}>
-            <i className="ti ti-circle-check" style={{fontSize:40,color:'#059669',display:'block',marginBottom:10}} aria-hidden="true"/>
+          <div style={{padding:40,textAlign:'center',color:TK.muted}}>
+            <i className="ti ti-circle-check" style={{fontSize:40,color:TK.positive,display:'block',marginBottom:10}} aria-hidden="true"/>
             All clear! No pending actions.
           </div>
         )}
@@ -749,8 +750,8 @@ export default function OnboardingDashboard() {
                 return (
                   <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 14px',background:gMeta[pri].bg,borderRadius:'8px',border:`0.5px solid ${gMeta[pri].border}`}}>
                     <div style={{flex:1}}>
-                      <div style={{fontSize:12,fontWeight:500,color:'#1E1B4B'}}>{a.label}</div>
-                      <div style={{fontSize:11,color:'#6B7280',marginTop:1}}>
+                      <div style={{fontSize:12,fontWeight:500,color:TK.ink}}>{a.label}</div>
+                      <div style={{fontSize:11,color:TK.muted,marginTop:1}}>
                         <i className="ti ti-user" style={{fontSize:11,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>{a.candidate}
                         {cand?.date_of_joining && <span style={{marginLeft:8}}>· DOJ: {fmt(cand.date_of_joining)}</span>}
                       </div>
@@ -765,12 +766,12 @@ export default function OnboardingDashboard() {
                         const link=`${window.location.origin}/onboarding/${cand.magic_link_token}`
                         await navigator.clipboard.writeText(link).catch(()=>{})
                         showToast('Link copied — send to candidate')
-                      }} style={{padding:'5px 12px',borderRadius:'8px',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:'#FFFFFF',fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
+                      }} style={{padding:'5px 12px',borderRadius:'8px',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:TK.surface,fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
                         <i className="ti ti-copy" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Copy link
                       </button>
                     )}
                     {(a.action==='laptop'||a.action==='idcard') && cand && (
-                      <button onClick={()=>issueAsset(cand.id,a.action==='laptop'?'LAPTOP':'ID_CARD')} style={{padding:'5px 12px',borderRadius:'8px',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:'#FFFFFF',fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
+                      <button onClick={()=>issueAsset(cand.id,a.action==='laptop'?'LAPTOP':'ID_CARD')} style={{padding:'5px 12px',borderRadius:'8px',border:`0.5px solid ${gMeta[pri].border}`,cursor:'pointer',background:TK.surface,fontSize:11,fontFamily:'inherit',color:gMeta[pri].color,whiteSpace:'nowrap'}}>
                         Mark issued
                       </button>
                     )}
@@ -796,18 +797,18 @@ export default function OnboardingDashboard() {
         {/* Attrition risk */}
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:500,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-            <i className="ti ti-alert-triangle" style={{fontSize:15,color:'#DC2626'}} aria-hidden="true"/>
+            <i className="ti ti-alert-triangle" style={{fontSize:15,color:TK.critical}} aria-hidden="true"/>
             Attrition & at-risk joiners ({atRisk.length})
           </div>
           {atRisk.length===0
-            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'8px',fontSize:12,color:'#3B6D11'}}>✓ No at-risk candidates right now.</div>
+            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'8px',fontSize:12,color:'#3B6D11'}}>No at-risk candidates right now.</div>
             : atRisk.map(c=>(
-              <div key={c.id} style={{background:'#FFFFFF',border:`0.5px solid ${c.ai_risk==='HIGH'?'#F09595':'#FDE68A'}`,borderRadius:'8px',padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${c.ai_risk==='HIGH'?'#DC2626':'#D97706'}`}}>
+              <div key={c.id} style={{background:TK.surface,border:`0.5px solid ${c.ai_risk==='HIGH'?'#F09595':'#FDE68A'}`,borderRadius:'8px',padding:'12px 14px',marginBottom:8,borderLeft:`3px solid ${c.ai_risk==='HIGH'?TK.critical:TK.warning}`}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                   <div>
                     <div style={{fontSize:12,fontWeight:500}}>{c.full_name} <RiskBadge risk={c.ai_risk}/></div>
-                    <div style={{fontSize:11,color:'#6B7280',marginTop:2}}>{c.designation} · DOJ: {fmt(c.date_of_joining)}</div>
-                    <div style={{fontSize:11,color:c.ai_risk==='HIGH'?'#B91C1C':'#D97706',marginTop:4,fontStyle:'italic'}}>
+                    <div style={{fontSize:11,color:TK.muted,marginTop:2}}>{c.designation} · DOJ: {fmt(c.date_of_joining)}</div>
+                    <div style={{fontSize:11,color:c.ai_risk==='HIGH'?TK.critical:TK.warning,marginTop:4,fontStyle:'italic'}}>
                       <i className="ti ti-robot" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
                       {c.ai_risk_reason}
                     </div>
@@ -818,7 +819,7 @@ export default function OnboardingDashboard() {
                     )}
                   </div>
                 </div>
-                <ProgressBar pct={progressPct(c)} color={c.ai_risk==='HIGH'?'#DC2626':'#D97706'}/>
+                <ProgressBar pct={progressPct(c)} color={c.ai_risk==='HIGH'?TK.critical:TK.warning}/>
               </div>
             ))
           }
@@ -827,15 +828,15 @@ export default function OnboardingDashboard() {
         {/* Document AI flags */}
         <div style={{marginBottom:16}}>
           <div style={{fontSize:12,fontWeight:500,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-            <i className="ti ti-file-alert" style={{fontSize:15,color:'#D97706'}} aria-hidden="true"/>
+            <i className="ti ti-file-alert" style={{fontSize:15,color:TK.warning}} aria-hidden="true"/>
             Document AI flags ({flaggedDocs.length} candidates)
           </div>
           {flaggedDocs.length===0
-            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'8px',fontSize:12,color:'#3B6D11'}}>✓ All uploaded documents verified by AI.</div>
+            ? <div style={{padding:16,background:'#EAF3DE',borderRadius:'8px',fontSize:12,color:'#3B6D11'}}>All uploaded documents verified by AI.</div>
             : flaggedDocs.map(c=>(
-              <div key={c.id} style={{background:'#FFFBEB',border:'0.5px solid #FDE68A',borderRadius:'8px',padding:'10px 12px',marginBottom:6}}>
+              <div key={c.id} style={{background:TK.warningTint,border:'0.5px solid #FDE68A',borderRadius:'8px',padding:'10px 12px',marginBottom:6}}>
                 <div style={{fontSize:12,fontWeight:500}}>{c.full_name}</div>
-                <div style={{fontSize:11,color:'#D97706',marginTop:2}}>
+                <div style={{fontSize:11,color:TK.warning,marginTop:2}}>
                   <i className="ti ti-robot" style={{fontSize:11,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>
                   {c.docs_ai_flagged} document(s) flagged — low confidence or mismatch detected. Manual review recommended.
                 </div>
@@ -847,19 +848,19 @@ export default function OnboardingDashboard() {
         {/* Onboarding champions */}
         <div>
           <div style={{fontSize:12,fontWeight:500,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-            <i className="ti ti-star" style={{fontSize:15,color:'#D97706'}} aria-hidden="true"/>
+            <i className="ti ti-star" style={{fontSize:15,color:TK.warning}} aria-hidden="true"/>
             Onboarding champions — 100% complete ({champs.length})
           </div>
           {champs.length===0
-            ? <div style={{padding:16,background:'#EEEDFE',borderRadius:'8px',fontSize:12,color:P}}>No 100% complete onboardings yet.</div>
+            ? <div style={{padding:16,background:TK.violetTint,borderRadius:'8px',fontSize:12,color:P}}>No 100% complete onboardings yet.</div>
             : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
               {champs.map(c=>(
                 <div key={c.id} style={{background:'#EAF3DE',border:'0.5px solid #A7F3D0',borderRadius:'8px',padding:'10px 12px',textAlign:'center'}}>
-                  <div style={{width:36,height:36,borderRadius:'50%',background:'#059669',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:500,margin:'0 auto 6px'}}>
+                  <div style={{width:36,height:36,borderRadius:'50%',background:TK.positive,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:500,margin:'0 auto 6px'}}>
                     {c.full_name.charAt(0)}
                   </div>
                   <div style={{fontSize:12,fontWeight:500,color:'#065F46'}}>{c.full_name}</div>
-                  <div style={{fontSize:10,color:'#059669',marginTop:2}}>{c.employee_code||'Code pending'}</div>
+                  <div style={{fontSize:10,color:TK.positive,marginTop:2}}>{c.employee_code||'Code pending'}</div>
                 </div>
               ))}
             </div>
@@ -879,16 +880,16 @@ export default function OnboardingDashboard() {
         {/* Summary row */}
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))',gap:8,marginBottom:16}}>
           {[
-            {label:'Form 11 pending', val:active.filter(c=>!c.form11).length, color:'#D97706'},
-            {label:'Form 2 pending',  val:active.filter(c=>!c.form2).length,  color:'#D97706'},
-            {label:'Bank pending',    val:active.filter(c=>!c.bank).length,   color:'#D97706'},
+            {label:'Form 11 pending', val:active.filter(c=>!c.form11).length, color:TK.warning},
+            {label:'Form 2 pending',  val:active.filter(c=>!c.form2).length,  color:TK.warning},
+            {label:'Bank pending',    val:active.filter(c=>!c.bank).length,   color:TK.warning},
             {label:'Policy pending',  val:active.filter(c=>!c.policy_ack).length, color:'#185FA5'},
             {label:'Laptop pending',  val:active.filter(c=>!c.laptop_issued).length, color:P},
             {label:'ID card pending', val:active.filter(c=>!c.id_card_issued).length, color:P},
           ].map(({label,val,color})=>(
-            <div key={label} style={{background:'#FAFAF8',borderRadius:'8px',padding:'10px 12px',borderLeft:`3px solid ${val>0?color:'#059669'}`}}>
-              <div style={{fontSize:10,color:'#6B7280',marginBottom:3,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:500}}>{label}</div>
-              <div style={{fontSize:22,fontWeight:500,color:val>0?color:'#059669'}}>{val}</div>
+            <div key={label} style={{background:TK.sunken,borderRadius:'8px',padding:'10px 12px',borderLeft:`3px solid ${val>0?color:TK.positive}`}}>
+              <div style={{fontSize:10,color:TK.muted,marginBottom:3,textTransform:'uppercase',letterSpacing:'.04em',fontWeight:500}}>{label}</div>
+              <div style={{fontSize:22,fontWeight:500,color:val>0?color:TK.positive}}>{val}</div>
             </div>
           ))}
         </div>
@@ -898,20 +899,20 @@ export default function OnboardingDashboard() {
           <div style={{overflowX:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
               <thead>
-                <tr style={{background:'#FAFAF8'}}>
+                <tr style={{background:TK.sunken}}>
                   {['Employee','DOJ','EPF Form 11','EPF Form 2','Bank','Policy Ack','Laptop','ID Card','PT State','BGV'].map(h=>(
-                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontSize:9,fontWeight:600,color:'#6B7280',textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontSize:9,fontWeight:600,color:TK.muted,textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {candidates.length===0 && (
-                  <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:'#6B7280'}}>No data</td></tr>
+                  <tr><td colSpan={10} style={{padding:24,textAlign:'center',color:TK.muted}}>No data</td></tr>
                 )}
                 {candidates.map((c,i)=>{
                   const ptState = (c.form_data as any)?.step_4?.perm_state || '—'
                   const Tick = ({done}:{done?:boolean}) => (
-                    <span style={{fontSize:14,color:done?'#059669':'#D97706'}}>
+                    <span style={{fontSize:14,color:done?TK.positive:TK.warning}}>
                       {done
                         ? <i className="ti ti-circle-check" style={{verticalAlign:-1}} aria-hidden="true"/>
                         : <i className="ti ti-clock" style={{verticalAlign:-1}} aria-hidden="true"/>
@@ -919,11 +920,11 @@ export default function OnboardingDashboard() {
                     </span>
                   )
                   return (
-                    <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?'#FFFFFF':'#FAFAF8'}}>
+                    <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?TK.surface:TK.sunken}}>
                       <td style={{padding:'9px 10px',minWidth:130}}>
                         <div style={{fontWeight:500,fontSize:12}}>{c.full_name}</div>
-                        <div style={{fontSize:10,color:'#6B7280'}}>{c.designation||'—'}</div>
-                        {c.employee_code && <div style={{fontSize:10,color:'#059669',fontWeight:600}}>{c.employee_code}</div>}
+                        <div style={{fontSize:10,color:TK.muted}}>{c.designation||'—'}</div>
+                        {c.employee_code && <div style={{fontSize:10,color:TK.positive,fontWeight:600}}>{c.employee_code}</div>}
                       </td>
                       <td style={{padding:'9px 10px',whiteSpace:'nowrap'}}>{fmt(c.date_of_joining)}</td>
                       <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.form11}/></td>
@@ -932,19 +933,19 @@ export default function OnboardingDashboard() {
                       <td style={{padding:'9px 10px',textAlign:'center'}}><Tick done={c.policy_ack}/></td>
                       <td style={{padding:'9px 10px',textAlign:'center'}}>
                         {c.laptop_issued
-                          ? <span style={{fontSize:10,color:'#059669',fontWeight:600}}>✓ Issued</span>
-                          : <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontFamily:'inherit',color:'#6B7280'}}>Issue</button>
+                          ? <span style={{fontSize:10,color:TK.positive,fontWeight:600}}>Issued</span>
+                          : <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontFamily:'inherit',color:TK.muted}}>Issue</button>
                         }
                       </td>
                       <td style={{padding:'9px 10px',textAlign:'center'}}>
                         {c.id_card_issued
-                          ? <span style={{fontSize:10,color:'#059669',fontWeight:600}}>✓ Issued</span>
-                          : <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontFamily:'inherit',color:'#6B7280'}}>Issue</button>
+                          ? <span style={{fontSize:10,color:TK.positive,fontWeight:600}}>Issued</span>
+                          : <button onClick={()=>issueAsset(c.id,'ID_CARD')} style={{fontSize:9,padding:'2px 7px',borderRadius:99,border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontFamily:'inherit',color:TK.muted}}>Issue</button>
                         }
                       </td>
-                      <td style={{padding:'9px 10px',fontSize:11,color:'#6B7280'}}>{ptState}</td>
+                      <td style={{padding:'9px 10px',fontSize:11,color:TK.muted}}>{ptState}</td>
                       <td style={{padding:'9px 10px'}}>
-                        <span style={{fontSize:10,color:'#6B7280'}}>—</span>
+                        <span style={{fontSize:10,color:TK.muted}}>—</span>
                       </td>
                     </tr>
                   )
@@ -967,7 +968,7 @@ export default function OnboardingDashboard() {
   ]
 
   return (
-    <div style={{background:'#F5F3FF',minHeight:'100vh',fontFamily:'"DM Sans","Segoe UI",sans-serif',color:'#1E1B4B'}}>
+    <div style={{background:TK.canvas,minHeight:'100vh',fontFamily:'"DM Sans","Segoe UI",sans-serif',color:TK.ink}}>
 
       {/* Header */}
       <div style={{background:`linear-gradient(135deg, ${P}, #4F46E5)`,padding:'14px 24px 0'}}>
@@ -991,7 +992,7 @@ export default function OnboardingDashboard() {
               <i className={`ti ${t.icon}`} style={{fontSize:14}} aria-hidden="true"/>
               {t.label}
               {t.badge!==undefined && t.badge > 0 && (
-                <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background: t.key==='pending' ? '#DC2626' : 'rgba(255,255,255,.25)',color:'#fff',fontWeight:600,minWidth:16,textAlign:'center'}}>
+                <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background: t.key==='pending' ? TK.critical : 'rgba(255,255,255,.25)',color:'#fff',fontWeight:600,minWidth:16,textAlign:'center'}}>
                   {t.badge}
                 </span>
               )}
@@ -1003,7 +1004,7 @@ export default function OnboardingDashboard() {
       {/* Content */}
       <div style={{padding:'20px 24px',maxWidth:1400,margin:'0 auto'}}>
         {loading
-          ? <div style={{textAlign:'center',padding:60,color:'#6B7280'}}>Loading onboarding data...</div>
+          ? <div style={{textAlign:'center',padding:60,color:TK.muted}}>Loading onboarding data...</div>
           : <>
             {/* Called as functions (not <Tab/>) so they render inline and don't
                 remount on every keystroke — keeps search-input focus. */}
@@ -1019,16 +1020,16 @@ export default function OnboardingDashboard() {
       {/* ── SEND ONBOARDING LINK MODAL ────────────────────────────── */}
       {linkModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-          <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
+          <div style={{background:TK.surface,borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:520,boxShadow:'0 20px 60px rgba(0,0,0,.2)',maxHeight:'90vh',overflowY:'auto'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
               <div style={{fontSize:15,fontWeight:500}}>Send joining link to new candidate</div>
-              <button onClick={()=>setLinkModal(false)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'#6B7280',lineHeight:1}}>×</button>
+              <button onClick={()=>setLinkModal(false)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:TK.muted,lineHeight:1}}>×</button>
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <div style={{marginBottom:8,gridColumn:'1 / -1'}}>
-                <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Company *</div>
+                <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Company *</div>
                 <select value={newForm.company_id} onChange={e=>setNewForm(f=>({...f,company_id:e.target.value}))}
-                  style={{width:'100%',padding:'8px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
+                  style={{width:'100%',padding:'8px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
                   <option value="">Select company…</option>
                   {companies.map(co=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
                 </select>
@@ -1042,35 +1043,35 @@ export default function OnboardingDashboard() {
                 {label:'Offered CTC (₹)',   key:'offered_ctc',    type:'number',placeholder:'e.g. 800000'},
               ].map(({label,key,type,placeholder})=>(
                 <div key={key} style={{marginBottom:8}}>
-                  <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{label}</div>
+                  <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{label}</div>
                   <input type={type} placeholder={placeholder} value={(newForm as any)[key]} onChange={e=>setNewForm(f=>({...f,[key]:e.target.value}))}
-                    style={{width:'100%',padding:'8px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+                    style={{width:'100%',padding:'8px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
                 </div>
               ))}
               <div style={{marginBottom:8}}>
-                <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Department</div>
+                <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Department</div>
                 <select value={newForm.department_id} onChange={e=>{ const d = departments.find(x=>x.id===e.target.value); setNewForm(f=>({...f, department_id:e.target.value, department: d?.dept_name || ''})) }}
-                  style={{width:'100%',padding:'8px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
+                  style={{width:'100%',padding:'8px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
                   <option value="">Select department…</option>
                   {departments.filter(d=>!newForm.company_id||d.company_id===newForm.company_id).map(d=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
                 </select>
               </div>
               <div style={{marginBottom:8}}>
-                <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Employment Type</div>
+                <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Employment Type</div>
                 <select value={newForm.employment_type} onChange={e=>setNewForm(f=>({...f,employment_type:e.target.value}))}
-                  style={{width:'100%',padding:'8px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
+                  style={{width:'100%',padding:'8px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
                   <option>Employee</option><option>Intern</option><option>Consultant</option><option>Contract</option><option>NAPS</option><option>NATS</option>
                 </select>
               </div>
             </div>
-            <div style={{background:'#EEEDFE',borderRadius:'8px',padding:'9px 12px',marginTop:4,fontSize:11,color:'#534AB7',lineHeight:1.7}}>
+            <div style={{background:TK.violetTint,borderRadius:'8px',padding:'9px 12px',marginTop:4,fontSize:11,color:'#534AB7',lineHeight:1.7}}>
               <i className="ti ti-info-circle" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
               A 24-hour onboarding link will be generated. Share with candidate via email or WhatsApp. OTP will be sent to their mobile for verification.
             </div>
             <div style={{display:'flex',gap:10,marginTop:16}}>
-              <button onClick={()=>setLinkModal(false)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#1E1B4B'}}>Cancel</button>
+              <button onClick={()=>setLinkModal(false)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.ink}}>Cancel</button>
               <button onClick={sendMagicLink} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
-                {saving ? 'Generating...' : '🔗 Generate & send onboarding link'}
+                {saving ? 'Generating...' : 'Generate & send onboarding link'}
               </button>
             </div>
           </div>
@@ -1080,22 +1081,22 @@ export default function OnboardingDashboard() {
       {/* ── EDIT ONBOARDING DATE MODAL ───────────────────────── */}
       {dateModal && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',display:'flex',alignItems:'center',justifyContent:'center',zIndex:1000,padding:16}}>
-          <div style={{background:'#FFFFFF',borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:420,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
+          <div style={{background:TK.surface,borderRadius:'16px',padding:'20px 22px',width:'100%',maxWidth:420,boxShadow:'0 20px 60px rgba(0,0,0,.2)'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
               <div style={{fontSize:15,fontWeight:500}}>Edit candidate — {dateModal.full_name}</div>
-              <button onClick={()=>setDateModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:'#6B7280',lineHeight:1}}>×</button>
+              <button onClick={()=>setDateModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:TK.muted,lineHeight:1}}>×</button>
             </div>
-            <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Joining / Onboarding Date</div>
+            <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Joining / Onboarding Date</div>
             <input type="date" value={dateVal} onChange={e=>setDateVal(e.target.value)}
-              style={{width:'100%',padding:'9px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box',marginBottom:10}}/>
-            <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Email</div>
+              style={{width:'100%',padding:'9px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box',marginBottom:10}}/>
+            <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Email</div>
             <input type="email" value={editEmail} onChange={e=>setEditEmail(e.target.value)} placeholder="candidate@email.com"
-              style={{width:'100%',padding:'9px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box',marginBottom:10}}/>
-            <div style={{fontSize:10,fontWeight:600,color:'#6D28D9',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Mobile</div>
+              style={{width:'100%',padding:'9px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box',marginBottom:10}}/>
+            <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Mobile</div>
             <input type="tel" value={editMobile} onChange={e=>setEditMobile(e.target.value)} placeholder="+91 XXXXXXXXXX"
-              style={{width:'100%',padding:'9px 11px',background:'#FAFAF8',border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:'#1E1B4B',outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
+              style={{width:'100%',padding:'9px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
             <div style={{display:'flex',gap:10,marginTop:16}}>
-              <button onClick={()=>setDateModal(null)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:'#FAFAF8',fontSize:12,fontFamily:'inherit',color:'#1E1B4B'}}>Cancel</button>
+              <button onClick={()=>setDateModal(null)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.ink}}>Cancel</button>
               <button onClick={saveDate} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>{saving?'Saving…':'Save'}</button>
             </div>
           </div>

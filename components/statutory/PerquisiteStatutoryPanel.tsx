@@ -7,10 +7,13 @@ import { supabase } from '@/lib/supabase'
 import PerquisiteTaxSummary from './PerquisiteTaxSummary'
 import { getPerquisiteConfig } from '@/lib/perquisites/actions'
 import { getEmployeePerquisites, saveEmployeePerquisite } from '@/lib/perquisites/employeeActions'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
-const C = { navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280' }
+const C = { navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface, border: TK.line, muted: TK.muted }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: '#FAFAF8', color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
 const lbl: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
 
 export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
@@ -94,7 +97,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
                   </Fragment>
                 ))}
               </div>
-              <button onClick={saveAmounts} disabled={saving} style={{ marginTop: 12, padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : '💾 Save amounts'}</button>
+              <button onClick={saveAmounts} disabled={saving} style={{ marginTop: 12, padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save amounts'}</button>
             </>
           )}
         </div>

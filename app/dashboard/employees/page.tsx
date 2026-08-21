@@ -248,12 +248,12 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
             <>
               <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:'#fff', border:'1px solid rgba(255,255,255,.25)', borderRadius:'8px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
               <button onClick={onSave} disabled={saving} style={{ ...s.saveBtn, opacity: saving ? .7 : 1 }}>
-                <span>{saving ? '⏳' : '💾'}</span>{saving ? 'Saving…' : 'Save changes'}
+                <span>{saving ? '' : ''}</span>{saving ? 'Saving…' : 'Save changes'}
               </button>
             </>
           ) : (
             <button onClick={onEdit} style={{ ...s.priBtn }}>
-              <span>✏️</span> Edit profile
+              <span></span> Edit profile
             </button>
           )}
         </div>
@@ -339,7 +339,7 @@ function StatChip({ label, value }: { label: string; value: boolean }) {
   return (
     <div style={{ flex:1, padding:'10px 8px', borderRadius:'10px', background:value?P.greenBg:P.page, border:`1px solid ${value?'#BBF7D0':P.border}`, textAlign:'center' }}>
       <div style={{ fontSize:'11px', fontWeight:600, color:P.text }}>{label}</div>
-      <div style={{ fontSize:'10px', color:value?P.green:P.muted, marginTop:'4px', fontWeight:500 }}>{value ? '✓ Yes' : '✗ No'}</div>
+      <div style={{ fontSize:'10px', color:value?P.green:P.muted, marginTop:'4px', fontWeight:500 }}>{value ? 'Yes' : 'No'}</div>
     </div>
   )
 }
@@ -573,15 +573,15 @@ export default function EmployeeMaster() {
   }
 
   const TABS = [
-    { id:'personal',   label:'Personal',   icon:'👤' },
-    { id:'employment', label:'Employment',  icon:'💼' },
-    { id:'statutory',  label:'Statutory',   icon:'🏛️' },
-    { id:'bank',       label:'Bank',        icon:'🏦' },
-    { id:'documents',  label:'Documents',   icon:'📄' },
-    { id:'salary',     label:'Salary',      icon:'💰' },
-    { id:'onboarding', label:'Onboarding',  icon:'📋' },
-    { id:'actions',    label:'HR Actions',  icon:'⚡' },
-    { id:'history',    label:'History',     icon:'📜' },
+    { id:'personal',   label:'Personal',   icon:'' },
+    { id:'employment', label:'Employment',  icon:'' },
+    { id:'statutory',  label:'Statutory',   icon:'' },
+    { id:'bank',       label:'Bank',        icon:'' },
+    { id:'documents',  label:'Documents',   icon:'' },
+    { id:'salary',     label:'Salary',      icon:'' },
+    { id:'onboarding', label:'Onboarding',  icon:'' },
+    { id:'actions',    label:'HR Actions',  icon:'' },
+    { id:'history',    label:'History',     icon:'' },
   ]
 
   // ─── Render profile tab content ───────────────────────────────
@@ -691,8 +691,8 @@ export default function EmployeeMaster() {
               {F('Last Working Date','last_working_date','date')}
             </Grid2>
             <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
-              <div style={{ padding:'6px 12px', borderRadius:'8px', background:emp.rehire_eligible?P.greenBg:P.page, border:`1px solid ${emp.rehire_eligible?'#BBF7D0':P.border}`, fontSize:'11px', color:emp.rehire_eligible?P.green:P.muted }}>{emp.rehire_eligible?'✓ Rehire Eligible':'✗ Not Rehire Eligible'}</div>
-              {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'8px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>🚫 Blacklisted</div>}
+              <div style={{ padding:'6px 12px', borderRadius:'8px', background:emp.rehire_eligible?P.greenBg:P.page, border:`1px solid ${emp.rehire_eligible?'#BBF7D0':P.border}`, fontSize:'11px', color:emp.rehire_eligible?P.green:P.muted }}>{emp.rehire_eligible?'Rehire Eligible':'Not Rehire Eligible'}</div>
+              {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'8px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>Blacklisted</div>}
             </div>
           </Section>
         )}
@@ -952,7 +952,7 @@ export default function EmployeeMaster() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:'6px', padding:'12px', borderTop:`1px solid ${P.border}` }}>
-              <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===1?.4:1 }} onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>← Prev</button>
+              <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===1?.4:1 }} onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Prev</button>
               {Array.from({length:Math.min(totalPages,7)},(_,i)=>{
                 const p = page<=4 ? i+1 : page-3+i
                 if(p<1||p>totalPages) return null
@@ -971,7 +971,7 @@ export default function EmployeeMaster() {
 
             {/* Nav breadcrumb */}
             <div style={{ padding:'10px 20px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:P.muted }}>
-              <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>← Employee list</button>
+              <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>Employee list</button>
               <span>›</span>
               <span style={{ color:P.text, fontWeight:500 }}>{selected.full_name}</span>
               {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'6px', fontSize:'10px', fontWeight:500 }}>Editing</span>}

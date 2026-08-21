@@ -17,12 +17,15 @@ import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { loadRuns, buildNeftRows, loadUnbankable, setRunStatus, MONTHS, type PayrollRun } from '@/lib/payroll/core'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5', greenBd: '#BBF7D0',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A', red: '#DC2626', redBg: '#FEF2F2',
-  purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint, greenBd: '#BBF7D0',
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
+  purpleBg: TK.violetTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -191,7 +194,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 940 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)', flexShrink: 0 }}>💸</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)', flexShrink: 0 }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Arrear &amp; Payments</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
@@ -212,7 +215,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
           {(['arrear', 'payments'] as const).map(k => (
             <button key={k} onClick={() => setTab(k)}
               style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${tab === k ? C.purple : C.border}`, background: tab === k ? C.purple : '#fff', color: tab === k ? '#fff' : C.navy, fontWeight: tab === k ? 700 : 500, fontSize: 12.5, cursor: 'pointer', fontFamily: font }}>
-              {k === 'arrear' ? '📌 Arrear' : '🏦 Payments'}
+              {k === 'arrear' ? 'Arrear' : 'Payments'}
             </button>
           ))}
         </div>
@@ -235,7 +238,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
             <Stat label="Arrear recovered" value={inr(totalArrearDed)} color={C.amber} />
             <Stat label="Net arrear" value={inr(totalArrearAdd - totalArrearDed)} color={C.purple} />
             <div style={{ flex: 1 }} />
-            <button onClick={downloadArrear} disabled={!arrears.length} style={{ ...S.btnP, alignSelf: 'center', opacity: arrears.length ? 1 : 0.5, cursor: arrears.length ? 'pointer' : 'not-allowed' }}>📥 Download</button>
+            <button onClick={downloadArrear} disabled={!arrears.length} style={{ ...S.btnP, alignSelf: 'center', opacity: arrears.length ? 1 : 0.5, cursor: arrears.length ? 'pointer' : 'not-allowed' }}>Download</button>
           </div>
 
           {arrears.length === 0 ? (
@@ -293,11 +296,11 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
                 {unbankable.length > 0 && <Stat label="No bank detail" value={unbankable.length} color={C.red} />}
                 <div style={{ flex: 1 }} />
                 <button onClick={downloadNeft} disabled={busy === 'neft' || !pays.length} style={{ ...S.btnP, alignSelf: 'center', opacity: pays.length ? 1 : 0.5 }}>
-                  {busy === 'neft' ? 'Building…' : '🏦 NEFT file'}
+                  {busy === 'neft' ? 'Building…' : 'NEFT file'}
                 </button>
                 <button onClick={markDisbursed} disabled={busy === 'disburse' || !pays.length}
                   style={{ ...S.btnO, alignSelf: 'center', borderColor: C.green, color: C.green, fontWeight: 700 }}>
-                  {busy === 'disburse' ? 'Marking…' : '✓ Mark disbursed'}
+                  {busy === 'disburse' ? 'Marking…' : 'Mark disbursed'}
                 </button>
               </div>
 

@@ -5,11 +5,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { loadEntitlements, loadWindow, ComponentLimit, NO_INVOICE, ACCEPTED_TYPES, FY } from '@/lib/flexi/claims'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const V = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489', border: '#E9E7F5', muted: '#6B6B7B',
-  card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5', red: '#DC2626', redBg: '#FEF2F2',
-  amber: '#D97706', amberBg: '#FFFBEB', purpleBg: '#EEEDFE',
+  navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line, muted: TK.muted,
+  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint,
+  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint,
 }
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 
@@ -34,7 +37,7 @@ function HistoryDrawer({ label, items, onClose }: { label: string; items: HistIt
         {items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: V.muted, fontSize: 13 }}>No claims submitted yet</div>
         ) : items.map(cl => {
-          const [bg, fg] = HIST_STATUS[cl.status] || ['#F3F0FF', V.purpleDark]
+          const [bg, fg] = HIST_STATUS[cl.status] || [TK.violetTint, V.purpleDark]
           return (
             <div key={cl.id} style={{ background: V.card, border: `1px solid ${V.border}`, borderLeft: `3px solid ${fg}`, borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -50,7 +53,7 @@ function HistoryDrawer({ label, items, onClose }: { label: string; items: HistIt
               {cl.status === 'REJECTED' && cl.rejection_reason && (
                 <div style={{ marginTop: 6, padding: '5px 8px', background: V.redBg, borderRadius: 6, fontSize: 11, color: V.red }}>⚠ {cl.rejection_reason}</div>
               )}
-              <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 5 }}>Submitted {new Date(cl.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+              <div style={{ fontSize: 10, color: TK.faint, marginTop: 5 }}>Submitted {new Date(cl.submitted_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
             </div>
           )
         })}
@@ -61,9 +64,9 @@ function HistoryDrawer({ label, items, onClose }: { label: string; items: HistIt
 
 function FileChip({ file, onRemove }: { file: File; onRemove: () => void }) {
   const ext = file.name.split('.').pop()?.toUpperCase() || ''
-  const cols: Record<string, string> = { PDF: V.red, JPG: V.amber, JPEG: V.amber, PNG: V.green, ZIP: V.purple, DOC: '#1D4ED8', DOCX: '#1D4ED8', XLS: V.green, XLSX: V.green }
+  const cols: Record<string, string> = { PDF: V.red, JPG: V.amber, JPEG: V.amber, PNG: V.green, ZIP: V.purple, DOC: TK.info, DOCX: TK.info, XLS: V.green, XLSX: V.green }
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', border: `1px solid ${V.border}`, borderRadius: 6, fontSize: 10, color: V.muted, margin: 2, background: '#F8F7FF' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', border: `1px solid ${V.border}`, borderRadius: 6, fontSize: 10, color: V.muted, margin: 2, background: TK.sunken }}>
       <span style={{ color: cols[ext] || V.muted, fontWeight: 700 }}>{ext}</span>
       {file.name.length > 20 ? file.name.slice(0, 18) + '…' : file.name}
       <span style={{ cursor: 'pointer', color: V.red, marginLeft: 2 }} onClick={onRemove}>×</span>
@@ -74,7 +77,7 @@ function UploadZone({ onFiles, label, sub }: { onFiles: (f: File[]) => void; lab
   const ref = useRef<HTMLInputElement>(null)
   return (
     <div style={{ border: `1px dashed ${V.border}`, borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 6 }} onClick={() => ref.current?.click()}>
-      <span style={{ fontSize: 14, color: V.muted }}>⬆</span>
+      <span style={{ fontSize: 14, color: V.muted }}></span>
       <div><div style={{ fontSize: 12, color: V.muted }}>{label}</div>{sub && <div style={{ fontSize: 10, color: V.muted }}>{sub}</div>}</div>
       <input ref={ref} type="file" accept={ACCEPTED_TYPES} multiple style={{ display: 'none' }} onChange={e => { if (e.target.files) onFiles(Array.from(e.target.files)); e.target.value = '' }} />
     </div>
@@ -85,7 +88,7 @@ function AIAssist({ files, amount, setAmount }: { files: File[]; amount: string;
   const aiAmt = files.length * 1400
   return (
     <div style={{ background: V.purpleBg, border: `1px solid #C4B5FD`, borderRadius: 8, padding: '8px 10px', display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 6 }}>
-      <span style={{ fontSize: 13 }}>✨</span>
+      <span style={{ fontSize: 13 }}></span>
       <div style={{ flex: 1, fontSize: 11, color: V.purpleDark }}>
         AI detected <b>{files.length} receipt{files.length > 1 ? 's' : ''}</b> · Suggested total <b>{inr(aiAmt)}</b>
         {!amount && <button onClick={() => setAmount(String(aiAmt))} style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', border: `1px solid #C4B5FD`, borderRadius: 6, background: '#fff', cursor: 'pointer', color: V.purpleDark }}>Auto-fill {inr(aiAmt)}</button>}
@@ -158,7 +161,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
     const lim = limits.find(l => l.code === reqComp)
     const res = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'REQUEST_LIMIT', employee_id: employeeId, company_id: companyId, fy: FY, component_code: reqComp, current_limit: lim?.annual_limit || 0, requested_limit: Number(reqAmt), reason: reqReason }) }).then(r => r.json())
     if (res.error) return showToast('⚠ ' + res.error)
-    setReqComp(null); setReqAmt(''); setReqReason(''); showToast('✓ Limit-increase request sent to Payroll')
+    setReqComp(null); setReqAmt(''); setReqReason(''); showToast('Limit-increase request sent to Payroll')
   }
 
   const card: React.CSSProperties = { background: V.card, border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 12 }
@@ -168,20 +171,20 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
   if (status === 'loading') return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading flexi claims…</div>
   if (status === 'nopolicy') return (
     <div style={card}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>💳 Flexi Reimbursement</div>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Flexi Reimbursement</div>
       <div style={{ fontSize: 12.5, color: V.muted }}>No claimable flexi components are configured for your company &amp; salary band yet. Once HR sets up the flexi policy slabs, your entitlements &amp; bill submission will appear here.</div>
     </div>
   )
 
   return (
     <div>
-      <div style={{ fontSize: 17, fontWeight: 700, color: V.navy, marginBottom: 2 }}>💳 Flexi Reimbursement</div>
+      <div style={{ fontSize: 17, fontWeight: 700, color: V.navy, marginBottom: 2 }}>Flexi Reimbursement</div>
       <div style={{ fontSize: 12, color: V.muted, marginBottom: 12 }}>Submit monthly bills for your declared flexi components · {regime === 'old' ? 'Old' : 'New'} regime{slabLabel ? ` · Slab ${slabLabel}` : ''}</div>
 
       {/* Window banner */}
       {win ? (
         <div style={{ background: isOpen ? V.greenBg : V.redBg, border: `1px solid ${isOpen ? '#BBF7D0' : '#FCA5A5'}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>{isOpen ? '🟢' : '🔴'}</span>
+          <span style={{ fontSize: 16 }}>{isOpen ? '' : ''}</span>
           <div style={{ flex: 1, fontSize: 12, color: isOpen ? '#065F46' : '#991B1B' }}>
             {isOpen ? <>Window open · submit bills by <b>{new Date(win.closes_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</b> · {Math.max(0, Math.ceil((new Date(win.closes_at).getTime() - Date.now()) / 86400000))} days left</> : 'Window closed · bills cannot be submitted right now'}
           </div>
@@ -191,7 +194,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
       {/* Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>
         {[['Annual limit', inr(totals.limit), V.purple], ['Approved', inr(totals.approved), V.green], ['Pending', inr(totals.pending), V.amber], ['Balance', inr(totals.balance), V.navy]].map(([l, v, c]) => (
-          <div key={l} style={{ background: '#F8F7FF', borderRadius: 8, padding: 10, textAlign: 'center' }}><div style={{ fontSize: 18, fontWeight: 700, color: c as string }}>{v}</div><div style={{ fontSize: 10, color: V.muted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>{l}</div></div>
+          <div key={l} style={{ background: TK.sunken, borderRadius: 8, padding: 10, textAlign: 'center' }}><div style={{ fontSize: 18, fontWeight: 700, color: c as string }}>{v}</div><div style={{ fontSize: 10, color: V.muted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>{l}</div></div>
         ))}
       </div>
 
@@ -214,28 +217,28 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 8 }}>
               {[['Annual limit', inr(lim.annual_limit), V.purple], ['Approved', inr(lim.approved), V.green], ['Pending', inr(lim.pending), V.amber]].map(([l, v, c]) => (
-                <div key={l} style={{ background: '#F8F7FF', borderRadius: 7, padding: 8, textAlign: 'center' }}><div style={{ fontSize: 10, color: V.muted, marginBottom: 2 }}>{l}</div><div style={{ fontSize: 14, fontWeight: 700, color: c as string }}>{v}</div></div>
+                <div key={l} style={{ background: TK.sunken, borderRadius: 7, padding: 8, textAlign: 'center' }}><div style={{ fontSize: 10, color: V.muted, marginBottom: 2 }}>{l}</div><div style={{ fontSize: 14, fontWeight: 700, color: c as string }}>{v}</div></div>
               ))}
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: V.muted, marginBottom: 3 }}><span>Approved: {usedPct}%</span><span>Remaining: {inr(remaining)}</span></div>
             <div style={{ height: 5, background: V.border, borderRadius: 3, overflow: 'hidden' }}><div style={{ height: '100%', width: `${usedPct}%`, background: usedPct >= 100 ? V.red : usedPct >= 80 ? V.amber : V.purple, borderRadius: 3, transition: 'width .3s' }} /></div>
             {lim.rejected > 0 && <div style={{ fontSize: 10, color: V.amber, marginTop: 4 }}>⚠ {inr(lim.rejected)} rejected (not deducted from limit)</div>}
 
-            {noInv && <div style={{ marginTop: 10, fontSize: 11, color: V.muted, background: '#F8F7FF', borderRadius: 6, padding: '8px 10px' }}>Auto-claimed monthly — no bill submission required. Payroll processes this automatically.</div>}
+            {noInv && <div style={{ marginTop: 10, fontSize: 11, color: V.muted, background: TK.sunken, borderRadius: 6, padding: '8px 10px' }}>Auto-claimed monthly — no bill submission required. Payroll processes this automatically.</div>}
 
             {!exhausted && isOpen && !noInv && (
               <div style={{ marginTop: 12, borderTop: `1px solid ${V.border}`, paddingTop: 12 }}>
                 <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>Submit bill</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Amount (₹)</label><input type="number" min={0} style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: '#F8F7FF', width: '100%', boxSizing: 'border-box' }} value={d.amount} onChange={e => setD(lim.code, { amount: e.target.value })} /></div>
-                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Bill date</label><input type="date" max={new Date().toISOString().slice(0, 10)} style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: '#F8F7FF', width: '100%', boxSizing: 'border-box' }} value={d.billDate} onChange={e => setD(lim.code, { billDate: e.target.value })} /></div>
-                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Bill / Invoice no.</label><input type="text" placeholder="INV-2026-001" style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: '#F8F7FF', width: '100%', boxSizing: 'border-box' }} value={d.billNo} onChange={e => setD(lim.code, { billNo: e.target.value })} /></div>
-                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Agency / Vendor name</label><input type="text" placeholder="HPCL, Airtel…" style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: '#F8F7FF', width: '100%', boxSizing: 'border-box' }} value={d.vendor} onChange={e => setD(lim.code, { vendor: e.target.value })} /></div>
+                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Amount (₹)</label><input type="number" min={0} style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, width: '100%', boxSizing: 'border-box' }} value={d.amount} onChange={e => setD(lim.code, { amount: e.target.value })} /></div>
+                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Bill date</label><input type="date" max={new Date().toISOString().slice(0, 10)} style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, width: '100%', boxSizing: 'border-box' }} value={d.billDate} onChange={e => setD(lim.code, { billDate: e.target.value })} /></div>
+                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Bill / Invoice no.</label><input type="text" placeholder="INV-2026-001" style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, width: '100%', boxSizing: 'border-box' }} value={d.billNo} onChange={e => setD(lim.code, { billNo: e.target.value })} /></div>
+                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Agency / Vendor name</label><input type="text" placeholder="HPCL, Airtel…" style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, width: '100%', boxSizing: 'border-box' }} value={d.vendor} onChange={e => setD(lim.code, { vendor: e.target.value })} /></div>
                 </div>
                 <UploadZone label="Upload bills" sub="ZIP PNG JPG PDF WORD EXCEL · max 10 files" onFiles={f => addFiles(lim.code, 'bills', f)} />
                 <div>{d.bills.map((f, i) => <FileChip key={i} file={f} onRemove={() => rmFile(lim.code, 'bills', i)} />)}</div>
                 <AIAssist files={d.bills} amount={d.amount} setAmount={v => setD(lim.code, { amount: v })} />
-                <div style={{ marginTop: 10, background: '#F8F7FF', borderRadius: 8, padding: '10px 12px' }}>
+                <div style={{ marginTop: 10, background: TK.sunken, borderRadius: 8, padding: '10px 12px' }}>
                   <div style={{ fontSize: 10, fontWeight: 600, color: V.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em' }}>Other supporting docs</div>
                   <textarea placeholder="Remark (log book, lease copy…)" rows={2} style={{ width: '100%', fontSize: 11, padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 6, resize: 'none', boxSizing: 'border-box', background: '#fff', marginBottom: 6, fontFamily: 'inherit' }} value={d.supportingRemark} onChange={e => setD(lim.code, { supportingRemark: e.target.value })} />
                   <UploadZone label="Attach supporting documents" sub="Any format" onFiles={f => addFiles(lim.code, 'supporting', f)} />

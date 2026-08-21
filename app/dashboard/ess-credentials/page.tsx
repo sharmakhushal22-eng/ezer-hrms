@@ -5,13 +5,16 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489', border: '#E9E7F5', muted: '#6B7280',
-  card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5', red: '#DC2626', amber: '#B45309', amberBg: '#FFFBEB', purpleBg: '#EEEDFE',
+  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line, muted: TK.muted,
+  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, background: '#FAFAF8', color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
 const pri: React.CSSProperties = { padding: '9px 18px', background: C.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
 const sec: React.CSSProperties = { padding: '8px 14px', background: '#fff', color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: font }
 
@@ -84,7 +87,7 @@ export default function EssCredentialsPage() {
       <div style={{ fontSize: 12, color: C.muted, marginTop: 2, marginBottom: 16 }}>Generate employee self-service logins in bulk · temp password = employee code · forced change on first login</div>
 
       <div style={{ background: C.amberBg, border: '1px solid #FDE68A', borderRadius: 10, padding: '11px 14px', marginBottom: 16, fontSize: 12.5, color: C.amber, display: 'flex', gap: 8 }}>
-        <span>🔒</span><span><b>Confidential.</b> Each employee&apos;s temporary password is their own <b>employee code</b> (e.g. SRS0001). They must set a new password on first login. Share the exported list securely, then delete it.</span>
+        <span></span><span><b>Confidential.</b> Each employee&apos;s temporary password is their own <b>employee code</b> (e.g. SRS0001). They must set a new password on first login. Share the exported list securely, then delete it.</span>
       </div>
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
@@ -116,7 +119,7 @@ export default function EssCredentialsPage() {
             onClick={() => generate('selected')}
           >Generate for these</button>
         </div>
-        {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.red, background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 12px' }}>⚠ {error}</div>}
+        {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.red, background: TK.criticalTint, border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 12px' }}>⚠ {error}</div>}
       </div>
 
       {summary && (
@@ -148,9 +151,9 @@ export default function EssCredentialsPage() {
                               setCopiedIdx(i); setTimeout(() => setCopiedIdx(c => (c === i ? null : c)), 1800)
                             }}
                             style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, border: `1px solid ${C.border}`, background: copiedIdx === i ? C.greenBg : '#fff', color: copiedIdx === i ? C.green : C.purpleDark, fontWeight: 600, cursor: 'pointer', fontFamily: font }}
-                          >{copiedIdx === i ? '✓ Copied' : '🔗 Copy link'}</button>
+                          >{copiedIdx === i ? 'Copied' : 'Copy link'}</button>
                         </span>
-                      ) : <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: '#FEF2F2', color: C.red, fontWeight: 600 }}>{r.error || 'Error'}</span>}
+                      ) : <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: TK.criticalTint, color: C.red, fontWeight: 600 }}>{r.error || 'Error'}</span>}
                     </td>
                   </tr>
                 ))}

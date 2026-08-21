@@ -7,12 +7,15 @@
 //   • the gap between declared and proven, per employee
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A', red: '#DC2626', redBg: '#FEF2F2',
-  purpleBg: '#EEEDFE', soft: '#FAFAF8',
+  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
+  purpleBg: TK.violetTint, soft: TK.sunken,
 }
 const FY = '2026-27'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -35,7 +38,7 @@ interface Row {
 }
 
 const TONE: Record<string, [string, string]> = {
-  PENDING: ['#F3F4F6', '#6B7280'], SUBMITTED: [C.amberBg, C.amber],
+  PENDING: ['#F3F4F6', TK.muted], SUBMITTED: [C.amberBg, C.amber],
   APPROVED: [C.greenBg, C.green], REJECTED: [C.redBg, C.red],
 }
 
@@ -58,7 +61,7 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
           <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{r.declared_item}</div>
         </div>
         {leaving && <span style={{ fontSize: 10, fontWeight: 700, color: C.amber, background: C.amberBg, border: `0.5px solid ${C.amberBd}`, borderRadius: 99, padding: '2px 9px' }}>Leaving {fmtDate(leaving)}</span>}
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: overdue && !done ? C.red : C.muted, background: overdue && !done ? C.redBg : '#F8F7FF', borderRadius: 99, padding: '3px 10px' }}>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: overdue && !done ? C.red : C.muted, background: overdue && !done ? C.redBg : TK.sunken, borderRadius: 99, padding: '3px 10px' }}>
           {overdue && !done ? 'Deadline passed · ' : 'Deadline '}{fmtDate(r.deadline)}
         </span>
         <span style={{ fontSize: 10.5, fontWeight: 700, color: fg, background: bg, borderRadius: 99, padding: '3px 10px' }}>{r.status}</span>
@@ -170,7 +173,7 @@ export default function InvestmentProofsPage() {
     return (e?.code || '').toLowerCase().includes(t) || (e?.name || '').toLowerCase().includes(t) || r.section.toLowerCase().includes(t)
   })
   const stat = (label: string, v: any, color: string) => (
-    <div key={label} style={{ background: '#F8F7FF', border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 110 }}>
+    <div key={label} style={{ background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 110 }}>
       <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 800, color }}>{v}</div>
     </div>

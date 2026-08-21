@@ -4,11 +4,14 @@
 // Inline styles only. All sub-components OUTSIDE the parent (no focus-loss).
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 // ── Admin C palette ──────────────────────────────────────────────
 const C = {
-  page:'#F0F4F8', card:'#FFFFFF', border:'#E2E8F0', purple:'#7C3AED', navy:'#0F172A', muted:'#64748B',
-  red:'#DC2626', redBg:'#FEF2F2', green:'#059669', greenBg:'#ECFDF5', amber:'#B45309', amberBg:'#FFFBEB', blue:'#185FA5', blueBg:'#E6F1FB',
+  page:'#F0F4F8', card:TK.surface, border:TK.line, purple:TK.violet, navy:TK.ink, muted:TK.muted,
+  red:TK.critical, redBg:TK.criticalTint, green:TK.positive, greenBg:TK.positiveTint, amber:TK.warning, amberBg:TK.warningTint, blue:'#185FA5', blueBg:'#E6F1FB',
 }
 const S = {
   page: { background:C.page, minHeight:'100vh', color:C.navy, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:13, padding:'20px 16px' } as React.CSSProperties,
@@ -33,9 +36,9 @@ function Badge({ status }: { status: string }) {
     IN_APPROVAL:[C.amberBg, C.amber], SUBMITTED:[C.amberBg, C.amber], REQUESTED:[C.amberBg, C.amber], GENERATED:[C.amberBg, C.amber], UNDER_REVIEW:[C.blueBg, C.blue],
     APPROVED:[C.greenBg, C.green], RECOVERING:[C.greenBg, C.green], DISBURSED:[C.greenBg, C.green], SIGNED:[C.greenBg, C.green],
     REJECTED:[C.redBg, C.red], CANCELLED:[C.redBg, C.red], EXIT_RECOVERY:[C.redBg, C.red],
-    CLOSED:['#F1F5F9', C.muted], FORECLOSED:['#F1F5F9', C.muted],
+    CLOSED:[TK.sunken, C.muted], FORECLOSED:[TK.sunken, C.muted],
   }
-  const [bg, c] = map[s] || ['#F3F0FF', C.purple]
+  const [bg, c] = map[s] || [TK.violetTint, C.purple]
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{s.replace(/_/g, ' ')}</span>
 }
 
@@ -216,7 +219,7 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
       {rows.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>No loans for this company.</div> : (
         <div style={{ overflowX:'auto' }}>
           <table style={{ borderCollapse:'collapse', width:'100%', minWidth:640 }}>
-            <thead><tr style={{ background:'#F8FAFC' }}>
+            <thead><tr style={{ background:TK.sunken }}>
               <th style={{ ...th, textAlign:'left' }}>Loan #</th><th style={{ ...th, textAlign:'left' }}>Employee</th><th style={th}>Principal</th><th style={th}>EMI</th><th style={th}>Recovered</th><th style={th}>Outstanding</th><th style={{ ...th, textAlign:'left' }}>Status</th><th style={th}></th>
             </tr></thead>
             <tbody>
@@ -235,7 +238,7 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
                   <td style={td}>
                     {['DISBURSED','ACTIVE'].includes(String(l.status || '').toUpperCase()) && (
                       <button onClick={() => foreclose(l)} disabled={busy === l.id}
-                        style={{ padding:'4px 11px', borderRadius:99, border:`0.5px solid ${C.amber}`, background:'#FFFBEB', color:C.amber, fontWeight:700, fontSize:10.5, cursor: busy === l.id ? 'not-allowed' : 'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+                        style={{ padding:'4px 11px', borderRadius:99, border:`0.5px solid ${C.amber}`, background:TK.warningTint, color:C.amber, fontWeight:700, fontSize:10.5, cursor: busy === l.id ? 'not-allowed' : 'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
                         {busy === l.id ? '…' : 'Foreclose'}
                       </button>
                     )}
@@ -249,8 +252,8 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
       <div style={{ fontSize:11, color:C.muted, marginTop:10, lineHeight:1.55 }}>
         EMI is deducted through <b>Payroll → Data Sync → Loan</b> — once per payroll month, however many times you run the sync. The last EMI is only as large as the balance that is left.
       </div>
-      {msg && <div style={{ fontSize:12, fontWeight:600, color:C.green, background:'#ECFDF5', borderRadius:8, padding:'9px 12px', marginTop:10 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize:12, color:C.red, background:'#FEF2F2', borderRadius:8, padding:'9px 12px', marginTop:10 }}>{err}</div>}
+      {msg && <div style={{ fontSize:12, fontWeight:600, color:C.green, background:TK.positiveTint, borderRadius:8, padding:'9px 12px', marginTop:10 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize:12, color:C.red, background:TK.criticalTint, borderRadius:8, padding:'9px 12px', marginTop:10 }}>{err}</div>}
     </div>
   )
 }

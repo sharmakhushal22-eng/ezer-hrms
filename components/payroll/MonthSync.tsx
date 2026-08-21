@@ -11,11 +11,14 @@ import {
   SYNC_CATEGORIES, loadSyncStatus, runCategorySync, runFullSync, loadCategoryRows, loadFilterCandidates,
   type SyncCategory, type SyncStatus, type SyncEmployee,
 } from '@/lib/payroll/sync'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  greenBd: '#BBF7D0', amber: '#B45309', amberBg: '#FFFBEB', purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -82,7 +85,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginTop: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
-        <div style={{ width: 34, height: 34, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}>📊</div>
+        <div style={{ width: 34, height: 34, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}></div>
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: C.navy }}>Changes vs previous month</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
@@ -96,13 +99,12 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
         </label>
         <button onClick={compare} disabled={busy || !run} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 11.5, fontFamily: font, cursor: busy ? 'not-allowed' : 'pointer' }}>⟳ Refresh</button>
         <button onClick={download} disabled={!diff || !diff.rows.length}
-          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? '#C4B5FD' : 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>
-          📥 Download changes
+          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? '#C4B5FD' : 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
         </button>
       </div>
 
       {busy && <div style={{ fontSize: 12, color: C.muted, padding: '10px 0' }}>Comparing months…</div>}
-      {err && <div style={{ fontSize: 12, color: '#DC2626', background: '#FEF2F2', borderRadius: 9, padding: '10px 14px' }}>{err}</div>}
+      {err && <div style={{ fontSize: 12, color: TK.critical, background: TK.criticalTint, borderRadius: 9, padding: '10px 14px' }}>{err}</div>}
       {!busy && !err && prevMissing && (
         <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 12px' }}>
           Nothing to compare against — <b>{prevMissing}</b> was never created for this selection. The first month of a company has no previous month master.
@@ -169,10 +171,10 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 0', borderTop: `1px solid ${C.border}` }}>
       <div style={{
         width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 15, flexShrink: 0, background: ready ? C.purpleBg : global_ ? '#ECFDF5' : '#F3F4F6',
+        fontSize: 15, flexShrink: 0, background: ready ? C.purpleBg : global_ ? TK.positiveTint : '#F3F4F6',
       }}>{cat.icon}</div>
       <div style={{ flex: 1, minWidth: 180 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: ready || global_ ? C.navy : '#9CA3AF' }}>{cat.label}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: ready || global_ ? C.navy : TK.faint }}>{cat.label}</div>
         <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, lineHeight: 1.45 }}>{cat.note}</div>
         {extra}
       </div>
@@ -186,7 +188,7 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
             {busy ? 'Syncing…' : 'Sync'}
           </button>
           <button onClick={onDownload} disabled={disabled} title={`Download ${cat.label} as frozen in this month`}
-            style={{ padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.muted, fontSize: 12, fontFamily: font, cursor: disabled ? 'not-allowed' : 'pointer' }}>⬇</button>
+            style={{ padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.muted, fontSize: 12, fontFamily: font, cursor: disabled ? 'not-allowed' : 'pointer' }}></button>
         </>
       ) : global_ ? (
         <>
@@ -194,7 +196,7 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
           <span style={{ fontSize: 10.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `0.5px solid ${C.greenBd}`, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Whole year</span>
         </>
       ) : (
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#DC2626', background: '#FEF2F2', borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Planned</span>
+        <span style={{ fontSize: 10.5, fontWeight: 700, color: TK.critical, background: TK.criticalTint, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Planned</span>
       )}
     </div>
   )
@@ -223,7 +225,7 @@ function FilterBar({ pool, company, location, search, onCompany, onLocation, onS
   }
   const on = matched !== null
   return (
-    <div style={{ background: on ? C.purpleBg : C.gray, border: `1px solid ${on ? '#DDD6FE' : C.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+    <div style={{ background: on ? C.purpleBg : C.gray, border: `1px solid ${on ? TK.violetEdge : C.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
         {companies.length > 1 && (
@@ -247,12 +249,12 @@ function FilterBar({ pool, company, location, search, onCompany, onLocation, onS
           <input style={{ ...inp, width: '100%' }} value={search} onChange={e => onSearch(e.target.value)}
             placeholder="OXYZO680, OXYZO741, OXYZO1013   ya   umesh" />
         </div>
-        {on && <button onClick={onClear} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: '#DC2626', fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer' }}>Clear</button>}
+        {on && <button onClick={onClear} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: TK.critical, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer' }}>Clear</button>}
       </div>
       <div style={{ fontSize: 10.5, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
         {!on ? <>No filter — Sync will run on the <b>whole month</b> ({pool.length} employees).</>
           : matched.length === 0
-            ? <b style={{ color: '#DC2626' }}>This filter matches no employees — Sync is disabled.</b>
+            ? <b style={{ color: TK.critical }}>This filter matches no employees — Sync is disabled.</b>
             : <>Filter on — <b>{matched.length}</b> of {pool.length} employees. Any Sync you press now runs on <b>these only</b>, and the counters below refer to them too.</>}
       </div>
     </div>
@@ -369,7 +371,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 880 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)', flexShrink: 0 }}>⇄</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)', flexShrink: 0 }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Snapshot Sync</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
@@ -443,7 +445,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         </div>
 
         {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
-        {err && <div style={{ fontSize: 12, color: '#DC2626', background: '#FEF2F2', borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
+        {err && <div style={{ fontSize: 12, color: TK.critical, background: TK.criticalTint, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
       </div>
 
       <ChangeTable companyId={companyId} run={sel} />

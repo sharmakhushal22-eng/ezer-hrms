@@ -4,8 +4,11 @@
 // (or all companies in Group mode). Not employee-level.
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
-const C = { navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280', purpleBg: '#EEEDFE', teal: '#0F6E56', amber: '#B45309' }
+const C = { navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface, border: TK.line, muted: TK.muted, purpleBg: TK.violetTint, teal: '#0F6E56', amber: TK.warning }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 function SectionCard({ icon, title, count, children }: { icon: string; title: string; count: number; children: React.ReactNode }) {
@@ -55,7 +58,7 @@ export default function CompanyStructureView({ companyId }: { companyId: string 
       {sub && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{sub}</div>}
     </div>
   )
-  const empty = (t: string) => <div style={{ fontSize: 11.5, color: '#9CA3AF' }}>{t}</div>
+  const empty = (t: string) => <div style={{ fontSize: 11.5, color: TK.faint }}>{t}</div>
 
   return (
     <div style={{ fontFamily: font }}>

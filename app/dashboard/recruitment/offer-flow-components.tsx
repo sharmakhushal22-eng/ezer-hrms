@@ -130,7 +130,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     const docsCount = negotiation?.documents_count || 'pending'
 
     const tmpl = `OFFER APPROVAL REQUEST — CONFIDENTIAL
-${'─'.repeat(50)}
+${''.repeat(50)}
 Reference: OAR-${Date.now().toString().slice(-6)}
 Date: ${new Date().toLocaleDateString('en-IN')}
 Prepared by: [Recruiter Name]
@@ -177,7 +177,7 @@ HIRING MANAGER REMARK / TARGET:
   ${hiringRemark || 'Nil'}
 
 ${recruiterComments ? `Recruiter Comments:\n  ${recruiterComments}` : ''}
-${'─'.repeat(50)}
+${''.repeat(50)}
 This document is confidential and for internal approval only.`
     setTemplate(tmpl)
     setShowTemplate(true)
@@ -344,11 +344,10 @@ This document is confidential and for internal approval only.`
 
       {/* ACTIONS */}
       <div style={{ display:'flex', gap:10, marginBottom:16 }}>
-        <button onClick={generateTemplate} style={S.btn('#EDE9FE','#4C1D95')}>
-          🤖 Generate Approval Template
+        <button onClick={generateTemplate} style={S.btn('#EDE9FE','#4C1D95')}>Generate Approval Template
         </button>
         <button onClick={submitForApproval} disabled={saving || !template} style={S.btn(saving||!template?'rgba(124,58,237,0.4)':'#7C3AED','#fff')}>
-          {saving ? 'Submitting...' : '📤 Submit to HR Head'}
+          {saving ? 'Submitting...' : 'Submit to HR Head'}
         </button>
       </div>
 
@@ -509,7 +508,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {/* MRF Approvals — HR Head approves new manpower requisitions here */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>📝 MRF Approvals ({fMrfs.length})</div>
+        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>MRF Approvals ({fMrfs.length})</div>
         {fMrfs.length === 0 && (
           <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>{ql?'No matching MRF':'No MRFs pending approval'}</div>
         )}
@@ -523,8 +522,8 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               {m.skills_required && <div style={{ fontSize:11, color:'#6D28D9', marginTop:3 }}>Skills: {m.skills_required}</div>}
             </div>
             <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-              <button onClick={()=>approveMrf(m.id)} style={S.btn('#059669','#fff')}>✅ Approve</button>
-              <button onClick={()=>rejectMrf(m.id)} style={{ ...S.btn('#FEF2F2','#DC2626'), border:'1px solid #FCA5A5' }}>❌ Reject</button>
+              <button onClick={()=>approveMrf(m.id)} style={S.btn('#059669','#fff')}>Approve</button>
+              <button onClick={()=>rejectMrf(m.id)} style={{ ...S.btn('#FEF2F2','#DC2626'), border:'1px solid #FCA5A5' }}>Reject</button>
             </div>
           </div>
         ))}
@@ -532,7 +531,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>♻️ Rehire — Rejected Candidates ({fRejected.length})</div>
+        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>Rehire — Rejected Candidates ({fRejected.length})</div>
         {fRejected.length === 0 && (
           <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>{ql?'No matching candidate':'No rejected candidates'}</div>
         )}
@@ -547,18 +546,18 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                 <option value="">Place at stage…</option>
                 {REHIRE_STAGES.map(st => <option key={st} value={st}>{st}</option>)}
               </select>
-              <button onClick={()=>rehire(c, rehireStage[c.id])} style={S.btn('#059669','#fff')}>♻️ Rehire</button>
+              <button onClick={()=>rehire(c, rehireStage[c.id])} style={S.btn('#059669','#fff')}>Rehire</button>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'4px 0 8px' }}>📄 Offer Approvals</div>
+      <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'4px 0 8px' }}>Offer Approvals</div>
       <div style={{ display:'flex', gap:8, marginBottom:16 }}>
         {(['pending','done'] as const).map(t => (
           <button key={t} onClick={()=>{setTab(t);setSelected(null)}}
             style={{ ...S.btn(tab===t?'#7C3AED':'#fff', tab===t?'#fff':'#6B7280'), border: tab===t?'none':'1px solid #DDD6FE' }}>
-            {t === 'pending' ? '⏳ Pending Approval' : '✅ Approved'}
+            {t === 'pending' ? 'Pending Approval' : 'Approved'}
           </button>
         ))}
       </div>
@@ -635,11 +634,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               <div style={S.cardP}>
                 <div style={S.sec}>Your Decision</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
-                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?'#ECFDF5':'#F9FAFB', action==='approve'?'#059669':'#6B7280'), border:action==='approve'?'1.5px solid #059669':'1px solid #E5E7EB', padding:12, fontSize:13 }}>
-                    ✅ Approve
+                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?'#ECFDF5':'#F9FAFB', action==='approve'?'#059669':'#6B7280'), border:action==='approve'?'1.5px solid #059669':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Approve
                   </button>
-                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?'#FEF2F2':'#F9FAFB', action==='reject'?'#DC2626':'#6B7280'), border:action==='reject'?'1.5px solid #DC2626':'1px solid #E5E7EB', padding:12, fontSize:13 }}>
-                    ❌ Reject
+                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?'#FEF2F2':'#F9FAFB', action==='reject'?'#DC2626':'#6B7280'), border:action==='reject'?'1.5px solid #DC2626':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Reject
                   </button>
                 </div>
                 <div style={{ marginBottom:12 }}>
@@ -657,7 +654,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             {/* Already actioned */}
             {selected.status === 'HR_HEAD_APPROVED' && (
               <div style={{ background:'#ECFDF5', border:'1px solid #A7F3D0', borderRadius:10, padding:14 }}>
-                <div style={{ fontSize:13, fontWeight:500, color:'#059669', marginBottom:4 }}>✅ Approved</div>
+                <div style={{ fontSize:13, fontWeight:500, color:'#059669', marginBottom:4 }}>Approved</div>
                 {selected.hr_head_comments && <div style={{ fontSize:12, color:'#374151' }}>{selected.hr_head_comments}</div>}
                 <div style={{ fontSize:11, color:'#9CA3AF', marginTop:4 }}>
                   {selected.hr_head_actioned_at ? new Date(selected.hr_head_actioned_at).toLocaleDateString('en-IN') : ''}
@@ -873,7 +870,7 @@ ${company} — Human Resources`)
             </div>
             <button onClick={sendOffer} disabled={sending}
               style={{ ...S.btn('#7C3AED','#fff'), width:'100%', padding:11, fontSize:13 }}>
-              {sending ? 'Sending…' : '📤 Send Offer & Mark as Sent'}
+              {sending ? 'Sending…' : 'Send Offer & Mark as Sent'}
             </button>
           </div>
         )}
@@ -899,20 +896,20 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
   }, [candidateId])
 
   const actionLabel: Record<string, [string, string]> = {
-    DOC_LINK_CREATED:          ['🔗','Document link created'],
-    DOCUMENT_UPLOADED:         ['📄','Document uploaded'],
-    DOCUMENTS_SUBMITTED:       ['✅','All documents submitted'],
-    SALARY_LINK_SENT:          ['💰','Salary calculator link sent'],
-    CANDIDATE_INTERESTED:      ['👍','Candidate confirmed interest'],
-    OFFER_APPROVAL_REQUESTED:  ['📋','Offer approval request submitted'],
-    HR_HEAD_APPROVED:          ['✅','HR Head approved'],
-    HR_HEAD_REJECTED:          ['❌','HR Head rejected'],
-    OFFER_LETTER_SENT:         ['📤','Offer letter sent'],
-    OFFER_ACCEPTED:            ['🎉','Offer accepted'],
-    OFFER_ACCEPTED_DIGITAL:    ['🎉','Offer accepted digitally'],
-    OFFER_ACCEPTED_UPLOAD:     ['🎉','Signed copy uploaded'],
-    OFFER_REVISE_REQUESTED:    ['✏️','Offer revision requested'],
-    OFFER_BACKOUT:             ['🚪','Candidate backed out'],
+    DOC_LINK_CREATED:          ['','Document link created'],
+    DOCUMENT_UPLOADED:         ['','Document uploaded'],
+    DOCUMENTS_SUBMITTED:       ['','All documents submitted'],
+    SALARY_LINK_SENT:          ['','Salary calculator link sent'],
+    CANDIDATE_INTERESTED:      ['','Candidate confirmed interest'],
+    OFFER_APPROVAL_REQUESTED:  ['','Offer approval request submitted'],
+    HR_HEAD_APPROVED:          ['','HR Head approved'],
+    HR_HEAD_REJECTED:          ['','HR Head rejected'],
+    OFFER_LETTER_SENT:         ['','Offer letter sent'],
+    OFFER_ACCEPTED:            ['','Offer accepted'],
+    OFFER_ACCEPTED_DIGITAL:    ['','Offer accepted digitally'],
+    OFFER_ACCEPTED_UPLOAD:     ['','Signed copy uploaded'],
+    OFFER_REVISE_REQUESTED:    ['','Offer revision requested'],
+    OFFER_BACKOUT:             ['','Candidate backed out'],
   }
 
   return (
@@ -920,7 +917,7 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
       <div style={{ fontSize:13, fontWeight:500, marginBottom:12 }}>Audit Trail</div>
       {logs.length === 0 && <div style={{ color:'#9CA3AF', fontSize:12 }}>No audit logs yet</div>}
       {logs.map((log, i) => {
-        const [icon, label] = actionLabel[log.action_type] || ['📌', log.action_type]
+        const [icon, label] = actionLabel[log.action_type] || ['', log.action_type]
         return (
           <div key={log.id} style={{ display:'flex', gap:10, paddingBottom:12, borderBottom: i<logs.length-1 ? '1px solid #F3F0FF' : 'none', marginBottom:i<logs.length-1?12:0 }}>
             <div style={{ width:28, height:28, borderRadius:99, background:'#EDE9FE', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>{icon}</div>

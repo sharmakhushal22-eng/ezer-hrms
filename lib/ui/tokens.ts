@@ -75,7 +75,12 @@ export const C = {
   /** The dark rail and any inverted surface. */
   dark: '#17143B',
   darkSoft: '#241F52',
-} as const;
+  // NOT `as const`. With it, every value is its own literal type, so
+  //   useState({ color: C.violet })
+  // infers `color: "#6D3BEF"` and refuses every later colour. A palette is a
+  // set of strings, not a set of singleton types. `satisfies` keeps the keys
+  // checked and autocompleted without narrowing the values.
+} satisfies Record<string, string>;
 
 // ---------------------------------------------------------------------------
 // TYPE
