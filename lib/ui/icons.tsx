@@ -142,6 +142,9 @@ export const IconPlus = (p: IconProps) => (
 export const IconAlert = (p: IconProps) => (
   <Svg {...p}><circle cx="10" cy="10" r="7.2" /><path d="M10 6v4.5M10 13.6v.1" /></Svg>
 );
+export const IconBell = (p: IconProps) => (
+  <Svg {...p}><path d="M5.5 8a4.5 4.5 0 0 1 9 0c0 3.2.9 4.6 1.5 5.3H4c.6-.7 1.5-2.1 1.5-5.3Z" /><path d="M8.2 16a1.9 1.9 0 0 0 3.6 0" /></Svg>
+);
 export const IconLogout = (p: IconProps) => (
   <Svg {...p}><path d="M7.5 3.5H5A1.5 1.5 0 0 0 3.5 5v10A1.5 1.5 0 0 0 5 16.5h2.5" /><path d="M12 6.5 15.5 10 12 13.5M15.5 10h-8" /></Svg>
 );

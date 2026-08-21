@@ -183,7 +183,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={onClose}>
       <div style={{ background:'#fff', borderRadius:'12px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'14px', color:'#0F172A' }}>Add Employee</div>
+        <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'14px', color:C.ink }}>Add Employee</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'12px' }}>
           <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Rahul Sharma" /></div>
           <div><label style={mc.lbl}>Employment type</label><select style={mc.inp} value={f.employment_type} onChange={e => set('employment_type', e.target.value)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
@@ -196,7 +196,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
           <div><label style={mc.lbl}>Date of joining</label><input type="date" style={mc.inp} value={f.company_doj} onChange={e => set('company_doj', e.target.value)} /></div>
           <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Employee code (auto)</label><input style={mc.inp} value={f.emp_code} onChange={e => set('emp_code', e.target.value.toUpperCase())} placeholder="auto" /></div>
         </div>
-        {err && <div style={{ background:'#FEF2F2', color:'#B91C1C', fontSize:'12px', padding:'8px 12px', borderRadius:'7px', marginBottom:'12px' }}>{err}</div>}
+        {err && <div style={{ background:C.criticalTint, color:C.critical, fontSize:'12px', padding:'8px 12px', borderRadius:'7px', marginBottom:'12px' }}>{err}</div>}
         <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
           <button style={mc.out} onClick={onClose}>Cancel</button>
           <button style={{ ...mc.pri, opacity: ready && !busy ? 1 : 0.5 }} disabled={!ready || busy} onClick={save}>{busy ? 'Saving…' : 'Add employee'}</button>
@@ -218,13 +218,13 @@ function StatCard({ label, value, color, onClick, active }: any) {
 }
 
 function Badge({ val, map }: { val: string; map: Record<string,{bg:string;color:string}> }) {
-  const c = map[val] || {bg:'#F1F5F9',color:'#374151'}
+  const c = map[val] || {bg:C.sunken,color:C.inkSoft}
   return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '—'}</span>
 }
 
 // Profile header strip
 function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any) {
-  const gc = GRADE_COLORS[emp.grade] || {bg:'#F1F5F9',color:'#374151'}
+  const gc = GRADE_COLORS[emp.grade] || {bg:C.sunken,color:C.inkSoft}
   return (
     <div style={{ background:P.navy, padding:'18px 24px 0', borderRadius:'14px 14px 0 0' }}>
       <div style={{ display:'flex', alignItems:'flex-start', gap:'16px', paddingBottom:'14px' }}>
@@ -318,7 +318,7 @@ function Grid2({ children }: { children: React.ReactNode }) {
 // Tab bar
 function TabBar({ tabs, active, onChange }: any) {
   return (
-    <div style={{ display:'flex', background:'#F8F7FF', borderBottom:`1px solid ${P.border}`, overflowX:'auto' }}>
+    <div style={{ display:'flex', background:C.sunken, borderBottom:`1px solid ${P.border}`, overflowX:'auto' }}>
       {tabs.map((t: any) => (
         <button key={t.id} onClick={() => onChange(t.id)} style={{
           padding:'11px 16px', border:'none', background:'transparent', cursor:'pointer',
@@ -723,7 +723,7 @@ export default function EmployeeMaster() {
     if (profileTab === 'bank') return (
       <Section title="Salary Account" icon="🏦">
         <div style={{ background:P.greenBg, border:`1px solid #BBF7D0`, borderRadius:'10px', padding:'16px', marginBottom:'12px' }}>
-          <div style={{ fontSize:'12px', fontWeight:600, color:'#15803D', marginBottom:'12px' }}>Primary Account</div>
+          <div style={{ fontSize:'12px', fontWeight:600, color:C.positive, marginBottom:'12px' }}>Primary Account</div>
           <Grid2>
             {[
               ['Bank Name', emp.bank_name],
@@ -732,7 +732,7 @@ export default function EmployeeMaster() {
               ['IFSC Code', emp.ifsc_code],
             ].map(([l,v]) => (
               <div key={l} style={{padding:'6px 0',borderBottom:`1px solid #DCFCE7`}}>
-                <div style={{fontSize:'10px',color:'#16A34A',marginBottom:'3px',fontWeight:500,textTransform:'uppercase',letterSpacing:'.4px'}}>{l}</div>
+                <div style={{fontSize:'10px',color:C.positive,marginBottom:'3px',fontWeight:500,textTransform:'uppercase',letterSpacing:'.4px'}}>{l}</div>
                 <div style={{fontSize:'13px',color:P.text,fontFamily:l==='Account No.'||l==='IFSC Code'?'monospace':'inherit'}}>{v||'—'}</div>
               </div>
             ))}
@@ -997,7 +997,7 @@ export default function EmployeeMaster() {
       {/* ── Modals + toast ── */}
       {showAdd && <AddEmployeeModal companies={companies} locations={locations} departments={departments} onClose={() => setShowAdd(false)} onSaved={(msg) => { setShowAdd(false); setAddMsg(msg); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 3500) }} />}
       {showBulk && <BulkUploadModal companies={companies} departments={departments} locations={locations} onClose={() => setShowBulk(false)} onDone={(r) => { setAddMsg(`Bulk: ${r.added} added, ${r.skipped} skipped, ${r.errors} errors`); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 4000) }} />}
-      {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:'#059669', color:'#fff', borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
+      {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:C.positive, color:'#fff', borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
     </div>
   )
 }

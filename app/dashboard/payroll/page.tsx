@@ -683,7 +683,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
         </div>
         {mode === 'create' && (
           <>
-            {allCo && <div style={{ fontSize: 12, color: C.purpleDark, marginTop: 10, background: '#EEEDFE', borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
+            {allCo && <div style={{ fontSize: 12, color: C.purpleDark, marginTop: 10, background: TK.violetTint, borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
             <div style={{ marginTop: 12 }}>
               <button style={{ ...S.btnPrimary }} onClick={() => setShowCreate(true)}>➕ {allCo ? 'Create for all companies' : 'Create month'}</button>
             </div>
@@ -836,7 +836,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 
   const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }
   const box: React.CSSProperties = { background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 55px rgba(30,27,75,0.35)' }
-  const GREEN = '#059669'
+  const GREEN = TK.positive
 
   return (
     <div style={overlay}>
@@ -847,7 +847,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{allCo ? 'A month master will be built for every company.' : 'A month master will be built for the selected company.'} Months already created are not listed.</div>
             {availableMonths.length === 0 ? (
               <>
-                <div style={{ fontSize: 13, color: C.navy, background: '#EEEDFE', borderRadius: 8, padding: '12px 14px', marginBottom: 18 }}>All months for FY {fy} have already been created{allCo ? ' for every company' : ''}. 🎉</div>
+                <div style={{ fontSize: 13, color: C.navy, background: TK.violetTint, borderRadius: 8, padding: '12px 14px', marginBottom: 18 }}>All months for FY {fy} have already been created{allCo ? ' for every company' : ''}. 🎉</div>
                 <button style={{ ...S.btnOutline, width: '100%' }} onClick={onClose}>Close</button>
               </>
             ) : (
@@ -885,7 +885,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             </div>
             <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 18 }}>
               {blockers.map(b => (
-                <div key={b.companyId} style={{ border: '1px solid #FECACA', background: '#FEF2F2', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                <div key={b.companyId} style={{ border: '1px solid #FECACA', background: TK.criticalTint, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 6 }}>{b.companyName} · {b.prevLabel}</div>
                   {[
                     ['Attendance processed', b.attendanceDone, b.attendanceDetail],
@@ -934,10 +934,10 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 
         {step === 'done' && (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 60, height: 60, borderRadius: 99, background: '#ECFDF5', border: `2px solid ${GREEN}`, color: GREEN, fontSize: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}></div>
+            <div style={{ width: 60, height: 60, borderRadius: 99, background: TK.positiveTint, border: `2px solid ${GREEN}`, color: GREEN, fontSize: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}></div>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, marginBottom: 8 }}>Month master ready</div>
             {summary && <div style={{ fontSize: 12.5, color: C.navy, marginBottom: err ? 10 : 18 }}>{summary}</div>}
-            {err && <div style={{ fontSize: 11.5, color: C.red, background: '#FEF2F2', borderRadius: 8, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
+            {err && <div style={{ fontSize: 11.5, color: C.red, background: TK.criticalTint, borderRadius: 8, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
             <button style={{ ...S.btnPrimary, background: GREEN, width: '100%' }} onClick={onClose}>Done</button>
           </div>
         )}
@@ -950,10 +950,10 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 function statusPill(status: string) {
   const map: Record<string, { bg: string; color: string }> = {
     OPEN: { bg: 'rgba(107,107,123,0.14)', color: C.muted },
-    SYNCED: { bg: 'rgba(37,99,235,0.12)', color: '#2563EB' },
-    ATTENDANCE_LOCKED: { bg: 'rgba(37,99,235,0.12)', color: '#2563EB' },
-    CALCULATED: { bg: 'rgba(37,99,235,0.12)', color: '#2563EB' },
-    AI_CHECKED: { bg: 'rgba(37,99,235,0.12)', color: '#2563EB' },
+    SYNCED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
+    ATTENDANCE_LOCKED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
+    CALCULATED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
+    AI_CHECKED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
     APPROVED: { bg: 'rgba(5,150,105,0.12)', color: C.success },
     DISBURSED: { bg: 'rgba(5,150,105,0.12)', color: C.success },
     LOCKED: { bg: 'rgba(30,27,75,0.12)', color: C.navy },
@@ -997,7 +997,7 @@ function BenefitsTab() {
         <div style={S.cardTitle}>Benefits &amp; Loans</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 12 }}>
           {items.map(it => (
-            <div key={it.title} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, background: '#FAFAF8' }}>
+            <div key={it.title} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, background: TK.sunken }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 {it.href ? (
                   <a href={it.href} style={{ fontSize: 13, fontWeight: 700, color: C.purple, textDecoration: 'none' }}>{it.title} →</a>

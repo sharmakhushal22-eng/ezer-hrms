@@ -10,6 +10,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { loadRuns, editEmployeeAttendance, addArrearDays, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { C, font, lbl, ddInp, SearchSelect, type Opt } from './attendanceShared'
+// Design tokens, aliased as TK — this file declares its own C.
+import { C as TK } from '@/lib/ui'
 
 type SnapRow = {
   employee_code: string; full_name: string; department: string | null
@@ -113,7 +115,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 780 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: mode === 'arrear' ? 'linear-gradient(135deg,#10B981,#059669)' : 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(124,58,237,0.28)' }}>{mode === 'arrear' ? '' : ''}</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: mode === 'arrear' ? `linear-gradient(135deg,${TK.positive},${TK.positive})` : `linear-gradient(135deg,${TK.violet},${TK.violetDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(124,58,237,0.28)' }}>{mode === 'arrear' ? '' : ''}</div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>{mode === 'arrear' ? 'Arrear Days' : 'Attendance Edit'}</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -124,7 +126,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
         </div>
       </div>
 
-      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
+      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
 
       {/* month + employee pickers */}
       <div style={card}>
@@ -167,14 +169,14 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={save} disabled={saveBusy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.violet},${TK.violetDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
                 {saveBusy ? 'Saving…' : 'Save changes'}
               </button>
               {saveMsg && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>✓ {saveMsg}</span>}
               {saveErr && <span style={{ fontSize: 12, color: C.red }}>{saveErr}</span>}
             </div>
             {recalcMsg && (
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 12px', marginTop: 12 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', marginTop: 12 }}>
                 ⚠️ {recalcMsg}
               </div>
             )}

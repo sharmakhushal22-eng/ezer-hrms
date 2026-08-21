@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { loadBankDetails, type BankRow } from '@/lib/payroll/core'
 import { C, font, fmtDate } from './attendanceShared'
+// Design tokens, aliased as TK — this file declares its own C.
+import { C as TK } from '@/lib/ui'
 
 export default function BankDetailsTab({ companyId }: { companyId: string }) {
   const [rows, setRows] = useState<BankRow[]>([])
@@ -55,13 +57,13 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
   }
 
   const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' }
-  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
+  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: `${TK.violetEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1100 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.violet},${TK.violetDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Bank Details</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Salary account per employee — maintained in the Employee Master, shown here for payroll</div>

@@ -39,7 +39,7 @@ import TravelClaims from '@/components/ess/TravelClaims'
 import {
   C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
-  IconLetters, IconReports, IconRecruitment, IconAi,
+  IconLetters, IconReports, IconRecruitment, IconAi, IconBell,
 } from '@/lib/ui'
 
 // ── Styles ─────────────────────────────────────────────────────────
@@ -65,11 +65,11 @@ const QUOTES = [
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string,[string,string]> = {
-    PENDING:['#FFFBEB','#B45309'], IN_REVIEW:['#EFF6FF','#1D4ED8'], APPROVED:['#ECFDF5','#059669'],
-    REJECTED:['#FEF2F2','#DC2626'], COMPLETED:['#F0FDF4','#16A34A'], REQUESTED:['#FFFBEB','#B45309'],
-    GENERATED:['#ECFDF5','#059669'],
+    PENDING:[C.warningTint,C.warning], IN_REVIEW:[C.infoTint,C.info], APPROVED:[C.positiveTint,C.positive],
+    REJECTED:[C.criticalTint,C.critical], COMPLETED:[C.positiveTint,C.positive], REQUESTED:[C.warningTint,C.warning],
+    GENERATED:[C.positiveTint,C.positive],
   }
-  const [bg,c] = map[status] || ['#F3F0FF','#6D28D9']
+  const [bg,c] = map[status] || [C.violetTint,C.violetDeep]
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{status}</span>
 }
 
@@ -84,7 +84,7 @@ function TransferAckCard({ empId, onAck }: { empId: string; onAck: () => void })
       <div style={{ fontSize:11, color:'#854F0B', marginTop:3 }}>You are being transferred, effective {tr.effective_date}.</div>
       <div style={{ display:'flex', gap:8, marginTop:10 }}>
         {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:'#fff', border:'1px solid #EF9F27', borderRadius:7, fontSize:11, color:'#633806', textDecoration:'none' }}>View Letter</a>}
-        <button onClick={async () => { await HR.acknowledgeTransfer(tr.id); setTransfers(t=>t.filter(x=>x.id!==tr.id)); onAck() }} style={{ padding:'7px 14px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:7, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Acknowledge & Accept</button>
+        <button onClick={async () => { await HR.acknowledgeTransfer(tr.id); setTransfers(t=>t.filter(x=>x.id!==tr.id)); onAck() }} style={{ padding:'7px 14px', background:C.violet, color:'#fff', border:'none', borderRadius:7, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Acknowledge & Accept</button>
       </div>
     </div>
   ))}</>)
@@ -132,14 +132,14 @@ function PunchButton({ employeeId }: { employeeId: string }) {
 
   const isOut = punchedToday === true
   return (
-    <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? '#DC2626' : '#059669'}` }}>
+    <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? C.critical : C.positive}` }}>
       <div style={T.section}>Attendance</div>
       <button onClick={punch} disabled={busy || punchedToday === null}
-        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: '#fff', background: isOut ? '#DC2626' : '#059669', opacity: (busy || punchedToday === null) ? .6 : 1 }}>
+        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: '#fff', background: isOut ? C.critical : C.positive, opacity: (busy || punchedToday === null) ? .6 : 1 }}>
         {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? 'Punch Out' : 'Punch In')}
       </button>
-      {msg && <div style={{ fontSize: 12, color: msg.startsWith('') ? '#059669' : '#DC2626', marginTop: 8, textAlign: 'center' }}>{msg}</div>}
-      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6, textAlign: 'center' }}>{isOut ? 'Punched in today · resets to “Punch In” at 12 AM.' : 'Tap to punch in for the day.'}</div>
+      {msg && <div style={{ fontSize: 12, color: msg.startsWith('') ? C.positive : C.critical, marginTop: 8, textAlign: 'center' }}>{msg}</div>}
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 6, textAlign: 'center' }}>{isOut ? 'Punched in today · resets to “Punch In” at 12 AM.' : 'Tap to punch in for the day.'}</div>
     </div>
   )
 }
@@ -185,11 +185,11 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
       <div style={{ ...T.card, maxWidth:380, width:'100%', marginBottom:0 }} onClick={e => e.stopPropagation()}>
         <div style={T.section}>Edit Profile Picture</div>
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
-          <div style={{ width:120, height:120, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, fontWeight:700 }}>
+          <div style={{ width:120, height:120, borderRadius:'50%', overflow:'hidden', background:C.violetTint, color:C.violet, display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, fontWeight:700 }}>
             {preview ? <img src={preview} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}
           </div>
           <label style={{ ...T.btnO, cursor:'pointer' }}>Choose photo<input type="file" accept="image/*" style={{ display:'none' }} onChange={onFile} /></label>
-          {preview && <button onClick={() => setPreview(null)} style={{ ...T.btnO, color:'#DC2626', borderColor:'#FCA5A5' }}>Remove photo</button>}
+          {preview && <button onClick={() => setPreview(null)} style={{ ...T.btnO, color:C.critical, borderColor:'#FCA5A5' }}>Remove photo</button>}
         </div>
         <div style={{ display:'flex', gap:10, marginTop:16 }}>
           <button onClick={onClose} style={{ ...T.btnO, flex:1 }}>Cancel</button>
@@ -214,15 +214,15 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
  * an HR head, both, or neither.
  */
 const CLAIM_STEP: Record<string, { step: number; label: string; tone: string }> = {
-  DRAFT:           { step: 0, label: 'Draft',              tone: '#9CA3AF' },
-  SUBMITTED:       { step: 1, label: 'Submitted',          tone: '#B45309' },
-  PENDING_RM:      { step: 1, label: 'With your manager',  tone: '#B45309' },
-  PENDING_HR:      { step: 2, label: 'With HR',            tone: '#B45309' },
-  PENDING_FINANCE: { step: 3, label: 'With Finance',       tone: '#6D28D9' },
+  DRAFT:           { step: 0, label: 'Draft',              tone: C.faint },
+  SUBMITTED:       { step: 1, label: 'Submitted',          tone: C.warning },
+  PENDING_RM:      { step: 1, label: 'With your manager',  tone: C.warning },
+  PENDING_HR:      { step: 2, label: 'With HR',            tone: C.warning },
+  PENDING_FINANCE: { step: 3, label: 'With Finance',       tone: C.violetDeep },
   APPROVED:        { step: 4, label: 'Approved, awaiting payment', tone: '#047857' },
   PAID:            { step: 5, label: 'Paid',               tone: '#047857' },
-  SENT_BACK:       { step: 1, label: 'Sent back to you',   tone: '#B91C1C' },
-  REJECTED:        { step: 0, label: 'Rejected',           tone: '#B91C1C' },
+  SENT_BACK:       { step: 1, label: 'Sent back to you',   tone: C.critical },
+  REJECTED:        { step: 0, label: 'Rejected',           tone: C.critical },
 }
 
 function ClaimStepper({ status }: { status: string }) {
@@ -236,7 +236,7 @@ function ClaimStepper({ status }: { status: string }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginTop: 8 }}>
       {steps.map((label, i) => {
         const on = !dead && here >= reached[i]
-        const colour = dead ? '#FCA5A5' : on ? (done ? '#059669' : '#7C3AED') : '#E5E7EB'
+        const colour = dead ? '#FCA5A5' : on ? (done ? C.positive : C.violet) : C.line
         return (
           <div key={label} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : '0 0 auto' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
@@ -250,7 +250,7 @@ function ClaimStepper({ status }: { status: string }) {
             </div>
             {i < steps.length - 1 && (
               <div style={{ flex: 1, height: 2, margin: '0 4px', marginBottom: 13,
-                            background: !dead && here >= reached[i + 1] ? colour : '#E5E7EB' }} />
+                            background: !dead && here >= reached[i + 1] ? colour : C.line }} />
             )}
           </div>
         )
@@ -299,28 +299,28 @@ function TravelClaimStatus({ emp, go }: { emp: EmployeeDetail; go: (k: string) =
         </button>
       </div>
       {open.length > 0 && (
-        <div style={{ fontSize: 11.5, color: '#6B7280', marginBottom: 10 }}>
+        <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 10 }}>
           ₹{Math.round(owed).toLocaleString('en-IN')} across {open.length} claim
           {open.length === 1 ? '' : 's'} still moving through approval
         </div>
       )}
 
       {show.map(c => {
-        const st = CLAIM_STEP[c.status] ?? { label: c.status, tone: '#6B7280' }
+        const st = CLAIM_STEP[c.status] ?? { label: c.status, tone: C.muted }
         const waited = daysSince(c.submitted_at)
         return (
           <div key={c.id} style={{ padding: '10px 0', borderTop: '1px solid #F3F0FF' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: '#1E1B4B' }}>{c.claim_no}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: '#1E1B4B' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{c.claim_no}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>
                 ₹{Math.round(Number(c.total_claimed) || 0).toLocaleString('en-IN')}
               </span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: st.tone }}>● {st.label}</span>
               {waited != null && !['PAID', 'REJECTED'].includes(c.status) && (
-                <span style={{ fontSize: 10.5, color: waited > 5 ? '#B45309' : '#9CA3AF' }}>
+                <span style={{ fontSize: 10.5, color: waited > 5 ? C.warning : C.faint }}>
                   {waited === 0 ? 'submitted today' : `waiting ${waited} day${waited === 1 ? '' : 's'}`}
                 </span>
               )}
@@ -331,7 +331,7 @@ function TravelClaimStatus({ emp, go }: { emp: EmployeeDetail; go: (k: string) =
       })}
 
       {claims.length > show.length && (
-        <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 8 }}>
+        <div style={{ fontSize: 11, color: C.faint, marginTop: 8 }}>
           + {claims.length - show.length} more in Travel Claims
         </div>
       )}
@@ -360,35 +360,35 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
   const bdaySoon = dob ? (() => { const n = new Date(); const t = new Date(n.getFullYear(), dob.getMonth(), dob.getDate()); const d = Math.ceil((t.getTime() - n.getTime())/86400000); return d >= -1 && d <= 30 ? d : null })() : null
 
   const Stat = ({ label, value, color }: { label: string; value: string; color?: string }) => (
-    <div style={T.card}><div style={{ fontSize:11, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' }}>{label}</div><div style={{ fontSize:18, fontWeight:700, marginTop:3, color: color || '#1E1B4B' }}>{value}</div></div>
+    <div style={T.card}><div style={{ fontSize:11, color:C.faint, fontWeight:600, textTransform:'uppercase' }}>{label}</div><div style={{ fontSize:18, fontWeight:700, marginTop:3, color: color || C.ink }}>{value}</div></div>
   )
 
   return (
     <div>
       <TransferAckCard empId={emp.id} onAck={()=>{}} />
       <div style={{ ...T.card, borderLeft:'3px solid #7C3AED', display:'flex', alignItems:'center', gap:14 }}>
-        <div style={{ width:52, height:52, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
+        <div style={{ width:52, height:52, borderRadius:'50%', overflow:'hidden', background:C.violetTint, color:C.violet, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
         <div>
           <div style={{ fontSize:17, fontWeight:700 }}>{greet}, {emp.first_name || emp.full_name.split(' ')[0]}! {emoji}</div>
-          <div style={{ fontSize:12, color:'#6B7280', marginTop:2 }}>{emp.designation || '—'} · {emp.emp_code}</div>
-          <div style={{ fontSize:12, color:'#7C3AED', marginTop:4, fontStyle:'italic' }}>“{quote}”</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{emp.designation || '—'} · {emp.emp_code}</div>
+          <div style={{ fontSize:12, color:C.violet, marginTop:4, fontStyle:'italic' }}>“{quote}”</div>
         </div>
       </div>
 
       <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch' }}>
         <div style={{ flex:'3 1 280px' }}><PunchButton employeeId={emp.id} /></div>
         <button onClick={() => setEditOpen(true)} style={{ flex:'1 1 160px', ...T.card, marginBottom:10, cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, fontFamily:'inherit' }}>
-          <div style={{ width:46, height:46, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
-          <span style={{ fontSize:13, fontWeight:600, color:'#6D28D9' }}>Edit Profile</span>
+          <div style={{ width:46, height:46, borderRadius:'50%', overflow:'hidden', background:C.violetTint, color:C.violet, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
+          <span style={{ fontSize:13, fontWeight:600, color:C.violetDeep }}>Edit Profile</span>
         </button>
       </div>
       {editOpen && <EditProfileModal emp={emp} onClose={() => setEditOpen(false)} onSaved={reload} notify={notify} />}
 
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:10 }}>
-        <Stat label="Leave Balance" value="—" color="#9CA3AF" />
-        <Stat label="Net Salary" value={salaryVisible ? '—' : 'Hidden'} color="#9CA3AF" />
-        <Stat label="Attendance %" value="—" color="#9CA3AF" />
-        <Stat label="Pending Actions" value={String(pending)} color={pending ? '#D97706' : '#059669'} />
+        <Stat label="Leave Balance" value="—" color={C.faint} />
+        <Stat label="Net Salary" value={salaryVisible ? '—' : 'Hidden'} color={C.faint} />
+        <Stat label="Attendance %" value="—" color={C.faint} />
+        <Stat label="Pending Actions" value={String(pending)} color={pending ? C.warning : C.positive} />
       </div>
 
       {/* where the employee's travel claims currently sit */}
@@ -407,19 +407,19 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
           <div style={T.section}>Birthday & Anniversary</div>
           {bdaySoon !== null
             ? <div style={{ fontSize:13 }}>Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s)`} — wishing you ahead!</div>
-            : <div style={{ fontSize:12, color:'#9CA3AF' }}>No upcoming birthdays in the next 30 days.</div>}
-          {emp.group_doj && <div style={{ fontSize:12, color:'#6B7280', marginTop:6 }}>Joined {fmt(emp.group_doj)} · {tenureYrs} yr{tenureYrs===1?'':'s'} with us 🎊</div>}
+            : <div style={{ fontSize:12, color:C.faint }}>No upcoming birthdays in the next 30 days.</div>}
+          {emp.group_doj && <div style={{ fontSize:12, color:C.muted, marginTop:6 }}>Joined {fmt(emp.group_doj)} · {tenureYrs} yr{tenureYrs===1?'':'s'} with us 🎊</div>}
         </div>
 
         {/* My Journey */}
         <div style={T.card}>
           <div style={T.section}>My Journey</div>
-          <div style={{ fontSize:12, color:'#374151', lineHeight:1.9 }}>
+          <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.9 }}>
             <div>Joined: <b>{fmt(emp.group_doj)}</b></div>
             <div>Designation: <b>{emp.designation || '—'}</b></div>
             <div>Tenure: <b>{tenureYrs} year{tenureYrs===1?'':'s'}</b></div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' }}>
-              {[1,3,5].map(y => <span key={y} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, fontWeight:600, background: tenureYrs>=y?'#ECFDF5':'#F1F5F9', color: tenureYrs>=y?'#059669':'#9CA3AF' }}>{tenureYrs>=y?'':''} {y}-yr</span>)}
+              {[1,3,5].map(y => <span key={y} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, fontWeight:600, background: tenureYrs>=y?C.positiveTint:C.sunken, color: tenureYrs>=y?C.positive:C.faint }}>{tenureYrs>=y?'':''} {y}-yr</span>)}
             </div>
           </div>
         </div>
@@ -427,15 +427,15 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         {/* Kudos */}
         <div style={T.card}>
           <div style={T.section}>Recognition & Kudos</div>
-          {kudos.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No kudos yet — appreciation from peers will show here.</div>}
-          {kudos.map(k => <div key={k.id} style={{ fontSize:12, padding:'6px 0', borderBottom:'1px solid #F3F0FF' }}>{k.badge ? `🏆 ${k.badge} — ` : ''}{k.message || 'Kudos!'}<span style={{ color:'#9CA3AF', fontSize:10, marginLeft:6 }}>{fmt(k.created_at)}</span></div>)}
+          {kudos.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No kudos yet — appreciation from peers will show here.</div>}
+          {kudos.map(k => <div key={k.id} style={{ fontSize:12, padding:'6px 0', borderBottom:'1px solid #F3F0FF' }}>{k.badge ? `🏆 ${k.badge} — ` : ''}{k.message || 'Kudos!'}<span style={{ color:C.faint, fontSize:10, marginLeft:6 }}>{fmt(k.created_at)}</span></div>)}
         </div>
 
         {/* Announcements */}
         <div style={T.card}>
           <div style={T.section}>Announcements</div>
-          {ann.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No announcements right now.</div>}
-          {ann.map(a => <div key={a.id} style={{ padding:'7px 0', borderBottom:'1px solid #F3F0FF' }}><div style={{ fontSize:12.5, fontWeight:600 }}>{a.title}</div>{a.body && <div style={{ fontSize:11.5, color:'#6B7280', marginTop:2 }}>{a.body}</div>}<div style={{ fontSize:10, color:'#9CA3AF', marginTop:2 }}>{fmt(a.published_at)}</div></div>)}
+          {ann.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No announcements right now.</div>}
+          {ann.map(a => <div key={a.id} style={{ padding:'7px 0', borderBottom:'1px solid #F3F0FF' }}><div style={{ fontSize:12.5, fontWeight:600 }}>{a.title}</div>{a.body && <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>{a.body}</div>}<div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{fmt(a.published_at)}</div></div>)}
         </div>
       </div>
     </div>
@@ -851,8 +851,8 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
               <div><label style={T.label}>Account type</label><select style={T.input} value={bank.account_type} onChange={e => setBank(b => ({ ...b, account_type: e.target.value }))}><option>Savings</option><option>Current</option></select></div>
               <div><label style={T.label}>Account number *</label><input style={T.input} value={bank.account_number} onChange={e => setBank(b => ({ ...b, account_number: e.target.value }))} /></div>
               <div><label style={T.label}>Confirm account number *</label><input style={{ ...T.input, borderColor: bank.confirm && bank.confirm !== bank.account_number ? P.red : undefined }} value={bank.confirm} onChange={e => setBank(b => ({ ...b, confirm: e.target.value }))} /></div>
-              <div><label style={T.label}>Bank name</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.bank_name} onChange={e => setBank(b => ({ ...b, bank_name: e.target.value }))} placeholder="Fills in from IFSC" /></div>
-              <div><label style={T.label}>Branch</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.branch} onChange={e => setBank(b => ({ ...b, branch: e.target.value }))} placeholder="Fills in from IFSC" /></div>
+              <div><label style={T.label}>Bank name</label><input style={{ ...T.input, background:C.positiveTint, border:'1px solid #A7F3D0' }} value={bank.bank_name} onChange={e => setBank(b => ({ ...b, bank_name: e.target.value }))} placeholder="Fills in from IFSC" /></div>
+              <div><label style={T.label}>Branch</label><input style={{ ...T.input, background:C.positiveTint, border:'1px solid #A7F3D0' }} value={bank.branch} onChange={e => setBank(b => ({ ...b, branch: e.target.value }))} placeholder="Fills in from IFSC" /></div>
               <div style={{ gridColumn:'span 2' }}><label style={T.label}>Account holder name *</label><input style={T.input} value={bank.holder_name} onChange={e => setBank(b => ({ ...b, holder_name: e.target.value }))} placeholder="Exactly as your bank has it" /></div>
               {bank.confirm && bank.confirm !== bank.account_number && (
                 <div style={{ gridColumn:'span 2', color:P.red, fontSize:12, marginTop:-4 }}>
@@ -908,10 +908,10 @@ function Documents({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t
       </div>
       <div style={T.card}>
         <div style={T.section}>My Letter Requests</div>
-        {rows.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No requests yet.</div>}
+        {rows.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No requests yet.</div>}
         {rows.map(r => (
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
-            <div><div style={{ fontSize:13, fontWeight:600 }}>{r.letter_type}</div><div style={{ fontSize:11, color:'#9CA3AF' }}>{r.purpose || '—'} · {fmt(r.requested_at)}</div></div>
+            <div><div style={{ fontSize:13, fontWeight:600 }}>{r.letter_type}</div><div style={{ fontSize:11, color:C.faint }}>{r.purpose || '—'} · {fmt(r.requested_at)}</div></div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
               <StatusPill status={r.status} />
               {r.letter_url && <a href={r.letter_url} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration:'none' }}>Download</a>}
@@ -955,17 +955,17 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
         <div style={T.section}>Raise a Request</div>
         <label style={T.label}>Type</label>
         <select style={{ ...T.input, marginBottom:10 }} value={type} onChange={e => setType(e.target.value)}>{REQ_TYPES.map(r => <option key={r.k} value={r.k}>{r.label}</option>)}</select>
-        {def.confidential && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:'#B91C1C' }}>This is confidential and routes only to the Internal Committee — not regular HR.</div>}
+        {def.confidential && <div style={{ background:C.criticalTint, border:'1px solid #FECACA', borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:C.critical }}>This is confidential and routes only to the Internal Committee — not regular HR.</div>}
         <label style={T.label}>Details</label>
         <textarea style={{ ...T.input, minHeight:90, marginBottom:10, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="Describe your request…" />
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
       </div>
       <div style={T.card}>
         <div style={T.section}>My Requests</div>
-        {rows.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No requests yet.</div>}
+        {rows.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No requests yet.</div>}
         {rows.map(r => (
           <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
-            <div><div style={{ fontSize:13, fontWeight:600 }}>{REQ_TYPES.find(x => x.k === r.request_type)?.label || r.request_type}{r.is_confidential && ' 🔒'}</div><div style={{ fontSize:11, color:'#9CA3AF' }}>{r.request_data?.detail?.slice(0,60) || '—'} · {fmt(r.submitted_at)}</div></div>
+            <div><div style={{ fontSize:13, fontWeight:600 }}>{REQ_TYPES.find(x => x.k === r.request_type)?.label || r.request_type}{r.is_confidential && ' 🔒'}</div><div style={{ fontSize:11, color:C.faint }}>{r.request_data?.detail?.slice(0,60) || '—'} · {fmt(r.submitted_at)}</div></div>
             <StatusPill status={r.status} />
           </div>
         ))}
@@ -980,8 +980,8 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
 function DirDetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
-      <span style={{ fontSize:11, color:'#6B7280', fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }}>{label}</span>
-      <span style={{ fontSize:13, color:'#1E1B4B', textAlign:'right', wordBreak:'break-word' }}>{value || '—'}</span>
+      <span style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }}>{label}</span>
+      <span style={{ fontSize:13, color:C.ink, textAlign:'right', wordBreak:'break-word' }}>{value || '—'}</span>
     </div>
   )
 }
@@ -990,12 +990,12 @@ function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () =
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:4000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div onClick={ev => ev.stopPropagation()} style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:440, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, padding:'18px 20px', borderBottom:'1px solid #EDE9FE' }}>
-          <div style={{ width:48, height:48, borderRadius:'50%', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:16, flexShrink:0 }}>{initials(e.full_name)}</div>
+          <div style={{ width:48, height:48, borderRadius:'50%', background:C.violetTint, color:C.violet, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:16, flexShrink:0 }}>{initials(e.full_name)}</div>
           <div style={{ minWidth:0, flex:1 }}>
             <div style={{ fontSize:16, fontWeight:700 }}>{e.full_name}</div>
-            <div style={{ fontSize:12, color:'#9CA3AF' }}>{e.designation || '—'}</div>
+            <div style={{ fontSize:12, color:C.faint }}>{e.designation || '—'}</div>
           </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, lineHeight:1, cursor:'pointer', color:'#9CA3AF' }}>×</button>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, lineHeight:1, cursor:'pointer', color:C.faint }}>×</button>
         </div>
         <div style={{ padding:'6px 20px 16px' }}>
           <DirDetailRow label="Employee Code" value={e.emp_code} />
@@ -1017,9 +1017,9 @@ function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () =
 }
 // A stable colour per person so the same face keeps the same avatar between visits.
 const DIR_TINTS = [
-  { bg: '#EDE9FE', fg: '#6D28D9' }, { bg: '#E6F1FB', fg: '#185FA5' }, { bg: '#ECFDF5', fg: '#059669' },
+  { bg: C.violetTint, fg: C.violetDeep }, { bg: '#E6F1FB', fg: '#185FA5' }, { bg: C.positiveTint, fg: C.positive },
   { bg: '#FFF7ED', fg: '#C2410C' }, { bg: '#FCE7F3', fg: '#BE185D' }, { bg: '#EEF2FF', fg: '#4338CA' },
-  { bg: '#F0FDFA', fg: '#0F766E' }, { bg: '#FEF3C7', fg: '#B45309' },
+  { bg: '#F0FDFA', fg: '#0F766E' }, { bg: C.warningTint, fg: C.warning },
 ]
 const dirTint = (s: string) => DIR_TINTS[Array.from(s || '?').reduce((a, c) => a + c.charCodeAt(0), 0) % DIR_TINTS.length]
 
@@ -1066,8 +1066,8 @@ function Directory({ isMobile }: { isMobile: boolean }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
           <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1E1B4B' }}>Employee Directory</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>Employee Directory</div>
+            <div style={{ fontSize: 11, color: C.faint }}>
               {loading ? 'Loading colleagues…' : `${filtered.length}${filtered.length !== rows.length ? ` of ${rows.length}` : ''} colleague${filtered.length === 1 ? '' : 's'}`}
             </div>
           </div>
@@ -1114,14 +1114,14 @@ function Directory({ isMobile }: { isMobile: boolean }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                   <div style={{ width: 44, height: 44, borderRadius: '50%', background: t.bg, color: t.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>{initials(e.full_name)}</div>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.full_name}</div>
-                    <div style={{ fontSize: 11, color: '#6B6B7B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '—'}</div>
-                    <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 1 }}>{e.emp_code}</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.full_name}</div>
+                    <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '—'}</div>
+                    <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>{e.emp_code}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                  {e.dept_name && chip(e.dept_name, '#F5F3FF', '#6D28D9')}
-                  {e.location_name && chip('📍 ' + e.location_name, '#F8FAFC', '#475569')}
+                  {e.dept_name && chip(e.dept_name, C.canvas, C.violetDeep)}
+                  {e.location_name && chip('📍 ' + e.location_name, C.sunken, C.inkSoft)}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: '1px solid #F1F5F9', paddingTop: 8 }} onClick={ev => ev.stopPropagation()}>
                   {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} title={e.office_email || e.personal_email || ''} style={{ ...T.btnO, textDecoration: 'none' }}>Email</a>}
@@ -1134,8 +1134,8 @@ function Directory({ isMobile }: { isMobile: boolean }) {
           {filtered.length === 0 && !err && (
             <div style={{ ...T.card, gridColumn: '1 / -1', textAlign: 'center', padding: '30px 16px' }}>
               <div style={{ fontSize: 30, marginBottom: 6 }}></div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1B4B', marginBottom: 3 }}>No colleagues match that search</div>
-              <div style={{ fontSize: 11.5, color: '#9CA3AF' }}>Try a different name, code or department{(dept || loc) ? ', or clear the filters' : ''}.</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 3 }}>No colleagues match that search</div>
+              <div style={{ fontSize: 11.5, color: C.faint }}>Try a different name, code or department{(dept || loc) ? ', or clear the filters' : ''}.</div>
             </div>
           )}
         </div>
@@ -1158,12 +1158,12 @@ function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () =
         <div style={T.section}>Notifications</div>
         <button onClick={async () => { await markAllNotifications(emp.id); load() }} style={T.btnO}>Mark all read</button>
       </div>
-      {rows.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF', padding:'8px 0' }}>You're all caught up. 🎉</div>}
+      {rows.length === 0 && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>You're all caught up. 🎉</div>}
       {rows.map(n => (
         <div key={n.id} onClick={async () => { if (!n.is_read) { await markNotification(n.id); load() } }} style={{ padding:'9px 0', borderBottom:'1px solid #F3F0FF', cursor: n.is_read ? 'default' : 'pointer', opacity: n.is_read ? .6 : 1 }}>
-          <div style={{ fontSize:13, fontWeight:600 }}>{!n.is_read && <span style={{ color:'#7C3AED' }}>● </span>}{n.title}</div>
-          {n.body && <div style={{ fontSize:12, color:'#6B7280', marginTop:2 }}>{n.body}</div>}
-          <div style={{ fontSize:10, color:'#9CA3AF', marginTop:2 }}>{n.category || ''} · {fmtDT(n.created_at)}</div>
+          <div style={{ fontSize:13, fontWeight:600 }}>{!n.is_read && <span style={{ color:C.violet }}>● </span>}{n.title}</div>
+          {n.body && <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{n.body}</div>}
+          <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{n.category || ''} · {fmtDT(n.created_at)}</div>
         </div>
       ))}
     </div>
@@ -1191,7 +1191,7 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   // Balance lookup by leave_type_id → shows "(N left)" next to a type when seeded.
   const balByType = useMemo(() => { const m: Record<string, any> = {}; balances.forEach((b: any) => { m[b.leave_type_id] = b }); return m }, [balances])
   const avail = (b: any) => (Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)
-  const barColor = (pct: number) => pct > 60 ? '#059669' : pct > 30 ? '#F59E0B' : '#DC2626'
+  const barColor = (pct: number) => pct > 60 ? C.positive : pct > 30 ? C.warning : C.critical
   const submit = async () => {
     if (!form.leave_type_id || !form.from_date || !form.to_date) { notify('Select leave type and dates', 'error'); return }
     if (form.half_day && !form.half_session) { notify('Select 1st half or 2nd half', 'error'); return }
@@ -1203,22 +1203,22 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
     notify('Leave request submitted ✓'); setForm({ leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' })
     loadLeaveApplications(emp.id).then(setApps)
   }
-  const STATUS: Record<string, [string, string]> = { PENDING: ['#FFFBEB', '#B45309'], APPROVED: ['#ECFDF5', '#059669'], REJECTED: ['#FEF2F2', '#DC2626'], CANCELLED: ['#F3F4F6', '#6B7280'] }
-  const HOL_STYLE: Record<string, [string, string]> = { NATIONAL: ['#EFF6FF', '#1E40AF'], FESTIVAL: ['#EDE9FE', '#534AB7'], OPTIONAL: ['#FFFBEB', '#B45309'], REGIONAL: ['#E0F2FE', '#0369A1'] }
+  const STATUS: Record<string, [string, string]> = { PENDING: [C.warningTint, C.warning], APPROVED: [C.positiveTint, C.positive], REJECTED: [C.criticalTint, C.critical], CANCELLED: ['#F3F4F6', C.muted] }
+  const HOL_STYLE: Record<string, [string, string]> = { NATIONAL: [C.infoTint, '#1E40AF'], FESTIVAL: [C.violetTint, '#534AB7'], OPTIONAL: [C.warningTint, C.warning], REGIONAL: ['#E0F2FE', '#0369A1'] }
   const today = new Date().toISOString().slice(0, 10)
   const upcoming = hols.filter((h: any) => h.holiday_date >= today)
   return (
     <div>
       <div style={T.card}>
         <div style={T.section}>Leave Balance · FY 2026-27</div>
-        {balances.length === 0 ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>No leave balances yet — contact HR.</div> :
+        {balances.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No leave balances yet — contact HR.</div> :
           balances.map((b: any) => { const total = Number(b.opening || 0) + Number(b.accrued || 0); const av = avail(b); const pct = total > 0 ? Math.round(av / total * 100) : 0; return (
-            <div key={b.id} style={{ background: '#FAFAF8', borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}>
+            <div key={b.id} style={{ background: C.sunken, borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10, background: '#EDE9FE', color: '#6D28D9', padding: '2px 7px', borderRadius: 99, marginRight: 6 }}>{b.leave_types?.short_name}</span>{b.leave_types?.name}</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: barColor(pct) }}>{av}<span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}> / {total}</span></span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10, background: C.violetTint, color: C.violetDeep, padding: '2px 7px', borderRadius: 99, marginRight: 6 }}>{b.leave_types?.short_name}</span>{b.leave_types?.name}</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: barColor(pct) }}>{av}<span style={{ fontSize: 11, color: C.faint, fontWeight: 400 }}> / {total}</span></span>
               </div>
-              <div style={{ height: 5, borderRadius: 99, background: '#E2E8F0', overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: barColor(pct) }} /></div>
+              <div style={{ height: 5, borderRadius: 99, background: C.line, overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: barColor(pct) }} /></div>
             </div>
           )})}
       </div>
@@ -1261,10 +1261,10 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
       </div>
       <div style={T.card}>
         <div style={T.section}>Recent Requests</div>
-        {apps.length === 0 ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>No leave applications yet.</div> :
-          apps.map((a: any) => { const [bg, c] = STATUS[a.status] || ['#F3F4F6', '#6B7280']; return (
+        {apps.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No leave applications yet.</div> :
+          apps.map((a: any) => { const [bg, c] = STATUS[a.status] || ['#F3F4F6', C.muted]; return (
             <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F3F0FF', fontSize: 12 }}>
-              <span style={{ fontSize: 10, background: '#EDE9FE', color: '#6D28D9', padding: '2px 7px', borderRadius: 99, fontWeight: 600 }}>{a.leave_types?.short_name}</span>
+              <span style={{ fontSize: 10, background: C.violetTint, color: C.violetDeep, padding: '2px 7px', borderRadius: 99, fontWeight: 600 }}>{a.leave_types?.short_name}</span>
               <span style={{ flex: 1 }}>{a.from_date}{a.to_date !== a.from_date ? ` → ${a.to_date}` : ''}{a.half_day ? ' (½)' : ''}</span>
               <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: bg, color: c, fontWeight: 600 }}>{a.status}</span>
             </div>
@@ -1272,13 +1272,13 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
       </div>
       <div style={T.card}>
         <div style={T.section}>Upcoming Holidays</div>
-        {upcoming.length === 0 ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>No upcoming holidays.</div> :
-          upcoming.map((h: any) => { const [bg, c] = HOL_STYLE[h.holiday_type] || ['#F3F4F6', '#6B7280']; return (
+        {upcoming.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No upcoming holidays.</div> :
+          upcoming.map((h: any) => { const [bg, c] = HOL_STYLE[h.holiday_type] || ['#F3F4F6', C.muted]; return (
             <div key={h.holiday_date + h.description} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F3F0FF', fontSize: 12 }}>
               <span style={{ minWidth: 64, fontWeight: 600 }}>{new Date(h.holiday_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
               <span style={{ flex: 1 }}>{h.description}</span>
               <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: bg, color: c, fontWeight: 600 }}>{h.holiday_type}</span>
-              {h.is_optional && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: '#FEF3C7', color: '#92400E' }}>Optional</span>}
+              {h.is_optional && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: C.warningTint, color: C.warning }}>Optional</span>}
             </div>
           )})}
       </div>
@@ -1293,14 +1293,14 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 // green and were hard to read at calendar-cell size. Each is [background, ink]
 // and every pair clears WCAG AA at 11px.
 const STATUS_STYLE: Record<string,[string,string]> = {
-  PRESENT:['#E7F7EE','#047857'], ABSENT:['#FEECEC','#B91C1C'], HALF_DAY:['#FEF3E2','#B45309'],
-  MISS_PUNCH:['#FFF4E5','#C2410C'], LWP:['#FEECEC','#B91C1C'], WEEKLY_OFF:['#F1F5F9','#94A3B8'],
-  HOLIDAY:['#E8F1FE','#1D4ED8'], ON_LEAVE:['#EFEBFF','#5B21B6'], FUTURE:['transparent','#CBD5E1'], TODAY:['#F5F3FF','#7C3AED'],
+  PRESENT:['#E7F7EE','#047857'], ABSENT:['#FEECEC',C.critical], HALF_DAY:['#FEF3E2',C.warning],
+  MISS_PUNCH:['#FFF4E5','#C2410C'], LWP:['#FEECEC',C.critical], WEEKLY_OFF:[C.sunken,C.faint],
+  HOLIDAY:['#E8F1FE',C.info], ON_LEAVE:['#EFEBFF',C.violetDeep], FUTURE:['transparent',C.lineStrong], TODAY:[C.canvas,C.violet],
 }
 /** Accent bar colour per status — the saturated version of the ink. */
 const STATUS_BAR: Record<string,string> = {
-  PRESENT:'#10B981', ABSENT:'#EF4444', HALF_DAY:'#F59E0B', MISS_PUNCH:'#FB923C',
-  LWP:'#EF4444', WEEKLY_OFF:'#CBD5E1', HOLIDAY:'#3B82F6', ON_LEAVE:'#8B5CF6',
+  PRESENT:'#10B981', ABSENT:C.critical, HALF_DAY:C.warning, MISS_PUNCH:'#FB923C',
+  LWP:C.critical, WEEKLY_OFF:C.lineStrong, HOLIDAY:C.info, ON_LEAVE:'#8B5CF6',
 }
 const STATUS_FULL: Record<string,string> = {
   PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half day', MISS_PUNCH:'Missing punch',
@@ -1315,7 +1315,7 @@ const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const pad2 = (n: number) => String(n).padStart(2,'0')
 
 function StatusBadge({ status }: { status: string }) {
-  const [bg,c] = STATUS_STYLE[status] || ['#F3F0FF','#6D28D9']
+  const [bg,c] = STATUS_STYLE[status] || [C.violetTint,C.violetDeep]
   const lbl = ({ PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half Day', MISS_PUNCH:'Miss Punch', LWP:'LWP', WEEKLY_OFF:'Weekly Off', HOLIDAY:'Holiday', ON_LEAVE:'On Leave', FUTURE:'—' } as Record<string,string>)[status] || status
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{lbl}</span>
 }
@@ -1389,7 +1389,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
   isThisMonth: boolean; isMobile: boolean
 }) {
   const { working, pct } = summary
-  const tone = pct == null ? '#94A3B8' : pct >= 95 ? '#34D399' : pct >= 85 ? '#FBBF24' : '#F87171'
+  const tone = pct == null ? C.faint : pct >= 95 ? '#34D399' : pct >= 85 ? '#FBBF24' : '#F87171'
 
   const size = isMobile ? 68 : 82
   const r = (size - 10) / 2
@@ -1471,7 +1471,7 @@ function StatTile({ label, value, bg, fg, bar, wide }: {
                   border: `1px solid ${empty ? '#F0F0F5' : bg}`, position: 'relative',
                   overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
-                    background: empty ? '#E5E7EB' : bar }} />
+                    background: empty ? C.line : bar }} />
       <div style={{ fontSize: 21, fontWeight: 700, lineHeight: 1.05, marginLeft: 4,
                     color: empty ? '#C4C4CC' : fg }}>{value}</div>
       <div style={{ fontSize: 9.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
@@ -1511,7 +1511,7 @@ function CalendarLegend() {
                   borderTop:'1px solid #F3F0FF' }}>
       {items.map(k => (
         <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5,
-                               fontSize:10, color:'#9CA3AF' }}>
+                               fontSize:10, color:C.faint }}>
           <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_BAR[k] }} />
           {STATUS_FULL[k]}
         </span>
@@ -1624,20 +1624,20 @@ function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }
                   justifyContent: 'center', marginBottom: 0 }}>
       <div style={{ textAlign: 'center', padding: '6px 0 16px' }}>
         <div style={{ fontSize: 26, marginBottom: 6 }}></div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: '#1E1B4B' }}>Pick a day</div>
-        <div style={{ fontSize: 11.5, color: '#9CA3AF', marginTop: 3, lineHeight: 1.55 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>Pick a day</div>
+        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 3, lineHeight: 1.55 }}>
           Its punches, hours and status appear here.
         </div>
       </div>
       <div style={{ borderTop: '1px solid #F3F0FF', paddingTop: 12 }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '.06em',
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.faint, letterSpacing: '.06em',
                       textTransform: 'uppercase', marginBottom: 8 }}>This month so far</div>
         {rows.map(([k, v, c]) => (
           <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: c }} />
-            <span style={{ fontSize: 12, color: '#6B7280', flex: 1 }}>{k}</span>
+            <span style={{ fontSize: 12, color: C.muted, flex: 1 }}>{k}</span>
             <span style={{ fontSize: 13, fontWeight: 700,
-                           color: v === '0' ? '#C4C4CC' : '#1E1B4B' }}>{v}</span>
+                           color: v === '0' ? '#C4C4CC' : C.ink }}>{v}</span>
           </div>
         ))}
       </div>
@@ -1741,7 +1741,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
     const { status, rec, leave } = resolveDay(dateStr, monthData, todayStr)
-    const [bg, ink] = STATUS_STYLE[status] || ['#fff', '#1E1B4B']
+    const [bg, ink] = STATUS_STYLE[status] || ['#fff', C.ink]
     const dot = STATUS_BAR[status]
     const isToday = dateStr === todayStr
     const isSel = dateStr === selectedDate
@@ -1805,7 +1805,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
 
         {isToday && !isSel && (
           <span style={{ position: 'absolute', top: 3, right: 4, width: 4, height: 4,
-                         borderRadius: '50%', background: '#7C3AED' }} />
+                         borderRadius: '50%', background: C.violet }} />
         )}
       </button>
     )
@@ -1864,34 +1864,34 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
       </div>
 
       {holiday && <div style={{ fontSize:13, color:'#0C447C', background:'#E6F1FB', borderRadius:7, padding:'8px 11px', marginBottom:10 }}>🎌 {holiday.description}{holiday.is_optional ? ' (Optional)' : ''}</div>}
-      {status === 'WEEKLY_OFF' && <div style={{ fontSize:13, color:'#94A3B8', background:'#F1F5F9', borderRadius:7, padding:'8px 11px', marginBottom:10 }}>Weekly Off</div>}
-      {leave && <div style={{ fontSize:13, color:'#3C3489', background:'#EEEDFE', borderRadius:7, padding:'8px 11px', marginBottom:10 }}>On Leave — {leave.name}{leave.half_day ? ' (Half day)' : ''}</div>}
+      {status === 'WEEKLY_OFF' && <div style={{ fontSize:13, color:C.faint, background:C.sunken, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>Weekly Off</div>}
+      {leave && <div style={{ fontSize:13, color:C.violetDeep, background:C.violetTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>On Leave — {leave.name}{leave.half_day ? ' (Half day)' : ''}</div>}
 
       {rec && (
         <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:8, marginBottom:10 }}>
           {([['In', fmtT(rec.work_in)],['Out', fmtT(rec.work_out)],['Worked', worked],['Late', `${rec.late_minutes||0}m`],['OT', `${rec.overtime_minutes||0}m`]] as [string,string][]).map(([k,v]) => (
-            <div key={k} style={{ background:'#FAFAF8', borderRadius:7, padding:'7px 10px' }}>
-              <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' }}>{k}</div>
+            <div key={k} style={{ background:C.sunken, borderRadius:7, padding:'7px 10px' }}>
+              <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' }}>{k}</div>
               <div style={{ fontSize:13, fontWeight:600, marginTop:2 }}>{v}</div>
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ fontSize:11, fontWeight:600, color:'#6D28D9', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:6 }}>Punch Timeline</div>
-      {loading ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Loading punches…</div>
-        : punches.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No raw punches recorded.</div>
+      <div style={{ fontSize:11, fontWeight:600, color:C.violetDeep, textTransform:'uppercase', letterSpacing:'.05em', marginBottom:6 }}>Punch Timeline</div>
+      {loading ? <div style={{ fontSize:12, color:C.faint }}>Loading punches…</div>
+        : punches.length === 0 ? <div style={{ fontSize:12, color:C.faint }}>No raw punches recorded.</div>
         : punches.map((p, i) => (
           <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
             <span style={{ fontWeight:600, minWidth:52 }}>{fmtT(p.punch_time)}</span>
-            <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: p.punch_type==='IN' ? '#ECFDF5' : '#FEF2F2', color: p.punch_type==='IN' ? '#059669' : '#DC2626' }}>{p.punch_type}</span>
-            <span style={{ color:'#6B7280' }}>{p.source || '—'}</span>
-            {p.geofence_status && <span style={{ marginLeft:'auto', fontSize:10, color:'#9CA3AF' }}>{p.geofence_status}</span>}
+            <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: p.punch_type==='IN' ? C.positiveTint : C.criticalTint, color: p.punch_type==='IN' ? C.positive : C.critical }}>{p.punch_type}</span>
+            <span style={{ color:C.muted }}>{p.source || '—'}</span>
+            {p.geofence_status && <span style={{ marginLeft:'auto', fontSize:10, color:C.faint }}>{p.geofence_status}</span>}
           </div>
         ))}
 
       {status === 'MISS_PUNCH' && (
-        <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:'#D97706' }}>Raise regularisation</button>
+        <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:C.warning }}>Raise regularisation</button>
       )}
     </div>
   )
@@ -2008,7 +2008,7 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
   return (
     <div style={T.card}>
       <div style={T.section}>Regularise a date range</div>
-      <div style={{ fontSize: 11.5, color: '#6B7280', marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 11.5, color: C.muted, marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
         For a stretch of days with the same story — biometric down, on site, working from home.
         Weekly offs, holidays, leave and days already recorded are left out automatically.
       </div>
@@ -2022,23 +2022,23 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
           <input type="time" style={T.input} value={actualIn} onChange={e => setActualIn(e.target.value)} /></div>
         <div><label style={T.label}>Actual OUT *</label>
           <input type="time" style={T.input} value={actualOut} onChange={e => setActualOut(e.target.value)} /></div>
-        <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason * <span style={{ fontWeight: 400, color: '#9CA3AF' }}>(applies to every day)</span></label>
+        <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason * <span style={{ fontWeight: 400, color: C.faint }}>(applies to every day)</span></label>
           <input style={T.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Biometric device was down all week" /></div>
       </div>
 
-      {scanning && <div style={{ fontSize: 12, color: '#9CA3AF', marginBottom: 10 }}>Checking those dates…</div>}
+      {scanning && <div style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>Checking those dates…</div>}
 
       {preview && !scanning && (
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 9 }}>
             <span style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 99,
-                           background: preview.eligible.length ? '#ECFDF5' : '#FEF2F2',
-                           color: preview.eligible.length ? '#059669' : '#DC2626' }}>
+                           background: preview.eligible.length ? C.positiveTint : C.criticalTint,
+                           color: preview.eligible.length ? C.positive : C.critical }}>
               {preview.eligible.length} day{preview.eligible.length === 1 ? '' : 's'} will be sent
             </span>
             {preview.skipped.length > 0 && (
               <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99,
-                             background: '#F3F0FF', color: '#6D28D9' }}>
+                             background: C.violetTint, color: C.violetDeep }}>
                 {preview.skipped.length} skipped
               </span>
             )}
@@ -2049,7 +2049,7 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
               {preview.eligible.map(d => (
                 <span key={d.date} title={d.why}
                       style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
-                               background: '#ECFDF5', color: '#059669',
+                               background: C.positiveTint, color: C.positive,
                                border: '1px solid #A7F3D0', fontWeight: 600 }}>
                   {short(d.date)} <span style={{ fontWeight: 400, opacity: .8 }}>· {d.why}</span>
                 </span>
@@ -2059,13 +2059,13 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
 
           {preview.skipped.length > 0 && (
             <details>
-              <summary style={{ fontSize: 11.5, color: '#6B7280', cursor: 'pointer', marginBottom: 6 }}>
+              <summary style={{ fontSize: 11.5, color: C.muted, cursor: 'pointer', marginBottom: 6 }}>
                 Why {preview.skipped.length} day{preview.skipped.length === 1 ? ' was' : 's were'} left out
               </summary>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {preview.skipped.map(d => (
                   <span key={d.date} style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
-                                              background: '#F8FAFC', color: '#9CA3AF',
+                                              background: C.sunken, color: C.faint,
                                               border: '1px solid #E9E7F5' }}>
                     {short(d.date)} · {d.why}
                   </span>
@@ -2076,7 +2076,7 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
         </div>
       )}
 
-      {msg && <div style={{ fontSize: 12, marginBottom: 10, color: msg.ok ? '#059669' : '#DC2626' }}>{msg.text}</div>}
+      {msg && <div style={{ fontSize: 12, marginBottom: 10, color: msg.ok ? C.positive : C.critical }}>{msg.text}</div>}
 
       <div style={{ display: 'flex', gap: 10 }}>
         <button onClick={onCancel} style={{ ...T.btnO, flex: 1 }}>Cancel</button>
@@ -2126,16 +2126,16 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
     <div style={T.card}>
       <div style={T.section}>Raise Regularisation</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-        <div style={{ gridColumn:'1/-1' }}><label style={T.label}>Attendance date * <span style={{ fontWeight:400, color:'#9CA3AF' }}>(past dates only)</span></label>{editable
+        <div style={{ gridColumn:'1/-1' }}><label style={T.label}>Attendance date * <span style={{ fontWeight:400, color:C.faint }}>(past dates only)</span></label>{editable
           ? <input type="date" max={yesterdayStr} style={T.input} value={dateVal} onChange={e => setDateVal(e.target.value)} />
-          : <input style={{ ...T.input, background:'#F1F5F9' }} value={dateLbl} readOnly />}</div>
-        <div><label style={T.label}>Recorded IN</label><input style={{ ...T.input, background:'#F1F5F9' }} value={rec?.work_in ? fmtT(rec.work_in) : 'Not recorded'} readOnly /></div>
-        <div><label style={T.label}>Recorded OUT</label><input style={{ ...T.input, background:'#F1F5F9' }} value={rec?.work_out ? fmtT(rec.work_out) : 'Not recorded'} readOnly /></div>
+          : <input style={{ ...T.input, background:C.sunken }} value={dateLbl} readOnly />}</div>
+        <div><label style={T.label}>Recorded IN</label><input style={{ ...T.input, background:C.sunken }} value={rec?.work_in ? fmtT(rec.work_in) : 'Not recorded'} readOnly /></div>
+        <div><label style={T.label}>Recorded OUT</label><input style={{ ...T.input, background:C.sunken }} value={rec?.work_out ? fmtT(rec.work_out) : 'Not recorded'} readOnly /></div>
         <div><label style={T.label}>Actual IN *</label><input type="time" style={T.input} value={actualIn} onChange={e => setActualIn(e.target.value)} /></div>
         <div><label style={T.label}>Actual OUT *</label><input type="time" style={T.input} value={actualOut} onChange={e => setActualOut(e.target.value)} /></div>
         <div style={{ gridColumn:'1/-1' }}><label style={T.label}>Reason *</label><input style={T.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="Why was the punch missed?" /></div>
       </div>
-      {msg && <div style={{ fontSize:12, marginBottom:10, color: msg.ok ? '#059669' : '#DC2626' }}>{msg.text}</div>}
+      {msg && <div style={{ fontSize:12, marginBottom:10, color: msg.ok ? C.positive : C.critical }}>{msg.text}</div>}
       <div style={{ display:'flex', gap:10 }}>
         <button onClick={onCancel} style={{ ...T.btnO, flex:1 }}>Cancel</button>
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, flex:1, opacity: busy?.6:1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
@@ -2146,21 +2146,21 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
 
 // 5) Regularisation list ─────────────────────────────────────────
 function RegularisationList({ requests }: { requests: RegularisationRequest[] }) {
-  const STY: Record<string,[string,string]> = { PENDING:['#FEF3C7','#D97706'], APPROVED:['#ECFDF5','#059669'], REJECTED:['#FEF2F2','#DC2626'] }
+  const STY: Record<string,[string,string]> = { PENDING:[C.warningTint,C.warning], APPROVED:[C.positiveTint,C.positive], REJECTED:[C.criticalTint,C.critical] }
   return (
     <div style={T.card}>
       <div style={T.section}>My Regularisation Requests</div>
-      {requests.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No regularisation requests yet.</div>}
-      {requests.map(r => { const [bg,c] = STY[r.status] || ['#F3F0FF','#6D28D9']; return (
+      {requests.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No regularisation requests yet.</div>}
+      {requests.map(r => { const [bg,c] = STY[r.status] || [C.violetTint,C.violetDeep]; return (
         <div key={r.id} style={{ padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{fmt(r.attendance_date)}</div>
             <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{r.status}</span>
           </div>
-          <div style={{ fontSize:11, color:'#6B7280', marginTop:3 }}>Recorded: IN {r.recorded_in ? fmtT(r.recorded_in) : '—'} · OUT {r.recorded_out ? fmtT(r.recorded_out) : '—'}</div>
-          <div style={{ fontSize:11, color:'#374151', marginTop:1 }}>Requested: {r.requested_in} → {r.requested_out}</div>
-          {r.reason && <div style={{ fontSize:12, color:'#374151', marginTop:3 }}>{r.reason}</div>}
-          <div style={{ fontSize:10, color:'#9CA3AF', marginTop:3 }}>Submitted {fmtDT(r.created_at)}</div>
+          <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>Recorded: IN {r.recorded_in ? fmtT(r.recorded_in) : '—'} · OUT {r.recorded_out ? fmtT(r.recorded_out) : '—'}</div>
+          <div style={{ fontSize:11, color:C.inkSoft, marginTop:1 }}>Requested: {r.requested_in} → {r.requested_out}</div>
+          {r.reason && <div style={{ fontSize:12, color:C.inkSoft, marginTop:3 }}>{r.reason}</div>}
+          <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>Submitted {fmtDT(r.created_at)}</div>
         </div>
       )})}
     </div>
@@ -2254,7 +2254,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
       <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: ((manualRaise || bulkRaise) && !raiseDate) ? 0 : undefined }}>
         <div>
           <div style={{ fontSize:13, fontWeight:600 }}>Attendance Regularisation</div>
-          <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>Forgot to punch or wrong time? Raise a correction → HR approval. Use a range when several days share the same reason.</div>
+          <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Forgot to punch or wrong time? Raise a correction → HR approval. Use a range when several days share the same reason.</div>
         </div>
         {!manualRaise && !bulkRaise && !raiseDate && (
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
@@ -2272,7 +2272,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
 
 // ── Voluntary PF (VPF) — EPF wage base × percent ──
 function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', red:'#A32D2D', redBg:'#FCEBEB', amber:'#854F0B', amberBg:'#FAEEDA', teal:'#0F6E56' }
+  const V = { navy:C.ink, purple:C.violet, purpleDark:C.violetDeep, border:C.line, muted:C.muted, red:'#A32D2D', redBg:'#FCEBEB', amber:'#854F0B', amberBg:'#FAEEDA', teal:'#0F6E56' }
   const MAX_PCT = 88, HIGH_ALERT = 50
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -2340,7 +2340,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
       <div style={{ ...card, background: '#FBFAFF' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 12, color: V.muted }}>Your EPF wages (from database)</span>
-          <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: e.is_capped ? '#EEEDFE' : '#E1F5EE', color: e.is_capped ? V.purpleDark : V.teal }}>{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</span>
+          <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: e.is_capped ? C.violetTint : '#E1F5EE', color: e.is_capped ? V.purpleDark : V.teal }}>{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</span>
         </div>
         <div style={{ fontSize: 24, fontWeight: 600, color: V.purpleDark }}>{inr(base)}</div>
         <div style={{ ...row, borderTop: `1px solid ${V.border}`, marginTop: 10, paddingTop: 8 }}>
@@ -2382,7 +2382,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
           <span style={{ fontSize: 13, color: V.muted }}>80C usage (₹1.5L max)</span>
           <span style={{ fontSize: 12, fontWeight: 500, color: V.navy }}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span>
         </div>
-        <div style={{ height: 8, background: '#E9E7F5', borderRadius: 20, overflow: 'hidden' }}><div style={{ height: '100%', width: `${barPct}%`, background: over80c ? '#EF9F27' : V.purple, borderRadius: 20 }} /></div>
+        <div style={{ height: 8, background: C.line, borderRadius: 20, overflow: 'hidden' }}><div style={{ height: '100%', width: `${barPct}%`, background: over80c ? '#EF9F27' : V.purple, borderRadius: 20 }} /></div>
         <div style={{ fontSize: 11, color: '#9B9BA8', marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` — no 80C benefit on ${inr(total80c - e.c80_limit)}` : ''}</div>
       </div>
 
@@ -2396,14 +2396,14 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.</span>
       </label>
 
-      <button disabled={!ack || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: ack ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: ack ? V.purple : '#F5F3FF', color: ack ? '#fff' : '#9B9BA8', cursor: ack ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>
+      <button disabled={!ack || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: ack ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: ack ? V.purple : C.canvas, color: ack ? '#fff' : '#9B9BA8', cursor: ack ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>
     </div>
   )
 }
 
 // ── Corporate NPS enrolment (80CCD(2)) — % of Basic by regime ──
 function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', red:'#A32D2D', amber:'#854F0B', amberBg:'#FAEEDA', blue:'#185FA5', blueBg:'#E6F1FB', teal:'#0F6E56', bg:'#F5F3FF' }
+  const V = { navy:C.ink, purple:C.violet, purpleDark:C.violetDeep, border:C.line, muted:C.muted, red:'#A32D2D', amber:'#854F0B', amberBg:'#FAEEDA', blue:'#185FA5', blueBg:'#E6F1FB', teal:'#0F6E56', bg:C.canvas }
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [hasPran, setHasPran] = useState(true)
@@ -2539,7 +2539,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.</span>
       </label>
 
-      <button disabled={!canSubmit || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: canSubmit ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: canSubmit ? V.purple : '#F5F3FF', color: canSubmit ? '#fff' : '#9B9BA8', cursor: canSubmit ? 'pointer' : 'not-allowed' }}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</button>
+      <button disabled={!canSubmit || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: canSubmit ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: canSubmit ? V.purple : C.canvas, color: canSubmit ? '#fff' : '#9B9BA8', cursor: canSubmit ? 'pointer' : 'not-allowed' }}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</button>
     </div>
   )
 }
@@ -2547,7 +2547,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 // ════════════════════════════════════════════════════════════════
 // LOANS (ESS) — apply, track requests, sign agreement, manage loans
 // ════════════════════════════════════════════════════════════════
-const LOAN_V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', red:'#A32D2D', redBg:'#FCEBEB', amber:'#854F0B', amberBg:'#FAEEDA', teal:'#0F6E56', tealBg:'#EEF7F3', bg:'#F5F3FF' }
+const LOAN_V = { navy:C.ink, purple:C.violet, purpleDark:C.violetDeep, border:C.line, muted:C.muted, red:'#A32D2D', redBg:'#FCEBEB', amber:'#854F0B', amberBg:'#FAEEDA', teal:'#0F6E56', tealBg:'#EEF7F3', bg:C.canvas }
 const loanInr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 // reducing-balance EMI
 function loanEmi(P: number, ratePct: number, n: number): number {
@@ -2563,9 +2563,9 @@ function LoanStatusBadge({ status }: { status: string }) {
     SUBMITTED:['#FAEEDA','#854F0B'], IN_APPROVAL:['#FAEEDA','#854F0B'], REQUESTED:['#FAEEDA','#854F0B'], GENERATED:['#FAEEDA','#854F0B'], UNDER_REVIEW:['#E6F1FB','#185FA5'], PENDING_PRAN:['#E6F1FB','#185FA5'],
     APPROVED:['#EEF7F3','#0F6E56'], RECOVERING:['#EEF7F3','#0F6E56'], DISBURSED:['#EEF7F3','#0F6E56'], SIGNED:['#EEF7F3','#0F6E56'],
     REJECTED:['#FCEBEB','#A32D2D'], CANCELLED:['#FCEBEB','#A32D2D'], EXIT_RECOVERY:['#FCEBEB','#A32D2D'],
-    CLOSED:['#F1F5F9','#64748B'], FORECLOSED:['#F1F5F9','#64748B'],
+    CLOSED:[C.sunken,C.muted], FORECLOSED:[C.sunken,C.muted],
   }
-  const [bg, c] = map[s] || ['#F3F0FF','#6D28D9']
+  const [bg, c] = map[s] || [C.violetTint,C.violetDeep]
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{s.replace(/_/g,' ')}</span>
 }
 
@@ -2839,14 +2839,14 @@ function Placeholder({ title, phase, needs }: { title: string; phase: number; ne
     <div style={{ ...T.card, textAlign:'center', padding:40 }}>
       <div style={{ fontSize:38, marginBottom:8 }}></div>
       <div style={{ fontSize:16, fontWeight:600 }}>{title}</div>
-      <div style={{ fontSize:13, color:'#6B7280', marginTop:6, lineHeight:1.7 }}>Coming in Phase {phase}. This module needs the <b>{needs}</b> module's data, which isn't built yet.</div>
+      <div style={{ fontSize:13, color:C.muted, marginTop:6, lineHeight:1.7 }}>Coming in Phase {phase}. This module needs the <b>{needs}</b> module's data, which isn't built yet.</div>
     </div>
   )
 }
 
 // ── Flexi Benefit Plan (FBP) — the employee's company policy for their salary slab ──
 function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', purpleBg:'#F5F3FF' }
+  const V = { navy:C.ink, purple:C.violet, purpleDark:C.violetDeep, border:C.line, muted:C.muted, purpleBg:C.canvas }
   const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
   const num = (v: any) => (v == null || v === '' ? 0 : Number(v) || 0)
   const [status, setStatus] = useState<'loading' | 'ready' | 'nopolicy'>('loading')
@@ -2919,10 +2919,10 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
 
   return (
     <div>
-      <div style={{ ...card, background: V.purpleBg, borderColor: '#DDD6FE' }}>
+      <div style={{ ...card, background: V.purpleBg, borderColor: C.violetEdge }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 15, fontWeight: 700 }}>Flexi Benefit Plan (FBP)</div>
-          <span style={{ fontSize: 11, background: '#EEEDFE', color: V.purpleDark, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>{companyName}</span>
+          <span style={{ fontSize: 11, background: C.violetTint, color: V.purpleDark, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>{companyName}</span>
         </div>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 10, fontSize: 12 }}>
           <div><span style={{ color: V.muted }}>Your annual fixed</span><div style={{ fontWeight: 700, fontSize: 15 }}>{inr(annualFixed)}</div></div>
@@ -2978,14 +2978,14 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
   return (
     <div style={T.card}>
       <div style={T.section}>My Letters</div>
-      {loading ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Loading…</div> :
-        rows.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No letters have been shared with you yet. HR-issued letters (offer, confirmation, etc.) will appear here.</div> :
+      {loading ? <div style={{ fontSize:12, color:C.faint }}>Loading…</div> :
+        rows.length === 0 ? <div style={{ fontSize:12, color:C.faint }}>No letters have been shared with you yet. HR-issued letters (offer, confirmation, etc.) will appear here.</div> :
         rows.map(r => (
           <div key={r.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 0', borderBottom:'1px solid #F3F0FF' }}>
             <span style={{ fontSize:20 }}></span>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:13, fontWeight:600 }}>{r.letter_name}</div>
-              <div style={{ fontSize:11, color:'#9CA3AF' }}>{new Date(r.letter_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</div>
+              <div style={{ fontSize:11, color:C.faint }}>{new Date(r.letter_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</div>
             </div>
             <button onClick={() => download(r.file_url)} style={{ ...T.btnO }}>⬇ Download</button>
           </div>
@@ -3131,11 +3131,11 @@ const viewMeta = (k: string) => VIEWS.find(v => v.k === k) || VIEWS[0]
 /** The four an employee opens daily — these get the mobile thumb bar, rest go under More. */
 const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
 
-const DOT: Record<Ready, string> = { ready:'#059669', partial:'#B45309', soon:'#DC2626' }
+const DOT: Record<Ready, string> = { ready:C.positive, partial:C.warning, soon:C.critical }
 const BADGE: Record<Ready, [string, string, string]> = {
-  ready:   ['Available',        '#ECFDF5', '#059669'],
-  partial: ['Partly available', '#FFFBEB', '#B45309'],
-  soon:    ['Coming soon',      '#FEF2F2', '#DC2626'],
+  ready:   ['Available',        C.positiveTint, C.positive],
+  partial: ['Partly available', C.warningTint, C.warning],
+  soon:    ['Coming soon',      C.criticalTint, C.critical],
 }
 
 // ── Sidebar / sub-tab / feature-grid bits (outside the parent — no focus loss) ──
@@ -3145,7 +3145,7 @@ function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean;
   const bg = active ? 'rgba(124,58,237,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? '#fff' : '#C4BFEE', cursor:'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? '#7C3AED' : 'transparent'}` }}>
+      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? '#fff' : '#C4BFEE', cursor:'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.violet : 'transparent'}` }}>
       <EssIcon k={s.k} size={15} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
@@ -3164,7 +3164,7 @@ function TabHeader({ s }: { s: NavSection }) {
         </div>
         <span style={{ fontSize:10.5, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
       </div>
-      <div style={{ fontSize:12.5, color:'#6B7280' }}>{s.desc}</div>
+      <div style={{ fontSize:12.5, color:C.muted }}>{s.desc}</div>
     </div>
   )
 }
@@ -3176,7 +3176,7 @@ function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: 
       {items.map(i => {
         const on = i.k === view
         return (
-          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:12.5, fontWeight: on ? 600 : 500, border:`1px solid ${on ? '#7C3AED' : '#E9E7F5'}`, background: on ? '#7C3AED' : '#fff', color: on ? '#fff' : '#4B5563', whiteSpace:'nowrap' }}>
+          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:12.5, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.violet : C.line}`, background: on ? C.violet : '#fff', color: on ? '#fff' : '#4B5563', whiteSpace:'nowrap' }}>
             {i.label}{i.phase ? <span style={{ marginLeft:5, fontSize:9, opacity:.7 }}>soon</span> : null}
           </button>
         )
@@ -3194,11 +3194,11 @@ function FeatureGrid({ features }: { features: Feature[] }) {
           <div key={f.name} style={{ background:'#fff', border:'1px solid #ECEAFB', borderRadius:12, padding:16 }}>
             <div style={{ fontSize:22, marginBottom:6 }}>{f.icon}</div>
             <div style={{ fontWeight:700, fontSize:13, marginBottom:3 }}>{f.name}</div>
-            <div style={{ fontSize:11, color:'#6B7280' }}>{f.note}</div>
+            <div style={{ fontSize:11, color:C.muted }}>{f.note}</div>
           </div>
         ))}
       </div>
-      <div style={{ background:'#F3EEFF', borderRadius:10, padding:'12px 16px', marginTop:20, fontSize:12, color:'#6D28D9' }}>
+      <div style={{ background:'#F3EEFF', borderRadius:10, padding:'12px 16px', marginTop:20, fontSize:12, color:C.violetDeep }}>
         This tab isn’t live yet. Everything above is what it will hold — nothing here is clickable so far.
       </div>
     </div>
@@ -3207,10 +3207,10 @@ function FeatureGrid({ features }: { features: Feature[] }) {
 
 function NotificationBell({ unread, open, onToggle }: { unread: number; open: boolean; onToggle: () => void }) {
   return (
-    <button onClick={onToggle} title="Notifications" style={{ position:'relative', width:34, height:34, borderRadius:8, border:`1px solid ${open ? '#7C3AED' : '#E9E7F5'}`, background: open ? '#F5F3FF' : '#fff', cursor:'pointer', fontSize:16, lineHeight:1, fontFamily:'inherit', flexShrink:0 }}>
-      🔔
+    <button onClick={onToggle} title="Notifications" style={{ position:'relative', width:34, height:34, borderRadius:R.md, border:`1px solid ${open ? C.violet : C.line}`, background: open ? C.violetTint : C.surface, color: open ? C.violetDeep : C.muted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit', flexShrink:0 }}>
+      <IconBell size={17} />
       {unread > 0 && (
-        <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:99, background:'#DC2626', color:'#fff', fontSize:9.5, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
+        <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:R.pill, background:C.critical, color:'#fff', fontSize:9.5, fontWeight:W.bold, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
           {unread > 9 ? '9+' : unread}
         </span>
       )}
@@ -3279,14 +3279,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     }
   }
 
-  if (loading) return <div style={{ padding:40, textAlign:'center', color:'#7C3AED', fontFamily:'"DM Sans",sans-serif' }}>Loading portal…</div>
-  if (!emp) return <div style={{ padding:40, textAlign:'center', color:'#DC2626', fontFamily:'"DM Sans",sans-serif' }}>Employee not found.</div>
+  if (loading) return <div style={{ padding:40, textAlign:'center', color:C.violet, fontFamily:'"DM Sans",sans-serif' }}>Loading portal…</div>
+  if (!emp) return <div style={{ padding:40, textAlign:'center', color:C.critical, fontFamily:'"DM Sans",sans-serif' }}>Employee not found.</div>
 
   return (
-    <div style={{ minHeight:'100vh', background:'#F5F3FF', fontFamily:'"DM Sans","Segoe UI",sans-serif', color:'#1E1B4B', display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+    <div style={{ minHeight:'100vh', background:C.canvas, fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
       {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
       {!isMobile && (
-        <div style={{ width:220, background:'#1E1B4B', padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
+        <div style={{ width:220, background:C.ink, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
           <div style={{ padding:'0 18px 16px', color:'#fff', fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
           {SECTIONS.map(s => (
             <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
@@ -3302,15 +3302,15 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
             {isMobile ? 'EZER ESS' : (section.items.length > 1 ? meta.label : '')}
           </div>
-          {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'#FEF3C7', color:'#92400E', fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
+          {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
           <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9 }}>
             <NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} />
-            <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
+            <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:C.violetTint, color:C.violet, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
             {!isMobile && (
               <div style={{ lineHeight:1.2, textAlign:'right' }}>
                 <div style={{ fontSize:13, fontWeight:700, whiteSpace:'nowrap', maxWidth:220, overflow:'hidden', textOverflow:'ellipsis' }}>{emp.full_name}</div>
-                <div style={{ fontSize:11, color:'#6B7280', fontFamily:'monospace' }}>{emp.emp_code}</div>
+                <div style={{ fontSize:11, color:C.muted, fontFamily:'monospace' }}>{emp.emp_code}</div>
               </div>
             )}
           </div>
@@ -3338,11 +3338,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {isMobile && (
         <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'#fff', borderTop:'1px solid #EDE9FE', display:'flex', zIndex:20 }}>
           {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
-            <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? '#7C3AED' : '#9CA3AF', fontWeight: on ? 600 : 500 }}>
+            <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? C.violet : C.faint, fontWeight: on ? 600 : 500 }}>
               <EssIcon k={s.k} size={17} />{s.short}
             </button>
           )})}
-          <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? '#7C3AED' : '#9CA3AF', fontWeight: moreOpen ? 600 : 500 }}>
+          <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? C.violet : C.faint, fontWeight: moreOpen ? 600 : 500 }}>
             <div style={{ fontSize:17, lineHeight:1.3 }}>⋯</div>More
           </button>
         </div>
@@ -3356,7 +3356,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
             <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
               {SECTIONS.map(s => (
-                <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:9, border:`1px solid ${section.k === s.k ? '#7C3AED' : '#EDE9FE'}`, background: section.k === s.k ? '#F5F3FF' : '#FAFAF8', cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:'#1E1B4B' }}>
+                <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:9, border:`1px solid ${section.k === s.k ? C.violet : C.violetTint}`, background: section.k === s.k ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:C.ink }}>
                   <span style={{ display:'flex' }}><EssIcon k={s.k} size={16} /></span>
                   <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
                   <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
@@ -3367,7 +3367,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         </div>
       )}
 
-      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
+      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?C.positive:C.critical, color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
     </div>
   )
 }

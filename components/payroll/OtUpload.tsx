@@ -7,6 +7,8 @@ import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { loadRuns, uploadOtBatch, getValidEmpCodesForRun, MONTHS, type PayrollRun, type OtUploadRow } from '@/lib/payroll/core'
 import { C, font, num, fmtDate, DownloadCard, ValidationCard } from './attendanceShared'
+// Design tokens, aliased as TK — this file declares its own C.
+import { C as TK } from '@/lib/ui'
 
 function normalizeRow(r: Record<string, any>): OtUploadRow | null {
   const g = (...keys: string[]) => { for (const k of Object.keys(r)) { const kk = k.trim().toLowerCase(); if (keys.some(x => kk === x)) return r[k] } return undefined }
@@ -89,14 +91,14 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 760 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#D97706,#B45309)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(217,119,6,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.warning},${TK.warning})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(217,119,6,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>OT Upload</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Overtime hours only — a separate sheet that never overwrites leave or paid days</div>
         </div>
       </div>
 
-      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months. (Download works for any company.)</div>}
+      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months. (Download works for any company.)</div>}
 
       <DownloadCard companyId={companyId} fy={fy}
         heading="Download OT sheet" note="— filter and download a ready-to-fill OT sheet"
@@ -138,7 +140,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Preview · {fileName} ({rows.length} rows)</div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 320 }}>
-              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'OT Hours'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'OT Hours'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 9.5, color: `${TK.violetEdge}`, fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.slice(0, 8).map((r, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
@@ -160,7 +162,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
             ✓ {updated} of {results.length} OT rows updated
           </div>
           {notFound.length > 0 && (
-            <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 14px' }}>
+            <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 14px' }}>
               <b>{notFound.length}</b> emp code{notFound.length > 1 ? 's' : ''} not found in this month (skipped): {notFound.map(r => r.emp_code).join(', ')}
             </div>
           )}

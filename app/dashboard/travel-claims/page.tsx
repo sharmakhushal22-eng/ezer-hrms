@@ -240,7 +240,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
         <input type="number" min="0" max={line.amount_claimed} value={value}
                onChange={e => onChange(e.target.value)}
                style={{ ...S.inp, width: 92, flexShrink: 0, padding: '6px 9px',
-                        borderColor: trimmed ? V.amber : '#DDD6FE' }} />
+                        borderColor: trimmed ? V.amber : C.violetEdge }} />
       ) : (
         <div style={{ width: 92, textAlign: 'right', fontSize: 12.5, color: V.muted, flexShrink: 0 }}>
           {line.amount_approved != null ? inr(line.amount_approved) : '—'}

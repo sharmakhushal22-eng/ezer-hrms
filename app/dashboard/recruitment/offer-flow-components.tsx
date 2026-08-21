@@ -37,7 +37,7 @@ function SecLine({ title }: { title: string }) {
 // ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
 // `f` shape: { company, department, position, location } — all '' means "All".
 function RecFilterBar({ companies, departments, locations, positions, f, setF }: any) {
-  const lbl = { fontSize:11, fontWeight:600 as const, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 }
+  const lbl = { fontSize:11, fontWeight:600 as const, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 }
   return (
     <div style={{ ...S.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end' }}>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
@@ -69,7 +69,7 @@ function RecFilterBar({ companies, departments, locations, positions, f, setF }:
         </select>
       </div>
       {(f.company||f.department||f.position||f.location) && (
-        <button style={{ ...S.btn('#fff','#6D28D9'), border:'1px solid #DDD6FE' }} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
+        <button style={{ ...S.btn('#fff',TK.violetDeep), border:'1px solid #DDD6FE' }} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
       )}
     </div>
   )
@@ -257,15 +257,15 @@ This document is confidential and for internal approval only.`
 
   return (
     <div style={{ maxWidth:700, margin:'0 auto', padding:16 }}>
-      <div style={{ fontSize:16, fontWeight:600, color:'#1E1B4B', marginBottom:4 }}>Create Offer Approval Request</div>
-      <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:16 }}>
+      <div style={{ fontSize:16, fontWeight:600, color:TK.ink, marginBottom:4 }}>Create Offer Approval Request</div>
+      <div style={{ fontSize:12, color:TK.faint, marginBottom:16 }}>
         {candidate?.full_name} — {mrf?.designation}
       </div>
 
       {/* PREVIOUS EMPLOYER SECTION */}
       <div style={S.cardP}>
         <SecLine title="Previous Employer Details" />
-        <div style={{ fontSize:11, color:'#6D28D9', background:'#EDE9FE', borderRadius:6, padding:'6px 10px', marginBottom:12 }}>
+        <div style={{ fontSize:11, color:TK.violetDeep, background:TK.violetTint, borderRadius:6, padding:'6px 10px', marginBottom:12 }}>
           This section is confidential — NOT shown to candidate. Only visible in HR approval request.
         </div>
         <div style={{ ...S.g2, marginBottom:10 }}>
@@ -303,7 +303,7 @@ This document is confidential and for internal approval only.`
           </div>
         </div>
         {joining.proposed_doj && (
-          <div style={{ background:'#EDE9FE', borderRadius:7, padding:'8px 12px', fontSize:12, color:'#4C1D95' }}>
+          <div style={{ background:TK.violetTint, borderRadius:7, padding:'8px 12px', fontSize:12, color:TK.violetDeep }}>
             Days to join: <strong>{daysDiff(joining.proposed_doj)} days</strong> from today
           </div>
         )}
@@ -319,14 +319,14 @@ This document is confidential and for internal approval only.`
               ['Monthly In-Hand', `₹${fmt(negotiation.net_monthly || 0)}`],
               ['Hike %', `${Number(negotiation.hike_pct||0).toFixed(1)}%`],
             ].map(([l,v]) => (
-              <div key={l} style={{ background:'#F3F0FF', borderRadius:8, padding:'10px 12px' }}>
-                <div style={{ fontSize:10, color:'#9CA3AF' }}>{l}</div>
-                <div style={{ fontSize:14, fontWeight:500, color:'#4C1D95', marginTop:2 }}>{v}</div>
+              <div key={l} style={{ background:TK.violetTint, borderRadius:8, padding:'10px 12px' }}>
+                <div style={{ fontSize:10, color:TK.faint }}>{l}</div>
+                <div style={{ fontSize:14, fontWeight:500, color:TK.violetDeep, marginTop:2 }}>{v}</div>
               </div>
             ))}
           </div>
         ) : (
-          <div style={{ color:'#9CA3AF', fontSize:12 }}>No CTC negotiation found. Please complete the calculator first.</div>
+          <div style={{ color:TK.faint, fontSize:12 }}>No CTC negotiation found. Please complete the calculator first.</div>
         )}
       </div>
 
@@ -344,9 +344,9 @@ This document is confidential and for internal approval only.`
 
       {/* ACTIONS */}
       <div style={{ display:'flex', gap:10, marginBottom:16 }}>
-        <button onClick={generateTemplate} style={S.btn('#EDE9FE','#4C1D95')}>Generate Approval Template
+        <button onClick={generateTemplate} style={S.btn(TK.violetTint,TK.violetDeep)}>Generate Approval Template
         </button>
-        <button onClick={submitForApproval} disabled={saving || !template} style={S.btn(saving||!template?'rgba(124,58,237,0.4)':'#7C3AED','#fff')}>
+        <button onClick={submitForApproval} disabled={saving || !template} style={S.btn(saving||!template?'rgba(124,58,237,0.4)':TK.violet,'#fff')}>
           {saving ? 'Submitting...' : 'Submit to HR Head'}
         </button>
       </div>
@@ -356,12 +356,12 @@ This document is confidential and for internal approval only.`
         <div style={S.card}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
             <div style={{ fontSize:13, fontWeight:500 }}>Approval Request Preview (read-only)</div>
-            <button onClick={()=>setShowTemplate(false)} style={{ ...S.btn('#F3F0FF','#9CA3AF'), padding:'4px 10px', fontSize:11 }}>Hide</button>
+            <button onClick={()=>setShowTemplate(false)} style={{ ...S.btn(TK.violetTint,TK.faint), padding:'4px 10px', fontSize:11 }}>Hide</button>
           </div>
-          <pre style={{ fontFamily:'monospace', fontSize:11, color:'#374151', background:'#F9FAFB', borderRadius:7, padding:12, whiteSpace:'pre-wrap', border:'1px solid #EDE9FE', maxHeight:500, overflow:'auto', margin:0 }}>
+          <pre style={{ fontFamily:'monospace', fontSize:11, color:TK.inkSoft, background:TK.sunken, borderRadius:7, padding:12, whiteSpace:'pre-wrap', border:'1px solid #EDE9FE', maxHeight:500, overflow:'auto', margin:0 }}>
             {template}
           </pre>
-          <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>
+          <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>
             This is a preview of what HR Head will see. To change it, edit the fields above and re-generate.
           </div>
         </div>
@@ -378,8 +378,8 @@ function SearchBar({ placeholder, onApply, width=320 }:{ placeholder:string; onA
     <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
       <input style={{ ...S.input, maxWidth:width }} value={draft} placeholder={placeholder}
         onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
-      <button style={S.btn('#7C3AED','#fff')} onClick={()=>onApply(draft.trim())}>Apply</button>
-      {draft && <button style={S.btn('#F3F0FF','#6D28D9')} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
+      <button style={S.btn(TK.violet,'#fff')} onClick={()=>onApply(draft.trim())}>Apply</button>
+      {draft && <button style={S.btn(TK.violetTint,TK.violetDeep)} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
     </div>
   )
 }
@@ -481,11 +481,11 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   }
 
   const statusColor = (s: string) => ({
-    SUBMITTED: ['#EFF6FF','#1D4ED8'],
-    HR_HEAD_APPROVED: ['#ECFDF5','#059669'],
-    HR_HEAD_REJECTED: ['#FEF2F2','#DC2626'],
-    OFFER_SENT: ['#F3F0FF','#7C3AED'],
-  }[s] || ['#F9FAFB','#6B7280'])
+    SUBMITTED: [TK.infoTint,TK.info],
+    HR_HEAD_APPROVED: [TK.positiveTint,TK.positive],
+    HR_HEAD_REJECTED: [TK.criticalTint,TK.critical],
+    OFFER_SENT: [TK.violetTint,TK.violet],
+  }[s] || [TK.sunken,TK.muted])
 
   const ql = hq.trim().toLowerCase()
   // Position options pooled from all three lists shown on this dashboard.
@@ -508,22 +508,22 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {/* MRF Approvals — HR Head approves new manpower requisitions here */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>MRF Approvals ({fMrfs.length})</div>
+        <div style={{ fontSize:13, fontWeight:600, color:TK.violetDeep, margin:'10px 0 8px' }}>MRF Approvals ({fMrfs.length})</div>
         {fMrfs.length === 0 && (
-          <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>{ql?'No matching MRF':'No MRFs pending approval'}</div>
+          <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:18, fontSize:12 }}>{ql?'No matching MRF':'No MRFs pending approval'}</div>
         )}
         {fMrfs.map(m => (
           <div key={m.id} style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
             <div>
               <div style={{ fontSize:14, fontWeight:600 }}>{m.designation || m.position || 'Untitled'}</div>
-              <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>
+              <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>
                 {m.companies?.company_name || ''} · {m.no_of_openings || m.openings || 0} openings · {m.employment_type || '—'}{m.experience_required ? ` · ${m.experience_required}` : ''}
               </div>
-              {m.skills_required && <div style={{ fontSize:11, color:'#6D28D9', marginTop:3 }}>Skills: {m.skills_required}</div>}
+              {m.skills_required && <div style={{ fontSize:11, color:TK.violetDeep, marginTop:3 }}>Skills: {m.skills_required}</div>}
             </div>
             <div style={{ display:'flex', gap:8, flexShrink:0 }}>
-              <button onClick={()=>approveMrf(m.id)} style={S.btn('#059669','#fff')}>Approve</button>
-              <button onClick={()=>rejectMrf(m.id)} style={{ ...S.btn('#FEF2F2','#DC2626'), border:'1px solid #FCA5A5' }}>Reject</button>
+              <button onClick={()=>approveMrf(m.id)} style={S.btn(TK.positive,'#fff')}>Approve</button>
+              <button onClick={()=>rejectMrf(m.id)} style={{ ...S.btn(TK.criticalTint,TK.critical), border:'1px solid #FCA5A5' }}>Reject</button>
             </div>
           </div>
         ))}
@@ -531,32 +531,32 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'10px 0 8px' }}>Rehire — Rejected Candidates ({fRejected.length})</div>
+        <div style={{ fontSize:13, fontWeight:600, color:TK.violetDeep, margin:'10px 0 8px' }}>Rehire — Rejected Candidates ({fRejected.length})</div>
         {fRejected.length === 0 && (
-          <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:18, fontSize:12 }}>{ql?'No matching candidate':'No rejected candidates'}</div>
+          <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:18, fontSize:12 }}>{ql?'No matching candidate':'No rejected candidates'}</div>
         )}
         {fRejected.map(c => (
           <div key={c.id} style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
             <div>
-              <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}{c.blacklisted && <span style={{ fontSize:10, color:'#DC2626', marginLeft:8, fontWeight:600 }}>BLACKLISTED</span>}</div>
-              <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>{c.designation || '—'}</div>
+              <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}{c.blacklisted && <span style={{ fontSize:10, color:TK.critical, marginLeft:8, fontWeight:600 }}>BLACKLISTED</span>}</div>
+              <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{c.designation || '—'}</div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
               <select value={rehireStage[c.id] || ''} onChange={e=>setRehireStage(m=>({ ...m, [c.id]: e.target.value }))} style={{ ...S.input, width:160 }}>
                 <option value="">Place at stage…</option>
                 {REHIRE_STAGES.map(st => <option key={st} value={st}>{st}</option>)}
               </select>
-              <button onClick={()=>rehire(c, rehireStage[c.id])} style={S.btn('#059669','#fff')}>Rehire</button>
+              <button onClick={()=>rehire(c, rehireStage[c.id])} style={S.btn(TK.positive,'#fff')}>Rehire</button>
             </div>
           </div>
         ))}
       </div>
 
-      <div style={{ fontSize:13, fontWeight:600, color:'#6D28D9', margin:'4px 0 8px' }}>Offer Approvals</div>
+      <div style={{ fontSize:13, fontWeight:600, color:TK.violetDeep, margin:'4px 0 8px' }}>Offer Approvals</div>
       <div style={{ display:'flex', gap:8, marginBottom:16 }}>
         {(['pending','done'] as const).map(t => (
           <button key={t} onClick={()=>{setTab(t);setSelected(null)}}
-            style={{ ...S.btn(tab===t?'#7C3AED':'#fff', tab===t?'#fff':'#6B7280'), border: tab===t?'none':'1px solid #DDD6FE' }}>
+            style={{ ...S.btn(tab===t?TK.violet:'#fff', tab===t?'#fff':TK.muted), border: tab===t?'none':'1px solid #DDD6FE' }}>
             {t === 'pending' ? 'Pending Approval' : 'Approved'}
           </button>
         ))}
@@ -567,7 +567,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
         {/* Request List */}
         <div>
           {fRequests.length === 0 && (
-            <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:32 }}>
+            <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:32 }}>
               {ql ? 'No matching candidate' : `No ${tab === 'pending' ? 'pending' : 'approved'} requests`}
             </div>
           )}
@@ -575,13 +575,13 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             const [bg, c] = statusColor(r.status)
             return (
               <div key={r.id} onClick={()=>setSelected(r)}
-                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?'#F3F0FF':'#fff' }}>
+                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?TK.violetTint:'#fff' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                   <div>
                     <div style={{ fontSize:14, fontWeight:600 }}>{r.candidates?.full_name}</div>
-                    <div style={{ fontSize:12, color:'#9CA3AF', marginTop:2 }}>{r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} CTC</div>
-                    <div style={{ fontSize:11, color:'#7C3AED', marginTop:2 }}>Hike: {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}</div>
-                    {r.submitted_at && <div style={{ fontSize:10, color:'#9CA3AF', marginTop:3 }}>Submitted: {new Date(r.submitted_at).toLocaleDateString('en-IN')}</div>}
+                    <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} CTC</div>
+                    <div style={{ fontSize:11, color:TK.violet, marginTop:2 }}>Hike: {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}</div>
+                    {r.submitted_at && <div style={{ fontSize:10, color:TK.faint, marginTop:3 }}>Submitted: {new Date(r.submitted_at).toLocaleDateString('en-IN')}</div>}
                   </div>
                   <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:bg, color:c, fontWeight:500 }}>{r.status.replace('_',' ')}</span>
                 </div>
@@ -596,7 +596,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             {/* Template */}
             <div style={S.card}>
               <div style={{ fontSize:13, fontWeight:500, marginBottom:10 }}>Approval Request</div>
-              <pre style={{ fontFamily:'monospace', fontSize:11, color:'#374151', background:'#F9FAFB', borderRadius:7, padding:12, overflowX:'auto', whiteSpace:'pre-wrap', border:'1px solid #EDE9FE', maxHeight:400, overflow:'auto' }}>
+              <pre style={{ fontFamily:'monospace', fontSize:11, color:TK.inkSoft, background:TK.sunken, borderRadius:7, padding:12, overflowX:'auto', whiteSpace:'pre-wrap', border:'1px solid #EDE9FE', maxHeight:400, overflow:'auto' }}>
                 {selected.template_content || 'Template not available'}
               </pre>
             </div>
@@ -613,9 +613,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                   ['Proposed DOJ', selected.proposed_doj ? new Date(selected.proposed_doj).toLocaleDateString('en-IN') : '—'],
                   ['Notice Period', `${selected.notice_period_days || '—'} days`],
                 ].map(([l,v]) => (
-                  <div key={l} style={{ background:'#F9FAFB', borderRadius:7, padding:'9px 12px', border:'1px solid #EDE9FE' }}>
-                    <div style={{ fontSize:10, color:'#9CA3AF' }}>{l}</div>
-                    <div style={{ fontSize:13, fontWeight:500, color:'#1E1B4B', marginTop:2 }}>{v}</div>
+                  <div key={l} style={{ background:TK.sunken, borderRadius:7, padding:'9px 12px', border:'1px solid #EDE9FE' }}>
+                    <div style={{ fontSize:10, color:TK.faint }}>{l}</div>
+                    <div style={{ fontSize:13, fontWeight:500, color:TK.ink, marginTop:2 }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -625,7 +625,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             {selected.hiring_manager_remark && (
               <div style={S.card}>
                 <div style={S.sec}>Hiring Manager Remark / Target</div>
-                <div style={{ fontSize:12.5, color:'#1E1B4B', whiteSpace:'pre-wrap' }}>{selected.hiring_manager_remark}</div>
+                <div style={{ fontSize:12.5, color:TK.ink, whiteSpace:'pre-wrap' }}>{selected.hiring_manager_remark}</div>
               </div>
             )}
 
@@ -634,9 +634,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               <div style={S.cardP}>
                 <div style={S.sec}>Your Decision</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
-                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?'#ECFDF5':'#F9FAFB', action==='approve'?'#059669':'#6B7280'), border:action==='approve'?'1.5px solid #059669':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Approve
+                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?TK.positiveTint:TK.sunken, action==='approve'?TK.positive:TK.muted), border:action==='approve'?'1.5px solid #059669':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Approve
                   </button>
-                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?'#FEF2F2':'#F9FAFB', action==='reject'?'#DC2626':'#6B7280'), border:action==='reject'?'1.5px solid #DC2626':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Reject
+                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?TK.criticalTint:TK.sunken, action==='reject'?TK.critical:TK.muted), border:action==='reject'?'1.5px solid #DC2626':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Reject
                   </button>
                 </div>
                 <div style={{ marginBottom:12 }}>
@@ -645,7 +645,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                     placeholder={action === 'reject' ? 'Reason clearly batao...' : 'Optional comments for HR Manager...'} />
                 </div>
                 <button onClick={processApproval} disabled={processing}
-                  style={S.btn(action==='approve'?'#059669':'#DC2626','#fff')}>
+                  style={S.btn(action==='approve'?TK.positive:TK.critical,'#fff')}>
                   {processing ? 'Processing...' : action === 'approve' ? 'Approve & Notify HR Manager' : 'Reject & Notify Recruiter'}
                 </button>
               </div>
@@ -653,13 +653,13 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
             {/* Already actioned */}
             {selected.status === 'HR_HEAD_APPROVED' && (
-              <div style={{ background:'#ECFDF5', border:'1px solid #A7F3D0', borderRadius:10, padding:14 }}>
-                <div style={{ fontSize:13, fontWeight:500, color:'#059669', marginBottom:4 }}>Approved</div>
-                {selected.hr_head_comments && <div style={{ fontSize:12, color:'#374151' }}>{selected.hr_head_comments}</div>}
-                <div style={{ fontSize:11, color:'#9CA3AF', marginTop:4 }}>
+              <div style={{ background:TK.positiveTint, border:'1px solid #A7F3D0', borderRadius:10, padding:14 }}>
+                <div style={{ fontSize:13, fontWeight:500, color:TK.positive, marginBottom:4 }}>Approved</div>
+                {selected.hr_head_comments && <div style={{ fontSize:12, color:TK.inkSoft }}>{selected.hr_head_comments}</div>}
+                <div style={{ fontSize:11, color:TK.faint, marginTop:4 }}>
                   {selected.hr_head_actioned_at ? new Date(selected.hr_head_actioned_at).toLocaleDateString('en-IN') : ''}
                 </div>
-                <div style={{ fontSize:12, color:'#059669', fontWeight:500, marginTop:8 }}>
+                <div style={{ fontSize:12, color:TK.positive, fontWeight:500, marginTop:8 }}>
                   The HR Manager has been notified — sending the offer letter is still pending
                 </div>
               </div>
@@ -821,25 +821,25 @@ ${company} — Human Resources`)
   return (
     <div style={{ maxWidth:900, margin:'0 auto', padding:16 }}>
       <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Manager — Send Offer Letters</div>
-      <div style={{ fontSize:12, color:'#9CA3AF', marginBottom:16 }}>Requests approved by the HR Head — send the offer letter</div>
+      <div style={{ fontSize:12, color:TK.faint, marginBottom:16 }}>Requests approved by the HR Head — send the offer letter</div>
       <SearchBar placeholder="Search candidate…" onApply={setSq} width={300} />
       <RecFilterBar companies={companies} departments={departments} locations={locations} positions={positionOpts} f={f} setF={setF} />
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
         <div>
           {fApproved.length === 0 && (
-            <div style={{ ...S.card, textAlign:'center' as const, color:'#9CA3AF', padding:32 }}>
+            <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:32 }}>
               {sql ? 'No matching candidate' : 'No approved requests pending'}
             </div>
           )}
           {fApproved.map(r => (
             <div key={r.id} onClick={() => prepareOffer(r)}
-              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?'#F3F0FF':'#fff' }}>
+              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?TK.violetTint:'#fff' }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}</div>
-              <div style={{ fontSize:12, color:'#9CA3AF' }}>
+              <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}
               </div>
-              <div style={{ fontSize:11, color:'#059669', marginTop:4 }}>
+              <div style={{ fontSize:11, color:TK.positive, marginTop:4 }}>
                 HR Head approved on {r.hr_head_actioned_at ? new Date(r.hr_head_actioned_at).toLocaleDateString('en-IN') : '—'}
               </div>
             </div>
@@ -848,7 +848,7 @@ ${company} — Human Resources`)
 
         {selected && (
           <div style={S.cardP}>
-            <div style={{ fontSize:13, fontWeight:500, color:'#6D28D9', marginBottom:12 }}>Send Offer Letter — {selected.candidates?.full_name}</div>
+            <div style={{ fontSize:13, fontWeight:500, color:TK.violetDeep, marginBottom:12 }}>Send Offer Letter — {selected.candidates?.full_name}</div>
             <div style={{ marginBottom:8 }}>
               <label style={S.label}>To *</label>
               <input style={S.input} value={toEmail} onChange={e=>setToEmail(e.target.value)} />
@@ -865,11 +865,11 @@ ${company} — Human Resources`)
               <label style={S.label}>Email Body</label>
               <textarea style={{ ...S.textarea, minHeight:280 }} value={body} onChange={e=>setBody(e.target.value)} />
             </div>
-            <div style={{ background:'#F3F0FF', borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:'#4C1D95' }}>
+            <div style={{ background:TK.violetTint, borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:TK.violetDeep }}>
               This emails the offer letter to the candidate via Gmail, records it, and marks the candidate <b>Offer Sent</b> in the pipeline.
             </div>
             <button onClick={sendOffer} disabled={sending}
-              style={{ ...S.btn('#7C3AED','#fff'), width:'100%', padding:11, fontSize:13 }}>
+              style={{ ...S.btn(TK.violet,'#fff'), width:'100%', padding:11, fontSize:13 }}>
               {sending ? 'Sending…' : 'Send Offer & Mark as Sent'}
             </button>
           </div>
@@ -915,16 +915,16 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
   return (
     <div style={S.card}>
       <div style={{ fontSize:13, fontWeight:500, marginBottom:12 }}>Audit Trail</div>
-      {logs.length === 0 && <div style={{ color:'#9CA3AF', fontSize:12 }}>No audit logs yet</div>}
+      {logs.length === 0 && <div style={{ color:TK.faint, fontSize:12 }}>No audit logs yet</div>}
       {logs.map((log, i) => {
         const [icon, label] = actionLabel[log.action_type] || ['', log.action_type]
         return (
           <div key={log.id} style={{ display:'flex', gap:10, paddingBottom:12, borderBottom: i<logs.length-1 ? '1px solid #F3F0FF' : 'none', marginBottom:i<logs.length-1?12:0 }}>
-            <div style={{ width:28, height:28, borderRadius:99, background:'#EDE9FE', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>{icon}</div>
+            <div style={{ width:28, height:28, borderRadius:99, background:TK.violetTint, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>{icon}</div>
             <div>
-              <div style={{ fontSize:12, fontWeight:500, color:'#1E1B4B' }}>{label}</div>
-              {log.actor_email && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:1 }}>By: {log.actor_email}</div>}
-              <div style={{ fontSize:10, color:'#9CA3AF', marginTop:1 }}>{new Date(log.created_at).toLocaleString('en-IN')}</div>
+              <div style={{ fontSize:12, fontWeight:500, color:TK.ink }}>{label}</div>
+              {log.actor_email && <div style={{ fontSize:11, color:TK.faint, marginTop:1 }}>By: {log.actor_email}</div>}
+              <div style={{ fontSize:10, color:TK.faint, marginTop:1 }}>{new Date(log.created_at).toLocaleString('en-IN')}</div>
             </div>
           </div>
         )
