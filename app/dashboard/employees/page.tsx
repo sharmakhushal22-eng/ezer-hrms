@@ -5,6 +5,14 @@ import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
+// This page keeps its own local Badge / Field / Section, so the system's
+// equivalents are aliased where the names would clash.
+import {
+  Page as UIPage, PageHeader, Button, Person, Th, Td, Tr, Empty, SkeletonRows,
+  Badge as Chip, inputStyle, tone,
+  C, F, W, S, R, E, M, numeric, eyebrow,
+  IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees,
+} from '@/lib/ui'
 
 // ─── Types ────────────────────────────────────────────────────
 interface Employee {
@@ -28,47 +36,63 @@ interface Employee {
 }
 
 // ─── Palette ──────────────────────────────────────────────────
+// Bound to the design system rather than restated. Every style helper below
+// reads from here, so the whole page follows lib/ui/tokens.ts.
 const P = {
-  navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489',
-  purpleBg:'#EEEDFE', purpleLight:'#F5F3FF',
-  border:'#E9E7F5', card:'#FFFFFF', page:'#F5F3FF',
-  text:'#1E1B4B', muted:'#6B6B7B', green:'#059669', greenBg:'#ECFDF5',
-  red:'#DC2626', redBg:'#FEF2F2', amber:'#D97706', amberBg:'#FFFBEB',
+  navy:C.ink, purple:C.violet, purpleDark:C.violetDeep,
+  purpleBg:C.violetTint, purpleLight:C.sunken,
+  border:C.line, card:C.surface, page:C.canvas,
+  text:C.ink, muted:C.muted, green:C.positive, greenBg:tone('positive').bg,
+  red:C.critical, redBg:tone('critical').bg, amber:C.warning, amberBg:tone('warning').bg,
 }
 
+/**
+ * Grade is an ordered scale — L1 is not "a different kind of thing" from M3,
+ * it is further along. The old map gave each grade an unrelated hue, which
+ * made a ranked axis look categorical. These are one violet ramp, dark at the
+ * senior end, so a column of them reads as a gradient rather than confetti.
+ */
 const GRADE_COLORS: Record<string,{bg:string;color:string}> = {
-  L2:{bg:'#EDE9FE',color:'#7C3AED'}, L1:{bg:'#DDD6FE',color:'#6D28D9'},
-  M3:{bg:'#DBEAFE',color:'#1D4ED8'}, M2:{bg:'#E0F2FE',color:'#0369A1'},
-  M1:{bg:'#CCFBF1',color:'#0D9488'}, E3:{bg:'#DCFCE7',color:'#16A34A'},
-  E2:{bg:'#ECFCCB',color:'#65A30D'}, E1:{bg:'#FEF3C7',color:'#D97706'},
-  W2:{bg:'#FEE2E2',color:'#DC2626'}, W1:{bg:'#FFE4E6',color:'#BE123C'},
+  L1:{bg:'#D7C8FA',color:'#3B1799'}, L2:{bg:'#DCCFFB',color:'#4A1FB8'},
+  M1:{bg:'#E1D6FB',color:'#5426D9'}, M2:{bg:'#E6DDFC',color:'#5F30D4'},
+  M3:{bg:'#EAE3FC',color:'#6D3BEF'},
+  E1:{bg:'#EEE8FD',color:'#7343E4'}, E2:{bg:'#F1EDFD',color:'#7B54E8'},
+  E3:{bg:'#F4F1FE',color:'#8560DF'},
+  W1:{bg:'#F0EFF5',color:'#5C5773'}, W2:{bg:'#F4F3F8',color:'#6E6A85'},
 }
+// Employment type IS categorical, so these stay distinct — but drawn from the
+// token palette so they belong to the same world as everything else.
 const TYPE_COLORS: Record<string,{bg:string;color:string}> = {
-  Employee:{bg:'#EDE9FE',color:'#7C3AED'}, Intern:{bg:'#DBEAFE',color:'#1D4ED8'},
-  NAPS:{bg:'#DCFCE7',color:'#16A34A'}, NATS:{bg:'#FEF3C7',color:'#D97706'},
-  Consultant:{bg:'#FEE2E2',color:'#DC2626'}, Contract:{bg:'#F1F5F9',color:'#374151'},
+  Employee:{bg:C.violetTint,color:C.violetDeep},
+  Intern:{bg:C.infoTint,color:C.info},
+  NAPS:{bg:C.positiveTint,color:C.positive},
+  NATS:{bg:C.warningTint,color:C.warning},
+  Consultant:{bg:C.criticalTint,color:C.critical},
+  Contract:{bg:C.sunken,color:C.muted},
 }
 const STATUS_COLORS: Record<string,{bg:string;color:string}> = {
-  Active:{bg:'#DCFCE7',color:'#16A34A'}, Resigned:{bg:'#FEE2E2',color:'#DC2626'},
-  Terminated:{bg:'#FEE2E2',color:'#991B1B'}, Absconding:{bg:'#FEF3C7',color:'#D97706'},
+  Active:{bg:C.positiveTint,color:C.positive},
+  Resigned:{bg:C.criticalTint,color:C.critical},
+  Terminated:{bg:C.criticalTint,color:'#8E1F24'},
+  Absconding:{bg:C.warningTint,color:C.warning},
 }
 
 // ─── Inline style helpers ─────────────────────────────────────
 const s = {
-  page:   { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:P.page, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' },
+  page:   { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:P.page, fontFamily:F.family, fontSize:F.body },
   topbar: { background:P.card, padding:'11px 20px', borderBottom:`1px solid ${P.border}`, display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const, position:'sticky' as const, top:0, zIndex:40 },
-  body:   { flex:1, padding:'16px 20px' },
-  card:   { background:P.card, borderRadius:'12px', border:`1px solid ${P.border}`, marginBottom:'12px' } as React.CSSProperties,
-  inp:    { padding:'8px 10px', border:`1.5px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', outline:'none', background:'#F8F7FF', color:P.text, width:'100%', boxSizing:'border-box' as const },
-  sel:    { padding:'8px 10px', border:`1.5px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', outline:'none', background:'#F8F7FF', color:P.text, cursor:'pointer', width:'100%' } as React.CSSProperties,
-  priBtn: { padding:'8px 16px', background:P.purple, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer', display:'flex' as const, alignItems:'center' as const, gap:'5px' },
-  secBtn: { padding:'8px 14px', background:P.card, color:P.text, border:`1px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
-  saveBtn:{ padding:'8px 16px', background:P.green, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer', display:'flex' as const, alignItems:'center' as const, gap:'5px' },
+  body:   { flex:1, padding:`${S.lg}px ${S.xl}px ${S.huge}px` },
+  card:   { background:P.card, borderRadius:R.lg, border:`1px solid ${P.border}`, marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
+  inp:    { ...inputStyle(), height:34, fontSize:F.small },
+  sel:    { ...inputStyle(), height:34, fontSize:F.small, cursor:'pointer' } as React.CSSProperties,
+  priBtn: { padding:'0 14px', height:34, background:`linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color:'#fff', border:`1px solid ${C.violetDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.violet, fontFamily:'inherit' },
+  secBtn: { padding:'0 13px', height:34, background:P.card, color:P.text, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.flat, fontFamily:'inherit' },
+  saveBtn:{ padding:'0 14px', height:34, background:C.positive, color:'#fff', border:'none', borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, fontFamily:'inherit' },
 }
 
 const initials = (n: string) => n?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || 'NA'
 const fmt = (v: any) => !v || v === '' ? '—' : String(v)
-const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) }
+const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,' ') }
 
 // ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
 const EMP_TYPES = ['Employee', 'Intern', 'NAPS', 'NATS', 'Consultant', 'Contract']
@@ -94,10 +118,10 @@ const EXPORT_EMP_COLS = [
 ]
 const EXPORT_NAME_COLS = ['company_name','company_code','department_name','location_name','location_city']
 const mc = {
-  inp:   { width:'100%', padding:'8px 10px', background:'#F8FAFC', border:'1px solid #CBD5E1', borderRadius:'7px', fontSize:'13px', color:'#0F172A', outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  lbl:   { fontSize:'10px', fontWeight:600 as const, color:'#64748B', textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:'3px' },
-  pri:   { padding:'9px 16px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:'8px', fontSize:'13px', fontWeight:600 as const, cursor:'pointer', fontFamily:'inherit' },
-  out:   { padding:'9px 14px', background:'#fff', color:'#475569', border:'1px solid #CBD5E1', borderRadius:'8px', fontSize:'13px', cursor:'pointer', fontFamily:'inherit' },
+  inp:   { ...inputStyle() },
+  lbl:   { ...eyebrow, display:'block', marginBottom:4 } as React.CSSProperties,
+  pri:   { padding:'0 16px', height:36, background:`linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color:'#fff', border:`1px solid ${C.violetDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', fontFamily:'inherit', boxShadow:E.violet },
+  out:   { padding:'0 14px', height:36, background:C.surface, color:C.ink, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', fontFamily:'inherit' },
 }
 
 // Next type-wise code from existing employees (no migration dependency, atomic-ish).
@@ -729,38 +753,69 @@ export default function EmployeeMaster() {
   return (
     <div style={s.page}>
 
-      {/* Topbar */}
-      <div style={s.topbar}>
-        <div style={{ fontSize:'12px', color:P.muted }}>
-          <span style={{ color:P.purple, fontWeight:500 }}>Employee Master</span>
-          <span style={{ marginLeft:'8px', padding:'2px 8px', background:P.purpleBg, color:P.purple, borderRadius:'10px', fontSize:'11px' }}>
-            {stats.total} Total
-          </span>
-        </div>
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button style={{ ...s.secBtn, opacity: exporting ? 0.6 : 1 }} disabled={exporting} onClick={exportExcel}>📥 {exporting ? 'Exporting…' : 'Export Excel'}</button>
-          <button style={s.secBtn} onClick={() => setShowBulk(true)}>⬆ Bulk Upload</button>
-          <button style={s.priBtn} onClick={() => setShowAdd(true)}><span>+</span> Add Employee</button>
-        </div>
-      </div>
-
       <div style={s.body}>
+        <PageHeader
+          title="Employee Master"
+          context={loading
+            ? 'Loading…'
+            : `${stats.total.toLocaleString('en-IN')} on record · ${stats.active.toLocaleString('en-IN')} active · showing ${employees.length.toLocaleString('en-IN')}`}
+          actions={<>
+            <Button icon={<IconDownload size={15} />} disabled={exporting} onClick={exportExcel}>
+              {exporting ? 'Exporting…' : 'Export Excel'}
+            </Button>
+            <Button icon={<IconUpload size={15} />} onClick={() => setShowBulk(true)}>Bulk Upload</Button>
+            <Button variant="primary" icon={<IconPlus size={15} />} onClick={() => setShowAdd(true)}>Add Employee</Button>
+          </>}
+        />
 
-        {/* Stat Cards */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(8,1fr)', gap:'8px', marginBottom:'14px' }}>
-          <StatCard label="Total"      value={loading?'—':stats.total}      color={P.navy}    active={!filterStatus&&!filterType} onClick={()=>{setFType('');setFStatus('')}} />
-          <StatCard label="Active"     value={loading?'—':stats.active}     color={P.green}   active={filterStatus==='Active'&&!filterType}   onClick={()=>{setFType('');setFStatus('Active')}} />
-          <StatCard label="Resigned"   value={loading?'—':stats.resigned}   color={P.red}     active={filterStatus==='Resigned'&&!filterType}  onClick={()=>{setFType('');setFStatus('Resigned')}} />
-          <StatCard label="Employee"   value={loading?'—':stats.employee}   color={P.purple}  active={filterType==='Employee'}   onClick={()=>setFType('Employee')} />
-          <StatCard label="Intern"     value={loading?'—':stats.intern}     color='#1D4ED8'   active={filterType==='Intern'}     onClick={()=>setFType('Intern')} />
-          <StatCard label="NAPS"       value={loading?'—':stats.naps}       color='#0D9488'   active={filterType==='NAPS'}       onClick={()=>setFType('NAPS')} />
-          <StatCard label="Consultant" value={loading?'—':stats.consultant} color={P.amber}   active={filterType==='Consultant'} onClick={()=>setFType('Consultant')} />
-          <StatCard label="Contract"   value={loading?'—':stats.contract}   color='#374151'   active={filterType==='Contract'}   onClick={()=>setFType('Contract')} />
+        {/* These were eight equal stat cards. They are not statistics — they
+            are filters, and exactly one is active at a time. A segmented bar
+            says that; eight identical cards did not. */}
+        <div className="ez-scroll" style={{
+          display:'flex', gap:6, marginBottom:S.lg, overflowX:'auto', paddingBottom:2,
+        }}>
+          {[
+            { label:'Total',      n:stats.total,      on:!filterStatus && !filterType,               go:()=>{setFType('');setFStatus('')} },
+            { label:'Active',     n:stats.active,     on:filterStatus==='Active' && !filterType,     go:()=>{setFType('');setFStatus('Active')} },
+            { label:'Resigned',   n:stats.resigned,   on:filterStatus==='Resigned' && !filterType,   go:()=>{setFType('');setFStatus('Resigned')} },
+            { label:'Employee',   n:stats.employee,   on:filterType==='Employee',   go:()=>setFType('Employee') },
+            { label:'Intern',     n:stats.intern,     on:filterType==='Intern',     go:()=>setFType('Intern') },
+            { label:'NAPS',       n:stats.naps,       on:filterType==='NAPS',       go:()=>setFType('NAPS') },
+            { label:'Consultant', n:stats.consultant, on:filterType==='Consultant', go:()=>setFType('Consultant') },
+            { label:'Contract',   n:stats.contract,   on:filterType==='Contract',   go:()=>setFType('Contract') },
+          ].map(f => (
+            <button key={f.label} onClick={f.go} className="ez-press" style={{
+              display:'inline-flex', alignItems:'center', gap:7, flexShrink:0,
+              height:34, padding:'0 13px', borderRadius:R.pill, cursor:'pointer',
+              fontFamily:'inherit', fontSize:F.small, fontWeight:f.on ? W.semi : W.medium,
+              background: f.on ? C.violet : C.surface,
+              color: f.on ? '#fff' : C.muted,
+              border:`1px solid ${f.on ? C.violetDeep : C.line}`,
+              boxShadow: f.on ? E.violet : E.flat,
+            }}>
+              {f.label}
+              <span style={{
+                fontSize:F.micro, fontWeight:W.bold, padding:'1px 6px', borderRadius:R.pill,
+                background: f.on ? 'rgba(255,255,255,.22)' : C.sunken,
+                color: f.on ? '#fff' : C.faint, ...numeric,
+              }}>{loading ? '—' : f.n}</span>
+            </button>
+          ))}
         </div>
 
         {/* Filters — sticky so they stay visible while the list scrolls */}
-        <div style={{ ...s.card, display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', padding:'12px 16px', position:'sticky', top:'58px', zIndex:30, boxShadow:'0 2px 8px rgba(124,58,237,0.06)' }}>
-          <input style={{ ...s.inp, flex:1, minWidth:'200px', width:'auto' }} placeholder="🔍  Name, Code, Designation, Mobile…" value={search} onChange={e=>setSearch(e.target.value)} />
+        {/* Sticky to the top of the viewport now — the old offset was clearing
+            a topbar that the page header replaced. */}
+        <div style={{ ...s.card, display:'flex', gap:S.sm, alignItems:'center', flexWrap:'wrap',
+                      padding:`${S.md}px ${S.lg}px`, position:'sticky', top:0, zIndex:30,
+                      boxShadow:E.raised }}>
+          <div style={{ position:'relative', flex:1, minWidth:220 }}>
+            <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:C.faint, display:'flex', pointerEvents:'none' }}>
+              <IconSearch size={14} />
+            </span>
+            <input style={{ ...s.inp, paddingLeft:30 }} placeholder="Name, code, designation, mobile…"
+                   value={search} onChange={e=>setSearch(e.target.value)} />
+          </div>
           <select style={{ ...s.sel, width:'auto', minWidth:'140px' }} value={filterCompany} onChange={e=>{setFCo(e.target.value);setFLoc('');setFDept('')}}>
             <option value="">All Companies</option>
             {companies.map(c=><option key={c.id} value={c.id}>{c.company_code} — {c.company_name}</option>)}
@@ -785,66 +840,109 @@ export default function EmployeeMaster() {
             <option value="">All Grades</option>
             {['L1','L2','M1','M2','M3','E1','E2','E3','W1','W2'].map(g=><option key={g}>{g}</option>)}
           </select>
-          <button style={s.secBtn} onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus('Active'); setFGrade('') }}>✕ Clear</button>
+          <button style={s.secBtn} onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus('Active'); setFGrade('') }}>
+            <IconClose size={13} /> Clear
+          </button>
         </div>
 
-        {/* Error */}
-        {error && <div style={{ background:P.redBg, border:`1px solid #FCA5A5`, borderRadius:'8px', padding:'10px 14px', color:P.red, fontSize:'12px', marginBottom:'12px' }}>⚠ {error}</div>}
+        {error && (
+          <div style={{
+            background:tone('critical').bg, border:`1px solid ${tone('critical').edge}`,
+            borderRadius:R.md, padding:`${S.md}px ${S.lg}px`, color:C.inkSoft,
+            fontSize:F.small, marginBottom:S.md,
+          }}>
+            <strong style={{ color:C.critical }}>Could not load employees. </strong>{error}
+          </div>
+        )}
 
         {/* Table */}
         <div style={s.card}>
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+          <div className="ez-scroll" style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:F.small }}>
               <thead>
-                <tr style={{ borderBottom:`1.5px solid ${P.border}`, background:P.purpleLight }}>
-                  {['Emp Code','Name & Designation','Type','Location','Grade','Status','DOJ','Mobile','Actions'].map(h=>(
-                    <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:600, color:P.purpleDark, fontSize:'11px', letterSpacing:'.3px', whiteSpace:'nowrap' }}>{h}</th>
-                  ))}
+                <tr>
+                  {/* Widths are sized for the app's 130% auto-zoom, which is
+                      what the layout actually gets — at that zoom the content
+                      column is ~900px, not the ~1200 the viewport suggests. */}
+                  <Th width={78}>Emp Code</Th>
+                  <Th>Employee</Th>
+                  <Th width={70}>Type</Th>
+                  <Th width={108}>Location</Th>
+                  <Th width={50}>Grade</Th>
+                  <Th width={74}>Status</Th>
+                  <Th width={68}>Joined</Th>
+                  <Th width={84}>Mobile</Th>
+                  {/* Pinned. Nine columns at the app's 130% zoom will not fit
+                      a laptop, so the table scrolls — but the one action on a
+                      row must not be the thing that scrolls out of reach. */}
+                  <Th width={54} align="right" style={{
+                    position:'sticky', right:0, zIndex:2, background:C.sunken,
+                    boxShadow:`inset 1px 0 0 ${C.line}`,
+                  }} />
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={9} style={{ padding:'32px', textAlign:'center', color:P.muted }}>Loading employees…</td></tr>
+                  <tr><td colSpan={9} style={{ padding:0 }}><SkeletonRows rows={8} /></td></tr>
                 )}
                 {!loading && employees.length === 0 && (
-                  <tr><td colSpan={9} style={{ padding:'32px', textAlign:'center', color:P.muted }}>No employees found</td></tr>
+                  <tr><td colSpan={9}>
+                    <Empty
+                      icon={<IconEmployees size={20} />}
+                      title="No employees match these filters"
+                      hint="Try clearing the search or widening the company, location and status filters."
+                      action={<Button size="sm" onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus(''); setFGrade('') }}>Clear all filters</Button>}
+                    />
+                  </td></tr>
                 )}
                 {employees.map(emp => {
-                  const gc = GRADE_COLORS[emp.grade] || {bg:'#F1F5F9',color:'#374151'}
-                  const sc = STATUS_COLORS[emp.employment_status] || {bg:'#F1F5F9',color:'#374151'}
+                  const gc = GRADE_COLORS[emp.grade] || { bg:C.sunken, color:C.muted }
+                  const sc = STATUS_COLORS[emp.employment_status] || { bg:C.sunken, color:C.muted }
                   return (
-                    <tr key={emp.id} onClick={()=>openProfile(emp)} style={{ borderBottom:`1px solid ${P.border}`, cursor:'pointer', transition:'background .1s' }}
-                      onMouseEnter={e=>(e.currentTarget.style.background='#FAFAFE')}
-                      onMouseLeave={e=>(e.currentTarget.style.background='')}>
-                      <td style={{ padding:'10px 12px', fontWeight:600, color:P.purple, fontFamily:'monospace', fontSize:'11px' }}>{emp.emp_code}</td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <div style={{ fontWeight:500, color:P.text }}>{emp.full_name}</div>
-                        <div style={{ fontSize:'10px', color:P.muted, marginTop:'2px' }}>{emp.designation || '—'}</div>
-                      </td>
-                      <td style={{ padding:'10px 12px' }}><Badge val={emp.employment_type} map={TYPE_COLORS} /></td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <div style={{ fontSize:'12px', color:P.text }}>{(emp as any).locations?.location_name || '—'}</div>
-                        <div style={{ fontSize:'10px', color:P.muted }}>{(emp as any).companies?.company_code || '—'}</div>
-                      </td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'11px', fontWeight:500, ...gc }}>{emp.grade || '—'}</span>
-                      </td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...sc }}>{emp.employment_status}</span>
-                        {emp.employment_status==='Resigned'&&emp.last_working_date&&(
-                          <div style={{ fontSize:'9px', color:P.red, marginTop:'2px' }}>LWD: {fmtDate(emp.last_working_date)}</div>
+                    <Tr key={emp.id} onClick={()=>openProfile(emp)}>
+                      <Td mono strong style={{ color:C.violetDeep, fontSize:F.tiny, letterSpacing:'.02em' }}>
+                        {emp.emp_code}
+                      </Td>
+                      <Td>
+                        {/* Avatar + name + designation. The face makes a long
+                            list scannable in a way a column of text does not. */}
+                        <Person name={emp.full_name} meta={emp.designation || '—'} />
+                      </Td>
+                      <Td><Badge val={emp.employment_type} map={TYPE_COLORS} /></Td>
+                      <Td style={{ maxWidth:108 }}>
+                        <div title={(emp as any).locations?.location_name || ''} style={{
+                          color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+                        }}>{(emp as any).locations?.location_name || '—'}</div>
+                        <div style={{ fontSize:F.micro, color:C.faint }}>{(emp as any).companies?.company_code || '—'}</div>
+                      </Td>
+                      <Td>
+                        <span style={{
+                          padding:'2px 9px', borderRadius:R.pill, fontSize:F.tiny,
+                          fontWeight:W.semi, whiteSpace:'nowrap', ...gc,
+                        }}>{emp.grade || '—'}</span>
+                      </Td>
+                      <Td>
+                        <span style={{
+                          padding:'2px 9px', borderRadius:R.pill, fontSize:F.tiny,
+                          fontWeight:W.semi, whiteSpace:'nowrap', ...sc,
+                        }}>{emp.employment_status}</span>
+                        {emp.employment_status==='Resigned' && emp.last_working_date && (
+                          <div style={{ fontSize:F.micro, color:C.critical, marginTop:3, ...numeric }}>
+                            LWD {fmtDate(emp.last_working_date)}
+                          </div>
                         )}
-                      </td>
-                      <td style={{ padding:'10px 12px', fontSize:'11px', color:P.muted }}>{fmtDate(emp.company_doj)}</td>
-                      <td style={{ padding:'10px 12px', fontSize:'11px', color:P.text }}>{emp.mobile||'—'}</td>
-                      {/* View + Edit — both wired */}
-                      <td style={{ padding:'10px 12px' }} onClick={e=>e.stopPropagation()}>
-                        <div style={{ display:'flex', gap:'4px' }}>
-                          <button onClick={()=>openProfile(emp)} style={{ padding:'4px 10px', background:P.purpleBg, border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'10px', color:P.purple, fontWeight:500 }}>View</button>
-                          <button onClick={()=>openEdit(emp)} style={{ padding:'4px 10px', background:'#F0FDF4', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'10px', color:P.green, fontWeight:500 }}>Edit</button>
-                        </div>
-                      </td>
-                    </tr>
+                      </Td>
+                      <Td mono style={{ color:C.muted, fontSize:F.tiny, whiteSpace:'nowrap' }}>{fmtDate(emp.company_doj)}</Td>
+                      <Td mono style={{ fontSize:F.tiny, whiteSpace:'nowrap' }}>{emp.mobile||'—'}</Td>
+                      <Td align="right" style={{
+                        whiteSpace:'nowrap', position:'sticky', right:0,
+                        background:C.surface, boxShadow:`inset 1px 0 0 ${C.line}`,
+                      }}>
+                        <span onClick={e=>e.stopPropagation()}>
+                          <Button size="sm" onClick={()=>openEdit(emp)}>Edit</Button>
+                        </span>
+                      </Td>
+                    </Tr>
                   )
                 })}
               </tbody>

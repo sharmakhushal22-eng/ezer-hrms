@@ -415,14 +415,16 @@ export function TableWrap({ children, style }: { children: React.ReactNode; styl
   );
 }
 
-export function Th({ children, align = 'left', width }: {
-  children?: React.ReactNode; align?: 'left' | 'right' | 'center'; width?: number | string;
+export function Th({ children, align = 'left', width, style }: {
+  children?: React.ReactNode; align?: 'left' | 'right' | 'center';
+  width?: number | string; style?: React.CSSProperties;
 }) {
   return (
     <th style={{
-      ...eyebrow, textAlign: align, padding: '11px 14px', width,
+      ...eyebrow, textAlign: align, padding: '11px 12px', width,
       borderBottom: `1px solid ${C.line}`, background: C.sunken,
       position: 'sticky', top: 0, zIndex: 1, whiteSpace: 'nowrap',
+      ...style,
     }}>{children}</th>
   );
 }
@@ -433,7 +435,7 @@ export function Td({ children, align = 'left', mono, strong, style }: {
 }) {
   return (
     <td style={{
-      padding: '11px 14px', textAlign: align,
+      padding: '11px 12px', textAlign: align,
       borderBottom: `1px solid ${C.line}`,
       color: strong ? C.ink : C.inkSoft,
       fontWeight: strong ? W.semi : W.regular,
