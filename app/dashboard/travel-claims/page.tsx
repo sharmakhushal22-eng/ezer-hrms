@@ -15,13 +15,15 @@
 // inbox by, so a person only ever sees claims genuinely routed to them.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { authToken } from '@/lib/rms-client'
 import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
 
 // These endpoints require a signed-in dashboard session (lib/api-auth.ts).
 // Mirrors the helper added to the recruitment page in 5220d59.
 async function authHeaders(): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession()
-  const t = data?.session?.access_token
+  // Prefers the ESS session, falling back to the legacy Supabase one. Dashboard users
+  // arrive through /ess-login now, so sending only the Supabase token would 401 them.
+  const t = await authToken()
   return t ? { Authorization: `Bearer ${t}` } : {}
 }
 

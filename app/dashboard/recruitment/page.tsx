@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { authToken } from '@/lib/rms-client'
 import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
@@ -564,9 +565,10 @@ function MasterSelect({ options, value, onChange, placeholder, style, useCode }:
 
 // The recruitment upload/share routes run on the service-role key, so they check for a
 // dashboard session of their own. The browser already holds one — this hands it over.
-async function authHeaders(supabase:any): Promise<Record<string,string>> {
-  const { data } = await supabase.auth.getSession()
-  const t = data?.session?.access_token
+async function authHeaders(_supabase?:any): Promise<Record<string,string>> {
+  // Prefers the ESS session, falling back to the legacy Supabase one. Dashboard users
+  // arrive through /ess-login now, so sending only the Supabase token would 401 them.
+  const t = await authToken()
   return t ? { Authorization: `Bearer ${t}` } : {}
 }
 

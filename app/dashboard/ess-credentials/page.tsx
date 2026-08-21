@@ -4,6 +4,7 @@
 // Generates accounts, previews the list, and exports an Excel to distribute.
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { accountSource } from '@/lib/supabase-ess'
 import * as XLSX from 'xlsx'
 
 const C = {
@@ -44,7 +45,12 @@ export default function EssCredentialsPage() {
       const { data: emps } = await supabase.from('employees').select('id').eq('company_id', companyId).eq('employment_status', 'Active').neq('is_test', true)
       const ids = (emps || []).map((e: any) => e.id)
       let withPw = 0
-      if (ids.length) { const { count } = await supabase.from('ess_accounts').select('id', { count: 'exact', head: true }).in('employee_id', ids).not('password_hash', 'is', null); withPw = count || 0 }
+      if (ids.length) { const src = await accountSource()
+        // The view exposes has_password instead of the hash itself, so the filter
+        // differs depending on which one this deployment is reading.
+        const q = supabase.from(src).select('id', { count: 'exact', head: true }).in('employee_id', ids)
+        const { count } = src === 'ess_accounts_safe' ? await q.eq('has_password', true) : await q.not('password_hash', 'is', null)
+        withPw = count || 0 }
       setCounts({ total: total || 0, withPw })
     })()
   }, [companyId, summary])

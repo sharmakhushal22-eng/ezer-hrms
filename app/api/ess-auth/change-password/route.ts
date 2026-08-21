@@ -3,6 +3,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { resolveEmployee, hashPassword, verifyPassword } from '@/lib/ess-auth'
+import { issueEssToken } from '@/lib/ess-session'
 
 export const runtime = 'nodejs'
 
@@ -35,5 +36,8 @@ export async function POST(req: NextRequest) {
     .update({ password_hash: hash, password_salt: salt, must_change_password: false }).eq('id', account.id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ ok: true, employee_id: employee.id, name: employee.full_name })
+  // They proved the old password and set a new one, so this is the moment a session is
+  // earned — login deliberately withholds it while must_change_password stands.
+  const token = issueEssToken(employee.id)
+  return NextResponse.json({ ok: true, employee_id: employee.id, name: employee.full_name, token, session_available: !!token })
 }
