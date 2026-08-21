@@ -3,6 +3,12 @@
 // The sidebar/chrome is provided by app/dashboard/layout.tsx; this renders content only.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import {
+  Page, PageHeader, Card, Section, Stat, StatRow, Button, Badge, Input, Empty,
+  Person, TableWrap, Th, Td, Tr, Skeleton, Notice,
+  C, F, W, S, R, E, M, numeric, eyebrow, tone,
+  IconEmployees, IconCheck, IconRecruitment, IconOnboarding, IconClock, IconSearch,
+} from '@/lib/ui'
 
 // Small muted captions read as labels, so the first real word is capitalised:
 //   "3 companies" → "3 Companies"      "3yr anniversary" → "3yr Anniversary"
@@ -17,11 +23,14 @@ const capFirst = (s: any) => {
 }
 
 const RECRUIT_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted','Offer Sent','Joined','Rejected']
+// A funnel reads left to right as "further along". Colour follows that: violet
+// through the middle stages, green once the outcome is good, red when it is not.
+// The old set gave every stage its own unrelated hue, which encoded nothing.
 const STAGE_COLOR: Record<string,string> = {
-  'Applied':'#7C3AED','AI Screened':'#6D28D9','Telephonic':'#D97706','L1':'#DB2777',
-  'L2':'#059669','Optional Round':'#4F46E5','Shortlisted':'#16A34A','Offer Sent':'#0891B2','Joined':'#15803D','Rejected':'#DC2626',
+  'Applied':'#B39BF5','AI Screened':'#9B7BF0','Telephonic':'#8A66EC','L1':'#7B54E8',
+  'L2':'#6D3BEF','Optional Round':'#5F30D4','Shortlisted':'#0B7A5B','Offer Sent':'#0B7A5B',
+  'Joined':'#0B7A5B','Rejected':'#C42B32',
 }
-const PALETTE = ['#7C3AED','#3B82F6','#16A34A','#F97316','#EF4444','#0891B2','#D946EF','#65A30D']
 
 const fmtMoney = (n: number) => '₹' + (n >= 10000000 ? (n/10000000).toFixed(1)+'Cr' : n >= 100000 ? (n/100000).toFixed(1)+'L' : n.toLocaleString('en-IN'))
 const monthLabel = new Date().toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })
@@ -43,8 +52,31 @@ function daysUntilAnnual(iso?: string | null): number | null {
   return Math.round((next.getTime() - now.getTime())/86400000)
 }
 
-const card: React.CSSProperties = { background:'#fff', borderRadius:10, padding:'12px 14px', border:'1px solid #E2E8F0' }
-const cardTitle: React.CSSProperties = { fontSize:12, fontWeight:600, color:'#374151', marginBottom:10, display:'flex', justifyContent:'space-between', alignItems:'center' }
+/**
+ * A labelled horizontal bar. Used for headcount by location and by company,
+ * where the only quantity that matters is the length of the bar relative to the
+ * longest one — so every bar is the same violet. Colouring them differently
+ * would imply the categories mean something they do not.
+ */
+function BarRow({ label, count, max, colour = C.violet }: {
+  label: string; count: number; max: number; colour?: string
+}) {
+  return (
+    <div style={{ display:'flex', alignItems:'center', gap:S.sm, marginBottom:7 }}>
+      <div title={label} style={{
+        width:126, fontSize:F.tiny, color:C.muted, textAlign:'right', flexShrink:0,
+        whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
+      }}>{label}</div>
+      <div style={{ flex:1, height:7, background:C.sunken, borderRadius:R.pill, overflow:'hidden' }}>
+        <div style={{
+          height:'100%', width:`${Math.max((count/max)*100, 2)}%`, background:colour,
+          borderRadius:R.pill, transition:`width ${M.ease}`,
+        }} />
+      </div>
+      <div style={{ width:32, fontSize:F.tiny, color:C.ink, fontWeight:W.semi, ...numeric }}>{count}</div>
+    </div>
+  )
+}
 
 export default function Dashboard() {
   const [loading, setLoading] = useState(true)
@@ -182,14 +214,30 @@ export default function Dashboard() {
     setWished(p => [...p, c.id])
   }
 
-  if (loading || !d) return <div style={{ padding:40, textAlign:'center', color:'#7C3AED', fontFamily:'"DM Sans",sans-serif' }}>Loading dashboard…</div>
+  // A skeleton shaped like the page it replaces, so the layout does not jump
+  // when the data lands.
+  if (loading || !d) return (
+    <Page>
+      <PageHeader title="HR Dashboard" context={monthLabel} />
+      <StatRow>{Array.from({length:5}).map((_,i)=>(
+        <Card key={i} pad={S.md} elevation="flat">
+          <Skeleton w={72} h={9} /><div style={{height:10}}/><Skeleton w={54} h={26} />
+        </Card>))}</StatRow>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:S.md }}>
+        <Card><Skeleton w={140} h={12}/><div style={{height:14}}/>
+          {Array.from({length:5}).map((_,i)=><div key={i} style={{marginBottom:9}}><Skeleton h={8}/></div>)}</Card>
+        <Card><Skeleton w={140} h={12}/><div style={{height:14}}/>
+          {Array.from({length:5}).map((_,i)=><div key={i} style={{marginBottom:9}}><Skeleton h={8}/></div>)}</Card>
+      </div>
+    </Page>
+  )
 
   const stats = [
-    { key:'total', label:'Total Employees', value: d.total.toLocaleString('en-IN'), sub:`${d.companyRows.length} companies`, color:'#7C3AED' },
-    { key:'active', label:'Active', value: d.active.toLocaleString('en-IN'), sub: d.total ? `${Math.round(d.active/d.total*100)}% active` : '—', color:'#16A34A' },
-    { key:'open', label:'Open Positions', value: d.openPositions, sub:'approved MRFs', color:'#3B82F6' },
-    { key:'pipeline', label:'In Pipeline', value: d.inPipeline, sub:'active candidates', color:'#F97316' },
-    { key:'joining', label:'Joining Soon', value: d.joiningSoon, sub:'in onboarding', color:'#0891B2' },
+    { key:'total',    label:'Total Employees', value: d.total.toLocaleString('en-IN'), sub:`${d.companyRows.length} companies`,  t:'violet'   as const, icon:<IconEmployees size={16}/> },
+    { key:'active',   label:'Active',          value: d.active.toLocaleString('en-IN'), sub: d.total ? `${Math.round(d.active/d.total*100)}% active` : '—', t:'positive' as const, icon:<IconCheck size={16}/> },
+    { key:'open',     label:'Open Positions',  value: d.openPositions, sub:'approved MRFs',      t:'info'    as const, icon:<IconRecruitment size={16}/> },
+    { key:'pipeline', label:'In Pipeline',     value: d.inPipeline,    sub:'active candidates',  t:'warning' as const, icon:<IconClock size={16}/> },
+    { key:'joining',  label:'Joining Soon',    value: d.joiningSoon,   sub:'in onboarding',      t:'violet'  as const, icon:<IconOnboarding size={16}/> },
   ]
   const DRILL_TITLES: Record<string,string> = { total:'All Employees', active:'Active Employees', open:'Open Positions', pipeline:'Candidates in Pipeline', joining:'Candidates in Onboarding' }
   // A drill-down that declares columns renders as a proper headed table; the rest keep
@@ -213,173 +261,208 @@ export default function Dashboard() {
   const maxStage = d.pipeline.reduce((m: number, p: any) => Math.max(m, p.count), 0) || 1
 
   return (
-    <div style={{ background:'#F0F4F8', minHeight:'100vh', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:13, color:'#0F172A' }}>
-      {/* Header */}
-      <div style={{ background:'#fff', padding:'10px 16px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid #E2E8F0' }}>
-        <div style={{ fontSize:14, fontWeight:600 }}>HR Dashboard</div>
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-          <div style={{ fontSize:11, color:'#64748B', background:'#F1F5F9', padding:'4px 10px', borderRadius:6 }}>{monthLabel}</div>
-          <button onClick={load} style={{ fontSize:11, color:'#6D28D9', background:'#EDE9FE', border:'none', padding:'5px 12px', borderRadius:6, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>↻ Refresh</button>
-        </div>
-      </div>
+    <Page>
+      <PageHeader
+        title="HR Dashboard"
+        context={<>{monthLabel} · {d.total.toLocaleString('en-IN')} employees across {d.companyRows.length} companies</>}
+        actions={<Button onClick={load} icon={<IconClock size={15} />}>Refresh</Button>}
+      />
 
-      <div style={{ padding:14 }}>
-        {/* Stats — click a card to drill down */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(172px,1fr))', gap:8, marginBottom: sel ? 8 : 12 }}>
-          {stats.map((st) => {
-            const isSel = sel === st.key
-            return (
-              <div key={st.key} onClick={() => { setSel(isSel ? null : st.key); setDrillQ('') }} title="Click to view details"
-                style={{ ...card, borderTop:`3px solid ${st.color}`, cursor:'pointer', transition:'box-shadow .15s, transform .1s',
-                  boxShadow: isSel ? `0 0 0 2px ${st.color}` : 'none',
-                  background: isSel ? '#FAFAFF' : '#fff', position:'relative' }}>
-                <div style={{ fontSize:11.5, color:'#94A3B8', marginBottom:4, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                  <span>{st.label}</span>
-                  <span style={{ fontSize:12, color: isSel ? st.color : '#CBD5E1' }}>{isSel ? '▲' : '▾'}</span>
-                </div>
-                <div style={{ fontSize:23, fontWeight:700, color:'#0F172A', marginBottom:3 }}>{st.value}</div>
-                <div style={{ fontSize:12.5, color:'#64748B', fontWeight:700 }}>{capFirst(st.sub)}</div>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Drill-down detail panel */}
-        {sel && (
-          <div style={{ ...card, marginBottom:12, padding:0, overflow:'hidden' }}>
-            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8, padding:'10px 14px', borderBottom:'1px solid #F1F5F9', flexWrap:'wrap' }}>
-              <div style={{ fontSize:13, fontWeight:600, color:'#0F172A' }}>
-                {DRILL_TITLES[sel]} <span style={{ fontSize:11, fontWeight:500, color:'#94A3B8' }}>· {filteredRows.length}{drillQ?` of ${selRows.length}`:''}</span>
-              </div>
-              <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                <input value={drillQ} onChange={e => setDrillQ(e.target.value)} placeholder="Search…"
-                  style={{ fontSize:12, padding:'5px 10px', border:'1px solid #E2E8F0', borderRadius:6, outline:'none', fontFamily:'inherit', width:160 }} />
-              </div>
+      {/* Each tile is a filter. Clicking one opens the matching list below, so
+          the summary and the detail are the same control rather than two. */}
+      <StatRow>
+        {stats.map(st => {
+          const on = sel === st.key
+          return (
+            <div key={st.key} onClick={() => { setSel(on ? null : st.key); setDrillQ('') }}
+              className="ez-lift" title="Show these records"
+              style={{
+                cursor:'pointer', borderRadius:R.lg, minWidth:0,
+                outline: on ? `2px solid ${C.violet}` : '2px solid transparent',
+                outlineOffset: 1, transition:`outline-color ${M.quick}`,
+              }}>
+              <Stat label={st.label} value={st.value} sub={capFirst(st.sub)} t={st.t} icon={st.icon} />
             </div>
-            {cols && filteredRows.length > 0 && (
-              <div style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 14px', background:'#F8FAFC', borderBottom:'1px solid #E2E8F0' }}>
-                <div style={{ width:22, flexShrink:0 }} />
-                {cols.map(c => (
-                  <div key={c.key} style={{ flex:c.flex, minWidth:0, fontSize:10, fontWeight:700, color:'#64748B', textTransform:'uppercase', letterSpacing:'.04em' }}>{c.label}</div>
-                ))}
+          )
+        })}
+      </StatRow>
+
+      {sel && (
+        <Card pad={0} className="ez-rise" style={{ marginBottom:S.xl, overflow:'hidden' }}>
+          <div style={{
+            display:'flex', alignItems:'center', justifyContent:'space-between',
+            gap:S.md, padding:`${S.md}px ${S.lg}px`, borderBottom:`1px solid ${C.line}`, flexWrap:'wrap',
+          }}>
+            <div style={{ fontSize:F.lead, fontWeight:W.semi, color:C.ink }}>
+              {DRILL_TITLES[sel]}
+              <span style={{ marginLeft:8, fontSize:F.small, fontWeight:W.regular, color:C.muted, ...numeric }}>
+                {filteredRows.length}{drillQ ? ` of ${selRows.length}` : ''}
+              </span>
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:S.sm }}>
+              <div style={{ position:'relative' }}>
+                <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:C.faint, display:'flex' }}>
+                  <IconSearch size={14} />
+                </span>
+                <Input value={drillQ} onChange={e => setDrillQ(e.target.value)} placeholder="Search…"
+                  style={{ width:190, paddingLeft:29 }} />
               </div>
-            )}
-            <div style={{ maxHeight:340, overflowY:'auto' }}>
-              {filteredRows.length === 0 && <div style={{ fontSize:12, color:'#94A3B8', padding:'18px 14px', textAlign:'center' }}>No records.</div>}
-              {cols
-                ? filteredRows.map((r: any, i: number) => (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', borderBottom: i < filteredRows.length-1 ? '1px solid #F8FAFC' : 'none' }}>
-                      <div style={{ width:22, fontSize:10, color:'#CBD5E1', flexShrink:0, textAlign:'right' }}>{i+1}</div>
-                      {cols.map(c => (
-                        <div key={c.key} style={{ flex:c.flex, minWidth:0 }}>
-                          {c.pill
-                            ? <span style={{ fontSize:10.5, fontWeight:600, color: r.tone || '#64748B', background:`${(r.tone||'#64748B')}14`, padding:'3px 9px', borderRadius:99, whiteSpace:'nowrap' }}>{r[c.key]}</span>
-                            : <div style={{ fontSize:12.5, fontWeight: c.key==='name' ? 500 : 400, color: c.key==='name' ? '#0F172A' : '#475569', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r[c.key]}</div>}
-                        </div>
-                      ))}
-                    </div>
-                  ))
-                : filteredRows.map((r: any, i: number) => (
-                    <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', borderBottom: i < filteredRows.length-1 ? '1px solid #F8FAFC' : 'none' }}>
-                      <div style={{ width:22, fontSize:10, color:'#CBD5E1', flexShrink:0, textAlign:'right' }}>{i+1}</div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:12.5, fontWeight:500, color:'#0F172A', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r.name}</div>
-                        <div style={{ fontSize:11, color:'#94A3B8', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{r.sub}</div>
-                      </div>
-                      <div style={{ fontSize:10.5, fontWeight:600, color: r.tone || '#64748B', background:`${(r.tone||'#64748B')}14`, padding:'3px 9px', borderRadius:99, flexShrink:0, whiteSpace:'nowrap' }}>{r.meta}</div>
-                    </div>
+              <Button variant="ghost" size="sm" onClick={() => setSel(null)}>Close</Button>
+            </div>
+          </div>
+
+          {filteredRows.length === 0 ? (
+            <Empty
+              title={drillQ ? 'Nothing matches that search' : 'No records'}
+              hint={drillQ ? 'Try a shorter search, or clear it to see everything in this list.' : undefined}
+              action={drillQ ? <Button size="sm" onClick={() => setDrillQ('')}>Clear search</Button> : undefined}
+            />
+          ) : (
+            <div className="ez-scroll" style={{ maxHeight:380, overflowY:'auto' }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:F.small }}>
+                <thead>
+                  <tr>
+                    <Th width={44}>#</Th>
+                    {cols
+                      ? cols.map(c => <Th key={c.key}>{c.label}</Th>)
+                      : <><Th>Name</Th><Th align="right">Status</Th></>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((r: any, i: number) => (
+                    <Tr key={i}>
+                      <Td mono style={{ color:C.faint }}>{i + 1}</Td>
+                      {cols
+                        ? cols.map(c => (
+                            <Td key={c.key}>
+                              {c.pill
+                                ? <Badge t="neutral" dot>{r[c.key]}</Badge>
+                                : c.key === 'name'
+                                  ? <Person name={r.name} />
+                                  : <span style={{ color:C.muted }}>{r[c.key] || '—'}</span>}
+                            </Td>
+                          ))
+                        : <>
+                            <Td><Person name={r.name} meta={r.sub} /></Td>
+                            <Td align="right"><Badge t="neutral">{r.meta}</Badge></Td>
+                          </>}
+                    </Tr>
                   ))}
+                </tbody>
+              </table>
             </div>
-          </div>
-        )}
+          )}
+        </Card>
+      )}
 
-        {/* Location + Company headcount */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
-          <div style={card}>
-            <div style={cardTitle}>📍 Location-wise Headcount</div>
-            {d.locationRows.length === 0 && <div style={{ fontSize:11, color:'#94A3B8' }}>No employee location data.</div>}
-            {d.locationRows.map(([name, count]: any, i: number) => (
-              <div key={name} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                <div style={{ width:110, fontSize:11, color:'#64748B', textAlign:'right', flexShrink:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{name}</div>
-                <div style={{ flex:1, height:8, background:'#F1F5F9', borderRadius:4, overflow:'hidden' }}><div style={{ height:'100%', width:`${(count/maxLoc)*100}%`, background:PALETTE[i%PALETTE.length], borderRadius:4 }} /></div>
-                <div style={{ width:34, fontSize:11, color:'#374151', fontWeight:600 }}>{count}</div>
-              </div>
-            ))}
-          </div>
+      <div style={{ display:'grid', gap:S.md, marginBottom:S.xl, alignItems:'start',
+                    gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))' }}>
+        <Card>
+          <div style={{ ...eyebrow, marginBottom:S.md }}>Headcount by location</div>
+          {d.locationRows.length === 0
+            ? <div style={{ fontSize:F.small, color:C.faint }}>No employee location data.</div>
+            : d.locationRows.map(([name, count]: any) => (
+                <BarRow key={name} label={name} count={count} max={maxLoc} />
+              ))}
+        </Card>
 
-          <div style={card}>
-            <div style={cardTitle}>🏢 Company-wise Headcount</div>
-            {d.companyRows.length === 0 && <div style={{ fontSize:11, color:'#94A3B8' }}>No employee company data.</div>}
-            {d.companyRows.map(([name, count]: any, i: number) => (
-              <div key={name} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
-                <div style={{ width:110, fontSize:11, color:'#64748B', textAlign:'right', flexShrink:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{name}</div>
-                <div style={{ flex:1, height:8, background:'#F1F5F9', borderRadius:4, overflow:'hidden' }}><div style={{ height:'100%', width:`${(count/maxCo)*100}%`, background:PALETTE[i%PALETTE.length], borderRadius:4 }} /></div>
-                <div style={{ width:34, fontSize:11, color:'#374151', fontWeight:600 }}>{count}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Bottom row */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8 }}>
-          {/* Recruitment pipeline */}
-          <div style={card}>
-            <div style={cardTitle}>🎯 Recruitment Pipeline</div>
-            {d.pipeline.map((p: any) => (
-              <div key={p.stage} style={{ display:'flex', alignItems:'center', gap:8, marginBottom:5 }}>
-                <div style={{ width:90, fontSize:10.5, color:'#64748B', textAlign:'right', flexShrink:0 }}>{p.stage}</div>
-                <div style={{ flex:1, height:7, background:'#F1F5F9', borderRadius:4, overflow:'hidden' }}><div style={{ height:'100%', width:`${(p.count/maxStage)*100}%`, background: STAGE_COLOR[p.stage]||'#7C3AED', borderRadius:4 }} /></div>
-                <div style={{ width:24, fontSize:11, color:'#374151', fontWeight:600 }}>{p.count}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Recent activity */}
-          <div style={card}>
-            <div style={cardTitle}>🕐 Recent Activity</div>
-            {d.activity.length === 0 && <div style={{ fontSize:11, color:'#94A3B8' }}>No recent activity.</div>}
-            {d.activity.map((a: any, i: number) => (
-              <div key={i} style={{ display:'flex', gap:8, padding:'6px 0', borderBottom: i < d.activity.length-1 ? '1px solid #F1F5F9' : 'none', alignItems:'flex-start' }}>
-                <div style={{ width:24, height:24, borderRadius:7, background:'#EDE9FE', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, flexShrink:0 }}>{a.icon}</div>
-                <div><div style={{ fontSize:11, color:'#374151', lineHeight:1.4 }}>{a.text}</div><div style={{ fontSize:10, color:'#94A3B8', marginTop:2 }}>{a.time}</div></div>
-              </div>
-            ))}
-          </div>
-
-          {/* Celebrations */}
-          <div style={card}>
-            <div style={cardTitle}>🎉 Birthdays &amp; Anniversaries</div>
-            <div style={{ fontSize:10, fontWeight:600, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'.04em', marginBottom:6 }}>Today</div>
-            {d.today.length === 0 && <div style={{ fontSize:11, color:'#94A3B8', marginBottom:6 }}>Nothing today.</div>}
-            {d.today.map((c: any, i: number) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:7, padding:'6px 0', borderBottom:'1px solid #F1F5F9' }}>
-                <div style={{ fontSize:18 }}>{c.type==='birthday'?'🎂':'🌟'}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:11, fontWeight:500, color:'#374151' }}>{c.name}</div>
-                  <div style={{ fontSize:10, color:'#94A3B8', fontWeight:700 }}>{c.type==='birthday'?'Happy Birthday!':`${c.years} Years with us!`}{c.company?` · ${c.company}`:''}</div>
-                </div>
-                <button onClick={() => sendWish(c)} disabled={wished.includes(c.id) || wishing === c.id}
-                  title={wished.includes(c.id) ? 'Delivered to their ESS notifications' : 'Send a wish to their ESS dashboard'}
-                  style={{ padding:'3px 8px', borderRadius:6, border:'none', cursor: wished.includes(c.id)||wishing===c.id?'default':'pointer', fontSize:10, fontWeight:500, background: wished.includes(c.id)?'#DCFCE7':'#7C3AED', color: wished.includes(c.id)?'#16A34A':'#fff', opacity: wishing===c.id?0.6:1 }}>
-                  {wished.includes(c.id) ? '✓ Sent' : wishing === c.id ? 'Sending…' : 'Wish'}
-                </button>
-              </div>
-            ))}
-            {wishErr && <div style={{ fontSize:10, color:'#DC2626', background:'#FEF2F2', borderRadius:6, padding:'6px 8px', marginTop:6 }}>{wishErr}</div>}
-            <div style={{ fontSize:10, fontWeight:600, color:'#94A3B8', textTransform:'uppercase', letterSpacing:'.04em', margin:'8px 0 6px' }}>This Week</div>
-            {d.week.length === 0 && <div style={{ fontSize:11, color:'#94A3B8' }}>Nothing this week.</div>}
-            {d.week.map((c: any, i: number) => (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:7, padding:'5px 0', borderBottom: i < d.week.length-1 ? '1px solid #F8FAFC' : 'none' }}>
-                <div style={{ fontSize:14 }}>{c.type==='birthday'?'🎂':'🌟'}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:11, color:'#374151' }}>{c.name}</div>
-                  <div style={{ fontSize:10, color:'#94A3B8', fontWeight:700 }}>{capFirst(c.type==='anniversary'?`${c.years}yr anniversary`:'Birthday')} · in {c.days}d</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+        <Card>
+          <div style={{ ...eyebrow, marginBottom:S.md }}>Headcount by company</div>
+          {d.companyRows.length === 0
+            ? <div style={{ fontSize:F.small, color:C.faint }}>No employee company data.</div>
+            : d.companyRows.map(([name, count]: any) => (
+                <BarRow key={name} label={name} count={count} max={maxCo} />
+              ))}
+        </Card>
       </div>
-    </div>
+
+      <div style={{ display:'grid', gap:S.md, alignItems:'start',
+                    gridTemplateColumns:'repeat(auto-fit, minmax(260px, 1fr))' }}>
+        <Card>
+          <div style={{ ...eyebrow, marginBottom:S.md }}>Recruitment pipeline</div>
+          {d.pipeline.map((p: any) => (
+            <BarRow key={p.stage} label={p.stage} count={p.count} max={maxStage}
+                    colour={STAGE_COLOR[p.stage] || C.violet} />
+          ))}
+        </Card>
+
+        <Card>
+          <div style={{ ...eyebrow, marginBottom:S.md }}>Recent activity</div>
+          {d.activity.length === 0
+            ? <div style={{ fontSize:F.small, color:C.faint }}>No recent activity.</div>
+            : d.activity.map((a: any, i: number) => (
+                <div key={i} style={{
+                  display:'flex', gap:S.sm, padding:'8px 0', alignItems:'flex-start',
+                  borderBottom: i < d.activity.length - 1 ? `1px solid ${C.line}` : 'none',
+                }}>
+                  <div style={{
+                    width:26, height:26, borderRadius:R.sm, background:C.violetTint,
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    fontSize:12, flexShrink:0,
+                  }}>{a.icon}</div>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:F.small, color:C.inkSoft, lineHeight:1.45 }}>{a.text}</div>
+                    <div style={{ fontSize:F.micro, color:C.faint, marginTop:2 }}>{a.time}</div>
+                  </div>
+                </div>
+              ))}
+        </Card>
+
+        {/* Celebrations keep their emoji. Everywhere else emoji were standing in
+            for an icon system; here the cake IS the content, and a line-drawn
+            equivalent would be colder for no gain. */}
+        <Card>
+          <div style={{ ...eyebrow, marginBottom:S.md }}>Birthdays &amp; anniversaries</div>
+
+          <div style={{ ...eyebrow, color:C.violetDeep, marginBottom:6 }}>Today</div>
+          {d.today.length === 0 && (
+            <div style={{ fontSize:F.small, color:C.faint, marginBottom:S.md }}>Nothing today.</div>
+          )}
+          {d.today.map((c: any, i: number) => (
+            <div key={i} style={{
+              display:'flex', alignItems:'center', gap:S.sm, padding:'7px 0',
+              borderBottom:`1px solid ${C.line}`,
+            }}>
+              <span style={{ fontSize:17, lineHeight:1 }}>{c.type === 'birthday' ? '🎂' : '🌟'}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:F.small, fontWeight:W.semi, color:C.ink }}>{c.name}</div>
+                <div style={{ fontSize:F.micro, color:C.muted }}>
+                  {c.type === 'birthday' ? 'Happy Birthday!' : `${c.years} years with us`}
+                  {c.company ? ` · ${c.company}` : ''}
+                </div>
+              </div>
+              <Button size="sm"
+                variant={wished.includes(c.id) ? 'secondary' : 'primary'}
+                disabled={wished.includes(c.id) || wishing === c.id}
+                onClick={() => sendWish(c)}
+                title={wished.includes(c.id)
+                  ? 'Delivered to their ESS notifications'
+                  : 'Send a wish to their ESS dashboard'}>
+                {wished.includes(c.id) ? 'Sent' : wishing === c.id ? 'Sending…' : 'Wish'}
+              </Button>
+            </div>
+          ))}
+
+          {wishErr && <div style={{ marginTop:S.md }}><Notice t="critical">{wishErr}</Notice></div>}
+
+          <div style={{ ...eyebrow, color:C.violetDeep, margin:'14px 0 6px' }}>This week</div>
+          {d.week.length === 0 && <div style={{ fontSize:F.small, color:C.faint }}>Nothing this week.</div>}
+          {d.week.map((c: any, i: number) => (
+            <div key={i} style={{
+              display:'flex', alignItems:'center', gap:S.sm, padding:'6px 0',
+              borderBottom: i < d.week.length - 1 ? `1px solid ${C.line}` : 'none',
+            }}>
+              <span style={{ fontSize:14, lineHeight:1, opacity:.85 }}>{c.type === 'birthday' ? '🎂' : '🌟'}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:F.small, color:C.inkSoft }}>{c.name}</div>
+                <div style={{ fontSize:F.micro, color:C.faint }}>
+                  {capFirst(c.type === 'anniversary' ? `${c.years}yr anniversary` : 'Birthday')} · in {c.days}d
+                </div>
+              </div>
+            </div>
+          ))}
+        </Card>
+      </div>
+    </Page>
   )
 }
