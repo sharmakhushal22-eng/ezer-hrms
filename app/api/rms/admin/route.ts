@@ -217,6 +217,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true, account_id: acctId })
     }
 
+    // ── viewing the portal as somebody else ─────────────────────────────────
+    // Impersonation is as privileged as any role change: it shows one person
+    // another person's salary and documents. It used to be written from the browser,
+    // with the admin's identity taken from auth.getUser() — which returns nothing at
+    // all once the legacy login is retired, leaving the log with no attribution.
+    case 'impersonate_start': {
+      const employee_id = String(body.employee_id || '')
+      if (!employee_id) return bad('employee_id is required.')
+      const { data, error } = await sb.from('ess_impersonation_log').insert({
+        admin_id: actor.employeeId,
+        admin_name: actor.name || (actor.legacy ? 'Legacy dashboard login' : 'Unknown'),
+        employee_id,
+      }).select('id').single()
+      if (error) return bad(error.message, 500)
+      await audit({ action: 'IMPERSONATE_START', actor, reason: reason || null, details: { employee_id } })
+      return NextResponse.json({ ok: true, log_id: data?.id })
+    }
+
+    case 'impersonate_end': {
+      const log_id = String(body.log_id || '')
+      if (!log_id) return bad('log_id is required.')
+      await sb.from('ess_impersonation_log').update({ ended_at: new Date().toISOString() }).eq('id', log_id)
+      await audit({ action: 'IMPERSONATE_END', actor, details: { log_id } })
+      return NextResponse.json({ ok: true })
+    }
+
     default:
       return bad('Unknown action.')
   }

@@ -131,16 +131,15 @@ export async function assignRoles(u: EssUser, roleIds: string[], byName?: string
 }
 
 export async function startImpersonation(u: EssUser, adminName?: string): Promise<string | null> {
-  let adminId: string | null = null
-  try { const { data } = await supabase.auth.getUser(); adminId = data?.user?.id || null } catch {}
-  const { data } = await supabase.from('ess_impersonation_log').insert({
-    admin_id: adminId || '00000000-0000-0000-0000-000000000000',
-    admin_name: adminName || 'Admin', employee_id: u.employee_id,
-  }).select('id').single()
-  return data?.id || null
+  // The admin's identity used to come from auth.getUser() in the browser, which returns
+  // nothing once the legacy Supabase login is retired — the log would have carried a
+  // zero-uuid and the name the caller happened to pass. The route takes it from the
+  // signed session instead, so the record says who actually did this.
+  const res = await rmsAdmin({ action: 'impersonate_start', employee_id: u.employee_id })
+  return res.error ? null : (res.log_id || null)
 }
 export async function endImpersonation(logId: string) {
-  await supabase.from('ess_impersonation_log').update({ ended_at: new Date().toISOString() }).eq('id', logId)
+  await rmsAdmin({ action: 'impersonate_end', log_id: logId })
 }
 
 // ════════════════════════════════════════════════════════════════
