@@ -310,7 +310,7 @@ export default function LoansPage() {
   return (
     <div style={S.page}>
       <div style={S.content}>
-        <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:16, flexWrap:'wrap', background:TK.surface, borderRadius:12, border:`1px solid ${C.border}`, padding:'14px 16px', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+          <div className="ez-page-head" style={{ display:'flex', alignItems:'flex-start', gap:16, flexWrap:'wrap', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
           <div style={{ flex:1, minWidth:200 }}>
             <h1 style={S.h1}>Loan Management</h1>
             <div style={S.sub}>Approve requests, review agreements, disburse funds, and track active loans.</div>

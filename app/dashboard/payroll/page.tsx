@@ -1132,7 +1132,7 @@ export default function PayrollPage() {
     <div style={S.page}>
       <div style={S.content}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div className="ez-page-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             <h1 style={S.h1}>Payroll</h1>
           </div>

@@ -254,7 +254,7 @@ export default function RecruitmentPage() {
   return (
     <div style={T.page}>
       {/* Header */}
-      <div style={{ padding:`${S.xl}px ${S.xl}px ${S.lg}px` }}>
+      <div className="ez-page-head ez-page-head-bleed">
         <h1 style={{ margin:0, fontSize:F.page, fontWeight:W.bold, color:C.ink, letterSpacing:'-.02em' }}>
           Recruitment &amp; ATS
         </h1>

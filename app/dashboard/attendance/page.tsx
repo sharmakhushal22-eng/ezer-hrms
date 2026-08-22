@@ -246,8 +246,10 @@ export default function AttendancePage() {
   return (
     <div style={{ ...T.page, padding:'20px 24px' }}>
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Attendance &amp; Shifts</div>
-        <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Shift config (auto-coded), employee assignment, and processed attendance (first IN / last OUT). ESS app / biometric / manual punches feed one engine.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Shift config (auto-coded), employee assignment, and processed attendance (first IN / last OUT). ESS app / biometric / manual punches feed one engine.</div>
+        </div>
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>{tabs.map(([k, l]) => <button key={k} style={T.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}</div>
         {loading ? <div style={{ ...T.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <>

@@ -1079,9 +1079,13 @@ export default function ReportsPage() {
   // ─── Report Listing ──────────────────────────────────────────
   return (
     <div style={s.page}>
-      <div style={{ fontSize: 22, fontWeight: 600, color: C.navy, marginBottom: 4 }}>Reports</div>
-      <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>
-        Employee, salary, leave, statutory &amp; tax reports · pulled live from your HRMS data
+      {/* wrapped: the title and its caption were loose siblings, so there was
+          nothing to give a background to */}
+      <div className="ez-page-head">
+        <div style={{ fontSize: 22, fontWeight: 600, color: C.navy, marginBottom: 4 }}>Reports</div>
+        <div style={{ fontSize: 13, color: C.muted }}>
+          Employee, salary, leave, statutory &amp; tax reports · pulled live from your HRMS data
+        </div>
       </div>
 
       {/* Search + Category + Company */}

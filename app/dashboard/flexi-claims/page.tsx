@@ -471,7 +471,7 @@ export default function FlexiClaimsAdmin() {
 
   return (
     <div style={S.page}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+      <div className="ez-page-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontSize: 22, fontWeight: 700 }}>Flexi Claims</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Review reimbursement bills, manage the submission window &amp; employee limits</div>

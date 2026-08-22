@@ -98,8 +98,10 @@ export default function CompanyPoliciesPage() {
   return (
     <div style={{ ...C.page, padding:'20px 24px' }}>
       <div style={{ maxWidth:1100, margin:'0 auto' }}>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Company Policies</div>
-        <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Per-company policies that appear in the onboarding magic-link Phase 9 (acknowledgement). Add / edit / reorder — changes apply to new onboarding sessions instantly; already-acked candidates keep their original version.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Per-company policies that appear in the onboarding magic-link Phase 9 (acknowledgement). Add / edit / reorder — changes apply to new onboarding sessions instantly; already-acked candidates keep their original version.</div>
+        </div>
 
         <div style={{ ...C.card, display:'flex', gap:12, alignItems:'flex-end', flexWrap:'wrap' }}>
           <div><label style={C.lbl}>Company</label>

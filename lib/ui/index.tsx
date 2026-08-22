@@ -167,6 +167,31 @@ export function UIKeyframes() {
       .ez-cta:not(:disabled):active{transform:scale(.985)}
 
       /* Scrollbars, so they belong to the palette instead of the OS. */
+      /* PAGE HEADER
+         Most pages painted their title area in the same #F3F5F8 as the canvas,
+         so the header did not read as a header — it was just the top of the
+         page. This gives it its own plane.
+
+         A tinted panel rather than a full-bleed band, because the page shells
+         are not consistent: some give the header its own padding, some nest it
+         inside an already-padded container, and a couple have no header
+         wrapper at all. A band would need to know each parent's padding to
+         bleed correctly and would sit inset and wrong wherever that guess was
+         off. A panel is right in all of them.
+
+         The gradient runs surface -> brand tint, so the header carries a hint
+         of the product's blue without becoming a coloured slab. Both stops are
+         theme variables, so it inverts with everything else. */
+      .ez-page-head{
+        background:linear-gradient(135deg, var(--ez-surface) 0%, var(--ez-brand-tint) 100%);
+        border:1px solid var(--ez-brand-edge);
+        border-radius:14px;
+        padding:16px 18px;
+        margin-bottom:16px;
+      }
+      /* For a header sitting in a container with no padding of its own. */
+      .ez-page-head-bleed{ margin:16px 24px 16px }
+
       /* Tab pills. Hover only lifts the inactive ones — the active pill is
          already filled, and lightening it on hover would read as deselecting. */
       .ez-tab{transition:background .14s cubic-bezier(.4,0,.2,1),color .14s,border-color .14s}
@@ -288,9 +313,9 @@ export function PageHeader({ title, context, actions, back }: {
   back?: React.ReactNode;
 }) {
   return (
-    <div style={{
+    <div className="ez-page-head" style={{
       display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
-      gap: S.lg, flexWrap: 'wrap', marginBottom: S.xl,
+      gap: S.lg, flexWrap: 'wrap',
     }}>
       <div style={{ minWidth: 0 }}>
         {back}

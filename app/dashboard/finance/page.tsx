@@ -330,7 +330,7 @@ export default function FinanceDepartment() {
     <div style={{ background: V.page, minHeight: '100vh',
                   padding: `${SP.xl}px ${SP.xl}px ${SP.huge}px`, maxWidth: 1440, margin: '0 auto',
                   fontFamily: F.family, color: C.ink, fontSize: F.body }}>
-      <div style={{ marginBottom: SP.xl }}>
+      <div className="ez-page-head">
         <h1 style={{ margin: 0, fontSize: F.page, fontWeight: W.bold, color: C.ink,
                      letterSpacing: '-.02em' }}>Finance</h1>
         <div style={{ marginTop: 5, fontSize: F.small, color: C.muted }}>

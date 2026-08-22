@@ -249,7 +249,7 @@ export default function TransferPage() {
   return (
     <div style={C.page}>
       <div style={C.wrap}>
-        <div style={{ marginBottom:18 }}>
+        <div className="ez-page-head">
           <div style={{ fontSize:22, fontWeight:700, color:TK.ink }}>Employee Transfer</div>
           <div style={{ fontSize:13, ...C.muted, marginTop:2 }}>Bulk move employees between branches within the same company. Transfer letters are generated and sent for acknowledgement.</div>
         </div>
