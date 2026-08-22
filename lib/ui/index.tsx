@@ -28,19 +28,86 @@ export * from './icons';
 export function UIKeyframes() {
   return (
     <style>{`
-      @keyframes ezShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-      @keyframes ezRise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-      @keyframes ezFade{from{opacity:0}to{opacity:1}}
-      .ez-rise{animation:ezRise ${M.ease} both}
-      .ez-fade{animation:ezFade ${M.ease} both}
+      /* ── Motion ────────────────────────────────────────────────────────────
+         Every animation here answers a question the user would otherwise have
+         to work out for themselves: where did this panel come from, which row
+         did I just change, is this number still loading. Nothing moves purely
+         to be seen moving, and nothing is slow enough to wait for — an HR
+         administrator approving two hundred claims must never queue behind an
+         animation.
 
-      /* :hover and :focus-visible cannot be expressed as inline styles, so the
-         handful of states that need them live here. */
+         The whole system collapses under prefers-reduced-motion at the bottom
+         of this block.
+         ------------------------------------------------------------------ */
+
+      @keyframes ezShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+      @keyframes ezFade{from{opacity:0}to{opacity:1}}
+      @keyframes ezRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+      @keyframes ezRiseIn3d{
+        from{opacity:0;transform:translateY(10px) scale(.985)}
+        to  {opacity:1;transform:none}}
+      /* Panels enter from the side they conceptually came from. */
+      @keyframes ezSlideL{from{opacity:0;transform:translateX(-10px)}to{opacity:1;transform:none}}
+      @keyframes ezSlideR{from{opacity:0;transform:translateX(10px)}to{opacity:1;transform:none}}
+      /* A row that just changed pulses once in the brand tint, then lets go. */
+      @keyframes ezFlash{0%{background:${C.brandTint}}100%{background:transparent}}
+      /* A step completing in an approval chain. */
+      @keyframes ezPop{0%{transform:scale(.7);opacity:0}60%{transform:scale(1.06)}100%{transform:none;opacity:1}}
+
+      .ez-fade{animation:ezFade ${M.ease} both}
+      .ez-rise{animation:ezRise ${M.ease} both}
+      .ez-rise-3d{animation:ezRiseIn3d ${M.ease} both}
+      .ez-slide-l{animation:ezSlideL ${M.ease} both}
+      .ez-slide-r{animation:ezSlideR ${M.ease} both}
+      .ez-flash{animation:ezFlash 1.1s ease-out both}
+      .ez-pop{animation:ezPop .3s cubic-bezier(.22,1.4,.4,1) both}
+
+      /* A list arrives as a wave rather than all at once, which makes its
+         order legible. Capped at ten steps so a 400-row table is not still
+         arriving a second later. */
+      .ez-stagger > *{animation:ezRise ${M.ease} both}
+      .ez-stagger > *:nth-child(1){animation-delay:0ms}
+      .ez-stagger > *:nth-child(2){animation-delay:26ms}
+      .ez-stagger > *:nth-child(3){animation-delay:52ms}
+      .ez-stagger > *:nth-child(4){animation-delay:78ms}
+      .ez-stagger > *:nth-child(5){animation-delay:104ms}
+      .ez-stagger > *:nth-child(6){animation-delay:130ms}
+      .ez-stagger > *:nth-child(7){animation-delay:156ms}
+      .ez-stagger > *:nth-child(8){animation-delay:182ms}
+      .ez-stagger > *:nth-child(9){animation-delay:208ms}
+      .ez-stagger > *:nth-child(n+10){animation-delay:230ms}
+
+      /* Same wave, applied to table rows. Scoped to tbody so the sticky
+         header does not animate away from its own columns. */
+      .ez-table-stagger tbody tr{animation:ezFade ${M.ease} both}
+      .ez-table-stagger tbody tr:nth-child(1){animation-delay:0ms}
+      .ez-table-stagger tbody tr:nth-child(2){animation-delay:18ms}
+      .ez-table-stagger tbody tr:nth-child(3){animation-delay:36ms}
+      .ez-table-stagger tbody tr:nth-child(4){animation-delay:54ms}
+      .ez-table-stagger tbody tr:nth-child(5){animation-delay:72ms}
+      .ez-table-stagger tbody tr:nth-child(6){animation-delay:90ms}
+      .ez-table-stagger tbody tr:nth-child(7){animation-delay:108ms}
+      .ez-table-stagger tbody tr:nth-child(8){animation-delay:126ms}
+      .ez-table-stagger tbody tr:nth-child(n+9){animation-delay:140ms}
+
+      /* ── Depth ─────────────────────────────────────────────────────────────
+         Interactive surfaces lift toward the pointer. The tilt is deliberately
+         small: at 3 degrees a card reads as a physical object, and past about
+         6 the type starts to smear. Cards that are not interactive do not move
+         at all, so movement continues to mean "you can act on this".
+         ------------------------------------------------------------------ */
+      .ez-lift{transition:transform ${M.ease},box-shadow ${M.ease}}
+      .ez-lift:hover{transform:translateY(-2px);box-shadow:${E.floating}}
+
+      .ez-3d{perspective:900px}
+      .ez-3d > *{transition:transform ${M.ease},box-shadow ${M.ease};transform-style:preserve-3d}
+      .ez-3d:hover > *{transform:translateZ(14px) rotateX(2.5deg);box-shadow:${E.floating}}
+
+      /* :hover and :focus-visible cannot be expressed as inline styles. */
+      .ez-row{transition:background ${M.quick}}
       .ez-row:hover{background:${C.brandTint}!important}
       .ez-press{transition:transform ${M.quick},box-shadow ${M.quick},background ${M.quick},border-color ${M.quick}}
       .ez-press:active:not(:disabled){transform:scale(.975)}
-      .ez-lift{transition:transform ${M.ease},box-shadow ${M.ease}}
-      .ez-lift:hover{transform:translateY(-2px);box-shadow:${E.floating}}
 
       :focus-visible{outline:2px solid ${C.brand};outline-offset:2px;border-radius:${R.sm}px}
 
@@ -50,16 +117,67 @@ export function UIKeyframes() {
       .ez-scroll::-webkit-scrollbar-thumb:hover{background:${C.faint};background-clip:content-box}
       .ez-scroll::-webkit-scrollbar-track{background:transparent}
       .ez-scroll-dark::-webkit-scrollbar{width:8px}
-      .ez-scroll-dark::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:99px}
+      .ez-scroll-dark::-webkit-scrollbar-thumb{background:${C.lineStrong};border-radius:99px}
       .ez-scroll-dark::-webkit-scrollbar-track{background:transparent}
 
+      /* Someone who has asked for less motion still gets the depth — the
+         shadows and the hierarchy — but nothing travels. A rotation on hover
+         is exactly what this setting is asking us not to do. */
       @media (prefers-reduced-motion: reduce){
-        .ez-rise,.ez-fade{animation-duration:.01ms!important}
+        .ez-fade,.ez-rise,.ez-rise-3d,.ez-slide-l,.ez-slide-r,.ez-flash,.ez-pop,
+        .ez-stagger > *,.ez-table-stagger tbody tr{animation-duration:.01ms!important;animation-delay:0ms!important}
         .ez-lift:hover{transform:none}
+        .ez-3d:hover > *{transform:none}
         .ez-press:active:not(:disabled){transform:none}
       }
     `}</style>
   );
+}
+
+/**
+ * A number that counts up to its value.
+ *
+ * Only worth doing where the figure is the point of the card — a headcount, a
+ * payroll total. It also does real work: a value that animates has visibly
+ * *arrived*, which distinguishes a loaded zero from a zero that is still
+ * loading. Formatting is delegated so money stays money.
+ */
+export function CountUp({ value, format, duration = 620, style }: {
+  value: number;
+  format?: (n: number) => string;
+  duration?: number;
+  style?: React.CSSProperties;
+}) {
+  // Starts at zero, not at `value`. The data is usually already present on
+  // first render, so seeding the ref with the final number meant the guard
+  // below fired immediately and the figure simply appeared — the animation
+  // existed but never ran.
+  const [shown, setShown] = React.useState(0);
+  const from = React.useRef(0);
+  const raf = React.useRef<number | null>(null);
+
+  React.useEffect(() => {
+    const reduce = typeof window !== 'undefined'
+      && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || from.current === value) { setShown(value); from.current = value; return; }
+
+    const start = performance.now();
+    const a = from.current, b = value;
+    const tick = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      // Ease out: the number decelerates into its final value rather than
+      // stopping dead, which is what makes it read as settling.
+      const eased = 1 - Math.pow(1 - t, 3);
+      setShown(a + (b - a) * eased);
+      if (t < 1) raf.current = requestAnimationFrame(tick);
+      else from.current = b;
+    };
+    raf.current = requestAnimationFrame(tick);
+    return () => { if (raf.current !== null) cancelAnimationFrame(raf.current); };
+  }, [value, duration]);
+
+  const n = Math.round(shown);
+  return <span style={{ ...numeric, ...style }}>{format ? format(n) : n.toLocaleString('en-IN')}</span>;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,12 +294,14 @@ export function Card({ children, pad = S.lg, elevation = 'raised', interactive, 
  * The label sits *above* the value: eyes land on the number first and the label
  * only qualifies it. Values are tabular so a row of tiles lines up.
  */
-export function Stat({ label, value, sub, t = 'neutral', icon }: {
-  label: string; value: React.ReactNode; sub?: React.ReactNode; t?: Tone; icon?: React.ReactNode;
+export function Stat({ label, value, sub, t = 'neutral', icon, onClick }: {
+  label: string; value: React.ReactNode; sub?: React.ReactNode; t?: Tone;
+  icon?: React.ReactNode; onClick?: () => void;
 }) {
   const k = tone(t);
   return (
-    <Card pad={S.md} elevation="flat" style={{ minWidth: 0 }}>
+    <Card pad={S.md} elevation="flat" interactive={!!onClick} onClick={onClick}
+          style={{ minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: S.sm }}>
         <div style={{ minWidth: 0 }}>
           {/* Reserve two lines. "Active" is one line and "Total Employees" is
@@ -220,7 +340,7 @@ export function Stat({ label, value, sub, t = 'neutral', icon }: {
  */
 export function StatRow({ children, min = 150 }: { children: React.ReactNode; min?: number }) {
   return (
-    <div style={{
+    <div className="ez-stagger" style={{
       display: 'grid', gap: S.md, marginBottom: S.xl,
       gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`,
       alignItems: 'stretch',
@@ -402,13 +522,19 @@ export function Tabs<T extends string>({ tabs, value, onChange }: {
 // ---------------------------------------------------------------------------
 
 /** Table in a card, scrolling horizontally inside its own bounds. */
-export function TableWrap({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
+export function TableWrap({ children, style, stagger = true }: {
+  children: React.ReactNode; style?: React.CSSProperties;
+  /** Rows arrive as a wave rather than all at once, which makes their order
+   *  legible. Turn it off for a table that re-renders on every keystroke. */
+  stagger?: boolean;
+}) {
   return (
     <div className="ez-scroll" style={{
       background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg,
       boxShadow: E.raised, ...scrollX, ...style,
     }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: F.small }}>
+      <table className={stagger ? 'ez-table-stagger' : undefined}
+             style={{ width: '100%', borderCollapse: 'collapse', fontSize: F.small }}>
         {children}
       </table>
     </div>
@@ -470,7 +596,7 @@ export function Empty({ title, hint, action, icon }: {
   title: string; hint?: string; action?: React.ReactNode; icon?: React.ReactNode;
 }) {
   return (
-    <div style={{
+    <div className="ez-rise" style={{
       padding: `${S.huge}px ${S.xl}px`, textAlign: 'center',
       display: 'flex', flexDirection: 'column', alignItems: 'center', gap: S.sm,
     }}>
@@ -525,7 +651,7 @@ export function Notice({ children, t = 'critical', title, action }: {
 }) {
   const k = tone(t);
   return (
-    <div style={{
+    <div className="ez-rise" style={{
       display: 'flex', gap: S.md, alignItems: 'flex-start',
       background: k.bg, border: `1px solid ${k.edge}`, borderRadius: R.md,
       padding: `${S.md}px ${S.lg}px`, marginBottom: S.lg,

@@ -5,7 +5,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import {
   Page, PageHeader, Card, Section, Stat, StatRow, Button, Badge, Input, Empty,
-  Person, TableWrap, Th, Td, Tr, Skeleton, Notice,
+  Person, TableWrap, Th, Td, Tr, Skeleton, Notice, CountUp,
   C, F, W, S, R, E, M, numeric, eyebrow, tone,
   IconEmployees, IconCheck, IconRecruitment, IconOnboarding, IconClock, IconSearch,
 } from '@/lib/ui'
@@ -69,6 +69,17 @@ function daysUntilAnnual(iso?: string | null): number | null {
 function BarRow({ label, count, max, colour = C.brand }: {
   label: string; count: number; max: number; colour?: string
 }) {
+  // The bar is rendered at zero width for one frame, then given its real
+  // width, so the CSS transition has something to travel. Rendering straight
+  // at the final width means the transition never fires and the bar just
+  // exists — which is what was happening.
+  const [grown, setGrown] = useState(false)
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setGrown(true))
+    return () => cancelAnimationFrame(id)
+  }, [])
+  const pct = grown ? Math.max((count / max) * 100, 2) : 0
+
   return (
     <div style={{ display:'flex', alignItems:'center', gap:S.sm, marginBottom:7 }}>
       <div title={label} style={{
@@ -77,8 +88,11 @@ function BarRow({ label, count, max, colour = C.brand }: {
       }}>{label}</div>
       <div style={{ flex:1, height:7, background:C.sunken, borderRadius:R.pill, overflow:'hidden' }}>
         <div style={{
-          height:'100%', width:`${Math.max((count/max)*100, 2)}%`, background:colour,
-          borderRadius:R.pill, transition:`width ${M.ease}`,
+          height:'100%', width:`${pct}%`, background:colour,
+          borderRadius:R.pill,
+          // Eased out over 520ms: long enough to read as growth, short enough
+          // that the page has settled before anyone reaches for it.
+          transition:'width .52s cubic-bezier(.22,1,.36,1)',
         }} />
       </div>
       <div style={{ width:32, fontSize:F.tiny, color:C.ink, fontWeight:W.semi, ...numeric }}>{count}</div>
@@ -241,11 +255,11 @@ export default function Dashboard() {
   )
 
   const stats = [
-    { key:'total',    label:'Total Employees', value: d.total.toLocaleString('en-IN'), sub:`${d.companyRows.length} companies`,  t:'brand'   as const, icon:<IconEmployees size={16}/> },
-    { key:'active',   label:'Active',          value: d.active.toLocaleString('en-IN'), sub: d.total ? `${Math.round(d.active/d.total*100)}% active` : '—', t:'positive' as const, icon:<IconCheck size={16}/> },
-    { key:'open',     label:'Open Positions',  value: d.openPositions, sub:'approved MRFs',      t:'info'    as const, icon:<IconRecruitment size={16}/> },
-    { key:'pipeline', label:'In Pipeline',     value: d.inPipeline,    sub:'active candidates',  t:'warning' as const, icon:<IconClock size={16}/> },
-    { key:'joining',  label:'Joining Soon',    value: d.joiningSoon,   sub:'in onboarding',      t:'brand'   as const, icon:<IconOnboarding size={16}/> },
+    { key:'total',    label:'Total Employees', value: <CountUp value={d.total} />, sub:`${d.companyRows.length} companies`,  t:'brand'   as const, icon:<IconEmployees size={16}/> },
+    { key:'active',   label:'Active',          value: <CountUp value={d.active} />, sub: d.total ? `${Math.round(d.active/d.total*100)}% active` : '—', t:'positive' as const, icon:<IconCheck size={16}/> },
+    { key:'open',     label:'Open Positions',  value: <CountUp value={d.openPositions} />, sub:'approved MRFs',      t:'info'    as const, icon:<IconRecruitment size={16}/> },
+    { key:'pipeline', label:'In Pipeline',     value: <CountUp value={d.inPipeline} />,    sub:'active candidates',  t:'warning' as const, icon:<IconClock size={16}/> },
+    { key:'joining',  label:'Joining Soon',    value: <CountUp value={d.joiningSoon} />,   sub:'in onboarding',      t:'brand'   as const, icon:<IconOnboarding size={16}/> },
   ]
   const DRILL_TITLES: Record<string,string> = { total:'All Employees', active:'Active Employees', open:'Open Positions', pipeline:'Candidates in Pipeline', joining:'Candidates in Onboarding' }
   // A drill-down that declares columns renders as a proper headed table; the rest keep
@@ -296,7 +310,7 @@ export default function Dashboard() {
       </StatRow>
 
       {sel && (
-        <Card pad={0} className="ez-rise" style={{ marginBottom:S.xl, overflow:'hidden' }}>
+        <Card pad={0} className="ez-rise-3d" style={{ marginBottom:S.xl, overflow:'hidden' }}>
           <div style={{
             display:'flex', alignItems:'center', justifyContent:'space-between',
             gap:S.md, padding:`${S.md}px ${S.lg}px`, borderBottom:`1px solid ${C.line}`, flexWrap:'wrap',
