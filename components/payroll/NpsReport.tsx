@@ -54,8 +54,8 @@ function npsEffectiveDate(doj: string | null, mStart: string): string {
 const S = {
   card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' } as React.CSSProperties,
   sel: { padding: '8px 10px', border: `1px solid #DDD6FE`, borderRadius: 7, fontSize: 12.5, fontFamily: font, background: TK.sunken, color: C.navy, outline: 'none', minWidth: 150 } as React.CSSProperties,
-  btnP: { padding: '9px 16px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
-  btnO: { padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
+  btnP: { padding: '9px 16px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
+  btnO: { padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
   th: { padding: '9px 10px', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase' as const, letterSpacing: '.04em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const, background: C.gray, borderBottom: `1px solid ${C.border}` },
   td: { padding: '8px 10px', fontSize: 12, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' as const, color: C.navy },
 }
@@ -135,7 +135,7 @@ function DetailRow({ k, v }: { k: string; v: React.ReactNode }) {
 function SearchResult({ r, onPick }: { r: NpsRow; onPick: (r: NpsRow) => void }) {
   return (
     <button onClick={() => onPick(r)}
-      style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px', borderRadius: 10, border: `1px solid ${C.border}`, marginTop: 7, background: '#fff', cursor: 'pointer', fontFamily: font }}>
+      style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 11, padding: '10px 11px', borderRadius: 10, border: `1px solid ${C.border}`, marginTop: 7, background: TK.surface, cursor: 'pointer', fontFamily: font }}>
       <div style={{ width: 36, height: 36, borderRadius: '50%', background: r.opted ? C.greenBg : C.purpleBg, color: r.opted ? C.green : C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 12, flexShrink: 0 }}>
         {initials(r.full_name)}
       </div>
@@ -231,10 +231,10 @@ function NpsDialog({ rows, onClose, onDone }: {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.5)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={ev => ev.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,0.35)', fontFamily: font, overflow: 'hidden' }}>
+      <div onClick={ev => ev.stopPropagation()} style={{ background: TK.surface, borderRadius: 16, width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,0.35)', fontFamily: font, overflow: 'hidden' }}>
 
         {/* header */}
-        <div style={{ background: 'linear-gradient(135deg,#2563EB,#4F46E5)', padding: '16px 20px', color: '#fff', flexShrink: 0 }}>
+        <div style={{ background: 'linear-gradient(135deg,#2563EB,#4F46E5)', padding: '16px 20px', color: TK.onAccent, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 20 }}></div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -243,7 +243,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                 {sel ? 'Turn NPS on or off for this employee' : 'Find an employee to begin'}
               </div>
             </div>
-            <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: '#fff', width: 28, height: 28, borderRadius: 8, cursor: 'pointer', fontSize: 16, lineHeight: 1, fontFamily: font }}>×</button>
+            <button onClick={onClose} style={{ background: 'rgba(255,255,255,.15)', border: 'none', color: TK.onAccent, width: 28, height: 28, borderRadius: 8, cursor: 'pointer', fontSize: 16, lineHeight: 1, fontFamily: font }}>×</button>
           </div>
         </div>
 

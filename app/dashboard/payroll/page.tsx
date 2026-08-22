@@ -61,7 +61,7 @@ const S = {
   input: { ...inputStyle() } as React.CSSProperties,
   btnPrimary: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${TK.brandDeep}`,
           cursor: 'pointer', fontSize: TF.small, fontWeight: W.semi, fontFamily: 'inherit',
-          background: `linear-gradient(180deg, ${TK.brand}, ${TK.brandDeep})`, color: '#fff',
+          background: `linear-gradient(180deg, ${TK.brand}, ${TK.brandDeep})`, color: TK.onAccent,
           whiteSpace: 'nowrap', boxShadow: E.brand } as React.CSSProperties,
   btnOutline: { height: 34, padding: '0 13px', borderRadius: R.md, border: `1px solid ${TK.lineStrong}`,
           cursor: 'pointer', fontSize: TF.small, fontWeight: W.medium, fontFamily: 'inherit',
@@ -198,7 +198,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
             position: 'absolute', top: 'calc(100% + 6px)',
             ...(alignRight ? { right: 0 } : { left: 0 }),
             zIndex: 1001, minWidth: 262, maxHeight: '70vh', overflowY: 'auto',
-            background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12,
+            background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 12,
             boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6,
           }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em', padding: '6px 10px 8px' }}>Sections · {built}/{sections.length} built</div>
@@ -835,7 +835,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
   }
 
   const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }
-  const box: React.CSSProperties = { background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 55px rgba(30,27,75,0.35)' }
+  const box: React.CSSProperties = { background: TK.surface, borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 55px rgba(30,27,75,0.35)' }
   const GREEN = TK.positive
 
   return (

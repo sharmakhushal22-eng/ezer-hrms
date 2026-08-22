@@ -216,7 +216,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
           <MultiSelect values={codes} options={empOpts} placeholder="Click, then type or paste codes — e.g. SRS0001, SRS0002" onChange={setCodes} />
         </div>
         <button onClick={search} disabled={busy || !monthVal}
-          style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: busy || !monthVal ? 'not-allowed' : 'pointer', opacity: busy || !monthVal ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+          style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy || !monthVal ? 'not-allowed' : 'pointer', opacity: busy || !monthVal ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
           {busy ? 'Searching…' : 'Search'}
         </button>
         {err && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 10 }}>{err}</div>}
@@ -283,7 +283,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
       {editing && (
         <>
           <div onClick={() => setEditing(null)} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 600 }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(680px, 94vw)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', borderRadius: 14, boxShadow: '0 24px 70px rgba(30,27,75,0.35)', zIndex: 601, padding: 20 }}>
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 'min(680px, 94vw)', maxHeight: '90vh', overflowY: 'auto', background: TK.surface, borderRadius: 14, boxShadow: '0 24px 70px rgba(30,27,75,0.35)', zIndex: 601, padding: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
               <span style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>Unprocessed — {editing.employee_code} · {editing.full_name}</span>
               <button onClick={() => setEditing(null)} style={{ marginLeft: 'auto', border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.muted }}></button>
@@ -325,11 +325,11 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
 
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={process} disabled={saveBusy || violations.length > 0}
-                style={{ padding: '10px 24px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: saveBusy || violations.length ? 'not-allowed' : 'pointer', opacity: saveBusy || violations.length ? 0.5 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
+                style={{ padding: '10px 24px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saveBusy || violations.length ? 'not-allowed' : 'pointer', opacity: saveBusy || violations.length ? 0.5 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
                 {saveBusy ? 'Processing…' : 'Process'}
               </button>
               <button onClick={() => setEditing(null)} disabled={saveBusy}
-                style={{ padding: '10px 20px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', color: C.muted, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+                style={{ padding: '10px 20px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
                 Cancel
               </button>
             </div>

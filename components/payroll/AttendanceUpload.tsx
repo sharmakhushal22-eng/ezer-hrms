@@ -301,7 +301,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
 
   const updated = results?.filter(r => r.result === 'UPDATED').length || 0
   const notFound = results?.filter(r => r.result !== 'UPDATED') || []
-  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' }
+  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const nn = (v: any) => Number(v) || 0
   const companyCount = allRuns.filter(r => String(r.month) === upMonth).length
 
@@ -369,7 +369,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
             const off = !rows.length || !upMonth || checking || busy || sheetErrs.length > 0
             return (
               <button onClick={() => runValidation(rows)} disabled={off}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
                 {checking ? 'Checking…' : '⬆ Upload attendance'}
               </button>
             )
@@ -423,7 +423,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: notFound.length ? 12 : 0 }}>
             <button onClick={downloadProcessed}
-              style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
+              style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
               ⬇ Download processed file
             </button>
             <span style={{ fontSize: 11.5, color: C.muted }}>Your uploaded sheet plus <b>Total Days</b> and <b>Status</b> — each employee marked <b>Processed</b>.</span>

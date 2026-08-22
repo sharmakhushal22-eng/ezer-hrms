@@ -964,9 +964,9 @@ export default function ReportsPage() {
       padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: 'pointer', border: 'none',
       background: active ? C.purple : 'transparent', color: active ? '#fff' : C.muted, transition: 'all .15s',
     } as const),
-    inp: { padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, outline: 'none', background: '#fff', color: C.navy } as const,
-    priBtn: { padding: '8px 16px', borderRadius: 8, background: C.purple, color: '#fff', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500 } as const,
-    secBtn: { padding: '8px 14px', borderRadius: 8, background: '#fff', color: C.purpleDark, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 13 } as const,
+    inp: { padding: '8px 12px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, outline: 'none', background: TK.surface, color: C.navy } as const,
+    priBtn: { padding: '8px 16px', borderRadius: 8, background: C.purple, color: TK.onAccent, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500 } as const,
+    secBtn: { padding: '8px 14px', borderRadius: 8, background: TK.surface, color: C.purpleDark, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 13 } as const,
   };
 
   // ─── Report Detail View ──────────────────────────────────────

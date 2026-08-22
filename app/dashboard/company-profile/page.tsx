@@ -19,8 +19,8 @@ const C = {
   lbl:    { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em' } as React.CSSProperties,
   val:    { fontSize:13, color:TK.ink, marginTop:2 } as React.CSSProperties,
   input:  { padding:'6px 9px', background:TK.sunken, border:'1px solid #CBD5E1', borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
-  pri:    { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
-  out:    { padding:'6px 12px', borderRadius:8, border:'1px solid #CBD5E1', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.inkSoft } as React.CSSProperties,
+  pri:    { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
+  out:    { padding:'6px 12px', borderRadius:8, border:'1px solid #CBD5E1', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
   sec:    { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
 }
 const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF:'#0891B2', FACTORY:TK.critical }
@@ -30,7 +30,7 @@ const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:0
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
   return (
-    <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>
+    <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>
       {type==='success'?'':''} {msg}
     </div>
   )
@@ -89,7 +89,7 @@ function SearchSelect({ value, options, placeholder, onChange, disabled }: {
       {open && !disabled && (
         <>
           <div onClick={() => setOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }} />
-          <div style={{ position:'absolute', top:'calc(100% + 3px)', left:0, width:'100%', minWidth:210, background:'#fff', border:'1px solid #DDD6FE', borderRadius:8, boxShadow:'0 8px 24px rgba(30,27,75,0.16)', zIndex:41, overflow:'hidden' }}>
+          <div style={{ position:'absolute', top:'calc(100% + 3px)', left:0, width:'100%', minWidth:210, background:TK.surface, border:'1px solid #DDD6FE', borderRadius:8, boxShadow:'0 8px 24px rgba(30,27,75,0.16)', zIndex:41, overflow:'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
               style={{ width:'100%', padding:'8px 10px', border:'none', borderBottom:'1px solid #EEF', fontSize:12.5, outline:'none', boxSizing:'border-box', fontFamily:'inherit' }} />
             <div style={{ maxHeight:220, overflowY:'auto' }}>
@@ -175,7 +175,7 @@ function CompanyCard({ co, isMobile, save, openPay }: {
         {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.brandTint, color:TK.brand, fontWeight:600 }}>{co.company_type}</span>}
         <span style={{ fontSize:10, color:TK.faint }}>{co.company_code}</span>
         <span style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
-          <button onClick={e => { e.stopPropagation(); setOpen(true) }} style={{ fontSize:11, fontWeight:600, padding:'4px 11px', borderRadius:7, border:'1px solid #DDD6FE', background:'#fff', color:TK.brand, cursor:'pointer' }}>Edit</button>
+          <button onClick={e => { e.stopPropagation(); setOpen(true) }} style={{ fontSize:11, fontWeight:600, padding:'4px 11px', borderRadius:7, border:'1px solid #DDD6FE', background:TK.surface, color:TK.brand, cursor:'pointer' }}>Edit</button>
           <StatusBadge status={co.account_status} days={co.days_to_due} />
         </span>
       </div>
@@ -358,7 +358,7 @@ export default function CompanyProfilePage() {
           <>
             {groups.map(g => (
               <div key={g.id} style={{ marginBottom:18 }}>
-                <div style={{ ...C.card, display:'flex', alignItems:'center', gap:12, background:TK.ink, color:'#fff', border:'none' }}>
+                <div style={{ ...C.card, display:'flex', alignItems:'center', gap:12, background:TK.ink, color:TK.onAccent, border:'none' }}>
                   <span style={{ fontSize:18 }}></span>
                   <div><div style={{ fontSize:15, fontWeight:600 }}>{g.group_name}</div><div style={{ fontSize:11, color:'#C7D2FE' }}>{g.group_code} · {g.country} · {g.companies.length} companies</div></div>
                 </div>

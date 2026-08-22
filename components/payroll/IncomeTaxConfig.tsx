@@ -167,7 +167,7 @@ export default function IncomeTaxConfig() {
             {AGES.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
           </select>
           <button onClick={runCalculation} disabled={calculating}
-            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
             {calculating ? 'Calculating…' : 'Compare'}
           </button>
         </div>
@@ -181,7 +181,7 @@ export default function IncomeTaxConfig() {
                   <div key={title} style={{ flex: 1, minWidth: 220, borderRadius: 12, padding: '12px 14px', background: win ? (accent === C.green ? C.greenBg : C.purpleBg) : C.gray, border: `1.5px solid ${win ? accent : C.border}`, boxShadow: win ? '0 3px 12px rgba(37,99,235,0.12)' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11.5, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '.03em' }}>{title}</span>
-                      {win && <span style={{ fontSize: 8.5, fontWeight: 800, color: '#fff', background: accent, borderRadius: 99, padding: '2px 7px', textTransform: 'uppercase' }}>Lower</span>}
+                      {win && <span style={{ fontSize: 8.5, fontWeight: 800, color: TK.onAccent, background: accent, borderRadius: 99, padding: '2px 7px', textTransform: 'uppercase' }}>Lower</span>}
                     </div>
                     <ResultRow label="Taxable income" value={r.taxable_income} />
                     <ResultRow label="Tax before rebate" value={r.tax_before_rebate} />

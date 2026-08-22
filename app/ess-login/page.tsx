@@ -130,7 +130,7 @@ export default function ESSLoginPage() {
 
       {/* ── Left brand panel (desktop) ── */}
       <div className="ezer-brand" style={{
-        flex: '1 1 46%', maxWidth: 560, position: 'relative', overflow: 'hidden', color: '#fff',
+        flex: '1 1 46%', maxWidth: 560, position: 'relative', overflow: 'hidden', color: TK.onAccent,
         background: `linear-gradient(155deg, ${P.purple} 0%, ${P.purpleDark} 55%, ${P.purpleDeep} 100%)`,
         padding: '48px 52px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
       }}>
@@ -181,7 +181,7 @@ export default function ESSLoginPage() {
             <div style={{ fontSize: 18, fontWeight: 800, color: P.navy }}>EZER HRMS</div>
           </div>
 
-          <div style={{ background: '#fff', borderRadius: 18, border: '1px solid rgba(37,99,235,0.10)', boxShadow: '0 12px 40px rgba(37,99,235,0.12)', padding: '34px 32px' }}>
+          <div style={{ background: TK.surface, borderRadius: 18, border: '1px solid rgba(37,99,235,0.10)', boxShadow: '0 12px 40px rgba(37,99,235,0.12)', padding: '34px 32px' }}>
             {/* Step dots */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
               {[0, 1].map(i => <div key={i} style={{ height: 4, flex: 1, borderRadius: 99, background: i <= stepIndex ? P.purple : TK.brandTint, transition: 'background .2s' }} />)}
@@ -258,7 +258,7 @@ function PrimaryBtn({ loading, label, loadingLabel }: { loading: boolean; label:
   return (
     <button type="submit" disabled={loading} style={{
       width: '100%', padding: '13px', borderRadius: 10, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-      fontSize: 14.5, fontWeight: 700, fontFamily: 'inherit', color: '#fff',
+      fontSize: 14.5, fontWeight: 700, fontFamily: 'inherit', color: TK.onAccent,
       background: loading ? '#93C5FD' : 'linear-gradient(180deg,#3B82F6,#2563EB)', boxShadow: loading ? 'none' : '0 6px 18px rgba(37,99,235,0.32)',
       transition: 'transform .1s, box-shadow .15s',
     }}

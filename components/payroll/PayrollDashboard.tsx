@@ -258,7 +258,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
 
   useEffect(() => { load() }, [load])
 
-  const selStyle: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' }
+  const selStyle: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const maxDept = Math.max(1, ...deptCost.map(d => d.cost))
 
   return (

@@ -48,7 +48,7 @@ const T = {
   card:  { background:C.surface, borderRadius:R.lg, border:`1px solid ${C.line}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
   label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
   input: { ...inputStyle() } as React.CSSProperties,
-  btnP:  { height:36, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.brandDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:'#fff', boxShadow:E.brand } as React.CSSProperties,
+  btnP:  { height:36, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.brandDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, boxShadow:E.brand } as React.CSSProperties,
   btnO:  { height:34, padding:'0 13px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat } as React.CSSProperties,
   section: { ...eyebrow, marginBottom:S.md, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
@@ -83,8 +83,8 @@ function TransferAckCard({ empId, onAck }: { empId: string; onAck: () => void })
       <div style={{ fontSize:13, fontWeight:600, color:'#633806' }}>Transfer Letter — action required</div>
       <div style={{ fontSize:11, color:'#854F0B', marginTop:3 }}>You are being transferred, effective {tr.effective_date}.</div>
       <div style={{ display:'flex', gap:8, marginTop:10 }}>
-        {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:'#fff', border:'1px solid #EF9F27', borderRadius:7, fontSize:11, color:'#633806', textDecoration:'none' }}>View Letter</a>}
-        <button onClick={async () => { await HR.acknowledgeTransfer(tr.id); setTransfers(t=>t.filter(x=>x.id!==tr.id)); onAck() }} style={{ padding:'7px 14px', background:C.brand, color:'#fff', border:'none', borderRadius:7, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Acknowledge & Accept</button>
+        {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:C.surface, border:'1px solid #EF9F27', borderRadius:7, fontSize:11, color:'#633806', textDecoration:'none' }}>View Letter</a>}
+        <button onClick={async () => { await HR.acknowledgeTransfer(tr.id); setTransfers(t=>t.filter(x=>x.id!==tr.id)); onAck() }} style={{ padding:'7px 14px', background:C.brand, color:C.onAccent, border:'none', borderRadius:7, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Acknowledge & Accept</button>
       </div>
     </div>
   ))}</>)
@@ -135,7 +135,7 @@ function PunchButton({ employeeId }: { employeeId: string }) {
     <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? C.critical : C.positive}` }}>
       <div style={T.section}>Attendance</div>
       <button onClick={punch} disabled={busy || punchedToday === null}
-        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: '#fff', background: isOut ? C.critical : C.positive, opacity: (busy || punchedToday === null) ? .6 : 1 }}>
+        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: C.onAccent, background: isOut ? C.critical : C.positive, opacity: (busy || punchedToday === null) ? .6 : 1 }}>
         {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? 'Punch Out' : 'Punch In')}
       </button>
       {msg && <div style={{ fontSize: 12, color: msg.startsWith('') ? C.positive : C.critical, marginTop: 8, textAlign: 'center' }}>{msg}</div>}
@@ -242,7 +242,7 @@ function ClaimStepper({ status }: { status: string }) {
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
               <div style={{ width: 15, height: 15, borderRadius: '50%', background: on ? colour : '#fff',
                             border: `2px solid ${colour}`, display: 'flex', alignItems: 'center',
-                            justifyContent: 'center', fontSize: 8, color: '#fff', fontWeight: 700 }}>
+                            justifyContent: 'center', fontSize: 8, color: C.onAccent, fontWeight: 700 }}>
                 {on ? '' : ''}
               </div>
               <span style={{ fontSize: 8.5, fontWeight: 600, color: on ? colour : '#C4C4CC',
@@ -527,7 +527,7 @@ function Ring({ pct, size = 76 }: { pct: number; size?: number }) {
                 style={{ transition: 'stroke-dasharray .7s cubic-bezier(.4,0,.2,1)' }} />
       </svg>
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                    alignItems: 'center', justifyContent: 'center', color: C.onAccent }}>
         <span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1 }}>{pct}%</span>
         <span style={{ fontSize: 8.5, opacity: .7, letterSpacing: '.05em', marginTop: 1 }}>DONE</span>
       </div>
@@ -542,7 +542,7 @@ function Avatar({ emp, size = 84 }: { emp: EmployeeDetail; size?: number }) {
     <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0,
                   background: show ? '#fff' : 'linear-gradient(135deg,#2563EB,#93C5FD)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: '#fff', fontSize: size * 0.34, fontWeight: 700, letterSpacing: '.02em',
+                  color: C.onAccent, fontSize: size * 0.34, fontWeight: 700, letterSpacing: '.02em',
                   border: '3px solid rgba(255,255,255,0.25)',
                   boxShadow: '0 6px 20px rgba(0,0,0,0.22)', overflow: 'hidden' }}>
       {show
@@ -557,7 +557,7 @@ function Chip({ icon, children }: { icon: string; children: React.ReactNode }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px',
                    borderRadius: 99, background: 'rgba(255,255,255,0.12)',
-                   border: '1px solid rgba(255,255,255,0.16)', color: '#fff',
+                   border: '1px solid rgba(255,255,255,0.16)', color: C.onAccent,
                    fontSize: 11.5, fontWeight: 500, whiteSpace: 'nowrap' }}>
       <span style={{ opacity: .85 }}>{icon}</span>{children}
     </span>
@@ -659,7 +659,7 @@ function ProfileHero({ emp, notify }: {
         <Avatar emp={emp} />
 
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div style={{ fontSize: 26, fontWeight: 700, color: '#fff', lineHeight: 1.15,
+          <div style={{ fontSize: 26, fontWeight: 700, color: C.onAccent, lineHeight: 1.15,
                         letterSpacing: '-.02em' }}>{emp.full_name || '—'}</div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.72)', marginTop: 3 }}>
             {emp.designation || 'Designation not set'}
@@ -988,7 +988,7 @@ function DirDetailRow({ label, value }: { label: string; value: React.ReactNode 
 function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () => void }) {
   return (
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:4000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div onClick={ev => ev.stopPropagation()} style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:440, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+      <div onClick={ev => ev.stopPropagation()} style={{ background:C.surface, borderRadius:14, width:'100%', maxWidth:440, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, padding:'18px 20px', borderBottom:'1px solid #EDE9FE' }}>
           <div style={{ width:48, height:48, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:16, flexShrink:0 }}>{initials(e.full_name)}</div>
           <div style={{ minWidth:0, flex:1 }}>
@@ -1398,7 +1398,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
   const nav: React.CSSProperties = {
     width: 32, height: 32, borderRadius: 9, cursor: 'pointer',
     border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.10)',
-    color: '#fff', fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
+    color: C.onAccent, fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     transition: 'background .15s ease, transform .12s ease',
   }
@@ -1415,7 +1415,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
         <div style={{ flex: 1, minWidth: 190 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 3 }}>
             <button onClick={onPrev} className="ezer-nav" style={nav} title="Previous month">‹</button>
-            <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: '#fff', letterSpacing: '-.01em' }}>
+            <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: C.onAccent, letterSpacing: '-.01em' }}>
               {MONTH_NAMES[month - 1]} <span style={{ opacity: .55, fontWeight: 500 }}>{year}</span>
             </div>
             <button onClick={onNext} className="ezer-nav" style={nav} title="Next month">›</button>
@@ -1449,7 +1449,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
             )}
           </svg>
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
-                        alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
+                        alignItems: 'center', justifyContent: 'center', color: C.onAccent }}>
             <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, lineHeight: 1 }}>
               {pct == null ? '—' : `${pct}%`}
             </span>
@@ -2314,7 +2314,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     const res = await fetch('/api/ess/vpf', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, stopped_reason: 'Employee requested', stopped_from_month: 4 }) })
     if (res.ok) { notify('VPF stopped'); load() } else notify('Failed to stop', 'error')
   }
-  const card: React.CSSProperties = { background: '#fff', border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
   const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '5px 0' }
 
   return (
@@ -2333,7 +2333,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
       {current && (
         <div style={{ ...card, background: '#EEF7F3', border: '1px solid #C5E8DB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: V.teal }}>Active VPF: {current.vpf_percent}% ({inr(current.monthly_vpf_amount)}/mo) — modify below</span>
-          <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: '#fff', color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop VPF</button>
+          <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: C.surface, color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop VPF</button>
         </div>
       )}
 
@@ -2430,7 +2430,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
   const pranClean = pran.replace(/\D/g, '')
   const pranValid = pranClean.length === e.pran_length
   const canSubmit = ack && (!hasPran || pranValid)
-  const card: React.CSSProperties = { background: '#fff', border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
   const label: React.CSSProperties = { fontSize: 12, color: V.muted, display: 'block', marginBottom: 6 }
   const input: React.CSSProperties = { width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${V.border}`, fontSize: 14, boxSizing: 'border-box', fontFamily: 'inherit' }
 
@@ -2472,13 +2472,13 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
               <div style={{ fontSize: 12, color: V.blue, marginBottom: 8 }}>PRAN pending — generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '—'}.</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`} style={{ ...input, letterSpacing: 2 }} />
-                <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: V.purple, color: '#fff', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
+                <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: V.purple, color: C.onAccent, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: V.teal }}>Active NPS: {current.contribution_percent}% of Basic ({inr(current.monthly_nps_amount)}/mo)</span>
-              <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: '#fff', color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop NPS</button>
+              <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: C.surface, color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop NPS</button>
             </div>
           )}
         </div>
@@ -2584,7 +2584,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
       setAgr(d?.agreement || null); setLoading(false)
     }).catch(() => setLoading(false))
   }, [requestId])
-  const card: React.CSSProperties = { background:'#fff', border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
+  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
   const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:8, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
 
   const submit = async () => {
@@ -2606,7 +2606,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
   if (!agr) return (
     <div style={card}>
       <div style={{ fontSize:13, color:V.red, marginBottom:8 }}>No agreement found yet — please check back shortly.</div>
-      <button onClick={onClose} style={{ padding:'7px 13px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:12 }}>Close</button>
+      <button onClick={onClose} style={{ padding:'7px 13px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:12 }}>Close</button>
     </div>
   )
   const schedule: any[] = Array.isArray(agr.schedule_snapshot) ? agr.schedule_snapshot : (typeof agr.schedule_snapshot === 'string' ? (() => { try { return JSON.parse(agr.schedule_snapshot) } catch { return [] } })() : [])
@@ -2617,8 +2617,8 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
         <div style={{ fontSize:14, fontWeight:600, color:V.navy }}>Sign agreement — {agr.agreement_number}</div>
         <div style={{ display:'flex', gap:8 }}>
-          <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, textDecoration:'none', fontSize:11 }}>View / print</a>
-          <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
+          <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, textDecoration:'none', fontSize:11 }}>View / print</a>
+          <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
         </div>
       </div>
       <div style={{ overflowX:'auto', border:`1px solid ${V.border}`, borderRadius:8, marginBottom:14 }}>
@@ -2657,7 +2657,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
           <input value={pdfUrl} onChange={e => setPdfUrl(e.target.value)} placeholder="https://…/signed-agreement.pdf" style={input} />
         </div>
       )}
-      <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:'#fff', cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit signed agreement'}</button>
+      <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit signed agreement'}</button>
     </div>
   )
 }
@@ -2682,7 +2682,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   }, [emp.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
 
-  const card: React.CSSProperties = { background:'#fff', border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
+  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
   const label: React.CSSProperties = { fontSize:12, color:V.muted, display:'block', marginBottom:6 }
   const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:8, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
 
@@ -2775,7 +2775,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
                 <span style={{ fontSize:18, fontWeight:600, color:V.purpleDark }}>{loanInr(indicativeEmi)}<span style={{ fontSize:11, color:V.muted, fontWeight:400 }}>/mo</span></span>
               </div>
             </div>
-            <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:'#fff', cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
+            <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
           </>
         )}
       </div>
@@ -2796,7 +2796,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
               </div>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                 <LoanStatusBadge status={p.status} />
-                {(p.status || '').toUpperCase() === 'APPROVED' && <button onClick={() => setSigningReq(p.id)} style={{ padding:'6px 12px', borderRadius:7, border:'none', background:V.purple, color:'#fff', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Sign agreement</button>}
+                {(p.status || '').toUpperCase() === 'APPROVED' && <button onClick={() => setSigningReq(p.id)} style={{ padding:'6px 12px', borderRadius:7, border:'none', background:V.purple, color:C.onAccent, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Sign agreement</button>}
               </div>
             </div>
           )
@@ -2821,8 +2821,8 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
               </div>
               {isRecovering && (
                 <div style={{ display:'flex', gap:8, marginTop:8 }}>
-                  <button onClick={() => manage(l, 'CLOSURE')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.red}`, background:'#fff', color:V.red, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Foreclose</button>
-                  <button onClick={() => manage(l, 'PART_PAYMENT')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.purple}`, background:'#fff', color:V.purpleDark, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Part-payment</button>
+                  <button onClick={() => manage(l, 'CLOSURE')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.red}`, background:C.surface, color:V.red, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Foreclose</button>
+                  <button onClick={() => manage(l, 'PART_PAYMENT')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.purple}`, background:C.surface, color:V.purpleDark, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Part-payment</button>
                 </div>
               )}
             </div>
@@ -2895,7 +2895,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
     return () => { live = false }
   }, [emp.id])
 
-  const card: React.CSSProperties = { background: '#fff', border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
 
   if (status === 'loading') return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading flexi policy…</div>
   if (status === 'nopolicy') return (
@@ -2938,7 +2938,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
       </div>
 
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '10px 14px', background: V.navy, color: '#fff', fontSize: 11, fontWeight: 700 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '10px 14px', background: V.navy, color: C.onAccent, fontSize: 11, fontWeight: 700 }}>
           <span>COMPONENT</span><span style={{ textAlign: 'right' }}>{regime === 'old' ? 'OLD REGIME' : 'NEW REGIME'}</span><span style={{ textAlign: 'right' }}>PERQUISITE / EXTRA</span>
         </div>
         {rows.map((r, i) => {
@@ -3191,7 +3191,7 @@ function FeatureGrid({ features }: { features: Feature[] }) {
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12 }}>
         {features.map(f => (
-          <div key={f.name} style={{ background:'#fff', border:'1px solid #ECEAFB', borderRadius:12, padding:16 }}>
+          <div key={f.name} style={{ background:C.surface, border:'1px solid #ECEAFB', borderRadius:12, padding:16 }}>
             <div style={{ fontSize:22, marginBottom:6 }}>{f.icon}</div>
             <div style={{ fontWeight:700, fontSize:13, marginBottom:3 }}>{f.name}</div>
             <div style={{ fontSize:11, color:C.muted }}>{f.note}</div>
@@ -3210,7 +3210,7 @@ function NotificationBell({ unread, open, onToggle }: { unread: number; open: bo
     <button onClick={onToggle} title="Notifications" style={{ position:'relative', width:34, height:34, borderRadius:R.md, border:`1px solid ${open ? C.brand : C.line}`, background: open ? C.brandTint : C.surface, color: open ? C.brandDeep : C.muted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit', flexShrink:0 }}>
       <IconBell size={17} />
       {unread > 0 && (
-        <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:R.pill, background:C.critical, color:'#fff', fontSize:9.5, fontWeight:W.bold, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
+        <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:R.pill, background:C.critical, color:C.onAccent, fontSize:9.5, fontWeight:W.bold, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
           {unread > 9 ? '9+' : unread}
         </span>
       )}
@@ -3287,7 +3287,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
       {!isMobile && (
         <div style={{ width:220, background:C.ink, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
-          <div style={{ padding:'0 18px 16px', color:'#fff', fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
+          <div style={{ padding:'0 18px 16px', color:C.onAccent, fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
           {SECTIONS.map(s => (
             <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
           ))}
@@ -3296,7 +3296,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
       <div style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 70 : 0 }}>
         {/* Top bar */}
-        <div style={{ background:'#fff', borderBottom:'1px solid #EDE9FE', padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:25 }}>
+        <div style={{ background:C.surface, borderBottom:'1px solid #EDE9FE', padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:25 }}>
           {/* The tab's own name and badge live in TabHeader below, so this bar carries
               only what that header can't: the sub-tab you're on, and who you are. */}
           <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
@@ -3327,7 +3327,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {/* Notification panel — anchored to the bell, not a sidebar entry */}
       {bellOpen && (
         <div onClick={() => setBellOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }}>
-          <div onClick={e => e.stopPropagation()} style={{ position:'absolute', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', background:'#fff', border:'1px solid #EDE9FE', borderRadius:12, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
+          <div onClick={e => e.stopPropagation()} style={{ position:'absolute', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', background:C.surface, border:'1px solid #EDE9FE', borderRadius:12, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
             <Notifications emp={emp} onChange={refreshUnread} />
           </div>
         </div>
@@ -3336,7 +3336,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {/* Mobile bottom bar — eleven tabs don't fit a thumb bar, so the four an employee
           opens daily sit here and the rest are one tap away under More. */}
       {isMobile && (
-        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'#fff', borderTop:'1px solid #EDE9FE', display:'flex', zIndex:20 }}>
+        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:C.surface, borderTop:'1px solid #EDE9FE', display:'flex', zIndex:20 }}>
           {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
             <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? C.brand : C.faint, fontWeight: on ? 600 : 500 }}>
               <EssIcon k={s.k} size={17} />{s.short}
@@ -3352,7 +3352,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           is reachable from only one place. */}
       {isMobile && moreOpen && (
         <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:30, display:'flex', alignItems:'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:C.surface, width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
             <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
               {SECTIONS.map(s => (
@@ -3367,7 +3367,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         </div>
       )}
 
-      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?C.positive:C.critical, color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
+      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
     </div>
   )
 }

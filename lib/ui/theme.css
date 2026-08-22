@@ -34,17 +34,27 @@
 :root {
   color-scheme: light;
 
-  /* Text — high contrast, neutral. Readability comes from here. */
-  --ez-ink:           #111827;   /* headings, primary values      */
-  --ez-ink-soft:      #374151;   /* body text, table values       */
-  --ez-muted:         #6B7280;   /* labels, secondary lines       */
-  --ez-faint:         #9CA3AF;   /* placeholders, quiet metadata  */
+  /* Text.
+     Every value below clears WCAG AA (4.5:1) against BOTH white cards and the
+     canvas — measured, not eyeballed. The previous set did not: --ez-faint at
+     #9CA3AF was 2.54:1 on white, which is unreadable at the 10.5px the
+     uppercase card labels use, and it was the reason grey text was
+     disappearing. The whole scale moved one step darker.
+
+     ratios: white / canvas #F3F5F8 */
+  --ez-ink:           #111827;   /* 17.74 / 16.24 — headings, primary values  */
+  --ez-ink-soft:      #374151;   /* 10.31 /  9.44 — body text, table values   */
+  --ez-muted:         #4B5563;   /*  7.56 /  6.92 — labels, secondary lines   */
+  --ez-faint:         #626D80;   /*  5.23 /  4.78 — placeholders, metadata    */
 
   /* Brand — trust blue */
   --ez-brand:         #2563EB;   /* primary actions, active nav   */
   --ez-brand-deep:    #1D4ED8;   /* pressed, gradient end         */
   --ez-brand-tint:    #EFF6FF;   /* hover wash, selected rows     */
   --ez-brand-edge:    #BFDBFE;   /* borders on tinted surfaces    */
+  /* Text that sits ON a saturated accent fill — a primary button, a filled
+     badge. White works in light because every accent is dark there. */
+  --ez-on-accent:     #FFFFFF;
 
   /* Surfaces — neutral light greys, so white cards read as crisp */
   --ez-surface:       #FFFFFF;
@@ -53,14 +63,16 @@
   --ez-line:          #E5E7EB;
   --ez-line-strong:   #D1D5DB;
 
-  /* State — none of these is the brand colour */
-  --ez-positive:      #059669;
+  /* State — none of these is the brand colour.
+     #059669 was the other failure at 3.77:1; state text is often the smallest
+     text on a screen, so these are held to the same bar as body copy. */
+  --ez-positive:      #047857;   /*  5.48 / 5.02 */
   --ez-positive-tint: #ECFDF5;
-  --ez-warning:       #B45309;
+  --ez-warning:       #B45309;   /*  5.02 / 4.60 */
   --ez-warning-tint:  #FFFBEB;
-  --ez-critical:      #DC2626;
+  --ez-critical:      #C0201F;   /*  5.44 / 4.98 */
   --ez-critical-tint: #FEF2F2;
-  --ez-info:          #0369A1;
+  --ez-info:          #0369A1;   /*  5.93 / 5.43 */
   --ez-info-tint:     #F0F9FF;
 
   /* The navigation rail.
@@ -71,7 +83,7 @@
   --ez-rail:             #FFFFFF;
   --ez-rail-text:        #111827;
   --ez-rail-muted:       #4B5563;
-  --ez-rail-faint:       #9CA3AF;
+  --ez-rail-faint:       #626D80;
   --ez-rail-line:        #E5E7EB;
   --ez-rail-hover:       #F3F4F6;
   --ez-rail-active-bg:   #EFF6FF;
@@ -104,6 +116,16 @@
   --ez-ramp-4: #3B82F6;
   --ez-ramp-5: #2563EB;
   --ez-ramp-6: #1D4ED8;
+
+  /* Grade pills. An ordered scale like the funnel, but it has to carry text,
+     so each step is a background/foreground PAIR that clears AA — the previous
+     violet ramp was unreadable in dark and marginal in light. */
+  --ez-grade-1-bg: #DBEAFE;  --ez-grade-1-fg: #1E3A8A;
+  --ez-grade-2-bg: #DFEDFE;  --ez-grade-2-fg: #1E40AF;
+  --ez-grade-3-bg: #E4F0FE;  --ez-grade-3-fg: #1D4ED8;
+  --ez-grade-4-bg: #E9F3FE;  --ez-grade-4-fg: #1F51CE;
+  --ez-grade-5-bg: #EEF6FF;  --ez-grade-5-fg: #2563EB;
+  --ez-grade-6-bg: #F1F5F9;  --ez-grade-6-fg: #475569;
 }
 
 /* ---------------------------------------------------------------------------
@@ -124,12 +146,15 @@
     --ez-ink:           #F3F4F6;
     --ez-ink-soft:      #D1D5DB;
     --ez-muted:         #9CA3AF;
-    --ez-faint:         #6B7280;
+    --ez-faint:         #828C9B;   /* 4.75 on surface */
 
     --ez-brand:         #60A5FA;
     --ez-brand-deep:    #3B82F6;
     --ez-brand-tint:    #172033;
     --ez-brand-edge:    #24344F;
+    /* In dark every accent LIGHTENS (#2563EB becomes #60A5FA), so white text
+       on a primary button drops to 2.54:1. It has to invert. */
+    --ez-on-accent:     #0D1117;
 
     --ez-surface:       #171B21;
     --ez-canvas:        #0F1216;
@@ -151,7 +176,7 @@
     --ez-rail:             #171B21;
     --ez-rail-text:        #F3F4F6;
     --ez-rail-muted:       #9CA3AF;
-    --ez-rail-faint:       #6B7280;
+    --ez-rail-faint:       #828C9B;
     --ez-rail-line:        #262C35;
     --ez-rail-hover:       #1F242C;
     --ez-rail-active-bg:   #172033;
@@ -177,6 +202,13 @@
     --ez-ramp-4: #3B82F6;
     --ez-ramp-5: #60A5FA;
     --ez-ramp-6: #93C5FD;
+
+    --ez-grade-1-bg: #1E3350;      --ez-grade-1-fg: #BFDBFE;
+    --ez-grade-2-bg: #1C3049;      --ez-grade-2-fg: #A9CEFC;
+    --ez-grade-3-bg: #1A2C43;      --ez-grade-3-fg: #93C5FD;
+    --ez-grade-4-bg: #19283C;      --ez-grade-4-fg: #86BAF8;
+    --ez-grade-5-bg: #172436;      --ez-grade-5-fg: #7BAFF4;
+    --ez-grade-6-bg: #1C2129;      --ez-grade-6-fg: #9AA6B5;
   }
 }
 
@@ -188,12 +220,13 @@
   --ez-ink:           #F3F4F6;
   --ez-ink-soft:      #D1D5DB;
   --ez-muted:         #9CA3AF;
-  --ez-faint:         #6B7280;
+  --ez-faint:         #828C9B;   /* 4.75 on surface */
 
   --ez-brand:         #60A5FA;
   --ez-brand-deep:    #3B82F6;
   --ez-brand-tint:    #172033;
   --ez-brand-edge:    #24344F;
+  --ez-on-accent:     #0D1117;
 
   --ez-surface:       #171B21;
   --ez-canvas:        #0F1216;
@@ -213,7 +246,7 @@
   --ez-rail:             #171B21;
   --ez-rail-text:        #F3F4F6;
   --ez-rail-muted:       #9CA3AF;
-  --ez-rail-faint:       #6B7280;
+  --ez-rail-faint:       #828C9B;
   --ez-rail-line:        #262C35;
   --ez-rail-hover:       #1F242C;
   --ez-rail-active-bg:   #172033;
@@ -234,6 +267,13 @@
   --ez-ramp-4: #3B82F6;
   --ez-ramp-5: #60A5FA;
   --ez-ramp-6: #93C5FD;
+
+  --ez-grade-1-bg: #1E3350;    --ez-grade-1-fg: #BFDBFE;
+  --ez-grade-2-bg: #1C3049;    --ez-grade-2-fg: #A9CEFC;
+  --ez-grade-3-bg: #1A2C43;    --ez-grade-3-fg: #93C5FD;
+  --ez-grade-4-bg: #19283C;    --ez-grade-4-fg: #86BAF8;
+  --ez-grade-5-bg: #172436;    --ez-grade-5-fg: #7BAFF4;
+  --ez-grade-6-bg: #1C2129;    --ez-grade-6-fg: #9AA6B5;
 }
 
 /* The viewport paints its own ground behind the app; without this the body

@@ -24,7 +24,7 @@ const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block
 function InfoTile({ icon, label, value, hint, accent }: { icon: string; label: string; value: string; hint?: string; accent?: string }) {
   const a = accent || C.purpleD
   return (
-    <div style={{ background: '#fff', borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(37,99,235,0.05)', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ background: TK.surface, borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(37,99,235,0.05)', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: a }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
         <span style={{ fontSize: 13 }}>{icon}</span>
@@ -164,19 +164,19 @@ export default function EpfConfig() {
               {isIw && <Toggle checked={hasCoc} onChange={setHasCoc} label="Has Certificate of Coverage (excluded)" />}
             </div>
             <button onClick={runCalc}
-              style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', marginBottom: result ? 12 : 0 }}>
+              style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', marginBottom: result ? 12 : 0 }}>
               Calculate
             </button>
 
             {result && (result.is_excluded_employee ? (
               <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 11, padding: '13px 15px' }}>
-                <span style={{ fontSize: 10.5, fontWeight: 800, color: '#fff', background: TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase' }}>Excluded employee</span>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: TK.onAccent, background: TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase' }}>Excluded employee</span>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>COC-holding International Worker — zero EPF applies in India.</div>
               </div>
             ) : (
               <div style={{ background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 11, padding: '13px 15px' }}>
                 <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>EPF wages: <strong style={{ color: C.navy, fontSize: 13 }}>{inr(result.epf_wages)}</strong>{isIw && <span style={{ marginLeft: 8, fontSize: 9.5, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '2px 8px' }}>IW · full gross, no cap</span>}</div>
-                <div style={{ display: 'flex', gap: 0, background: '#fff', borderRadius: 9, border: `1px solid ${C.greenBd}`, overflow: 'hidden', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 0, background: TK.surface, borderRadius: 9, border: `1px solid ${C.greenBd}`, overflow: 'hidden', flexWrap: 'wrap' }}>
                   {[
                     ['Employee', result.employee_contribution, C.navy],
                     ['Employer EPS', result.employer_eps_contribution, '#0891B2'],
@@ -202,7 +202,7 @@ export default function EpfConfig() {
               <div style={{ width: 110 }}><label style={lbl}>Paid days</label><input type="number" value={paidDays} onChange={e => setPaidDays(e.target.value)} style={inputStyle} /></div>
               <div style={{ width: 120 }}><label style={lbl}>Days in month</label><input type="number" value={daysInMonth} onChange={e => setDaysInMonth(e.target.value)} style={inputStyle} /></div>
               <div style={{ marginBottom: 9 }}><Toggle checked={hasMembers} onChange={setHasMembers} label="Has contributing members" /></div>
-              <button onClick={runCharges} style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${C.purple}`, background: '#fff', color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 2 }}>Estimate</button>
+              <button onClick={runCharges} style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${C.purple}`, background: TK.surface, color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 2 }}>Estimate</button>
             </div>
             {charges && (
               <div style={{ display: 'flex', gap: 0, background: C.gray, borderRadius: 9, border: `1px solid ${C.border}`, overflow: 'hidden' }}>

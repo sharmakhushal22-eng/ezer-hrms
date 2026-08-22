@@ -14,7 +14,7 @@ type FieldConf = 'ai-high' | 'ai-verify' | 'manual' | 'normal'
 const PRI = TK.brand
 const S = {
   pg:  { background: TK.canvas, minHeight: '100vh', fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.ink } as const,
-  cd:  { background: '#fff', borderRadius: 12, border: '1px solid rgba(37,99,235,0.12)', padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(37,99,235,0.05)' } as const,
+  cd:  { background: TK.surface, borderRadius: 12, border: '1px solid rgba(37,99,235,0.12)', padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(37,99,235,0.05)' } as const,
   lbl: { fontSize: 10, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.06em', display: 'block', marginBottom: 4 },
   inp: (conf: FieldConf = 'normal') => ({
     width: '100%', padding: '9px 11px', borderRadius: 7, fontSize: 13, outline: 'none',
@@ -24,8 +24,8 @@ const S = {
   }),
   g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } as const,
   g3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } as const,
-  btnP: { padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: PRI, color: '#fff' } as const,
-  btnO: { padding: '9px 16px', borderRadius: 8, border: '1px solid #DDD6FE', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: PRI } as const,
+  btnP: { padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: PRI, color: TK.onAccent } as const,
+  btnO: { padding: '9px 16px', borderRadius: 8, border: '1px solid #DDD6FE', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: PRI } as const,
 }
 const STEPS = ['Personal', 'Address', 'Professional', 'Bank', 'References', 'Documents', 'Review']
 const POLICIES = [
@@ -260,7 +260,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
   // ── COMPLIANCE screen ────────────────────────────────────────
   if (phase === 'compliance') return (
     <div style={{ ...S.pg }}>
-      <div style={{ background: `linear-gradient(135deg, ${PRI}, #4F46E5)`, padding: '12px 18px', color: '#fff' }}>
+      <div style={{ background: `linear-gradient(135deg, ${PRI}, #4F46E5)`, padding: '12px 18px', color: TK.onAccent }}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>Statutory Compliance Forms</div>
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)' }}>All forms AI pre-filled · Review and accept</div>
       </div>
@@ -516,7 +516,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
             </div>
             {(form as any)[key]
               ? <span style={{ fontSize: 11, color: TK.positive, fontWeight: 600 }}>Uploaded</span>
-              : <span style={{ fontSize: 11, background: PRI, color: '#fff', padding: '4px 12px', borderRadius: 99 }}>Upload</span>}
+              : <span style={{ fontSize: 11, background: PRI, color: TK.onAccent, padding: '4px 12px', borderRadius: 99 }}>Upload</span>}
           </div>
         ))}
       </div>
@@ -553,13 +553,13 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
   return (
     <div style={S.pg}>
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, ${PRI}, #4F46E5)`, padding: '12px 18px 14px', color: '#fff' }}>
+      <div style={{ background: `linear-gradient(135deg, ${PRI}, #4F46E5)`, padding: '12px 18px 14px', color: TK.onAccent }}>
         <div style={{ fontSize: 16, fontWeight: 600 }}>Joining Formalities</div>
         <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)' }}>{company?.company_name || 'Company'} · {c.full_name}</div>
       </div>
 
       {/* Step bar */}
-      <div style={{ display: 'flex', overflowX: 'auto', padding: '9px 14px', gap: 3, background: '#fff', borderBottom: '1px solid #EDE9FE' }}>
+      <div style={{ display: 'flex', overflowX: 'auto', padding: '9px 14px', gap: 3, background: TK.surface, borderBottom: '1px solid #EDE9FE' }}>
         {STEPS.map((s, i) => (
           <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
             <div onClick={() => { if (i <= step) setStep(i) }} style={{ padding: '5px 11px', borderRadius: 99, fontSize: 11, fontWeight: 500, cursor: i <= step ? 'pointer' : 'default', whiteSpace: 'nowrap', transition: 'all .2s', background: i === step ? PRI : i < step ? TK.brandTint : '#FAFAFA', color: i === step ? '#fff' : i < step ? PRI : TK.faint }}>

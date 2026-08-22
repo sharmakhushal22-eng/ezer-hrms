@@ -25,14 +25,14 @@ const S = {
   card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   inp: { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, background: TK.sunken, color: C.navy, outline: 'none', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
   label: { fontSize: 10, color: C.muted, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.04em', display: 'block', marginBottom: 3 },
-  pri: { padding: '8px 16px', background: C.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' } as React.CSSProperties,
-  sec: { padding: '7px 12px', background: '#fff', color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' } as React.CSSProperties,
-  green: { padding: '7px 12px', background: C.green, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' } as React.CSSProperties,
+  pri: { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' } as React.CSSProperties,
+  sec: { padding: '7px 12px', background: TK.surface, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: 'inherit' } as React.CSSProperties,
+  green: { padding: '7px 12px', background: C.green, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' } as React.CSSProperties,
 }
 
 function Toast({ msg, onClose }: { msg: string; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3200); return () => clearTimeout(t) }, [onClose])
-  return <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: C.navy, color: '#fff', borderRadius: 10, padding: '11px 18px', fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>{msg}</div>
+  return <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: C.navy, color: TK.onAccent, borderRadius: 10, padding: '11px 18px', fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.2)' }}>{msg}</div>
 }
 function StatBox({ label, value, color }: { label: string; value: React.ReactNode; color: string }) {
   return <div style={{ ...S.card, marginBottom: 0, padding: 14, textAlign: 'center' }}><div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div><div style={{ fontSize: 10, color: C.muted, marginTop: 2, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div></div>
@@ -194,7 +194,7 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
                 {isPending ? <>
                   <button title="Approve" onClick={() => approve([c.id])} style={{ padding: '3px 8px', fontSize: 11, background: C.greenBg, color: C.green, border: `1px solid #BBF7D0`, borderRadius: 6, cursor: 'pointer' }}></button>
                   <button title="Reject" onClick={() => { setRejectIds([c.id]); setRejectReason('') }} style={{ padding: '3px 8px', fontSize: 11, background: C.redBg, color: C.red, border: `1px solid #FCA5A5`, borderRadius: 6, cursor: 'pointer' }}></button>
-                  <button onClick={() => openBills(c)} style={{ padding: '3px 8px', fontSize: 10, background: '#fff', color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer' }}>Bills</button>
+                  <button onClick={() => openBills(c)} style={{ padding: '3px 8px', fontSize: 10, background: TK.surface, color: C.muted, border: `1px solid ${C.border}`, borderRadius: 6, cursor: 'pointer' }}>Bills</button>
                 </> : <StatusBadge status={c.status} />}
               </div>
             </div>
@@ -242,7 +242,7 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
       {/* Bill viewer */}
       {viewFiles && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={() => setViewFiles(null)}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 20, maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: TK.surface, borderRadius: 12, padding: 20, maxWidth: 560, width: '100%', maxHeight: '85vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 2 }}>Bills — {viewFiles.claim.employees?.full_name}</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>{viewFiles.claim.component_code} · {inr(viewFiles.claim.claim_amount)}{viewFiles.claim.bill_no ? ` · 🧾 ${viewFiles.claim.bill_no}` : ''}{(viewFiles.claim.agency_name || viewFiles.claim.vendor_desc) ? ` · 🏪 ${viewFiles.claim.agency_name || viewFiles.claim.vendor_desc}` : ''}</div>
             {viewFiles.files.length === 0 && <div style={{ color: C.muted, fontSize: 12 }}>No files uploaded for this claim.</div>}

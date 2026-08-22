@@ -51,7 +51,7 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
   const locked = p.status === 'APPROVED'
   const shortfall = Math.max(0, num(p.declared_amount) - num(draftAmt || p.submitted_amount))
   return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: '#fff' }}>
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: TK.surface }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
         <span style={{ fontSize: 10.5, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 6, padding: '3px 8px' }}>{p.section}</span>
         <div style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 600 }}>{p.declared_item}</div>
@@ -90,7 +90,7 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
       {!locked && (
         <div style={{ marginTop: 10 }}>
           <button onClick={onSave} disabled={busy}
-            style={{ padding: '7px 15px', borderRadius: 7, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, fontFamily: 'inherit' }}>
+            style={{ padding: '7px 15px', borderRadius: 7, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, fontFamily: 'inherit' }}>
             {p.status === 'PENDING' ? 'Submit proof' : 'Update proof'}
           </button>
         </div>
@@ -210,7 +210,7 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
                 The proof window is not open yet. Use the button below to open a window for each line of your declaration.
               </div>
               <button onClick={openWindow} disabled={busy === 'open'}
-                style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
                 {busy === 'open' ? 'Opening…' : 'Proof window kholein'}
               </button>
             </div>

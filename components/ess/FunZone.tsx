@@ -20,8 +20,8 @@ const F = {
   muted:TK.muted, border:'#ECEAFB', green:TK.positive, greenBg:TK.positiveTint,
   pink:'#DB2777', pinkBg:'#FDF2F8', blue:TK.info, blueBg:TK.infoTint, red:TK.critical,
 }
-const panel: React.CSSProperties = { background:'#fff', borderRadius:16, padding:24, boxShadow:'0 2px 8px rgba(37,99,235,0.08)' }
-const btnPrimary: React.CSSProperties = { fontFamily:'inherit', fontSize:13.5, fontWeight:700, color:'#fff', background:F.purple, border:'none', borderRadius:10, padding:'10px 24px', cursor:'pointer' }
+const panel: React.CSSProperties = { background:TK.surface, borderRadius:16, padding:24, boxShadow:'0 2px 8px rgba(37,99,235,0.08)' }
+const btnPrimary: React.CSSProperties = { fontFamily:'inherit', fontSize:13.5, fontWeight:700, color:TK.onAccent, background:F.purple, border:'none', borderRadius:10, padding:'10px 24px', cursor:'pointer' }
 const gameTitle: React.CSSProperties = { fontSize:18, fontWeight:700, marginBottom:4 }
 const gameSub: React.CSSProperties = { fontSize:12, color:F.muted, marginBottom:18 }
 
@@ -222,7 +222,7 @@ function SpinWheel({ onBack }: { onBack: () => void }) {
         <div style={{ width:0, height:0, borderLeft:'14px solid transparent', borderRight:'14px solid transparent', borderTop:`22px solid ${F.navy}`, marginBottom:-6, zIndex:2 }} />
         <div style={{ width:260, height:260, borderRadius:'50%', position:'relative', marginBottom:20, transform:`rotate(${deg}deg)`, transition:'transform 4s cubic-bezier(0.17,0.67,0.12,0.99)', background:'conic-gradient(#2563EB 0deg 60deg,#DB2777 60deg 120deg,#2563EB 120deg 180deg,#059669 180deg 240deg,#B45309 240deg 300deg,#1D4ED8 300deg 360deg)' }}>
           {PRIZES.map((p, i) => (
-            <div key={p} style={{ position:'absolute', top:'50%', left:'50%', color:'#fff', fontWeight:700, fontSize:10, width:90, textAlign:'center', transformOrigin:'left center', transform:`rotate(${i * SEG + SEG / 2}deg) translateX(30px)` }}>{p.split(' ')[0]}</div>
+            <div key={p} style={{ position:'absolute', top:'50%', left:'50%', color:TK.onAccent, fontWeight:700, fontSize:10, width:90, textAlign:'center', transformOrigin:'left center', transform:`rotate(${i * SEG + SEG / 2}deg) translateX(30px)` }}>{p.split(' ')[0]}</div>
           ))}
         </div>
         <button onClick={spin} disabled={spinning} style={{ ...btnPrimary, opacity: spinning ? .6 : 1, cursor: spinning ? 'wait' : 'pointer' }}>{spinning ? 'Spinning…' : 'Spin!'}</button>

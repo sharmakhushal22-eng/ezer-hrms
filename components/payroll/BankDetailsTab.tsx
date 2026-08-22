@@ -56,7 +56,7 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
     XLSX.writeFile(wb, 'Bank_Details.xlsx')
   }
 
-  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' }
+  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
 
@@ -85,7 +85,7 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
             <input type="checkbox" checked={onlyActive} onChange={e => setOnlyActive(e.target.checked)} /> Hide exited
           </label>
           <button onClick={exportXlsx} disabled={!filtered.length}
-            style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>
+            style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>
             ⬇ Export
           </button>
         </div>

@@ -91,7 +91,7 @@ function AIAssist({ files, amount, setAmount }: { files: File[]; amount: string;
       <span style={{ fontSize: 13 }}></span>
       <div style={{ flex: 1, fontSize: 11, color: V.purpleDark }}>
         AI detected <b>{files.length} receipt{files.length > 1 ? 's' : ''}</b> · Suggested total <b>{inr(aiAmt)}</b>
-        {!amount && <button onClick={() => setAmount(String(aiAmt))} style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', border: `1px solid #C4B5FD`, borderRadius: 6, background: '#fff', cursor: 'pointer', color: V.purpleDark }}>Auto-fill {inr(aiAmt)}</button>}
+        {!amount && <button onClick={() => setAmount(String(aiAmt))} style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', border: `1px solid #C4B5FD`, borderRadius: 6, background: TK.surface, cursor: 'pointer', color: V.purpleDark }}>Auto-fill {inr(aiAmt)}</button>}
       </div>
     </div>
   )
@@ -212,7 +212,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
               {noInv && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: V.greenBg, color: V.green, fontWeight: 600 }}>No invoice needed</span>}
               {exhausted && !noInv && <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: V.redBg, color: V.red, fontWeight: 600 }}>Limit exhausted</span>}
               {(() => { const cnt = claimHist.filter(c => c.component_code === lim.code).length; return (
-                <button onClick={() => setHistComp(lim.code)} style={{ marginLeft: 'auto', fontSize: 11, padding: '4px 11px', borderRadius: 7, border: `1px solid ${V.border}`, background: '#fff', color: V.purpleDark, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>History{cnt ? ` (${cnt})` : ''}</button>
+                <button onClick={() => setHistComp(lim.code)} style={{ marginLeft: 'auto', fontSize: 11, padding: '4px 11px', borderRadius: 7, border: `1px solid ${V.border}`, background: TK.surface, color: V.purpleDark, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>History{cnt ? ` (${cnt})` : ''}</button>
               ) })()}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, marginBottom: 8 }}>
@@ -240,13 +240,13 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
                 <AIAssist files={d.bills} amount={d.amount} setAmount={v => setD(lim.code, { amount: v })} />
                 <div style={{ marginTop: 10, background: TK.sunken, borderRadius: 8, padding: '10px 12px' }}>
                   <div style={{ fontSize: 10, fontWeight: 600, color: V.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em' }}>Other supporting docs</div>
-                  <textarea placeholder="Remark (log book, lease copy…)" rows={2} style={{ width: '100%', fontSize: 11, padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 6, resize: 'none', boxSizing: 'border-box', background: '#fff', marginBottom: 6, fontFamily: 'inherit' }} value={d.supportingRemark} onChange={e => setD(lim.code, { supportingRemark: e.target.value })} />
+                  <textarea placeholder="Remark (log book, lease copy…)" rows={2} style={{ width: '100%', fontSize: 11, padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 6, resize: 'none', boxSizing: 'border-box', background: TK.surface, marginBottom: 6, fontFamily: 'inherit' }} value={d.supportingRemark} onChange={e => setD(lim.code, { supportingRemark: e.target.value })} />
                   <UploadZone label="Attach supporting documents" sub="Any format" onFiles={f => addFiles(lim.code, 'supporting', f)} />
                   <div>{d.supporting.map((f, i) => <FileChip key={i} file={f} onRemove={() => rmFile(lim.code, 'supporting', i)} />)}</div>
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <button disabled={!!submitting} onClick={() => submit(lim)} style={{ padding: '8px 16px', background: V.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: submitting === lim.code ? .7 : 1 }}>{submitting === lim.code ? 'Submitting…' : 'Submit bill'}</button>
-                  <button onClick={() => setReqComp(lim.code)} style={{ padding: '7px 12px', background: '#fff', color: V.navy, border: `1px solid ${V.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>Request limit increase</button>
+                  <button disabled={!!submitting} onClick={() => submit(lim)} style={{ padding: '8px 16px', background: V.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: submitting === lim.code ? .7 : 1 }}>{submitting === lim.code ? 'Submitting…' : 'Submit bill'}</button>
+                  <button onClick={() => setReqComp(lim.code)} style={{ padding: '7px 12px', background: TK.surface, color: V.navy, border: `1px solid ${V.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12 }}>Request limit increase</button>
                 </div>
               </div>
             )}
@@ -254,7 +254,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
             {exhausted && !noInv && (
               <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', background: V.amberBg, border: `1px solid #FDE68A`, borderRadius: 8, padding: '8px 12px' }}>
                 <span style={{ fontSize: 12, color: V.amber, flex: 1 }}>Annual limit reached. You can request an increase from Payroll.</span>
-                <button onClick={() => setReqComp(lim.code)} style={{ padding: '5px 12px', background: V.amber, color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>Request increase</button>
+                <button onClick={() => setReqComp(lim.code)} style={{ padding: '5px 12px', background: V.amber, color: TK.onAccent, border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 11 }}>Request increase</button>
               </div>
             )}
           </div>
@@ -265,16 +265,16 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
         <div style={{ background: V.amberBg, border: `1px solid #FDE68A`, borderRadius: 12, padding: 16, marginTop: 8 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: V.amber, marginBottom: 10 }}>Request limit increase — {reqComp}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Requested annual limit (₹)</label><input type="number" style={{ padding: '7px 8px', border: `1px solid #FDE68A`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: '#fff' }} value={reqAmt} onChange={e => setReqAmt(e.target.value)} /></div>
-            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Reason (mandatory)</label><input type="text" placeholder="Official travel increased…" style={{ padding: '7px 8px', border: `1px solid #FDE68A`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: '#fff' }} value={reqReason} onChange={e => setReqReason(e.target.value)} /></div>
+            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Requested annual limit (₹)</label><input type="number" style={{ padding: '7px 8px', border: `1px solid #FDE68A`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqAmt} onChange={e => setReqAmt(e.target.value)} /></div>
+            <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Reason (mandatory)</label><input type="text" placeholder="Official travel increased…" style={{ padding: '7px 8px', border: `1px solid #FDE68A`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqReason} onChange={e => setReqReason(e.target.value)} /></div>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}><button onClick={sendLimitRequest} style={{ padding: '7px 14px', background: V.amber, color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Send request</button><button onClick={() => setReqComp(null)} style={{ padding: '7px 12px', background: '#fff', color: V.navy, border: `1px solid ${V.border}`, borderRadius: 7, cursor: 'pointer', fontSize: 12 }}>Cancel</button></div>
+          <div style={{ display: 'flex', gap: 8 }}><button onClick={sendLimitRequest} style={{ padding: '7px 14px', background: V.amber, color: TK.onAccent, border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Send request</button><button onClick={() => setReqComp(null)} style={{ padding: '7px 12px', background: TK.surface, color: V.navy, border: `1px solid ${V.border}`, borderRadius: 7, cursor: 'pointer', fontSize: 12 }}>Cancel</button></div>
         </div>
       )}
 
       {histComp && <HistoryDrawer label={limits.find(l => l.code === histComp)?.name || histComp} items={claimHist.filter(c => c.component_code === histComp)} onClose={() => setHistComp(null)} />}
 
-      {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: V.navy, color: '#fff', padding: '11px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,.2)' }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, background: V.navy, color: TK.onAccent, padding: '11px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,.2)' }}>{toast}</div>}
     </div>
   )
 }

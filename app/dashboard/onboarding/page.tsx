@@ -75,7 +75,7 @@ const RiskBadge = ({ risk }: {risk?: RiskLevel}) => {
 
 function Toast({msg,type,onClose}:{msg:string;type:'ok'|'err';onClose:()=>void}) {
   useEffect(()=>{const t=setTimeout(onClose,3500);return()=>clearTimeout(t)},[onClose])
-  return <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,borderRadius:10,padding:'12px 20px',fontSize:13,fontWeight:500,background:type==='ok'?TK.positive:TK.critical,color:'#fff',boxShadow:'0 8px 24px rgba(0,0,0,.18)',maxWidth:320}}>{type==='ok'?'':''} {msg}</div>
+  return <div style={{position:'fixed',bottom:24,right:24,zIndex:9999,borderRadius:10,padding:'12px 20px',fontSize:13,fontWeight:500,background:type==='ok'?TK.positive:TK.critical,color:TK.onAccent,boxShadow:'0 8px 24px rgba(0,0,0,.18)',maxWidth:320}}>{type==='ok'?'':''} {msg}</div>
 }
 
 function ProgressBar({pct,color=P}:{pct:number;color?:string}) {
@@ -476,7 +476,7 @@ export default function OnboardingDashboard() {
         <div>
           <SH title="Quick actions"/>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            <button onClick={()=>setTab('candidates')} style={{padding:'11px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
+            <button onClick={()=>setTab('candidates')} style={{padding:'11px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
               <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/> Send onboarding links (All candidates)
             </button>
             <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:TK.ink}}>
@@ -530,7 +530,7 @@ export default function OnboardingDashboard() {
                   <div style={{display:'flex',justifyContent:'space-between',marginTop:5,fontSize:10,color:TK.muted}}>
                     <span>Step {c.current_step||1}/8 · {pct}% complete</span>
                     {c.status==='SUBMITTED' && (
-                      <button onClick={()=>{openCodeModal(c)}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:'#fff',fontFamily:'inherit'}}>
+                      <button onClick={()=>{openCodeModal(c)}} style={{fontSize:10,padding:'2px 8px',borderRadius:99,border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontFamily:'inherit'}}>
                         Generate code
                       </button>
                     )}
@@ -583,7 +583,7 @@ export default function OnboardingDashboard() {
         <div style={{marginLeft:'auto',fontSize:11,color:TK.muted}}>{filtered.length} of {total} shown</div>
         <button onClick={()=>{ const ni = filtered.filter(c=>c.status==='NOT_INVITED'); const all = ni.length>0 && ni.every(c=>selIds.has(c.id)); setSelIds(prev=>{ const n=new Set(prev); ni.forEach(c=>all?n.delete(c.id):n.add(c.id)); return n }) }} style={{padding:'7px 12px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.brandDeep}}>Select all (not invited)</button>
         {filtered.some(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)) && (
-          <button onClick={bulkSend} disabled={saving} style={{padding:'7px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:12,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1,display:'flex',alignItems:'center',gap:5}}>
+          <button onClick={bulkSend} disabled={saving} style={{padding:'7px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:12,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1,display:'flex',alignItems:'center',gap:5}}>
             <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send link to {filtered.filter(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)).length} selected
           </button>
         )}
@@ -665,7 +665,7 @@ export default function OnboardingDashboard() {
                     <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>
                       <div style={{display:'flex',gap:5,flexWrap:'wrap'}}>
                         {notInvited && (
-                          <button onClick={()=>sendOnboardingFor(c)} disabled={saving} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1}}>
+                          <button onClick={()=>sendOnboardingFor(c)} disabled={saving} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1}}>
                             <i className="ti ti-send" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Send onboarding link
                           </button>
                         )}
@@ -673,7 +673,7 @@ export default function OnboardingDashboard() {
                           <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.brandDeep}}>Edit</button>
                         )}
                         {c.status==='SUBMITTED' && (
-                          <button onClick={()=>{openCodeModal(c)}} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
+                          <button onClick={()=>{openCodeModal(c)}} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
                             <i className="ti ti-bolt" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>Code
                           </button>
                         )}
@@ -687,7 +687,7 @@ export default function OnboardingDashboard() {
                           </button>
                         )}
                         {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
-                          <button onClick={()=>resendLink(c)} disabled={resendingId===c.id} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:resendingId===c.id?.6:1}}>
+                          <button onClick={()=>resendLink(c)} disabled={resendingId===c.id} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontWeight:600,fontFamily:'inherit',opacity:resendingId===c.id?.6:1}}>
                             <i className="ti ti-send" style={{fontSize:11,verticalAlign:-1,marginRight:2}} aria-hidden="true"/>{resendingId===c.id?'Sending…':'Resend'}
                           </button>
                         )}
@@ -757,7 +757,7 @@ export default function OnboardingDashboard() {
                       </div>
                     </div>
                     {a.action==='generate' && cand && (
-                      <button onClick={()=>{openCodeModal(cand)}} style={{padding:'5px 12px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
+                      <button onClick={()=>{openCodeModal(cand)}} style={{padding:'5px 12px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:11,fontWeight:600,fontFamily:'inherit',whiteSpace:'nowrap'}}>
                         <i className="ti ti-bolt" style={{fontSize:12,verticalAlign:-1,marginRight:3}} aria-hidden="true"/>Generate code
                       </button>
                     )}
@@ -815,7 +815,7 @@ export default function OnboardingDashboard() {
                   </div>
                   <div style={{display:'flex',gap:6}}>
                     {c.status==='SUBMITTED' && (
-                      <button onClick={()=>{openCodeModal(c)}} style={{padding:'5px 10px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontFamily:'inherit'}}>Generate code</button>
+                      <button onClick={()=>{openCodeModal(c)}} style={{padding:'5px 10px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:10,fontFamily:'inherit'}}>Generate code</button>
                     )}
                   </div>
                 </div>
@@ -856,7 +856,7 @@ export default function OnboardingDashboard() {
             : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
               {champs.map(c=>(
                 <div key={c.id} style={{background:'#EAF3DE',border:'0.5px solid #A7F3D0',borderRadius:'8px',padding:'10px 12px',textAlign:'center'}}>
-                  <div style={{width:36,height:36,borderRadius:'50%',background:TK.positive,color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:500,margin:'0 auto 6px'}}>
+                  <div style={{width:36,height:36,borderRadius:'50%',background:TK.positive,color:TK.onAccent,display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:500,margin:'0 auto 6px'}}>
                     {c.full_name.charAt(0)}
                   </div>
                   <div style={{fontSize:12,fontWeight:500,color:'#065F46'}}>{c.full_name}</div>
@@ -974,12 +974,12 @@ export default function OnboardingDashboard() {
       <div style={{background:`linear-gradient(135deg, ${P}, #4F46E5)`,padding:'14px 24px 0'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
           <div>
-            <div style={{fontSize:18,fontWeight:500,color:'#fff'}}>Onboarding</div>
+            <div style={{fontSize:18,fontWeight:500,color:TK.onAccent}}>Onboarding</div>
             <div style={{fontSize:11,color:'rgba(255,255,255,.6)',marginTop:1}}>
               {active} active · {thisWeek} joining this week
             </div>
           </div>
-          <button onClick={()=>setTab('candidates')} style={{padding:'8px 16px',borderRadius:'8px',border:'none',cursor:'pointer',background:'rgba(255,255,255,.15)',color:'#fff',fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+          <button onClick={()=>setTab('candidates')} style={{padding:'8px 16px',borderRadius:'8px',border:'none',cursor:'pointer',background:'rgba(255,255,255,.15)',color:TK.onAccent,fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
             <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send onboarding links
           </button>
         </div>
@@ -992,7 +992,7 @@ export default function OnboardingDashboard() {
               <i className={`ti ${t.icon}`} style={{fontSize:14}} aria-hidden="true"/>
               {t.label}
               {t.badge!==undefined && t.badge > 0 && (
-                <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background: t.key==='pending' ? TK.critical : 'rgba(255,255,255,.25)',color:'#fff',fontWeight:600,minWidth:16,textAlign:'center'}}>
+                <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background: t.key==='pending' ? TK.critical : 'rgba(255,255,255,.25)',color:TK.onAccent,fontWeight:600,minWidth:16,textAlign:'center'}}>
                   {t.badge}
                 </span>
               )}
@@ -1070,7 +1070,7 @@ export default function OnboardingDashboard() {
             </div>
             <div style={{display:'flex',gap:10,marginTop:16}}>
               <button onClick={()=>setLinkModal(false)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.ink}}>Cancel</button>
-              <button onClick={sendMagicLink} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
+              <button onClick={sendMagicLink} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>
                 {saving ? 'Generating...' : 'Generate & send onboarding link'}
               </button>
             </div>
@@ -1097,7 +1097,7 @@ export default function OnboardingDashboard() {
               style={{width:'100%',padding:'9px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
             <div style={{display:'flex',gap:10,marginTop:16}}>
               <button onClick={()=>setDateModal(null)} style={{padding:'9px 16px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.ink}}>Cancel</button>
-              <button onClick={saveDate} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>{saving?'Saving…':'Save'}</button>
+              <button onClick={saveDate} disabled={saving} style={{flex:1,padding:'9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:13,fontWeight:500,fontFamily:'inherit',opacity:saving?.6:1}}>{saving?'Saving…':'Save'}</button>
             </div>
           </div>
         </div>

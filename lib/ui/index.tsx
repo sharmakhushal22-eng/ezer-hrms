@@ -257,7 +257,7 @@ export function Button({
   const skin: Record<ButtonVariant, React.CSSProperties> = {
     primary: {
       background: `linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`,
-      color: '#fff', border: `1px solid ${C.brandDeep}`, boxShadow: E.brand,
+      color: C.onAccent, border: `1px solid ${C.brandDeep}`, boxShadow: E.brand,
     },
     secondary: {
       background: C.surface, color: C.ink,
@@ -556,10 +556,14 @@ export function Avatar({ name, size = 32, src }: { name?: string | null; size?: 
   ) : (
     <div style={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0,
-      background: `hsl(${h} 62% 94%)`, color: `hsl(${h} 54% 34%)`,
+      // Lightness is fixed rather than free: at 34% the initials measured
+      // ~4.1:1 on their own tint, just under AA. 28% on a 93% ground clears it
+      // for every hue on the wheel, which is what a name-derived colour has to
+      // guarantee — you cannot pick per person.
+      background: `hsl(${h} 58% 93%)`, color: `hsl(${h} 62% 28%)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontSize: size * 0.38, fontWeight: W.bold, letterSpacing: '.01em',
-      border: `1px solid hsl(${h} 46% 87%)`,
+      border: `1px solid hsl(${h} 44% 85%)`,
     }}>{initials}</div>
   );
 }

@@ -42,9 +42,9 @@ export interface Candidate {
 const C = {
   page:  { background: TK.canvas, minHeight: '100vh', color: TK.ink, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: '13px' } as React.CSSProperties,
   card:  { background: TK.surface, borderRadius: 10, border: '1px solid rgba(37,99,235,0.12)', padding: '14px 16px', marginBottom: 10, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
-  btnP:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.brand, color: '#fff' } as React.CSSProperties,
-  btnG:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.positive, color: '#fff' } as React.CSSProperties,
-  btnO:  { padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: TK.brand } as React.CSSProperties,
+  btnP:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.brand, color: TK.onAccent } as React.CSSProperties,
+  btnG:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.positive, color: TK.onAccent } as React.CSSProperties,
+  btnO:  { padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: TK.brand } as React.CSSProperties,
   inp:   { width: '100%', padding: '9px 11px', background: TK.sunken, border: '1px solid rgba(37,99,235,0.12)', borderRadius: 7, color: TK.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const },
   lbl:   { fontSize: 11, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.05em', display: 'block', marginBottom: 4 },
   g2:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as React.CSSProperties,
@@ -323,7 +323,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
           {defs.map((d, i) => (
             <button key={d.id} onClick={() => setTab(i)} style={{
               padding: '6px 11px', borderRadius: 7, border: `1px solid ${i === tab ? cfg.color : 'rgba(37,99,235,0.15)'}`,
-              background: i === tab ? cfg.color : '#fff', color: i === tab ? '#fff' : TK.muted,
+              background: i === tab ? cfg.color : TK.onAccent, color: i === tab ? '#fff' : TK.muted,
               fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
             }}>
               {params[i].rating > 0 ? '★ ' : ''}{d.label}
@@ -354,9 +354,9 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
       <div style={C.card}>
         <label style={C.lbl}>Recommendation</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-          <button onClick={() => setRec('yes')} style={{ ...C.btnO, ...(rec === 'yes' ? { background: TK.positive, color: '#fff', borderColor: TK.positive } : {}) }}>Proceed to next round</button>
-          <button onClick={() => setRec('hold')} style={{ ...C.btnO, ...(rec === 'hold' ? { background: TK.warning, color: '#fff', borderColor: TK.warning } : {}) }}>On hold</button>
-          <button onClick={() => setRec('no')} style={{ ...C.btnO, ...(rec === 'no' ? { background: TK.critical, color: '#fff', borderColor: TK.critical } : {}) }}>Do not proceed</button>
+          <button onClick={() => setRec('yes')} style={{ ...C.btnO, ...(rec === 'yes' ? { background: TK.positive, color: TK.onAccent, borderColor: TK.positive } : {}) }}>Proceed to next round</button>
+          <button onClick={() => setRec('hold')} style={{ ...C.btnO, ...(rec === 'hold' ? { background: TK.warning, color: TK.onAccent, borderColor: TK.warning } : {}) }}>On hold</button>
+          <button onClick={() => setRec('no')} style={{ ...C.btnO, ...(rec === 'no' ? { background: TK.critical, color: TK.onAccent, borderColor: TK.critical } : {}) }}>Do not proceed</button>
         </div>
         {rec === 'yes' && (
           <div style={C.g2}>

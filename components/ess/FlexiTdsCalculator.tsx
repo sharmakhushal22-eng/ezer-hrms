@@ -75,8 +75,8 @@ const s = {
   label: { fontSize: 11, color: P.muted, fontWeight: 600, display: 'block', marginBottom: 4 } as React.CSSProperties,
   input: { width: '100%', padding: '9px 11px', background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 8, color: P.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
   g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as React.CSSProperties,
-  btn: { padding: '9px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: P.purple, color: '#fff' } as React.CSSProperties,
-  ghost: { padding: '9px 16px', borderRadius: 8, border: `1px solid ${P.border}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: '#fff', color: P.navy } as React.CSSProperties,
+  btn: { padding: '9px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: P.purple, color: TK.onAccent } as React.CSSProperties,
+  ghost: { padding: '9px 16px', borderRadius: 8, border: `1px solid ${P.border}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.surface, color: P.navy } as React.CSSProperties,
   sec: { fontSize: 11, fontWeight: 700, color: P.purpleDark, textTransform: 'uppercase' as const, letterSpacing: '.04em', margin: '14px 0 8px' } as React.CSSProperties,
 }
 
@@ -377,7 +377,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           </div>
 
           <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.ink, fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: '.03em' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.ink, fontSize: 11, fontWeight: 700, color: TK.onAccent, letterSpacing: '.03em' }}>
               <span>COMPONENT</span><span style={{ textAlign: 'right' }}>MONTHLY</span><span style={{ textAlign: 'right' }}>ANNUAL</span>
             </div>
             {(() => {
@@ -436,7 +436,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           {/* Monthly is shown first and largest because that is the figure the HR record
               (Employee Master → Salary) displays. The annual number sits beside it, labelled,
               so the wallet budget can't be mistaken for a different Special Allowance. */}
-          <div style={{ marginTop: 10, background: 'linear-gradient(135deg,#4a148c,#7b1fa2)', borderRadius: 10, padding: '14px 16px', color: '#fff' }}>
+          <div style={{ marginTop: 10, background: 'linear-gradient(135deg,#4a148c,#7b1fa2)', borderRadius: 10, padding: '14px 16px', color: TK.onAccent }}>
             <div style={{ fontSize: 11, opacity: .85 }}>Flexi Wallet {rd ? '(funded by Special Allowance)' : '(Other Reimbursement)'}</div>
             {rd ? (
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', margin: '4px 0 2px' }}>
@@ -501,7 +501,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 8 }}>Car Lease + Driver — Perquisite Tax Applied</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
             {[['Car Lease Perq', '₹7,000', 'per month'], ['Driver Perq', '₹3,000', 'per month'], ['Total Perquisite', '₹10,000', '₹1,20,000/yr → taxable']].map(([l, v, sub]) => (
-              <div key={l} style={{ background: '#fff', borderRadius: 8, padding: '9px 11px', border: '1px solid #FDE68A' }}>
+              <div key={l} style={{ background: TK.surface, borderRadius: 8, padding: '9px 11px', border: '1px solid #FDE68A' }}>
                 <div style={{ fontSize: 10.5, color: P.muted }}>{l}</div><div style={{ fontSize: 16, fontWeight: 700, color: P.amber }}>{v}</div><div style={{ fontSize: 9.5, color: P.muted }}>{sub}</div>
               </div>
             ))}
@@ -537,7 +537,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       </div>
       <div style={s.g2}><WalletBar title="Old Regime Wallet" used={oTot} io={true} /><WalletBar title="New Regime Wallet" used={nTot} io={false} /></div>
       <div style={{ ...s.card, padding: 0, overflow: 'hidden', marginTop: 14 }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', background: P.navy, color: '#fff', fontSize: 11, fontWeight: 700, padding: '10px 14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', background: P.navy, color: TK.onAccent, fontSize: 11, fontWeight: 700, padding: '10px 14px' }}>
           <span>Component</span><span style={{ textAlign: 'center' }}>Old Regime</span><span style={{ textAlign: 'center' }}>New Regime</span>
         </div>
         {COMPS.map(({ k, l, perq }) => {
@@ -834,7 +834,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
     const sec = (t: string) => <tr><td colSpan={3} style={{ padding: '8px 10px', fontSize: 11, fontWeight: 700, color: P.purpleDark, background: '#FAFAFE', letterSpacing: '.03em' }}>{t}</td></tr>
     return (
       <div>
-        <div style={{ ...s.card, background: rec === 'OLD' ? 'linear-gradient(135deg,#B45309,#C2410C)' : 'linear-gradient(135deg,#059669,#047857)', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        <div style={{ ...s.card, background: rec === 'OLD' ? 'linear-gradient(135deg,#B45309,#C2410C)' : 'linear-gradient(135deg,#059669,#047857)', color: TK.onAccent, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div><div style={{ fontSize: 17, fontWeight: 700 }}>Recommended: {rec === 'OLD' ? 'Old' : 'New'} Regime</div><div style={{ fontSize: 12, opacity: .9 }}>You save <b>{R(save)}</b> annually</div></div>
           <div style={{ textAlign: 'right' }}><div style={{ fontSize: 32, fontWeight: 800 }}>{R(rec === 'OLD' ? T.fO : T.fN)}</div><div style={{ fontSize: 11, opacity: .85 }}>Annual Tax · Monthly TDS {R(rec === 'OLD' ? T.moO : T.moN)}</div></div>
         </div>
@@ -915,7 +915,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             const tax = io ? T.fO : T.fN, gr = io ? T.gO : T.gN, ded = io ? T.dO : T.dN, tx2 = io ? T.tO : T.tN, mo = io ? T.moO : T.moN, eff = io ? T.efO : T.efN
             return (
               <div key={rg} style={{ ...s.card, marginBottom: 0, borderLeft: `3px solid ${io ? '#C05621' : P.green}`, boxShadow: ir ? `0 0 0 2px ${P.purple}` : undefined }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: io ? '#9b2c2c' : '#1c4532', display: 'flex', gap: 8, alignItems: 'center' }}>{io ? 'Old' : 'New'} Regime {ir && <span style={{ fontSize: 9, background: P.purple, color: '#fff', padding: '2px 7px', borderRadius: 99 }}>Recommended</span>}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: io ? '#9b2c2c' : '#1c4532', display: 'flex', gap: 8, alignItems: 'center' }}>{io ? 'Old' : 'New'} Regime {ir && <span style={{ fontSize: 9, background: P.purple, color: TK.onAccent, padding: '2px 7px', borderRadius: 99 }}>Recommended</span>}</div>
                 <div style={{ fontSize: 26, fontWeight: 800, color: io ? '#C05621' : P.green, margin: '4px 0' }}>{R(tax)}</div>
                 <div style={{ fontSize: 11, color: P.muted, marginBottom: 8 }}>Effective {eff}% · Monthly TDS {R(mo)}</div>
                 {[['Gross Income', R(gr)], ['(–) Deductions', R(ded)], ['= Net Taxable', R(tx2)], ['Annual Tax', R(tax)], ['Monthly TDS', R(mo)]].map(([l, v]) => <div key={l} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 12, borderBottom: `1px solid ${P.border}` }}><span style={{ color: P.muted }}>{l}</span><span style={{ fontWeight: 600 }}>{v}</span></div>)}

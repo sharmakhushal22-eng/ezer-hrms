@@ -21,8 +21,8 @@ const T = {
   card:       { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   label:      { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
   input:      { width:'100%', padding:'9px 11px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  btnPrimary: { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
-  btnOutline: { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep } as React.CSSProperties,
+  btnPrimary: { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
+  btnOutline: { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep } as React.CSSProperties,
   section:    { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10, marginTop:4, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
 const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d }
@@ -33,7 +33,7 @@ const fmtDT = (s?: string|null) => s ? new Date(s).toLocaleString('en-IN', { dat
 function Toast({ msg, type, onClose }: { msg:string; type:'success'|'error'; onClose:()=>void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
   return (
-    <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:10 }}>
+    <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:10 }}>
       {type==='success'?'':''} {msg}
       <button onClick={onClose} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.7)', cursor:'pointer', fontSize:16, padding:'0 4px' }}>×</button>
     </div>
@@ -204,7 +204,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
         <input style={{ ...T.input, maxWidth:260 }} placeholder="Search emp code / name" value={q} onChange={e => setQ(e.target.value)} />
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
           {FILTERS.map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:TK.brand, color:'#fff', border:'1px solid #2563EB' } : {}) }}>{f}</button>
+            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:TK.brand, color:TK.onAccent, border:'1px solid #2563EB' } : {}) }}>{f}</button>
           ))}
         </div>
         <div style={{ marginLeft:'auto', fontSize:11, color:TK.muted }}>{filtered.length} shown</div>
@@ -348,7 +348,7 @@ function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign }: {
 function StepHead({ n, title, hint, done }: { n: number; title: string; hint?: string; done?: boolean }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-      <span style={{ width:22, height:22, borderRadius:99, background: done ? TK.positive : TK.brand, color:'#fff', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{done ? '' : n}</span>
+      <span style={{ width:22, height:22, borderRadius:99, background: done ? TK.positive : TK.brand, color:TK.onAccent, fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{done ? '' : n}</span>
       <span style={{ fontSize:13, fontWeight:600 }}>{title}</span>
       {hint && <span style={{ fontSize:11, color:TK.faint }}>{hint}</span>}
     </div>
@@ -579,8 +579,8 @@ export default function ESSPage() {
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
         {/* Top-level section switch — ESS & Access + Roles & Permissions in one place */}
         <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-          <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:TK.brand, color:'#fff', border:'1px solid #2563EB' } : {}) }}>ESS &amp; Access</button>
-          <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:TK.brand, color:'#fff', border:'1px solid #2563EB' } : {}) }}>Roles &amp; Permissions</button>
+          <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:TK.brand, color:TK.onAccent, border:'1px solid #2563EB' } : {}) }}>ESS &amp; Access</button>
+          <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:TK.brand, color:TK.onAccent, border:'1px solid #2563EB' } : {}) }}>Roles &amp; Permissions</button>
           <a href="/dashboard/ess-credentials" style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, textDecoration:'none', marginLeft:'auto' }}>Generate Login Credentials →</a>
         </div>
 
@@ -590,7 +590,7 @@ export default function ESSPage() {
 
         <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' }}>
           {TABS.map(t => (
-            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:TK.brand, color:'#fff', border:'1px solid #2563EB' } : {}) }}>{t.l}</button>
+            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:TK.brand, color:TK.onAccent, border:'1px solid #2563EB' } : {}) }}>{t.l}</button>
           ))}
           <button onClick={reload} style={{ ...T.btnOutline, marginLeft:'auto' }}>Refresh</button>
         </div>
@@ -633,10 +633,10 @@ export default function ESSPage() {
       {/* Impersonation overlay (Employee Portal = Phase 2) */}
       {imp && (
         <div style={{ position:'fixed', inset:0, background:TK.canvas, zIndex:1200, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
-          <div style={{ background:TK.ink, color:'#fff', padding:'10px 18px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10, flexWrap:'wrap' }}>
+          <div style={{ background:TK.ink, color:TK.onAccent, padding:'10px 18px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10, flexWrap:'wrap' }}>
             <span style={{ fontSize:13, fontWeight:600 }}>Viewing as {imp.u.full_name} — Admin Mode</span>
             <span style={{ fontSize:11, color:'rgba(255,255,255,.6)' }}>{imp.u.emp_code} · {imp.u.designation || '—'}</span>
-            <button onClick={exitImpersonate} style={{ marginLeft:'auto', ...T.btnOutline, background:'transparent', color:'#fff', borderColor:'rgba(255,255,255,.3)' }}>Exit Admin Mode</button>
+            <button onClick={exitImpersonate} style={{ marginLeft:'auto', ...T.btnOutline, background:'transparent', color:TK.onAccent, borderColor:'rgba(255,255,255,.3)' }}>Exit Admin Mode</button>
           </div>
           <EmployeePortal employeeId={imp.u.employee_id} />
         </div>

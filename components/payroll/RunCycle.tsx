@@ -162,7 +162,7 @@ function Banner({ tone, title, sub }: { tone: 'red' | 'green' | 'amber'; title: 
     }}>
       <div style={{
         width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center',
-        justifyContent: 'center', flexShrink: 0, fontSize: 18, background: t.dot, color: '#fff',
+        justifyContent: 'center', flexShrink: 0, fontSize: 18, background: t.dot, color: TK.onAccent,
       }}>{t.ic}</div>
       <div>
         <div style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>{title}</div>
@@ -190,7 +190,7 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
   const on = isFiltered(filter)
   const inp: React.CSSProperties = {
     padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12,
-    background: '#fff', color: C.navy, fontFamily: font, outline: 'none',
+    background: TK.surface, color: C.navy, fontFamily: font, outline: 'none',
   }
   const lbl: React.CSSProperties = { fontSize: 9.5, color: C.muted, display: 'block', marginBottom: 3 }
   return (
@@ -245,7 +245,7 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
         </div>
         {on && (
           <button onClick={onClear} style={{
-            padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff',
+            padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface,
             color: C.red, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer',
           }}>Clear</button>
         )}
@@ -585,7 +585,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
         <button onClick={run} disabled={!canRun}
           style={{
-            fontFamily: font, fontSize: 14, fontWeight: 700, color: '#fff',
+            fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
             background: canRun ? C.purple : '#D8D3F5', border: 'none', borderRadius: 12,
             padding: '14px 28px', cursor: canRun ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', gap: 8,

@@ -42,10 +42,10 @@ export default function ESSPortalPage() {
   if (viewing) {
     return (
       <div>
-        <div style={{ background: TK.ink, color: '#fff', padding: '9px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13 }}>
+        <div style={{ background: TK.ink, color: TK.onAccent, padding: '9px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13 }}>
           <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: TK.warning, color: TK.ink, fontWeight: 700 }}>{scope?.scope} VIEW</span>
           <span>Viewing <b>{viewing.full_name}</b> · {viewing.emp_code}{viewing.designation ? ` · ${viewing.designation}` : ''}</span>
-          <button onClick={() => setViewing(null)} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: '1px solid rgba(255,255,255,.3)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>Back to my portal</button>
+          <button onClick={() => setViewing(null)} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: '1px solid rgba(255,255,255,.3)', background: 'transparent', color: TK.onAccent, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>Back to my portal</button>
         </div>
         <EmployeePortal employeeId={viewing.id} adminMode onExit={() => setViewing(null)} />
       </div>
@@ -57,7 +57,7 @@ export default function ESSPortalPage() {
       {canViewOthers && (
         <div style={{ background: TK.brandTint, borderBottom: '1px solid #E9E7F5', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 12.5, color: TK.brandDeep }}>
           <span>You have <b>{scope?.roleNames.join(', ')}</b> access ({scope?.scope.toLowerCase()}) — you can open {scope?.employees.length} team member{scope?.employees.length === 1 ? '' : 's'}&apos; portals.</span>
-          <button onClick={() => { setPickerOpen(true); setQ('') }} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: 'none', background: TK.brand, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>View a team member →</button>
+          <button onClick={() => { setPickerOpen(true); setQ('') }} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: 'none', background: TK.brand, color: TK.onAccent, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>View a team member →</button>
         </div>
       )}
 
@@ -65,7 +65,7 @@ export default function ESSPortalPage() {
 
       {pickerOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }} onClick={() => setPickerOpen(false)}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 480, width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: TK.surface, borderRadius: 12, padding: 18, maxWidth: 480, width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize: 15, fontWeight: 700, color: TK.ink, marginBottom: 8 }}>Open a team member&apos;s portal</div>
             <input autoFocus placeholder="Search name or code…" value={q} onChange={e => setQ(e.target.value)} style={{ padding: '9px 12px', border: '1px solid #E9E7F5', borderRadius: 8, fontSize: 13, background: TK.sunken, outline: 'none', marginBottom: 10, fontFamily: 'inherit' }} />
             <div style={{ overflowY: 'auto', flex: 1 }}>
@@ -77,7 +77,7 @@ export default function ESSPortalPage() {
               ))}
               {!list.length && <div style={{ padding: 20, textAlign: 'center', color: TK.muted, fontSize: 13 }}>No matching employees.</div>}
             </div>
-            <div style={{ textAlign: 'right', marginTop: 10 }}><button onClick={() => setPickerOpen(false)} style={{ padding: '8px 14px', background: '#fff', color: TK.ink, border: '1px solid #E9E7F5', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>Close</button></div>
+            <div style={{ textAlign: 'right', marginTop: 10 }}><button onClick={() => setPickerOpen(false)} style={{ padding: '8px 14px', background: TK.surface, color: TK.ink, border: '1px solid #E9E7F5', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>Close</button></div>
           </div>
         </div>
       )}

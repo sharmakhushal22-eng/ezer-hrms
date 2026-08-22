@@ -12,11 +12,11 @@ import { C as TK } from '@/lib/ui'
 const money = (n?: number | null) => (n == null) ? '—' : '₹' + Number(n).toLocaleString('en-IN')
 
 const C = {
-  card:  { background:'#fff', borderRadius:10, padding:'12px 14px', border:'1px solid #E2E8F0', marginBottom:10 } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, padding:'12px 14px', border:'1px solid #E2E8F0', marginBottom:10 } as React.CSSProperties,
   label: { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:4 },
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #E2E8F0', borderRadius:7, color:TK.ink, fontSize:12.5, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  pri:   { padding:'8px 14px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
-  out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #E2E8F0', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.inkSoft } as React.CSSProperties,
+  pri:   { padding:'8px 14px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
+  out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #E2E8F0', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.inkSoft, marginBottom:8, display:'flex', alignItems:'center', gap:6 } as React.CSSProperties,
   g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 } as React.CSSProperties,
 }
@@ -382,7 +382,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
     return (
       <div>
         <div style={{ ...C.card, padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.ink, fontSize: 11, fontWeight: 700, color: '#fff', letterSpacing: '.03em' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.ink, fontSize: 11, fontWeight: 700, color: TK.onAccent, letterSpacing: '.03em' }}>
             <span>{isConsultant ? 'CONSULTANT PAY' : 'STIPEND'}</span>
             <span style={{ textAlign: 'right' }}>MONTHLY</span>
             <span style={{ textAlign: 'right' }}>ANNUAL</span>
@@ -420,7 +420,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
       </div>
 
       <div style={{ ...C.card, padding:0, overflow:'hidden' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'9px 12px', background:TK.ink, fontSize:11, fontWeight:700, color:'#fff', letterSpacing:'.03em' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'9px 12px', background:TK.ink, fontSize:11, fontWeight:700, color:TK.onAccent, letterSpacing:'.03em' }}>
           <span>SALARY STRUCTURE{d.payType && d.payType !== 'Regular' ? ` · ${d.payType}` : ''}</span>
           <span style={{ textAlign:'right' }}>MONTHLY</span>
           <span style={{ textAlign:'right' }}>ANNUAL</span>
@@ -591,5 +591,5 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
 }
 
 function Toast({ t }: { t: { msg: string; type: 'success'|'error' } }) {
-  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:99999, background: t.type==='success'?TK.positive:TK.critical, color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{t.type==='success'?'':''} {t.msg}</div>
+  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:99999, background: t.type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{t.type==='success'?'':''} {t.msg}</div>
 }

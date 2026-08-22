@@ -153,7 +153,7 @@ export default function CompanyProfileView() {
       <div style={{ fontSize:12, color:TK.muted, marginBottom:12 }}>Group, companies, branches, statutory registrations, bank &amp; license — view only. To edit, open Company Profile from Admin.</div>
       {groups.map(g => (
         <div key={g.id} style={{ marginBottom:18 }}>
-          <div style={{ ...C.card, display:'flex', alignItems:'center', gap:12, background:TK.ink, color:'#fff', border:'none' }}>
+          <div style={{ ...C.card, display:'flex', alignItems:'center', gap:12, background:TK.ink, color:TK.onAccent, border:'none' }}>
             <span style={{ fontSize:18 }}></span>
             <div><div style={{ fontSize:15, fontWeight:600 }}>{g.group_name}</div><div style={{ fontSize:11, color:'#C7D2FE' }}>{g.group_code} · {g.country} · {g.companies.length} companies</div></div>
           </div>

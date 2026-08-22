@@ -167,12 +167,12 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
       <button onClick={handleSave} disabled={saving}
         onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
         onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-        style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+        style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
         {saving ? 'Saving…' : 'Save bonus configuration'}
       </button>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: '#fff', padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
           {toast}
         </div>
       )}

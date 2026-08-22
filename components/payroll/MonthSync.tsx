@@ -97,9 +97,9 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
           <input type="checkbox" checked={withAtt} onChange={e => setWithAtt(e.target.checked)} style={{ accentColor: C.purple, cursor: 'pointer' }} />
           Include attendance &amp; OT
         </label>
-        <button onClick={compare} disabled={busy || !run} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 11.5, fontFamily: font, cursor: busy ? 'not-allowed' : 'pointer' }}>⟳ Refresh</button>
+        <button onClick={compare} disabled={busy || !run} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 11.5, fontFamily: font, cursor: busy ? 'not-allowed' : 'pointer' }}>⟳ Refresh</button>
         <button onClick={download} disabled={!diff || !diff.rows.length}
-          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? '#C4B5FD' : 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
+          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? '#C4B5FD' : 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
         </button>
       </div>
 
@@ -184,11 +184,11 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
             {count == null ? '—' : count}
           </span>
           <button onClick={onSync} disabled={busy || disabled}
-            style={{ padding: '7px 15px', borderRadius: 8, border: 'none', background: busy || disabled ? '#C4B5FD' : C.purple, color: '#fff', fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+            style={{ padding: '7px 15px', borderRadius: 8, border: 'none', background: busy || disabled ? '#C4B5FD' : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
             {busy ? 'Syncing…' : 'Sync'}
           </button>
           <button onClick={onDownload} disabled={disabled} title={`Download ${cat.label} as frozen in this month`}
-            style={{ padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.muted, fontSize: 12, fontFamily: font, cursor: disabled ? 'not-allowed' : 'pointer' }}></button>
+            style={{ padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontSize: 12, fontFamily: font, cursor: disabled ? 'not-allowed' : 'pointer' }}></button>
         </>
       ) : global_ ? (
         <>
@@ -221,7 +221,7 @@ function FilterBar({ pool, company, location, search, onCompany, onLocation, onS
   const locations = Array.from(new Set(pool.map(e => e.location).filter(Boolean))).sort()
   const inp: React.CSSProperties = {
     padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12,
-    background: '#fff', color: C.navy, fontFamily: font, outline: 'none',
+    background: TK.surface, color: C.navy, fontFamily: font, outline: 'none',
   }
   const on = matched !== null
   return (
@@ -249,7 +249,7 @@ function FilterBar({ pool, company, location, search, onCompany, onLocation, onS
           <input style={{ ...inp, width: '100%' }} value={search} onChange={e => onSearch(e.target.value)}
             placeholder="OXYZO680, OXYZO741, OXYZO1013   ya   umesh" />
         </div>
-        {on && <button onClick={onClear} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: TK.critical, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer' }}>Clear</button>}
+        {on && <button onClick={onClear} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: TK.critical, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer' }}>Clear</button>}
       </div>
       <div style={{ fontSize: 10.5, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
         {!on ? <>No filter — Sync will run on the <b>whole month</b> ({pool.length} employees).</>
@@ -365,7 +365,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   const readyCount = SYNC_CATEGORIES.filter(c => c.status === 'ready').length
   const globalCount = SYNC_CATEGORIES.filter(c => c.status === 'global').length
   const plannedCount = SYNC_CATEGORIES.length - readyCount - globalCount
-  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' }
+  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const monthOpts = Array.from(new Map(runs.map(r => [r.month, r])).values()).sort((a, b) => (a.month || 0) - (b.month || 0))
 
   return (
@@ -413,7 +413,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
             {migrationDetail && <div style={{ marginTop: 5, fontFamily: 'ui-monospace, monospace', fontSize: 10.5, opacity: .85 }}>{migrationDetail}</div>}
             <div style={{ marginTop: 5 }}>Run the migration that creates that function, then reload.</div>
             <button onClick={syncEverything} disabled={busyKey === 'all' || !runIds.length}
-              style={{ marginLeft: 10, padding: '5px 12px', borderRadius: 7, border: 'none', background: C.amber, color: '#fff', fontWeight: 700, fontSize: 11, fontFamily: font, cursor: 'pointer' }}>
+              style={{ marginLeft: 10, padding: '5px 12px', borderRadius: 7, border: 'none', background: C.amber, color: TK.onAccent, fontWeight: 700, fontSize: 11, fontFamily: font, cursor: 'pointer' }}>
               {busyKey === 'all' ? 'Syncing…' : 'Re-sync everything (old behaviour)'}
             </button>
           </div>

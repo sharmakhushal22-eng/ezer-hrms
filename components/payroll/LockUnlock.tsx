@@ -48,7 +48,7 @@ const card: React.CSSProperties = {
 }
 const inp: React.CSSProperties = {
   fontFamily: font, fontSize: 12.5, color: C.navy, width: '100%',
-  border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', background: '#fff', outline: 'none',
+  border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', background: TK.surface, outline: 'none',
 }
 const fieldLbl: React.CSSProperties = {
   fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase',
@@ -312,11 +312,11 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setApplied({ ...filter })} disabled={busy}
-            style={{ fontFamily: font, fontSize: 12.5, fontWeight: 700, color: '#fff', background: C.purple, border: 'none', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>
+            style={{ fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, background: C.purple, border: 'none', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>
             Search
           </button>
           <button onClick={() => { setFilter(EMPTY_LOCK_FILTER); setApplied(EMPTY_LOCK_FILTER) }} disabled={busy}
-            style={{ fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.muted, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 16px', cursor: 'pointer' }}>
+            style={{ fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.muted, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 16px', cursor: 'pointer' }}>
             Clear
           </button>
         </div>
@@ -332,7 +332,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               nothing locked yet had no way to select anything at all. */}
           {rows.length > 0 && (
             <button onClick={toggleAll}
-              style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11.5, fontWeight: 600, color: C.purpleD, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
+              style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11.5, fontWeight: 600, color: C.purpleD, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
               {rows.length > 0 && rows.every(r => sel.has(r.employee_code)) ? 'Clear selection' : `Select all ${rows.length}`}
             </button>
           )}
@@ -383,7 +383,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <button onClick={unlock} disabled={busy || toUnlock.length === 0}
             style={{
-              fontFamily: font, fontSize: 13.5, fontWeight: 700, color: '#fff',
+              fontFamily: font, fontSize: 13.5, fontWeight: 700, color: TK.onAccent,
               background: toUnlock.length && !busy ? C.purple : '#D8D3F5', border: 'none', borderRadius: 10,
               padding: '12px 22px', cursor: toUnlock.length && !busy ? 'pointer' : 'not-allowed',
               boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(37,99,235,0.2)' : 'none',
@@ -396,7 +396,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
             style={{
               fontFamily: font, fontSize: 13.5, fontWeight: 700,
               color: toLock.length && !busy ? C.red : TK.faint,
-              background: '#fff', border: `1px solid ${toLock.length && !busy ? C.redBd : C.border}`,
+              background: TK.surface, border: `1px solid ${toLock.length && !busy ? C.redBd : C.border}`,
               borderRadius: 10, padding: '12px 22px',
               cursor: toLock.length && !busy ? 'pointer' : 'not-allowed',
             }}>Lock Selected ({toLock.length})
@@ -422,7 +422,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               <span style={{ color: C.muted }}>{r.full_name}</span>
               {r.unlock_reason && <span style={{ color: C.muted, fontSize: 11 }}>— “{r.unlock_reason}”</span>}
               <button onClick={() => relock(r)} disabled={busy}
-                style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11, fontWeight: 700, color: C.red, background: '#fff', border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '5px 12px', cursor: busy ? 'not-allowed' : 'pointer' }}>Lock again
+                style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11, fontWeight: 700, color: C.red, background: TK.surface, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '5px 12px', cursor: busy ? 'not-allowed' : 'pointer' }}>Lock again
               </button>
             </div>
           ))}

@@ -228,7 +228,7 @@ export default function Appraisal() {
                   onKeyDown={e => { if (e.key === 'Enter') lookup() }} />
               </div>
               <button onClick={lookup} disabled={busy || !code.trim()}
-                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: '#fff', background: !code.trim() ? '#D8D3F5' : C.purple, cursor: !code.trim() ? 'not-allowed' : 'pointer' }}>
+                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, background: !code.trim() ? '#D8D3F5' : C.purple, cursor: !code.trim() ? 'not-allowed' : 'pointer' }}>
                 {busy ? 'Loading…' : 'Load'}
               </button>
             </div>
@@ -282,7 +282,7 @@ export default function Appraisal() {
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
                 <button onClick={save} disabled={!canSave}
-                  style={{ padding: '11px 24px', borderRadius: 9, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: '#fff', background: canSave ? 'linear-gradient(120deg,#2563EB,#5B21B6)' : '#D8D3F5', cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? '0 3px 10px rgba(37,99,235,0.22)' : 'none' }}>
+                  style={{ padding: '11px 24px', borderRadius: 9, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: canSave ? 'linear-gradient(120deg,#2563EB,#5B21B6)' : '#D8D3F5', cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? '0 3px 10px rgba(37,99,235,0.22)' : 'none' }}>
                   {busy ? 'Saving…' : 'Save appraisal'}
                 </button>
                 {!canSave && emp && <span style={{ fontSize: 11, color: C.muted }}>New CTC, effective date and pay-out month are all needed.</span>}
@@ -310,7 +310,7 @@ export default function Appraisal() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
             <div style={{ fontSize: 13.5, fontWeight: 700 }}>Saved appraisals</div>
             <button onClick={loadReport} disabled={repBusy}
-              style={{ marginLeft: 'auto', padding: '6px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 700, fontSize: 11.5, cursor: 'pointer', fontFamily: font }}>
+              style={{ marginLeft: 'auto', padding: '6px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 700, fontSize: 11.5, cursor: 'pointer', fontFamily: font }}>
               {repBusy ? 'Loading…' : '⟳ Refresh'}
             </button>
           </div>

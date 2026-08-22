@@ -203,7 +203,7 @@ export default function FlexiConfigBuilder() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
           <span style={{ background: TK.brandTint, color: C.purpleDark, fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>{companyId ? `Slab ${slabs.length + 1}` : 'New slab'}</span>
           <span style={{ fontSize: 11, color: C.muted }}>Annual Fixed = CTC − Variable</span>
-          <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12.5, fontFamily: 'inherit', background: '#fff', color: C.navy }}>
+          <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12.5, fontFamily: 'inherit', background: TK.surface, color: C.navy }}>
             <option value="">All Companies</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
@@ -233,7 +233,7 @@ export default function FlexiConfigBuilder() {
           <ComponentRow key={c.code} c={c} rs={rows[c.code]} onToggle={reg => toggle(c.code, reg)} onField={(f, v) => setField(c.code, f, v)} />
         ))}
 
-        <button onClick={saveSlab} disabled={saving || companies.length === 0} style={{ width: '100%', marginTop: 12, padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: `1px solid ${C.purple}`, background: saving ? '#C4B5FD' : C.purple, color: '#fff', cursor: saving ? 'not-allowed' : 'pointer' }}>
+        <button onClick={saveSlab} disabled={saving || companies.length === 0} style={{ width: '100%', marginTop: 12, padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: `1px solid ${C.purple}`, background: saving ? '#C4B5FD' : C.purple, color: TK.onAccent, cursor: saving ? 'not-allowed' : 'pointer' }}>
           {saving ? 'Saving…' : companyId ? 'Save slab (Old + New together) & create next' : `Save slab for all ${companies.length} companies`}
         </button>
         {!companyId && <div style={{ fontSize: 11, color: C.muted, marginTop: 8, textAlign: 'center' }}>This slab range + components will be added to every company at once.</div>}
@@ -243,12 +243,12 @@ export default function FlexiConfigBuilder() {
         <div>
           <div style={{ fontSize: 13, fontWeight: 500, color: C.navy, marginBottom: 8 }}>Saved slabs ({slabs.length}){!companyId && ' · all companies'}</div>
           {slabs.map(s => (
-            <div key={s.id} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div key={s.id} style={{ background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: C.purpleDark }}>
                 {!companyId && <span style={{ background: TK.brandTint, color: C.purpleDark, fontSize: 11, padding: '2px 8px', borderRadius: 20, marginRight: 8, fontWeight: 500 }}>{companyName(s.company_id)}</span>}
                 Slab {s.sort_order} · {inr(s.fixed_from)} – {inr(s.fixed_to)}
               </span>
-              <button onClick={() => deleteSlab(s.id)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.red}`, background: '#fff', color: C.red, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+              <button onClick={() => deleteSlab(s.id)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.red}`, background: TK.surface, color: C.red, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
             </div>
           ))}
         </div>

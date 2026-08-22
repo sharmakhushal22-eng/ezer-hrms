@@ -80,7 +80,7 @@ function UploadZone({ label, sub, onPick, accept }: { label: string; sub: string
         <div style={{ fontSize: 12.5, color: C.navy, fontWeight: 600 }}>{label}</div>
         <div style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{sub}</div>
       </div>
-      <span style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 7, padding: '5px 11px', flexShrink: 0 }}>Browse</span>
+      <span style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 7, padding: '5px 11px', flexShrink: 0 }}>Browse</span>
       <input ref={ref} type="file" accept={accept} style={{ display: 'none' }}
         onChange={e => { if (e.target.files?.[0]) onPick(e.target.files[0]) }} />
     </div>
@@ -204,7 +204,7 @@ function LetterheadCard({
             </div>
           </div>
           {existingUrl && <a href={existingUrl} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: C.purpleD, textDecoration: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}>View ↗</a>}
-          <button onClick={handleRemove} style={{ padding: '5px 11px', fontSize: 11, borderRadius: 7, border: `1px solid ${C.redBd}`, background: '#fff', color: C.red, cursor: 'pointer', fontWeight: 600 }}>Remove</button>
+          <button onClick={handleRemove} style={{ padding: '5px 11px', fontSize: 11, borderRadius: 7, border: `1px solid ${C.redBd}`, background: TK.surface, color: C.red, cursor: 'pointer', fontWeight: 600 }}>Remove</button>
         </div>
       )}
 
@@ -214,7 +214,7 @@ function LetterheadCard({
       {/* ── Preview modal — shown after a valid single-page PDF is picked ── */}
       {file && detected && previewUrl && (
         <div onClick={closePreview} style={{ position: 'fixed', inset: 0, zIndex: 5000, background: 'rgba(30,27,75,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 580, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: TK.surface, borderRadius: 16, width: '100%', maxWidth: 580, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
               <div style={{ width: 34, height: 34, borderRadius: 9, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>📄</div>
@@ -235,7 +235,7 @@ function LetterheadCard({
                 const grip = { background: TK.brand, borderRadius: 3, boxShadow: '0 0 0 2px #fff' }
                 return (
                   <div style={{ display: 'flex', justifyContent: 'center' }}>
-                    <div ref={previewRef} style={{ position: 'relative', width: '100%', maxWidth: 350, aspectRatio: `${detected.widthMm} / ${detected.heightMm}`, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: '#fff', boxShadow: '0 3px 14px rgba(30,27,75,0.12)', touchAction: 'none', userSelect: 'none' }}>
+                    <div ref={previewRef} style={{ position: 'relative', width: '100%', maxWidth: 350, aspectRatio: `${detected.widthMm} / ${detected.heightMm}`, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: TK.surface, boxShadow: '0 3px 14px rgba(30,27,75,0.12)', touchAction: 'none', userSelect: 'none' }}>
                       <iframe title="Letterhead preview" src={`${previewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
                         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', pointerEvents: 'none', transform: `scale(${(scalePct || 100) / 100})`, transformOrigin: 'center center' }} />
                       {/* Safe content box (visual only) */}
@@ -268,9 +268,9 @@ function LetterheadCard({
             </div>
             {/* Footer */}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 18px', borderTop: `1px solid ${C.border}` }}>
-              <button onClick={closePreview} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', color: C.muted, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>Cancel</button>
+              <button onClick={closePreview} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>Cancel</button>
               <button onClick={handleSave} disabled={saving}
-                style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>
+                style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>
                 {saving ? 'Uploading…' : '⬆ Upload letterhead'}
               </button>
             </div>
@@ -433,9 +433,9 @@ function SignatoryCard({
   }
 
   const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 5000, background: 'rgba(30,27,75,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }
-  const modalCard: React.CSSProperties = { background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }
-  const uploadBtn: React.CSSProperties = { padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }
-  const cancelBtn: React.CSSProperties = { padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', color: C.muted, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }
+  const modalCard: React.CSSProperties = { background: TK.surface, borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }
+  const uploadBtn: React.CSSProperties = { padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }
+  const cancelBtn: React.CSSProperties = { padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
@@ -450,7 +450,7 @@ function SignatoryCard({
 
       <UploadZone label={existingPreview ? 'Replace signature image' : 'Upload signature image'} sub="PNG or JPG, max 2MB — then crop & place it" onPick={pickFile} accept="image/png,image/jpeg" />
       {existingPreview && (
-        <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px' }}>
+        <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={existingPreview} alt="Signature preview" style={{ height: 40, objectFit: 'contain' }} />
           <span style={{ fontSize: 10, color: C.muted }}>current signature{existing?.sig_x_pct != null ? ' · placed' : ''}</span>
@@ -461,7 +461,7 @@ function SignatoryCard({
       {(existing) && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button onClick={handleSaveDetails} disabled={saving} style={{ ...uploadBtn, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : '💾 Save name/designation'}</button>
-          <button onClick={handleRemove} style={{ padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.redBd}`, background: '#fff', color: C.red, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Remove</button>
+          <button onClick={handleRemove} style={{ padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.redBd}`, background: TK.surface, color: C.red, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Remove</button>
         </div>
       )}
 
@@ -510,7 +510,7 @@ function SignatoryCard({
                 <input placeholder="Designation" value={designation} onChange={e => setDesignation(e.target.value)} style={{ padding: '8px 10px', border: '1px solid #DDD6FE', borderRadius: 8, fontSize: 12, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <div ref={placeRef} style={{ position: 'relative', width: '100%', maxWidth: 320, aspectRatio: `${lhBg.wMm} / ${lhBg.hMm}`, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: '#fff', boxShadow: '0 3px 14px rgba(30,27,75,0.12)', touchAction: 'none', userSelect: 'none' }}>
+                <div ref={placeRef} style={{ position: 'relative', width: '100%', maxWidth: 320, aspectRatio: `${lhBg.wMm} / ${lhBg.hMm}`, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: TK.surface, boxShadow: '0 3px 14px rgba(30,27,75,0.12)', touchAction: 'none', userSelect: 'none' }}>
                   {lhBg.url
                     ? <iframe title="letterhead" src={`${lhBg.url}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', pointerEvents: 'none' }} />
                     : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: C.muted, textAlign: 'center', padding: 12 }}>No letterhead set at this level — position is relative to an A4 page.</div>}

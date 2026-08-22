@@ -55,6 +55,12 @@ export const C = {
   brandTint: 'var(--ez-brand-tint)',
   /** Borders on tinted surfaces. */
   brandEdge: 'var(--ez-brand-edge)',
+  /**
+   * Text and icons sitting ON a saturated accent fill — a primary button, a
+   * filled badge. White in light; near-black in dark, because every accent
+   * lightens there and white on it falls to 2.5:1.
+   */
+  onAccent: 'var(--ez-on-accent)',
 
   /** Cards, panels, inputs. */
   surface: 'var(--ez-surface)',
@@ -203,7 +209,10 @@ export const eyebrow: React.CSSProperties = {
   fontWeight: W.bold,
   letterSpacing: '.09em',
   textTransform: 'uppercase',
-  color: C.faint,
+  // `muted`, not `faint`. These are labels — the word that tells you what a
+  // number means — and they were being drawn in the lightest colour in the
+  // system at 10.5px, which is where "grey text is not visible" came from.
+  color: C.muted,
 };
 
 /**

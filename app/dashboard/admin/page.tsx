@@ -38,9 +38,9 @@ const STEPS = [
 ]
 const C = {
   wrap: { minHeight: '100vh', background: '#F0F4F8', fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: '13px' } as React.CSSProperties,
-  top: { background: '#fff', padding: '11px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 } as React.CSSProperties,
+  top: { background: TK.surface, padding: '11px 20px', borderBottom: '1px solid #E2E8F0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 } as React.CSSProperties,
   body: { maxWidth: '900px', margin: '0 auto', padding: '20px 16px' } as React.CSSProperties,
-  card: { background: '#fff', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '18px', marginBottom: '12px' } as React.CSSProperties,
+  card: { background: TK.surface, borderRadius: '10px', border: '1px solid #E2E8F0', padding: '18px', marginBottom: '12px' } as React.CSSProperties,
   sub: { background: TK.sunken, borderRadius: '8px', border: '1px solid #E2E8F0', padding: '12px 14px', marginBottom: '8px' } as React.CSSProperties,
   lbl: { display: 'block', fontSize: '12px', fontWeight: 500, color: TK.inkSoft, marginBottom: '5px' } as React.CSSProperties,
   req: { color: TK.critical, marginLeft: '2px' } as React.CSSProperties,
@@ -49,10 +49,10 @@ const C = {
   secTitle: { fontSize: '13px', fontWeight: 600, color: TK.ink, marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
   addBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', background: TK.sunken, border: '1px dashed #CBD5E1', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', color: TK.brand, fontWeight: 500, width: 'fit-content', marginTop: '6px' } as React.CSSProperties,
   rmBtn: { padding: '3px 8px', background: TK.criticalTint, border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '10px', color: TK.critical, fontWeight: 500 } as React.CSSProperties,
-  priBtn: { padding: '10px 24px', background: TK.brand, color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
-  secBtn: { padding: '10px 20px', background: '#fff', color: TK.inkSoft, border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
-  xlsBtn: { padding: '7px 14px', background: TK.positive, color: '#fff', border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
-  upBtn: { padding: '7px 14px', background: '#0EA5E9', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
+  priBtn: { padding: '10px 24px', background: TK.brand, color: TK.onAccent, border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
+  secBtn: { padding: '10px 20px', background: TK.surface, color: TK.inkSoft, border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
+  xlsBtn: { padding: '7px 14px', background: TK.positive, color: TK.onAccent, border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
+  upBtn: { padding: '7px 14px', background: TK.brand, color: TK.onAccent, border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
 }
 const inp = (err?: boolean): React.CSSProperties => ({
   width: '100%', padding: '9px 11px', border: `1.5px solid ${err ? TK.critical : TK.line}`,
@@ -78,13 +78,13 @@ interface MasterValue { id: string; type_id: string; code: string; label: string
 // ── Styles ─────────────────────────────────────────────────────────
 const MC = {
   page: { display:'flex' as const, minHeight:'100vh', background:'#F0F4F8', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' },
-  sidebar: { width:'260px', background:'#fff', borderRight:'1px solid #E2E8F0', display:'flex' as const, flexDirection:'column' as const, flexShrink:0 },
+  sidebar: { width:'260px', background:TK.surface, borderRight:'1px solid #E2E8F0', display:'flex' as const, flexDirection:'column' as const, flexShrink:0 },
   main: { flex:1, display:'flex' as const, flexDirection:'column' as const, overflow:'hidden' as const },
-  topbar: { background:'#fff', padding:'11px 20px', borderBottom:'1px solid #E2E8F0', display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const },
+  topbar: { background:TK.surface, padding:'11px 20px', borderBottom:'1px solid #E2E8F0', display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const },
   body: { flex:1, padding:'16px 20px', overflowY:'auto' as const },
-  card: { background:'#fff', borderRadius:'10px', border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:'10px' },
-  priBtn: { padding:'8px 16px', background:TK.brand, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
-  secBtn: { padding:'8px 12px', background:'#fff', color:TK.inkSoft, border:'1px solid #E2E8F0', borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
+  card: { background:TK.surface, borderRadius:'10px', border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:'10px' },
+  priBtn: { padding:'8px 16px', background:TK.brand, color:TK.onAccent, border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
+  secBtn: { padding:'8px 12px', background:TK.surface, color:TK.inkSoft, border:'1px solid #E2E8F0', borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
   dangerBtn: { padding:'6px 12px', background:TK.criticalTint, color:TK.critical, border:'none', borderRadius:'6px', fontSize:'11px', cursor:'pointer' },
   inp: { width:'100%', padding:'8px 10px', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'13px', outline:'none', background:TK.sunken, boxSizing:'border-box' as const, color:TK.ink },
   lbl: { fontSize:'11px', fontWeight:500 as const, color:TK.inkSoft, display:'block' as const, marginBottom:'4px' },
@@ -369,7 +369,7 @@ function CompanySetupTab() {
 
   if (done) return (
     <div style={{ ...C.wrap, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ textAlign: 'center', padding: '48px', background: '#fff', borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: '480px', width: '100%', margin: '20px' }}>
+      <div style={{ textAlign: 'center', padding: '48px', background: TK.surface, borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: '480px', width: '100%', margin: '20px' }}>
         <div style={{ fontSize: '56px', marginBottom: '16px' }}></div>
         <h2 style={{ fontSize: '22px', fontWeight: 700, color: TK.ink, marginBottom: '8px' }}>Setup Complete!</h2>
         <p style={{ fontSize: '14px', color: TK.muted, marginBottom: '4px' }}>{savedGroup} → {companyName}</p>
@@ -399,18 +399,18 @@ function CompanySetupTab() {
           <button style={C.xlsBtn} onClick={downloadTemplate}>Template</button>
           <button style={C.upBtn} onClick={() => fileRef.current?.click()}>Upload Excel</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleUpload} />
-          <div style={{ width: '30px', height: '30px', background: TK.brand, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '11px', fontWeight: 600 }}>KS</div>
+          <div style={{ width: '30px', height: '30px', background: TK.brand, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: TK.onAccent, fontSize: '11px', fontWeight: 600 }}>KS</div>
         </div>
       </div>
 
       {/* Upload Preview Modal */}
       {uploadPreview && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '24px', maxWidth: '820px', width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
+          <div style={{ background: TK.surface, borderRadius: '12px', padding: '24px', maxWidth: '820px', width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
             <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '4px' }}>Excel Upload Preview</div>
             <div style={{ fontSize: '12px', color: TK.muted, marginBottom: '14px' }}>{uploadPreview.length} locations found — review and confirm</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-              <thead><tr style={{ background: TK.brand, color: '#fff' }}>
+              <thead><tr style={{ background: TK.brand, color: TK.onAccent }}>
                 {['Name','Type','State','District','PIN'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left' }}>{h}</th>)}
               </tr></thead>
               <tbody>{uploadPreview.map((r, i) => (
@@ -434,7 +434,7 @@ function CompanySetupTab() {
       {/* Map Modal */}
       {mapModal !== null && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: '#fff', borderRadius: '12px', padding: '20px', maxWidth: '700px', width: '100%' }}>
+          <div style={{ background: TK.surface, borderRadius: '12px', padding: '20px', maxWidth: '700px', width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
               <div style={{ fontSize: '14px', fontWeight: 600 }}>Pin Location on Map</div>
               <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: TK.muted }} onClick={() => setMapModal(null)}></button>
@@ -457,7 +457,7 @@ function CompanySetupTab() {
 
       <div style={C.body}>
         {/* Progress Bar */}
-        <div style={{ background: '#fff', borderRadius: '10px', border: '1px solid #E2E8F0', padding: '14px 18px', marginBottom: '16px' }}>
+        <div style={{ background: TK.surface, borderRadius: '10px', border: '1px solid #E2E8F0', padding: '14px 18px', marginBottom: '16px' }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             {STEPS.map((st, i) => {
               const isDone = i < step, isActive = i === step
@@ -1052,7 +1052,7 @@ function MasterSetupTab() {
   // Modal wrapper
   const Modal = ({ title, onClose, children, onSave, saveLabel='Save' }: any) => (
     <div style={{ position:'fixed' as const, inset:0, background:'rgba(0,0,0,0.4)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
-      <div style={{ background:'#fff', borderRadius:'14px', padding:'24px', width:'520px', maxHeight:'85vh', overflowY:'auto' as const, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+      <div style={{ background:TK.surface, borderRadius:'14px', padding:'24px', width:'520px', maxHeight:'85vh', overflowY:'auto' as const, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'16px' }}>
           <div style={{ fontSize:'15px', fontWeight:600 }}>{title}</div>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:TK.faint }}></button>
@@ -1080,7 +1080,7 @@ function MasterSetupTab() {
       {/* Left Sidebar */}
       <div style={MC.sidebar}>
         <div style={{ padding:'14px 16px', borderBottom:'1px solid #E2E8F0', background:TK.ink }}>
-          <div style={{ fontSize:'13px', fontWeight:600, color:'#fff' }}>Master Setup</div>
+          <div style={{ fontSize:'13px', fontWeight:600, color:TK.onAccent }}>Master Setup</div>
           <div style={{ fontSize:'10px', color:'rgba(255,255,255,0.5)', marginTop:'2px' }}>Select category → type → manage values</div>
         </div>
 
@@ -1211,14 +1211,14 @@ function MasterSetupTab() {
                 <table style={{ width:'100%', borderCollapse:'collapse' as const, fontSize:'12px' }}>
                   <thead>
                     <tr style={{ background:TK.ink }}>
-                      <th style={{ padding:'9px 10px', color:'#fff', textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'40px' }}>Order</th>
-                      {selType.has_color && <th style={{ padding:'9px 10px', color:'#fff', textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'60px' }}>Color</th>}
-                      {selType.has_code && <th style={{ padding:'9px 10px', color:'#fff', textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'120px' }}>Code</th>}
-                      <th style={{ padding:'9px 10px', color:'#fff', textAlign:'left' as const, fontWeight:600, fontSize:'11px' }}>Label</th>
-                      <th style={{ padding:'9px 10px', color:'#fff', textAlign:'left' as const, fontWeight:600, fontSize:'11px' }}>Description</th>
-                      {selType.has_extra_data && <th style={{ padding:'9px 10px', color:'#fff', textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'80px' }}>Extra Data</th>}
-                      <th style={{ padding:'9px 10px', color:'#fff', textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'80px' }}>Status</th>
-                      <th style={{ padding:'9px 10px', color:'#fff', textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'120px' }}>Actions</th>
+                      <th style={{ padding:'9px 10px', color:TK.onAccent, textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'40px' }}>Order</th>
+                      {selType.has_color && <th style={{ padding:'9px 10px', color:TK.onAccent, textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'60px' }}>Color</th>}
+                      {selType.has_code && <th style={{ padding:'9px 10px', color:TK.onAccent, textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'120px' }}>Code</th>}
+                      <th style={{ padding:'9px 10px', color:TK.onAccent, textAlign:'left' as const, fontWeight:600, fontSize:'11px' }}>Label</th>
+                      <th style={{ padding:'9px 10px', color:TK.onAccent, textAlign:'left' as const, fontWeight:600, fontSize:'11px' }}>Description</th>
+                      {selType.has_extra_data && <th style={{ padding:'9px 10px', color:TK.onAccent, textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'80px' }}>Extra Data</th>}
+                      <th style={{ padding:'9px 10px', color:TK.onAccent, textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'80px' }}>Status</th>
+                      <th style={{ padding:'9px 10px', color:TK.onAccent, textAlign:'left' as const, fontWeight:600, fontSize:'11px', width:'120px' }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1236,7 +1236,7 @@ function MasterSetupTab() {
                         )}
                         {selType.has_code && (
                           <td style={{ padding:'8px 10px' }}>
-                            <span style={{ padding:'2px 7px', background: v.color||TK.brandTint, color:'#fff', borderRadius:'5px', fontSize:'10px', fontWeight:600 }}>{v.code}</span>
+                            <span style={{ padding:'2px 7px', background: v.color||TK.brandTint, color:TK.onAccent, borderRadius:'5px', fontSize:'10px', fontWeight:600 }}>{v.code}</span>
                           </td>
                         )}
                         <td style={{ padding:'8px 10px', fontWeight:500 }}>{v.label}</td>
@@ -1368,13 +1368,13 @@ export default function AdminPage() {
       {/* Header */}
       <div style={{ background: TK.ink, padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
-          <div style={{ fontSize: '15px', fontWeight: 600, color: '#fff' }}>Admin Setup</div>
+          <div style={{ fontSize: '15px', fontWeight: 600, color: TK.onAccent }}>Admin Setup</div>
           <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', marginTop: '2px' }}>Company Configuration · Master Data · ezerhrms.com</div>
         </div>
         <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>Sharma Group</div>
       </div>
       {/* Tabs */}
-      <div style={{ background: '#fff', borderBottom: '1px solid #E2E8F0', padding: '0 24px', display: 'flex' }}>
+      <div style={{ background: TK.surface, borderBottom: '1px solid #E2E8F0', padding: '0 24px', display: 'flex' }}>
         {[
           { id: 'company', label: 'Company Setup', desc: 'Onboard a new company — 7-step wizard' },
           { id: 'master',  label: 'Master Setup',  desc: 'Manage dropdowns — Add/Edit/Disable' },

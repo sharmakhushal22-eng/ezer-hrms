@@ -14,12 +14,12 @@ interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: an
 const P = TK.brand
 const S = {
   page: { background: TK.canvas, minHeight: '100vh', fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.ink } as const,
-  card: { background: '#fff', borderRadius: 12, border: '1px solid rgba(37,99,235,0.12)', padding: '18px 20px', marginBottom: 12, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as const,
+  card: { background: TK.surface, borderRadius: 12, border: '1px solid rgba(37,99,235,0.12)', padding: '18px 20px', marginBottom: 12, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as const,
   lbl: { fontSize: 10, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.06em', display: 'block', marginBottom: 4 },
   inp: (err = false) => ({ width: '100%', padding: '9px 12px', background: err ? TK.criticalTint : TK.sunken, border: `1px solid ${err ? '#FCA5A5' : TK.brandEdge}`, borderRadius: 8, color: TK.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }),
   sel: { width: '100%', padding: '9px 12px', background: TK.sunken, border: '1px solid #DDD6FE', borderRadius: 8, color: TK.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' },
-  btnP: { padding: '11px 24px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', background: P, color: '#fff', transition: 'opacity .2s' } as const,
-  btnO: { padding: '10px 18px', borderRadius: 9, border: `1px solid ${P}`, cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: P } as const,
+  btnP: { padding: '11px 24px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', background: P, color: TK.onAccent, transition: 'opacity .2s' } as const,
+  btnO: { padding: '10px 18px', borderRadius: 9, border: `1px solid ${P}`, cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: P } as const,
   g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as const,
   g3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } as const,
 }
@@ -49,7 +49,7 @@ async function api(path: string, body: any, method = 'POST') {
 // ── Toast ─────────────────────────────────────────────────────────
 function Toast({ msg, type }: { msg: string; type: 'ok' | 'err' }) {
   return (
-    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, borderRadius: 10, padding: '12px 20px', fontSize: 13, fontWeight: 500, background: type === 'ok' ? TK.positive : TK.critical, color: '#fff', boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 320 }}>
+    <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9999, borderRadius: 10, padding: '12px 20px', fontSize: 13, fontWeight: 500, background: type === 'ok' ? TK.positive : TK.critical, color: TK.onAccent, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', maxWidth: 320 }}>
       {type === 'ok' ? '' : ''} {msg}
     </div>
   )
@@ -59,7 +59,7 @@ function Toast({ msg, type }: { msg: string; type: 'ok' | 'err' }) {
 function StepBar({ current }: { current: Step }) {
   const pct = Math.round((current / STEPS.length) * 100)
   return (
-    <div style={{ background: '#fff', borderBottom: '1px solid #EDE9FE' }}>
+    <div style={{ background: TK.surface, borderBottom: '1px solid #EDE9FE' }}>
       <div style={{ display: 'flex', alignItems: 'center', padding: '12px 20px 4px', overflowX: 'auto', gap: 0 }}>
         {STEPS.map((s, i) => {
           const n = i + 1
@@ -1076,13 +1076,13 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
   return (
     <div style={S.page}>
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg, ${P}, #4F46E5)`, padding: '14px 20px', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <div style={{ background: `linear-gradient(135deg, ${P}, #4F46E5)`, padding: '14px 20px', color: TK.onAccent, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 16, fontWeight: 600 }}>{co?.company_name || 'EZER HRMS'} — Joining Formalities</div>
           <div style={{ fontSize: 11, color: 'rgba(255,255,255,.65)', marginTop: 1 }}>{(c.full_name || '').toUpperCase()} · {c.designation}</div>
         </div>
         {esicApplicable && (
-          <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 99, background: 'rgba(255,255,255,.18)', color: '#fff', border: '1px solid rgba(255,255,255,.35)' }}>ESIC Applicable
+          <span style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 99, background: 'rgba(255,255,255,.18)', color: TK.onAccent, border: '1px solid rgba(255,255,255,.35)' }}>ESIC Applicable
           </span>
         )}
       </div>
@@ -1101,7 +1101,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
         {/* ═══ STEP 1: WELCOME + IDENTITY VERIFY ════════════════════ */}
         {step === 1 && (
           <div>
-            <div style={{ ...S.card, background: `linear-gradient(135deg, ${P}, #4F46E5)`, color: '#fff' }}>
+            <div style={{ ...S.card, background: `linear-gradient(135deg, ${P}, #4F46E5)`, color: TK.onAccent }}>
               <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 6 }}>Welcome, {(c.full_name || '').toUpperCase()}! 👋</div>
               <div style={{ fontSize: 13, color: 'rgba(255,255,255,.8)', lineHeight: 1.8 }}>
                 We're excited to have you join {co?.company_name}. Let's verify your identity to begin.

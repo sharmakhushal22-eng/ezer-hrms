@@ -169,7 +169,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={save} disabled={saveBusy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
                 {saveBusy ? 'Saving…' : 'Save changes'}
               </button>
               {saveMsg && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>✓ {saveMsg}</span>}
@@ -196,7 +196,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={saveArrear} disabled={arrBusy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: arrBusy ? 'not-allowed' : 'pointer', opacity: arrBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: arrBusy ? 'not-allowed' : 'pointer', opacity: arrBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
                 {arrBusy ? 'Saving…' : 'Add arrear'}
               </button>
               {cur.arrear_days ? <span style={{ fontSize: 11.5, color: C.purpleD }}>current: <b>{cur.arrear_days}</b> day(s){cur.arrear_source_period ? ` from ${String(cur.arrear_source_period).slice(0, 7)}` : ''}</span> : null}

@@ -178,7 +178,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div style={{
           width: 38, height: 38, borderRadius: R.md,
           background: `linear-gradient(180deg,${C.brand},${C.brandDeep})`,
-          color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: C.onAccent, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontWeight: W.bold, fontSize: F.body, boxShadow: E.brand,
         }}>Ez</div>
         Checking access…
@@ -219,7 +219,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             width: 34, height: 34, borderRadius: R.md, flexShrink: 0,
             background: `linear-gradient(180deg,${C.brand},${C.brandDeep})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: C.onDark, fontWeight: W.bold, fontSize: F.body, letterSpacing: '-.02em',
+            color: C.onAccent, fontWeight: W.bold, fontSize: F.body, letterSpacing: '-.02em',
             boxShadow: E.brand,
           }}>Ez</div>
           {open && (

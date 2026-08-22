@@ -29,7 +29,7 @@ export default function SubSectionDropdown({ items, active, onChange, kicker = '
     <div style={{ position: 'relative', marginBottom: 14, maxWidth: 340 }}>
       <button onClick={toggle} style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderRadius: 10,
-        border: `1px solid ${open ? C.purple : C.border}`, background: '#fff', cursor: 'pointer', fontFamily: font,
+        border: `1px solid ${open ? C.purple : C.border}`, background: TK.surface, cursor: 'pointer', fontFamily: font,
         boxShadow: open ? '0 6px 20px rgba(37,99,235,0.16)' : '0 1px 3px rgba(37,99,235,0.06)', transition: 'box-shadow .15s, border-color .15s',
       }}>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2, minWidth: 0 }}>
@@ -41,7 +41,7 @@ export default function SubSectionDropdown({ items, active, onChange, kicker = '
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000 }} />
-          <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 240, width: '100%', zIndex: 1001, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6, maxHeight: '70vh', overflowY: 'auto' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 240, width: '100%', zIndex: 1001, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6, maxHeight: '70vh', overflowY: 'auto' }}>
             {items.map(i => {
               const on = i.id === active
               return (

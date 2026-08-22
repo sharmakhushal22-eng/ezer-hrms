@@ -252,7 +252,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={saveOne} disabled={busy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
                 {busy ? 'Saving…' : 'Save entry'}
               </button>
               {headType && <span style={{ fontSize: 11.5, fontWeight: 700, color: headType === 'Addition' ? C.green : C.red }}>{headType}</span>}
@@ -312,7 +312,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={downloadTemplate} disabled={!picked.length || !runIds.length}
-                style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: picked.length && runIds.length ? 'pointer' : 'not-allowed', opacity: picked.length && runIds.length ? 1 : 0.5 }}>
+                style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: picked.length && runIds.length ? 'pointer' : 'not-allowed', opacity: picked.length && runIds.length ? 1 : 0.5 }}>
                 ⬇ Download template
               </button>
               <span style={{ fontSize: 11, color: C.muted }}>{picked.length} head{picked.length === 1 ? '' : 's'} selected</span>
@@ -326,7 +326,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
             {bulkRows && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
                 <button onClick={processBulk} disabled={bulkBusy}
-                  style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: bulkBusy ? 'not-allowed' : 'pointer', opacity: bulkBusy ? 0.6 : 1 }}>
+                  style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: bulkBusy ? 'not-allowed' : 'pointer', opacity: bulkBusy ? 0.6 : 1 }}>
                   {bulkBusy ? 'Saving…' : `Save ${bulkRows.length} rows`}
                 </button>
                 <span style={{ fontSize: 11.5, color: C.purpleD }}><b>{bulkFile}</b> · {bulkRows.length} employees</span>

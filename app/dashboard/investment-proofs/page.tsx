@@ -27,8 +27,8 @@ const S = {
   page: { background: C.bg, minHeight: '100vh', padding: 24, color: C.navy, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13 } as React.CSSProperties,
   card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   inp: { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, background: C.soft, color: C.navy, outline: 'none', fontFamily: 'inherit' } as React.CSSProperties,
-  pri: { padding: '7px 14px', background: C.green, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' } as React.CSSProperties,
-  rej: { padding: '7px 14px', background: '#fff', color: C.red, border: `1px solid ${C.red}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' } as React.CSSProperties,
+  pri: { padding: '7px 14px', background: C.green, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' } as React.CSSProperties,
+  rej: { padding: '7px 14px', background: TK.surface, color: C.red, border: `1px solid ${C.red}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' } as React.CSSProperties,
 }
 
 interface Row {
@@ -53,7 +53,7 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
   const gap = Math.max(0, num(r.declared_amount) - num(draft || r.submitted_amount))
   const done = r.status === 'APPROVED' || r.status === 'REJECTED'
   return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: '#fff' }}>
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: TK.surface }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 9 }}>
         <span style={{ fontSize: 10.5, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 6, padding: '3px 8px' }}>{r.section}</span>
         <div style={{ flex: 1, minWidth: 190 }}>
@@ -203,7 +203,7 @@ export default function InvestmentProofsPage() {
           {['PENDING', 'SUBMITTED', 'APPROVED', 'REJECTED'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <input style={{ ...S.inp, flex: 1, minWidth: 200 }} placeholder="Emp code, naam ya section" value={q} onChange={e => setQ(e.target.value)} />
-        <button style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }} onClick={load}>⟳ Refresh</button>
+        <button style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }} onClick={load}>⟳ Refresh</button>
       </div>
 
       {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}

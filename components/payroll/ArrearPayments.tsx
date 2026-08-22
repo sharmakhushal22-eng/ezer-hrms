@@ -45,9 +45,9 @@ const S = {
   card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' } as React.CSSProperties,
   th: { padding: '8px 11px', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.05em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const },
   td: { padding: '8px 11px', color: C.navy, borderTop: `1px solid ${C.border}`, whiteSpace: 'nowrap' as const },
-  inp: { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' } as React.CSSProperties,
-  btnP: { padding: '9px 17px', borderRadius: 8, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
-  btnO: { padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
+  inp: { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' } as React.CSSProperties,
+  btnP: { padding: '9px 17px', borderRadius: 8, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
+  btnO: { padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
 }
 
 function Stat({ label, value, color }: { label: string; value: any; color: string }) {

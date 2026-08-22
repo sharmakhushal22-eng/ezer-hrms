@@ -23,7 +23,7 @@ const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`
 function InfoTile({ icon, label, value, hint, accent }: { icon: string; label: string; value: string; hint?: string; accent?: string }) {
   const a = accent || C.purpleD
   return (
-    <div style={{ background: '#fff', borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(37,99,235,0.05)', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ background: TK.surface, borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(37,99,235,0.05)', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: a }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
         <span style={{ fontSize: 13 }}>{icon}</span>
@@ -137,14 +137,14 @@ export default function EsicConfig() {
             {est && (
               <div style={{ background: est.covered ? C.greenBg : C.gray, border: `1px solid ${est.covered ? C.greenBd : C.border}`, borderRadius: 11, padding: '13px 15px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: est.covered ? 12 : 0 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 800, color: '#fff', background: est.covered ? C.green : TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase', letterSpacing: '.03em' }}>
+                  <span style={{ fontSize: 10.5, fontWeight: 800, color: TK.onAccent, background: est.covered ? C.green : TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase', letterSpacing: '.03em' }}>
                     {est.covered ? 'Covered' : 'Not covered'}
                   </span>
                   {!est.covered && <span style={{ fontSize: 11.5, color: C.muted }}>wage above {inr(est.ceiling)} ceiling</span>}
                   {est.lowWaged && est.covered && <span style={{ fontSize: 9.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 99, padding: '2px 8px' }}>low-wage: employee share waived</span>}
                 </div>
                 {est.covered && (
-                  <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: '#fff', borderRadius: 9, border: `1px solid ${C.greenBd}`, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: TK.surface, borderRadius: 9, border: `1px solid ${C.greenBd}`, overflow: 'hidden' }}>
                     {[
                       ['Employee', est.employee, C.navy],
                       ['Employer', est.employer, C.navy],

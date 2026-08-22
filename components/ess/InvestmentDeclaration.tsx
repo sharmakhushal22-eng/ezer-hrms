@@ -35,8 +35,8 @@ const S = {
   lbl: { fontSize: 12, color: C.navy, display: 'block', marginBottom: 5 } as React.CSSProperties,
   inp: { width: '100%', padding: '9px 11px', background: C.soft, border: `1px solid #DDD6FE`, borderRadius: 7, color: C.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
   row: { display: 'grid', gridTemplateColumns: '1fr 200px', gap: 14, alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${C.border}` } as React.CSSProperties,
-  btnP: { padding: '11px 24px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
-  btnO: { padding: '11px 20px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
+  btnP: { padding: '11px 24px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
+  btnO: { padding: '11px 20px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
 }
 
 // Regime cards, defined outside the component so typing never remounts them.

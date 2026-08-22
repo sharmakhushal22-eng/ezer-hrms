@@ -86,7 +86,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
   const runLabel = (r: PayrollRun) => `month master for ${r.company_name || 'company'} for ${r.period_label || `${MONTHS[(r.month || 1) - 1]} ${String(r.fy || '').split('-')[0]}`}`
   const updated = results?.filter(r => r.result === 'UPDATED').length || 0
   const notFound = results?.filter(r => r.result !== 'UPDATED') || []
-  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' }
+  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 760 }}>

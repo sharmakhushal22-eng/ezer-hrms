@@ -21,10 +21,10 @@ const S = {
   sub: { fontSize:12.5, color:C.muted, marginTop:3 } as React.CSSProperties,
   section: { fontSize:14, fontWeight:600, color:C.navy, marginBottom:12 } as React.CSSProperties,
   label: { fontSize:11, fontWeight:600, color:C.purple, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'8px 10px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, color:C.navy, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  btnP: { padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.purple, color:'#fff' } as React.CSSProperties,
-  btnG: { padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.green, color:'#fff' } as React.CSSProperties,
-  btnR: { padding:'7px 14px', borderRadius:8, border:`1px solid ${C.red}`, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:'#fff', color:C.red } as React.CSSProperties,
+  input: { width:'100%', padding:'8px 10px', background:TK.surface, border:`1px solid ${C.border}`, borderRadius:8, color:C.navy, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
+  btnP: { padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.purple, color:TK.onAccent } as React.CSSProperties,
+  btnG: { padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.green, color:TK.onAccent } as React.CSSProperties,
+  btnR: { padding:'7px 14px', borderRadius:8, border:`1px solid ${C.red}`, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.surface, color:C.red } as React.CSSProperties,
   row: { display:'flex', justifyContent:'space-between', gap:12, padding:'10px 0', borderBottom:`1px solid ${C.border}`, alignItems:'center', flexWrap:'wrap' as const },
 }
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
@@ -310,7 +310,7 @@ export default function LoansPage() {
   return (
     <div style={S.page}>
       <div style={S.content}>
-        <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:16, flexWrap:'wrap', background:'#fff', borderRadius:12, border:`1px solid ${C.border}`, padding:'14px 16px', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:16, flexWrap:'wrap', background:TK.surface, borderRadius:12, border:`1px solid ${C.border}`, padding:'14px 16px', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
           <div style={{ flex:1, minWidth:200 }}>
             <h1 style={S.h1}>Loan Management</h1>
             <div style={S.sub}>Approve requests, review agreements, disburse funds, and track active loans.</div>
@@ -336,7 +336,7 @@ export default function LoansPage() {
       </div>
 
       {toast && (
-        <div style={{ position:'fixed', bottom:20, left:'50%', transform:'translateX(-50%)', background: toast.err ? C.red : C.navy, color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:13, fontWeight:500, boxShadow:'0 4px 16px rgba(0,0,0,.18)', zIndex:1000 }}>{toast.msg}</div>
+        <div style={{ position:'fixed', bottom:20, left:'50%', transform:'translateX(-50%)', background: toast.err ? C.red : C.navy, color:TK.onAccent, padding:'10px 18px', borderRadius:10, fontSize:13, fontWeight:500, boxShadow:'0 4px 16px rgba(0,0,0,.18)', zIndex:1000 }}>{toast.msg}</div>
       )}
     </div>
   )

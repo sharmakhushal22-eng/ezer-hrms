@@ -65,7 +65,7 @@ export default function LoginPage() {
             <rect x="29.5" y="12" width="5" height="6" rx="1" fill="#C4B5FD"/>
           </svg>
           <div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: '#fff' }}>ezer <span style={{ color: '#93C5FD' }}>hrms</span></div>
+            <div style={{ fontSize: '20px', fontWeight: '700', color: TK.onAccent }}>ezer <span style={{ color: '#93C5FD' }}>hrms</span></div>
             <div style={{ fontSize: '10px', color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.08em' }}>India&apos;s Intelligent HR Platform</div>
           </div>
         </div>
@@ -132,7 +132,7 @@ export default function LoginPage() {
             </div>
             <div style={{ textAlign: 'right', marginBottom: '20px' }}><a href="#" style={{ fontSize:'13px',color:TK.brand,textDecoration:'none',fontWeight:'500' }}>Forgot password?</a></div>
             {error && <div style={{ background:d?'#2D1515':TK.criticalTint,border:`1px solid ${d?'#7F1D1D':'#FECACA'}`,borderRadius:'8px',padding:'10px 14px',fontSize:'13px',color:d?'#FCA5A5':TK.critical,marginBottom:'16px' }}>⚠️ {error}</div>}
-            <button type="submit" disabled={loading} style={{ width:'100%',padding:'13px',background:loading?'#93C5FD':TK.brand,color:'#fff',border:'none',borderRadius:'10px',fontSize:'15px',fontWeight:'600',cursor:loading?'not-allowed':'pointer' }}>{loading?'Signing in...':'Sign In →'}</button>
+            <button type="submit" disabled={loading} style={{ width:'100%',padding:'13px',background:loading?'#93C5FD':TK.brand,color:TK.onAccent,border:'none',borderRadius:'10px',fontSize:'15px',fontWeight:'600',cursor:loading?'not-allowed':'pointer' }}>{loading?'Signing in...':'Sign In →'}</button>
           </form>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '24px 0' }}>
             <div style={{ flex: 1, height: '1px', background: d?'#1F2937':TK.line }} />

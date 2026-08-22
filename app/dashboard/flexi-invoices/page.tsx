@@ -16,8 +16,8 @@ const C = {
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
-const pri: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: font }
-const sec: React.CSSProperties = { padding: '7px 13px', background: '#fff', color: C.purpleDark, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontFamily: font }
+const pri: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: font }
+const sec: React.CSSProperties = { padding: '7px 13px', background: TK.surface, color: C.purpleDark, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontFamily: font }
 
 interface EmpVoucher {
   employee_id: string; emp_code: string; full_name: string; department: string; designation: string

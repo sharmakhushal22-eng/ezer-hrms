@@ -52,13 +52,16 @@ const P = {
  * made a ranked axis look categorical. These are one violet ramp, dark at the
  * senior end, so a column of them reads as a gradient rather than confetti.
  */
+// Grade is an ordered scale, so the colour deepens with seniority rather than
+// each grade taking an unrelated hue. Held in theme variables as bg/fg PAIRS
+// so both halves flip together and stay readable in dark — the previous
+// hardcoded violet ramp measured 2.19:1 on dark, which is invisible.
+const g = (n: number) => ({ bg: `var(--ez-grade-${n}-bg)`, color: `var(--ez-grade-${n}-fg)` })
 const GRADE_COLORS: Record<string,{bg:string;color:string}> = {
-  L1:{bg:'#D7C8FA',color:'#3B1799'}, L2:{bg:'#DCCFFB',color:'#4A1FB8'},
-  M1:{bg:'#E1D6FB',color:'#5426D9'}, M2:{bg:'#E6DDFC',color:'#5F30D4'},
-  M3:{bg:'#EAE3FC',color:'#6D3BEF'},
-  E1:{bg:'#EEE8FD',color:'#7343E4'}, E2:{bg:'#F1EDFD',color:'#7B54E8'},
-  E3:{bg:'#F4F1FE',color:'#8560DF'},
-  W1:{bg:'#F0EFF5',color:'#5C5773'}, W2:{bg:'#F4F3F8',color:'#6E6A85'},
+  L1: g(1), L2: g(1),
+  M1: g(2), M2: g(3), M3: g(3),
+  E1: g(4), E2: g(5), E3: g(5),
+  W1: g(6), W2: g(6),
 }
 // Employment type IS categorical, so these stay distinct — but drawn from the
 // token palette so they belong to the same world as everything else.
@@ -85,9 +88,9 @@ const s = {
   card:   { background:P.card, borderRadius:R.lg, border:`1px solid ${P.border}`, marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
   inp:    { ...inputStyle(), height:34, fontSize:F.small },
   sel:    { ...inputStyle(), height:34, fontSize:F.small, cursor:'pointer' } as React.CSSProperties,
-  priBtn: { padding:'0 14px', height:34, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:'#fff', border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.brand, fontFamily:'inherit' },
+  priBtn: { padding:'0 14px', height:34, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.brand, fontFamily:'inherit' },
   secBtn: { padding:'0 13px', height:34, background:P.card, color:P.text, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.flat, fontFamily:'inherit' },
-  saveBtn:{ padding:'0 14px', height:34, background:C.positive, color:'#fff', border:'none', borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, fontFamily:'inherit' },
+  saveBtn:{ padding:'0 14px', height:34, background:C.positive, color:C.onAccent, border:'none', borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, fontFamily:'inherit' },
 }
 
 const initials = (n: string) => n?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || 'NA'
@@ -120,7 +123,7 @@ const EXPORT_NAME_COLS = ['company_name','company_code','department_name','locat
 const mc = {
   inp:   { ...inputStyle() },
   lbl:   { ...eyebrow, display:'block', marginBottom:4 } as React.CSSProperties,
-  pri:   { padding:'0 16px', height:36, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:'#fff', border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', fontFamily:'inherit', boxShadow:E.brand },
+  pri:   { padding:'0 16px', height:36, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', fontFamily:'inherit', boxShadow:E.brand },
   out:   { padding:'0 14px', height:36, background:C.surface, color:C.ink, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', fontFamily:'inherit' },
 }
 
@@ -182,7 +185,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={onClose}>
-      <div style={{ background:'#fff', borderRadius:'12px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background:C.surface, borderRadius:'12px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'14px', color:C.ink }}>Add Employee</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'12px' }}>
           <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Rahul Sharma" /></div>
@@ -234,7 +237,7 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
         </div>
         {/* Info */}
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:'17px', fontWeight:600, color:'#fff', marginBottom:'3px' }}>{emp.full_name}</div>
+          <div style={{ fontSize:'17px', fontWeight:600, color:C.onAccent, marginBottom:'3px' }}>{emp.full_name}</div>
           <div style={{ fontSize:'12px', color:'rgba(255,255,255,.6)', marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
             <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...TYPE_COLORS[emp.employment_type] }}>{emp.employment_type}</span>
@@ -246,7 +249,7 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
         <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
           {editMode ? (
             <>
-              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:'#fff', border:'1px solid rgba(255,255,255,.25)', borderRadius:'8px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
+              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:C.onAccent, border:'1px solid rgba(255,255,255,.25)', borderRadius:'8px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
               <button onClick={onSave} disabled={saving} style={{ ...s.saveBtn, opacity: saving ? .7 : 1 }}>
                 <span>{saving ? '' : ''}</span>{saving ? 'Saving…' : 'Save changes'}
               </button>
@@ -269,7 +272,7 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
           { l:'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '—' },
         ].map(x => (
           <div key={x.l} style={{ fontSize:'11px', color:'rgba(255,255,255,.55)' }}>
-            {x.l}: <span style={{ color:'#fff', fontWeight:500 }}>{x.v}</span>
+            {x.l}: <span style={{ color:C.onAccent, fontWeight:500 }}>{x.v}</span>
           </div>
         ))}
       </div>
@@ -997,7 +1000,7 @@ export default function EmployeeMaster() {
       {/* ── Modals + toast ── */}
       {showAdd && <AddEmployeeModal companies={companies} locations={locations} departments={departments} onClose={() => setShowAdd(false)} onSaved={(msg) => { setShowAdd(false); setAddMsg(msg); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 3500) }} />}
       {showBulk && <BulkUploadModal companies={companies} departments={departments} locations={locations} onClose={() => setShowBulk(false)} onDone={(r) => { setAddMsg(`Bulk: ${r.added} added, ${r.skipped} skipped, ${r.errors} errors`); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 4000) }} />}
-      {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:C.positive, color:'#fff', borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
+      {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:C.positive, color:C.onAccent, borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
     </div>
   )
 }

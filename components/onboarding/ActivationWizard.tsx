@@ -30,8 +30,8 @@ const T = {
   chipV:    { fontSize:12, color:TK.ink, fontWeight:500, marginTop:2 },
   sectionH: { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', margin:'4px 0 10px' },
   btn:      { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit' },
-  btnPri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' },
-  btnOut:   { padding:'9px 16px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:13, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep },
+  btnPri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent },
+  btnOut:   { padding:'9px 16px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:13, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep },
   card2:    { background:TK.surface, border:'1px solid rgba(37,99,235,0.12)', borderRadius:10, padding:'14px 16px', boxShadow:'0 1px 4px rgba(37,99,235,0.06)' },
 }
 const PURPLE = TK.brand, GREEN = TK.positive, RED = TK.critical, AMBER = TK.warning, MUTED = TK.muted
@@ -116,7 +116,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
         width:36, height:20, borderRadius:99, padding:2, flexShrink:0, transition:'background .15s',
         background: checked ? GREEN : '#D1D5DB', display:'inline-flex', alignItems:'center',
       }}>
-        <span style={{ width:16, height:16, borderRadius:99, background:'#fff', transform: checked ? 'translateX(16px)' : 'translateX(0)', transition:'transform .15s' }} />
+        <span style={{ width:16, height:16, borderRadius:99, background:TK.surface, transform: checked ? 'translateX(16px)' : 'translateX(0)', transition:'transform .15s' }} />
       </span>
       <span style={{ fontSize:12.5, color:TK.ink }}>{label}</span>
     </label>
@@ -453,7 +453,7 @@ export default function ActivationWizard({ candidate, genCode, setGenCode, codeT
             {step < 5 && <button onClick={next} style={T.btnPri} disabled={busy || loading}>Next →</button>}
             {step === 5 && (
               <button onClick={onGenerate} disabled={!allGatesPass(gates) || !genCode.trim() || saving}
-                style={{ ...T.btn, background: (allGatesPass(gates) && genCode.trim() && !saving) ? GREEN : TK.faint, color:'#fff', cursor: (allGatesPass(gates) && genCode.trim() && !saving) ? 'pointer' : 'not-allowed' }}>
+                style={{ ...T.btn, background: (allGatesPass(gates) && genCode.trim() && !saving) ? GREEN : TK.faint, color:TK.onAccent, cursor: (allGatesPass(gates) && genCode.trim() && !saving) ? 'pointer' : 'not-allowed' }}>
                 {saving ? 'Generating…' : `⚡ Generate ${genCode || 'code'} & unlock ESS`}
               </button>
             )}

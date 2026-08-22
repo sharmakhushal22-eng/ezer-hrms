@@ -108,7 +108,7 @@ function AddTypeModal({ onClose, onCreate }: { onClose: () => void; onCreate: (a
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 14, padding: 22, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
+      <div style={{ background: TK.surface, borderRadius: 14, padding: 22, width: '100%', maxWidth: 440, maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, marginBottom: 14 }}>Add new perquisite</div>
 
         <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Code *</label>
@@ -133,10 +133,10 @@ function AddTypeModal({ onClose, onCreate }: { onClose: () => void; onCreate: (a
 
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
           <button disabled={!valid} onClick={() => onCreate({ code, name, category, description, valuationMethod: method, lawReference: lawRef })}
-            style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: valid ? 1 : 0.5 }}>
+            style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: valid ? 1 : 0.5 }}>
             Create
           </button>
-          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -270,7 +270,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
         <button onClick={() => setShowAddModal(true)}
           onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)'}
           onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-          style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', marginBottom: 16, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+          style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', marginBottom: 16, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
           + Add new perquisite
         </button>
         {Object.entries(grouped).map(([cat, catRows]) => (
@@ -332,7 +332,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
                       onChange={patch => setSlabs(prev => prev.map((x, idx) => idx === i ? { ...x, ...patch } : x))}
                       onDelete={() => setSlabs(prev => prev.filter((_, idx) => idx !== i))} />
                   ))}
-                  <button onClick={addSlabRow} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 6, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, cursor: 'pointer' }}>+ Add slab</button>
+                  <button onClick={addSlabRow} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 6, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer' }}>+ Add slab</button>
                 </div>
               )}
 
@@ -365,7 +365,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
               <button onClick={handleSave} disabled={saving}
                 onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
                 {saving ? 'Saving…' : 'Save value'}
               </button>
             </div>
@@ -376,7 +376,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
       {showAddModal && <AddTypeModal onClose={() => setShowAddModal(false)} onCreate={handleCreateType} />}
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: '#fff', padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
           {toast}
         </div>
       )}

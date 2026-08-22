@@ -15,8 +15,8 @@ const C = {
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
-const pri: React.CSSProperties = { padding: '9px 18px', background: C.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
-const sec: React.CSSProperties = { padding: '8px 14px', background: '#fff', color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: font }
+const pri: React.CSSProperties = { padding: '9px 18px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
+const sec: React.CSSProperties = { padding: '8px 14px', background: TK.surface, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: font }
 
 export default function EssCredentialsPage() {
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([])

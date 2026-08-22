@@ -173,10 +173,10 @@ export default function RouteMap({ route, height = 300, title }: {
 
       new G.maps.Marker({ position: actualPts[0], map, title: 'Start',
         icon: { path: G.maps.SymbolPath.CIRCLE, scale: 7, fillColor: V.green,
-                fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 } })
+                fillOpacity: 1, strokeColor: TK.onAccent, strokeWeight: 2 } })
       new G.maps.Marker({ position: actualPts[actualPts.length - 1], map, title: 'End',
         icon: { path: G.maps.SymbolPath.CIRCLE, scale: 7, fillColor: V.red,
-                fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 } })
+                fillOpacity: 1, strokeColor: TK.onAccent, strokeWeight: 2 } })
 
       const bounds = new G.maps.LatLngBounds()
       for (const p of [...actualPts, ...(optimalPts ?? [])]) bounds.extend(p)

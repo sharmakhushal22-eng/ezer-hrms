@@ -29,7 +29,7 @@ const UPLOADERS = [
 ]
 
 const sel: React.CSSProperties = { width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font }
-const priBtn: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }
+const priBtn: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }
 const secBtn: React.CSSProperties = { padding: '7px 12px', background: C.card, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: font }
 
 function UploaderCard({ u, active, onClick }: any) {
@@ -237,7 +237,7 @@ export default function BulkUploaderPage() {
               <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, marginBottom: 8 }}>Payroll impact alert</div>
               <div style={{ fontSize: 12, color: '#7c4a03', marginBottom: 12, lineHeight: 1.6 }}>{active.payrollAlertMsg}<br /><b>Proceeding means you have verified this with the payroll team.</b></div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => { setAck(true); setShowAlert(false) }} style={{ padding: '7px 16px', background: C.amber, color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }}>I have verified with payroll — proceed</button>
+                <button onClick={() => { setAck(true); setShowAlert(false) }} style={{ padding: '7px 16px', background: C.amber, color: TK.onAccent, border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }}>I have verified with payroll — proceed</button>
                 <button onClick={() => setShowAlert(false)} style={secBtn}>Cancel</button>
               </div>
             </div>
@@ -278,7 +278,7 @@ export default function BulkUploaderPage() {
         </div>
       </div>
 
-      {toast && <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: '#fff', padding: '10px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999 }}>{toast}</div>}
     </div>
   )
 }

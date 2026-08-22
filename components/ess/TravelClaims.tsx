@@ -359,14 +359,14 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
         {journey.state === 'IDLE' && (
           <button onClick={onStart}
                   style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: V.purple,
-                           color: '#fff', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                           color: C.onAccent, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
             Start travel
           </button>
         )}
         {tracking && (
           <button onClick={onEnd}
                   style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: V.green,
-                           color: '#fff', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                           color: C.onAccent, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
             End travel
           </button>
         )}
@@ -376,7 +376,7 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
             </span>
             <button onClick={onReset}
                     style={{ padding: '7px 14px', borderRadius: 7, border: `1px solid ${V.border}`,
-                             background: '#fff', color: V.muted, fontSize: 12,
+                             background: C.surface, color: V.muted, fontSize: 12,
                              fontFamily: 'inherit', cursor: 'pointer' }}>
               Discard
             </button>
@@ -1053,7 +1053,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
         <button onClick={addExpense} disabled={saving || preview}
                 title={preview ? 'Only the employee can file their own expense' : undefined}
                 style={{ padding: '9px 20px', borderRadius: 7, border: 'none',
-                         background: saving || preview ? V.muted : V.purple, color: '#fff',
+                         background: saving || preview ? V.muted : V.purple, color: C.onAccent,
                          fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
                          cursor: saving || preview ? 'not-allowed' : 'pointer' }}>
           {saving ? 'Saving…' : preview ? 'Add expense — employee only' : 'Add expense'}

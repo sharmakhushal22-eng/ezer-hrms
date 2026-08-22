@@ -21,8 +21,8 @@ const C = {
   lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-  pri:   { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
-  out:   { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep } as React.CSSProperties,
+  pri:   { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
+  out:   { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep } as React.CSSProperties,
   tab:   (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
 }
 const ACCESS_COLOR: Record<AccessLevel, [string, string]> = {
@@ -38,7 +38,7 @@ const typeLabel = (k: string) => APPROVAL_TYPES.find(t => t.key === k)?.label ||
 
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
-  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'':''} {msg}</div>
+  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'':''} {msg}</div>
 }
 function Pill({ text, bg, color }: { text: string; bg: string; color: string }) {
   return <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99, background:bg, color }}>{text}</span>
@@ -204,7 +204,7 @@ function RequestCard({ item, recruiters, onResolve }: { item: PendingItem; recru
           <div style={{ position:'relative' }}>
             <input style={{ ...C.input, maxWidth:360 }} placeholder="Search recruiter — name or emp code" value={recQ} onChange={e => setRecQ(e.target.value)} />
             {matches.length > 0 && (
-              <div style={{ position:'absolute', top:'100%', left:0, right:0, maxWidth:360, background:'#fff', border:'1px solid #DDD6FE', borderRadius:7, marginTop:2, zIndex:30, boxShadow:'0 6px 18px rgba(0,0,0,.1)', maxHeight:200, overflowY:'auto' }}>
+              <div style={{ position:'absolute', top:'100%', left:0, right:0, maxWidth:360, background:TK.surface, border:'1px solid #DDD6FE', borderRadius:7, marginTop:2, zIndex:30, boxShadow:'0 6px 18px rgba(0,0,0,.1)', maxHeight:200, overflowY:'auto' }}>
                 {matches.map(r => (
                   <div key={r.id} onClick={() => { setSelRec([...selRec, r]); setRecQ('') }} style={{ padding:'7px 10px', cursor:'pointer', borderBottom:'1px solid #F3F0FF', display:'flex', justifyContent:'space-between', gap:8 }}>
                     <span style={{ fontSize:13, fontWeight:600 }}>{r.full_name}</span><span style={{ fontSize:11, color:TK.brand }}>{r.emp_code}</span>
