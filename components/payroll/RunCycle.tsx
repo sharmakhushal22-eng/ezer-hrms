@@ -26,11 +26,11 @@ import {
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, purpleSoft: '#F3EEFF',
-  card: TK.surface, border: '#ECEAFB', muted: TK.muted,
-  green: TK.positive, greenBg: TK.positiveTint, greenBd: '#A7F3D0',
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
-  red: TK.critical, redBg: TK.criticalTint, redBd: '#FECACA', redDark: TK.critical,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, purpleSoft: TK.brandTint,
+  card: TK.surface, border: TK.brandEdge, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, redBd: TK.criticalTint, redDark: TK.critical,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -69,7 +69,7 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
     background: active
       ? 'rgba(255,255,255,0.28)'
       : blocked ? C.red : clear ? C.greenBg : 'rgba(0,0,0,0.08)',
-    color: active ? '#fff' : blocked ? '#fff' : clear ? C.green : C.navy,
+    color: active ? TK.surface : blocked ? TK.surface : clear ? C.green : C.navy,
   }
   return (
     <button
@@ -80,7 +80,7 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
         flexShrink: 0, background: active ? C.purple : C.card,
         border: `1px solid ${active ? C.purple : C.border}`, borderRadius: 10,
         padding: '10px 16px', cursor: off ? 'not-allowed' : 'pointer',
-        fontSize: 12.5, fontWeight: 600, color: active ? '#fff' : C.navy,
+        fontSize: 12.5, fontWeight: 600, color: active ? TK.surface : C.navy,
         display: 'flex', alignItems: 'center', gap: 8, fontFamily: font,
         opacity: off ? 0.45 : 1, transition: 'all .15s',
       }}>
@@ -151,10 +151,10 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
 // ── Banner ─────────────────────────────────────────────────────────────────
 function Banner({ tone, title, sub }: { tone: 'red' | 'green' | 'amber'; title: string; sub: string }) {
   const t = tone === 'red'
-    ? { bg: 'linear-gradient(135deg,#FEF2F2,#FFF5F5)', bd: C.redBd, dot: C.red, fg: C.red, sub: C.redDark, ic: '' }
+    ? { bg: `linear-gradient(135deg,${TK.criticalTint},${TK.criticalTint})`, bd: C.redBd, dot: C.red, fg: C.red, sub: C.redDark, ic: '' }
     : tone === 'green'
-      ? { bg: 'linear-gradient(135deg,#ECFDF5,#F3FDF8)', bd: C.greenBd, dot: C.green, fg: C.green, sub: '#047857', ic: '' }
-      : { bg: 'linear-gradient(135deg,#FFFBEB,#FFFDF5)', bd: C.amberBd, dot: C.amber, fg: C.amber, sub: TK.warning, ic: '' }
+      ? { bg: `linear-gradient(135deg,${TK.positiveTint},${TK.positiveTint})`, bd: C.greenBd, dot: C.green, fg: C.green, sub: TK.positive, ic: '' }
+      : { bg: `linear-gradient(135deg,${TK.warningTint},${TK.warningTint})`, bd: C.amberBd, dot: C.amber, fg: C.amber, sub: TK.warning, ic: '' }
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12, borderRadius: 14, padding: '16px 20px',
@@ -586,7 +586,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
         <button onClick={run} disabled={!canRun}
           style={{
             fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
-            background: canRun ? C.purple : '#D8D3F5', border: 'none', borderRadius: 12,
+            background: canRun ? C.purple: TK.brandTint, border: 'none', borderRadius: 12,
             padding: '14px 28px', cursor: canRun ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', gap: 8,
             boxShadow: canRun ? '0 4px 14px rgba(37,99,235,0.25)' : 'none',

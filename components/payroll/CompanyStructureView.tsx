@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 
-const C = { navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface, border: TK.line, muted: TK.muted, purpleBg: TK.brandTint, teal: '#0F6E56', amber: TK.warning }
+const C = { navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface, border: TK.line, muted: TK.muted, purpleBg: TK.brandTint, teal: TK.positive, amber: TK.warning }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 function SectionCard({ icon, title, count, children }: { icon: string; title: string; count: number; children: React.ReactNode }) {
@@ -53,7 +53,7 @@ export default function CompanyStructureView({ companyId }: { companyId: string 
   const deptName: Record<string, string> = {}; depts.forEach(d => { deptName[d.id] = d.dept_name })
   const co = (id: string) => allCo ? <span style={{ fontSize: 9.5, color: C.muted }}> · {comps[id] || '—'}</span> : null
   const item = (main: React.ReactNode, sub: React.ReactNode) => (
-    <div style={{ padding: '7px 0', borderBottom: '1px solid #F3F0FF' }}>
+    <div style={{ padding: '7px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
       <div style={{ fontSize: 12.5, fontWeight: 600, color: C.navy }}>{main}</div>
       {sub && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{sub}</div>}
     </div>

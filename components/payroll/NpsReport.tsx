@@ -20,7 +20,7 @@ import { C as TK } from '@/lib/ui'
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint,
   red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
@@ -223,7 +223,7 @@ function NpsDialog({ rows, onClose, onDone }: {
     <button key={v} onClick={() => !disabled && setMode(v)} disabled={disabled}
       style={{ flex: 1, padding: '10px 8px', borderRadius: 9, cursor: disabled ? 'not-allowed' : 'pointer', fontFamily: font, fontSize: 13, fontWeight: 700,
         border: on ? `2px solid ${v === 'y' ? C.green : C.red}` : `1px solid ${C.border}`,
-        background: on ? (v === 'y' ? C.greenBg : C.redBg) : '#fff',
+        background: on ? (v === 'y' ? C.greenBg : C.redBg) : TK.surface,
         color: disabled ? TK.lineStrong : on ? (v === 'y' ? C.green : C.red) : C.navy, opacity: disabled ? .6 : 1 }}>
       {label}
     </button>
@@ -234,7 +234,7 @@ function NpsDialog({ rows, onClose, onDone }: {
       <div onClick={ev => ev.stopPropagation()} style={{ background: TK.surface, borderRadius: 16, width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,0.35)', fontFamily: font, overflow: 'hidden' }}>
 
         {/* header */}
-        <div style={{ background: 'linear-gradient(135deg,#2563EB,#4F46E5)', padding: '16px 20px', color: TK.onAccent, flexShrink: 0 }}>
+        <div style={{ background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, padding: '16px 20px', color: TK.onAccent, flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 20 }}></div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -324,7 +324,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                       <button key={String(v)} onClick={() => setHasPran(v as boolean)}
                         style={{ flex: 1, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', fontFamily: font, fontSize: 12.5, fontWeight: 600,
                           border: hasPran === v ? `2px solid ${C.purple}` : `1px solid ${C.border}`,
-                          background: hasPran === v ? C.purpleBg : '#fff', color: hasPran === v ? C.purpleD : C.navy }}>
+                          background: hasPran === v ? C.purpleBg: TK.surface, color: hasPran === v ? C.purpleD : C.navy }}>
                         {lbl as string}
                       </button>
                     ))}
@@ -337,7 +337,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                       {pran && !pranOk && <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>{pranLen - pranClean.length} more digit(s) needed</div>}
                     </>
                   ) : (
-                    <div style={{ marginTop: 9, fontSize: 11.5, color: '#0C447C', background: '#E6F1FB', borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
+                    <div style={{ marginTop: 9, fontSize: 11.5, color: TK.brand, background: TK.brandTint, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
                       A PRAN creation form is emailed to the employee and the enrolment stays
                       <b> PRAN pending</b> until they submit it — it does not go active on its own.
                     </div>
@@ -366,7 +366,7 @@ function NpsDialog({ rows, onClose, onDone }: {
 
               {mode === 'n' && sel.opted && (
                 <>
-                  <div style={{ marginTop: 14, fontSize: 11.5, color: C.red, background: C.redBg, border: '1px solid #FECACA', borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
+                  <div style={{ marginTop: 14, fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
                     Stopping NPS ends the employer contribution from next month. The employee&apos;s
                     take-home goes up, their retirement contribution stops, and the 80CCD(2)
                     benefit ends with it.
@@ -564,7 +564,7 @@ export default function NpsReport({ fy }: { fy: string }) {
         </div>
       </div>
 
-      {err && <div style={{ ...S.card, background: C.redBg, border: '1px solid #FECACA', color: C.red, fontSize: 12.5 }}>{err}</div>}
+      {err && <div style={{ ...S.card, background: C.redBg, border: `1px solid ${TK.criticalTint}`, color: C.red, fontSize: 12.5 }}>{err}</div>}
 
       <div style={S.card}>
         <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -608,7 +608,7 @@ export default function NpsReport({ fy }: { fy: string }) {
         </div>
 
         {pending > 0 && (
-          <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', fontSize: 11.5, color: '#0C447C', background: '#E6F1FB', border: '1px solid #B5D4F4', borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
+          <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', fontSize: 11.5, color: TK.brand, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
             <div style={{ flex: 1, minWidth: 240 }}>
               <b>{pending} employee{pending === 1 ? ' is' : 's are'} enrolled but waiting on a PRAN.</b> Nothing
               is being deducted or credited for {pending === 1 ? 'them' : 'them'} until it is submitted:{' '}
@@ -678,7 +678,7 @@ export default function NpsReport({ fy }: { fy: string }) {
       </div>
 
       {msg && (
-        <div style={{ ...S.card, background: C.greenBg, border: '1px solid #A7F3D0', color: C.green, fontSize: 12.5, fontWeight: 700 }}>✓ {msg}</div>
+        <div style={{ ...S.card, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, color: C.green, fontSize: 12.5, fontWeight: 700 }}>✓ {msg}</div>
       )}
 
       {picker && (

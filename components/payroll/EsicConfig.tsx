@@ -15,7 +15,7 @@ import { C as TK } from '@/lib/ui'
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
+  greenBd: TK.positiveTint, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`
@@ -80,20 +80,20 @@ export default function EsicConfig() {
     }
   })()
 
-  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
+  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 680 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>ESIC</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Employees&apos; State Insurance — wage ceiling, contributions &amp; mid-period coverage continuity</div>
         </div>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
 
       {cfg && (
         <>
@@ -141,7 +141,7 @@ export default function EsicConfig() {
                     {est.covered ? 'Covered' : 'Not covered'}
                   </span>
                   {!est.covered && <span style={{ fontSize: 11.5, color: C.muted }}>wage above {inr(est.ceiling)} ceiling</span>}
-                  {est.lowWaged && est.covered && <span style={{ fontSize: 9.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 99, padding: '2px 8px' }}>low-wage: employee share waived</span>}
+                  {est.lowWaged && est.covered && <span style={{ fontSize: 9.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 99, padding: '2px 8px' }}>low-wage: employee share waived</span>}
                 </div>
                 {est.covered && (
                   <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: TK.surface, borderRadius: 9, border: `1px solid ${C.greenBd}`, overflow: 'hidden' }}>
@@ -150,7 +150,7 @@ export default function EsicConfig() {
                       ['Employer', est.employer, C.navy],
                       ['Total / month', est.employee + est.employer, C.purpleD],
                     ].map(([lbl, val, col], i) => (
-                      <div key={lbl as string} style={{ flex: 1, padding: '10px 14px', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none', background: i === 2 ? C.purpleBg : '#fff' }}>
+                      <div key={lbl as string} style={{ flex: 1, padding: '10px 14px', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none', background: i === 2 ? C.purpleBg: TK.surface }}>
                         <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em', fontWeight: 700, marginBottom: 3 }}>{lbl as string}</div>
                         <div style={{ fontSize: 17, fontWeight: 800, color: col as string }}>{inr(val as number)}</div>
                       </div>

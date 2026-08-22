@@ -189,7 +189,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
             {isOpen ? <>Window open · submit bills by <b>{new Date(win.closes_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</b> · {Math.max(0, Math.ceil((new Date(win.closes_at).getTime() - Date.now()) / 86400000))} days left</> : 'Window closed · bills cannot be submitted right now'}
           </div>
         </div>
-      ) : <div style={{ background: V.amberBg, border: '1px solid #FDE68A', borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: V.amber }}>No submission window is open for this month yet. Contact HR / Payroll.</div>}
+      ) : <div style={{ background: V.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, fontSize: 12, color: V.amber }}>No submission window is open for this month yet. Contact HR / Payroll.</div>}
 
       {/* Summary */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 16 }}>

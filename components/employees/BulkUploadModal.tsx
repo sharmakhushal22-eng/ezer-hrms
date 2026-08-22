@@ -19,10 +19,10 @@ const COLS = ['emp_code', 'full_name', 'employment_type', 'designation', 'depart
   'confirmation_status', 'location_name']
 
 const s = {
-  inp:  { width:'100%', padding:'9px 11px', border:'1px solid #E2E8F0', borderRadius:7, fontSize:13, fontFamily:'inherit', background:TK.surface, color:TK.ink, outline:'none', boxSizing:'border-box' as const },
+  inp:  { width:'100%', padding:'9px 11px', border: `1px solid ${TK.line}`, borderRadius:7, fontSize:13, fontFamily:'inherit', background:TK.surface, color:TK.ink, outline:'none', boxSizing:'border-box' as const },
   lbl:  { fontSize:10, fontWeight:600 as const, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 },
   pri:  { padding:'9px 18px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600 as const, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
-  out:  { padding:'9px 16px', borderRadius:7, border:'1px solid #E2E8F0', cursor:'pointer', fontSize:12, fontWeight:500 as const, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
+  out:  { padding:'9px 16px', borderRadius:7, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500 as const, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
 }
 const S = (v: any) => String(v ?? '').trim()
 const num = (v: any) => { const n = Number(v); return v === '' || v == null || !Number.isFinite(n) ? null : n }
@@ -166,12 +166,12 @@ export default function BulkUploadModal({ companies, departments, locations, onC
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1500, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div style={{ background:TK.surface, borderRadius:12, width:'100%', maxWidth:640, maxHeight:'90vh', overflowY:'auto', boxShadow:'0 24px 64px rgba(0,0,0,.18)' }} onClick={e => e.stopPropagation()}>
-        <div style={{ background:'#1E293B', padding:'14px 20px', borderRadius:'12px 12px 0 0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+        <div style={{ background: TK.dark, padding:'14px 20px', borderRadius:'12px 12px 0 0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <div>
-            <div style={{ fontSize:15, fontWeight:600, color:TK.onAccent }}>Bulk Employee Upload</div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,.55)', marginTop:2 }}>Step {step} of 3 · hundreds of employees from one Excel file</div>
+            <div style={{ fontSize:15, fontWeight:600, color:TK.onDark }}>Bulk Employee Upload</div>
+            <div style={{ fontSize:11, color:TK.onDarkFaint, marginTop:2 }}>Step {step} of 3 · hundreds of employees from one Excel file</div>
           </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', color:'rgba(255,255,255,.7)', cursor:'pointer', fontSize:22 }}>×</button>
+          <button onClick={onClose} style={{ background:'none', border:'none', color:TK.onDarkFaint, cursor:'pointer', fontSize:22 }}>×</button>
         </div>
 
         <div style={{ padding:'18px 20px' }}>
@@ -184,7 +184,7 @@ export default function BulkUploadModal({ companies, departments, locations, onC
                 {companies.map((c: any) => <option key={c.id} value={c.id}>{c.company_name}</option>)}
               </select>
 
-              <div style={{ background:TK.infoTint, border:'1px solid #BFDBFE', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:12, color:'#1E40AF', lineHeight:1.6 }}>Leave <b>emp_code</b> blank → auto-generated per type (e.g. {(company?.company_code || 'SSM')}0001, {(company?.company_code || 'SSM')}INT0001). Or fill in your existing codes for a first-time setup — duplicate rows are skipped.
+              <div style={{ background:TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:12, color: TK.brand, lineHeight:1.6 }}>Leave <b>emp_code</b> blank → auto-generated per type (e.g. {(company?.company_code || 'SSM')}0001, {(company?.company_code || 'SSM')}INT0001). Or fill in your existing codes for a first-time setup — duplicate rows are skipped.
               </div>
 
               <label style={{ display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, marginBottom:16 }}>

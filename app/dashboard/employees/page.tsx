@@ -76,7 +76,7 @@ const TYPE_COLORS: Record<string,{bg:string;color:string}> = {
 const STATUS_COLORS: Record<string,{bg:string;color:string}> = {
   Active:{bg:C.positiveTint,color:C.positive},
   Resigned:{bg:C.criticalTint,color:C.critical},
-  Terminated:{bg:C.criticalTint,color:'#8E1F24'},
+  Terminated:{bg:C.criticalTint,color: C.critical},
   Absconding:{bg:C.warningTint,color:C.warning},
 }
 
@@ -238,7 +238,7 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
         {/* Info */}
         <div style={{ flex:1 }}>
           <div style={{ fontSize:'17px', fontWeight:600, color:C.onAccent, marginBottom:'3px' }}>{emp.full_name}</div>
-          <div style={{ fontSize:'12px', color:'rgba(255,255,255,.6)', marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
+          <div style={{ fontSize:'12px', color:C.onAccentDim, marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
             <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...TYPE_COLORS[emp.employment_type] }}>{emp.employment_type}</span>
             <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...STATUS_COLORS[emp.employment_status] }}>{emp.employment_status}</span>
@@ -271,7 +271,7 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
           { l:'Location', v: (emp as any).locations?.location_name || '—' },
           { l:'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '—' },
         ].map(x => (
-          <div key={x.l} style={{ fontSize:'11px', color:'rgba(255,255,255,.55)' }}>
+          <div key={x.l} style={{ fontSize:'11px', color:C.onAccentDim }}>
             {x.l}: <span style={{ color:C.onAccent, fontWeight:500 }}>{x.v}</span>
           </div>
         ))}
@@ -792,15 +792,17 @@ export default function EmployeeMaster() {
               height:34, padding:'0 13px', borderRadius:R.pill, cursor:'pointer',
               fontFamily:'inherit', fontSize:F.small, fontWeight:f.on ? W.semi : W.medium,
               background: f.on ? C.brand : C.surface,
-              color: f.on ? '#fff' : C.muted,
+              color: f.on ? C.surface : C.muted,
               border:`1px solid ${f.on ? C.brandDeep : C.line}`,
               boxShadow: f.on ? E.brand : E.flat,
             }}>
               {f.label}
               <span style={{
                 fontSize:F.micro, fontWeight:W.bold, padding:'1px 6px', borderRadius:R.pill,
-                background: f.on ? 'rgba(255,255,255,.22)' : C.sunken,
-                color: f.on ? '#fff' : C.faint, ...numeric,
+                // A 22% white wash left the digits at 3.49:1 on the active
+                // pill. A solid deeper fill of the brand carries them.
+                background: f.on ? C.brandDeep : C.sunken,
+                color: f.on ? C.surface : C.faint, ...numeric,
               }}>{loading ? '—' : f.n}</span>
             </button>
           ))}
@@ -959,7 +961,7 @@ export default function EmployeeMaster() {
               {Array.from({length:Math.min(totalPages,7)},(_,i)=>{
                 const p = page<=4 ? i+1 : page-3+i
                 if(p<1||p>totalPages) return null
-                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`1.5px solid ${p===page?P.purple:P.border}`,borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple:'#fff',color:p===page?'#fff':P.text }}>{p}</button>
+                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`1.5px solid ${p===page?P.purple:P.border}`,borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple: C.surface,color:p===page?C.surface:P.text }}>{p}</button>
               })}
               <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===totalPages?.4:1 }} onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}>Next →</button>
             </div>

@@ -14,14 +14,14 @@ import { C as TK } from '@/lib/ui'
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: '#BBF7D0', purpleBg: TK.brandTint, gray: TK.sunken, amber: TK.warning, amberBg: TK.warningTint,
+  greenBd: TK.positiveTint, purpleBg: TK.brandTint, gray: TK.sunken, amber: TK.warning, amberBg: TK.warningTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`
 
 function ratePill(rate: number) {
   const [bg, fg] = rate === 0 ? [TK.positiveTint, TK.positive]
-    : rate <= 10 ? ['#EEF2FF', '#4F46E5']
+    : rate <= 10 ? [TK.brandTint, TK.brand]
     : rate <= 20 ? [TK.warningTint, TK.warning]
     : [TK.criticalTint, TK.critical]
   return <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: bg, color: fg, minWidth: 40, display: 'inline-block', textAlign: 'center' }}>{rate}%</span>
@@ -61,7 +61,7 @@ function RegimeCard({ regime, slabs, surcharge, config }: {
         <div style={{ fontSize: 9.5, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Slabs</div>
         <div style={{ marginBottom: 14 }}>
           {slabs.map((s, i) => (
-            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderRadius: 7, background: i % 2 === 0 ? C.gray : '#fff' }}>
+            <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderRadius: 7, background: i % 2 === 0 ? C.gray: TK.surface }}>
               <span style={{ fontSize: 11.5, color: C.navy }}>{inr(s.slab_min)}{s.slab_max != null ? ` – ${inr(s.slab_max)}` : '+'}</span>
               {ratePill(Number(s.tax_rate))}
             </div>
@@ -134,13 +134,13 @@ export default function IncomeTaxConfig() {
     } catch (e: any) { setError(e.message) } finally { setCalculating(false) }
   }
 
-  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
+  const inputStyle: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 800 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Income Tax — Old vs New</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -150,7 +150,7 @@ export default function IncomeTaxConfig() {
         </div>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
 
       {/* Regime reference cards */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -167,7 +167,7 @@ export default function IncomeTaxConfig() {
             {AGES.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
           </select>
           <button onClick={runCalculation} disabled={calculating}
-            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
             {calculating ? 'Calculating…' : 'Compare'}
           </button>
         </div>

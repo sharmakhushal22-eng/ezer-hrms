@@ -14,16 +14,16 @@ import { C as TK } from '@/lib/ui'
 
 // ── Style constant (employees/admin palette — C) ───────────────────
 const C = {
-  page:   { background:'#F0F4F8', minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
-  card:   { background:TK.surface, borderRadius:10, border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
+  page:   { background: TK.sunken, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
+  card:   { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
   lbl:    { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em' } as React.CSSProperties,
   val:    { fontSize:13, color:TK.ink, marginTop:2 } as React.CSSProperties,
-  input:  { padding:'6px 9px', background:TK.sunken, border:'1px solid #CBD5E1', borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
+  input:  { padding:'6px 9px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
   pri:    { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
-  out:    { padding:'6px 12px', borderRadius:8, border:'1px solid #CBD5E1', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
+  out:    { padding:'6px 12px', borderRadius:8, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
   sec:    { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
 }
-const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF:'#0891B2', FACTORY:TK.critical }
+const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF: TK.info, FACTORY:TK.critical }
 const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
 
 // ── Helper components (OUTSIDE parent — no focus-loss) ──────────────
@@ -89,16 +89,16 @@ function SearchSelect({ value, options, placeholder, onChange, disabled }: {
       {open && !disabled && (
         <>
           <div onClick={() => setOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }} />
-          <div style={{ position:'absolute', top:'calc(100% + 3px)', left:0, width:'100%', minWidth:210, background:TK.surface, border:'1px solid #DDD6FE', borderRadius:8, boxShadow:'0 8px 24px rgba(30,27,75,0.16)', zIndex:41, overflow:'hidden' }}>
+          <div style={{ position:'absolute', top:'calc(100% + 3px)', left:0, width:'100%', minWidth:210, background:TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius:8, boxShadow:'0 8px 24px rgba(30,27,75,0.16)', zIndex:41, overflow:'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
-              style={{ width:'100%', padding:'8px 10px', border:'none', borderBottom:'1px solid #EEF', fontSize:12.5, outline:'none', boxSizing:'border-box', fontFamily:'inherit' }} />
+              style={{ width:'100%', padding:'8px 10px', border:'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12.5, outline:'none', boxSizing:'border-box', fontFamily:'inherit' }} />
             <div style={{ maxHeight:220, overflowY:'auto' }}>
               {filtered.length === 0 && <div style={{ padding:'8px 10px', fontSize:12, color:TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o} onClick={() => { onChange(o); setOpen(false) }}
                   onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
-                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? '#EEF2FF' : '#fff'}
-                  style={{ padding:'7px 10px', fontSize:12.5, cursor:'pointer', background: o === value ? '#EEF2FF' : '#fff', color:TK.ink }}>
+                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? TK.brandTint : TK.surface}
+                  style={{ padding:'7px 10px', fontSize:12.5, cursor:'pointer', background: o === value ? TK.brandTint : TK.surface, color:TK.ink }}>
                   {o}
                 </div>
               ))}
@@ -175,7 +175,7 @@ function CompanyCard({ co, isMobile, save, openPay }: {
         {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.brandTint, color:TK.brand, fontWeight:600 }}>{co.company_type}</span>}
         <span style={{ fontSize:10, color:TK.faint }}>{co.company_code}</span>
         <span style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
-          <button onClick={e => { e.stopPropagation(); setOpen(true) }} style={{ fontSize:11, fontWeight:600, padding:'4px 11px', borderRadius:7, border:'1px solid #DDD6FE', background:TK.surface, color:TK.brand, cursor:'pointer' }}>Edit</button>
+          <button onClick={e => { e.stopPropagation(); setOpen(true) }} style={{ fontSize:11, fontWeight:600, padding:'4px 11px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, background:TK.surface, color:TK.brand, cursor:'pointer' }}>Edit</button>
           <StatusBadge status={co.account_status} days={co.days_to_due} />
         </span>
       </div>
@@ -196,7 +196,7 @@ function CompanyCard({ co, isMobile, save, openPay }: {
           <div style={C.sec}>Branches ({co.branches.length})</div>
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:8, marginBottom:18 }}>
             {co.branches.map((b: Branch) => (
-              <div key={b.id} style={{ border:'1px solid #E2E8F0', borderRadius:8, padding:'10px 12px' }}>
+              <div key={b.id} style={{ border: `1px solid ${TK.line}`, borderRadius:8, padding:'10px 12px' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                   <span style={{ fontSize:13, fontWeight:600 }}>{b.location_name}</span>
                   <span style={{ fontSize:10, padding:'1px 7px', borderRadius:99, background:TK.sunken, color:TK.inkSoft }}>{b.location_type}</span>
@@ -221,7 +221,7 @@ function CompanyCard({ co, isMobile, save, openPay }: {
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <tbody>
                 {co.registrations.map((r: Registration) => (
-                  <tr key={r.id} style={{ borderBottom:'1px solid #F1F5F9' }}>
+                  <tr key={r.id} style={{ borderBottom: `1px solid ${TK.line}` }}>
                     <td style={{ padding:'7px 8px', width:60 }}><span style={{ fontSize:10, fontWeight:700, color:REG_COLOR[r.reg_type] || TK.inkSoft }}>{r.reg_type}</span></td>
                     <td style={{ padding:'7px 8px' }}><EditField label="" value={r.reg_number} onSave={v => save('REGISTRATION', r.id, 'reg_number', v, co.id)} /></td>
                     <td style={{ padding:'7px 8px', color:TK.muted }}>{[r.state, r.district].filter(Boolean).join(' · ') || '—'}</td>
@@ -358,9 +358,9 @@ export default function CompanyProfilePage() {
           <>
             {groups.map(g => (
               <div key={g.id} style={{ marginBottom:18 }}>
-                <div style={{ ...C.card, display:'flex', alignItems:'center', gap:12, background:TK.ink, color:TK.onAccent, border:'none' }}>
+                <div style={{ ...C.card, display:'flex', alignItems:'center', gap:12, background: TK.dark, color:TK.onDark, border:'none' }}>
                   <span style={{ fontSize:18 }}></span>
-                  <div><div style={{ fontSize:15, fontWeight:600 }}>{g.group_name}</div><div style={{ fontSize:11, color:'#C7D2FE' }}>{g.group_code} · {g.country} · {g.companies.length} companies</div></div>
+                  <div><div style={{ fontSize:15, fontWeight:600 }}>{g.group_name}</div><div style={{ fontSize:11, color: TK.onDarkMuted }}>{g.group_code} · {g.country} · {g.companies.length} companies</div></div>
                 </div>
                 {g.companies.map(co => (
                   <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay} />
@@ -372,7 +372,7 @@ export default function CompanyProfilePage() {
               <div style={C.sec}>Audit log — recent changes</div>
               {audit.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No changes yet.</div>}
               {audit.map(a => (
-                <div key={a.id} style={{ display:'flex', gap:8, padding:'7px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}>
+                <div key={a.id} style={{ display:'flex', gap:8, padding:'7px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}>
                   <span style={{ color:TK.brand }}>•</span>
                   <div>
                     <div><b>{a.entity_type}</b> · {a.field}: <span style={{ color:TK.faint }}>{a.old_value || '—'}</span> → <span style={{ color:TK.ink }}>{a.new_value || '—'}</span></div>

@@ -17,17 +17,17 @@ const T = {
   card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   lbl:   { fontSize:10, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
-  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
+  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
   pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep } as React.CSSProperties,
-  danger:{ padding:'6px 11px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
-  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
+  out:   { padding:'7px 12px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep } as React.CSSProperties,
+  danger:{ padding:'6px 11px', borderRadius:7, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
+  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
 }
 const hrs = (m: number | null) => m == null ? '—' : `${Math.floor(m / 60)}h ${m % 60}m`
 const tm = (s: string | null) => s ? new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
 const STATUS_COLOR: Record<string, [string, string]> = {
   PRESENT:[TK.positiveTint,TK.positive], HALF_DAY:[TK.warningTint,TK.warning], ABSENT:[TK.criticalTint,TK.critical],
-  LEAVE:[TK.brandTint,TK.brandDeep], HOLIDAY:[TK.infoTint,'#1E40AF'], WEEKLY_OFF:['#F3F4F6',TK.muted], LWP:[TK.criticalTint,TK.critical],
+  LEAVE:[TK.brandTint,TK.brandDeep], HOLIDAY:[TK.infoTint,TK.brand], WEEKLY_OFF:[TK.sunken,TK.muted], LWP:[TK.criticalTint,TK.critical],
 }
 
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -82,11 +82,11 @@ function ShiftsTab({ companies, locations, departments, shifts, onCreate, onTogg
 
       <div style={{ ...T.card, overflowX:'auto', padding:0 }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-          <thead><tr style={{ background:TK.sunken }}>{['Code','Type','Company','In → Out','Lunch','OT','Active',''].map(h => <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', borderBottom:'1px solid #EDE9FE', whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
+          <thead><tr style={{ background:TK.sunken }}>{['Code','Type','Company','In → Out','Lunch','OT','Active',''].map(h => <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', borderBottom: `1px solid ${TK.brandEdge}`, whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
           <tbody>
             {shifts.length === 0 && <tr><td colSpan={8} style={{ padding:24, textAlign:'center', color:TK.faint }}>No shifts. Has migration 036 been run? Or create one above.</td></tr>}
             {shifts.map(s => (
-              <tr key={s.id} style={{ borderBottom:'1px solid #F3F0FF', opacity: s.is_active ? 1 : 0.5 }}>
+              <tr key={s.id} style={{ borderBottom: `1px solid ${TK.brandEdge}`, opacity: s.is_active ? 1 : 0.5 }}>
                 <td style={{ padding:'8px 10px', fontWeight:700 }}>{s.shift_code}</td>
                 <td style={{ padding:'8px 10px' }}>{s.shift_type}</td>
                 <td style={{ padding:'8px 10px', color:TK.muted }}>{coName(s.company_id)}{s.branch_id ? ' · ' + brName(s.branch_id) : ''}{s.department_id ? ' · ' + deName(s.department_id) : ''}</td>
@@ -138,7 +138,7 @@ function AssignTab({ shifts, employees, assignments, onAssign }: {
           <input style={{ ...T.input, marginBottom:10, maxWidth:320 }} placeholder="Search employee" value={q} onChange={e => setQ(e.target.value)} />
           <div style={{ maxHeight:'42vh', overflowY:'auto' }}>
             {filtered.map(e => (
-              <label key={e.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 6px', borderBottom:'1px solid #F3F0FF', cursor:'pointer' }}>
+              <label key={e.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 6px', borderBottom: `1px solid ${TK.brandEdge}`, cursor:'pointer' }}>
                 <input type="checkbox" checked={sel.has(e.id)} onChange={() => toggle(e.id)} />
                 <div style={{ flex:1 }}><div style={{ fontSize:13, fontWeight:600 }}>{e.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{e.emp_code} · {e.dept_name || '—'}</div></div>
                 {assignedEmpIds.has(e.id) && <span style={{ fontSize:10, color:TK.muted }}>current: {codeOf(shiftByEmp.get(e.id) || '')}</span>}
@@ -152,7 +152,7 @@ function AssignTab({ shifts, employees, assignments, onAssign }: {
         <div style={T.sec}>Pending — no active shift ({pending.length})</div>
         {pending.length === 0 ? <div style={{ fontSize:12, color:TK.faint }}>Every employee already has a shift assigned.</div> : (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:6 }}>
-            {pending.slice(0, 120).map(e => <div key={e.id} style={{ fontSize:12, padding:'5px 8px', background:TK.sunken, borderRadius:6, border:'1px solid #F3F0FF' }}>{e.full_name} <span style={{ color:TK.faint, fontSize:10 }}>{e.emp_code}</span></div>)}
+            {pending.slice(0, 120).map(e => <div key={e.id} style={{ fontSize:12, padding:'5px 8px', background:TK.sunken, borderRadius:6, border: `1px solid ${TK.brandEdge}` }}>{e.full_name} <span style={{ color:TK.faint, fontSize:10 }}>{e.emp_code}</span></div>)}
           </div>
         )}
       </div>
@@ -174,14 +174,14 @@ function RecordsTab({ employees, records, from, to, onFrom, onTo }: {
       </div>
       <div style={{ ...T.card, overflowX:'auto', padding:0 }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-          <thead><tr style={{ background:TK.sunken }}>{['Date','Employee','In','Out','Worked','Late','OT','Status'].map(h => <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', borderBottom:'1px solid #EDE9FE', whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
+          <thead><tr style={{ background:TK.sunken }}>{['Date','Employee','In','Out','Worked','Late','OT','Status'].map(h => <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', borderBottom: `1px solid ${TK.brandEdge}`, whiteSpace:'nowrap' }}>{h}</th>)}</tr></thead>
           <tbody>
             {records.length === 0 && <tr><td colSpan={8} style={{ padding:24, textAlign:'center', color:TK.faint }}>No processed attendance in this range. (It appears here once punches are processed.)</td></tr>}
             {records.map(r => {
               const e = emp(r.employee_id)
               const [bg, c] = STATUS_COLOR[r.status] || STATUS_COLOR.PRESENT
               return (
-                <tr key={r.id} style={{ borderBottom:'1px solid #F3F0FF' }}>
+                <tr key={r.id} style={{ borderBottom: `1px solid ${TK.brandEdge}` }}>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap', color:TK.inkSoft }}>{r.attendance_date}</td>
                   <td style={{ padding:'8px 10px' }}><div style={{ fontWeight:600 }}>{e?.full_name || r.employee_id.slice(0, 8)}</div><div style={{ fontSize:10, color:TK.faint }}>{e?.emp_code || ''}</div></td>
                   <td style={{ padding:'8px 10px' }}>{tm(r.work_in)}</td>

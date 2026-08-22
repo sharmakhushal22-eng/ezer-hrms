@@ -17,8 +17,8 @@ import { C as TK } from '@/lib/ui'
 
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
-  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint, greenBd: '#A7F3D0',
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint,
   red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
@@ -192,14 +192,14 @@ export default function Appraisal() {
       style={{
         padding: '9px 16px', borderRadius: 9, fontFamily: font, fontSize: 12.5, fontWeight: 700,
         cursor: 'pointer', border: `1px solid ${tab === id ? C.purple : C.border}`,
-        background: tab === id ? C.purple : '#fff', color: tab === id ? '#fff' : C.navy,
+        background: tab === id ? C.purple: TK.surface, color: tab === id ? TK.surface : C.navy,
       }}>{label}</button>
   )
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, color: C.navy, maxWidth: 1000 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>Appraisal &amp; Arrear</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -228,7 +228,7 @@ export default function Appraisal() {
                   onKeyDown={e => { if (e.key === 'Enter') lookup() }} />
               </div>
               <button onClick={lookup} disabled={busy || !code.trim()}
-                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, background: !code.trim() ? '#D8D3F5' : C.purple, cursor: !code.trim() ? 'not-allowed' : 'pointer' }}>
+                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, background: !code.trim() ? TK.brandTint : C.purple, cursor: !code.trim() ? 'not-allowed' : 'pointer' }}>
                 {busy ? 'Loading…' : 'Load'}
               </button>
             </div>
@@ -275,14 +275,14 @@ export default function Appraisal() {
                 </div>
               )}
               {effFrom && payOut && months.length === 0 && (
-                <div style={{ marginTop: 12, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '11px 13px', fontSize: 11.5, color: '#047857' }}>
+                <div style={{ marginTop: 12, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '11px 13px', fontSize: 11.5, color: TK.positive }}>
                   No back months — the raise takes effect in the pay-out month itself, so there is no arrear.
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
                 <button onClick={save} disabled={!canSave}
-                  style={{ padding: '11px 24px', borderRadius: 9, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: canSave ? 'linear-gradient(120deg,#2563EB,#5B21B6)' : '#D8D3F5', cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? '0 3px 10px rgba(37,99,235,0.22)' : 'none' }}>
+                  style={{ padding: '11px 24px', borderRadius: 9, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: canSave ? 'linear-gradient(120deg,#2563EB,#5B21B6)' : TK.brandTint, cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? '0 3px 10px rgba(37,99,235,0.22)' : 'none' }}>
                   {busy ? 'Saving…' : 'Save appraisal'}
                 </button>
                 {!canSave && emp && <span style={{ fontSize: 11, color: C.muted }}>New CTC, effective date and pay-out month are all needed.</span>}

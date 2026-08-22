@@ -24,15 +24,15 @@ const C = {
   card:    { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   lbl:     { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:     { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
-  input:   { width:'100%', padding:'9px 11px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
+  input:   { width:'100%', padding:'9px 11px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
   pri:     { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:     { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  danger:  { padding:'5px 10px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
-  tab:     (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
+  out:     { padding:'7px 13px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  danger:  { padding:'5px 10px', borderRadius:7, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
+  tab:     (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
 }
 const TYPE_COLOR: Record<HolidayType, [string, string]> = {
-  NATIONAL:['#E0E7FF','#3730A3'], FESTIVAL:['#FCE7F3','#9D174D'], DISCRETIONARY:[TK.warningTint,TK.warning],
-  REGIONAL:[TK.infoTint,'#1E40AF'], OPTIONAL:['#D1FAE5','#065F46'],
+  NATIONAL:[TK.brandTint,TK.inkSoft], FESTIVAL:[TK.criticalTint,TK.critical], DISCRETIONARY:[TK.warningTint,TK.warning],
+  REGIONAL:[TK.infoTint,TK.brand], OPTIONAL:[TK.positiveTint,TK.positive],
 }
 const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
 const ym = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -82,12 +82,12 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
         <div style={C.sec}>Calendars ({calendars.length})</div>
         {calendars.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No calendars yet. Create one above.</div>}
         {calendars.map(c => (
-          <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
+          <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
             <span style={{ fontSize:13, fontWeight:600 }}>{c.name}</span>
             <Badge text={c.calendar_type} bg={TK.brandTint} color={TK.brand} />
             {c.status === 'PUBLISHED'
-              ? <Badge text="PUBLISHED" bg="#D1FAE5" color="#065F46" />
-              : <Badge text="DRAFT" bg="#F3F4F6" color={TK.muted} />}
+              ? <Badge text="PUBLISHED" bg={TK.positiveTint} color={TK.positive} />
+              : <Badge text="DRAFT" bg={TK.sunken} color={TK.muted} />}
             <span style={{ fontSize:11, color:TK.faint }}>{fmt(c.from_date)} – {fmt(c.to_date)}</span>
             <span style={{ marginLeft:'auto', display:'flex', gap:6 }}>
               {c.status === 'DRAFT'
@@ -106,7 +106,7 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
         {companies.map(co => {
           const m = maps.find(x => x.company_id === co.id)
           return (
-            <div key={co.id} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1fr', gap:10, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #F3F0FF' }}>
+            <div key={co.id} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1fr', gap:10, alignItems:'center', padding:'8px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
               <div style={{ fontSize:13, fontWeight:600 }}>{co.company_name} <span style={{ fontSize:11, color:TK.faint }}>{co.company_code}</span></div>
               <select style={C.input} value={m?.holiday_calendar_id || ''} onChange={e => onMap(co.id, e.target.value || null, m?.leave_calendar_id || null)}>
                 <option value="">— Holiday calendar —</option>
@@ -155,14 +155,14 @@ function HolidaysTab({ calendars, companies, branches, weeklyOffs, selCal, setSe
             const rows = appl.filter(a => a.holiday_id === h.id)
             const [bg, col] = TYPE_COLOR[h.holiday_type]
             return (
-              <div key={h.id} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
+              <div key={h.id} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'9px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
                 <div style={{ width:120, fontSize:12, fontWeight:600 }}>{fmt(h.holiday_date)}</div>
                 <div style={{ flex:1 }}>
                   <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                     <span style={{ fontSize:13, fontWeight:600 }}>{h.description}</span>
                     <Badge text={h.holiday_type} bg={bg} color={col} />
-                    {h.is_optional && <Badge text="OPTIONAL" bg="#FFEDD5" color="#9A3412" />}
-                    {h.on_weekly_off && <Badge text="ON WEEKLY-OFF" bg={TK.criticalTint} color="#991B1B" />}
+                    {h.is_optional && <Badge text="OPTIONAL" bg={TK.warningTint} color={TK.critical} />}
+                    {h.on_weekly_off && <Badge text="ON WEEKLY-OFF" bg={TK.criticalTint} color={TK.critical} />}
                   </div>
                   <div style={{ fontSize:11, color:TK.faint, marginTop:3 }}>
                     {rows.length === 0 ? 'No applicability' : rows.map(r => `${coName(r.company_id)} · ${brName(r.branch_id)}`).join('  |  ')}
@@ -258,7 +258,7 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
       </div>
       <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>
         {scopes.map((s, i) => (
-          <span key={i} style={{ fontSize:11, background:TK.canvas, border:'1px solid #DDD6FE', borderRadius:99, padding:'3px 10px', display:'inline-flex', gap:6, alignItems:'center' }}>
+          <span key={i} style={{ fontSize:11, background:TK.canvas, border: `1px solid ${TK.brandEdge}`, borderRadius:99, padding:'3px 10px', display:'inline-flex', gap:6, alignItems:'center' }}>
             {coName(s.company_id)} · {brName(s.branch_id)}
             <span style={{ cursor:'pointer', color:TK.critical, fontWeight:700 }} onClick={() => setScopes(scopes.filter((_, j) => j !== i))}>×</span>
           </span>
@@ -267,7 +267,7 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
       </div>
 
       {conflict.conflict && (
-        <div style={{ background:TK.criticalTint, border:'1px solid #FCA5A5', borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:12, color:'#991B1B' }}>
+        <div style={{ background:TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:12, color: TK.critical }}>
           ⚠️ {fmt(date)} is a {conflict.weekday} — a weekly off in this scope. Add it anyway?
           <label style={{ display:'flex', alignItems:'center', gap:7, marginTop:7, cursor:'pointer', fontWeight:600 }}>
             <input type="checkbox" checked={confirmWeekend} onChange={e => setConfirmWeekend(e.target.checked)} /> Yes, confirm the weekend override (it goes into the audit log)
@@ -333,7 +333,7 @@ function WeeklyOffTab({ calendars, companies, branches, departments, weeklyOffs,
             <label style={C.lbl}>Which occurrences</label>
             <div style={{ display:'flex', gap:8 }}>
               {[1, 2, 3, 4, 5].map(n => (
-                <label key={n} style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', border:'1px solid #DDD6FE', borderRadius:7, padding:'5px 10px', background: nth.includes(n) ? TK.brandTint : '#fff' }}>
+                <label key={n} style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', border: `1px solid ${TK.brandEdge}`, borderRadius:7, padding:'5px 10px', background: nth.includes(n) ? TK.brandTint: TK.surface }}>
                   <input type="checkbox" checked={nth.includes(n)} onChange={() => toggleNth(n)} /> {n}{n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}
                 </label>
               ))}
@@ -355,10 +355,10 @@ function WeeklyOffTab({ calendars, companies, branches, departments, weeklyOffs,
         <div style={C.sec}>Weekly-off rules ({weeklyOffs.length})</div>
         {weeklyOffs.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No rules.</div>}
         {weeklyOffs.map(w => (
-          <div key={w.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
+          <div key={w.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
             <span style={{ fontWeight:600, width:90 }}>{WEEKDAYS[w.weekday]}</span>
             <Badge text={w.mode === 'EVERY' ? 'EVERY WEEK' : `WEEKS ${(w.nth_occurrences || []).join(',')}`} bg={TK.brandTint} color={TK.brand} />
-            {w.is_primary && <Badge text="PRIMARY" bg="#D1FAE5" color="#065F46" />}
+            {w.is_primary && <Badge text="PRIMARY" bg={TK.positiveTint} color={TK.positive} />}
             <span style={{ color:TK.faint }}>{coName(w.company_id)} · {brName(w.branch_id)} · {deptName(w.department_id)}{w.employment_type ? ` · ${w.employment_type}` : ''}</span>
             <button style={{ ...C.danger, marginLeft:'auto' }} onClick={() => onDelete(w.id)}>Delete</button>
           </div>
@@ -425,13 +425,13 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
               const isOff = offSet.has(ds)
               const isHol = holMap.has(ds)
               return (
-                <div key={i} title={isHol ? holMap.get(ds)!.description : ''} style={{ textAlign:'center', padding:'8px 0', borderRadius:6, fontSize:12, fontWeight: (isOff || isHol) ? 600 : 400, background: isHol ? '#FCE7F3' : isOff ? '#F3F4F6' : '#fff', color: isHol ? '#9D174D' : isOff ? TK.faint : TK.ink, border:'1px solid #F3F0FF' }}>{day}</div>
+                <div key={i} title={isHol ? holMap.get(ds)!.description : ''} style={{ textAlign:'center', padding:'8px 0', borderRadius:6, fontSize:12, fontWeight: (isOff || isHol) ? 600 : 400, background: isHol ? '#FCE7F3' : isOff ? '#F3F4F6' : '#fff', color: isHol ? '#9D174D' : isOff ? TK.faint : TK.ink, border: `1px solid ${TK.brandEdge}` }}>{day}</div>
               )
             })}
           </div>
           <div style={{ display:'flex', gap:14, marginTop:10, fontSize:11, color:TK.muted }}>
-            <span><span style={{ display:'inline-block', width:10, height:10, background:'#F3F4F6', borderRadius:3, marginRight:4 }} />Weekly off</span>
-            <span><span style={{ display:'inline-block', width:10, height:10, background:'#FCE7F3', borderRadius:3, marginRight:4 }} />Holiday</span>
+            <span><span style={{ display:'inline-block', width:10, height:10, background: TK.sunken, borderRadius:3, marginRight:4 }} />Weekly off</span>
+            <span><span style={{ display:'inline-block', width:10, height:10, background: TK.criticalTint, borderRadius:3, marginRight:4 }} />Holiday</span>
           </div>
         </div>
 
@@ -441,11 +441,11 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
           {hols.map((h, i) => {
             const [bg, col] = TYPE_COLOR[h.holiday_type]
             return (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'1px solid #F3F0FF' }}>
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
                 <span style={{ width:110, fontSize:12, fontWeight:600 }}>{fmt(h.holiday_date)}</span>
                 <span style={{ flex:1, fontSize:13 }}>{h.description}</span>
                 <Badge text={h.holiday_type} bg={bg} color={col} />
-                {h.is_optional ? <Badge text="OPTIONAL" bg="#FFEDD5" color="#9A3412" /> : <Badge text="FIXED" bg="#F3F4F6" color={TK.muted} />}
+                {h.is_optional ? <Badge text="OPTIONAL" bg={TK.warningTint} color={TK.critical} /> : <Badge text="FIXED" bg={TK.sunken} color={TK.muted} />}
               </div>
             )
           })}

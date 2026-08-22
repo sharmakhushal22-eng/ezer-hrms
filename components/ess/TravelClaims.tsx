@@ -1113,7 +1113,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
               <button onClick={submitClaim} disabled={picked.size === 0 || submitting}
                       style={{ padding: '9px 20px', borderRadius: 7, border: 'none',
                                background: picked.size === 0 || submitting ? V.border : V.green,
-                               color: picked.size === 0 || submitting ? V.muted : '#fff',
+                               color: picked.size === 0 || submitting ? V.muted: C.surface,
                                fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
                                cursor: picked.size === 0 || submitting ? 'default' : 'pointer' }}>
                 {submitting ? 'Submitting…' : 'Submit claim'}

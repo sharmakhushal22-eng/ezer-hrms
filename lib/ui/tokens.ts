@@ -61,6 +61,9 @@ export const C = {
    * lightens there and white on it falls to 2.5:1.
    */
   onAccent: 'var(--ez-on-accent)',
+  /** Secondary and tertiary text on an accent fill. */
+  onAccentSoft: 'var(--ez-on-accent-soft)',
+  onAccentDim: 'var(--ez-on-accent-dim)',
 
   /** Cards, panels, inputs. */
   surface: 'var(--ez-surface)',

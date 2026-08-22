@@ -10,7 +10,7 @@ import { C as TK } from '@/lib/ui'
 type Step = 'email' | 'login' | 'setpw' | 'changepw'
 
 // ── EZER palette ──
-const P = { purple: TK.brand, purpleDark: TK.brandDeep, purpleDeep: '#3C1E7A', navy: TK.ink, muted: TK.muted, border: TK.brandTint, bg: TK.canvas }
+const P = { purple: TK.brand, purpleDark: TK.brandDeep, purpleDeep: TK.brand, navy: TK.ink, muted: TK.muted, border: TK.brandTint, bg: TK.canvas }
 
 // ── Reusable field components (OUTSIDE parent — no focus-loss) ──
 function TextField({ label, value, onChange, placeholder, icon, autoFocus }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; icon: React.ReactNode; autoFocus?: boolean }) {
@@ -19,7 +19,7 @@ function TextField({ label, value, onChange, placeholder, icon, autoFocus }: { l
     <div style={{ marginBottom: 16 }}>
       <label style={labelStyle}>{label}</label>
       <div style={{ position: 'relative' }}>
-        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple : '#93C5FD', fontSize: 15, lineHeight: 1 }}>{icon}</span>
+        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple: TK.brandTint, fontSize: 15, lineHeight: 1 }}>{icon}</span>
         <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} autoCapitalize="characters"
           onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
           style={{ ...fieldStyle, paddingLeft: 38, borderColor: focus ? P.purple : P.border, boxShadow: focus ? '0 0 0 4px rgba(37,99,235,0.10)' : 'none' }} />
@@ -34,7 +34,7 @@ function PasswordField({ label, value, onChange, placeholder, autoFocus }: { lab
     <div style={{ marginBottom: 14 }}>
       <label style={labelStyle}>{label}</label>
       <div style={{ position: 'relative' }}>
-        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple : '#93C5FD', fontSize: 15, lineHeight: 1 }}></span>
+        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple: TK.brandTint, fontSize: 15, lineHeight: 1 }}></span>
         <input type={show ? 'text' : 'password'} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoFocus={autoFocus}
           onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
           style={{ ...fieldStyle, paddingLeft: 38, paddingRight: 44, borderColor: focus ? P.purple : P.border, boxShadow: focus ? '0 0 0 4px rgba(37,99,235,0.10)' : 'none' }} />
@@ -45,7 +45,7 @@ function PasswordField({ label, value, onChange, placeholder, autoFocus }: { lab
   )
 }
 
-const fieldStyle: React.CSSProperties = { width: '100%', padding: '12px 14px', background: '#FAFAFE', border: `1.5px solid ${P.border}`, borderRadius: 10, color: P.navy, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', transition: 'border-color .15s, box-shadow .15s' }
+const fieldStyle: React.CSSProperties = { width: '100%', padding: '12px 14px', background: TK.brandTint, border: `1.5px solid ${P.border}`, borderRadius: 10, color: P.navy, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', transition: 'border-color .15s, box-shadow .15s' }
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: TK.brandDeep, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 7 }
 
 export default function ESSLoginPage() {
@@ -154,20 +154,20 @@ export default function ESSLoginPage() {
 
         <div style={{ position: 'relative' }}>
           <div style={{ fontSize: 34, fontWeight: 800, lineHeight: 1.15, marginBottom: 14 }}>Your workday,<br />in one place.</div>
-          <div style={{ fontSize: 15, color: 'rgba(255,255,255,0.82)', lineHeight: 1.6, maxWidth: 380, marginBottom: 28 }}>
+          <div style={{ fontSize: 15, color: TK.onAccentSoft, lineHeight: 1.6, maxWidth: 380, marginBottom: 28 }}>
             Payslips, leave, attendance, flexi benefits &amp; more — all self-service, secure, and always with you.
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {[['', 'Payslips & tax', 'Download anytime'], ['', 'Leave & attendance', 'Apply and track'], ['', 'Flexi & reimbursements', 'Submit bills in a tap']].map(([ic, t, s]) => (
               <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ width: 42, height: 42, borderRadius: 11, background: 'rgba(255,255,255,0.13)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>{ic}</div>
-                <div><div style={{ fontSize: 14, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.72)' }}>{s}</div></div>
+                <div><div style={{ fontSize: 14, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 12.5, color: TK.onAccentSoft }}>{s}</div></div>
               </div>
             ))}
           </div>
         </div>
 
-        <div style={{ position: 'relative', fontSize: 12, color: 'rgba(255,255,255,0.6)' }}>Bank-grade security · Your data stays private</div>
+        <div style={{ position: 'relative', fontSize: 12, color: TK.onAccentDim }}>Bank-grade security · Your data stays private</div>
       </div>
 
       {/* ── Right form panel ── */}
@@ -224,7 +224,7 @@ export default function ESSLoginPage() {
 
             {step === 'changepw' && (
               <form onSubmit={onChangePassword}>
-                <div style={{ ...infoBox, background: TK.warningTint, border: '1px solid #FDE68A', color: TK.warning }}>You logged in with a temporary password. Set your own password to continue.</div>
+                <div style={{ ...infoBox, background: TK.warningTint, border: `1px solid ${TK.warningTint}`, color: TK.warning }}>You logged in with a temporary password. Set your own password to continue.</div>
                 <PasswordField label="New Password" value={newPw} onChange={setNewPw} placeholder="At least 6 characters" autoFocus />
                 <PasswordField label="Confirm New Password" value={confirm} onChange={setConfirm} placeholder="Re-enter password" />
                 {error && <ErrorBox msg={error} />}
@@ -252,14 +252,14 @@ export default function ESSLoginPage() {
   )
 }
 
-const infoBox: React.CSSProperties = { fontSize: 12.5, color: TK.brandDeep, background: TK.canvas, border: '1px solid #EDE9FE', padding: '10px 12px', borderRadius: 9, marginBottom: 16, lineHeight: 1.5 }
+const infoBox: React.CSSProperties = { fontSize: 12.5, color: TK.brandDeep, background: TK.canvas, border: `1px solid ${TK.brandEdge}`, padding: '10px 12px', borderRadius: 9, marginBottom: 16, lineHeight: 1.5 }
 
 function PrimaryBtn({ loading, label, loadingLabel }: { loading: boolean; label: string; loadingLabel: string }) {
   return (
     <button type="submit" disabled={loading} style={{
       width: '100%', padding: '13px', borderRadius: 10, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
       fontSize: 14.5, fontWeight: 700, fontFamily: 'inherit', color: TK.onAccent,
-      background: loading ? '#93C5FD' : 'linear-gradient(180deg,#3B82F6,#2563EB)', boxShadow: loading ? 'none' : '0 6px 18px rgba(37,99,235,0.32)',
+      background: loading ? TK.brandTint : 'linear-gradient(180deg,#3B82F6,#2563EB)', boxShadow: loading ? 'none' : '0 6px 18px rgba(37,99,235,0.32)',
       transition: 'transform .1s, box-shadow .15s',
     }}
       onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 22px rgba(37,99,235,0.4)' } }}
@@ -270,7 +270,7 @@ function PrimaryBtn({ loading, label, loadingLabel }: { loading: boolean; label:
 }
 
 function ErrorBox({ msg }: { msg: string }) {
-  return <div style={{ background: TK.criticalTint, border: '1px solid #FECACA', borderRadius: 9, padding: '10px 12px', fontSize: 13, color: TK.critical, marginBottom: 14, display: 'flex', gap: 7, alignItems: 'flex-start' }}><span></span><span>{msg}</span></div>
+  return <div style={{ background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px', fontSize: 13, color: TK.critical, marginBottom: 14, display: 'flex', gap: 7, alignItems: 'flex-start' }}><span></span><span>{msg}</span></div>
 }
 
 function BackLink({ onClick }: { onClick: () => void }) {

@@ -12,11 +12,11 @@ import { C as TK } from '@/lib/ui'
 const money = (n?: number | null) => (n == null) ? '—' : '₹' + Number(n).toLocaleString('en-IN')
 
 const C = {
-  card:  { background:TK.surface, borderRadius:10, padding:'12px 14px', border:'1px solid #E2E8F0', marginBottom:10 } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, padding:'12px 14px', border: `1px solid ${TK.line}`, marginBottom:10 } as React.CSSProperties,
   label: { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #E2E8F0', borderRadius:7, color:TK.ink, fontSize:12.5, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
+  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:7, color:TK.ink, fontSize:12.5, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   pri:   { padding:'8px 14px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
-  out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #E2E8F0', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
+  out:   { padding:'7px 12px', borderRadius:7, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.inkSoft, marginBottom:8, display:'flex', alignItems:'center', gap:6 } as React.CSSProperties,
   g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 } as React.CSSProperties,
 }
@@ -25,7 +25,7 @@ const addDays = (iso: string, n: number) => { if (!iso) return ''; const d = new
 const todayISO = () => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10) }
 
 function Row({ k, v }: { k: string; v: any }) {
-  return <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}><span style={{ color:TK.muted }}>{k}</span><span style={{ fontWeight:600, color:TK.ink, textAlign:'right' }}>{v ?? '—'}</span></div>
+  return <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}><span style={{ color:TK.muted }}>{k}</span><span style={{ fontWeight:600, color:TK.ink, textAlign:'right' }}>{v ?? '—'}</span></div>
 }
 function Banner({ color, bg, children }: { color: string; bg: string; children: React.ReactNode }) {
   return <div style={{ background:bg, border:`1px solid ${color}33`, borderLeft:`3px solid ${color}`, borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:12.5, color:TK.ink }}>{children}</div>
@@ -63,7 +63,7 @@ function OnboardingTab({ onb }: { onb: HR.OnboardingInfo | null }) {
         <div style={C.sec}>Documents ({onb.documents.length})</div>
         {onb.documents.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No documents uploaded.</div>}
         {onb.documents.map((d, i) => (
-          <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}>
+          <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}>
             <span>{d.doc_code} <span style={{ color:TK.faint }}>{d.file_name ? `· ${d.file_name}` : ''}</span></span>
             <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: d.hr_verified ? TK.positiveTint : d.ai_status==='VERIFIED' ? TK.brandTint : TK.warningTint, color: d.hr_verified ? TK.positive : d.ai_status==='VERIFIED' ? TK.brand : TK.warning }}>
               {d.hr_verified ? 'HR Verified' : d.ai_status==='VERIFIED' ? 'AI ✓' : (d.ai_status || 'Uploaded')}
@@ -199,7 +199,7 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
 
   const pill = (active: boolean): React.CSSProperties => ({
     padding: '7px 16px', borderRadius: 99, border: `1px solid ${active ? TK.brand : TK.line}`,
-    background: active ? TK.brand : '#fff', color: active ? '#fff' : TK.muted,
+    background: active ? TK.brand: TK.surface, color: active ? TK.surface : TK.muted,
     fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
   })
 
@@ -318,7 +318,7 @@ function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
     <div style={C.card}>
       <div style={C.sec}>Documents Submitted ({onb.documents.length})</div>
       {onb.documents.map((d, i) => (
-        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}>
+        <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontWeight:600 }}>{d.doc_code}</div>
             <div style={{ fontSize:10, color:TK.faint }}>{d.file_name || '—'}</div>
@@ -340,10 +340,10 @@ function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
 // employer cost → deductions → net → CTC summary).
 function BreakupRow({ label, monthly, annual, kind }: { label: string; monthly: number; annual?: number; kind?: 'sub' | 'total' | 'net' | 'plain' }) {
   const bold = kind === 'sub' || kind === 'total' || kind === 'net'
-  const bg = kind === 'total' ? TK.canvas : kind === 'sub' ? '#FAFAFE' : kind === 'net' ? TK.positiveTint : 'transparent'
+  const bg = kind === 'total' ? TK.canvas : kind === 'sub' ? TK.brandTint : kind === 'net' ? TK.positiveTint : 'transparent'
   const color = kind === 'total' ? TK.brand : kind === 'net' ? TK.positive : TK.ink
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'7px 12px', background:bg, borderBottom:'1px solid #F1F5F9', fontSize:12.5 }}>
+    <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'7px 12px', background:bg, borderBottom: `1px solid ${TK.line}`, fontSize:12.5 }}>
       <span style={{ color: bold ? color : TK.inkSoft, fontWeight: bold ? 700 : 400 }}>{label}</span>
       <span style={{ textAlign:'right', fontWeight: bold ? 700 : 500, color: bold ? color : TK.ink, fontVariantNumeric:'tabular-nums' }}>{money(monthly)}</span>
       <span style={{ textAlign:'right', fontWeight: bold ? 700 : 500, color: bold ? color : TK.muted, fontVariantNumeric:'tabular-nums' }}>{annual != null ? money(annual) : '—'}</span>
@@ -382,14 +382,14 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
     return (
       <div>
         <div style={{ ...C.card, padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.ink, fontSize: 11, fontWeight: 700, color: TK.onAccent, letterSpacing: '.03em' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.dark, fontSize: 11, fontWeight: 700, color: TK.onDark, letterSpacing: '.03em' }}>
             <span>{isConsultant ? 'CONSULTANT PAY' : 'STIPEND'}</span>
             <span style={{ textAlign: 'right' }}>MONTHLY</span>
             <span style={{ textAlign: 'right' }}>ANNUAL</span>
           </div>
           {rows.map(([l, m, a]) => <BreakupRow key={l} label={l} monthly={m} annual={a} kind={l.startsWith('Stipend') ? 'sub' : 'plain'} />)}
           {/* TDS yes/no */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderTop: '1px solid #F1F5F9' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderTop: `1px solid ${TK.line}` }}>
             <span style={{ fontSize: 12.5, color: TK.inkSoft }}>TDS applicable</span>
             <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 99, background: d.tds ? TK.criticalTint : TK.positiveTint, color: d.tds ? TK.critical : TK.positive }}>
               {d.tds ? 'Yes' : 'No'}{isConsultant && d.tds ? ' · 194J' : ''}
@@ -412,7 +412,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
           { l: 'Net Take-home / mo', v: money(d.net), c: TK.positive, bg: TK.positiveTint },
           { l: 'Fixed / mo', v: money(d.fixedMonthly), c: TK.ink, bg: TK.sunken },
         ].map(x => (
-          <div key={x.l} style={{ background:x.bg, border:'1px solid #E2E8F0', borderRadius:10, padding:'12px 14px' }}>
+          <div key={x.l} style={{ background:x.bg, border: `1px solid ${TK.line}`, borderRadius:10, padding:'12px 14px' }}>
             <div style={{ fontSize:10, color:TK.muted, textTransform:'uppercase', letterSpacing:'.04em', marginBottom:4 }}>{x.l}</div>
             <div style={{ fontSize:17, fontWeight:700, color:x.c }}>{x.v}</div>
           </div>
@@ -420,7 +420,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
       </div>
 
       <div style={{ ...C.card, padding:0, overflow:'hidden' }}>
-        <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'9px 12px', background:TK.ink, fontSize:11, fontWeight:700, color:TK.onAccent, letterSpacing:'.03em' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'9px 12px', background: TK.dark, fontSize:11, fontWeight:700, color:TK.onDark, letterSpacing:'.03em' }}>
           <span>SALARY STRUCTURE{d.payType && d.payType !== 'Regular' ? ` · ${d.payType}` : ''}</span>
           <span style={{ textAlign:'right' }}>MONTHLY</span>
           <span style={{ textAlign:'right' }}>ANNUAL</span>
@@ -526,7 +526,7 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
           <div style={C.sec}>Action History</div>
           {history.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No actions yet.</div>}
           {history.map(a => (
-            <div key={a.id} style={{ display:'flex', gap:8, padding:'7px 0', borderBottom:'1px solid #F1F5F9', alignItems:'flex-start' }}>
+            <div key={a.id} style={{ display:'flex', gap:8, padding:'7px 0', borderBottom: `1px solid ${TK.line}`, alignItems:'flex-start' }}>
               <span style={{ fontSize:14 }}>{icon(a.action_type)}</span>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:12, color:TK.inkSoft }}>{a.action_type.replace(/_/g,' ')}</div>
@@ -546,8 +546,8 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
       {/* Active banners + close actions */}
       {states.pip && <Banner color={TK.warning} bg={TK.warningTint}>📉 <b>PIP active</b> since {fmt(states.pip.start_date)}.
         <div style={{ marginTop:6, display:'flex', gap:6 }}>
-          <button style={{ ...C.out, borderColor:'#A7F3D0', color:TK.positive }} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'PASSED', by), 'PIP closed — Passed')}>Mark Passed</button>
-          <button style={{ ...C.out, borderColor:'#FCA5A5', color:TK.critical }} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'FAILED', by), 'PIP closed — Failed')}>Mark Failed</button>
+          <button style={{ ...C.out, borderColor: TK.positiveTint, color:TK.positive }} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'PASSED', by), 'PIP closed — Passed')}>Mark Passed</button>
+          <button style={{ ...C.out, borderColor: TK.criticalTint, color:TK.critical }} onClick={() => run(() => HR.closePIP(states.pip.id, employee.id, 'FAILED', by), 'PIP closed — Failed')}>Mark Failed</button>
         </div></Banner>}
       {states.sabbatical && <Banner color={TK.info} bg={TK.infoTint}>🌴 <b>On Sabbatical</b> {fmt(states.sabbatical.from_date)} → {fmt(states.sabbatical.to_date)}.
         <div style={{ marginTop:6 }}><button style={C.out} onClick={() => run(() => HR.markSabbaticalReturned(states.sabbatical.id, employee.id, todayISO(), by), 'Marked returned')}>Mark Returned (today)</button></div></Banner>}
@@ -561,11 +561,11 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
         <div style={C.card}>
           <div style={C.sec}>Pending Approval Requests ({requests.filter(r => r.status==='PENDING').length})</div>
           {requests.map(r => (
-            <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}>
+            <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}>
               <div><div style={{ fontWeight:600 }}>{r.request_type}</div><div style={{ fontSize:10, color:TK.faint }}>{JSON.stringify(r.request_data).slice(0,50)} · {r.status}</div></div>
               {r.status === 'PENDING' && <div style={{ display:'flex', gap:6 }}>
-                <button style={{ ...C.out, borderColor:'#A7F3D0', color:TK.positive }} onClick={() => run(() => HR.approveRequest(r.id, employee.id, by), 'Approved')}>Approve</button>
-                <button style={{ ...C.out, borderColor:'#FCA5A5', color:TK.critical }} onClick={() => { const n = window.prompt('Rejection reason') || ''; run(() => HR.rejectRequest(r.id, employee.id, n, by), 'Rejected') }}>Reject</button>
+                <button style={{ ...C.out, borderColor: TK.positiveTint, color:TK.positive }} onClick={() => run(() => HR.approveRequest(r.id, employee.id, by), 'Approved')}>Approve</button>
+                <button style={{ ...C.out, borderColor: TK.criticalTint, color:TK.critical }} onClick={() => { const n = window.prompt('Rejection reason') || ''; run(() => HR.rejectRequest(r.id, employee.id, n, by), 'Rejected') }}>Reject</button>
               </div>}
             </div>
           ))}

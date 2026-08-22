@@ -128,7 +128,7 @@ function SubTabHead({ crumbs, subtitle, built, total }: { crumbs: string[]; subt
             const last = i === crumbs.length - 1
             return (
               <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                {i > 0 && <span style={{ color: '#C9C7D6', fontSize: 15 }}>›</span>}
+                {i > 0 && <span style={{ color: TK.line, fontSize: 15 }}>›</span>}
                 <span style={{ fontSize: 17, fontWeight: last ? 700 : 600, color: last ? C.navy : C.muted }}>{c}</span>
               </span>
             )
@@ -138,7 +138,7 @@ function SubTabHead({ crumbs, subtitle, built, total }: { crumbs: string[]; subt
       </div>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: C.muted }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: C.success }} />{built} built</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: '#C9C7D6' }} />{total - built} planned</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: TK.line }} />{total - built} planned</span>
       </div>
     </div>
   )
@@ -184,8 +184,8 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
     <div style={{ position: 'relative', flexShrink: 0 }}>
       <button ref={btnRef} onClick={toggle} style={{
         display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 8,
-        border: `1px solid ${isActive || open ? C.purple : C.border}`, background: isActive ? C.purple : '#fff',
-        color: isActive ? '#fff' : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+        border: `1px solid ${isActive || open ? C.purple : C.border}`, background: isActive ? C.purple: TK.surface,
+        color: isActive ? TK.surface : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
         boxShadow: open ? '0 6px 20px rgba(37,99,235,0.18)' : 'none',
       }}>
         {label}
@@ -212,7 +212,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                 <div key={s.id}>
                   <button
                     onClick={() => { if (hasKids) { toggleExpand(s.id) } else { onPick(s.id); setOpen(false) } }}
-                    onMouseEnter={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = '#F7F5FF' }}
+                    onMouseEnter={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = TK.brandTint }}
                     onMouseLeave={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
                     style={{
                       width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 9,
@@ -225,7 +225,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                       <span style={{ color: C.muted, fontSize: 11, flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}></span>
                     ) : (
                       <>
-                        <span title={s.built ? 'Built' : 'Planned'} style={{ width: 7, height: 7, borderRadius: 99, flexShrink: 0, background: s.built ? C.success : '#C9C7D6' }} />
+                        <span title={s.built ? 'Built' : 'Planned'} style={{ width: 7, height: 7, borderRadius: 99, flexShrink: 0, background: s.built ? C.success: TK.line }} />
                         {on && <span style={{ color: C.purple, fontSize: 13, marginLeft: 2 }}></span>}
                       </>
                     )}
@@ -237,7 +237,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                         const kon = on && k.id === activeChild
                         return (
                           <button key={k.id} onClick={() => { onPick(s.id, k.id); setOpen(false) }}
-                            onMouseEnter={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = '#F7F5FF' }}
+                            onMouseEnter={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = TK.brandTint }}
                             onMouseLeave={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
                             style={{
                               width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8,
@@ -885,7 +885,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             </div>
             <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 18 }}>
               {blockers.map(b => (
-                <div key={b.companyId} style={{ border: '1px solid #FECACA', background: TK.criticalTint, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                <div key={b.companyId} style={{ border: `1px solid ${TK.criticalTint}`, background: TK.criticalTint, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
                   <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 6 }}>{b.companyName} · {b.prevLabel}</div>
                   {[
                     ['Attendance processed', b.attendanceDone, b.attendanceDetail],
@@ -925,8 +925,8 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, marginBottom: 4 }}>Creating month master…</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 20 }}>{monthLabel}{allCo ? ' · all companies' : ''}</div>
             <div style={{ fontSize: 34, fontWeight: 800, color: GREEN, marginBottom: 12 }}>{pct}%</div>
-            <div style={{ height: 14, background: '#E7F6EF', borderRadius: 99, overflow: 'hidden', marginBottom: 14 }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#10B981,#059669)', borderRadius: 99, transition: 'width .2s ease' }} />
+            <div style={{ height: 14, background: TK.sunken, borderRadius: 99, overflow: 'hidden', marginBottom: 14 }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${TK.positive},${TK.positive})`, borderRadius: 99, transition: 'width .2s ease' }} />
             </div>
             <div style={{ fontSize: 12.5, color: C.navy, fontWeight: 600, minHeight: 18 }}>{stage}</div>
           </div>

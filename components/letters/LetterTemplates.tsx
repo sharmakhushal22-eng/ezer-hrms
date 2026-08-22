@@ -25,9 +25,9 @@ import { C as TK } from '@/lib/ui'
 const C = {
   bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted,
-  green: TK.positive, greenBg: TK.positiveTint, greenBd: '#BBF7D0',
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
-  red: TK.critical, redBg: TK.criticalTint, redBd: '#FCA5A5',
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, redBd: TK.criticalTint,
   purpleBg: TK.brandTint, gray: TK.sunken,
 }
 
@@ -91,10 +91,10 @@ function NewTemplateModal({ onClose, onCreate }: { onClose: () => void; onCreate
         <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, marginBottom: 14 }}>Add new letter</div>
         <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Name of letter *</label>
         <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Offer Letter"
-          style={{ width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }} />
         <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Description</label>
         <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional — what this letter is for"
-          style={{ width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }} />
         <div style={{ display: 'flex', gap: 8 }}>
           <button disabled={!name.trim()} onClick={() => onCreate(name.trim(), description.trim())}
             style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: !name.trim() ? 0.5 : 1 }}>
@@ -169,7 +169,7 @@ function ResultRow({ r }: { r: GenResult }) {
               {emailing ? '…' : 'Email'}
             </button>
             <button onClick={handlePublish} disabled={publishing || published}
-              style={{ padding: '4px 9px', fontSize: 10, borderRadius: 6, border: `1px solid ${published ? C.greenBd : C.border}`, background: published ? C.greenBg : '#fff', color: published ? C.green : C.navy, cursor: published ? 'default' : 'pointer' }}>
+              style={{ padding: '4px 9px', fontSize: 10, borderRadius: 6, border: `1px solid ${published ? C.greenBd : C.border}`, background: published ? C.greenBg: TK.surface, color: published ? C.green : C.navy, cursor: published ? 'default' : 'pointer' }}>
               {published ? 'Published to ESS' : publishing ? '…' : 'Publish to ESS'}
             </button>
           </div>
@@ -365,7 +365,7 @@ export default function LetterTemplates() {
                 <thead>
                   <tr style={{ background: C.navy }}>
                     {['Emp code', 'Name', 'Status', 'Actions'].map(h => (
-                      <th key={h} style={{ padding: '9px 8px', textAlign: 'left', fontSize: 10, color: '#A5B4FC', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
+                      <th key={h} style={{ padding: '9px 8px', textAlign: 'left', fontSize: 10, color: TK.brand, fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>

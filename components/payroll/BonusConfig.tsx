@@ -15,10 +15,10 @@ import { C as TK } from '@/lib/ui'
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, gray: TK.sunken,
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE8C8', purpleBg: TK.brandTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, purpleBg: TK.brandTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
+const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 
 function ToggleButton({ label, sub, active, onClick }: { label: string; sub?: string; active: boolean; onClick: () => void }) {
   return (
@@ -28,8 +28,8 @@ function ToggleButton({ label, sub, active, onClick }: { label: string; sub?: st
       style={{
         flex: 1, padding: '11px 14px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
         border: `1.5px solid ${active ? C.purple : C.border}`,
-        background: active ? 'linear-gradient(135deg,#2563EB,#5B21B6)' : '#fff',
-        color: active ? '#fff' : C.navy, transition: 'border-color .12s',
+        background: active ? 'linear-gradient(135deg,#2563EB,#5B21B6)' : TK.surface,
+        color: active ? TK.surface : C.navy, transition: 'border-color .12s',
         boxShadow: active ? '0 3px 10px rgba(37,99,235,0.22)' : 'none',
       }}>
       <div style={{ fontSize: 12.5, fontWeight: 700 }}>{label}</div>
@@ -102,7 +102,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 580 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Statutory Bonus</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -167,7 +167,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
       <button onClick={handleSave} disabled={saving}
         onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
         onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-        style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+        style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
         {saving ? 'Saving…' : 'Save bonus configuration'}
       </button>
 

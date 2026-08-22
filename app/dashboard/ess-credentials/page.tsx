@@ -86,7 +86,7 @@ export default function EssCredentialsPage() {
       <div style={{ fontSize: 22, fontWeight: 700 }}>ESS Login Credentials</div>
       <div style={{ fontSize: 12, color: C.muted, marginTop: 2, marginBottom: 16 }}>Generate employee self-service logins in bulk · temp password = employee code · forced change on first login</div>
 
-      <div style={{ background: C.amberBg, border: '1px solid #FDE68A', borderRadius: 10, padding: '11px 14px', marginBottom: 16, fontSize: 12.5, color: C.amber, display: 'flex', gap: 8 }}>
+      <div style={{ background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '11px 14px', marginBottom: 16, fontSize: 12.5, color: C.amber, display: 'flex', gap: 8 }}>
         <span></span><span><b>Confidential.</b> Each employee&apos;s temporary password is their own <b>employee code</b> (e.g. SRS0001). They must set a new password on first login. Share the exported list securely, then delete it.</span>
       </div>
 
@@ -119,7 +119,7 @@ export default function EssCredentialsPage() {
             onClick={() => generate('selected')}
           >Generate for these</button>
         </div>
-        {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.red, background: TK.criticalTint, border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 12px' }}>⚠ {error}</div>}
+        {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.red, background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '9px 12px' }}>⚠ {error}</div>}
       </div>
 
       {summary && (
@@ -150,7 +150,7 @@ export default function EssCredentialsPage() {
                               try { await navigator.clipboard.writeText(link) } catch { /* clipboard best-effort */ }
                               setCopiedIdx(i); setTimeout(() => setCopiedIdx(c => (c === i ? null : c)), 1800)
                             }}
-                            style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, border: `1px solid ${C.border}`, background: copiedIdx === i ? C.greenBg : '#fff', color: copiedIdx === i ? C.green : C.purpleDark, fontWeight: 600, cursor: 'pointer', fontFamily: font }}
+                            style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, border: `1px solid ${C.border}`, background: copiedIdx === i ? C.greenBg: TK.surface, color: copiedIdx === i ? C.green : C.purpleDark, fontWeight: 600, cursor: 'pointer', fontFamily: font }}
                           >{copiedIdx === i ? 'Copied' : 'Copy link'}</button>
                         </span>
                       ) : <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: TK.criticalTint, color: C.red, fontWeight: 600 }}>{r.error || 'Error'}</span>}

@@ -18,7 +18,7 @@ import { C as TK } from '@/lib/ui'
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
+  greenBd: TK.positiveTint, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -73,7 +73,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
     XLSX.writeFile(wb, `Month_Master_Changes_${safe(diff.curLabel)}_vs_${safe(diff.prevLabel)}.xlsx`.replace(/_+/g, '_'))
   }
 
-  const th: React.CSSProperties = { padding: '8px 12px', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', textAlign: 'left', whiteSpace: 'nowrap' }
+  const th: React.CSSProperties = { padding: '8px 12px', fontSize: 9.5, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '9px 12px', color: C.navy, borderTop: `1px solid ${C.border}` }
   const stat = (label: string, value: any, color: string) => (
     <div key={label} style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 9, padding: '8px 12px', minWidth: 96 }}>
@@ -99,14 +99,14 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
         </label>
         <button onClick={compare} disabled={busy || !run} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 11.5, fontFamily: font, cursor: busy ? 'not-allowed' : 'pointer' }}>⟳ Refresh</button>
         <button onClick={download} disabled={!diff || !diff.rows.length}
-          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? '#C4B5FD' : 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
+          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? TK.brandTint : 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
         </button>
       </div>
 
       {busy && <div style={{ fontSize: 12, color: C.muted, padding: '10px 0' }}>Comparing months…</div>}
       {err && <div style={{ fontSize: 12, color: TK.critical, background: TK.criticalTint, borderRadius: 9, padding: '10px 14px' }}>{err}</div>}
       {!busy && !err && prevMissing && (
-        <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 12px' }}>
+        <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px' }}>
           Nothing to compare against — <b>{prevMissing}</b> was never created for this selection. The first month of a company has no previous month master.
         </div>
       )}
@@ -171,7 +171,7 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 0', borderTop: `1px solid ${C.border}` }}>
       <div style={{
         width: 34, height: 34, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: 15, flexShrink: 0, background: ready ? C.purpleBg : global_ ? TK.positiveTint : '#F3F4F6',
+        fontSize: 15, flexShrink: 0, background: ready ? C.purpleBg : global_ ? TK.positiveTint: TK.sunken,
       }}>{cat.icon}</div>
       <div style={{ flex: 1, minWidth: 180 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: ready || global_ ? C.navy : TK.faint }}>{cat.label}</div>
@@ -184,7 +184,7 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
             {count == null ? '—' : count}
           </span>
           <button onClick={onSync} disabled={busy || disabled}
-            style={{ padding: '7px 15px', borderRadius: 8, border: 'none', background: busy || disabled ? '#C4B5FD' : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+            style={{ padding: '7px 15px', borderRadius: 8, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
             {busy ? 'Syncing…' : 'Sync'}
           </button>
           <button onClick={onDownload} disabled={disabled} title={`Download ${cat.label} as frozen in this month`}
@@ -371,7 +371,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 880 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Snapshot Sync</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
@@ -380,8 +380,8 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         </div>
         <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', paddingTop: 4 }}>
           <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: C.green, marginRight: 5 }} />{readyCount} ready
-          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#6EE7B7', margin: '0 5px 0 12px' }} />{globalCount} whole-year
-          {plannedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: '#C7C2E8', margin: '0 5px 0 12px' }} />{plannedCount} planned</>}
+          <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.positiveTint, margin: '0 5px 0 12px' }} />{globalCount} whole-year
+          {plannedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.line, margin: '0 5px 0 12px' }} />{plannedCount} planned</>}
         </div>
       </div>
 
@@ -402,13 +402,13 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         </div>
 
         {status?.is_locked && (
-          <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
             This month is <b>locked / disbursed</b> — every category sync is disabled. A locked month should not be changed quietly by a small sync; reopen it formally through <b>Lock / Unlock</b> first. (The database will refuse it anyway.)
           </div>
         )}
 
         {needsMigration && (
-          <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
             Category-wise sync is off — the database could not resolve one of its functions.
             {migrationDetail && <div style={{ marginTop: 5, fontFamily: 'ui-monospace, monospace', fontSize: 10.5, opacity: .85 }}>{migrationDetail}</div>}
             <div style={{ marginTop: 5 }}>Run the migration that creates that function, then reload.</div>
@@ -434,7 +434,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
             extra={cat.key === 'employee' && status && (status.new_joiners > 0 || status.leavers > 0) ? (
               <div style={{ fontSize: 10.5, marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 {status.new_joiners > 0 && <span style={{ color: C.green, background: C.greenBg, border: `0.5px solid ${C.greenBd}`, borderRadius: 99, padding: '2px 9px', fontWeight: 700 }}>+{status.new_joiners} new joiner{status.new_joiners === 1 ? '' : 's'} waiting</span>}
-                {status.leavers > 0 && <span style={{ color: C.amber, background: C.amberBg, border: '0.5px solid #FDE8C8', borderRadius: 99, padding: '2px 9px', fontWeight: 700 }}>{status.leavers} no longer eligible</span>}
+                {status.leavers > 0 && <span style={{ color: C.amber, background: C.amberBg, border: `0.5px solid ${TK.warningTint}`, borderRadius: 99, padding: '2px 9px', fontWeight: 700 }}>{status.leavers} no longer eligible</span>}
               </div>
             ) : undefined}
           />

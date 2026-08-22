@@ -27,7 +27,7 @@ const C = {
   red: TK.critical, redBg: TK.criticalTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
+const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 const labelStyle: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }
 
 // ── Searchable dropdown ─────────────────────────────────────────────
@@ -47,16 +47,16 @@ function SearchSelect({ value, options, placeholder, onChange }: {
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 210 }} />
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: '1px solid #DDD6FE', borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
-              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid #EEF', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
               {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o} onClick={() => { onChange(o); setOpen(false) }}
                   onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
-                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? '#EEF2FF' : '#fff'}
-                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o === value ? '#EEF2FF' : '#fff', color: C.navy }}>
+                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? TK.brandTint : TK.surface}
+                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
                   {o}
                 </div>
               ))}
@@ -76,7 +76,7 @@ function MonthPicker({ selected, onToggle }: { selected: number[]; onToggle: (m:
         const active = selected.includes(m)
         return (
           <button key={m} onClick={() => onToggle(m)} type="button"
-            style={{ padding: '7px 4px', borderRadius: 7, border: `1px solid ${active ? C.purple : C.border}`, background: active ? 'linear-gradient(135deg,#2563EB,#5B21B6)' : '#fff', color: active ? '#fff' : C.navy, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ padding: '7px 4px', borderRadius: 7, border: `1px solid ${active ? C.purple : C.border}`, background: active ? 'linear-gradient(135deg,#2563EB,#5B21B6)' : TK.surface, color: active ? TK.surface : C.navy, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
             {name}
           </button>
         )
@@ -128,7 +128,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: font }}>
       <div style={{ background: TK.surface, borderRadius: 14, padding: 22, width: '100%', maxWidth: 500, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(30,27,75,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise LWF config' : 'Add LWF state'}</div>
             <div style={{ fontSize: 10.5, color: C.muted }}>Applicable months + contributions</div>
@@ -173,7 +173,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button disabled={!valid || saving} onClick={handleSave}
-            style={{ flex: 1, padding: '11px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+            style={{ flex: 1, padding: '11px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
             {saving ? 'Saving…' : 'Save'}
           </button>
           <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
@@ -233,7 +233,7 @@ export default function LwfConfig() {
     padding: '16px 18px', marginBottom: 16, boxShadow: '0 1px 6px rgba(37,99,235,0.07)',
   }
   const th: React.CSSProperties = {
-    background: C.navy, color: '#A5B4FC', padding: '7px 6px', textAlign: 'right',
+    background: C.navy, color: TK.brand, padding: '7px 6px', textAlign: 'right',
     fontSize: 9, textTransform: 'uppercase', position: 'sticky', top: 0, whiteSpace: 'nowrap',
   }
   const td: React.CSSProperties = {
@@ -289,7 +289,7 @@ export default function LwfConfig() {
                     {MONTH_NAMES.map((m, mi) => {
                       const on = (r.applicable_months || []).includes(mi + 1)
                       return (
-                        <td key={m} style={{ ...td, color: on ? C.navy : '#C7C2E8', fontWeight: on ? 700 : 400 }}>
+                        <td key={m} style={{ ...td, color: on ? C.navy: TK.line, fontWeight: on ? 700 : 400 }}>
                           {on ? amt : '—'}
                         </td>
                       )
@@ -316,7 +316,7 @@ export default function LwfConfig() {
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1200 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 19, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Labour Welfare Fund Configuration</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
@@ -324,12 +324,12 @@ export default function LwfConfig() {
           </div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
+          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
           + Add / revise state
         </button>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
 
       {/* ── Quick check ─────────────────────────────────────────── */}
       <div style={card}>
@@ -355,7 +355,7 @@ export default function LwfConfig() {
             Exiting mid-month
           </label>
           <button onClick={runCheck} disabled={qBusy || !qState}
-            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: !qState ? '#D8D3F5' : C.purple, cursor: !qState ? 'not-allowed' : 'pointer' }}>
+            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: !qState ? TK.brandTint : C.purple, cursor: !qState ? 'not-allowed' : 'pointer' }}>
             {qBusy ? 'Checking…' : 'Check LWF'}
           </button>
         </div>
@@ -373,7 +373,7 @@ export default function LwfConfig() {
           const box: React.CSSProperties = {
             flex: 1, minWidth: 150, borderRadius: 10, padding: '13px 15px',
             background: found ? TK.positiveTint : C.amberBg,
-            border: `1px solid ${found ? '#A7F3D0' : '#FDE8C8'}`,
+            border: `1px solid ${found ? TK.positiveTint : TK.warningTint}`,
           }
           return (
             <div style={{ marginTop: 13 }}>

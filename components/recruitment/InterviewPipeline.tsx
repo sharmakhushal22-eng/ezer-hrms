@@ -57,7 +57,7 @@ interface ParamDef { id: string; label: string; tags: string[] }
 interface RoundConfig { badge: string; color: string; lightBg: string; params: ParamDef[] }
 
 const ROUND_CONFIGS: Record<string, RoundConfig> = {
-  'Recruiter Screening': { badge: 'RS', color: '#185FA5', lightBg: '#E6F1FB', params: [
+  'Recruiter Screening': { badge: 'RS', color: TK.brand, lightBg: TK.brandTint, params: [
     { id: 'comm',       label: 'Communication',     tags: ['Clear & articulate', 'Needs polish', 'Strong English'] },
     { id: 'exp',        label: 'Experience match',  tags: ['Relevant experience', 'Partial match', 'Over-qualified'] },
     { id: 'salary',     label: 'Salary alignment',  tags: ['Within budget', 'Slightly high', 'Negotiable'] },
@@ -148,7 +148,7 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
 
 function StatusPill({ status }: { status: RoundStatus }) {
   const map: Record<RoundStatus, [string, string, string]> = {
-    pending:   ['#F3F4F6', TK.muted, 'Pending'],
+    pending:   [TK.sunken, TK.muted, 'Pending'],
     scheduled: [TK.warningTint, TK.warning, 'Scheduled'],
     done:      [TK.positiveTint, TK.positive, 'Done'],
     rejected:  [TK.criticalTint, TK.critical, 'Rejected'],
@@ -161,11 +161,11 @@ function RoundNode({ round, isLast }: { round: Round; isLast: boolean }) {
   const cfg = cfgFor(round.round_type)
   const done = round.status === 'done'
   const rejected = round.status === 'rejected'
-  const dot = rejected ? TK.critical : done ? cfg.color : round.status === 'scheduled' ? TK.warning : '#D1D5DB'
+  const dot = rejected ? TK.critical : done ? cfg.color : round.status === 'scheduled' ? TK.warning: TK.line
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-        <div style={{ width: 30, height: 30, borderRadius: '50%', background: done || rejected ? dot : '#fff', border: `2px solid ${dot}`, color: done || rejected ? '#fff' : dot, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>
+        <div style={{ width: 30, height: 30, borderRadius: '50%', background: done || rejected ? dot: TK.surface, border: `2px solid ${dot}`, color: done || rejected ? '#fff' : dot, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>
           {cfg.badge}
         </div>
         <div style={{ fontSize: 9, color: TK.muted, whiteSpace: 'nowrap', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{round.round_type.replace(' Interview', '').replace(' Round', '')}</div>
@@ -224,7 +224,7 @@ function PrevFeedbackBlock({ rounds }: { rounds: Round[] }) {
           {done.map(r => {
             const cfg = cfgFor(r.round_type)
             return (
-              <div key={r.id} style={{ borderTop: '1px solid #EDE9FE', paddingTop: 10, marginTop: 10 }}>
+              <div key={r.id} style={{ borderTop: `1px solid ${TK.brandEdge}`, paddingTop: 10, marginTop: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                   <span style={C.pill(cfg.lightBg, cfg.color)}>{cfg.badge}</span>
                   <span style={{ fontSize: 12, fontWeight: 600 }}>{r.round_type}</span>
@@ -323,7 +323,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
           {defs.map((d, i) => (
             <button key={d.id} onClick={() => setTab(i)} style={{
               padding: '6px 11px', borderRadius: 7, border: `1px solid ${i === tab ? cfg.color : 'rgba(37,99,235,0.15)'}`,
-              background: i === tab ? cfg.color : TK.onAccent, color: i === tab ? '#fff' : TK.muted,
+              background: i === tab ? cfg.color : TK.onAccent, color: i === tab ? TK.surface : TK.muted,
               fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
             }}>
               {params[i].rating > 0 ? '★ ' : ''}{d.label}
@@ -403,7 +403,7 @@ function DetailView({ round, onBack }: { round: Round; onBack: () => void }) {
           {round.interviewer_name || '—'} · {fmtDate(round.scheduled_at)} · {round.interview_mode || '—'} · Recommendation: <strong>{recLabel}</strong>
         </div>
         {(round.params || []).map(p => (
-          <div key={p.param_id} style={{ borderTop: '1px solid #EDE9FE', paddingTop: 8, marginTop: 8 }}>
+          <div key={p.param_id} style={{ borderTop: `1px solid ${TK.brandEdge}`, paddingTop: 8, marginTop: 8 }}>
             <div style={{ fontSize: 12, fontWeight: 600 }}>{p.param_label} <span style={{ color: TK.warning }}>{''.repeat(p.rating)}{''.repeat(5 - p.rating)}</span></div>
             {p.text && <div style={{ fontSize: 12, color: TK.inkSoft, marginTop: 2 }}>{p.text}</div>}
           </div>

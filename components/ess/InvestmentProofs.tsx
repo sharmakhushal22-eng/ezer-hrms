@@ -17,8 +17,8 @@ import { C as TK } from '@/lib/ui'
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: 'rgba(37,99,235,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
-  soft: TK.sunken, purpleBg: '#F3EEFF',
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, red: TK.critical, redBg: TK.criticalTint,
+  soft: TK.sunken, purpleBg: TK.brandTint,
 }
 const FY = '2026-27'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -36,7 +36,7 @@ interface Proof {
 }
 
 const TONE: Record<string, { bg: string; fg: string; label: string }> = {
-  PENDING:   { bg: '#F3F4F6', fg: TK.muted, label: 'Proof pending' },
+  PENDING:   { bg: TK.sunken, fg: TK.muted, label: 'Proof pending' },
   SUBMITTED: { bg: TK.warningTint, fg: TK.warning, label: 'Under review' },
   APPROVED:  { bg: TK.positiveTint, fg: TK.positive, label: 'Approved' },
   REJECTED:  { bg: TK.criticalTint, fg: TK.critical, label: 'Rejected' },
@@ -65,13 +65,13 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
         </div>
         <div>
           <label style={{ fontSize: 10.5, color: C.muted, display: 'block', marginBottom: 3 }}>Proof amount</label>
-          <input style={{ width: '100%', padding: '8px 10px', background: locked ? '#F3F4F6' : C.soft, border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+          <input style={{ width: '100%', padding: '8px 10px', background: locked ? TK.sunken : C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
             value={draftAmt} readOnly={locked} inputMode="numeric"
             onChange={e => onAmt(e.target.value.replace(/[^0-9]/g, ''))} />
         </div>
         <div style={{ gridColumn: 'span 2' }}>
           <label style={{ fontSize: 10.5, color: C.muted, display: 'block', marginBottom: 3 }}>Bill / policy reference</label>
-          <input style={{ width: '100%', padding: '8px 10px', background: locked ? '#F3F4F6' : C.soft, border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+          <input style={{ width: '100%', padding: '8px 10px', background: locked ? TK.sunken : C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
             value={draftRef} readOnly={locked} placeholder="Policy no. / receipt no. / drive link"
             onChange={e => onRef(e.target.value)} />
         </div>
@@ -184,7 +184,7 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
           No <b>Investment Declaration</b> found for this FY. Proofs are submitted against it — fill in and submit the declaration first.
         </div>
       ) : regime === 'NEW' ? (
-        <div style={{ background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: 12, padding: 20, fontSize: 12.5, color: C.green, lineHeight: 1.6 }}>
+        <div style={{ background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 12, padding: 20, fontSize: 12.5, color: C.green, lineHeight: 1.6 }}>
           You are on the <b>New regime</b> — the 80C/80D/HRA exemptions do not apply, so no proof is needed.
         </div>
       ) : (
@@ -226,7 +226,7 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
         </>
       )}
 
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
+      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
       {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
     </div>
   )

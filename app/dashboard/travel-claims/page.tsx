@@ -909,7 +909,7 @@ export default function TravelClaimsAdmin() {
                            fontFamily: 'inherit', cursor: 'pointer',
                            border: tab === t.k ? 'none' : `1px solid ${V.border}`,
                            background: tab === t.k ? V.purple : V.card,
-                           color: tab === t.k ? '#fff' : V.purpleDark }}>
+                           color: tab === t.k ? C.surface : V.purpleDark }}>
             {t.label}
             {t.k === tab && claims.length > 0 && t.k !== 'PERIODS' && ` · ${claims.length}`}
           </button>

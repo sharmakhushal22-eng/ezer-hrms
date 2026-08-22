@@ -82,9 +82,9 @@ function toneColor(t?: Row['tone']) {
 }
 function TypeBadge({ t }: { t: string }) {
   const map: Record<string, [string, string]> = {
-    'Fixed earning': [C.greenBg, C.green], 'Balancing': ['#FEF9C3', '#854D0E'], 'Variable': ['#FFF7ED', '#C2410C'],
+    'Fixed earning': [C.greenBg, C.green], 'Balancing': [TK.warningTint, TK.warning], 'Variable': [TK.warningTint, TK.critical],
     'Reimbursement': [C.purpleBg, C.purpleDark], 'Statutory': [C.redBg, C.red], 'Voluntary': [TK.infoTint, TK.info],
-    'Recovery': [TK.criticalTint, TK.critical], 'Employer': [C.purpleBg, C.purpleDark], 'Accrual': ['#F0FDFA', '#0F766E'],
+    'Recovery': [TK.criticalTint, TK.critical], 'Employer': [C.purpleBg, C.purpleDark], 'Accrual': [TK.infoTint, TK.info],
     'Computed total': [TK.sunken, TK.inkSoft], 'Computed': [TK.sunken, TK.inkSoft],
   }
   const [bg, color] = map[t] || [TK.sunken, TK.inkSoft]

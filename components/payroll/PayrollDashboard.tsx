@@ -15,8 +15,8 @@ import { C as TK } from '@/lib/ui'
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FAC775', pink: '#D4537E',
-  purpleBg: TK.brandTint, gray: TK.sunken, teal: '#0891B2',
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, pink: TK.critical,
+  purpleBg: TK.brandTint, gray: TK.sunken, teal: TK.info,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const num = (v: any) => (v == null || v === '' ? 0 : Number(v) || 0)
@@ -331,7 +331,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
                       <span style={{ color: C.muted }}>{inrShort(d.cost)}</span>
                     </div>
                     <div style={{ height: 7, background: C.gray, borderRadius: 4, overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: 'linear-gradient(90deg,#2563EB,#5B21B6)', borderRadius: 4 }} />
+                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: `linear-gradient(90deg,${TK.brand},${TK.brand})`, borderRadius: 4 }} />
                     </div>
                   </div>
                 ))}

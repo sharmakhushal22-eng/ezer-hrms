@@ -374,7 +374,7 @@ export default function FinanceDepartment() {
                            fontFamily: 'inherit', cursor: 'pointer',
                            border: tab === k ? 'none' : `1px solid ${V.border}`,
                            background: tab === k ? V.purple : V.card,
-                           color: tab === k ? '#fff' : V.purpleDark }}>
+                           color: tab === k ? C.surface : V.purpleDark }}>
             {label}{k === 'QUEUE' && totals.count > 0 ? ` · ${totals.count}` : ''}
           </button>
         ))}

@@ -163,7 +163,7 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
           <span style={{ color: C.purpleDark, fontWeight: 600, fontSize: 12 }}>{selected.size} selected</span>
           <div style={{ flex: 1 }} />
           <button style={S.green} onClick={() => approve(Array.from(selected))}>Approve selected ({selected.size})</button>
-          <button style={{ ...S.sec, color: C.red, borderColor: '#FCA5A5' }} onClick={() => { setRejectIds(Array.from(selected)); setRejectReason('') }}>Reject selected</button>
+          <button style={{ ...S.sec, color: C.red, borderColor: TK.criticalTint }} onClick={() => { setRejectIds(Array.from(selected)); setRejectReason('') }}>Reject selected</button>
           <button style={S.sec} onClick={() => setSelected(new Set())}>Clear</button>
         </div>
       )}
@@ -288,7 +288,7 @@ function MonthCalendar({ openDay, closeDay, onChange }: { openDay: number; close
               style={{
                 aspectRatio: '1', border: `1px solid ${edge ? C.purple : inRange ? TK.brandEdge : C.border}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
                 fontSize: 12.5, fontWeight: edge ? 700 : 500, padding: 0, position: 'relative',
-                background: edge ? C.purple : inRange ? C.purpleBg : '#fff', color: edge ? '#fff' : inRange ? C.purpleDark : C.navy,
+                background: edge ? C.purple : inRange ? C.purpleBg: TK.surface, color: edge ? TK.surface : inRange ? C.purpleDark : C.navy,
               }}>
               {d}
               {label && <span style={{ position: 'absolute', bottom: 1, left: 0, right: 0, fontSize: 7, fontWeight: 700, letterSpacing: '.02em' }}>{label.toUpperCase()}</span>}
@@ -354,7 +354,7 @@ function WindowTab({ companyId, notify }: { companyId: string; notify: (m: strin
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button style={S.pri} disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save config'}</button>
-          {win && <button style={{ ...S.sec, color: isOpen ? C.red : C.green, borderColor: isOpen ? '#FCA5A5' : '#BBF7D0' }} onClick={toggle}>{isOpen ? 'Close window now' : 'Re-open window'}</button>}
+          {win && <button style={{ ...S.sec, color: isOpen ? C.red : C.green, borderColor: isOpen ? TK.criticalTint : TK.positiveTint }} onClick={toggle}>{isOpen ? 'Close window now' : 'Re-open window'}</button>}
         </div>
         {win && <div style={{ marginTop: 10, fontSize: 11, color: C.muted }}>Active window: {new Date(win.opens_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} – {new Date(win.closes_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>}
         <div style={{ marginTop: 12, background: C.purpleBg, borderRadius: 8, padding: '9px 12px', fontSize: 11, color: C.purpleDark }}>Employees can submit bills only while the window is <b>Open</b>. {NO_INVOICE.join(' & ')} are auto-claimed (no bill needed) and auto-approved.</div>
@@ -437,14 +437,14 @@ function LimitsTab({ companyId, notify }: { companyId: string; notify: (m: strin
         <div style={{ fontSize: 12, fontWeight: 600, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Pending limit-increase requests ({requests.length})</div>
         {!requests.length && <div style={{ fontSize: 12, color: C.muted }}>No pending requests.</div>}
         {requests.map(r => (
-          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 6, background: '#FAFAFE' }}>
+          <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 8, marginBottom: 6, background: TK.brandTint }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{r.employees?.full_name} <span style={{ color: C.muted, fontWeight: 400 }}>({r.employees?.emp_code})</span></div>
               <div style={{ fontSize: 11, color: C.muted }}>{COMP_NAMES[r.component_code] || r.component_code}: {inr(r.current_limit)} → <b style={{ color: C.purple }}>{inr(r.requested_limit)}</b></div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 2, fontStyle: 'italic' }}>“{r.reason}”</div>
             </div>
             <button style={{ ...S.green, padding: '5px 10px' }} onClick={() => handleReq(r.id, true)}>Approve</button>
-            <button style={{ ...S.sec, color: C.red, borderColor: '#FCA5A5', padding: '5px 10px' }} onClick={() => handleReq(r.id, false)}>Reject</button>
+            <button style={{ ...S.sec, color: C.red, borderColor: TK.criticalTint, padding: '5px 10px' }} onClick={() => handleReq(r.id, false)}>Reject</button>
           </div>
         ))}
       </div>
@@ -487,7 +487,7 @@ export default function FlexiClaimsAdmin() {
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {TABS.map(([id, label]) => (
-          <button key={id} onClick={() => setTab(id)} style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${tab === id ? C.purple : C.border}`, background: tab === id ? C.purple : '#fff', color: tab === id ? '#fff' : C.navy, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{label}</button>
+          <button key={id} onClick={() => setTab(id)} style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${tab === id ? C.purple : C.border}`, background: tab === id ? C.purple: TK.surface, color: tab === id ? TK.surface : C.navy, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{label}</button>
         ))}
       </div>
 

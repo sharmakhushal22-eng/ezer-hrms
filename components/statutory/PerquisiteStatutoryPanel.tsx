@@ -97,7 +97,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
                   </Fragment>
                 ))}
               </div>
-              <button onClick={saveAmounts} disabled={saving} style={{ marginTop: 12, padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save amounts'}</button>
+              <button onClick={saveAmounts} disabled={saving} style={{ marginTop: 12, padding: '8px 16px', borderRadius: 8, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save amounts'}</button>
             </>
           )}
         </div>

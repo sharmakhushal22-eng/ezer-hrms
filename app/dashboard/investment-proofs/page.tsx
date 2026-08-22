@@ -14,7 +14,7 @@ import { C as TK } from '@/lib/ui'
 const C = {
   bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, red: TK.critical, redBg: TK.criticalTint,
   purpleBg: TK.brandTint, soft: TK.sunken,
 }
 const FY = '2026-27'
@@ -38,7 +38,7 @@ interface Row {
 }
 
 const TONE: Record<string, [string, string]> = {
-  PENDING: ['#F3F4F6', TK.muted], SUBMITTED: [C.amberBg, C.amber],
+  PENDING: [TK.sunken, TK.muted], SUBMITTED: [C.amberBg, C.amber],
   APPROVED: [C.greenBg, C.green], REJECTED: [C.redBg, C.red],
 }
 
@@ -206,7 +206,7 @@ export default function InvestmentProofsPage() {
         <button style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }} onClick={load}>⟳ Refresh</button>
       </div>
 
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
+      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
       {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
 
       {loading ? <div style={{ fontSize: 12.5, color: C.muted }}>Loading…</div>

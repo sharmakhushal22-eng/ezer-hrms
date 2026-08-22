@@ -21,8 +21,8 @@ const font = '"DM Sans","Segoe UI",sans-serif'
 const UPLOADERS = [
   { id: 'personal', label: 'Personal Info', icon: '', color: TK.brand, colorBg: TK.brandTint, desc: 'Name, DOB, gender, blood group, marital status, mobile, emergency contact', payrollAlert: false, dateColumns: ['date_of_birth'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Personal_Info.xlsx' },
   { id: 'employment', label: 'Employment Details', icon: '', color: TK.brandDeep, colorBg: TK.infoTint, desc: 'Designation, grade, department, location, DOJ, confirmation, reporting manager', payrollAlert: true, payrollAlertMsg: 'Changing Group DOJ or Company DOJ impacts gratuity seniority and EPF enrolment. Verify with payroll before uploading.', dateColumns: ['group_doj', 'company_doj', 'confirmation_date'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Employment.xlsx' },
-  { id: 'statutory', label: 'Statutory IDs', icon: '', color: '#991B1B', colorBg: TK.criticalTint, desc: 'PAN, UAN, ESIC IP, EPF method & wage limit, PT state, LWF, TDS regime', payrollAlert: true, payrollAlertMsg: 'Changing EPF method or wage limit impacts the current payroll run. Coordinate with payroll.', confidential: true, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Statutory_IDs.xlsx' },
-  { id: 'bank', label: 'Bank Details', icon: '', color: '#065F46', colorBg: TK.positiveTint, desc: 'Bank name, account number, IFSC, account type — for salary disbursement', payrollAlert: true, payrollAlertMsg: 'New bank accounts require penny-drop verification. Accounts changed after the 25th apply from next month.', confidential: true, dateColumns: ['effective_from'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Bank_Details.xlsx' },
+  { id: 'statutory', label: 'Statutory IDs', icon: '', color: TK.critical, colorBg: TK.criticalTint, desc: 'PAN, UAN, ESIC IP, EPF method & wage limit, PT state, LWF, TDS regime', payrollAlert: true, payrollAlertMsg: 'Changing EPF method or wage limit impacts the current payroll run. Coordinate with payroll.', confidential: true, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Statutory_IDs.xlsx' },
+  { id: 'bank', label: 'Bank Details', icon: '', color: TK.positive, colorBg: TK.positiveTint, desc: 'Bank name, account number, IFSC, account type — for salary disbursement', payrollAlert: true, payrollAlertMsg: 'New bank accounts require penny-drop verification. Accounts changed after the 25th apply from next month.', confidential: true, dateColumns: ['effective_from'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Bank_Details.xlsx' },
   { id: 'salary', label: 'Salary Structure', icon: '', color: TK.warning, colorBg: TK.warningTint, desc: 'CTC revision, increment, grade-wise salary breakup, variable %, effective date', payrollAlert: true, payrollAlertMsg: 'PAYROLL IMPACT — Salary changes affect the current/next payroll run. Upload before the 25th. Coordinate with payroll.', dateColumns: ['effective_date'], requiredColumns: ['emp_code', 'effective_date', 'revision_reason', 'annual_ctc'], downloadFile: 'EZER_Uploader_Salary_Structure.xlsx' },
   { id: 'exit', label: 'Exit & Separation', icon: '', color: TK.critical, colorBg: TK.criticalTint, desc: 'Resignation, last working date, separation reason, FNF initiation, blacklist', payrollAlert: true, payrollAlertMsg: 'CRITICAL — Last Working Date triggers final payroll & FNF. Verify with payroll before uploading.', dateColumns: ['date_of_resignation', 'last_working_date', 'relieving_date', 'fnf_date'], requiredColumns: ['emp_code', 'employment_status', 'last_working_date', 'leaving_reason'], downloadFile: 'EZER_Uploader_Exit_Separation.xlsx' },
   { id: 'address', label: 'Address & Contact', icon: '', color: TK.brandDeep, colorBg: TK.brandTint, desc: 'Residential & permanent address — used for salary slip and statutory forms', payrollAlert: false, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Address_Contact.xlsx' },
@@ -48,7 +48,7 @@ function UploaderCard({ u, active, onClick }: any) {
   )
 }
 function AlertBanner({ msg, type }: { msg: string; type: 'warn' | 'error' | 'success' }) {
-  const map = { warn: [C.amberBg, C.amber, '#FDE68A'], error: [C.redBg, C.red, '#FCA5A5'], success: [C.greenBg, C.green, '#BBF7D0'] } as const
+  const map = { warn: [C.amberBg, C.amber, TK.warningTint], error: [C.redBg, C.red, TK.criticalTint], success: [C.greenBg, C.green, TK.positiveTint] } as const
   const [bg, fg, br] = map[type]
   return <div style={{ background: bg, border: `1px solid ${br}`, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: fg, marginBottom: 10, display: 'flex', gap: 8 }}><span>{type === 'warn' ? '' : type === 'error' ? '' : ''}</span><span>{msg}</span></div>
 }
@@ -219,7 +219,7 @@ export default function BulkUploaderPage() {
           {/* Upload zone */}
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Upload filled template</div>
-            <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${file ? C.purple : C.border}`, borderRadius: 10, padding: 20, textAlign: 'center', cursor: 'pointer', background: file ? C.purpleBg : '#FAFAFE' }}>
+            <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${file ? C.purple : C.border}`, borderRadius: 10, padding: 20, textAlign: 'center', cursor: 'pointer', background: file ? C.purpleBg: TK.brandTint }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}></div>
               <div style={{ fontSize: 13, color: file ? C.purple : C.muted }}>{file ? `✓ ${file.name} (${(file.size / 1024).toFixed(0)} KB)` : 'Click to select a filled .xlsx template'}</div>
               <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Only .xlsx · Max 5,000 rows · must use the EZER template</div>
@@ -235,7 +235,7 @@ export default function BulkUploaderPage() {
           {showAlert && (
             <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, marginBottom: 8 }}>Payroll impact alert</div>
-              <div style={{ fontSize: 12, color: '#7c4a03', marginBottom: 12, lineHeight: 1.6 }}>{active.payrollAlertMsg}<br /><b>Proceeding means you have verified this with the payroll team.</b></div>
+              <div style={{ fontSize: 12, color: TK.warning, marginBottom: 12, lineHeight: 1.6 }}>{active.payrollAlertMsg}<br /><b>Proceeding means you have verified this with the payroll team.</b></div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => { setAck(true); setShowAlert(false) }} style={{ padding: '7px 16px', background: C.amber, color: TK.onAccent, border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }}>I have verified with payroll — proceed</button>
                 <button onClick={() => setShowAlert(false)} style={secBtn}>Cancel</button>

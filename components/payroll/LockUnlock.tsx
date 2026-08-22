@@ -20,11 +20,11 @@ import {
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, purpleSoft: '#F3EEFF',
-  card: TK.surface, border: '#ECEAFB', muted: TK.muted,
-  green: TK.positive, greenBg: TK.positiveTint, greenBd: '#A7F3D0',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, purpleSoft: TK.brandTint,
+  card: TK.surface, border: TK.brandEdge, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
   amber: TK.warning, amberBg: TK.warningTint,
-  red: TK.critical, redBg: TK.criticalTint, redBd: '#FECACA',
+  red: TK.critical, redBg: TK.criticalTint, redBd: TK.criticalTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -384,7 +384,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           <button onClick={unlock} disabled={busy || toUnlock.length === 0}
             style={{
               fontFamily: font, fontSize: 13.5, fontWeight: 700, color: TK.onAccent,
-              background: toUnlock.length && !busy ? C.purple : '#D8D3F5', border: 'none', borderRadius: 10,
+              background: toUnlock.length && !busy ? C.purple: TK.brandTint, border: 'none', borderRadius: 10,
               padding: '12px 22px', cursor: toUnlock.length && !busy ? 'pointer' : 'not-allowed',
               boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(37,99,235,0.2)' : 'none',
             }}>

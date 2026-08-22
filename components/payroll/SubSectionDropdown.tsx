@@ -46,7 +46,7 @@ export default function SubSectionDropdown({ items, active, onChange, kicker = '
               const on = i.id === active
               return (
                 <button key={i.id} onClick={() => { onChange(i.id); setOpen(false) }}
-                  onMouseEnter={e => { if (!on) (e.currentTarget as HTMLButtonElement).style.background = '#F7F5FF' }}
+                  onMouseEnter={e => { if (!on) (e.currentTarget as HTMLButtonElement).style.background = TK.brandTint }}
                   onMouseLeave={e => { if (!on) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: font, textAlign: 'left', marginBottom: 2, background: on ? 'rgba(37,99,235,0.09)' : 'transparent', color: on ? C.purpleDark : C.navy, fontSize: 13, fontWeight: on ? 700 : 500 }}>
                   <span style={{ flex: 1 }}>{i.label}</span>

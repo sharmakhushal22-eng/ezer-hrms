@@ -14,13 +14,13 @@ import {
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  page:  { background:'#F0F4F8', minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
-  card:  { background:TK.surface, borderRadius:10, border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
+  page:  { background: TK.sunken, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
   lbl:   { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:3 } as React.CSSProperties,
-  input: { padding:'7px 9px', background:TK.sunken, border:'1px solid #CBD5E1', borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const, width:'100%' } as React.CSSProperties,
+  input: { padding:'7px 9px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const, width:'100%' } as React.CSSProperties,
   pri:   { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:   { padding:'7px 12px', borderRadius:8, border:'1px solid #CBD5E1', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  danger:{ padding:'5px 10px', borderRadius:8, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
+  out:   { padding:'7px 12px', borderRadius:8, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  danger:{ padding:'5px 10px', borderRadius:8, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
   sec:   { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
 }
 const numShow = (v: number | null) => v === null || v === undefined ? '—' : String(v)
@@ -31,7 +31,7 @@ function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error';
   return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'':''} {msg}</div>
 }
 function ActBadge({ a }: { a: ActType }) {
-  const [bg, c, l] = a === 'FACTORY' ? [TK.warningTint, TK.warning, 'Factories Act'] : ['#E0E7FF', '#3730A3', 'Shops & Estab']
+  const [bg, c, l] = a === 'FACTORY' ? [TK.warningTint, TK.warning, 'Factories Act'] : [TK.brandTint, TK.inkSoft, 'Shops & Estab']
   return <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99, background:bg, color:c }}>{l}</span>
 }
 
@@ -183,7 +183,7 @@ export default function StatutoryLeavePage() {
   }
 
   const Th = ({ children, n }: { children: React.ReactNode; n?: boolean }) => (
-    <th style={{ padding:'8px 9px', textAlign: n ? 'center' : 'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', letterSpacing:'.04em', borderBottom:'1px solid #E2E8F0', whiteSpace:'nowrap' }}>{children}</th>
+    <th style={{ padding:'8px 9px', textAlign: n ? 'center' : 'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', letterSpacing:'.04em', borderBottom: `1px solid ${TK.line}`, whiteSpace:'nowrap' }}>{children}</th>
   )
 
   return (
@@ -193,7 +193,7 @@ export default function StatutoryLeavePage() {
         <div style={{ fontSize:12, color:TK.muted, marginBottom:12 }}>State-wise minimum EL/CL/SL (Shops &amp; Establishments + Factories Act 1948). Reference for setting Leave Policy quotas at or above the statutory floor.</div>
 
         {/* Legal disclaimer (mandatory per spec §7) */}
-        <div style={{ background:TK.warningTint, border:'1px solid #FDE68A', borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:12, color:TK.warning, lineHeight:1.5 }}>
+        <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:12, color:TK.warning, lineHeight:1.5 }}>
           ⚠️ <b>Reference values — verify against the current state Act.</b> EZER is not a legal authority; Acts get amended. Confirm each row before relying on it (mark it verified once checked).
         </div>
 
@@ -219,7 +219,7 @@ export default function StatutoryLeavePage() {
               <tbody>
                 {filtered.length === 0 && <tr><td colSpan={11} style={{ padding:24, textAlign:'center', color:TK.faint }}>No rows. {rows.length === 0 ? 'Has migration 029 been run? Or use + Add row.' : 'Clear the filter.'}</td></tr>}
                 {filtered.map((r, i) => (
-                  <tr key={r.id} style={{ borderBottom:'1px solid #F1F5F9', background:i%2?TK.sunken:'#fff', opacity: r.is_active ? 1 : 0.55 }}>
+                  <tr key={r.id} style={{ borderBottom: `1px solid ${TK.line}`, background:i%2?TK.sunken: TK.surface, opacity: r.is_active ? 1 : 0.55 }}>
                     <td style={{ padding:'8px 9px', fontWeight:600, whiteSpace:'nowrap' }}>{r.state}</td>
                     <td style={{ padding:'8px 9px' }}><ActBadge a={r.act_type} /></td>
                     <td style={{ padding:'8px 9px', color:TK.muted }}>{r.fy}</td>

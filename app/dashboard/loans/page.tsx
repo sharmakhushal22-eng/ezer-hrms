@@ -10,8 +10,8 @@ import { C as TK } from '@/lib/ui'
 
 // ── Admin C palette ──────────────────────────────────────────────
 const C = {
-  page:'#F0F4F8', card:TK.surface, border:TK.line, purple:TK.brand, navy:TK.ink, muted:TK.muted,
-  red:TK.critical, redBg:TK.criticalTint, green:TK.positive, greenBg:TK.positiveTint, amber:TK.warning, amberBg:TK.warningTint, blue:'#185FA5', blueBg:'#E6F1FB',
+  page: TK.sunken, card:TK.surface, border:TK.line, purple:TK.brand, navy:TK.ink, muted:TK.muted,
+  red:TK.critical, redBg:TK.criticalTint, green:TK.positive, greenBg:TK.positiveTint, amber:TK.warning, amberBg:TK.warningTint, blue: TK.brand, blueBg: TK.brandTint,
 }
 const S = {
   page: { background:C.page, minHeight:'100vh', color:C.navy, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:13, padding:'20px 16px' } as React.CSSProperties,

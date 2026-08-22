@@ -22,13 +22,13 @@ import { C as TK } from '@/lib/ui'
 const C = {
   bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted,
-  green: TK.positive, greenBg: TK.positiveTint, greenBd: '#BBF7D0',
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
   amber: TK.warning, amberBg: TK.warningTint,
   purpleBg: TK.brandTint, gray: TK.sunken,
 }
 
 const METHOD_COLOR: Record<ValuationMethod, string> = {
-  FLAT_AMOUNT: C.purple, PERCENT_OF_SALARY: '#0F6E56', PERCENT_OF_COST: '#0F6E56',
+  FLAT_AMOUNT: C.purple, PERCENT_OF_SALARY: TK.positive, PERCENT_OF_COST: TK.positive,
   SLAB_BASED: C.amber, FMV_BASED: TK.info, MANUAL: C.muted,
 }
 
@@ -72,7 +72,7 @@ function PerquisiteRow({ row, selected, onSelect }: { row: PerquisiteConfigRow; 
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 12.5, fontWeight: 700, color: selected ? C.purpleD : C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</span>
-          <span title={row.type_active ? 'Active' : 'Inactive'} style={{ width: 6, height: 6, borderRadius: 99, background: row.type_active ? C.green : '#C9C7D6', flexShrink: 0 }} />
+          <span title={row.type_active ? 'Active' : 'Inactive'} style={{ width: 6, height: 6, borderRadius: 99, background: row.type_active ? C.green: TK.line, flexShrink: 0 }} />
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatValue(row)}</div>
       </div>
@@ -104,7 +104,7 @@ function AddTypeModal({ onClose, onCreate }: { onClose: () => void; onCreate: (a
   const [lawRef, setLawRef] = useState('')
 
   const valid = code.trim() && name.trim() && category.trim()
-  const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 12, boxSizing: 'border-box', marginBottom: 10 }
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 12, boxSizing: 'border-box', marginBottom: 10 }
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
@@ -144,7 +144,7 @@ function AddTypeModal({ onClose, onCreate }: { onClose: () => void; onCreate: (a
 }
 
 function SlabRow({ slab, onChange, onDelete }: { slab: Partial<PerquisiteSlab> & { _key: string }; onChange: (patch: Partial<PerquisiteSlab>) => void; onDelete: () => void }) {
-  const cellStyle: React.CSSProperties = { padding: '6px 8px', border: '1px solid #DDD6FE', borderRadius: 6, fontSize: 12, width: '100%', boxSizing: 'border-box' }
+  const cellStyle: React.CSSProperties = { padding: '6px 8px', border: `1px solid ${TK.brandEdge}`, borderRadius: 6, fontSize: 12, width: '100%', boxSizing: 'border-box' }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 30px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
       <input value={slab.slab_label ?? ''} onChange={e => onChange({ slab_label: e.target.value })} placeholder="Slab label" style={cellStyle} />
@@ -250,7 +250,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
   const grouped: Record<string, PerquisiteConfigRow[]> = {}
   for (const r of rows) { (grouped[r.category] ??= []).push(r) }
 
-  const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 12, boxSizing: 'border-box' }
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 12, boxSizing: 'border-box' }
 
   return (
     <div style={{ display: 'flex', gap: 20, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13, flexWrap: 'wrap' }}>
@@ -258,7 +258,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
       {/* ── List ── */}
       <div style={{ width: 300, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Perquisites</div>
             <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
@@ -270,7 +270,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
         <button onClick={() => setShowAddModal(true)}
           onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)'}
           onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-          style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', marginBottom: 16, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+          style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', marginBottom: 16, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
           + Add new perquisite
         </button>
         {Object.entries(grouped).map(([cat, catRows]) => (
@@ -298,7 +298,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
             {selected.description && <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, lineHeight: 1.45 }}>{selected.description}</div>}
 
             <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
-              <div style={{ height: 3, borderRadius: 99, background: 'linear-gradient(90deg,#2563EB,#5B21B6)', width: 44, marginBottom: 12 }} />
+              <div style={{ height: 3, borderRadius: 99, background: `linear-gradient(90deg,${TK.brand},${TK.brand})`, width: 44, marginBottom: 12 }} />
               <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', marginBottom: 10 }}>Value for FY {FY}</div>
 
               {(selected.valuation_method === 'FLAT_AMOUNT') && (
@@ -365,7 +365,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
               <button onClick={handleSave} disabled={saving}
                 onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
                 {saving ? 'Saving…' : 'Save value'}
               </button>
             </div>

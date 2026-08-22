@@ -12,8 +12,8 @@ import { C as TK } from '@/lib/ui'
 
 const C = {
   bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep,
-  card: TK.surface, border: TK.line, muted: TK.muted, red: '#A32D2D',
-  teal: '#0F6E56', tealBg: '#E1F5EE', purpleBg: TK.canvas,
+  card: TK.surface, border: TK.line, muted: TK.muted, red: TK.critical,
+  teal: TK.positive, tealBg: TK.sunken, purpleBg: TK.canvas,
 }
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 
@@ -219,8 +219,8 @@ export default function FlexiConfigBuilder() {
             <input type="number" value={smax} min={0} step={10000} onChange={e => setSmax(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit' }} />
           </div>
         </div>
-        {err && <div style={{ fontSize: 12.5, color: TK.critical, background: TK.criticalTint, border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>⚠ {err}</div>}
-        {msg && <div style={{ fontSize: 12.5, color: C.teal, background: C.tealBg, border: '1px solid #A7E3CE', borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>{msg}</div>}
+        {err && <div style={{ fontSize: 12.5, color: TK.critical, background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>⚠ {err}</div>}
+        {msg && <div style={{ fontSize: 12.5, color: C.teal, background: C.tealBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>{msg}</div>}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>
           <span style={{ flex: 1, fontSize: 11, color: C.muted, letterSpacing: 0.5 }}>COMPONENT</span>
@@ -233,7 +233,7 @@ export default function FlexiConfigBuilder() {
           <ComponentRow key={c.code} c={c} rs={rows[c.code]} onToggle={reg => toggle(c.code, reg)} onField={(f, v) => setField(c.code, f, v)} />
         ))}
 
-        <button onClick={saveSlab} disabled={saving || companies.length === 0} style={{ width: '100%', marginTop: 12, padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: `1px solid ${C.purple}`, background: saving ? '#C4B5FD' : C.purple, color: TK.onAccent, cursor: saving ? 'not-allowed' : 'pointer' }}>
+        <button onClick={saveSlab} disabled={saving || companies.length === 0} style={{ width: '100%', marginTop: 12, padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: `1px solid ${C.purple}`, background: saving ? TK.brandTint : C.purple, color: TK.onAccent, cursor: saving ? 'not-allowed' : 'pointer' }}>
           {saving ? 'Saving…' : companyId ? 'Save slab (Old + New together) & create next' : `Save slab for all ${companies.length} companies`}
         </button>
         {!companyId && <div style={{ fontSize: 11, color: C.muted, marginTop: 8, textAlign: 'center' }}>This slab range + components will be added to every company at once.</div>}

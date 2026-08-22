@@ -14,11 +14,11 @@ import { C as TK } from '@/lib/ui'
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
+  greenBd: TK.positiveTint, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
-const inputStyle: React.CSSProperties = { padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy, width: '100%' }
+const inputStyle: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy, width: '100%' }
 const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }
 
 function InfoTile({ icon, label, value, hint, accent }: { icon: string; label: string; value: string; hint?: string; accent?: string }) {
@@ -50,7 +50,7 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
         display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, cursor: 'pointer',
         padding: '6px 12px', borderRadius: 99, fontFamily: font,
         border: `1.5px solid ${checked ? C.purple : C.border}`,
-        background: checked ? C.purpleBg : '#fff', color: checked ? C.purpleD : C.muted,
+        background: checked ? C.purpleBg: TK.surface, color: checked ? C.purpleD : C.muted,
         transition: 'all .12s',
       }}>
       <span style={{ fontSize: 11 }}>{checked ? '' : '＋'}</span>{label}
@@ -65,11 +65,11 @@ function SplitBar({ eps, epf }: { eps: number; epf: number }) {
   return (
     <div style={{ marginTop: 12 }}>
       <div style={{ display: 'flex', height: 22, borderRadius: 7, overflow: 'hidden', border: `1px solid ${C.greenBd}` }}>
-        <div style={{ width: `${epsPct}%`, background: 'linear-gradient(90deg,#0891B2,#0EA5B7)', minWidth: eps > 0 ? 2 : 0 }} title={`EPS ₹${eps}`} />
-        <div style={{ flex: 1, background: 'linear-gradient(90deg,#2563EB,#5B21B6)' }} title={`EPF ₹${epf}`} />
+        <div style={{ width: `${epsPct}%`, background: `linear-gradient(90deg,${TK.info},${TK.info})`, minWidth: eps > 0 ? 2 : 0 }} title={`EPS ₹${eps}`} />
+        <div style={{ flex: 1, background: `linear-gradient(90deg,${TK.brand},${TK.brand})` }} title={`EPF ₹${epf}`} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, fontWeight: 700, color: C.muted, marginTop: 4 }}>
-        <span style={{ color: '#0891B2' }}>EPS (pension) {epsPct}%</span>
+        <span style={{ color: TK.info }}>EPS (pension) {epsPct}%</span>
         <span style={{ color: C.purpleD }}>EPF-proper {100 - epsPct}% ■</span>
       </div>
     </div>
@@ -121,14 +121,14 @@ export default function EpfConfig() {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 720 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>EPF</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Provident Fund — EPF Wages = Gross − HRA, capped at each employee&apos;s PF limit</div>
         </div>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
 
       {cfg && (
         <>
@@ -164,13 +164,13 @@ export default function EpfConfig() {
               {isIw && <Toggle checked={hasCoc} onChange={setHasCoc} label="Has Certificate of Coverage (excluded)" />}
             </div>
             <button onClick={runCalc}
-              style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', marginBottom: result ? 12 : 0 }}>
+              style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', marginBottom: result ? 12 : 0 }}>
               Calculate
             </button>
 
             {result && (result.is_excluded_employee ? (
               <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 11, padding: '13px 15px' }}>
-                <span style={{ fontSize: 10.5, fontWeight: 800, color: TK.onAccent, background: TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase' }}>Excluded employee</span>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: TK.onAccent, background: TK.lineStrong, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase' }}>Excluded employee</span>
                 <div style={{ fontSize: 12, color: C.muted, marginTop: 8 }}>COC-holding International Worker — zero EPF applies in India.</div>
               </div>
             ) : (
@@ -179,11 +179,11 @@ export default function EpfConfig() {
                 <div style={{ display: 'flex', gap: 0, background: TK.surface, borderRadius: 9, border: `1px solid ${C.greenBd}`, overflow: 'hidden', flexWrap: 'wrap' }}>
                   {[
                     ['Employee', result.employee_contribution, C.navy],
-                    ['Employer EPS', result.employer_eps_contribution, '#0891B2'],
+                    ['Employer EPS', result.employer_eps_contribution, TK.info],
                     ['Employer EPF', result.employer_epf_contribution, C.purpleD],
                     ['Employer total', result.employer_total_contribution, C.navy],
                   ].map(([l, v, col], i) => (
-                    <div key={l as string} style={{ flex: 1, minWidth: 120, padding: '10px 13px', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none', background: i === 3 ? C.purpleBg : '#fff' }}>
+                    <div key={l as string} style={{ flex: 1, minWidth: 120, padding: '10px 13px', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none', background: i === 3 ? C.purpleBg: TK.surface }}>
                       <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em', fontWeight: 700, marginBottom: 3 }}>{l as string}</div>
                       <div style={{ fontSize: 16, fontWeight: 800, color: col as string }}>{inr(v as number)}</div>
                     </div>

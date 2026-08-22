@@ -118,10 +118,10 @@ function TraceFallback({ actual, optimal, height }: {
         <path d={d(a)} fill="none" stroke={V.purple} strokeWidth="3.5"
               strokeLinecap="round" strokeLinejoin="round" />
       )}
-      {a.length > 0 && <circle cx={a[0].x} cy={a[0].y} r="6" fill={V.green} stroke="#fff" strokeWidth="2" />}
+      {a.length > 0 && <circle cx={a[0].x} cy={a[0].y} r="6" fill={V.green} stroke={TK.surface} strokeWidth="2" />}
       {a.length > 1 && (
         <circle cx={a[a.length - 1].x} cy={a[a.length - 1].y} r="6"
-                fill={V.red} stroke="#fff" strokeWidth="2" />
+                fill={V.red} stroke={TK.surface} strokeWidth="2" />
       )}
     </svg>
   )

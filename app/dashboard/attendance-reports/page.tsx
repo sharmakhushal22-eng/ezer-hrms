@@ -156,7 +156,7 @@ export default function AttendanceReportsPage() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14 }}>
-                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>{busy ? 'Generating…' : 'Generate report'}</button>
+                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>{busy ? 'Generating…' : 'Generate report'}</button>
                 {err && <span style={{ fontSize: 12, color: C.red }}>⚠ {err}</span>}
               </div>
             </div>
@@ -169,7 +169,7 @@ export default function AttendanceReportsPage() {
                   <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{out.rows.length ? <><b style={{ color: C.navy }}>{out.rows.length}</b> row{out.rows.length !== 1 ? 's' : ''}{out.note ? ` · ${out.note}` : ''} · {out.columns.length} columns</> : 'No records for these filters — try a wider date range or different filters.'}</div>
                 </div>
                 {out.rows.length > 0 && (
-                  <button onClick={exportXlsx} style={{ padding: '11px 22px', borderRadius: 10, border: 'none', background: 'linear-gradient(120deg,#059669,#047857)', color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(5,150,105,0.30)', whiteSpace: 'nowrap' }}>⬇ Export Excel</button>
+                  <button onClick={exportXlsx} style={{ padding: '11px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.positive},${TK.positive})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(5,150,105,0.30)', whiteSpace: 'nowrap' }}>⬇ Export Excel</button>
                 )}
               </div>
             )}

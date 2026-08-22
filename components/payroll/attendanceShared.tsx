@@ -13,12 +13,12 @@ import { C as TK } from '@/lib/ui'
 export const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: '#BBF7D0', red: TK.critical, redBg: TK.criticalTint, amber: TK.warning, amberBg: TK.warningTint,
+  greenBd: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint, amber: TK.warning, amberBg: TK.warningTint,
   purpleBg: TK.brandTint, gray: TK.sunken,
 }
 export const font = '"DM Sans","Segoe UI",sans-serif'
 export const num = (v: any) => { const n = Number(v); return isNaN(n) ? null : n }
-export const ddInp: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 8, fontSize: 12.5, boxSizing: 'border-box', background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
+export const ddInp: React.CSSProperties = { width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 12.5, boxSizing: 'border-box', background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
 export const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 5 }
 export type Opt = { value: string; label: string }
 export const GROUP = '__group__'   // Company dropdown sentinel → all companies at once
@@ -37,20 +37,20 @@ export function SearchSelect({ value, options, placeholder, onChange, disabled }
   return (
     <div style={{ position: 'relative' }}>
       <div onClick={() => { if (!disabled) { setOpen(o => !o); setQ('') } }}
-        style={{ ...ddInp, cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'center', color: sel ? C.navy : TK.faint, background: disabled ? TK.sunken : '#fff' }}>
+        style={{ ...ddInp, cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'center', color: sel ? C.navy : TK.faint, background: disabled ? TK.sunken: TK.surface }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sel ? sel.label : placeholder}</span>
         <span style={{ color: TK.faint, fontSize: 11 }}></span>
       </div>
       {open && !disabled && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 500 }} />
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: '1px solid #DDD6FE', borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
-            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid #EEF', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
+          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
+            <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
             <div style={{ maxHeight: 210, overflowY: 'auto' }}>
               {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o.value} onClick={() => { onChange(o.value); setOpen(false) }}
-                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o.value === value ? '#EEF2FF' : '#fff', color: C.navy }}>{o.label}</div>
+                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o.value === value ? TK.brandTint : TK.surface, color: C.navy }}>{o.label}</div>
               ))}
             </div>
           </div>
@@ -96,25 +96,25 @@ export function MultiSelect({ values, options, placeholder, onChange }: { values
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 500 }} />
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 240, background: TK.surface, border: '1px solid #DDD6FE', borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 240, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
             <input autoFocus value={q}
               onChange={e => onQChange(e.target.value)}
               onPaste={e => { const t = e.clipboardData.getData('text'); if (/[\s,;]/.test(t)) { e.preventDefault(); addTokens(t) } }}
               onKeyDown={e => { if (e.key === 'Enter' && q.trim()) { e.preventDefault(); addTokens(q) } }}
               placeholder="Search or paste codes (comma / newline separated)…"
-              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid #EEF', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
+              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
             <div style={{ maxHeight: 210, overflowY: 'auto' }}>
               {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>Press Enter to add “{q.trim()}”</div>}
               {filtered.map(o => (
                 <div key={o.value} onClick={() => toggle(o.value)}
-                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 8, background: values.includes(o.value) ? '#EEF2FF' : '#fff', color: C.navy }}>
+                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', gap: 8, background: values.includes(o.value) ? TK.brandTint : TK.surface, color: C.navy }}>
                   <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{o.label}</span>
                   {values.includes(o.value) && <span style={{ color: C.green }}></span>}
                 </div>
               ))}
             </div>
             {values.length > 0 && (
-              <div style={{ borderTop: '1px solid #EEF', padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ borderTop: `1px solid ${TK.brandEdge}`, padding: '6px 10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 10.5, color: C.muted }}>{values.length} selected</span>
                 <span onClick={() => onChange([])} style={{ fontSize: 10.5, color: C.red, cursor: 'pointer', fontWeight: 700 }}>Clear all</span>
               </div>
@@ -348,14 +348,14 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
       </div>
 
       {!checking && strictUnmatched && unmatched.length > 0 && (
-        <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: '1px solid #FECACA', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+        <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
           <div style={{ fontWeight: 800, marginBottom: 6 }}>Extra rows — these codes are not in this month&apos;s master. Remove them and upload again.</div>
           <div style={{ maxHeight: 120, overflowY: 'auto' }}>{unmatched.slice(0, 60).join(', ')}{unmatched.length > 60 ? ` +${unmatched.length - 60} more` : ''}</div>
         </div>
       )}
 
       {!checking && violations.length > 0 && (
-        <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: '1px solid #FECACA', borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+        <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
           <div style={{ fontWeight: 800, marginBottom: 6 }}>Nothing can exceed Max Days. Fix the sheet and upload again.</div>
           <div style={{ maxHeight: 170, overflowY: 'auto' }}>
             {violations.slice(0, 60).map((v, i) => (
@@ -369,7 +369,7 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
       )}
 
       {!checking && !strictUnmatched && unmatched.length > 0 && (
-        <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
           Skipped (wrong code / extra person / not in this month's master): <b>{unmatched.slice(0, 40).join(', ')}</b>{unmatched.length > 40 ? ` +${unmatched.length - 40} more` : ''}
         </div>
       )}

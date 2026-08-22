@@ -14,7 +14,7 @@ import { C as TK } from '@/lib/ui'
 const P = {
   navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
   bg: TK.canvas, card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, amber: TK.warning, amberBg: TK.warningTint,
-  red: TK.critical, redBg: TK.criticalTint, teal: '#0F6E56', tealBg: '#E1F5EE', purpleBg: TK.brandTint,
+  red: TK.critical, redBg: TK.criticalTint, teal: TK.positive, tealBg: TK.sunken, purpleBg: TK.brandTint,
 }
 
 // ── Policy constants (OFB flexi + FY 2026-27 tax) ──
@@ -324,8 +324,8 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         const n = i + 1, active = step === n, done = step > n
         return (
           <div key={lbl} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <button onClick={() => n <= step && setStep(n)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99, border: `1px solid ${active ? P.purple : P.border}`, background: active ? P.purple : done ? P.purpleBg : '#fff', color: active ? '#fff' : done ? P.purpleDark : P.muted, fontSize: 11.5, fontWeight: 600, cursor: n <= step ? 'pointer' : 'default', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
-              <span style={{ width: 18, height: 18, borderRadius: 99, background: active ? '#fff' : done ? P.purple : P.border, color: active ? P.purple : '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{done ? '' : n}</span>
+            <button onClick={() => n <= step && setStep(n)} style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '6px 12px', borderRadius: 99, border: `1px solid ${active ? P.purple : P.border}`, background: active ? P.purple : done ? P.purpleBg: TK.surface, color: active ? TK.surface : done ? P.purpleDark : P.muted, fontSize: 11.5, fontWeight: 600, cursor: n <= step ? 'pointer' : 'default', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
+              <span style={{ width: 18, height: 18, borderRadius: 99, background: active ? '#fff' : done ? P.purple : P.border, color: active ? P.purple: TK.surface, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{done ? '' : n}</span>
               {lbl}
             </button>
             {i < 3 && <span style={{ width: 14, height: 2, background: step > n ? P.purple : P.border, borderRadius: 2 }} />}
@@ -355,7 +355,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         <div style={s.card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>Your Salary Structure</div>
-            <span style={{ fontSize: 10.5, background: TK.positiveTint, color: TK.positive, padding: '2px 10px', borderRadius: 99, fontWeight: 700, border: '1px solid #BBF7D0' }}>
+            <span style={{ fontSize: 10.5, background: TK.positiveTint, color: TK.positive, padding: '2px 10px', borderRadius: 99, fontWeight: 700, border: `1px solid ${TK.positiveTint}` }}>
               ✓ as per your record
             </span>
             {rd.payType && rd.payType !== 'Regular' && (
@@ -369,23 +369,23 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
               { l: 'Net Take-home / mo', v: rd.net, c: TK.positive, bg: TK.positiveTint },
               { l: 'Fixed / mo', v: rd.fixedMonthly, c: TK.ink, bg: TK.sunken },
             ].map(x => (
-              <div key={x.l} style={{ background: x.bg, border: '1px solid #E2E8F0', borderRadius: 10, padding: '12px 14px' }}>
+              <div key={x.l} style={{ background: x.bg, border: `1px solid ${TK.line}`, borderRadius: 10, padding: '12px 14px' }}>
                 <div style={{ fontSize: 10, color: TK.muted, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>{x.l}</div>
                 <div style={{ fontSize: 17, fontWeight: 700, color: x.c }}>{R(x.v)}</div>
               </div>
             ))}
           </div>
 
-          <div style={{ border: '1px solid #E2E8F0', borderRadius: 10, overflow: 'hidden' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.ink, fontSize: 11, fontWeight: 700, color: TK.onAccent, letterSpacing: '.03em' }}>
+          <div style={{ border: `1px solid ${TK.line}`, borderRadius: 10, overflow: 'hidden' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '9px 12px', background: TK.dark, fontSize: 11, fontWeight: 700, color: TK.onDark, letterSpacing: '.03em' }}>
               <span>COMPONENT</span><span style={{ textAlign: 'right' }}>MONTHLY</span><span style={{ textAlign: 'right' }}>ANNUAL</span>
             </div>
             {(() => {
               const M = (v: number) => v * 12
               const Row = ({ label, m, kind }: { label: string; m: number; kind?: 'sub' | 'net' | 'total' }) => (
                 <div style={{
-                  display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '8px 12px', borderTop: '1px solid #F1F5F9',
-                  background: kind === 'total' ? TK.canvas : kind === 'net' ? TK.positiveTint : kind === 'sub' ? TK.sunken : '#fff',
+                  display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '8px 12px', borderTop: `1px solid ${TK.line}`,
+                  background: kind === 'total' ? TK.canvas : kind === 'net' ? TK.positiveTint : kind === 'sub' ? TK.sunken: TK.surface,
                   fontWeight: kind ? 700 : 400,
                   color: kind === 'total' ? TK.brand : kind === 'net' ? TK.positive : TK.ink,
                 }}>
@@ -407,7 +407,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
                   {rd.erEsic > 0 && <Row label="Employer ESIC" m={rd.erEsic} />}
                   {rd.gratuity > 0 && <Row label="Gratuity" m={rd.gratuity} />}
                   {(rd.eePf > 0 || rd.eeEsic > 0 || rd.pt > 0 || rd.lwf > 0) && (
-                    <div style={{ padding: '6px 12px', background: TK.criticalTint, fontSize: 10, fontWeight: 700, color: TK.critical, letterSpacing: '.04em', borderTop: '1px solid #F1F5F9' }}>DEDUCTIONS</div>
+                    <div style={{ padding: '6px 12px', background: TK.criticalTint, fontSize: 10, fontWeight: 700, color: TK.critical, letterSpacing: '.04em', borderTop: `1px solid ${TK.line}` }}>DEDUCTIONS</div>
                   )}
                   {rd.eePf > 0 && <Row label="Employee PF" m={rd.eePf} />}
                   {rd.eeEsic > 0 && <Row label="Employee ESIC" m={rd.eeEsic} />}
@@ -436,7 +436,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           {/* Monthly is shown first and largest because that is the figure the HR record
               (Employee Master → Salary) displays. The annual number sits beside it, labelled,
               so the wallet budget can't be mistaken for a different Special Allowance. */}
-          <div style={{ marginTop: 10, background: 'linear-gradient(135deg,#4a148c,#7b1fa2)', borderRadius: 10, padding: '14px 16px', color: TK.onAccent }}>
+          <div style={{ marginTop: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, borderRadius: 10, padding: '14px 16px', color: TK.onAccent }}>
             <div style={{ fontSize: 11, opacity: .85 }}>Flexi Wallet {rd ? '(funded by Special Allowance)' : '(Other Reimbursement)'}</div>
             {rd ? (
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', margin: '4px 0 2px' }}>
@@ -458,7 +458,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             )}
             {rd && <div style={{ fontSize: 10.5, opacity: .8 }}>Your full Special Allowance — {R(rd.specialGross || rd.special)}/month. {rd.flexiMonthly > 0 ? `${R(rd.flexiMonthly)}/month already declared, ${R(Math.max(0,(rd.specialGross||rd.special)-rd.flexiMonthly))} left.` : ''}</div>}
           </div>
-          <div style={{ marginTop: 10, background: P.amberBg, border: '1px solid #FDE68A', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: P.amber }}>
+          <div style={{ marginTop: 10, background: P.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 8, padding: '9px 12px', fontSize: 12, color: P.amber }}>
             {rd
               ? <><b>Source:</b> full Special Allowance <b>{R(rd.specialGross || rd.special)}/month</b> × 12 = <b>{R(sal.other)} annual wallet</b>. Declared flexi is deducted from the Special Allowance paid as salary.</>
               : <><b>Formula:</b> {R(sal.fixed)} − {R(sal.basic)} (Basic) − {R(sal.hra)} (HRA) − {R(sal.epf)} (PF) = <b>Flexi Wallet {R(sal.other)}</b></>}
@@ -466,9 +466,9 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         </div>
       )}
       {sal.ctc > 0 && join.mid && (
-        <div style={{ ...s.card, background: TK.infoTint, border: '1px solid #BFDBFE' }}>
+        <div style={{ ...s.card, background: TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: TK.info, marginBottom: 4 }}>Mid-year joining — pro-rata applies</div>
-          <div style={{ fontSize: 12, color: '#1E3A8A', lineHeight: 1.65 }}>You are with the company for <b>{join.months} month{join.months === 1 ? '' : 's'}</b> of FY 2026-27, so your salary income is earned for ≈<b>{Math.round(join.pr * 100)}%</b> of the year. Tax is computed on this pro-rated income and the <b>monthly TDS is spread over the {join.months} remaining pay month{join.months === 1 ? '' : 's'}</b>. (Employees who joined on/before 1 Apr 2026 are taxed on the full 12 months.)</div>
+          <div style={{ fontSize: 12, color: TK.brand, lineHeight: 1.65 }}>You are with the company for <b>{join.months} month{join.months === 1 ? '' : 's'}</b> of FY 2026-27, so your salary income is earned for ≈<b>{Math.round(join.pr * 100)}%</b> of the year. Tax is computed on this pro-rated income and the <b>monthly TDS is spread over the {join.months} remaining pay month{join.months === 1 ? '' : 's'}</b>. (Employees who joined on/before 1 Apr 2026 are taxed on the full 12 months.)</div>
         </div>
       )}
       {sal.ctc > 0 && !join.mid && f.doj && (
@@ -481,14 +481,14 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
   const carSel = (oFlexi.car || 0) > 0 || (nFlexi.car || 0) > 0
   const WalletBar = ({ title, used, io }: { title: string; used: number; io: boolean }) => {
     const bud = sal.other, pctv = bud > 0 ? Math.min(used / bud * 100, 100) : 0, ov = used > bud + 1
-    const col = ov ? P.red : pctv > 80 ? P.amber : io ? '#C05621' : P.green
+    const col = ov ? P.red : pctv > 80 ? P.amber : io ? TK.warning : P.green
     return (
       <div style={{ ...s.card, marginBottom: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
           <span>{io ? '' : ''} {title}</span>
           <span style={{ color: col }}>{ov ? 'EXCEEDED!' : R(Math.max(0, bud - used)) + ' left'}</span>
         </div>
-        <div style={{ height: 8, background: '#EEF0F4', borderRadius: 99, overflow: 'hidden' }}><div style={{ width: pctv + '%', height: '100%', background: col, transition: 'width .2s' }} /></div>
+        <div style={{ height: 8, background: TK.sunken, borderRadius: 99, overflow: 'hidden' }}><div style={{ width: pctv + '%', height: '100%', background: col, transition: 'width .2s' }} /></div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: P.muted, marginTop: 6 }}><span>Used: {R(used)}</span><span>Budget: {R(bud)}</span></div>
         {ov && <div style={{ marginTop: 8, background: P.redBg, color: P.red, borderRadius: 8, padding: '7px 10px', fontSize: 11 }}>Flexi wallet limit exceeded — remove some allowances.</div>}
       </div>
@@ -497,16 +497,16 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
   const step2 = (
     <div>
       {carSel && (
-        <div style={{ ...s.card, background: P.amberBg, border: '1px solid #FDE68A' }}>
+        <div style={{ ...s.card, background: P.amberBg, border: `1px solid ${TK.warningTint}` }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 8 }}>Car Lease + Driver — Perquisite Tax Applied</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
             {[['Car Lease Perq', '₹7,000', 'per month'], ['Driver Perq', '₹3,000', 'per month'], ['Total Perquisite', '₹10,000', '₹1,20,000/yr → taxable']].map(([l, v, sub]) => (
-              <div key={l} style={{ background: TK.surface, borderRadius: 8, padding: '9px 11px', border: '1px solid #FDE68A' }}>
+              <div key={l} style={{ background: TK.surface, borderRadius: 8, padding: '9px 11px', border: `1px solid ${TK.warningTint}` }}>
                 <div style={{ fontSize: 10.5, color: P.muted }}>{l}</div><div style={{ fontSize: 16, fontWeight: 700, color: P.amber }}>{v}</div><div style={{ fontSize: 9.5, color: P.muted }}>{sub}</div>
               </div>
             ))}
           </div>
-          <div style={{ fontSize: 11, color: '#9b2c2c', marginTop: 8 }}>Car lease is tax-exempt; Car + Driver are always selected together.</div>
+          <div style={{ fontSize: 11, color: TK.critical, marginTop: 8 }}>Car lease is tax-exempt; Car + Driver are always selected together.</div>
         </div>
       )}
       <div style={s.card}>
@@ -546,7 +546,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             ? <select style={{ ...s.input, padding: '6px 8px', width: 'auto', minWidth: 92 }} value={val} onChange={e => setFlexi(rg, k, +e.target.value)}><option value={0}>₹0</option><option value={lim}>{R(lim)}</option></select>
             : <span style={{ fontSize: 11, color: P.muted }}>Not eligible</span>
           return (
-            <div key={k} style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', alignItems: 'center', padding: '9px 14px', borderTop: `1px solid ${P.border}`, background: perq ? TK.warningTint : '#fff' }}>
+            <div key={k} style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', alignItems: 'center', padding: '9px 14px', borderTop: `1px solid ${P.border}`, background: perq ? TK.warningTint: TK.surface }}>
               <div><div style={{ fontSize: 12.5, color: P.navy }}>{l}</div>{perq && <span style={{ fontSize: 9, background: P.amberBg, color: P.amber, padding: '1px 6px', borderRadius: 99, fontWeight: 700 }}>Perquisite Tax</span>}</div>
               <div style={{ textAlign: 'center' }}>{drop(oL, oFlexi[k] || 0, 'old')}</div>
               <div style={{ textAlign: 'center' }}>{drop(nL, nFlexi[k] || 0, 'new')}</div>
@@ -554,7 +554,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           )
         })}
         <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr 1fr', padding: '10px 14px', borderTop: `2px solid ${P.border}`, fontWeight: 700, fontSize: 13 }}>
-          <span>Total Selected</span><span style={{ textAlign: 'center', color: oTot > sal.other ? P.red : '#C05621' }}>{R(oTot)}</span><span style={{ textAlign: 'center', color: nTot > sal.other ? P.red : P.green }}>{R(nTot)}</span>
+          <span>Total Selected</span><span style={{ textAlign: 'center', color: oTot > sal.other ? P.red: TK.warning }}>{R(oTot)}</span><span style={{ textAlign: 'center', color: nTot > sal.other ? P.red : P.green }}>{R(nTot)}</span>
         </div>
       </div>
     </div>
@@ -569,7 +569,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       <div style={s.g2}>
         {/* OLD */}
         <div style={{ ...s.card, borderLeft: `3px solid #C05621` }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#9b2c2c' }}>Old Regime Declaration</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: TK.critical }}>Old Regime Declaration</div>
           <div style={{ fontSize: 11.5, color: P.muted, marginBottom: 8 }}>Std Deduction ₹50,000 | 80C max ₹1,50,000</div>
           {sal.hra > 0 && (
             <div style={{ background: P.purpleBg, border: `1px solid #DDD6FE`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
@@ -592,7 +592,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             <input type="checkbox" checked={!!f.showHra2} onChange={e => set('showHra2', e.target.checked ? 'y' : '')} /> Changed residence mid-year? Add second HRA period
           </label>
           {f.showHra2 && (
-            <div style={{ background: P.tealBg, border: '1px solid #A7E3CE', borderRadius: 10, padding: 12, marginBottom: 10 }}>
+            <div style={{ background: P.tealBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 10, padding: 12, marginBottom: 10 }}>
               <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Period 2</div>
               <div style={s.g2}>
                 <Fg label="From Month"><select style={s.input} value={f.hra2From} onChange={e => set('hra2From', e.target.value)}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select></Fg>
@@ -602,7 +602,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
               <Fg label="City Type"><select style={s.input} value={f.cityType2} onChange={e => set('cityType2', e.target.value)}><option value="nonmetro">Non-Metro (40%)</option><option value="metro">Metro (50%)</option></select></Fg>
             </div>
           )}
-          {N(f.rentM) > 0 && <div style={{ background: P.greenBg, border: '1px solid #A7E3CE', borderRadius: 8, padding: '8px 11px', fontSize: 12, color: P.teal, marginBottom: 10 }}>Total HRA Exempt: <b>{R(hraExempt)}</b></div>}
+          {N(f.rentM) > 0 && <div style={{ background: P.greenBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 8, padding: '8px 11px', fontSize: 12, color: P.teal, marginBottom: 10 }}>Total HRA Exempt: <b>{R(hraExempt)}</b></div>}
 
           <div style={s.sec}>Section 80C (Max ₹1,50,000)</div>
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 10px', background: TK.sunken, borderRadius: 8, fontSize: 11, marginBottom: 8, border: `1px solid ${P.border}` }}><span style={{ color: P.muted }}>Employee PF (auto)</span><span style={{ fontWeight: 700 }}>{R(sal.epf)}</span></div>
@@ -625,9 +625,9 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         </div>
         {/* NEW */}
         <div style={{ ...s.card, borderLeft: `3px solid ${P.green}` }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: '#1c4532' }}>New Regime Declaration</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: TK.ink }}>New Regime Declaration</div>
           <div style={{ fontSize: 11.5, color: P.muted, marginBottom: 8 }}>Std Deduction ₹75,000 | No HRA / 80C / 80D</div>
-          <div style={{ background: P.greenBg, borderRadius: 9, padding: 12, marginBottom: 13, border: '1px solid #A7E3CE' }}>
+          <div style={{ background: P.greenBg, borderRadius: 9, padding: 12, marginBottom: 13, border: `1px solid ${TK.lineStrong}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span style={{ color: P.teal, fontWeight: 500 }}>Standard Deduction (auto)</span><span style={{ fontWeight: 700 }}>₹75,000</span></div>
             <div style={{ fontSize: 10, color: P.green }}>HRA · LTA · 80C · 80D · Home Loan — Not applicable</div>
           </div>
@@ -638,7 +638,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <Fg label="Incentive / Award">{numIn('iinc')}</Fg>
           <Fg label="Variable Pay Expected (rest of year)">{numIn('varEx')}</Fg>
           <Fg label="Interest Income (FD / Savings)">{numIn('iInc')}</Fg>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: P.greenBg, borderRadius: 8, fontSize: 12, fontWeight: 700, color: P.teal, border: '1px solid #A7E3CE' }}><span>Total Additional Income</span><span>{R(addITotal)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: P.greenBg, borderRadius: 8, fontSize: 12, fontWeight: 700, color: P.teal, border: `1px solid ${TK.lineStrong}` }}><span>Total Additional Income</span><span>{R(addITotal)}</span></div>
         </div>
       </div>
     </div>
@@ -746,7 +746,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #2563EB;padding-bottom:14px;margin-bottom:16px}
       .brand{font-size:22px;font-weight:800;color:#2563EB}.title{text-align:right;font-size:14px;font-weight:800;letter-spacing:.05em}
       .title .sub{font-size:11px;color:#2563EB}
-      .badge{display:inline-block;padding:4px 14px;border-radius:99px;font-weight:800;font-size:13px;background:${isOld ? '#FFF7ED' : TK.positiveTint};color:${isOld ? '#C05621' : TK.positive};border:2px solid ${isOld ? '#C05621' : TK.positive}}
+      .badge{display:inline-block;padding:4px 14px;border-radius:99px;font-weight:800;font-size:13px;background:${isOld ? TK.warningTint : TK.positiveTint};color:${isOld ? TK.warning : TK.positive};border:2px solid ${isOld ? TK.warningTint : TK.positive}}
       h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#3C3489;margin:20px 0 6px}
       table{width:100%;border-collapse:collapse;font-size:12.5px}
       td,th{padding:7px 10px;border-bottom:1px solid #F1F0FA;text-align:left}
@@ -831,7 +831,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
     const bold = (l: string, oV: string, nV: string, bg: string, col = P.navy) => (
       <tr style={{ background: bg }}><td style={{ padding: '8px 10px', fontSize: 12.5, fontWeight: 700, color: col }}>{l}</td><td style={{ padding: '8px 10px', fontSize: 12.5, fontWeight: 700, textAlign: 'right', color: col }}>{oV}</td><td style={{ padding: '8px 10px', fontSize: 12.5, fontWeight: 700, textAlign: 'right', color: col }}>{nV}</td></tr>
     )
-    const sec = (t: string) => <tr><td colSpan={3} style={{ padding: '8px 10px', fontSize: 11, fontWeight: 700, color: P.purpleDark, background: '#FAFAFE', letterSpacing: '.03em' }}>{t}</td></tr>
+    const sec = (t: string) => <tr><td colSpan={3} style={{ padding: '8px 10px', fontSize: 11, fontWeight: 700, color: P.purpleDark, background: TK.brandTint, letterSpacing: '.03em' }}>{t}</td></tr>
     return (
       <div>
         <div style={{ ...s.card, background: rec === 'OLD' ? 'linear-gradient(135deg,#B45309,#C2410C)' : 'linear-gradient(135deg,#059669,#047857)', color: TK.onAccent, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
@@ -848,7 +848,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             {status === 'DRAFT' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: TK.infoTint, color: TK.info }}>Draft saved</span>}
           </div>
           {!userPicked && !isSubmitted && recRegime && (
-            <div style={{ background: TK.infoTint, border: '1px solid #BFDBFE', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: '#1E3A8A', marginBottom: 10 }}>We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b> — it gives you the <b>lower annual tax</b>. You can change it below before submitting.
+            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, padding: '9px 12px', fontSize: 12, color: TK.brand, marginBottom: 10 }}>We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b> — it gives you the <b>lower annual tax</b>. You can change it below before submitting.
             </div>
           )}
           {isSubmitted && !editMode && (
@@ -863,8 +863,8 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
               return (
                 <button key={rg} onClick={() => { if (!regimeLocked) { setChosenRegime(rg); setUserPicked(true); setSaved(false) } }} disabled={regimeLocked} style={{
                   textAlign: 'left', padding: '12px 14px', borderRadius: 10, cursor: regimeLocked ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
-                  border: `2px solid ${sel ? (isOld ? '#C05621' : P.green) : P.border}`,
-                  background: sel ? (isOld ? '#FFF7ED' : P.greenBg) : '#fff', opacity: regimeLocked && !sel ? .45 : 1,
+                  border: `2px solid ${sel ? (isOld ? TK.warningTint : P.green) : P.border}`,
+                  background: sel ? (isOld ? TK.warningTint : P.greenBg) : TK.surface, opacity: regimeLocked && !sel ? .45 : 1,
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                     <span style={{ width: 16, height: 16, borderRadius: 99, border: `2px solid ${sel ? (isOld ? '#C05621' : P.green) : P.border}`, background: sel ? (isOld ? '#C05621' : P.green) : '#fff', display: 'inline-block', flexShrink: 0 }} />
@@ -902,8 +902,8 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         </div>
 
         {T.mid && (
-          <div style={{ ...s.card, background: TK.infoTint, border: '1px solid #BFDBFE' }}>
-            <div style={{ fontSize: 12, color: '#1E3A8A', lineHeight: 1.65 }}>📅 <b>Pro-rated for mid-year joining:</b> salary income taxed for <b>{T.months} of 12 months</b> (≈{Math.round(T.pr * 100)}%). Annual tax above is spread over the <b>{T.months} remaining pay month{T.months === 1 ? '' : 's'}</b>Monthly TDS = Annual Tax ÷ {T.months}. Standard deduction &amp; your actual investment declarations are counted in full.</div>
+          <div style={{ ...s.card, background: TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>
+            <div style={{ fontSize: 12, color: TK.brand, lineHeight: 1.65 }}>📅 <b>Pro-rated for mid-year joining:</b> salary income taxed for <b>{T.months} of 12 months</b> (≈{Math.round(T.pr * 100)}%). Annual tax above is spread over the <b>{T.months} remaining pay month{T.months === 1 ? '' : 's'}</b>Monthly TDS = Annual Tax ÷ {T.months}. Standard deduction &amp; your actual investment declarations are counted in full.</div>
           </div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8, marginBottom: 14 }}>
@@ -927,7 +927,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <div style={{ padding: '12px 14px', borderBottom: `1px solid ${P.border}` }}><div style={{ fontSize: 13, fontWeight: 700 }}>Taxable Income Breakup — Component-wise</div><div style={{ fontSize: 11, color: P.muted }}>What is taxable, what is exempt, and how TDS is computed</div></div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ background: '#FAFAFE' }}><th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, color: P.muted }}>Component</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: '#C05621' }}>Old (₹)</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: P.green }}>New (₹)</th></tr></thead>
+              <thead><tr style={{ background: TK.brandTint }}><th style={{ padding: '8px 10px', textAlign: 'left', fontSize: 11, color: P.muted }}>Component</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: TK.warning }}>Old (₹)</th><th style={{ padding: '8px 10px', textAlign: 'right', fontSize: 11, color: P.green }}>New (₹)</th></tr></thead>
               <tbody>
                 {sec(T.mid ? `📌 INCOME (${T.months} months · pro-rated ${Math.round(T.pr * 100)}%)` : 'INCOME')}
                 {row('Basic Salary — 100% taxable', R(T.eBasic), R(T.eBasic))}
@@ -940,7 +940,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
                 {T.eVari > 0 && row('Variable Pay', R(T.eVari), R(T.eVari))}
                 {T.addI > 0 && row('Additional Income', R(T.addI), R(T.addI))}
                 {(T.oPerq > 0 || T.nPerq > 0) && row('Car+Driver Perquisite (₹10,000/mo)', T.oPerq ? `+${R(T.oPerq)}` : '—', T.nPerq ? `+${R(T.nPerq)}` : '—')}
-                {bold('Gross Taxable Income', R(T.grossO), R(T.grossN), '#FEF9F3', '#9b2c2c')}
+                {bold('Gross Taxable Income', R(T.grossO), R(T.grossN), TK.warningTint, TK.critical)}
                 {sec('DEDUCTIONS')}
                 {row('Standard Deduction', '(₹50,000)', '(₹75,000)', true)}
                 {T.ltaAmt > 0 && row('Leave Travel Allowance', `(${R(T.ltaAmt)})`, '— N/A', true)}
@@ -959,15 +959,15 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
                 {row('Tax on income (slab)', R(T.bO), R(T.bN))}
                 {row('Rebate u/s 87A', T.tO <= 500000 ? `(${R(Math.min(T.bO, 12500))})` : '—', T.tN <= 1200000 ? `(${R(T.bN)})` : '—', true)}
                 {row('Add: 4% Health & Edu Cess', R(Math.round(T.fO / 1.04 * .04)), R(Math.round(T.fN / 1.04 * .04)))}
-                {bold('TOTAL ANNUAL TAX', R(T.fO), R(T.fN), P.navy, '#fff')}
-                {bold(`MONTHLY TDS (÷${T.months})`, R(T.moO), R(T.moN), '#FEF9F3', '#9b2c2c')}
+                {bold('TOTAL ANNUAL TAX', R(T.fO), R(T.fN), P.navy, TK.surface)}
+                {bold(`MONTHLY TDS (÷${T.months})`, R(T.moO), R(T.moN), TK.warningTint, TK.critical)}
               </tbody>
             </table>
           </div>
         </div>
-        <div style={{ ...s.card, background: P.amberBg, border: '1px solid #FDE68A' }}>
+        <div style={{ ...s.card, background: P.amberBg, border: `1px solid ${TK.warningTint}` }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 6 }}>Important Disclaimer</div>
-          <div style={{ fontSize: 11.5, color: '#7c4a03', lineHeight: 1.7 }}>
+          <div style={{ fontSize: 11.5, color: TK.warning, lineHeight: 1.7 }}>
             This is an <b>estimate</b> for comparison &amp; investment planning only. Actual TDS may vary with final proofs, payroll processing, mid-year changes or tax-law amendments. Please confirm with your HR / Finance team and file your full investment declaration on the HRMS portal for accurate TDS. Not tax or financial advice. FY 2026-27 (AY 2027-28).
           </div>
         </div>
@@ -989,7 +989,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         )}
       </div>
       {draftMsg && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: draftMsg.startsWith('') ? P.red : P.teal, background: draftMsg.startsWith('') ? TK.criticalTint : P.greenBg, border: `1px solid ${draftMsg.startsWith('') ? '#FCA5A5' : '#A7E3CE'}`, borderRadius: 8, padding: '8px 12px' }}>{draftMsg}</div>}
-      {viewLocked && <div style={{ marginBottom: 12, fontSize: 12, color: P.purpleDark, background: P.purpleBg, border: '1px solid #DDD6FE', borderRadius: 8, padding: '9px 12px' }}>This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.</div>}
+      {viewLocked && <div style={{ marginBottom: 12, fontSize: 12, color: P.purpleDark, background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, padding: '9px 12px' }}>This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.</div>}
       <Stepper />
       {step === 1 && <fieldset disabled={!basicRW} style={fsReset}>{step1}</fieldset>}
       {step === 2 && <fieldset disabled={!flexiRW} style={fsReset}>{step2}</fieldset>}

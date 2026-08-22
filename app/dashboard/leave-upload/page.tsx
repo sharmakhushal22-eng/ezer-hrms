@@ -25,15 +25,15 @@ const T = {
   card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'16px 18px', marginBottom:14, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
-  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
+  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
   pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:   { padding:'8px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  danger:{ padding:'5px 10px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
-  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
+  out:   { padding:'8px 13px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  danger:{ padding:'5px 10px', borderRadius:7, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
+  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
   check: { display:'flex', alignItems:'center', gap:7, fontSize:12.5, cursor:'pointer', padding:'4px 0' } as React.CSSProperties,
 }
 const MODE_LABEL: Record<AppMode, string> = { EMPLOYEE:'Employee applies', HR_MARK:'HR marks', EARN_AVAIL:'Earn & avail' }
-const SRC_COLOR: Record<string, [string, string]> = { branch:[TK.brandTint,TK.brandDeep], company:[TK.infoTint,'#1E40AF'], catalog:['#F3F4F6',TK.muted] }
+const SRC_COLOR: Record<string, [string, string]> = { branch:[TK.brandTint,TK.brandDeep], company:[TK.infoTint,TK.brand], catalog:[TK.sunken,TK.muted] }
 
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
@@ -48,7 +48,7 @@ function Flags({ t }: { t: LeaveType }) {
     { k:'UNPAID', on:!t.is_paid, bg:TK.criticalTint, c:TK.critical },
     { k:'HALF-DAY', on:t.allow_half_day, bg:TK.canvas, c:TK.brandDeep },
     { k:'LAPSES', on:t.laps, bg:TK.warningTint, c:TK.warning },
-    { k:'ENCASH', on:t.is_encashable, bg:'#ECFEFF', c:'#0891B2' },
+    { k:'ENCASH', on:t.is_encashable, bg: TK.infoTint, c: TK.info },
     { k:'NO-BAL OK', on:t.allow_without_balance, bg:TK.warningTint, c:TK.warning },
     { k:'AUTO-ABSENT', on:t.auto_mark_absent, bg:TK.criticalTint, c:TK.critical },
     { k:'CF∞', on:t.carry_forward_unlimited, bg:TK.brandTint, c:TK.brandDeep },
@@ -153,7 +153,7 @@ function LeaveTypesTab({ types, onEdit, onAdd, onToggle, onDelete }: {
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
               <span style={{ fontSize:15, fontWeight:700 }}>{t.short_name}</span>
               <span style={{ fontSize:13, color:TK.inkSoft }}>{t.name}</span>
-              {t.is_system && <Pill text="SYSTEM" bg="#F3F4F6" color={TK.muted} />}
+              {t.is_system && <Pill text="SYSTEM" bg={TK.sunken} color={TK.muted} />}
               {!t.is_active && <Pill text="INACTIVE" bg={TK.criticalTint} color={TK.critical} />}
             </div>
             <div style={{ fontSize:11, color:TK.muted, marginBottom:8 }}>
@@ -181,7 +181,7 @@ function QuotaRow({ row, onSave }: { row: ResolvedQuota; onSave: (leave_type_id:
   useEffect(() => { setQ(String(row.annual_quota)); setCf(String(row.max_carry_forward)) }, [row.annual_quota, row.max_carry_forward])
   const [bg, c] = SRC_COLOR[row.source] || SRC_COLOR.catalog
   return (
-    <tr style={{ borderBottom:'1px solid #F3F0FF' }}>
+    <tr style={{ borderBottom: `1px solid ${TK.brandEdge}` }}>
       <td style={{ padding:'8px 9px', fontWeight:600, whiteSpace:'nowrap' }}>{row.short_name} <span style={{ fontWeight:400, color:TK.faint, fontSize:11 }}>{row.name}</span></td>
       <td style={{ padding:'8px 9px' }}><input type="number" style={{ ...T.input, width:80 }} value={q} onChange={e => setQ(e.target.value)} /></td>
       <td style={{ padding:'8px 9px' }}><input type="number" style={{ ...T.input, width:80 }} value={cf} onChange={e => setCf(e.target.value)} /></td>
@@ -210,12 +210,12 @@ function BranchQuotaTab({ companies, branches, rows, company, branch, fy, onComp
         <div style={{ fontSize:11, color:TK.faint, marginTop:8 }}>A branch-specific quota overrides the company default. The <b>source</b> column shows where a value comes from — branch / company / catalog. Saving creates or updates the policy row for this exact scope.</div>
       </div>
 
-      {company === 'ALL' && <div style={{ ...T.card, fontSize:12, color:'#1E40AF', background:TK.infoTint, border:'1px solid #BFDBFE' }}>🌐 <b>All companies</b> — quotas below are shown from a template; clicking <b>Save</b> on a row applies that quota to <b>every</b> company (company-default scope).</div>}
+      {company === 'ALL' && <div style={{ ...T.card, fontSize:12, color: TK.brand, background:TK.infoTint, border: `1px solid ${TK.brandEdge}` }}>🌐 <b>All companies</b> — quotas below are shown from a template; clicking <b>Save</b> on a row applies that quota to <b>every</b> company (company-default scope).</div>}
       {!company ? <div style={{ ...T.card, textAlign:'center', color:TK.faint, padding:30 }}>Pick a company to see its quota.</div> : (
         <div style={{ ...T.card, overflowX:'auto', padding:0 }}>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead><tr style={{ background:TK.sunken }}>
-              {['Leave type', 'Annual quota', 'Carry-fwd max', 'Source', ''].map(h => <th key={h} style={{ padding:'9px', textAlign:'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', letterSpacing:'.04em', borderBottom:'1px solid #EDE9FE' }}>{h}</th>)}
+              {['Leave type', 'Annual quota', 'Carry-fwd max', 'Source', ''].map(h => <th key={h} style={{ padding:'9px', textAlign:'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', letterSpacing:'.04em', borderBottom: `1px solid ${TK.brandEdge}` }}>{h}</th>)}
             </tr></thead>
             <tbody>
               {rows.length === 0 && <tr><td colSpan={5} style={{ padding:24, textAlign:'center', color:TK.faint }}>No leave type is active.</td></tr>}
@@ -256,7 +256,7 @@ function PreviewTable({ rows }: { rows: ParsedRow[] }) {
           <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10, color: TK.muted, textTransform: 'uppercase' }}>Status</th>
         </tr></thead>
         <tbody>{rows.map(r => { const ok = r.status === 'ok'; return (
-          <tr key={r.rowNo} style={{ borderTop: '1px solid #F1EDFB', background: ok ? '#fff' : TK.criticalTint }}>
+          <tr key={r.rowNo} style={{ borderTop: `1px solid ${TK.brandEdge}`, background: ok ? '#fff' : TK.criticalTint }}>
             <td style={{ padding: '7px 10px', color: TK.muted, borderLeft: `3px solid ${ok ? '#10B981' : TK.critical}` }}>{r.rowNo}</td>
             {cols.map(c => <td key={c} style={{ padding: '7px 10px' }}>{String(r.cells[c] ?? '')}</td>)}
             <td style={{ padding: '7px 10px' }}>{ok ? <span style={{ fontSize: 11, color: TK.positive, fontWeight: 600 }}>✓ ok</span> : <span style={{ fontSize: 11, color: TK.critical }}>✗ {r.msg}</span>}</td>
@@ -295,7 +295,7 @@ function UploadFlow({ title, desc, columns, errorFile, onTemplate, onParse, onCo
           <button style={T.out} disabled={tplBusy} onClick={async () => { setTplBusy(true); try { await onTemplate() } catch {} setTplBusy(false) }}>⬇ {tplBusy ? 'Preparing…' : 'Download template'}</button>
         </div>
         <div onClick={() => inputRef.current?.click()} onDragOver={e => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f) }}
-          style={{ border: `2px dashed ${drag ? TK.brand : 'rgba(37,99,235,0.3)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? TK.canvas : '#FCFBFF' }}>
+          style={{ border: `2px dashed ${drag ? TK.brand : 'rgba(37,99,235,0.3)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? TK.canvas: TK.brandTint }}>
           <div style={{ fontSize: 26, marginBottom: 6 }}>{file ? '' : ''}</div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{file ? file.name : 'Drag & drop Excel here, or click to browse'}</div>
           <div style={{ fontSize: 11, color: TK.muted, marginTop: 4 }}>{parsing ? 'Reading…' : '.xlsx / .xls'}</div>

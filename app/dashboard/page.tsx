@@ -28,8 +28,16 @@ const RECRUIT_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional
 // The old set gave every stage its own unrelated hue, which encoded nothing.
 const STAGE_COLOR: Record<string,string> = {
   'Applied':'var(--ez-ramp-1)','AI Screened':'var(--ez-ramp-2)','Telephonic':'var(--ez-ramp-3)','L1':'var(--ez-ramp-4)',
-  'L2':'var(--ez-ramp-5)','Optional Round':'var(--ez-ramp-6)','Shortlisted':'#0B7A5B','Offer Sent':'#0B7A5B',
-  'Joined':'#0B7A5B','Rejected':'#C42B32',
+  'L2':'var(--ez-ramp-5)','Optional Round':'var(--ez-ramp-6)','Shortlisted':C.positive,'Offer Sent':C.positive,
+  'Joined':C.positive,'Rejected':C.critical,
+}
+
+// Same stages, readable as text. A bar only has to be visible; the stage
+// name has to be legible against the page in both themes.
+const STAGE_TEXT: Record<string,string> = {
+  'Applied':'var(--ez-ramp-1-fg)','AI Screened':'var(--ez-ramp-2-fg)','Telephonic':'var(--ez-ramp-3-fg)','L1':'var(--ez-ramp-4-fg)',
+  'L2':'var(--ez-ramp-5-fg)','Optional Round':'var(--ez-ramp-6-fg)','Shortlisted':C.positive,'Offer Sent':C.positive,
+  'Joined':C.positive,'Rejected':C.critical,
 }
 
 const fmtMoney = (n: number) => '₹' + (n >= 10000000 ? (n/10000000).toFixed(1)+'Cr' : n >= 100000 ? (n/100000).toFixed(1)+'L' : n.toLocaleString('en-IN'))
@@ -149,7 +157,7 @@ export default function Dashboard() {
       pipeline: [...pipelineCands].sort((a: any,b: any) => RECRUIT_STAGES.indexOf(a.stage) - RECRUIT_STAGES.indexOf(b.stage))
         .map((c: any) => ({ name: c.full_name || '—', dept: deptOf(c), status: c.stage || '—', location: locOf(c), tone: STAGE_COLOR[c.stage] || C.brand })),
       // already ordered by joining date (undated last) when joiningCands was built
-      joining: joiningCands.map((c: any) => ({ name: c.full_name || '—', sub: c.designation || '—', meta: fmtDate(c.onboarding_date), tone:'#0891B2' })),
+      joining: joiningCands.map((c: any) => ({ name: c.full_name || '—', sub: c.designation || '—', meta: fmtDate(c.onboarding_date), tone: C.info })),
     }
 
     const pipeline = RECRUIT_STAGES.filter(s => s !== 'Rejected').map(s => ({ stage: s, count: cands.filter((c: any) => c.stage === s).length }))

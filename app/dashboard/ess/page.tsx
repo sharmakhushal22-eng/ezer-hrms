@@ -20,9 +20,9 @@ const T = {
   page:       { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
   card:       { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   label:      { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
-  input:      { width:'100%', padding:'9px 11px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
+  input:      { width:'100%', padding:'9px 11px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   btnPrimary: { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
-  btnOutline: { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep } as React.CSSProperties,
+  btnOutline: { padding:'7px 13px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep } as React.CSSProperties,
   section:    { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10, marginTop:4, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
 const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d }
@@ -35,7 +35,7 @@ function Toast({ msg, type, onClose }: { msg:string; type:'success'|'error'; onC
   return (
     <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:10 }}>
       {type==='success'?'':''} {msg}
-      <button onClick={onClose} style={{ background:'none', border:'none', color:'rgba(255,255,255,0.7)', cursor:'pointer', fontSize:16, padding:'0 4px' }}>×</button>
+      <button onClick={onClose} style={{ background:'none', border:'none', color:TK.onAccentDim, cursor:'pointer', fontSize:16, padding:'0 4px' }}>×</button>
     </div>
   )
 }
@@ -107,7 +107,7 @@ function DashboardTab({ users, audit, isMobile }: { users: EssUser[]; audit: Aud
           {serving.map(u => {
             const days = u.last_working_date ? Math.max(0, Math.ceil((new Date(u.last_working_date).getTime() - Date.now())/86400000)) : 0
             return (
-              <div key={u.employee_id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
+              <div key={u.employee_id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 0', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
                 <div><div style={{ fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · LWD {fmt(u.last_working_date)}</div></div>
                 <span style={{ fontSize:11, fontWeight:700, color: days<=7?TK.critical:TK.warning }}>{days}d left</span>
               </div>
@@ -125,7 +125,7 @@ function DashboardTab({ users, audit, isMobile }: { users: EssUser[]; audit: Aud
           <div style={T.section}>Never Logged In ({neverLogged.length}) — HR follow-up</div>
           <div style={{ maxHeight:220, overflowY:'auto' }}>
             {neverLogged.slice(0,40).map(u => (
-              <div key={u.employee_id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
+              <div key={u.employee_id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
                 <span style={{ fontWeight:600 }}>{u.full_name}</span>
                 <span style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.dept_name || '—'}</span>
               </div>
@@ -138,7 +138,7 @@ function DashboardTab({ users, audit, isMobile }: { users: EssUser[]; audit: Aud
           <div style={T.section}>Recent Access Changes</div>
           {audit.length === 0 && <div style={{ fontSize:12, color:TK.faint, padding:'8px 0' }}>No changes yet. Recently deactivated (30d): {recentlyDeact}.</div>}
           {audit.slice(0,10).map(a => (
-            <div key={a.id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
+            <div key={a.id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
               <span>{auditLabel(a)} {a.details?.full_name ? `— ${a.details.full_name}` : a.details?.emp_code ? `— ${a.details.emp_code}` : ''}</span>
               <span style={{ fontSize:10, color:TK.faint }}>{fmtDT(a.created_at)}</span>
             </div>
@@ -191,8 +191,8 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
   const ActionBtns = ({ u }: { u: EssUser }) => (
     <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
       {u.account?.status === 'ACTIVE'
-        ? <button onClick={() => onDeactivate(u)} style={{ ...T.btnOutline, borderColor:'#FCA5A5', color:TK.critical }}>Deactivate</button>
-        : <button onClick={() => onActivate(u)} style={{ ...T.btnOutline, borderColor:'#A7F3D0', color:TK.positive }}>Activate</button>}
+        ? <button onClick={() => onDeactivate(u)} style={{ ...T.btnOutline, borderColor: TK.criticalTint, color:TK.critical }}>Deactivate</button>
+        : <button onClick={() => onActivate(u)} style={{ ...T.btnOutline, borderColor: TK.positiveTint, color:TK.positive }}>Activate</button>}
       <button onClick={() => onImpersonate(u)} style={T.btnOutline}>Login as</button>
       <button onClick={() => onAssignOpen(u)} style={T.btnOutline}>Role</button>
     </div>
@@ -204,7 +204,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
         <input style={{ ...T.input, maxWidth:260 }} placeholder="Search emp code / name" value={q} onChange={e => setQ(e.target.value)} />
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
           {FILTERS.map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:TK.brand, color:TK.onAccent, border:'1px solid #2563EB' } : {}) }}>{f}</button>
+            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:TK.brand, color:TK.onAccent, border: `1px solid ${TK.brandEdge}` } : {}) }}>{f}</button>
           ))}
         </div>
         <div style={{ marginLeft:'auto', fontSize:11, color:TK.muted }}>{filtered.length} shown</div>
@@ -213,8 +213,8 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
       {sel.size > 0 && (
         <div style={{ ...T.card, display:'flex', gap:10, alignItems:'center', background:TK.canvas, flexWrap:'wrap' }}>
           <span style={{ fontSize:12, fontWeight:600 }}>{sel.size} selected</span>
-          <button onClick={() => { onBulk(selectedUsers, 'ACTIVE'); setSel(new Set()) }} style={{ ...T.btnOutline, borderColor:'#A7F3D0', color:TK.positive }}>Activate</button>
-          <button onClick={() => { onBulk(selectedUsers, 'INACTIVE'); setSel(new Set()) }} style={{ ...T.btnOutline, borderColor:'#FCA5A5', color:TK.critical }}>⊘ Deactivate</button>
+          <button onClick={() => { onBulk(selectedUsers, 'ACTIVE'); setSel(new Set()) }} style={{ ...T.btnOutline, borderColor: TK.positiveTint, color:TK.positive }}>Activate</button>
+          <button onClick={() => { onBulk(selectedUsers, 'INACTIVE'); setSel(new Set()) }} style={{ ...T.btnOutline, borderColor: TK.criticalTint, color:TK.critical }}>⊘ Deactivate</button>
           <button
             onClick={() => {
               const codes = selectedUsers.map(u => u.emp_code).filter(Boolean).join(',')
@@ -254,7 +254,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
             <thead>
               <tr style={{ background:TK.sunken }}>
                 {['', 'Emp Code','Name','Department','Designation','Role(s)','ESS Status','Last Login','DOL','Actions'].map(h => (
-                  <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', letterSpacing:'.04em', borderBottom:'1px solid #EDE9FE', whiteSpace:'nowrap' }}>
+                  <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', letterSpacing:'.04em', borderBottom: `1px solid ${TK.brandEdge}`, whiteSpace:'nowrap' }}>
                     {h === '' ? <input type="checkbox" checked={allChecked} onChange={() => setSel(allChecked ? new Set() : new Set(filtered.map(u => u.employee_id)))} /> : h}
                   </th>
                 ))}
@@ -263,7 +263,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
             <tbody>
               {filtered.length === 0 && <tr><td colSpan={10} style={{ padding:24, textAlign:'center', color:TK.faint }}>No users match.</td></tr>}
               {filtered.map((u,i) => (
-                <tr key={u.employee_id} style={{ borderBottom:'1px solid #F3F0FF', background:i%2?TK.sunken:'#fff' }}>
+                <tr key={u.employee_id} style={{ borderBottom: `1px solid ${TK.brandEdge}`, background:i%2?TK.sunken: TK.surface }}>
                   <td style={{ padding:'8px 10px' }}><input type="checkbox" checked={sel.has(u.employee_id)} onChange={() => toggle(u.employee_id)} /></td>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap', fontWeight:600 }}>{u.emp_code}</td>
                   <td style={{ padding:'8px 10px', whiteSpace:'nowrap' }}>{u.full_name}</td>
@@ -484,7 +484,7 @@ function AuditTab({ audit }: { audit: AuditRow[] }) {
       <div style={T.section}>Access Audit Trail</div>
       {audit.length === 0 && <div style={{ fontSize:12, color:TK.faint, padding:'8px 0' }}>No audit entries yet.</div>}
       {audit.map(a => (
-        <div key={a.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
+        <div key={a.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
           <div>
             <div style={{ fontWeight:600 }}>{label(a)} {a.details?.full_name ? `— ${a.details.full_name}` : a.details?.emp_code ? `— ${a.details.emp_code}` : ''}</div>
             <div style={{ fontSize:10, color:TK.faint }}>{a.performed_by_name ? `by ${a.performed_by_name}` : 'by system'}{a.reason ? ` · ${a.reason}` : ''}</div>
@@ -579,8 +579,8 @@ export default function ESSPage() {
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
         {/* Top-level section switch — ESS & Access + Roles & Permissions in one place */}
         <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-          <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:TK.brand, color:TK.onAccent, border:'1px solid #2563EB' } : {}) }}>ESS &amp; Access</button>
-          <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:TK.brand, color:TK.onAccent, border:'1px solid #2563EB' } : {}) }}>Roles &amp; Permissions</button>
+          <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:TK.brand, color:TK.onAccent, border: `1px solid ${TK.brandEdge}` } : {}) }}>ESS &amp; Access</button>
+          <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:TK.brand, color:TK.onAccent, border: `1px solid ${TK.brandEdge}` } : {}) }}>Roles &amp; Permissions</button>
           <a href="/dashboard/ess-credentials" style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, textDecoration:'none', marginLeft:'auto' }}>Generate Login Credentials →</a>
         </div>
 
@@ -590,7 +590,7 @@ export default function ESSPage() {
 
         <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' }}>
           {TABS.map(t => (
-            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:TK.brand, color:TK.onAccent, border:'1px solid #2563EB' } : {}) }}>{t.l}</button>
+            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:TK.brand, color:TK.onAccent, border: `1px solid ${TK.brandEdge}` } : {}) }}>{t.l}</button>
           ))}
           <button onClick={reload} style={{ ...T.btnOutline, marginLeft:'auto' }}>Refresh</button>
         </div>
@@ -614,7 +614,7 @@ export default function ESSPage() {
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div style={{ ...T.card, maxWidth:440, width:'100%', marginBottom:0 }}>
             {!deact.last_working_date ? (
-              <div style={{ background:TK.warningTint, border:'1px solid #FDE68A', borderRadius:8, padding:'12px 14px', marginBottom:12, fontSize:12.5, color:TK.warning, lineHeight:1.6 }}>This employee has <b>no Date of Leaving set</b>. Deactivate anyway? They will not be able to log in, or reset their password.
+              <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:8, padding:'12px 14px', marginBottom:12, fontSize:12.5, color:TK.warning, lineHeight:1.6 }}>This employee has <b>no Date of Leaving set</b>. Deactivate anyway? They will not be able to log in, or reset their password.
               </div>
             ) : (
               <div style={{ fontSize:13, marginBottom:12 }}>Deactivate <b>{deact.full_name}</b>? They won&apos;t be able to log in or reset their password.</div>
@@ -623,7 +623,7 @@ export default function ESSPage() {
             <input style={{ ...T.input, marginBottom:14 }} value={deactReason} onChange={e => setDeactReason(e.target.value)} placeholder="e.g. resigned, absconding…" />
             <div style={{ display:'flex', gap:8, justifyContent:'flex-end', flexWrap:'wrap' }}>
               <button onClick={() => setDeact(null)} style={T.btnOutline}>Cancel</button>
-              {!deact.last_working_date && <button onClick={() => { setDeact(null); notify('Set the Date of Leaving in the Employees module first.', 'error') }} style={{ ...T.btnOutline, borderColor:'#FDE68A', color:TK.warning }}>Set DOL First</button>}
+              {!deact.last_working_date && <button onClick={() => { setDeact(null); notify('Set the Date of Leaving in the Employees module first.', 'error') }} style={{ ...T.btnOutline, borderColor: TK.warningTint, color:TK.warning }}>Set DOL First</button>}
               <button onClick={() => confirmDeactivate(deact)} style={{ ...T.btnPrimary, background:TK.critical }}>{deact.last_working_date ? 'Deactivate' : 'Deactivate Anyway'}</button>
             </div>
           </div>
@@ -633,10 +633,10 @@ export default function ESSPage() {
       {/* Impersonation overlay (Employee Portal = Phase 2) */}
       {imp && (
         <div style={{ position:'fixed', inset:0, background:TK.canvas, zIndex:1200, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
-          <div style={{ background:TK.ink, color:TK.onAccent, padding:'10px 18px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10, flexWrap:'wrap' }}>
+          <div style={{ background: TK.dark, color:TK.onDark, padding:'10px 18px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10, flexWrap:'wrap' }}>
             <span style={{ fontSize:13, fontWeight:600 }}>Viewing as {imp.u.full_name} — Admin Mode</span>
-            <span style={{ fontSize:11, color:'rgba(255,255,255,.6)' }}>{imp.u.emp_code} · {imp.u.designation || '—'}</span>
-            <button onClick={exitImpersonate} style={{ marginLeft:'auto', ...T.btnOutline, background:'transparent', color:TK.onAccent, borderColor:'rgba(255,255,255,.3)' }}>Exit Admin Mode</button>
+            <span style={{ fontSize:11, color:TK.onDarkFaint }}>{imp.u.emp_code} · {imp.u.designation || '—'}</span>
+            <button onClick={exitImpersonate} style={{ marginLeft:'auto', ...T.btnOutline, background:'transparent', color:TK.onDark, borderColor:'rgba(255,255,255,.3)' }}>Exit Admin Mode</button>
           </div>
           <EmployeePortal employeeId={imp.u.employee_id} />
         </div>

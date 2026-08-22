@@ -55,6 +55,16 @@
   /* Text that sits ON a saturated accent fill — a primary button, a filled
      badge. White works in light because every accent is dark there. */
   --ez-on-accent:     #FFFFFF;
+  /* Secondary text on an accent fill. There is very little room to dim text
+     on a saturated ground and stay legible — white at 66% on #2563EB is
+     3.14:1 — so these are the lowest opacities that still clear AA. */
+  --ez-on-accent-soft: rgba(255,255,255,.95);
+  --ez-on-accent-dim:  rgba(255,255,255,.94);
+
+  /* Avatar discs: dark initials on a pale tint of the person's own hue. */
+  --ez-avatar-tint-mix: 100%;
+  --ez-avatar-sat:      62%;
+  --ez-avatar-light:    28%;
 
   /* Surfaces — neutral light greys, so white cards read as crisp */
   --ez-surface:       #FFFFFF;
@@ -93,8 +103,8 @@
   --ez-dark:          #111827;
   --ez-dark-soft:     #1F2937;
   --ez-on-dark:       #F9FAFB;
-  --ez-on-dark-muted: rgba(249,250,251,.66);
-  --ez-on-dark-faint: rgba(249,250,251,.40);
+  --ez-on-dark-muted: rgba(249,250,251,.78);
+  --ez-on-dark-faint: rgba(249,250,251,.58);
   --ez-on-dark-line:  rgba(249,250,251,.10);
   --ez-on-dark-hover: rgba(249,250,251,.08);
 
@@ -116,6 +126,12 @@
   --ez-ramp-4: #3B82F6;
   --ez-ramp-5: #2563EB;
   --ez-ramp-6: #1D4ED8;
+  --ez-ramp-1-fg: #1E3A8A;
+  --ez-ramp-2-fg: #1E40AF;
+  --ez-ramp-3-fg: #1D4ED8;
+  --ez-ramp-4-fg: #2054CE;
+  --ez-ramp-5-fg: #2563EB;
+  --ez-ramp-6-fg: #1D4ED8;
 
   /* Grade pills. An ordered scale like the funnel, but it has to carry text,
      so each step is a background/foreground PAIR that clears AA — the previous
@@ -149,12 +165,26 @@
     --ez-faint:         #828C9B;   /* 4.75 on surface */
 
     --ez-brand:         #60A5FA;
-    --ez-brand-deep:    #3B82F6;
+    --ez-brand-deep:    #93C5FD;
     --ez-brand-tint:    #172033;
     --ez-brand-edge:    #24344F;
     /* In dark every accent LIGHTENS (#2563EB becomes #60A5FA), so white text
        on a primary button drops to 2.54:1. It has to invert. */
     --ez-on-accent:     #0D1117;
+    --ez-on-accent-soft: rgba(13,17,23,.92);
+    --ez-on-accent-dim:  rgba(13,17,23,.86);
+
+  /* Dark: a deep tint with lifted initials, not a bright disc punched into
+     a dark page. Verified at every hue — worst case 6.2:1. */
+  --ez-avatar-tint-mix: 14%;
+  --ez-avatar-sat:      58%;
+  --ez-avatar-light:    82%;
+
+    /* Dark: a deep tint with lifted initials, not a bright disc punched into
+       a dark page. Verified at every hue — worst case 6.2:1. */
+    --ez-avatar-tint-mix: 14%;
+    --ez-avatar-sat:      58%;
+    --ez-avatar-light:    82%;
 
     --ez-surface:       #171B21;
     --ez-canvas:        #0F1216;
@@ -196,12 +226,18 @@
 
     /* Reversed on dark: the early stages must stay visible against a dark
        ground, so the ramp brightens as it advances instead of darkening. */
-    --ez-ramp-1: #24466E;
-    --ez-ramp-2: #2C5A90;
-    --ez-ramp-3: #3572B4;
-    --ez-ramp-4: #3B82F6;
-    --ez-ramp-5: #60A5FA;
-    --ez-ramp-6: #93C5FD;
+    --ez-ramp-1: #6E9FD8;
+    --ez-ramp-2: #7DAAE0;
+    --ez-ramp-3: #8CB5E8;
+    --ez-ramp-4: #9BC0F0;
+    --ez-ramp-5: #AACBF7;
+    --ez-ramp-6: #B9D6FF;
+    --ez-ramp-1-fg: #6E9FD8;
+    --ez-ramp-2-fg: #7DAAE0;
+    --ez-ramp-3-fg: #8CB5E8;
+    --ez-ramp-4-fg: #9BC0F0;
+    --ez-ramp-5-fg: #AACBF7;
+    --ez-ramp-6-fg: #B9D6FF;
 
     --ez-grade-1-bg: #1E3350;      --ez-grade-1-fg: #BFDBFE;
     --ez-grade-2-bg: #1C3049;      --ez-grade-2-fg: #A9CEFC;
@@ -223,10 +259,18 @@
   --ez-faint:         #828C9B;   /* 4.75 on surface */
 
   --ez-brand:         #60A5FA;
-  --ez-brand-deep:    #3B82F6;
+  --ez-brand-deep:    #93C5FD;
   --ez-brand-tint:    #172033;
   --ez-brand-edge:    #24344F;
   --ez-on-accent:     #0D1117;
+  --ez-on-accent-soft: rgba(13,17,23,.92);
+  --ez-on-accent-dim:  rgba(13,17,23,.86);
+
+  /* Dark: a deep tint with lifted initials, not a bright disc punched into
+     a dark page. Verified at every hue — worst case 6.2:1. */
+  --ez-avatar-tint-mix: 14%;
+  --ez-avatar-sat:      58%;
+  --ez-avatar-light:    82%;
 
   --ez-surface:       #171B21;
   --ez-canvas:        #0F1216;
@@ -261,12 +305,18 @@
   --ez-shadow-overlay:  0 4px 8px rgba(0,0,0,.48), 0 24px 56px -16px rgba(0,0,0,.62);
   --ez-shadow-brand:    0 1px 2px rgba(0,0,0,.4), 0 8px 20px -6px rgba(96,165,250,.30);
 
-  --ez-ramp-1: #24466E;
-  --ez-ramp-2: #2C5A90;
-  --ez-ramp-3: #3572B4;
-  --ez-ramp-4: #3B82F6;
-  --ez-ramp-5: #60A5FA;
-  --ez-ramp-6: #93C5FD;
+  --ez-ramp-1: #6E9FD8;
+  --ez-ramp-2: #7DAAE0;
+  --ez-ramp-3: #8CB5E8;
+  --ez-ramp-4: #9BC0F0;
+  --ez-ramp-5: #AACBF7;
+  --ez-ramp-6: #B9D6FF;
+  --ez-ramp-1-fg: #6E9FD8;
+  --ez-ramp-2-fg: #7DAAE0;
+  --ez-ramp-3-fg: #8CB5E8;
+  --ez-ramp-4-fg: #9BC0F0;
+  --ez-ramp-5-fg: #AACBF7;
+  --ez-ramp-6-fg: #B9D6FF;
 
   --ez-grade-1-bg: #1E3350;    --ez-grade-1-fg: #BFDBFE;
   --ez-grade-2-bg: #1C3049;    --ez-grade-2-fg: #A9CEFC;

@@ -23,8 +23,8 @@ import { C as TK } from '@/lib/ui'
 
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
-  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint, greenBd: '#BBF7D0',
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, red: TK.critical, redBg: TK.criticalTint,
   purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
@@ -43,10 +43,10 @@ interface PayRow { employee_code: string; full_name: string; net_pay: number }
 
 const S = {
   card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' } as React.CSSProperties,
-  th: { padding: '8px 11px', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.05em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const },
+  th: { padding: '8px 11px', fontSize: 9.5, color: TK.brand, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.05em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const },
   td: { padding: '8px 11px', color: C.navy, borderTop: `1px solid ${C.border}`, whiteSpace: 'nowrap' as const },
   inp: { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' } as React.CSSProperties,
-  btnP: { padding: '9px 17px', borderRadius: 8, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
+  btnP: { padding: '9px 17px', borderRadius: 8, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
   btnO: { padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
 }
 
@@ -194,7 +194,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 940 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Arrear &amp; Payments</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
@@ -214,7 +214,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
         <div style={{ display: 'flex', gap: 6 }}>
           {(['arrear', 'payments'] as const).map(k => (
             <button key={k} onClick={() => setTab(k)}
-              style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${tab === k ? C.purple : C.border}`, background: tab === k ? C.purple : '#fff', color: tab === k ? '#fff' : C.navy, fontWeight: tab === k ? 700 : 500, fontSize: 12.5, cursor: 'pointer', fontFamily: font }}>
+              style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${tab === k ? C.purple : C.border}`, background: tab === k ? C.purple: TK.surface, color: tab === k ? TK.surface : C.navy, fontWeight: tab === k ? 700 : 500, fontSize: 12.5, cursor: 'pointer', fontFamily: font }}>
               {k === 'arrear' ? 'Arrear' : 'Payments'}
             </button>
           ))}
@@ -305,7 +305,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
               </div>
 
               {unbankable.length > 0 && (
-                <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: '1px solid #FECACA', borderRadius: 9, padding: '11px 13px', marginBottom: 12, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '11px 13px', marginBottom: 12, lineHeight: 1.6 }}>
                   <b>{unbankable.length} employees cannot be paid</b> — their salary is ready but their bank details are incomplete. They will not appear in the NEFT file:
                   <div style={{ marginTop: 6 }}>
                     {unbankable.slice(0, 8).map(u => (
