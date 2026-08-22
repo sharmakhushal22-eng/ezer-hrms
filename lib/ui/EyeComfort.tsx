@@ -182,10 +182,27 @@ export function EyeComfortLayer() {
       }
       .ez-eye-panel{animation:ezEyePop .22s cubic-bezier(.22,1,.36,1) both; transform-origin:100% 100%}
 
+      /* The auto-close countdown, shown as a depleting hairline along the foot
+         of the panel. A panel that vanishes with no warning reads as a glitch;
+         this makes the dismissal something the user can see coming, and gives
+         them the cue that touching it will stop the clock. It is a 2px
+         decorative bar with no text in it, so promoting it to its own
+         compositor layer costs nothing. */
+      @keyframes ezEyeCountdown{ from{transform:scaleX(1)} to{transform:scaleX(0)} }
+      .ez-eye-countdown{
+        position:absolute; left:0; right:0; bottom:0; height:2px;
+        border-bottom-left-radius:99px; border-bottom-right-radius:99px;
+        transform-origin:0 50%;
+        animation:ezEyeCountdown var(--ez-eye-hold, 6s) linear forwards;
+      }
       @media (prefers-reduced-motion: reduce){
         .ez-eye-layer{transition:none}
         .ez-eye-panel{animation:none}
+        /* No depleting bar without motion, but the panel still closes on time —
+           a static full-width rule would claim time is not passing. */
+        .ez-eye-countdown{animation:none; opacity:.3}
       }
+
     `}</style>
   );
 }
@@ -203,18 +220,49 @@ const EyeIcon = ({ on, size = 17 }: { on: boolean; size?: number }) => (
   </svg>
 );
 
+/** How long the panel waits before dismissing itself, if left alone. */
+const HOLD_MS = 6000;
+
+/** Where the slider lands the first time someone switches the filter on. */
+const DEFAULT_STRENGTH = 30;
+
+const TickIcon = () => (
+  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor"
+       strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+    <path d="M3 8.6 6.3 12 13 4.6" />
+  </svg>
+);
+
 /**
- * The floating control: an on/off button in the bottom-right corner, with the
- * intensity slider appearing above it only while the filter is on.
+ * The floating control: an on/off button seated beside the zoom pill, with the
+ * intensity panel appearing above it only while the filter is on.
  *
- * Keeping the slider out of the DOM when off is the point — an intensity
- * control for something switched off is just clutter, and its presence implies
- * the filter is active when it is not.
+ * THE PANEL DISMISSES ITSELF, AND WHY IT DOES NOT ALSO RESET
+ *
+ * Setting intensity is a moment's work; the panel has no reason to sit over the
+ * page afterwards. So it closes on Done, and closes on its own after six
+ * seconds if Done is never pressed.
+ *
+ * What it does NOT do is snap the strength back to the default when the timer
+ * runs out. Dragging the slider is a deliberate act, and discarding it because
+ * the user did not also press a button would throw away the thing they just
+ * did. The default applies where a default belongs — the first time the filter
+ * is switched on, at 30% — and after that whatever they set is what they get,
+ * confirmed or not. Done is a way to dismiss the panel early, not a commit
+ * step, and nothing is lost by ignoring it.
+ *
+ * The clock only runs when the control is unattended: pointer over it or
+ * keyboard focus inside it stops the countdown, and moving away restarts it.
+ * Closing under an active pointer would be the panel getting out of the way at
+ * exactly the moment it was being used.
  */
 export function EyeComfortDock() {
   const [pct, setPct] = React.useState(0);
-  const [last, setLast] = React.useState(40);
+  const [last, setLast] = React.useState(DEFAULT_STRENGTH);
   const [ready, setReady] = React.useState(false);
+  const [open, setOpen] = React.useState(false);
+  const [held, setHeld] = React.useState(false);   // pointer over, or focus inside
+  const [run, setRun] = React.useState(0);         // bump to restart the countdown
 
   // Read after mount. Reading during render would disagree with the server
   // output and hydrate mismatched; the control simply appears once hydrated.
@@ -225,25 +273,62 @@ export function EyeComfortDock() {
     setReady(true);
   }, []);
 
-  const apply = (v: number) => { setEyeStrength(v); setPct(v); if (v > 0) setLast(v); };
+  // The clock is derived state rather than something started and stopped by
+  // hand: it runs exactly when the panel is open and unattended, and React's
+  // cleanup cancels it on every change. Held as a ref instead, `held` would not
+  // re-render, and the countdown bar would go on animating after the pointer
+  // arrived — showing time running out while it was in fact stopped.
+  React.useEffect(() => {
+    if (!open || held) return;
+    const t = setTimeout(() => setOpen(false), HOLD_MS);
+    return () => clearTimeout(t);
+  }, [open, held, run]);
+
+  const apply = (v: number) => {
+    setEyeStrength(v); setPct(v);
+    if (v > 0) setLast(v);
+  };
+
   const on = pct > 0;
-  const toggle = () => apply(on ? 0 : last);
+
+  const toggle = () => {
+    if (on) { apply(0); setOpen(false); }
+    else { apply(last); setOpen(true); setRun(n => n + 1); }
+  };
+
+  const enter = () => { setHeld(true); if (on) setOpen(true); };
+  const leave = () => setHeld(false);
 
   if (!ready) return null;
 
   return (
-    <div style={{
-      position: 'relative', display: 'flex', alignItems: 'center',
-      fontFamily: '"DM Sans","Segoe UI",sans-serif',
-    }}>
-      {on && (
+    <div
+      style={{
+        position: 'relative', display: 'flex', alignItems: 'center',
+        fontFamily: '"DM Sans","Segoe UI",sans-serif',
+      }}
+      // pointerType is checked because touch has no hover: a tap fires
+      // pointerenter and often never fires pointerleave, which would hold the
+      // panel open forever on a phone. On touch the clock simply runs, and
+      // dragging the slider restarts it.
+      onPointerEnter={e => { if (e.pointerType !== 'touch') enter(); }}
+      onPointerLeave={e => { if (e.pointerType !== 'touch') leave(); }}
+      // Keyboard users get the same hold as pointer users. Without this the
+      // panel would close while someone was arrowing the slider.
+      onFocusCapture={enter}
+      onBlurCapture={e => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) leave();
+      }}
+    >
+      {on && open && (
         <div className="ez-eye-panel" role="group" aria-label="Eye comfort intensity"
           style={{
             // Absolute rather than a flex sibling, so opening the panel cannot
             // shove the button sideways and move the thing just clicked.
             position: 'absolute', bottom: 'calc(100% + 10px)', right: 0,
-            width: 196, padding: '11px 13px 12px', borderRadius: R.lg,
+            width: 196, padding: '11px 13px 13px', borderRadius: R.lg,
             background: C.surface, border: `1px solid ${C.line}`, boxShadow: E.floating,
+            overflow: 'hidden',   // keeps the countdown inside the rounded corners
           }}>
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
             <span style={{ fontSize: F.micro, fontWeight: W.semi, color: C.muted, letterSpacing: .3 }}>
@@ -256,7 +341,7 @@ export function EyeComfortDock() {
 
           <input
             type="range" min={1} max={100} step={1} value={pct}
-            onChange={e => apply(Number(e.target.value))}
+            onChange={e => { apply(Number(e.target.value)); setRun(n => n + 1); }}
             className="ez-eye-range"
             aria-label="Eye comfort intensity"
             aria-valuetext={`${pct} percent, cuts about ${blueCut(pct)} percent of blue light`}
@@ -269,12 +354,38 @@ export function EyeComfortDock() {
             <div>Cuts <strong style={{ color: C.warning, fontWeight: W.semi }}>~{blueCut(pct)}%</strong> of blue light</div>
             <div>from this app</div>
           </div>
+
+          <button
+            onClick={() => setOpen(false)}
+            className="ez-press"
+            title="Done — close this panel"
+            style={{
+              marginTop: 10, width: '100%', height: 28, borderRadius: R.sm,
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+              // Tinted green rather than a solid fill: --ez-positive inverts
+              // between themes (#047857 light, #34D399 dark), so white-on-green
+              // would drop below AA in dark. The tint pairing holds in both.
+              background: C.positiveTint, color: C.positive,
+              border: `1px solid ${C.positive}`,
+              cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: F.micro, fontWeight: W.semi,
+            }}>
+            <TickIcon /> Done
+          </button>
+
+          {/* Absent while the control is held, which is itself the signal that
+              the countdown has stopped. */}
+          {!held && (
+            <div key={run} className="ez-eye-countdown"
+              style={{ background: C.warning, ['--ez-eye-hold' as string]: `${HOLD_MS}ms` }}
+              aria-hidden />
+          )}
         </div>
       )}
 
       <button onClick={toggle} className="ez-press"
         title={on
-          ? `Eye comfort on — about ${blueCut(pct)}% less blue light from this app. Click to turn off.`
+          ? `Eye comfort on — about ${blueCut(pct)}% less blue light from this app. Hover to adjust, click to turn off.`
           : 'Eye comfort — warm the screen to cut blue light'}
         aria-label="Eye comfort" aria-pressed={on}
         style={{
