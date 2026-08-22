@@ -193,7 +193,7 @@ export function EyeComfortLayer() {
         position:absolute; left:0; right:0; bottom:0; height:2px;
         border-bottom-left-radius:99px; border-bottom-right-radius:99px;
         transform-origin:0 50%;
-        animation:ezEyeCountdown var(--ez-eye-hold, 3s) linear forwards;
+        animation:ezEyeCountdown var(--ez-eye-hold, 1s) linear forwards;
       }
       @media (prefers-reduced-motion: reduce){
         .ez-eye-layer{transition:none}
@@ -224,10 +224,22 @@ const EyeIcon = ({ on, size = 17 }: { on: boolean; size?: number }) => (
  * How long the panel waits before dismissing itself, if left alone.
  *
  * The clock only runs once the pointer has left the control, and by then the
- * user is finished with it — so this is a grace period, not a reading window.
- * Six seconds felt like waiting for the panel to go away.
+ * user is finished with it — so this is a grace period, not a reading window,
+ * and it wants to be short enough that moving away simply closes it.
  */
-const HOLD_MS = 3000;
+const HOLD_MS = 1000;
+
+/**
+ * The same grace period on a device that cannot hover.
+ *
+ * With a mouse, resting the pointer on the control holds the panel open
+ * indefinitely, so a one-second clock is safe: it only ever runs when the user
+ * has already moved away. Touch has no such hold — the clock starts the moment
+ * the panel opens — so one second there would snatch the panel away about a
+ * second after a tap, before a drag could even begin. Four seconds gives a
+ * thumb time to arrive, and dragging restarts it from there.
+ */
+const HOLD_TOUCH_MS = 4000;
 
 /** Where the slider lands the first time someone switches the filter on. */
 const DEFAULT_STRENGTH = 30;
@@ -269,9 +281,16 @@ export function EyeComfortDock() {
   const [open, setOpen] = React.useState(false);
   const [held, setHeld] = React.useState(false);   // pointer over, or focus inside
   const [run, setRun] = React.useState(0);         // bump to restart the countdown
+  const [hold, setHold] = React.useState(HOLD_MS);
 
   // Read after mount. Reading during render would disagree with the server
   // output and hydrate mismatched; the control simply appears once hydrated.
+  // A device with no hover cannot hold the panel open, so it gets the longer
+  // grace. Read after mount: matchMedia does not exist on the server.
+  React.useEffect(() => {
+    if (window.matchMedia('(hover: none)').matches) setHold(HOLD_TOUCH_MS);
+  }, []);
+
   React.useEffect(() => {
     const v = getEyeStrength();
     setPct(v);
@@ -286,9 +305,9 @@ export function EyeComfortDock() {
   // arrived — showing time running out while it was in fact stopped.
   React.useEffect(() => {
     if (!open || held) return;
-    const t = setTimeout(() => setOpen(false), HOLD_MS);
+    const t = setTimeout(() => setOpen(false), hold);
     return () => clearTimeout(t);
-  }, [open, held, run]);
+  }, [open, held, run, hold]);
 
   const apply = (v: number) => {
     setEyeStrength(v); setPct(v);
@@ -383,7 +402,7 @@ export function EyeComfortDock() {
               the countdown has stopped. */}
           {!held && (
             <div key={run} className="ez-eye-countdown"
-              style={{ background: C.warning, ['--ez-eye-hold' as string]: `${HOLD_MS}ms` }}
+              style={{ background: C.warning, ['--ez-eye-hold' as string]: `${hold}ms` }}
               aria-hidden />
           )}
         </div>
