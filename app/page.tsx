@@ -131,7 +131,7 @@ export default function LoginPage() {
               </div>
             </div>
             <div style={{ textAlign: 'right', marginBottom: '20px' }}><a href="#" style={{ fontSize:'13px',color:TK.brand,textDecoration:'none',fontWeight:'500' }}>Forgot password?</a></div>
-            {error && <div style={{ background:d?'#2D1515':TK.criticalTint,border:`1px solid ${d?'#7F1D1D':'#FECACA'}`,borderRadius:'8px',padding:'10px 14px',fontSize:'13px',color:d?'#FCA5A5':TK.critical,marginBottom:'16px' }}>⚠️ {error}</div>}
+            {error && <div style={{ background:d?'#2D1515':TK.criticalTint,border:`1px solid ${d?'#7F1D1D':'#FECACA'}`,borderRadius:'10px',padding:'10px 14px',fontSize:'13px',color:d?'#FCA5A5':TK.critical,marginBottom:'16px' }}>⚠️ {error}</div>}
             <button type="submit" disabled={loading} style={{ width:'100%',padding:'13px',background:loading?TK.brandTint:TK.brand,color:TK.onAccent,border:'none',borderRadius:'10px',fontSize:'15px',fontWeight:'600',cursor:loading?'not-allowed':'pointer' }}>{loading?'Signing in...':'Sign In →'}</button>
           </form>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '24px 0' }}>

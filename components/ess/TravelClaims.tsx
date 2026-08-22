@@ -295,7 +295,7 @@ function Banner({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: Rea
                  : tone === 'warn' ? [V.amberBg, V.amber]
                  : [V.redBg, V.red]
   return (
-    <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 8,
+    <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 10,
                   padding: '10px 13px', fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
       {children}
     </div>
@@ -316,7 +316,7 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
   const amount = rate != null ? liveKm * rate : null
 
   return (
-    <div style={{ border: `1px solid ${tracking ? V.purple : V.border}`, borderRadius: 9,
+    <div style={{ border: `1px solid ${tracking ? V.purple : V.border}`, borderRadius: 10,
                   padding: '14px 16px', marginBottom: 12,
                   background: tracking ? V.purpleBg : V.field }}>
       <div style={{ fontSize: 12, color: V.muted, marginBottom: 10, lineHeight: 1.55 }}>
@@ -431,7 +431,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
 
   const gps = log.distance_source === 'GPS_TRACKED' || log.distance_source === 'GPS_SNAPPED'
   return (
-    <div style={{ border: `1px solid ${checked ? V.purple : V.border}`, borderRadius: 8,
+    <div style={{ border: `1px solid ${checked ? V.purple : V.border}`, borderRadius: 10,
                   background: checked ? V.purpleBg : V.card, marginBottom: 7,
                   padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
@@ -506,7 +506,7 @@ function ClaimRow({ claim }: { claim: Claim }) {
   const settled = claim.status === 'PAID' || claim.status === 'APPROVED'
   return (
     <div style={{ border: `1px solid ${V.border}`, borderLeft: `3px solid ${fg}`,
-                  borderRadius: 9, padding: '12px 14px', marginBottom: 9 }}>
+                  borderRadius: 10, padding: '12px 14px', marginBottom: 9 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>{claim.claim_no}</div>

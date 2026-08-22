@@ -13,7 +13,7 @@ import { C as TK } from '@/lib/ui'
 
 const C = { navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface, border: TK.line, muted: TK.muted }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
 const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
 
 export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
@@ -66,7 +66,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
 
   return (
     <div style={{ fontFamily: font }}>
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, maxWidth: 560 }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, maxWidth: 560 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Perquisite tax impact</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 12 }}>
           <div>
@@ -85,7 +85,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
       </div>
 
       {empId && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, maxWidth: 560 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, maxWidth: 560 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>This employee&apos;s perquisite amounts · FY {fy}</div>
           {types.length === 0 ? <div style={{ fontSize: 12, color: C.muted }}>No active perquisite types — configure them in Configuration → Perquisite (run sql63/sql64 first).</div> : (
             <>
@@ -97,7 +97,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
                   </Fragment>
                 ))}
               </div>
-              <button onClick={saveAmounts} disabled={saving} style={{ marginTop: 12, padding: '8px 16px', borderRadius: 8, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save amounts'}</button>
+              <button onClick={saveAmounts} disabled={saving} style={{ marginTop: 12, padding: '8px 16px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save amounts'}</button>
             </>
           )}
         </div>

@@ -23,7 +23,7 @@ const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`
 function InfoTile({ icon, label, value, hint, accent }: { icon: string; label: string; value: string; hint?: string; accent?: string }) {
   const a = accent || C.purpleD
   return (
-    <div style={{ background: TK.surface, borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(37,99,235,0.05)', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ background: TK.surface, borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: 'var(--ez-shadow-flat)', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: a }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
         <span style={{ fontSize: 13 }}>{icon}</span>
@@ -86,14 +86,14 @@ export default function EsicConfig() {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 680 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>ESIC</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Employees&apos; State Insurance — wage ceiling, contributions &amp; mid-period coverage continuity</div>
         </div>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>{error}</div>}
 
       {cfg && (
         <>
@@ -112,12 +112,12 @@ export default function EsicConfig() {
           </GroupCard>
 
           {/* Coverage-continuity note */}
-          <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '9px 12px', marginBottom: 16, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '9px 12px', marginBottom: 16, lineHeight: 1.5 }}>
             <b>Coverage continuity:</b> once an employee is within the ceiling in any month of a 6-month contribution period (Apr–Sep / Oct–Mar), they stay covered for the rest of that period even if a raise pushes them above ₹{Number(cfg.wage_ceiling).toLocaleString('en-IN')}. This is applied automatically during the payroll run.
           </div>
 
           {/* Estimator */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Contribution estimate (single month)</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
               <div style={{ flex: 1, minWidth: 130 }}>
@@ -144,7 +144,7 @@ export default function EsicConfig() {
                   {est.lowWaged && est.covered && <span style={{ fontSize: 10, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 99, padding: '2px 8px' }}>low-wage: employee share waived</span>}
                 </div>
                 {est.covered && (
-                  <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: TK.surface, borderRadius: 9, border: `1px solid ${C.greenBd}`, overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: TK.surface, borderRadius: 10, border: `1px solid ${C.greenBd}`, overflow: 'hidden' }}>
                     {[
                       ['Employee', est.employee, C.navy],
                       ['Employer', est.employer, C.navy],

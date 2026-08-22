@@ -15,9 +15,9 @@ const C = {
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
-const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
-const pri: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
-const sec: React.CSSProperties = { padding: '7px 13px', background: TK.surface, color: C.purpleDark, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: font }
+const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const pri: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
+const sec: React.CSSProperties = { padding: '7px 13px', background: TK.surface, color: C.purpleDark, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer', fontSize: 13, fontFamily: font }
 
 interface EmpVoucher {
   employee_id: string; emp_code: string; full_name: string; department: string; designation: string
@@ -163,7 +163,7 @@ export default function FlexiInvoicesPage() {
         {rows.length > 0 && <button style={{ ...pri, alignSelf: 'flex-end', padding: '11px 18px' }} onClick={() => print(rows)}>Generate all vouchers ({rows.length})</button>}
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
         <div style={{ padding: '11px 16px', borderBottom: `1px solid ${C.border}`, fontSize: 13, fontWeight: 600 }}>Approved claims — {new Date(Number(ym.split('-')[0]), Number(ym.split('-')[1]) - 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</div>
         {loading && <div style={{ padding: 30, textAlign: 'center', color: C.muted }}>Loading…</div>}
         {!loading && !rows.length && <div style={{ padding: 30, textAlign: 'center', color: C.muted }}>No approved flexi claims for this company &amp; month.</div>}

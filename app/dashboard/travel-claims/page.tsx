@@ -137,7 +137,7 @@ function Empty({ text }: { text: string }) {
 
 function Note({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
   const [bg, fg] = tone === 'ok' ? [V.greenBg, V.green] : tone === 'warn' ? [V.amberBg, V.amber] : [V.redBg, V.red]
-  return <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 8,
+  return <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 10,
                        padding: '10px 13px', fontSize: 12, marginBottom: 12 }}>{children}</div>
 }
 
@@ -311,7 +311,7 @@ function ClaimCard({ claim, stage, onAction, busy }: {
   const approveAction = isFinance ? 'FINANCE_APPROVE' : stage === 'HR' ? 'HR_APPROVE' : 'RM_APPROVE'
 
   return (
-    <div style={{ border: `1px solid ${V.border}`, borderRadius: 9, marginBottom: 10, background: V.card }}>
+    <div style={{ border: `1px solid ${V.border}`, borderRadius: 10, marginBottom: 10, background: V.card }}>
       <div onClick={expand}
            style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 14px', cursor: 'pointer' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -397,7 +397,7 @@ function ClaimCard({ claim, stage, onAction, busy }: {
 function PayoutRow({ claim, onPay, busy }: { claim: Claim; onPay: () => void; busy: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px',
-                  border: `1px solid ${V.border}`, borderRadius: 8, marginBottom: 8 }}>
+                  border: `1px solid ${V.border}`, borderRadius: 10, marginBottom: 8 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: V.navy }}>
           {claim.full_name} <span style={{ color: V.muted, fontWeight: 500 }}>· {claim.emp_code}</span>
@@ -435,7 +435,7 @@ function RateRow({ type, current, history, onSet, busy }: {
   const past = history.filter(r => r.in_force && r.id !== current?.id)
 
   return (
-    <div style={{ border: `1px solid ${V.border}`, borderRadius: 8, padding: '12px 14px', marginBottom: 8 }}>
+    <div style={{ border: `1px solid ${V.border}`, borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 160 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: V.navy }}>
@@ -562,7 +562,7 @@ function PeriodRow({ p, onAct, busy }: {
   const needsReason = showReason && p.status === 'CLOSED'
 
   return (
-    <div style={{ border: `1px solid ${V.border}`, borderRadius: 8, padding: '12px 14px', marginBottom: 8 }}>
+    <div style={{ border: `1px solid ${V.border}`, borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: V.navy, minWidth: 90 }}>{p.period_label}</div>
         <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 99,

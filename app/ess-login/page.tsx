@@ -140,7 +140,7 @@ export default function ESSLoginPage() {
 
         <div style={{ position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <svg width="24" height="24" viewBox="0 0 44 44" fill="none">
                 <rect x="10" y="9" width="6" height="26" rx="2" fill="white" />
                 <rect x="10" y="9" width="20" height="6" rx="2" fill="white" />
@@ -181,7 +181,7 @@ export default function ESSLoginPage() {
             <div style={{ fontSize: 18, fontWeight: 800, color: P.navy }}>EZER HRMS</div>
           </div>
 
-          <div style={{ background: TK.surface, borderRadius: 18, border: '1px solid rgba(37,99,235,0.10)', boxShadow: '0 12px 40px rgba(37,99,235,0.12)', padding: '34px 32px' }}>
+          <div style={{ background: TK.surface, borderRadius: 20, border: '1px solid var(--ez-line)', boxShadow: '0 12px 40px rgba(37,99,235,0.12)', padding: '34px 32px' }}>
             {/* Step dots */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
               {[0, 1].map(i => <div key={i} style={{ height: 4, flex: 1, borderRadius: 99, background: i <= stepIndex ? P.purple : TK.brandTint, transition: 'background .2s' }} />)}
@@ -232,7 +232,7 @@ export default function ESSLoginPage() {
               </form>
             )}
 
-            <div style={{ textAlign: 'center', marginTop: 24, borderTop: '1px solid rgba(37,99,235,0.10)', paddingTop: 18 }}>
+            <div style={{ textAlign: 'center', marginTop: 24, borderTop: '1px solid var(--ez-line)', paddingTop: 18 }}>
               <a href="/" style={{ fontSize: 13, color: P.purple, textDecoration: 'none', fontWeight: 600 }}>Admin login</a>
             </div>
           </div>
@@ -252,7 +252,7 @@ export default function ESSLoginPage() {
   )
 }
 
-const infoBox: React.CSSProperties = { fontSize: 13, color: TK.brandDeep, background: TK.canvas, border: `1px solid ${TK.brandEdge}`, padding: '10px 12px', borderRadius: 9, marginBottom: 16, lineHeight: 1.5 }
+const infoBox: React.CSSProperties = { fontSize: 13, color: TK.brandDeep, background: TK.canvas, border: `1px solid ${TK.brandEdge}`, padding: '10px 12px', borderRadius: 10, marginBottom: 16, lineHeight: 1.5 }
 
 function PrimaryBtn({ loading, label, loadingLabel }: { loading: boolean; label: string; loadingLabel: string }) {
   return (
@@ -270,7 +270,7 @@ function PrimaryBtn({ loading, label, loadingLabel }: { loading: boolean; label:
 }
 
 function ErrorBox({ msg }: { msg: string }) {
-  return <div style={{ background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px', fontSize: 13, color: TK.critical, marginBottom: 14, display: 'flex', gap: 7, alignItems: 'flex-start' }}><span></span><span>{msg}</span></div>
+  return <div style={{ background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', fontSize: 13, color: TK.critical, marginBottom: 14, display: 'flex', gap: 7, alignItems: 'flex-start' }}><span></span><span>{msg}</span></div>
 }
 
 function BackLink({ onClick }: { onClick: () => void }) {

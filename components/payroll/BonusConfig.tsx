@@ -40,7 +40,7 @@ function ToggleButton({ label, sub, active, onClick }: { label: string; sub?: st
 
 function SectionCard({ step, title, children }: { step: string; title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px', marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <span style={{ width: 22, height: 22, borderRadius: 7, background: C.purpleBg, color: C.purpleD, fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{step}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em' }}>{title}</span>
@@ -102,7 +102,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 580 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Statutory Bonus</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
@@ -139,7 +139,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
           </div>
         )}
         {isAboveStatutoryMax && (
-          <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, padding: '8px 11px', borderRadius: 8, marginTop: 10, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, padding: '8px 11px', borderRadius: 10, marginTop: 10, lineHeight: 1.5 }}>
             ⚠ {bonusPercent}% is above the statutory maximum of {STATUTORY_MAX_PERCENT}% — a discretionary bonus beyond the Act&apos;s requirement, which is allowed but worth confirming is intentional.
           </div>
         )}
@@ -157,7 +157,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
             <input type="number" value={eligibilityCeiling} onChange={e => setEligibilityCeiling(Number(e.target.value))} style={inputStyle} />
           </div>
         </div>
-        <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.6, background: C.gray, borderRadius: 8, padding: '9px 11px' }}>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.6, background: C.gray, borderRadius: 10, padding: '9px 11px' }}>
           Bonus is calculated on <strong style={{ color: C.navy }}>earned basic</strong> (structured basic pro-rated by paid days) — capped at the
           calculation ceiling if earned basic exceeds it. Only employees with structured basic at or below the eligibility
           ceiling accrue bonus at all.
@@ -167,12 +167,12 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
       <button onClick={handleSave} disabled={saving}
         onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
         onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-        style={{ padding: '11px 24px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+        style={{ padding: '11px 24px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
         {saving ? 'Saving…' : 'Save bonus configuration'}
       </button>
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 18px', borderRadius: 10, fontSize: 12, fontWeight: 600, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
           {toast}
         </div>
       )}

@@ -61,7 +61,7 @@ function ScopeBadge({ scopeType }: { scopeType: ScopeType }) {
 function CardHead({ icon, title, tint, badge }: { icon: string; title: string; tint: string; badge?: React.ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-      <div style={{ width: 34, height: 34, borderRadius: 9, background: tint, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{icon}</div>
+      <div style={{ width: 34, height: 34, borderRadius: 10, background: tint, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{icon}</div>
       <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.navy }}>{title}</div>
       {badge}
     </div>
@@ -75,7 +75,7 @@ function UploadZone({ label, sub, onPick, accept }: { label: string; sub: string
     <div onClick={() => ref.current?.click()}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ border: `1.5px dashed ${hover ? C.purple : TK.brandEdge}`, borderRadius: 10, padding: '14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', background: hover ? TK.canvas : TK.sunken, transition: 'all .15s' }}>
-      <div style={{ width: 34, height: 34, borderRadius: 9, background: hover ? C.purple : C.purpleBg, color: hover ? '#fff' : C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, transition: 'all .15s' }}>⬆</div>
+      <div style={{ width: 34, height: 34, borderRadius: 10, background: hover ? C.purple : C.purpleBg, color: hover ? '#fff' : C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, transition: 'all .15s' }}>⬆</div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 13, color: C.navy, fontWeight: 600 }}>{label}</div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>
@@ -191,7 +191,7 @@ function LetterheadCard({
   }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
       <CardHead icon="📄" title="Letterhead (PDF)" tint={C.purpleBg} badge={<span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 999, fontWeight: 700, letterSpacing: '.04em', background: existing ? C.greenBg : TK.sunken, color: existing ? C.green : C.muted }}>{existing ? '✓ SET' : 'NOT SET'}</span>} />
 
       {existing && !file && (
@@ -214,10 +214,10 @@ function LetterheadCard({
       {/* ── Preview modal — shown after a valid single-page PDF is picked ── */}
       {file && detected && previewUrl && (
         <div onClick={closePreview} style={{ position: 'fixed', inset: 0, zIndex: 5000, background: 'rgba(30,27,75,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <div onClick={e => e.stopPropagation()} style={{ background: TK.surface, borderRadius: 16, width: '100%', maxWidth: 580, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background: TK.surface, borderRadius: 14, width: '100%', maxWidth: 580, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }}>
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>📄</div>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>📄</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
                 <div style={{ fontSize: 11, color: C.green }}>✓ {detected.label} · single page</div>
@@ -264,13 +264,13 @@ function LetterheadCard({
                 <input type="range" min={50} max={150} value={scalePct} onChange={e => setScalePct(Number(e.target.value))} style={{ flex: 1, accentColor: C.purple }} />
                 <span style={{ fontSize: 12, color: C.navy, fontWeight: 700, minWidth: 42, textAlign: 'right' }}>{scalePct}%</span>
               </div>
-              {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
+              {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 10, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
             </div>
             {/* Footer */}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 18px', borderTop: `1px solid ${C.border}` }}>
-              <button onClick={closePreview} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
+              <button onClick={closePreview} style={{ padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
               <button onClick={handleSave} disabled={saving}
-                style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>
+                style={{ padding: '9px 20px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>
                 {saving ? 'Uploading…' : '⬆ Upload letterhead'}
               </button>
             </div>
@@ -433,24 +433,24 @@ function SignatoryCard({
   }
 
   const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 5000, background: 'rgba(30,27,75,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }
-  const modalCard: React.CSSProperties = { background: TK.surface, borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }
-  const uploadBtn: React.CSSProperties = { padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }
-  const cancelBtn: React.CSSProperties = { padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 13, fontWeight: 600 }
+  const modalCard: React.CSSProperties = { background: TK.surface, borderRadius: 14, width: '100%', maxWidth: 520, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }
+  const uploadBtn: React.CSSProperties = { padding: '9px 20px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }
+  const cancelBtn: React.CSSProperties = { padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 13, fontWeight: 600 }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', boxShadow: 'var(--ez-shadow-flat)' }}>
       <CardHead icon="✍️" title="Authorised signatory" tint={C.greenBg} badge={<span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 999, fontWeight: 700, letterSpacing: '.04em', background: existing ? C.greenBg : TK.sunken, color: existing ? C.green : C.muted }}>{existing ? '✓ SET' : 'NOT SET'}</span>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
         <input placeholder="Signatory name" value={name} onChange={e => setName(e.target.value)}
-          style={{ padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 13, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
+          style={{ padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 10, fontSize: 13, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
         <input placeholder="Designation" value={designation} onChange={e => setDesignation(e.target.value)}
-          style={{ padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 13, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
+          style={{ padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 10, fontSize: 13, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
       </div>
 
       <UploadZone label={existingPreview ? 'Replace signature image' : 'Upload signature image'} sub="PNG or JPG, max 2MB — then crop & place it" onPick={pickFile} accept="image/png,image/jpeg" />
       {existingPreview && (
-        <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 12px' }}>
+        <div style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 8, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 12px' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={existingPreview} alt="Signature preview" style={{ height: 40, objectFit: 'contain' }} />
           <span style={{ fontSize: 10, color: C.muted }}>current signature{existing?.sig_x_pct != null ? ' · placed' : ''}</span>
@@ -461,7 +461,7 @@ function SignatoryCard({
       {(existing) && (
         <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
           <button onClick={handleSaveDetails} disabled={saving} style={{ ...uploadBtn, opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : '💾 Save name/designation'}</button>
-          <button onClick={handleRemove} style={{ padding: '9px 15px', borderRadius: 9, border: `1px solid ${C.redBd}`, background: TK.surface, color: C.red, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Remove</button>
+          <button onClick={handleRemove} style={{ padding: '9px 15px', borderRadius: 10, border: `1px solid ${C.redBd}`, background: TK.surface, color: C.red, cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Remove</button>
         </div>
       )}
 
@@ -470,22 +470,22 @@ function SignatoryCard({
         <div style={overlay} onClick={resetFlow}>
           <div style={modalCard} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: C.greenBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>✂️</div>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: C.greenBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>✂️</div>
               <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.navy }}>Step 1 — Crop the signature</div>
               <button onClick={resetFlow} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.muted }}>×</button>
             </div>
             <div style={{ padding: 16, overflowY: 'auto' }}>
               <div style={{ display: 'flex', justifyContent: 'center' }}>
-                <div ref={cropRef} style={{ position: 'relative', width: '100%', maxWidth: 420, aspectRatio: `${imgNat.w} / ${imgNat.h}`, background: TK.sunken, borderRadius: 8, overflow: 'hidden', touchAction: 'none', userSelect: 'none', backgroundImage: `linear-gradient(45deg,${TK.sunken} 25%,transparent 25%),linear-gradient(-45deg,${TK.sunken} 25%,transparent 25%),linear-gradient(45deg,transparent 75%,${TK.sunken} 75%),linear-gradient(-45deg,transparent 75%,${TK.sunken} 75%)`, backgroundSize: '16px 16px', backgroundPosition: '0 0,0 8px,8px -8px,-8px 0' }}>
+                <div ref={cropRef} style={{ position: 'relative', width: '100%', maxWidth: 420, aspectRatio: `${imgNat.w} / ${imgNat.h}`, background: TK.sunken, borderRadius: 10, overflow: 'hidden', touchAction: 'none', userSelect: 'none', backgroundImage: `linear-gradient(45deg,${TK.sunken} 25%,transparent 25%),linear-gradient(-45deg,${TK.sunken} 25%,transparent 25%),linear-gradient(45deg,transparent 75%,${TK.sunken} 75%),linear-gradient(-45deg,transparent 75%,${TK.sunken} 75%)`, backgroundSize: '16px 16px', backgroundPosition: '0 0,0 8px,8px -8px,-8px 0' }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={rawUrl} alt="signature" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none' }} />
                   <div onPointerDown={cropDrag('move')} style={{ position: 'absolute', left: `${cropBox.x}%`, top: `${cropBox.y}%`, width: `${cropBox.w}%`, height: `${cropBox.h}%`, border: `2px solid ${TK.brandEdge}`, boxShadow: '0 0 0 9999px rgba(30,27,75,0.4)', cursor: 'move', touchAction: 'none' }}>
-                    <div onPointerDown={cropDrag('resize')} style={{ position: 'absolute', right: -8, bottom: -8, width: 16, height: 16, background: TK.brand, border: `2px solid ${TK.line}`, borderRadius: 4, cursor: 'nwse-resize', touchAction: 'none' }} />
+                    <div onPointerDown={cropDrag('resize')} style={{ position: 'absolute', right: -8, bottom: -8, width: 16, height: 16, background: TK.brand, border: `2px solid ${TK.line}`, borderRadius: 7, cursor: 'nwse-resize', touchAction: 'none' }} />
                   </div>
                 </div>
               </div>
               <div style={{ fontSize: 11, color: C.muted, textAlign: 'center', marginTop: 9 }}>Drag inside the box to move · drag the corner to resize. Crop tight around the signature.</div>
-              {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
+              {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 10, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 18px', borderTop: `1px solid ${C.border}` }}>
               <button onClick={resetFlow} style={cancelBtn}>Cancel</button>
@@ -500,14 +500,14 @@ function SignatoryCard({
         <div style={overlay} onClick={resetFlow}>
           <div style={modalCard} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '14px 18px', borderBottom: `1px solid ${C.border}` }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: C.greenBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>📍</div>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: C.greenBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>📍</div>
               <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.navy }}>Step 2 — Place on the letterhead</div>
               <button onClick={resetFlow} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.muted }}>×</button>
             </div>
             <div style={{ padding: 16, overflowY: 'auto' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-                <input placeholder="Signatory name" value={name} onChange={e => setName(e.target.value)} style={{ padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 12, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
-                <input placeholder="Designation" value={designation} onChange={e => setDesignation(e.target.value)} style={{ padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 12, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
+                <input placeholder="Signatory name" value={name} onChange={e => setName(e.target.value)} style={{ padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 10, fontSize: 12, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
+                <input placeholder="Designation" value={designation} onChange={e => setDesignation(e.target.value)} style={{ padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 10, fontSize: 12, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
               </div>
               <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <div ref={placeRef} style={{ position: 'relative', width: '100%', maxWidth: 320, aspectRatio: `${lhBg.wMm} / ${lhBg.hMm}`, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: TK.surface, boxShadow: '0 3px 14px rgba(30,27,75,0.12)', touchAction: 'none', userSelect: 'none' }}>
@@ -525,7 +525,7 @@ function SignatoryCard({
                 <input type="range" min={8} max={55} value={place.wPct} onChange={e => setPlace(p => ({ ...p, wPct: clampN(Number(e.target.value), 8, 100 - p.xPct) }))} style={{ flex: 1, accentColor: C.purple }} />
                 <span style={{ fontSize: 12, color: C.navy, fontWeight: 700, minWidth: 42, textAlign: 'right' }}>{Math.round(place.wPct)}%</span>
               </div>
-              {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
+              {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 10, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', padding: '12px 18px', borderTop: `1px solid ${C.border}` }}>
               <button onClick={() => { setErr(''); setStep('crop') }} style={cancelBtn}>← Back to crop</button>
@@ -575,7 +575,7 @@ function ResolvedPreview({ letterhead, signatory }: { letterhead: ResolvedLetter
 }
 
 // ── Main page ────────────────────────────────────────────────────
-const selStyle: React.CSSProperties = { padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: '"DM Sans","Segoe UI",sans-serif', minWidth: 220, boxSizing: 'border-box' }
+const selStyle: React.CSSProperties = { padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: '"DM Sans","Segoe UI",sans-serif', minWidth: 220, boxSizing: 'border-box' }
 const selLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
 
 export default function LetterheadConfig() {
@@ -660,9 +660,9 @@ export default function LetterheadConfig() {
       {loading ? <div style={{ color: C.muted, fontSize: 12, padding: 20 }}>Loading…</div> : (
         <>
           {/* ── Company / Branch pickers ── */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 16, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 13 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>🎯</div>
+              <div style={{ width: 30, height: 30, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>🎯</div>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>Choose where to configure</div>
               {/* Breadcrumb */}
               <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>

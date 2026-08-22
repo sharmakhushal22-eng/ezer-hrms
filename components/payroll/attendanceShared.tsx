@@ -19,7 +19,7 @@ export const C = {
 }
 export const font = '"DM Sans","Segoe UI",sans-serif'
 export const num = (v: any) => { const n = Number(v); return isNaN(n) ? null : n }
-export const ddInp: React.CSSProperties = { width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 13, boxSizing: 'border-box', background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
+export const ddInp: React.CSSProperties = { width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 10, fontSize: 13, boxSizing: 'border-box', background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
 export const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 5 }
 export type Opt = { value: string; label: string }
 export const GROUP = '__group__'   // Company dropdown sentinel → all companies at once
@@ -47,7 +47,7 @@ export function SearchSelect({ value, options, placeholder, onChange, disabled }
       </div>
       {open && !disabled && (
         <>
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
             <div style={{ maxHeight: 210, overflowY: 'auto' }}>
               {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
@@ -101,7 +101,7 @@ export function MultiSelect({ values, options, placeholder, onChange }: { values
       </div>
       {open && (
         <>
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 240, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 240, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
             <input autoFocus value={q}
               onChange={e => onQChange(e.target.value)}
               onPaste={e => { const t = e.clipboardData.getData('text'); if (/[\s,;]/.test(t)) { e.preventDefault(); addTokens(t) } }}
@@ -289,9 +289,9 @@ export function DownloadCard({ companyId, fy, heading, note, filePrefix, sheetNa
     : (allRuns.find(r => r.id === dlRunId)?.period_label || '')
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.greenBd}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(5,150,105,0.08)' }}>
+    <div style={{ background: C.card, border: `1px solid ${C.greenBd}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(5,150,105,0.08)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-        <span style={{ width: 26, height: 26, borderRadius: 8, background: C.greenBg, border: `1px solid ${C.greenBd}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}></span>
+        <span style={{ width: 26, height: 26, borderRadius: 10, background: C.greenBg, border: `1px solid ${C.greenBd}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}></span>
         <span style={{ fontSize: 13, fontWeight: 800, color: C.navy }}>{heading}</span>
         <span style={{ fontSize: 11, color: C.muted }}>{note}</span>
       </div>
@@ -307,7 +307,7 @@ export function DownloadCard({ companyId, fy, heading, note, filePrefix, sheetNa
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <button onClick={download} disabled={dlBusy || !dlRunId}
-          style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: dlBusy || !dlRunId ? 'not-allowed' : 'pointer', opacity: dlBusy || !dlRunId ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
+          style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: dlBusy || !dlRunId ? 'not-allowed' : 'pointer', opacity: dlBusy || !dlRunId ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
           {dlBusy ? 'Preparing…' : '⬇ Download'}
         </button>
         {dlRunId && <span style={{ fontSize: 12, color: C.purpleD }}>month master for <b>{dlCompanyName}</b> for <b>{dlPeriod}</b>{(dlLoc || dlDept || dlEmpCodes.length) ? ' · filtered' : ''}</span>}
@@ -335,7 +335,7 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
 }) {
   const blocked = violations.length > 0 || (!!strictUnmatched && unmatched.length > 0)
   return (
-    <div style={{ background: C.card, border: `1px solid ${blocked && !checking ? '#FECACA' : C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
+    <div style={{ background: C.card, border: `1px solid ${blocked && !checking ? '#FECACA' : C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>
         {checking ? `Checking ${kind} sheet…` : blocked ? 'Validation failed' : `Ready to process · ${total} rows`}
       </div>
@@ -353,14 +353,14 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
       </div>
 
       {!checking && strictUnmatched && unmatched.length > 0 && (
-        <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
           <div style={{ fontWeight: 800, marginBottom: 6 }}>Extra rows — these codes are not in this month&apos;s master. Remove them and upload again.</div>
           <div style={{ maxHeight: 120, overflowY: 'auto' }}>{unmatched.slice(0, 60).join(', ')}{unmatched.length > 60 ? ` +${unmatched.length - 60} more` : ''}</div>
         </div>
       )}
 
       {!checking && violations.length > 0 && (
-        <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '10px 12px', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
           <div style={{ fontWeight: 800, marginBottom: 6 }}>Nothing can exceed Max Days. Fix the sheet and upload again.</div>
           <div style={{ maxHeight: 170, overflowY: 'auto' }}>
             {violations.slice(0, 60).map((v, i) => (
@@ -374,7 +374,7 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
       )}
 
       {!checking && !strictUnmatched && unmatched.length > 0 && (
-        <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 8, padding: '8px 10px', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '8px 10px', marginBottom: 12 }}>
           Skipped (wrong code / extra person / not in this month's master): <b>{unmatched.slice(0, 40).join(', ')}</b>{unmatched.length > 40 ? ` +${unmatched.length - 40} more` : ''}
         </div>
       )}
@@ -382,11 +382,11 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
       {!checking && (
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={onProcess} disabled={busy || blocked || matched.length === 0}
-            style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy || blocked || matched.length === 0 ? 'not-allowed' : 'pointer', opacity: busy || blocked || matched.length === 0 ? 0.5 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
+            style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy || blocked || matched.length === 0 ? 'not-allowed' : 'pointer', opacity: busy || blocked || matched.length === 0 ? 0.5 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
             {busy ? 'Processing…' : blocked ? 'Blocked' : `Process ${matched.length} rows`}
           </button>
           <button onClick={onCancel} disabled={busy}
-            style={{ padding: '10px 20px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer' }}>
+            style={{ padding: '10px 20px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer' }}>
             Cancel
           </button>
         </div>

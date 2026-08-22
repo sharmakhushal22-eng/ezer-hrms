@@ -16,7 +16,7 @@ const C = {
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
-const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
 const GROUP_ICON: Record<ReportGroup, string> = { Attendance: '', Exceptions: '', Leave: '', Summary: '' }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -102,7 +102,7 @@ export default function AttendanceReportsPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
           {/* Report picker */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Choose a report</div>
             {Object.entries(grouped).map(([grp, list]) => (
               <div key={grp} style={{ marginBottom: 12 }}>
@@ -111,7 +111,7 @@ export default function AttendanceReportsPage() {
                   const on = r.id === reportId
                   return (
                     <button key={r.id} onClick={() => setReportId(r.id)} style={{
-                      width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 8, marginBottom: 3, cursor: 'pointer', fontFamily: font,
+                      width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 10, marginBottom: 3, cursor: 'pointer', fontFamily: font,
                       border: `1px solid ${on ? C.purple : 'transparent'}`, background: on ? C.purpleBg : 'transparent',
                     }}>
                       <div style={{ fontSize: 13, fontWeight: on ? 700 : 600, color: on ? C.purpleD : C.navy }}>{r.label}</div>
@@ -125,7 +125,7 @@ export default function AttendanceReportsPage() {
 
           {/* Filters + results */}
           <div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>{report.label} — filters</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
                 <div>
@@ -158,14 +158,14 @@ export default function AttendanceReportsPage() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14 }}>
-                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>{busy ? 'Generating…' : 'Generate report'}</button>
+                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>{busy ? 'Generating…' : 'Generate report'}</button>
                 {err && <span style={{ fontSize: 12, color: C.red }}>⚠ {err}</span>}
               </div>
             </div>
 
             {out && (
-              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', boxShadow: '0 1px 4px rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-                <div style={{ width: 46, height: 46, borderRadius: 12, background: out.rows.length ? 'rgba(5,150,105,0.10)' : TK.sunken, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{out.rows.length ? '' : ''}</div>
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px', boxShadow: 'var(--ez-shadow-flat)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ width: 46, height: 46, borderRadius: 14, background: out.rows.length ? 'rgba(5,150,105,0.10)' : TK.sunken, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{out.rows.length ? '' : ''}</div>
                 <div style={{ flex: 1, minWidth: 180 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{out.rows.length ? `${report.label} ready` : 'No matching data'}</div>
                   <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{out.rows.length ? <><b style={{ color: C.navy }}>{out.rows.length}</b> row{out.rows.length !== 1 ? 's' : ''}{out.note ? ` · ${out.note}` : ''} · {out.columns.length} columns</> : 'No records for these filters — try a wider date range or different filters.'}</div>

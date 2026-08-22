@@ -21,7 +21,7 @@ import { C as TK } from '@/lib/ui'
 // ── Style constant (project palette) ────────────────────────────────
 const C = {
   page:    { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:    { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
+  card:    { background:TK.surface, borderRadius:10, border:'1px solid var(--ez-line)', padding:'14px 16px', marginBottom:10, boxShadow:'var(--ez-shadow-flat)' } as React.CSSProperties,
   lbl:     { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:     { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
   input:   { width:'100%', padding:'9px 11px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
@@ -137,7 +137,7 @@ function HolidaysTab({ calendars, companies, branches, weeklyOffs, selCal, setSe
 
   return (
     <>
-      <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+      <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
         <label style={C.lbl}>Calendar</label>
         <select style={{ ...C.input, maxWidth:420 }} value={selCal} onChange={e => setSelCal(e.target.value)}>
           <option value="">— Select a holiday calendar —</option>
@@ -267,7 +267,7 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
       </div>
 
       {conflict.conflict && (
-        <div style={{ background:TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:12, color: TK.critical }}>
+        <div style={{ background:TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius:10, padding:'10px 12px', marginBottom:10, fontSize:12, color: TK.critical }}>
           ⚠️ {fmt(date)} is a {conflict.weekday} — a weekly off in this scope. Add it anyway?
           <label style={{ display:'flex', alignItems:'center', gap:7, marginTop:7, cursor:'pointer', fontWeight:600 }}>
             <input type="checkbox" checked={confirmWeekend} onChange={e => setConfirmWeekend(e.target.checked)} /> Yes, confirm the weekend override (it goes into the audit log)
@@ -425,7 +425,7 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
               const isOff = offSet.has(ds)
               const isHol = holMap.has(ds)
               return (
-                <div key={i} title={isHol ? holMap.get(ds)!.description : ''} style={{ textAlign:'center', padding:'8px 0', borderRadius:6, fontSize:12, fontWeight: (isOff || isHol) ? 600 : 400, background: isHol ? '#FCE7F3' : isOff ? '#F3F4F6' : '#fff', color: isHol ? '#9D174D' : isOff ? TK.faint : TK.ink, border: `1px solid ${TK.brandEdge}` }}>{day}</div>
+                <div key={i} title={isHol ? holMap.get(ds)!.description : ''} style={{ textAlign:'center', padding:'8px 0', borderRadius:7, fontSize:12, fontWeight: (isOff || isHol) ? 600 : 400, background: isHol ? '#FCE7F3' : isOff ? '#F3F4F6' : '#fff', color: isHol ? '#9D174D' : isOff ? TK.faint : TK.ink, border: `1px solid ${TK.brandEdge}` }}>{day}</div>
               )
             })}
           </div>

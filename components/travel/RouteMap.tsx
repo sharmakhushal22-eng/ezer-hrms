@@ -103,7 +103,7 @@ function TraceFallback({ actual, optimal, height }: {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height, display: 'block',
-         background: V.field, borderRadius: 8, border: `1px solid ${V.border}` }}>
+         background: V.field, borderRadius: 10, border: `1px solid ${V.border}` }}>
       <defs>
         <pattern id="rm-grid" width="30" height="30" patternUnits="userSpaceOnUse">
           <path d="M30 0H0V30" fill="none" stroke={V.border} strokeWidth="1" />
@@ -219,7 +219,7 @@ export default function RouteMap({ route, height = 300, title }: {
       )}
 
       {useMap
-        ? <div ref={mapRef} style={{ width: '100%', height, borderRadius: 8,
+        ? <div ref={mapRef} style={{ width: '100%', height, borderRadius: 10,
                                      border: `1px solid ${V.border}` }} />
         : <TraceFallback actual={actualPts} optimal={optimalPts} height={height} />}
 

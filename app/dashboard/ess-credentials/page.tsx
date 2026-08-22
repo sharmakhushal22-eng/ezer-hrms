@@ -15,8 +15,8 @@ const C = {
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
-const pri: React.CSSProperties = { padding: '9px 18px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
-const sec: React.CSSProperties = { padding: '8px 14px', background: TK.surface, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: font }
+const pri: React.CSSProperties = { padding: '9px 18px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
+const sec: React.CSSProperties = { padding: '8px 14px', background: TK.surface, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer', fontSize: 13, fontFamily: font }
 
 export default function EssCredentialsPage() {
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([])
@@ -92,7 +92,7 @@ export default function EssCredentialsPage() {
         <span></span><span><b>Confidential.</b> Each employee&apos;s temporary password is their own <b>employee code</b> (e.g. SRS0001). They must set a new password on first login. Share the exported list securely, then delete it.</span>
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
           <div>
             <label style={{ fontSize: 11, color: C.purpleDark, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Company</label>
@@ -121,11 +121,11 @@ export default function EssCredentialsPage() {
             onClick={() => generate('selected')}
           >Generate for these</button>
         </div>
-        {error && <div style={{ marginTop: 10, fontSize: 13, color: C.red, background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '9px 12px' }}>⚠ {error}</div>}
+        {error && <div style={{ marginTop: 10, fontSize: 13, color: C.red, background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '9px 12px' }}>⚠ {error}</div>}
       </div>
 
       {summary && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
           <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Credentials generated</div>
             <span style={{ fontSize: 11, color: C.green }}>✓ {summary.generated} issued</span>

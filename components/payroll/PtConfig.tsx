@@ -66,7 +66,7 @@ function SearchSelect({ value, options, placeholder, onChange }: {
       </div>
       {open && (
         <>
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
               style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
@@ -116,7 +116,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: PtRow | null; onCl
   }
 
   const quick = (label: string, fn: () => void) => (
-    <button type="button" onClick={fn} style={{ fontSize: 10, padding: '3px 9px', borderRadius: 6, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', color: C.purpleD, fontWeight: 700 }}>{label}</button>
+    <button type="button" onClick={fn} style={{ fontSize: 10, padding: '3px 9px', borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', color: C.purpleD, fontWeight: 700 }}>{label}</button>
   )
   const setSame = () => { const v = amounts.find(a => a) || '200'; setAmounts(Array(12).fill(v)) }
   const setTwice = () => { const v = amounts.find((a, i) => (i === 2 || i === 8) && a) || amounts.find(a => a) || '300'; setAmounts(MONTH_LABELS.map((m) => (m === 'Mar' || m === 'Sep') ? v : '0')) }
@@ -169,14 +169,14 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: PtRow | null; onCl
           <div><label style={labelStyle}>Notification reference</label><input value={notificationRef} onChange={e => setNotificationRef(e.target.value)} placeholder="PT/2026/…" style={inputStyle} /></div>
         </div>
 
-        {err && <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 6, marginBottom: 10 }}>{err}</div>}
+        {err && <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginBottom: 10 }}>{err}</div>}
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button disabled={!valid || saving} onClick={handleSave}
-            style={{ flex: 1, padding: '11px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+            style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
             {saving ? 'Saving…' : 'Save slab'}
           </button>
-          <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -238,7 +238,7 @@ export default function PtConfig() {
 
   const card: React.CSSProperties = {
     background: C.card, borderRadius: 14, padding: '18px 20px', marginBottom: 16,
-    border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(37,99,235,0.06)',
+    border: `1px solid ${C.border}`, boxShadow: 'var(--ez-shadow-flat)',
   }
   const th: React.CSSProperties = {
     background: C.navy, color: TK.brand, padding: '7px 6px', textAlign: 'right',
@@ -251,7 +251,7 @@ export default function PtConfig() {
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1200 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 19, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Professional Tax Configuration</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
@@ -259,12 +259,12 @@ export default function PtConfig() {
           </div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
+          style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
           + Add / revise slab
         </button>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>{error}</div>}
 
       {/* ── Quick check ─────────────────────────────────────────── */}
       <div style={card}>
@@ -290,12 +290,12 @@ export default function PtConfig() {
               onChange={e => { setQGross(e.target.value); setQRes(null) }} />
           </div>
           <button onClick={runCheck} disabled={qBusy || !qState || qGross.trim() === ''}
-            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: (!qState || qGross.trim() === '') ? TK.brandTint : C.purple, cursor: (!qState || qGross.trim() === '') ? 'not-allowed' : 'pointer' }}>
+            style={{ padding: '9px 18px', borderRadius: 10, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: (!qState || qGross.trim() === '') ? TK.brandTint : C.purple, cursor: (!qState || qGross.trim() === '') ? 'not-allowed' : 'pointer' }}>
             {qBusy ? 'Checking…' : 'Check PT'}
           </button>
         </div>
 
-        {qErr && <div style={{ marginTop: 12, fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px' }}>{qErr}</div>}
+        {qErr && <div style={{ marginTop: 12, fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px' }}>{qErr}</div>}
 
         {qRes && (
           <div style={{
@@ -365,7 +365,7 @@ export default function PtConfig() {
                       })}
                       <td style={{ ...td, textAlign: 'center' }}>
                         <button onClick={() => setModal({ open: true, preset: r })} title="Revise this slab"
-                          style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 6, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer' }}>Revise</button>
+                          style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer' }}>Revise</button>
                       </td>
                     </tr>
                   )
@@ -381,7 +381,7 @@ export default function PtConfig() {
         )}
       </div>
 
-      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
         <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s PT from here — by their
         <b> state</b>, that month&apos;s <b>column</b> and their <b>gross</b>. No rate is written anywhere in the app,
         so a rate changed here applies to the next run on its own.

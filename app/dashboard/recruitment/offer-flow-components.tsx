@@ -265,7 +265,7 @@ This document is confidential and for internal approval only.`
       {/* PREVIOUS EMPLOYER SECTION */}
       <div style={S.cardP}>
         <SecLine title="Previous Employer Details" />
-        <div style={{ fontSize:11, color:TK.brandDeep, background:TK.brandTint, borderRadius:6, padding:'6px 10px', marginBottom:12 }}>
+        <div style={{ fontSize:11, color:TK.brandDeep, background:TK.brandTint, borderRadius:7, padding:'6px 10px', marginBottom:12 }}>
           This section is confidential — NOT shown to candidate. Only visible in HR approval request.
         </div>
         <div style={{ ...S.g2, marginBottom:10 }}>
@@ -319,7 +319,7 @@ This document is confidential and for internal approval only.`
               ['Monthly In-Hand', `₹${fmt(negotiation.net_monthly || 0)}`],
               ['Hike %', `${Number(negotiation.hike_pct||0).toFixed(1)}%`],
             ].map(([l,v]) => (
-              <div key={l} style={{ background:TK.brandTint, borderRadius:8, padding:'10px 12px' }}>
+              <div key={l} style={{ background:TK.brandTint, borderRadius:10, padding:'10px 12px' }}>
                 <div style={{ fontSize:10, color:TK.faint }}>{l}</div>
                 <div style={{ fontSize:14, fontWeight:500, color:TK.brandDeep, marginTop:2 }}>{v}</div>
               </div>
@@ -575,7 +575,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             const [bg, c] = statusColor(r.status)
             return (
               <div key={r.id} onClick={()=>setSelected(r)}
-                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                   <div>
                     <div style={{ fontSize:14, fontWeight:600 }}>{r.candidates?.full_name}</div>
@@ -834,7 +834,7 @@ ${company} — Human Resources`)
           )}
           {fApproved.map(r => (
             <div key={r.id} onClick={() => prepareOffer(r)}
-              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}</div>
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}

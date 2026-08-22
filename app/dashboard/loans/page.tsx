@@ -16,15 +16,15 @@ const C = {
 const S = {
   page: { background:C.page, minHeight:'100vh', color:C.navy, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:13, padding:'20px 16px' } as React.CSSProperties,
   content: { maxWidth:1100, margin:'0 auto' } as React.CSSProperties,
-  card: { background:C.card, borderRadius:12, border:`1px solid ${C.border}`, padding:'16px 18px', marginBottom:16 } as React.CSSProperties,
+  card: { background:C.card, borderRadius:14, border:`1px solid ${C.border}`, padding:'16px 18px', marginBottom:16 } as React.CSSProperties,
   h1: { fontSize:22, fontWeight:700, color:C.navy, margin:0 } as React.CSSProperties,
   sub: { fontSize:13, color:C.muted, marginTop:3 } as React.CSSProperties,
   section: { fontSize:14, fontWeight:600, color:C.navy, marginBottom:12 } as React.CSSProperties,
   label: { fontSize:11, fontWeight:600, color:C.purple, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'8px 10px', background:TK.surface, border:`1px solid ${C.border}`, borderRadius:8, color:C.navy, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  btnP: { padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.purple, color:TK.onAccent } as React.CSSProperties,
-  btnG: { padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.green, color:TK.onAccent } as React.CSSProperties,
-  btnR: { padding:'7px 14px', borderRadius:8, border:`1px solid ${C.red}`, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.surface, color:C.red } as React.CSSProperties,
+  input: { width:'100%', padding:'8px 10px', background:TK.surface, border:`1px solid ${C.border}`, borderRadius:10, color:C.navy, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
+  btnP: { padding:'7px 14px', borderRadius:10, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.purple, color:TK.onAccent } as React.CSSProperties,
+  btnG: { padding:'7px 14px', borderRadius:10, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.green, color:TK.onAccent } as React.CSSProperties,
+  btnR: { padding:'7px 14px', borderRadius:10, border:`1px solid ${C.red}`, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.surface, color:C.red } as React.CSSProperties,
   row: { display:'flex', justifyContent:'space-between', gap:12, padding:'10px 0', borderBottom:`1px solid ${C.border}`, alignItems:'center', flexWrap:'wrap' as const },
 }
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
@@ -252,8 +252,8 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
       <div style={{ fontSize:11, color:C.muted, marginTop:10, lineHeight:1.55 }}>
         EMI is deducted through <b>Payroll → Data Sync → Loan</b> — once per payroll month, however many times you run the sync. The last EMI is only as large as the balance that is left.
       </div>
-      {msg && <div style={{ fontSize:12, fontWeight:600, color:C.green, background:TK.positiveTint, borderRadius:8, padding:'9px 12px', marginTop:10 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize:12, color:C.red, background:TK.criticalTint, borderRadius:8, padding:'9px 12px', marginTop:10 }}>{err}</div>}
+      {msg && <div style={{ fontSize:12, fontWeight:600, color:C.green, background:TK.positiveTint, borderRadius:10, padding:'9px 12px', marginTop:10 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize:12, color:C.red, background:TK.criticalTint, borderRadius:10, padding:'9px 12px', marginTop:10 }}>{err}</div>}
     </div>
   )
 }
@@ -310,7 +310,7 @@ export default function LoansPage() {
   return (
     <div style={S.page}>
       <div style={S.content}>
-          <div className="ez-page-head" style={{ display:'flex', alignItems:'flex-start', gap:16, flexWrap:'wrap', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+          <div className="ez-page-head" style={{ display:'flex', alignItems:'flex-start', gap:16, flexWrap:'wrap', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
           <div style={{ flex:1, minWidth:200 }}>
             <h1 style={S.h1}>Loan Management</h1>
             <div style={S.sub}>Approve requests, review agreements, disburse funds, and track active loans.</div>

@@ -13,9 +13,9 @@ const font = '"DM Sans","Segoe UI",sans-serif'
 
 function SectionCard({ icon, title, count, children }: { icon: string; title: string; count: number; children: React.ReactNode }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(37,99,235,0.06)', minWidth: 260, flex: 1 }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', boxShadow: 'var(--ez-shadow-flat)', minWidth: 260, flex: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{icon}</div>
+        <div style={{ width: 30, height: 30, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{icon}</div>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.navy }}>{title}</div>
         <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '2px 9px' }}>{count}</span>
       </div>

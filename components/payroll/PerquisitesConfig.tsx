@@ -68,7 +68,7 @@ function PerquisiteRow({ row, selected, onSelect }: { row: PerquisiteConfigRow; 
         background: selected ? C.purpleBg : C.card, border: `1px solid ${selected ? C.purple : C.border}`,
         boxShadow: selected ? '0 2px 10px rgba(37,99,235,0.14)' : 'none', transition: 'background .12s',
       }}>
-      <div style={{ width: 30, height: 30, borderRadius: 8, background: selected ? '#fff' : C.gray, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>{catIcon(row.category)}</div>
+      <div style={{ width: 30, height: 30, borderRadius: 10, background: selected ? '#fff' : C.gray, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>{catIcon(row.category)}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: selected ? C.purpleD : C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</span>
@@ -133,10 +133,10 @@ function AddTypeModal({ onClose, onCreate }: { onClose: () => void; onCreate: (a
 
         <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
           <button disabled={!valid} onClick={() => onCreate({ code, name, category, description, valuationMethod: method, lawReference: lawRef })}
-            style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: valid ? 1 : 0.5 }}>
+            style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: valid ? 1 : 0.5 }}>
             Create
           </button>
-          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -144,7 +144,7 @@ function AddTypeModal({ onClose, onCreate }: { onClose: () => void; onCreate: (a
 }
 
 function SlabRow({ slab, onChange, onDelete }: { slab: Partial<PerquisiteSlab> & { _key: string }; onChange: (patch: Partial<PerquisiteSlab>) => void; onDelete: () => void }) {
-  const cellStyle: React.CSSProperties = { padding: '6px 8px', border: `1px solid ${TK.brandEdge}`, borderRadius: 6, fontSize: 12, width: '100%', boxSizing: 'border-box' }
+  const cellStyle: React.CSSProperties = { padding: '6px 8px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box' }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 30px', gap: 6, marginBottom: 6, alignItems: 'center' }}>
       <input value={slab.slab_label ?? ''} onChange={e => onChange({ slab_label: e.target.value })} placeholder="Slab label" style={cellStyle} />
@@ -285,7 +285,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
         ) : (
           <>
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 6 }}>
-              <div style={{ width: 46, height: 46, borderRadius: 12, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, border: `1px solid ${C.border}` }}>{catIcon(selected.category)}</div>
+              <div style={{ width: 46, height: 46, borderRadius: 14, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0, border: `1px solid ${C.border}` }}>{catIcon(selected.category)}</div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.15 }}>{selected.name}</div>
                 <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginTop: 5, flexWrap: 'wrap' }}>
@@ -297,7 +297,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
             </div>
             {selected.description && <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, lineHeight: 1.45 }}>{selected.description}</div>}
 
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px', boxShadow: 'var(--ez-shadow-flat)' }}>
               <div style={{ height: 3, borderRadius: 99, background: `linear-gradient(90deg,${TK.brand},${TK.brand})`, width: 44, marginBottom: 12 }} />
               <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', marginBottom: 10 }}>Value for FY {FY}</div>
 
@@ -332,7 +332,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
                       onChange={patch => setSlabs(prev => prev.map((x, idx) => idx === i ? { ...x, ...patch } : x))}
                       onDelete={() => setSlabs(prev => prev.filter((_, idx) => idx !== i))} />
                   ))}
-                  <button onClick={addSlabRow} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 6, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer' }}>+ Add slab</button>
+                  <button onClick={addSlabRow} style={{ padding: '5px 10px', fontSize: 11, borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer' }}>+ Add slab</button>
                 </div>
               )}
 
@@ -365,7 +365,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
               <button onClick={handleSave} disabled={saving}
                 onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+                style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
                 {saving ? 'Saving…' : 'Save value'}
               </button>
             </div>
@@ -376,7 +376,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
       {showAddModal && <AddTypeModal onClose={() => setShowAddModal(false)} onCreate={handleCreateType} />}
 
       {toast && (
-        <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 18px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
+        <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 18px', borderRadius: 10, fontSize: 12, fontWeight: 600, zIndex: 999, boxShadow: '0 4px 16px rgba(0,0,0,0.2)' }}>
           {toast}
         </div>
       )}

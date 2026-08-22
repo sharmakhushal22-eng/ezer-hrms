@@ -111,7 +111,7 @@ function QueueRow({ item, moduleName, detailRoute, onAction, busy }: {
   const [open, setOpen] = useState(false)
 
   return (
-    <div style={{ border: `1px solid ${V.border}`, borderRadius: 9, marginBottom: 9, background: V.card }}>
+    <div style={{ border: `1px solid ${V.border}`, borderRadius: 10, marginBottom: 9, background: V.card }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 14px', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 99, background: V.purpleBg,
                        color: V.purpleDark, fontWeight: 600 }}>{moduleName}</span>
@@ -396,7 +396,7 @@ export default function FinanceDepartment() {
             in as soon as it runs.
           </div>
           <div style={{ marginTop: 14, padding: '10px 13px', background: V.field,
-                        border: `1px solid ${V.border}`, borderRadius: 8,
+                        border: `1px solid ${V.border}`, borderRadius: 10,
                         fontFamily: 'ui-monospace, monospace', fontSize: 12, color: V.navy }}>
             supabase/migrations/053_finance_department.sql
           </div>

@@ -27,7 +27,7 @@ export default function LettersPage() {
       <div style={{ padding: '16px 24px 0' }}>
         <div style={{ maxWidth: 940, margin: '0 auto' }}>
           <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 13, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}></div>
+            <div style={{ width: 46, height: 46, borderRadius: 14, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}></div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em', color: TK.ink }}>HR Letters</div>
               <div style={{ fontSize: 13, color: TK.muted, marginTop: 2 }}>Configure letterheads &amp; signatories once, then draft and issue HR letters on branded stationery.</div>
@@ -40,7 +40,7 @@ export default function LettersPage() {
               return (
                 <button key={t.id} onClick={() => !t.soon && setTab(t.id)} disabled={t.soon}
                   className="ez-tab" data-on={active ? '1' : '0'}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 14px', borderRadius: 8,
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 14px', borderRadius: 10,
                     border: `1px solid ${active ? TK.brand : TK.line}`,
                     background: active ? TK.brand : 'transparent',
                     color: active ? TK.onAccent : TK.muted,

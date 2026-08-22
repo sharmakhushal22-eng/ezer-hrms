@@ -25,10 +25,10 @@ const fmtDate = (d: any) => { if (!d) return '—'; const x = new Date(d); retur
 
 const S = {
   page: { background: C.bg, minHeight: '100vh', padding: 24, color: C.navy, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13 } as React.CSSProperties,
-  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
-  inp: { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, background: C.soft, color: C.navy, outline: 'none', fontFamily: 'inherit' } as React.CSSProperties,
-  pri: { padding: '7px 14px', background: C.green, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' } as React.CSSProperties,
-  rej: { padding: '7px 14px', background: TK.surface, color: C.red, border: `1px solid ${C.red}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' } as React.CSSProperties,
+  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' } as React.CSSProperties,
+  inp: { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, background: C.soft, color: C.navy, outline: 'none', fontFamily: 'inherit' } as React.CSSProperties,
+  pri: { padding: '7px 14px', background: C.green, color: TK.onAccent, border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' } as React.CSSProperties,
+  rej: { padding: '7px 14px', background: TK.surface, color: C.red, border: `1px solid ${C.red}`, borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 700, fontFamily: 'inherit' } as React.CSSProperties,
 }
 
 interface Row {
@@ -55,7 +55,7 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: TK.surface }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 9 }}>
-        <span style={{ fontSize: 11, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 6, padding: '3px 8px' }}>{r.section}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 7, padding: '3px 8px' }}>{r.section}</span>
         <div style={{ flex: 1, minWidth: 190 }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>{code} — {name}</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{r.declared_item}</div>
@@ -173,7 +173,7 @@ export default function InvestmentProofsPage() {
     return (e?.code || '').toLowerCase().includes(t) || (e?.name || '').toLowerCase().includes(t) || r.section.toLowerCase().includes(t)
   })
   const stat = (label: string, v: any, color: string) => (
-    <div key={label} style={{ background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 110 }}>
+    <div key={label} style={{ background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 14px', minWidth: 110 }}>
       <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 800, color }}>{v}</div>
     </div>
@@ -203,11 +203,11 @@ export default function InvestmentProofsPage() {
           {['PENDING', 'SUBMITTED', 'APPROVED', 'REJECTED'].map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <input style={{ ...S.inp, flex: 1, minWidth: 200 }} placeholder="Emp code, naam ya section" value={q} onChange={e => setQ(e.target.value)} />
-        <button style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }} onClick={load}>⟳ Refresh</button>
+        <button style={{ padding: '7px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }} onClick={load}>⟳ Refresh</button>
       </div>
 
-      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
 
       {loading ? <div style={{ fontSize: 13, color: C.muted }}>Loading…</div>
         : filtered.length === 0 ? (

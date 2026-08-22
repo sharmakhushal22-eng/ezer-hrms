@@ -14,12 +14,12 @@ interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: an
 const P = TK.brand
 const S = {
   page: { background: TK.canvas, minHeight: '100vh', fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.ink } as const,
-  card: { background: TK.surface, borderRadius: 12, border: '1px solid rgba(37,99,235,0.12)', padding: '18px 20px', marginBottom: 12, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as const,
+  card: { background: TK.surface, borderRadius: 14, border: '1px solid var(--ez-line)', padding: '18px 20px', marginBottom: 12, boxShadow: 'var(--ez-shadow-flat)' } as const,
   lbl: { fontSize: 10, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.06em', display: 'block', marginBottom: 4 },
-  inp: (err = false) => ({ width: '100%', padding: '9px 12px', background: err ? TK.criticalTint : TK.sunken, border: `1px solid ${err ? TK.criticalTint : TK.brandEdge}`, borderRadius: 8, color: TK.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }),
-  sel: { width: '100%', padding: '9px 12px', background: TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, color: TK.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' },
-  btnP: { padding: '11px 24px', borderRadius: 9, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', background: P, color: TK.onAccent, transition: 'opacity .2s' } as const,
-  btnO: { padding: '10px 18px', borderRadius: 9, border: `1px solid ${P}`, cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: P } as const,
+  inp: (err = false) => ({ width: '100%', padding: '9px 12px', background: err ? TK.criticalTint : TK.sunken, border: `1px solid ${err ? TK.criticalTint : TK.brandEdge}`, borderRadius: 10, color: TK.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }),
+  sel: { width: '100%', padding: '9px 12px', background: TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, color: TK.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' },
+  btnP: { padding: '11px 24px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 14, fontWeight: 600, fontFamily: 'inherit', background: P, color: TK.onAccent, transition: 'opacity .2s' } as const,
+  btnO: { padding: '10px 18px', borderRadius: 10, border: `1px solid ${P}`, cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: P } as const,
   g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as const,
   g3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } as const,
 }
@@ -172,7 +172,7 @@ function DocUpload({
           )}
           {/* Show extracted data */}
           {status?.ai_extracted_data && Object.keys(status.ai_extracted_data).length > 0 && (
-            <div style={{ marginTop: 8, background: TK.brandTint, borderRadius: 6, padding: '6px 10px', fontSize: 11, color: TK.muted }}>Extracted: {Object.entries(status.ai_extracted_data).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(' · ')}
+            <div style={{ marginTop: 8, background: TK.brandTint, borderRadius: 7, padding: '6px 10px', fontSize: 11, color: TK.muted }}>Extracted: {Object.entries(status.ai_extracted_data).slice(0, 3).map(([k, v]) => `${k}: ${v}`).join(' · ')}
             </div>
           )}
           {uploading && <div style={{ fontSize: 11, color: P, marginTop: 4 }}>⏳ {progress}</div>}
@@ -250,7 +250,7 @@ function AIReviewTable({ docs }: { docs: Record<string, DocStatus> }) {
               <tr key={r.field} style={{ borderTop: '1px solid rgba(37,99,235,0.08)', background: mismatch ? TK.criticalTint : !r.value ? TK.warningTint : 'transparent' }}>
                 <td style={{ padding: '7px 14px', color: TK.muted }}>{r.field}</td>
                 <td style={{ padding: '7px 14px', fontWeight: 500 }}>{r.value || '—'}</td>
-                <td style={{ padding: '7px 14px' }}>{r.value ? <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: ok ? TK.positiveTint : TK.warningTint, color: ok ? TK.positive : TK.warning }}>{r.conf}%</span> : '—'}</td>
+                <td style={{ padding: '7px 14px' }}>{r.value ? <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 7, background: ok ? TK.positiveTint : TK.warningTint, color: ok ? TK.positive : TK.warning }}>{r.conf}%</span> : '—'}</td>
                 <td style={{ padding: '7px 14px' }}>{!r.value ? <span style={{ color: TK.faint }}>— Manual entry</span> : mismatch ? <span style={{ color: TK.critical }}>Mismatch — review</span> : ok ? <span style={{ color: TK.positive }}>Verified</span> : <span style={{ color: TK.warning }}>Low confidence</span>}</td>
               </tr>
             )
@@ -331,7 +331,7 @@ function StatutoryFormsPreview({ personal, contact, statutory, insurance, esic, 
           const on = t.id === activeTab
           return (
             <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ padding: '7px 16px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', border: `1px solid ${P}`, background: on ? P: TK.surface, color: on ? TK.surface : P }}>
+              style={{ padding: '7px 16px', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', border: `1px solid ${P}`, background: on ? P: TK.surface, color: on ? TK.surface : P }}>
               {t.label}
             </button>
           )
@@ -417,7 +417,7 @@ function PolicyCard({ policy, acked, onAck }: { policy: any; acked: boolean; onA
       </div>
       {open && !acked && (
         <div style={{ marginTop: 10 }}>
-          <div ref={bodyRef} onScroll={onScroll} style={{ maxHeight: 200, overflowY: 'auto', background: TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, padding: '10px 12px', fontSize: 12, color: TK.inkSoft, whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
+          <div ref={bodyRef} onScroll={onScroll} style={{ maxHeight: 200, overflowY: 'auto', background: TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '10px 12px', fontSize: 12, color: TK.inkSoft, whiteSpace: 'pre-wrap', lineHeight: 1.7 }}>
             {policy.policy_body || 'No content.'}
           </div>
           {!scrolledEnd && <div style={{ fontSize: 10, color: TK.warning, marginTop: 6 }}>Scroll to the bottom to enable acknowledgement</div>}
@@ -543,7 +543,7 @@ function ESignPhase({ token, onBack, onSubmit, submitting }: {
   const clean = aadhaar.replace(/\D/g, '')
   const bundle = ['EPF Form 11 (PF Declaration)', 'EPF Form 2 (Nominee Declaration)', 'Gratuity Form F', 'All Policy Acknowledgements', 'Complete Joining Form (consolidated)']
   const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 5 }
-  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', background: TK.sunken, border: `1px solid #DDD6FE`, borderRadius: 8, fontSize: 15, color: TK.ink, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', letterSpacing: 2 }
+  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', background: TK.sunken, border: `1px solid #DDD6FE`, borderRadius: 10, fontSize: 15, color: TK.ink, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', letterSpacing: 2 }
 
   const sendOtp = () => {
     if (clean.length !== 12) { setErr('Enter a valid 12-digit Aadhaar number'); return }
@@ -563,7 +563,7 @@ function ESignPhase({ token, onBack, onSubmit, submitting }: {
       <div style={S.card}>
         <div style={{ fontSize: 15, fontWeight: 600 }}>Aadhaar e-Verify &amp; Digital Signature</div>
         <div style={{ fontSize: 12, color: TK.muted, marginBottom: 12 }}>A single OTP e-signs all the forms and policies below at once.</div>
-        <div style={{ background: TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, padding: '10px 14px' }}>
+        <div style={{ background: TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '10px 14px' }}>
           {bundle.map(b => <div key={b} style={{ fontSize: 12, color: TK.inkSoft, padding: '3px 0' }}>📄 {b}</div>)}
         </div>
       </div>
@@ -1114,7 +1114,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               </div>
               {c.otp_verified ? (
                 <>
-                  <div style={{ background: TK.positiveTint, border: `1px solid ${TK.positiveTint}`, borderRadius: 8, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: TK.positive }}>Identity already verified!
+                  <div style={{ background: TK.positiveTint, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: TK.positive }}>Identity already verified!
                   </div>
                   <button onClick={nextStep} style={{ ...S.btnP, width: '100%', padding: 12, fontSize: 15 }}>Start Onboarding 🚀</button>
                 </>
@@ -1188,7 +1188,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
               </div>
             </div>
             {isForeign && (
-              <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, padding: '10px 12px', margin: '4px 0 10px', fontSize: 12, color: TK.muted, lineHeight: 1.6 }}>Foreign employee detected — extra passport/visa/tax fields will appear in the KYC &amp; EPF step.
+              <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '10px 12px', margin: '4px 0 10px', fontSize: 12, color: TK.muted, lineHeight: 1.6 }}>Foreign employee detected — extra passport/visa/tax fields will appear in the KYC &amp; EPF step.
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
@@ -1255,7 +1255,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
 
             {/* PAN — auto-filled from AI */}
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '18px 0 10px' }}>PAN</div>
-            <div style={{ background: TK.positiveTint, border: `1px solid ${TK.positiveTint}`, borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: TK.positive }}>PAN auto-filled from document AI. Please verify.
+            <div style={{ background: TK.positiveTint, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: TK.positive }}>PAN auto-filled from document AI. Please verify.
             </div>
             <div style={S.g2}>
               <Fld label="PAN Number *" hint="Auto-extracted from PAN card">
@@ -1282,7 +1282,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
 
             {/* Bank Details */}
             <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Bank Account (for Salary)</div>
-            <div style={{ background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: TK.warning }}>Bank details are encrypted. Only Payroll team has access.
+            <div style={{ background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '8px 12px', marginBottom: 12, fontSize: 12, color: TK.warning }}>Bank details are encrypted. Only Payroll team has access.
             </div>
             <div style={S.g2}>
               <Fld label="Account Number *"><input type="password" style={S.inp(!statutory.bank_account)} value={statutory.bank_account} onChange={e => setStatutory(s => ({ ...s, bank_account: e.target.value }))} /></Fld>
@@ -1311,7 +1311,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
 
             {isForeign && (
               <>
-                <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, padding: '8px 12px', margin: '18px 0 4px', fontSize: 12, color: TK.muted }}>Foreign employee — please complete the additional statutory details below.
+                <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '8px 12px', margin: '18px 0 4px', fontSize: 12, color: TK.muted }}>Foreign employee — please complete the additional statutory details below.
                 </div>
 
                 <div style={{ fontSize: 12, fontWeight: 600, color: P, margin: '14px 0 10px' }}>Foreign Employee — Passport</div>
@@ -1515,7 +1515,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             <AIReviewTable docs={docs} />
             <CrossDocCheck docs={docs} onResolve={onCrossDocResolve} onMismatchChange={setCrossDocUnresolved} />
             {crossDocUnresolved > 0 && (
-              <div style={{ fontSize: 12, color: TK.warning, background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: 8, padding: '8px 12px', marginBottom: 8 }}>Resolve all mismatches to continue ({crossDocUnresolved} remaining)
+              <div style={{ fontSize: 12, color: TK.warning, background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '8px 12px', marginBottom: 8 }}>Resolve all mismatches to continue ({crossDocUnresolved} remaining)
               </div>
             )}
             <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
@@ -1647,7 +1647,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
             {esicApplicable && (
               <>
                 <div style={{ fontSize: 12, fontWeight: 600, color: TK.brand, margin: '14px 0 4px' }}>ESIC Details (Form 1)</div>
-                <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: TK.inkSoft }}>
+                <div style={{ background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '8px 12px', marginBottom: 10, fontSize: 12, color: TK.inkSoft }}>
                   Your gross salary is within the ESIC limit (≤ ₹21,000/month), so ESIC Form 1 will be generated and your family photo attached for the e-Pehchan card.
                 </div>
                 <div style={S.g2}>
@@ -1719,7 +1719,7 @@ export default function OnboardingClient({ token, candidate, company, uploadedDo
           docsDeferred && !docsComplete ? (
             <div style={S.card}>
               <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>Upload Pending Documents</div>
-              <div style={{ fontSize: 12, color: TK.warning, background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: 8, padding: '8px 12px', marginBottom: 12 }}>You skipped document upload earlier. Please upload all required documents before acknowledging the company policies — this step cannot be skipped.
+              <div style={{ fontSize: 12, color: TK.warning, background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '8px 12px', marginBottom: 12 }}>You skipped document upload earlier. Please upload all required documents before acknowledging the company policies — this step cannot be skipped.
               </div>
               <DocsGrid docs={docs} token={token} esicApplicable={esicApplicable} isFresher={emergency.is_fresher} isForeign={isForeign} onUploaded={onDocUploaded} />
               <button onClick={prevStep} style={{ ...S.btnO, marginTop: 8 }}>Back</button>

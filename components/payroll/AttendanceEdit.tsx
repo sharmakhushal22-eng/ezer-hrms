@@ -104,9 +104,9 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
     setArrMsg(`Arrear recorded — ${arrDays} day(s) from ${arrMonth} added to this run.`); loadSnap()
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }
+  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }
   const stat = (label: string, val: any) => (
-    <div style={{ background: C.gray, borderRadius: 8, padding: '8px 11px', minWidth: 90 }}>
+    <div style={{ background: C.gray, borderRadius: 10, padding: '8px 11px', minWidth: 90 }}>
       <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{val ?? '—'}</div>
     </div>
@@ -115,7 +115,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 780 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: mode === 'arrear' ? `linear-gradient(135deg,${TK.positive},${TK.positive})` : `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(37,99,235,0.28)' }}>{mode === 'arrear' ? '' : ''}</div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: mode === 'arrear' ? `linear-gradient(135deg,${TK.positive},${TK.positive})` : `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(37,99,235,0.28)' }}>{mode === 'arrear' ? '' : ''}</div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>{mode === 'arrear' ? 'Arrear Days' : 'Attendance Edit'}</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
@@ -126,7 +126,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
         </div>
       </div>
 
-      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
+      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
 
       {/* month + employee pickers */}
       <div style={card}>
@@ -159,7 +159,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
               <NumField label="OT Hours" value={f.ot_hours} onChange={v => setF({ ...f, ot_hours: v })} />
             </div>
             {/* Paid Days is derived, never typed — same rule as the upload. */}
-            <div style={{ marginTop: 12, background: C.gray, borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <div style={{ marginTop: 12, background: C.gray, borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Paid Days</span>
               <span style={{ fontSize: 17, fontWeight: 800, color: (() => { const p = (Number(f.earned_leave) || 0) + (Number(f.casual_leave) || 0) + (Number(f.sick_leave) || 0) + (Number(f.other_leave) || 0) - (Number(f.absent_days) || 0); return p < 0 ? C.red : C.green })() }}>
                 {(Number(f.earned_leave) || 0) + (Number(f.casual_leave) || 0) + (Number(f.sick_leave) || 0) + (Number(f.other_leave) || 0) - (Number(f.absent_days) || 0)}
@@ -169,14 +169,14 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={save} disabled={saveBusy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
                 {saveBusy ? 'Saving…' : 'Save changes'}
               </button>
               {saveMsg && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>✓ {saveMsg}</span>}
               {saveErr && <span style={{ fontSize: 12, color: C.red }}>{saveErr}</span>}
             </div>
             {recalcMsg && (
-              <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', marginTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 12px', marginTop: 12 }}>
                 ⚠️ {recalcMsg}
               </div>
             )}
@@ -196,7 +196,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={saveArrear} disabled={arrBusy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: arrBusy ? 'not-allowed' : 'pointer', opacity: arrBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: arrBusy ? 'not-allowed' : 'pointer', opacity: arrBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
                 {arrBusy ? 'Saving…' : 'Add arrear'}
               </button>
               {cur.arrear_days ? <span style={{ fontSize: 12, color: C.purpleD }}>current: <b>{cur.arrear_days}</b> day(s){cur.arrear_source_period ? ` from ${String(cur.arrear_source_period).slice(0, 7)}` : ''}</span> : null}

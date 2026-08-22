@@ -29,8 +29,8 @@ const UPLOADERS = [
 ]
 
 const sel: React.CSSProperties = { width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font }
-const priBtn: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }
-const secBtn: React.CSSProperties = { padding: '7px 12px', background: C.card, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: font }
+const priBtn: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }
+const secBtn: React.CSSProperties = { padding: '7px 12px', background: C.card, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer', fontSize: 12, fontFamily: font }
 
 function UploaderCard({ u, active, onClick }: any) {
   return (
@@ -50,7 +50,7 @@ function UploaderCard({ u, active, onClick }: any) {
 function AlertBanner({ msg, type }: { msg: string; type: 'warn' | 'error' | 'success' }) {
   const map = { warn: [C.amberBg, C.amber, TK.warningTint], error: [C.redBg, C.red, TK.criticalTint], success: [C.greenBg, C.green, TK.positiveTint] } as const
   const [bg, fg, br] = map[type]
-  return <div style={{ background: bg, border: `1px solid ${br}`, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: fg, marginBottom: 10, display: 'flex', gap: 8 }}><span>{type === 'warn' ? '' : type === 'error' ? '' : ''}</span><span>{msg}</span></div>
+  return <div style={{ background: bg, border: `1px solid ${br}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: fg, marginBottom: 10, display: 'flex', gap: 8 }}><span>{type === 'warn' ? '' : type === 'error' ? '' : ''}</span><span>{msg}</span></div>
 }
 function ValRow({ row, errors, index }: any) {
   const bad = errors?.length > 0
@@ -183,7 +183,7 @@ export default function BulkUploaderPage() {
           <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 8px' }}>Recent uploads</div>
           {!logs.length && <div style={{ fontSize: 11, color: C.muted }}>No uploads yet.</div>}
           {logs.map(l => (
-            <div key={l.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 10px', marginBottom: 6, fontSize: 11 }}>
+            <div key={l.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '7px 10px', marginBottom: 6, fontSize: 11 }}>
               <div style={{ fontWeight: 600, textTransform: 'capitalize' }}>{l.uploader_type}</div>
               <div style={{ color: C.muted, marginTop: 1 }}><span style={{ color: C.green }}>{l.success_rows}✓</span>{l.error_rows > 0 && <span style={{ color: C.red }}> · {l.error_rows}✕</span>} · {new Date(l.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
             </div>
@@ -192,7 +192,7 @@ export default function BulkUploaderPage() {
 
         <div>
           {/* Header */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', marginBottom: 14 }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 18px', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 28 }}>{active.icon}</span>
               <div style={{ flex: 1 }}>
@@ -202,7 +202,7 @@ export default function BulkUploaderPage() {
               {active.confidential && <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: C.redBg, color: C.red, fontWeight: 600 }}>Confidential</span>}
               <a href={`/uploads/templates/${active.downloadFile}`} download style={{ ...priBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>⬇ Download template</a>
             </div>
-            {active.payrollAlert && <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 8, padding: '8px 12px', marginTop: 10, fontSize: 12, color: C.amber }}>⚠️ {active.payrollAlertMsg}</div>}
+            {active.payrollAlert && <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 10, padding: '8px 12px', marginTop: 10, fontSize: 12, color: C.amber }}>⚠️ {active.payrollAlertMsg}</div>}
           </div>
 
           {/* Filter bar (emp-code scoping) */}
@@ -217,7 +217,7 @@ export default function BulkUploaderPage() {
           </div>
 
           {/* Upload zone */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Upload filled template</div>
             <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${file ? C.purple : C.border}`, borderRadius: 10, padding: 20, textAlign: 'center', cursor: 'pointer', background: file ? C.purpleBg: TK.brandTint }}>
               <div style={{ fontSize: 24, marginBottom: 6 }}></div>
@@ -233,7 +233,7 @@ export default function BulkUploaderPage() {
 
           {/* Payroll alert */}
           {showAlert && (
-            <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
+            <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 14, padding: '16px 18px', marginBottom: 14 }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, marginBottom: 8 }}>Payroll impact alert</div>
               <div style={{ fontSize: 12, color: TK.warning, marginBottom: 12, lineHeight: 1.6 }}>{active.payrollAlertMsg}<br /><b>Proceeding means you have verified this with the payroll team.</b></div>
               <div style={{ display: 'flex', gap: 8 }}>
@@ -245,7 +245,7 @@ export default function BulkUploaderPage() {
 
           {/* Validation results */}
           {stage === 'validated' && (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 14, overflow: 'hidden' }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 14, overflow: 'hidden' }}>
               <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>Validation results</div>
                 <div style={{ display: 'flex', gap: 8, fontSize: 11 }}><span style={{ color: C.green, fontWeight: 600 }}>✓ {validCount} valid</span>{errRows.length > 0 && <span style={{ color: C.red, fontWeight: 600 }}>✕ {errRows.length} errors</span>}</div>
@@ -267,7 +267,7 @@ export default function BulkUploaderPage() {
 
           {/* Done */}
           {stage === 'done' && (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px' }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px' }}>
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Upload complete</div>
               {result.success > 0 && <AlertBanner msg={`${result.success} rows uploaded successfully.`} type="success" />}
               {result.errors > 0 && <AlertBanner msg={`${result.errors} rows failed. See details below.`} type="error" />}
@@ -278,7 +278,7 @@ export default function BulkUploaderPage() {
         </div>
       </div>
 
-      {toast && <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 600, zIndex: 999 }}>{toast}</div>}
     </div>
   )
 }

@@ -20,7 +20,7 @@ const F = {
   muted:TK.muted, border: TK.brandEdge, green:TK.positive, greenBg:TK.positiveTint,
   pink: TK.critical, pinkBg: TK.criticalTint, blue:TK.info, blueBg:TK.infoTint, red:TK.critical,
 }
-const panel: React.CSSProperties = { background:TK.surface, borderRadius:16, padding:24, boxShadow:'0 2px 8px rgba(37,99,235,0.08)' }
+const panel: React.CSSProperties = { background:TK.surface, borderRadius:14, padding:24, boxShadow:'0 2px 8px rgba(37,99,235,0.08)' }
 const btnPrimary: React.CSSProperties = { fontFamily:'inherit', fontSize:14, fontWeight:700, color:TK.onAccent, background:F.purple, border:'none', borderRadius:10, padding:'10px 24px', cursor:'pointer' }
 const gameTitle: React.CSSProperties = { fontSize:18, fontWeight:700, marginBottom:4 }
 const gameSub: React.CSSProperties = { fontSize:12, color:F.muted, marginBottom:18 }
@@ -33,7 +33,7 @@ const GAMES = [
 ]
 
 function BackBtn({ onClick }: { onClick: () => void }) {
-  return <button onClick={onClick} style={{ fontFamily:'inherit', fontSize:12, fontWeight:700, color:F.purpleDark, background:F.purpleSoft, border:'none', borderRadius:8, padding:'7px 14px', cursor:'pointer', marginBottom:16 }}>Back</button>
+  return <button onClick={onClick} style={{ fontFamily:'inherit', fontSize:12, fontWeight:700, color:F.purpleDark, background:F.purpleSoft, border:'none', borderRadius:10, padding:'7px 14px', cursor:'pointer', marginBottom:16 }}>Back</button>
 }
 
 // ── Tic-Tac-Toe ─────────────────────────────────────────────────

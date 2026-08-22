@@ -40,20 +40,20 @@ function RegimeCard({ regime, slabs, surcharge, config }: {
       <div style={{ height: 4, background: accent }} />
       <div style={{ padding: '14px 16px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-          <span style={{ width: 30, height: 30, borderRadius: 9, background: isNew ? C.greenBg : C.purpleBg, color: isNew ? C.green : C.purpleD, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isNew ? '' : ''}</span>
+          <span style={{ width: 30, height: 30, borderRadius: 10, background: isNew ? C.greenBg : C.purpleBg, color: isNew ? C.green : C.purpleD, fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{isNew ? '' : ''}</span>
           <span style={{ fontSize: 14, fontWeight: 800, color: C.navy }}>{isNew ? 'New Regime' : 'Old Regime'}</span>
           {isNew && <span style={{ marginLeft: 'auto', fontSize: 9, fontWeight: 800, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 99, padding: '2px 8px', textTransform: 'uppercase', letterSpacing: '.03em' }}>Default</span>}
         </div>
 
         {config && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-            <span style={{ fontSize: 10, color: C.muted, background: C.gray, borderRadius: 8, padding: '4px 9px' }}>Std. deduction <strong style={{ color: C.navy }}>{inr(config.standard_deduction)}</strong></span>
-            <span style={{ fontSize: 10, color: C.muted, background: C.gray, borderRadius: 8, padding: '4px 9px' }}>87A rebate <strong style={{ color: C.navy }}>{inr(config.rebate_87a_amount)}</strong></span>
+            <span style={{ fontSize: 10, color: C.muted, background: C.gray, borderRadius: 10, padding: '4px 9px' }}>Std. deduction <strong style={{ color: C.navy }}>{inr(config.standard_deduction)}</strong></span>
+            <span style={{ fontSize: 10, color: C.muted, background: C.gray, borderRadius: 10, padding: '4px 9px' }}>87A rebate <strong style={{ color: C.navy }}>{inr(config.rebate_87a_amount)}</strong></span>
           </div>
         )}
 
         {zeroUpto != null && (
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 8, padding: '7px 10px', marginBottom: 12 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '7px 10px', marginBottom: 12 }}>
             ₹0 tax up to {inr(zeroUpto)} gross
           </div>
         )}
@@ -140,7 +140,7 @@ export default function IncomeTaxConfig() {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 800 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Income Tax — Old vs New</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
@@ -150,7 +150,7 @@ export default function IncomeTaxConfig() {
         </div>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>{error}</div>}
 
       {/* Regime reference cards */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -159,7 +159,7 @@ export default function IncomeTaxConfig() {
       </div>
 
       {/* Calculator */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Compare — test a gross annual income</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
           <input type="number" value={testIncome} onChange={e => setTestIncome(e.target.value)} placeholder="Gross annual (₹)" style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
@@ -167,7 +167,7 @@ export default function IncomeTaxConfig() {
             {AGES.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
           </select>
           <button onClick={runCalculation} disabled={calculating}
-            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+            style={{ padding: '9px 20px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
             {calculating ? 'Calculating…' : 'Compare'}
           </button>
         </div>
@@ -178,7 +178,7 @@ export default function IncomeTaxConfig() {
             <>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 {([['Old Regime', oldResult, !newWins, C.purpleD], ['New Regime', newResult, newWins, C.green]] as const).map(([title, r, win, accent]) => (
-                  <div key={title} style={{ flex: 1, minWidth: 220, borderRadius: 12, padding: '12px 14px', background: win ? (accent === C.green ? C.greenBg : C.purpleBg) : C.gray, border: `2px solid ${win ? accent : C.border}`, boxShadow: win ? '0 3px 12px rgba(37,99,235,0.12)' : 'none' }}>
+                  <div key={title} style={{ flex: 1, minWidth: 220, borderRadius: 14, padding: '12px 14px', background: win ? (accent === C.green ? C.greenBg : C.purpleBg) : C.gray, border: `2px solid ${win ? accent : C.border}`, boxShadow: win ? '0 3px 12px rgba(37,99,235,0.12)' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 12, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '.03em' }}>{title}</span>
                       {win && <span style={{ fontSize: 9, fontWeight: 800, color: TK.onAccent, background: accent, borderRadius: 99, padding: '2px 7px', textTransform: 'uppercase' }}>Lower</span>}

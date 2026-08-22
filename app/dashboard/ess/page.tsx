@@ -18,7 +18,7 @@ import { C as TK } from '@/lib/ui'
 // ── Style constant (exact project palette) ─────────────────────────
 const T = {
   page:       { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
-  card:       { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
+  card:       { background:TK.surface, borderRadius:10, border:'1px solid var(--ez-line)', padding:'14px 16px', marginBottom:10, boxShadow:'var(--ez-shadow-flat)' } as React.CSSProperties,
   label:      { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
   input:      { width:'100%', padding:'9px 11px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   btnPrimary: { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
@@ -200,7 +200,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
 
   return (
     <div>
-      <div style={{ ...T.card, display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+      <div style={{ ...T.card, display:'flex', gap:10, flexWrap:'wrap', alignItems:'center', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
         <input style={{ ...T.input, maxWidth:260 }} placeholder="Search emp code / name" value={q} onChange={e => setQ(e.target.value)} />
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
           {FILTERS.map(f => (
@@ -616,7 +616,7 @@ export default function ESSPage() {
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div style={{ ...T.card, maxWidth:440, width:'100%', marginBottom:0 }}>
             {!deact.last_working_date ? (
-              <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:8, padding:'12px 14px', marginBottom:12, fontSize:13, color:TK.warning, lineHeight:1.6 }}>This employee has <b>no Date of Leaving set</b>. Deactivate anyway? They will not be able to log in, or reset their password.
+              <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:10, padding:'12px 14px', marginBottom:12, fontSize:13, color:TK.warning, lineHeight:1.6 }}>This employee has <b>no Date of Leaving set</b>. Deactivate anyway? They will not be able to log in, or reset their password.
               </div>
             ) : (
               <div style={{ fontSize:13, marginBottom:12 }}>Deactivate <b>{deact.full_name}</b>? They won&apos;t be able to log in or reset their password.</div>

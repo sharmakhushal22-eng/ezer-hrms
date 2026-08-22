@@ -22,14 +22,14 @@ import { C as TK } from '@/lib/ui'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'16px 18px', marginBottom:14, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border:'1px solid var(--ez-line)', padding:'16px 18px', marginBottom:14, boxShadow:'var(--ez-shadow-flat)' } as React.CSSProperties,
   lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
   pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
   out:   { padding:'8px 13px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
   danger:{ padding:'5px 10px', borderRadius:7, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
-  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
+  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:10, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
   check: { display:'flex', alignItems:'center', gap:7, fontSize:13, cursor:'pointer', padding:'4px 0' } as React.CSSProperties,
 }
 const MODE_LABEL: Record<AppMode, string> = { EMPLOYEE:'Employee applies', HR_MARK:'HR marks', EARN_AVAIL:'Earn & avail' }
@@ -201,7 +201,7 @@ function BranchQuotaTab({ companies, branches, rows, company, branch, fy, onComp
   const coBranches = branches.filter(b => b.company_id === company)
   return (
     <>
-      <div style={{ ...T.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+      <div style={{ ...T.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
         <div style={{ display:'grid', gridTemplateColumns:'2fr 2fr 1fr', gap:12 }}>
           <div><label style={T.lbl}>Company</label><select style={T.input} value={company} onChange={e => { const v = e.target.value; onCompany(v); if (v === 'ALL') onBranch('') }}><option value="">— Select company —</option><option value="ALL">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
           <div><label style={T.lbl}>Branch</label><select style={T.input} value={branch} onChange={e => onBranch(e.target.value)} disabled={!company || company === 'ALL'}><option value="">Company default (all branches)</option>{coBranches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}</select></div>
@@ -238,7 +238,7 @@ function downloadErrors(rows: ParsedRow[], name: string) {
 }
 function StatChip({ icon, label, value, color, bg }: { icon: string; label: string; value: number; color: string; bg: string }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: bg, borderRadius: 9, padding: '8px 14px' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: bg, borderRadius: 10, padding: '8px 14px' }}>
       <span style={{ fontSize: 15 }}>{icon}</span>
       <div><div style={{ fontSize: 18, fontWeight: 700, color, lineHeight: 1 }}>{value}</div><div style={{ fontSize: 10, color: TK.muted, marginTop: 2 }}>{label}</div></div>
     </div>
@@ -248,7 +248,7 @@ function PreviewTable({ rows }: { rows: ParsedRow[] }) {
   if (!rows.length) return <div style={{ fontSize: 13, color: TK.muted, padding: 20, textAlign: 'center' }}>No rows parsed.</div>
   const cols = Object.keys(rows[0].cells)
   return (
-    <div style={{ maxHeight: 340, overflow: 'auto', border: '1px solid rgba(37,99,235,0.12)', borderRadius: 9 }}>
+    <div style={{ maxHeight: 340, overflow: 'auto', border: '1px solid var(--ez-line)', borderRadius: 10 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead><tr style={{ position: 'sticky', top: 0, background: TK.canvas, zIndex: 1 }}>
           <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10, color: TK.muted, textTransform: 'uppercase', width: 36 }}>#</th>
@@ -289,13 +289,13 @@ function UploadFlow({ title, desc, columns, errorFile, onTemplate, onParse, onCo
     <div style={T.card}>
       <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{title}</div>
       <div style={{ fontSize: 13, color: TK.muted, marginBottom: 16 }}>{desc}</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>{columns.map(c => <span key={c} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: TK.canvas, color: TK.brand, border: '1px solid rgba(37,99,235,0.12)' }}>{c}</span>)}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>{columns.map(c => <span key={c} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 7, background: TK.canvas, color: TK.brand, border: '1px solid var(--ez-line)' }}>{c}</span>)}</div>
       {!result && (<>
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <button style={T.out} disabled={tplBusy} onClick={async () => { setTplBusy(true); try { await onTemplate() } catch {} setTplBusy(false) }}>⬇ {tplBusy ? 'Preparing…' : 'Download template'}</button>
         </div>
         <div onClick={() => inputRef.current?.click()} onDragOver={e => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f) }}
-          style={{ border: `2px dashed ${drag ? TK.brand : 'rgba(37,99,235,0.3)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? TK.canvas: TK.brandTint }}>
+          style={{ border: `2px dashed ${drag ? TK.brand : 'rgba(37,99,235,0.3)'}`, borderRadius: 14, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? TK.canvas: TK.brandTint }}>
           <div style={{ fontSize: 26, marginBottom: 6 }}>{file ? '' : ''}</div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{file ? file.name : 'Drag & drop Excel here, or click to browse'}</div>
           <div style={{ fontSize: 11, color: TK.muted, marginTop: 4 }}>{parsing ? 'Reading…' : '.xlsx / .xls'}</div>
@@ -322,7 +322,7 @@ function UploadFlow({ title, desc, columns, errorFile, onTemplate, onParse, onCo
           <StatChip icon="↻" label="updated" value={result.updated} color={TK.brand} bg={TK.canvas} />
           {result.failed > 0 && <StatChip icon="✗" label="failed" value={result.failed} color={TK.critical} bg={TK.criticalTint} />}
         </div>
-        {result.errors.length > 0 && <div style={{ maxHeight: 140, overflowY: 'auto', background: TK.warningTint, borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>{result.errors.map((e, i) => <div key={i} style={{ fontSize: 12, color: TK.warning, padding: '2px 0' }}>{e.rowNo > 0 ? `Row ${e.rowNo}: ` : ''}{e.msg}</div>)}</div>}
+        {result.errors.length > 0 && <div style={{ maxHeight: 140, overflowY: 'auto', background: TK.warningTint, borderRadius: 10, padding: '8px 12px', marginBottom: 14 }}>{result.errors.map((e, i) => <div key={i} style={{ fontSize: 12, color: TK.warning, padding: '2px 0' }}>{e.rowNo > 0 ? `Row ${e.rowNo}: ` : ''}{e.msg}</div>)}</div>}
         <button style={T.pri} onClick={reset}>Upload another file</button>
       </div>)}
     </div>

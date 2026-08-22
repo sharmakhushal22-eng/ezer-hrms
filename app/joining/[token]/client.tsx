@@ -14,7 +14,7 @@ type FieldConf = 'ai-high' | 'ai-verify' | 'manual' | 'normal'
 const PRI = TK.brand
 const S = {
   pg:  { background: TK.canvas, minHeight: '100vh', fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.ink } as const,
-  cd:  { background: TK.surface, borderRadius: 12, border: '1px solid rgba(37,99,235,0.12)', padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(37,99,235,0.05)' } as const,
+  cd:  { background: TK.surface, borderRadius: 14, border: '1px solid var(--ez-line)', padding: '16px 18px', marginBottom: 12, boxShadow: 'var(--ez-shadow-flat)' } as const,
   lbl: { fontSize: 10, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.06em', display: 'block', marginBottom: 4 },
   inp: (conf: FieldConf = 'normal') => ({
     width: '100%', padding: '9px 11px', borderRadius: 7, fontSize: 13, outline: 'none',
@@ -24,8 +24,8 @@ const S = {
   }),
   g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 } as const,
   g3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } as const,
-  btnP: { padding: '10px 20px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: PRI, color: TK.onAccent } as const,
-  btnO: { padding: '9px 16px', borderRadius: 8, border: `1px solid ${TK.brandEdge}`, cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: PRI } as const,
+  btnP: { padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: PRI, color: TK.onAccent } as const,
+  btnO: { padding: '9px 16px', borderRadius: 10, border: `1px solid ${TK.brandEdge}`, cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: PRI } as const,
 }
 const STEPS = ['Personal', 'Address', 'Professional', 'Bank', 'References', 'Documents', 'Review']
 const POLICIES = [
@@ -167,7 +167,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
               <div key={s} style={{ fontSize: 12, color: TK.positive, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>✓ {s}</div>
             ))}
           </div>
-          <div style={{ background: TK.warningTint, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: TK.warning, marginBottom: 16, lineHeight: 1.7 }}>HR Manager will generate your Employee Code shortly.<br/>You'll receive an email with your EZER ESS login details.
+          <div style={{ background: TK.warningTint, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: TK.warning, marginBottom: 16, lineHeight: 1.7 }}>HR Manager will generate your Employee Code shortly.<br/>You'll receive an email with your EZER ESS login details.
           </div>
           <button onClick={() => window.print()} style={S.btnP}>Download Signed PDF Package</button>
         </div>
@@ -185,7 +185,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
           <div style={{ fontSize: 13, color: TK.muted, marginTop: 4 }}>Sign every document with a single OTP</div>
         </div>
         <div style={S.cd}>
-          <div style={{ background: TK.brandTint, borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12, color: TK.muted, lineHeight: 1.7 }}>
+          <div style={{ background: TK.brandTint, borderRadius: 10, padding: '10px 12px', marginBottom: 14, fontSize: 12, color: TK.muted, lineHeight: 1.7 }}>
             <strong>Documents to be signed:</strong><br/>Joining form (7 steps) &nbsp;·&nbsp; ✓ EPF Form 11 + Form 2<br/>Gratuity Form F &nbsp;·&nbsp; ✓ {POLICIES.length} policy acknowledgements<br/><br/>
             <strong>Legal basis:</strong> IT Act 2000, Section 3A — legally valid Aadhaar eSign
           </div>
@@ -232,12 +232,12 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
             <div style={{ fontSize: 14, fontWeight: 600, color: TK.ink, marginBottom: 10 }}>{pol.name}</div>
             <div
               onScroll={e => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight >= el.scrollHeight - 8) setScrolled(true) }}
-              style={{ height: 180, overflowY: 'auto', background: TK.sunken, borderRadius: 8, padding: '12px 14px', fontSize: 12, color: TK.inkSoft, lineHeight: 1.9, marginBottom: 12, border: `1px solid ${TK.brandEdge}` }}>
+              style={{ height: 180, overflowY: 'auto', background: TK.sunken, borderRadius: 10, padding: '12px 14px', fontSize: 12, color: TK.inkSoft, lineHeight: 1.9, marginBottom: 12, border: `1px solid ${TK.brandEdge}` }}>
               {pol.body}
               <div style={{ height: 30 }}/>
               {!scrolled && !isAccepted && <div style={{ textAlign: 'center', color: TK.faint, fontSize: 11, marginTop: 8 }}>Scroll to bottom to enable accept</div>}
             </div>
-            <div style={{ background: TK.brandTint, borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: TK.muted, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ background: TK.brandTint, borderRadius: 10, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: TK.muted, display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <input type="checkbox" style={{ marginTop: 1, width: 15, height: 15, flexShrink: 0, cursor: 'pointer' }} readOnly checked={isAccepted}/>
               <span>I have read this policy in full. I consent to following it.</span>
             </div>
@@ -451,7 +451,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
     ),
     3: (
       <div>
-        <div style={{ background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: 8, padding: '9px 12px', marginBottom: 14, fontSize: 12, color: TK.warning }}>Bank details are encrypted — only the Payroll team can see them. Your salary will be credited to this account.
+        <div style={{ background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '9px 12px', marginBottom: 14, fontSize: 12, color: TK.warning }}>Bank details are encrypted — only the Payroll team can see them. Your salary will be credited to this account.
         </div>
         <div style={S.g2}>
           <Fld label="Account Number *" conf="manual"><input style={S.inp('manual')} type="password" value={form.bank_acc} onChange={e => F('bank_acc', e.target.value)} placeholder="Account number"/></Fld>
@@ -532,7 +532,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
           { s: 4, label: 'References', summary: `${form.ref1_name || 'Ref 1 missing'} · ${form.ref2_name || 'Ref 2 missing'}` },
           { s: 5, label: 'Documents', summary: `Photo: ${form.photo_done ? '' : 'Missing'} · UAN: ${form.uan_done ? '' : '—'} · ESIC: ${form.esic_done ? '' : '—'}` },
         ].map(({ s, label, summary }) => (
-          <div key={s} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: TK.sunken, borderRadius: 8, marginBottom: 6, border: `1px solid ${TK.brandEdge}` }}>
+          <div key={s} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', background: TK.sunken, borderRadius: 10, marginBottom: 6, border: `1px solid ${TK.brandEdge}` }}>
             <div>
               <div style={{ fontSize: 12, fontWeight: 500, color: TK.ink }}>{label}</div>
               <div style={{ fontSize: 11, color: TK.muted, marginTop: 1 }}>{summary}</div>
@@ -540,7 +540,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
             <button onClick={() => setStep(s)} style={{ ...S.btnO, padding: '4px 10px', fontSize: 11 }}>Edit</button>
           </div>
         ))}
-        <div style={{ background: TK.sunken, borderRadius: 8, padding: '10px 12px', marginTop: 10, fontSize: 12, color: TK.positive }}>
+        <div style={{ background: TK.sunken, borderRadius: 10, padding: '10px 12px', marginTop: 10, fontSize: 12, color: TK.positive }}>
           ✅ 7/7 steps complete · All mandatory fields filled
         </div>
         <div style={{ marginTop: 12 }}>

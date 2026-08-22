@@ -55,7 +55,7 @@ function timeAgo(iso: string) {
 // ── Presentational bits (defined outside parent) ──
 function Kpi({ label, value, accent, warn }: { label: string; value: string; accent?: string; warn?: boolean }) {
   return (
-    <div style={{ background: warn ? C.amberBg : C.card, border: `1px solid ${warn ? C.amberBd : C.border}`, borderRadius: 12, padding: '13px 15px', boxShadow: '0 1px 4px rgba(37,99,235,0.05)', minWidth: 120 }}>
+    <div style={{ background: warn ? C.amberBg : C.card, border: `1px solid ${warn ? C.amberBd : C.border}`, borderRadius: 14, padding: '13px 15px', boxShadow: 'var(--ez-shadow-flat)', minWidth: 120 }}>
       <div style={{ fontSize: 10, color: warn ? C.amber : C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700, marginBottom: 5 }}>{label}</div>
       <div style={{ fontSize: 19, fontWeight: 800, color: accent || (warn ? C.amber : C.navy), lineHeight: 1 }}>{value}</div>
     </div>
@@ -63,7 +63,7 @@ function Kpi({ label, value, accent, warn }: { label: string; value: string; acc
 }
 function Panel({ title, right, children, style }: { title: string; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '15px 17px', boxShadow: '0 1px 6px rgba(37,99,235,0.06)', ...style }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '15px 17px', boxShadow: 'var(--ez-shadow-flat)', ...style }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 10, fontWeight: 800, color: C.purple, textTransform: 'uppercase', letterSpacing: '.06em' }}>{title}</span>
         {right && <span style={{ marginLeft: 'auto' }}>{right}</span>}
@@ -258,7 +258,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
 
   useEffect(() => { load() }, [load])
 
-  const selStyle: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
+  const selStyle: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const maxDept = Math.max(1, ...deptCost.map(d => d.cost))
 
   return (
@@ -330,8 +330,8 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
                       <span style={{ color: C.navy, fontWeight: 600 }}>{d.name}</span>
                       <span style={{ color: C.muted }}>{inrShort(d.cost)}</span>
                     </div>
-                    <div style={{ height: 7, background: C.gray, borderRadius: 4, overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: `linear-gradient(90deg,${TK.brand},${TK.brand})`, borderRadius: 4 }} />
+                    <div style={{ height: 7, background: C.gray, borderRadius: 7, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: `linear-gradient(90deg,${TK.brand},${TK.brand})`, borderRadius: 7 }} />
                     </div>
                   </div>
                 ))}

@@ -187,7 +187,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
   return (
     <div ref={pop} style={{ position: 'relative', flexShrink: 0 }}>
       <button ref={btnRef} onClick={toggle} style={{
-        display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 8,
+        display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 10,
         border: `1px solid ${isActive || open ? C.purple : C.border}`, background: isActive ? C.purple: TK.surface,
         color: isActive ? TK.surface : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
         boxShadow: open ? '0 6px 20px rgba(37,99,235,0.18)' : 'none',
@@ -201,7 +201,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
             position: 'absolute', top: 'calc(100% + 6px)',
             ...(alignRight ? { right: 0 } : { left: 0 }),
             zIndex: 1001, minWidth: 262, maxHeight: '70vh', overflowY: 'auto',
-            background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+            background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 14,
             boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6,
           }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em', padding: '6px 10px 8px' }}>Sections · {built}/{sections.length} built</div>
@@ -218,7 +218,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                     onMouseEnter={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = TK.brandTint }}
                     onMouseLeave={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
                     style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 9,
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 10,
                       border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 2,
                       background: rowActive ? 'rgba(37,99,235,0.09)' : 'transparent',
                     }}>
@@ -243,7 +243,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                             onMouseEnter={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = TK.brandTint }}
                             onMouseLeave={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
                             style={{
-                              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8,
+                              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 10,
                               border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 1,
                               background: kon ? 'rgba(37,99,235,0.09)' : 'transparent',
                             }}>
@@ -277,7 +277,7 @@ function Chips({ items }: { items: string[] }) {
 function PlannedPanel({ s }: { s: SubTab }) {
   return (
     <div style={{ ...S.card, textAlign: 'center', padding: '38px 24px' }}>
-      <div style={{ width: 58, height: 58, borderRadius: 16, background: 'rgba(37,99,235,0.07)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 14px' }}>{s.icon}</div>
+      <div style={{ width: 58, height: 58, borderRadius: 14, background: 'rgba(37,99,235,0.07)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 14px' }}>{s.icon}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: 6 }}>
         <span style={{ fontSize: 16, fontWeight: 700, color: C.navy }}>{s.label}</span>
         <PlannedBadge />
@@ -838,7 +838,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
   }
 
   const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }
-  const box: React.CSSProperties = { background: TK.surface, borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 55px rgba(30,27,75,0.35)' }
+  const box: React.CSSProperties = { background: TK.surface, borderRadius: 14, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 55px rgba(30,27,75,0.35)' }
   const GREEN = TK.positive
 
   return (
@@ -850,7 +850,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{allCo ? 'A month master will be built for every company.' : 'A month master will be built for the selected company.'} Months already created are not listed.</div>
             {availableMonths.length === 0 ? (
               <>
-                <div style={{ fontSize: 13, color: C.navy, background: TK.brandTint, borderRadius: 8, padding: '12px 14px', marginBottom: 18 }}>All months for FY {fy} have already been created{allCo ? ' for every company' : ''}. 🎉</div>
+                <div style={{ fontSize: 13, color: C.navy, background: TK.brandTint, borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>All months for FY {fy} have already been created{allCo ? ' for every company' : ''}. 🎉</div>
                 <button style={{ ...S.btnOutline, width: '100%' }} onClick={onClose}>Close</button>
               </>
             ) : (
@@ -940,7 +940,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             <div style={{ width: 60, height: 60, borderRadius: 99, background: TK.positiveTint, border: `2px solid ${GREEN}`, color: GREEN, fontSize: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}></div>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, marginBottom: 8 }}>Month master ready</div>
             {summary && <div style={{ fontSize: 13, color: C.navy, marginBottom: err ? 10 : 18 }}>{summary}</div>}
-            {err && <div style={{ fontSize: 12, color: C.red, background: TK.criticalTint, borderRadius: 8, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
+            {err && <div style={{ fontSize: 12, color: C.red, background: TK.criticalTint, borderRadius: 10, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
             <button style={{ ...S.btnPrimary, background: GREEN, width: '100%' }} onClick={onClose}>Done</button>
           </div>
         )}
@@ -1052,7 +1052,7 @@ function EmployeesTab({ companyId }: { companyId: string }) {
 
   return (
     <div>
-      <div style={{ ...S.card, position: 'sticky', top: 46, zIndex: 29, boxShadow: '0 2px 8px rgba(15,23,42,0.06)' }}>
+      <div style={{ ...S.card, position: 'sticky', top: 46, zIndex: 29, boxShadow: 'var(--ez-shadow-flat)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={S.cardTitle}>Employees &amp; CTC ({filtered.length})</div>
           <input style={{ ...S.input, width: 200 }} placeholder="Search code / name…" value={q} onChange={e => setQ(e.target.value)} />
@@ -1165,7 +1165,7 @@ export default function PayrollPage() {
 
         {/* Tab bar — each main tab is a dropdown of its sub-sections; pick one to enter it.
             Wraps onto multiple rows so every section is always visible without scrolling. */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, rowGap: 8, marginBottom: 16, paddingBottom: 8, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 8, boxShadow: '0 2px 8px rgba(15,23,42,0.06)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, rowGap: 8, marginBottom: 16, paddingBottom: 8, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 8, boxShadow: 'var(--ez-shadow-flat)' }}>
           {TABS.map(t => (
             <MainTabDropdown
               key={t.id}

@@ -41,27 +41,27 @@ const C = {
   top: { background: TK.surface, padding: '11px 20px', borderBottom: `1px solid ${TK.line}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'sticky', top: 0, zIndex: 50 } as React.CSSProperties,
   body: { maxWidth: '900px', margin: '0 auto', padding: '20px 16px' } as React.CSSProperties,
   card: { background: TK.surface, borderRadius: '10px', border: `1px solid ${TK.line}`, padding: '18px', marginBottom: '12px' } as React.CSSProperties,
-  sub: { background: TK.sunken, borderRadius: '8px', border: `1px solid ${TK.line}`, padding: '12px 14px', marginBottom: '8px' } as React.CSSProperties,
+  sub: { background: TK.sunken, borderRadius: '10px', border: `1px solid ${TK.line}`, padding: '12px 14px', marginBottom: '8px' } as React.CSSProperties,
   lbl: { display: 'block', fontSize: '12px', fontWeight: 500, color: TK.inkSoft, marginBottom: '5px' } as React.CSSProperties,
   req: { color: TK.critical, marginLeft: '2px' } as React.CSSProperties,
   g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' } as React.CSSProperties,
   g3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' } as React.CSSProperties,
   secTitle: { fontSize: '13px', fontWeight: 600, color: TK.ink, marginBottom: '12px', paddingBottom: '8px', borderBottom: `1px solid ${TK.line}`, display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
   addBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', background: TK.sunken, border: `1px dashed ${TK.line}`, borderRadius: '7px', cursor: 'pointer', fontSize: '12px', color: TK.brand, fontWeight: 500, width: 'fit-content', marginTop: '6px' } as React.CSSProperties,
-  rmBtn: { padding: '3px 8px', background: TK.criticalTint, border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '10px', color: TK.critical, fontWeight: 500 } as React.CSSProperties,
-  priBtn: { padding: '10px 24px', background: TK.brand, color: TK.onAccent, border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
-  secBtn: { padding: '10px 20px', background: TK.surface, color: TK.inkSoft, border: `2px solid ${TK.line}`, borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
+  rmBtn: { padding: '3px 8px', background: TK.criticalTint, border: 'none', borderRadius: '7px', cursor: 'pointer', fontSize: '10px', color: TK.critical, fontWeight: 500 } as React.CSSProperties,
+  priBtn: { padding: '10px 24px', background: TK.brand, color: TK.onAccent, border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
+  secBtn: { padding: '10px 20px', background: TK.surface, color: TK.inkSoft, border: `2px solid ${TK.line}`, borderRadius: '10px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
   xlsBtn: { padding: '7px 14px', background: TK.positive, color: TK.onAccent, border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
   upBtn: { padding: '7px 14px', background: TK.brand, color: TK.onAccent, border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
 }
 const inp = (err?: boolean): React.CSSProperties => ({
   width: '100%', padding: '9px 11px', border: `2px solid ${err ? TK.critical : TK.line}`,
-  borderRadius: '8px', fontSize: '13px', outline: 'none', background: err ? TK.criticalTint : TK.sunken,
+  borderRadius: '10px', fontSize: '13px', outline: 'none', background: err ? TK.criticalTint : TK.sunken,
   boxSizing: 'border-box', color: TK.ink
 })
 const sel = (err?: boolean): React.CSSProperties => ({ ...inp(err), appearance: 'auto' as any })
 const uploadBox: React.CSSProperties = {
-  border: `2px dashed ${TK.line}`, borderRadius: '8px', padding: '10px',
+  border: `2px dashed ${TK.line}`, borderRadius: '10px', padding: '10px',
   textAlign: 'center', cursor: 'pointer', color: TK.faint, fontSize: '11px'
 }
 
@@ -83,10 +83,10 @@ const MC = {
   topbar: { background:TK.surface, padding:'11px 20px', borderBottom: `1px solid ${TK.line}`, display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const },
   body: { flex:1, padding:'16px 20px', overflowY:'auto' as const },
   card: { background:TK.surface, borderRadius:'10px', border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:'10px' },
-  priBtn: { padding:'8px 16px', background:TK.brand, color:TK.onAccent, border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
-  secBtn: { padding:'8px 12px', background:TK.surface, color:TK.inkSoft, border: `1px solid ${TK.line}`, borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
-  dangerBtn: { padding:'6px 12px', background:TK.criticalTint, color:TK.critical, border:'none', borderRadius:'6px', fontSize:'11px', cursor:'pointer' },
-  inp: { width:'100%', padding:'8px 10px', border: `2px solid ${TK.line}`, borderRadius:'8px', fontSize:'13px', outline:'none', background:TK.sunken, boxSizing:'border-box' as const, color:TK.ink },
+  priBtn: { padding:'8px 16px', background:TK.brand, color:TK.onAccent, border:'none', borderRadius:'10px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
+  secBtn: { padding:'8px 12px', background:TK.surface, color:TK.inkSoft, border: `1px solid ${TK.line}`, borderRadius:'10px', fontSize:'12px', cursor:'pointer' },
+  dangerBtn: { padding:'6px 12px', background:TK.criticalTint, color:TK.critical, border:'none', borderRadius:'7px', fontSize:'11px', cursor:'pointer' },
+  inp: { width:'100%', padding:'8px 10px', border: `2px solid ${TK.line}`, borderRadius:'10px', fontSize:'13px', outline:'none', background:TK.sunken, boxSizing:'border-box' as const, color:TK.ink },
   lbl: { fontSize:'11px', fontWeight:500 as const, color:TK.inkSoft, display:'block' as const, marginBottom:'4px' },
 }
 
@@ -369,7 +369,7 @@ function CompanySetupTab() {
 
   if (done) return (
     <div style={{ ...C.wrap, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ textAlign: 'center', padding: '48px', background: TK.surface, borderRadius: '16px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: '480px', width: '100%', margin: '20px' }}>
+      <div style={{ textAlign: 'center', padding: '48px', background: TK.surface, borderRadius: '14px', boxShadow: '0 4px 24px rgba(0,0,0,0.08)', maxWidth: '480px', width: '100%', margin: '20px' }}>
         <div style={{ fontSize: '56px', marginBottom: '16px' }}></div>
         <h2 style={{ fontSize: '22px', fontWeight: 700, color: TK.ink, marginBottom: '8px' }}>Setup Complete!</h2>
         <p style={{ fontSize: '14px', color: TK.muted, marginBottom: '4px' }}>{savedGroup} → {companyName}</p>
@@ -406,7 +406,7 @@ function CompanySetupTab() {
       {/* Upload Preview Modal */}
       {uploadPreview && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: TK.surface, borderRadius: '12px', padding: '24px', maxWidth: '820px', width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
+          <div style={{ background: TK.surface, borderRadius: '14px', padding: '24px', maxWidth: '820px', width: '100%', maxHeight: '80vh', overflow: 'auto' }}>
             <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '4px' }}>Excel Upload Preview</div>
             <div style={{ fontSize: '12px', color: TK.muted, marginBottom: '14px' }}>{uploadPreview.length} locations found — review and confirm</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
@@ -416,7 +416,7 @@ function CompanySetupTab() {
               <tbody>{uploadPreview.map((r, i) => (
                 <tr key={i} style={{ borderBottom: `1px solid ${TK.line}`, background: i % 2 ? TK.sunken: TK.surface }}>
                   <td style={{ padding: '7px 10px', fontWeight: 500 }}>{r.name}</td>
-                  <td style={{ padding: '7px 10px' }}><span style={{ padding: '2px 6px', background: TK.brandTint, color: TK.brand, borderRadius: '6px', fontSize: '10px' }}>{r.type}</span></td>
+                  <td style={{ padding: '7px 10px' }}><span style={{ padding: '2px 6px', background: TK.brandTint, color: TK.brand, borderRadius: '7px', fontSize: '10px' }}>{r.type}</span></td>
                   <td style={{ padding: '7px 10px' }}>{r.state}</td>
                   <td style={{ padding: '7px 10px' }}>{r.district}</td>
                   <td style={{ padding: '7px 10px' }}>{r.pincode}</td>
@@ -434,17 +434,17 @@ function CompanySetupTab() {
       {/* Map Modal */}
       {mapModal !== null && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px' }}>
-          <div style={{ background: TK.surface, borderRadius: '12px', padding: '20px', maxWidth: '700px', width: '100%' }}>
+          <div style={{ background: TK.surface, borderRadius: '14px', padding: '20px', maxWidth: '700px', width: '100%' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
               <div style={{ fontSize: '14px', fontWeight: 600 }}>Pin Location on Map</div>
               <button style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '18px', color: TK.muted }} onClick={() => setMapModal(null)}></button>
             </div>
             <input id="map-search" placeholder="Search address..." style={{ ...inp(), marginBottom: '10px', width: '100%', boxSizing: 'border-box' }} />
-            <div ref={mapRef} style={{ height: '380px', borderRadius: '8px', border: `1px solid ${TK.line}`, background: TK.sunken, display: 'flex', alignItems: 'center', justifyContent: 'center', color: TK.faint, fontSize: '12px' }}>
+            <div ref={mapRef} style={{ height: '380px', borderRadius: '10px', border: `1px solid ${TK.line}`, background: TK.sunken, display: 'flex', alignItems: 'center', justifyContent: 'center', color: TK.faint, fontSize: '12px' }}>
               Loading map...
             </div>
             {locations[mapModal.locIndex]?.lat && (
-              <div style={{ marginTop: '8px', fontSize: '11px', color: TK.positive, background: TK.positiveTint, padding: '6px 10px', borderRadius: '6px' }}>Pinned at {locations[mapModal.locIndex].lat}, {locations[mapModal.locIndex].lng}
+              <div style={{ marginTop: '8px', fontSize: '11px', color: TK.positive, background: TK.positiveTint, padding: '6px 10px', borderRadius: '7px' }}>Pinned at {locations[mapModal.locIndex].lat}, {locations[mapModal.locIndex].lng}
               </div>
             )}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px', gap: '8px' }}>
@@ -480,7 +480,7 @@ function CompanySetupTab() {
         {step === 0 && (
           <div style={C.card}>
             <div style={C.secTitle}>Group Setup</div>
-            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: '8px', padding: '10px 12px', marginBottom: '16px', fontSize: '12px', color: TK.info }}>Single company? Set Group Name = Company Name. Multiple companies can be consolidated under one group anytime.
+            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: '10px', padding: '10px 12px', marginBottom: '16px', fontSize: '12px', color: TK.info }}>Single company? Set Group Name = Company Name. Multiple companies can be consolidated under one group anytime.
             </div>
             <div style={C.g2}>
               <div>
@@ -570,7 +570,7 @@ function CompanySetupTab() {
                 </div>
               </div>
               {(headerText || footerText) && (
-                <div style={{ marginTop: '12px', border: `1px solid ${TK.line}`, borderRadius: '8px', overflow: 'hidden' }}>
+                <div style={{ marginTop: '12px', border: `1px solid ${TK.line}`, borderRadius: '10px', overflow: 'hidden' }}>
                   {headerText && <div style={{ background: TK.sunken, borderBottom: `1px solid ${TK.line}`, padding: '8px 14px', fontSize: '11px', color: TK.inkSoft, whiteSpace: 'pre-line' }}>{headerText}</div>}
                   <div style={{ padding: '12px 14px', fontSize: '11px', color: TK.faint, textAlign: 'center' }}>[ Letter content will appear here ]</div>
                   {footerText && <div style={{ background: TK.sunken, borderTop: `1px solid ${TK.line}`, padding: '8px 14px', fontSize: '10px', color: TK.muted, whiteSpace: 'pre-line', textAlign: 'center' }}>{footerText}</div>}
@@ -594,7 +594,7 @@ function CompanySetupTab() {
                 <button style={C.upBtn} onClick={() => fileRef.current?.click()}>Upload Excel</button>
               </div>
             </div>
-            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: '8px', padding: '9px 12px', marginBottom: '14px', fontSize: '11px', color: TK.info }}>State + District auto-links PT, ESIC & Shops Act. Google Maps pin captures geo-coordinates for attendance geo-fencing.
+            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: '10px', padding: '9px 12px', marginBottom: '14px', fontSize: '11px', color: TK.info }}>State + District auto-links PT, ESIC & Shops Act. Google Maps pin captures geo-coordinates for attendance geo-fencing.
             </div>
             {locations.map((loc, i) => (
               <div key={loc.id} style={C.sub}>
@@ -658,8 +658,8 @@ function CompanySetupTab() {
                     <label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={{ ...uploadBox, padding: '9px' }}>Upload</div></label>
                   </div>
                 </div>
-                {loc.lat && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.positive, background: TK.positiveTint, padding: '5px 10px', borderRadius: '5px' }}>Geo-tagged: {loc.lat}, {loc.lng}</div>}
-                {loc.state && loc.district && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.info, background: TK.infoTint, padding: '5px 10px', borderRadius: '5px' }}>✦ {loc.state} › {loc.district} — PT & ESIC will auto-link here</div>}
+                {loc.lat && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.positive, background: TK.positiveTint, padding: '5px 10px', borderRadius: '7px' }}>Geo-tagged: {loc.lat}, {loc.lng}</div>}
+                {loc.state && loc.district && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.info, background: TK.infoTint, padding: '5px 10px', borderRadius: '7px' }}>✦ {loc.state} › {loc.district} — PT & ESIC will auto-link here</div>}
               </div>
             ))}
             <button style={C.addBtn} onClick={() => setLocations(p => [...p, { id: uid(), name: '', type: 'Branch', address: '', state: '', district: '', pincode: '', lat: '', lng: '', licenseNumber: '', certificate: '' }])}>＋ Add Location / Branch</button>
@@ -720,7 +720,7 @@ function CompanySetupTab() {
                     <label style={C.lbl}>Select Locations</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
                       {namedLocs.map(loc => (
-                        <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'pointer', padding: '5px 9px', borderRadius: '6px', background: epf.locations.includes(loc.name) ? TK.brandTint : TK.sunken, border: `1px solid ${epf.locations.includes(loc.name) ? TK.brandEdge : TK.line}` }}>
+                        <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'pointer', padding: '5px 9px', borderRadius: '7px', background: epf.locations.includes(loc.name) ? TK.brandTint : TK.sunken, border: `1px solid ${epf.locations.includes(loc.name) ? TK.brandEdge : TK.line}` }}>
                           <input type="checkbox" checked={epf.locations.includes(loc.name)} onChange={() => toggleEpfLoc(i, loc.name)} style={{ width: '13px', height: '13px' }} />
                           {loc.name}
                         </label>
@@ -763,13 +763,13 @@ function CompanySetupTab() {
                     </select>
                   </div>
                 </div>
-                {esic.locations.length > 0 && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.positive, background: TK.positiveTint, padding: '5px 10px', borderRadius: '5px' }}>Auto-linked: {esic.locations.join(', ')}</div>}
+                {esic.locations.length > 0 && <div style={{ marginTop: '6px', fontSize: '11px', color: TK.positive, background: TK.positiveTint, padding: '5px 10px', borderRadius: '7px' }}>Auto-linked: {esic.locations.join(', ')}</div>}
                 {namedLocs.length > 0 && (
                   <div style={{ marginTop: '8px' }}>
                     <label style={C.lbl}>Override — Select Specific Locations</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
                       {namedLocs.map(loc => (
-                        <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', background: esic.locations.includes(loc.name) ? TK.brandTint : TK.sunken, border: `1px solid ${esic.locations.includes(loc.name) ? TK.brandEdge : TK.line}` }}>
+                        <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '7px', background: esic.locations.includes(loc.name) ? TK.brandTint : TK.sunken, border: `1px solid ${esic.locations.includes(loc.name) ? TK.brandEdge : TK.line}` }}>
                           <input type="checkbox" checked={esic.locations.includes(loc.name)} onChange={e => setEsicList(p => p.map((x, idx) => idx === i ? { ...x, locations: e.target.checked ? [...x.locations.filter(l => l !== loc.name), loc.name] : x.locations.filter(l => l !== loc.name) } : x))} style={{ width: '12px', height: '12px' }} />
                           {loc.name}
                         </label>
@@ -814,7 +814,7 @@ function CompanySetupTab() {
                   </div>
                 </div>
                 {pt.state && pt.district && (
-                  <div style={{ marginTop: '6px', fontSize: '11px', padding: '5px 10px', borderRadius: '5px', background: pt.coveredLocations.length ? TK.positiveTint : TK.warningTint, color: pt.coveredLocations.length ? TK.positive : TK.warning }}>
+                  <div style={{ marginTop: '6px', fontSize: '11px', padding: '5px 10px', borderRadius: '7px', background: pt.coveredLocations.length ? TK.positiveTint : TK.warningTint, color: pt.coveredLocations.length ? TK.positive : TK.warning }}>
                     {pt.coveredLocations.length ? `✓ Auto-covers: ${pt.coveredLocations.join(', ')}` : `⚠️ No locations in ${pt.district}, ${pt.state}`}
                   </div>
                 )}
@@ -837,7 +837,7 @@ function CompanySetupTab() {
                   <label style={C.lbl}>LWF Applicable States</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {ALL_STATES.map(st => (
-                      <label key={st} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', background: lwfStates.includes(st) ? TK.brandTint : TK.sunken, border: `1px solid ${lwfStates.includes(st) ? TK.brandEdge : TK.line}` }}>
+                      <label key={st} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '7px', background: lwfStates.includes(st) ? TK.brandTint : TK.sunken, border: `1px solid ${lwfStates.includes(st) ? TK.brandEdge : TK.line}` }}>
                         <input type="checkbox" checked={lwfStates.includes(st)} onChange={e => setLwfStates(p => e.target.checked ? [...p, st] : p.filter(s => s !== st))} style={{ width: '12px', height: '12px' }} />
                         {st}
                       </label>
@@ -874,7 +874,7 @@ function CompanySetupTab() {
 
             {!sameBank ? (
               <div style={C.sub}>
-                <div style={{ background: TK.brandTint, borderRadius: '6px', padding: '7px 10px', marginBottom: '10px', fontSize: '11px', color: TK.brand }}>Monthly salary NEFT/RTGS payments will be processed from this account
+                <div style={{ background: TK.brandTint, borderRadius: '7px', padding: '7px 10px', marginBottom: '10px', fontSize: '11px', color: TK.brand }}>Monthly salary NEFT/RTGS payments will be processed from this account
                 </div>
                 <div style={C.g2}>
                   <div><label style={C.lbl}>Bank Name</label><input style={inp()} value={salBank.bankName} onChange={e => setSalBank({ ...salBank, bankName: e.target.value })} placeholder="ICICI Bank" /></div>
@@ -886,7 +886,7 @@ function CompanySetupTab() {
                 <div style={{ marginTop: '10px' }}><label style={C.lbl}>Cancelled Cheque</label><label style={{ cursor: 'pointer' }}><input type="file" accept=".pdf,.jpg,.png,.jpeg" style={{ display: 'none' }} /><div style={uploadBox}>Upload</div></label></div>
               </div>
             ) : (
-              <div style={{ background: TK.positiveTint, borderRadius: '8px', padding: '10px 12px', fontSize: '12px', color: TK.positive }}>Salary will be disbursed from the Operating Account
+              <div style={{ background: TK.positiveTint, borderRadius: '10px', padding: '10px 12px', fontSize: '12px', color: TK.positive }}>Salary will be disbursed from the Operating Account
               </div>
             )}
           </div>
@@ -896,7 +896,7 @@ function CompanySetupTab() {
         {step === 6 && (
           <div style={C.card}>
             <div style={C.secTitle}>License & Billing Plan</div>
-            <div style={{ background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: '8px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px', color: TK.warning }}>Set this as per client agreement. Employee & location limits will be enforced. If limit is exceeded, system will alert and block further additions.
+            <div style={{ background: TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius: '10px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px', color: TK.warning }}>Set this as per client agreement. Employee & location limits will be enforced. If limit is exceeded, system will alert and block further additions.
             </div>
             <div style={{ display: 'flex', gap: '10px', marginBottom: '16px' }}>
               {PLANS.map(p => (
@@ -921,7 +921,7 @@ function CompanySetupTab() {
               <div><label style={C.lbl}>Billing Cycle</label><select style={sel()} value={license.billingCycle} onChange={e => setLicense(prev => ({ ...prev, billingCycle: e.target.value }))}><option>Monthly</option><option>Quarterly</option><option>Annual</option></select></div>
             </div>
             {license.validFrom && license.validTill && license.annualCost && (
-              <div style={{ marginTop: '14px', background: TK.positiveTint, borderRadius: '8px', padding: '12px 14px', fontSize: '12px', color: TK.positive }}>
+              <div style={{ marginTop: '14px', background: TK.positiveTint, borderRadius: '10px', padding: '12px 14px', fontSize: '12px', color: TK.positive }}>
                 ✓ {license.plan} Plan | {license.maxEmployees} employees | {license.maxLocations} locations | ₹{Number(license.annualCost).toLocaleString('en-IN')}/year | Valid: {license.validFrom} to {license.validTill}
               </div>
             )}
@@ -1057,7 +1057,7 @@ function MasterSetupTab() {
           <div style={{ fontSize:'15px', fontWeight:600 }}>{title}</div>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:TK.faint }}></button>
         </div>
-        {error && <div style={{ padding:'8px 12px', background:TK.criticalTint, borderRadius:'8px', fontSize:'12px', color:TK.critical, marginBottom:'12px' }}>⚠️ {error}</div>}
+        {error && <div style={{ padding:'8px 12px', background:TK.criticalTint, borderRadius:'10px', fontSize:'12px', color:TK.critical, marginBottom:'12px' }}>⚠️ {error}</div>}
         {children}
         <div style={{ display:'flex', gap:'8px', marginTop:'16px' }}>
           <button style={{ ...C.priBtn, flex:1, opacity: saving ? 0.7:1 }} onClick={onSave} disabled={saving}>{saving ? 'Saving...' : saveLabel}</button>
@@ -1183,11 +1183,11 @@ function MasterSetupTab() {
                   <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'4px' }}>{tp.name}</div>
                   <div style={{ fontSize:'11px', color:TK.muted, marginBottom:'8px' }}>{tp.description || ''}</div>
                   <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' as const }}>
-                    {tp.has_color && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.brandTint, color:TK.brand, borderRadius:'4px' }}>Color</span>}
-                    {tp.has_code && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.infoTint, color:TK.info, borderRadius:'4px' }}>Code</span>}
-                    {tp.has_parent && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.positiveTint, color:TK.positive, borderRadius:'4px' }}>Hierarchy</span>}
-                    {tp.has_extra_data && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.warningTint, color:TK.warning, borderRadius:'4px' }}>Extra Fields</span>}
-                    {tp.is_system && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.sunken, color:TK.inkSoft, borderRadius:'4px' }}>System</span>}
+                    {tp.has_color && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.brandTint, color:TK.brand, borderRadius:'7px' }}>Color</span>}
+                    {tp.has_code && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.infoTint, color:TK.info, borderRadius:'7px' }}>Code</span>}
+                    {tp.has_parent && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.positiveTint, color:TK.positive, borderRadius:'7px' }}>Hierarchy</span>}
+                    {tp.has_extra_data && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.warningTint, color:TK.warning, borderRadius:'7px' }}>Extra Fields</span>}
+                    {tp.is_system && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.sunken, color:TK.inkSoft, borderRadius:'7px' }}>System</span>}
                   </div>
                 </div>
               ))}
@@ -1198,7 +1198,7 @@ function MasterSetupTab() {
           {selType && (
             <div style={MC.card}>
               {/* Stats bar */}
-              <div style={{ display:'flex', gap:'16px', marginBottom:'14px', padding:'10px 14px', background:TK.sunken, borderRadius:'8px' }}>
+              <div style={{ display:'flex', gap:'16px', marginBottom:'14px', padding:'10px 14px', background:TK.sunken, borderRadius:'10px' }}>
                 <span style={{ fontSize:'11px', color:TK.muted }}>Total: <strong style={{ color:TK.inkSoft }}>{values.length}</strong></span>
                 <span style={{ fontSize:'11px', color:TK.muted }}>Active: <strong style={{ color:TK.positive }}>{values.filter(v=>v.is_active).length}</strong></span>
                 <span style={{ fontSize:'11px', color:TK.muted }}>Disabled: <strong style={{ color:TK.critical }}>{values.filter(v=>!v.is_active).length}</strong></span>
@@ -1236,26 +1236,26 @@ function MasterSetupTab() {
                         )}
                         {selType.has_code && (
                           <td style={{ padding:'8px 10px' }}>
-                            <span style={{ padding:'2px 7px', background: v.color||TK.brandTint, color:TK.onAccent, borderRadius:'5px', fontSize:'10px', fontWeight:600 }}>{v.code}</span>
+                            <span style={{ padding:'2px 7px', background: v.color||TK.brandTint, color:TK.onAccent, borderRadius:'7px', fontSize:'10px', fontWeight:600 }}>{v.code}</span>
                           </td>
                         )}
                         <td style={{ padding:'8px 10px', fontWeight:500 }}>{v.label}</td>
                         <td style={{ padding:'8px 10px', color:TK.muted, fontSize:'11px' }}>{v.description||'—'}</td>
                         {selType.has_extra_data && (
                           <td style={{ padding:'8px 10px' }}>
-                            {v.extra_data && <button onClick={() => alert(JSON.stringify(v.extra_data, null, 2))} style={{ padding:'2px 8px', background:TK.brandTint, border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:TK.brand }}>View</button>}
+                            {v.extra_data && <button onClick={() => alert(JSON.stringify(v.extra_data, null, 2))} style={{ padding:'2px 8px', background:TK.brandTint, border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'10px', color:TK.brand }}>View</button>}
                           </td>
                         )}
                         <td style={{ padding:'8px 10px' }}>
-                          <span style={{ padding:'2px 8px', borderRadius:'6px', fontSize:'10px', fontWeight:500, background: v.is_active ? TK.positiveTint:TK.criticalTint, color: v.is_active ? TK.positive:TK.critical }}>
+                          <span style={{ padding:'2px 8px', borderRadius:'7px', fontSize:'10px', fontWeight:500, background: v.is_active ? TK.positiveTint:TK.criticalTint, color: v.is_active ? TK.positive:TK.critical }}>
                             {v.is_active ? 'Active' : 'Disabled'}
                           </span>
-                          {v.is_system && <span style={{ marginLeft:'4px', padding:'1px 5px', background:TK.sunken, color:TK.muted, borderRadius:'4px', fontSize:'9px' }}>System</span>}
+                          {v.is_system && <span style={{ marginLeft:'4px', padding:'1px 5px', background:TK.sunken, color:TK.muted, borderRadius:'7px', fontSize:'9px' }}>System</span>}
                         </td>
                         <td style={{ padding:'8px 10px' }}>
                           <div style={{ display:'flex', gap:'4px' }}>
-                            <button onClick={() => openEditValue(v)} style={{ padding:'4px 8px', background:TK.brandTint, border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:TK.brand }}>Edit</button>
-                            <button onClick={() => handleToggle(v)} disabled={v.is_system && v.is_active} style={{ padding:'4px 8px', border:'none', borderRadius:'5px', cursor: v.is_system && v.is_active ? 'not-allowed':'pointer', fontSize:'10px', background: v.is_active ? TK.criticalTint:TK.positiveTint, color: v.is_active ? TK.critical:TK.positive, opacity: v.is_system && v.is_active ? 0.4:1 }}>
+                            <button onClick={() => openEditValue(v)} style={{ padding:'4px 8px', background:TK.brandTint, border:'none', borderRadius:'7px', cursor:'pointer', fontSize:'10px', color:TK.brand }}>Edit</button>
+                            <button onClick={() => handleToggle(v)} disabled={v.is_system && v.is_active} style={{ padding:'4px 8px', border:'none', borderRadius:'7px', cursor: v.is_system && v.is_active ? 'not-allowed':'pointer', fontSize:'10px', background: v.is_active ? TK.criticalTint:TK.positiveTint, color: v.is_active ? TK.critical:TK.positive, opacity: v.is_system && v.is_active ? 0.4:1 }}>
                               {v.is_active ? 'Disable' : 'Enable'}
                             </button>
                           </div>
@@ -1303,7 +1303,7 @@ function MasterSetupTab() {
           {selType.has_extra_data && selType.extra_schema && (
             <div style={{ marginBottom:'12px' }}>
               <label style={MC.lbl}>Extra Fields (as per schema)</label>
-              <div style={{ padding:'8px 12px', background:TK.brandTint, borderRadius:'8px', fontSize:'11px', color:TK.brand, marginBottom:'8px' }}>
+              <div style={{ padding:'8px 12px', background:TK.brandTint, borderRadius:'10px', fontSize:'11px', color:TK.brand, marginBottom:'8px' }}>
                 Fields: {Object.keys(selType.extra_schema).map((k: string) => `${k} (${selType.extra_schema[k]?.label})`).join(' · ')}
               </div>
               <textarea style={{ ...C.inp, height:'100px', resize:'vertical' as const, fontFamily:'monospace', fontSize:'11px' }}
@@ -1313,7 +1313,7 @@ function MasterSetupTab() {
             </div>
           )}
           {editValue?.is_system && (
-            <div style={{ padding:'8px 12px', background:TK.warningTint, borderRadius:'8px', fontSize:'11px', color:TK.warning }}>System value — only Label and Description can be edited
+            <div style={{ padding:'8px 12px', background:TK.warningTint, borderRadius:'10px', fontSize:'11px', color:TK.warning }}>System value — only Label and Description can be edited
             </div>
           )}
         </Modal>
@@ -1322,7 +1322,7 @@ function MasterSetupTab() {
       {/* ── ADD NEW MASTER TYPE MODAL ────────────────────────────────── */}
       {showTypeForm && selCat && (
         <Modal title={`+ New Master Type — ${selCat.name}`} onClose={() => setShowTypeForm(false)} onSave={handleSaveType} saveLabel="Create Master Type">
-          <div style={{ padding:'8px 12px', background:TK.infoTint, borderRadius:'8px', fontSize:'11px', color:TK.info, marginBottom:'12px' }}>After creating a new master type, you can add values to it. This master type will then be available in all forms.
+          <div style={{ padding:'8px 12px', background:TK.infoTint, borderRadius:'10px', fontSize:'11px', color:TK.info, marginBottom:'12px' }}>After creating a new master type, you can add values to it. This master type will then be available in all forms.
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
             <Fld label="Code (unique)" req>

@@ -583,7 +583,7 @@ function Field({ label, value, icon, copyable, sensitive, notify }: {
   return (
     <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
          style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px',
-                  borderRadius: 8, background: hover ? P.purpleLite : 'transparent',
+                  borderRadius: 10, background: hover ? P.purpleLite : 'transparent',
                   transition: 'background .15s' }}>
       {icon && <span style={{ fontSize: 14, width: 18, textAlign: 'center', opacity: .8 }}>{icon}</span>}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -623,7 +623,7 @@ function Panel({ title, icon, children, accent }: {
   title: string; icon: string; children: React.ReactNode; accent?: string
 }) {
   return (
-    <div style={{ background: P.white, borderRadius: 12, border: `1px solid ${P.line}`,
+    <div style={{ background: P.white, borderRadius: 14, border: `1px solid ${P.line}`,
                   padding: '15px 14px', boxShadow: '0 1px 3px rgba(37,99,235,0.05)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
                     paddingBottom: 9, borderBottom: `1px solid ${P.line}` }}>
@@ -770,7 +770,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
         {TABS.map(([k, label, icon]) => (
           <button key={k} onClick={() => setTab(k)}
                   style={{ display: 'flex', alignItems: 'center', gap: 6,
-                           padding: '8px 15px', borderRadius: 9, cursor: 'pointer',
+                           padding: '8px 15px', borderRadius: 10, cursor: 'pointer',
                            fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
                            border: tab === k ? 'none' : `1px solid ${P.line}`,
                            background: tab === k ? P.purple : P.white,
@@ -833,7 +833,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
       )}
 
       {tab === 'UPDATE' && (
-        <div style={{ background: P.white, borderRadius: 12, border: `1px solid ${P.line}`,
+        <div style={{ background: P.white, borderRadius: 14, border: `1px solid ${P.line}`,
                       padding: '18px 18px', maxWidth: 720 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Request a change</div>
           <div style={{ fontSize: 12, color: P.muted, marginTop: 4, marginBottom: 15, lineHeight: 1.6 }}>
@@ -1098,8 +1098,8 @@ function Directory({ isMobile }: { isMobile: boolean }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.brandTint }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ height: 11, background: C.brandTint, borderRadius: 4, width: '65%', marginBottom: 7 }} />
-                  <div style={{ height: 9, background: C.sunken, borderRadius: 4, width: '45%' }} />
+                  <div style={{ height: 11, background: C.brandTint, borderRadius: 7, width: '65%', marginBottom: 7 }} />
+                  <div style={{ height: 9, background: C.sunken, borderRadius: 7, width: '45%' }} />
                 </div>
               </div>
             </div>
@@ -1214,7 +1214,7 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
         <div style={T.section}>Leave Balance · FY 2026-27</div>
         {balances.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No leave balances yet — contact HR.</div> :
           balances.map((b: any) => { const total = Number(b.opening || 0) + Number(b.accrued || 0); const av = avail(b); const pct = total > 0 ? Math.round(av / total * 100) : 0; return (
-            <div key={b.id} style={{ background: C.sunken, borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}>
+            <div key={b.id} style={{ background: C.sunken, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                 <span style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10, background: C.brandTint, color: C.brandDeep, padding: '2px 7px', borderRadius: 99, marginRight: 6 }}>{b.leave_types?.short_name}</span>{b.leave_types?.name}</span>
                 <span style={{ fontSize: 18, fontWeight: 700, color: barColor(pct) }}>{av}<span style={{ fontSize: 11, color: C.faint, fontWeight: 400 }}> / {total}</span></span>
@@ -1397,7 +1397,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
   const circ = 2 * Math.PI * r
 
   const nav: React.CSSProperties = {
-    width: 32, height: 32, borderRadius: 9, cursor: 'pointer',
+    width: 32, height: 32, borderRadius: 10, cursor: 'pointer',
     border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.10)',
     color: C.onAccent, fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1766,7 +1766,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           border: isSel ? '1px solid #1D4ED8'
                 : isToday ? '2px solid #93C5FD'
                 : '1px solid rgba(37,99,235,0.09)',
-          borderRadius: 8, padding: 0,
+          borderRadius: 10, padding: 0,
           cursor: isFuture ? 'default' : 'pointer',
           opacity: isFuture ? .45 : 1,
           animationDelay: `${delay}ms`,
@@ -2232,7 +2232,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
           {loading || !monthData
             ? <div style={{ display:'grid', gridTemplateColumns:'repeat(7,60px)', gap:4 }}>
                 {Array.from({ length: 35 }).map((_, i) => (
-                  <div key={i} style={{ height: isMobile ? 40 : 56, borderRadius:8,
+                  <div key={i} style={{ height: isMobile ? 40 : 56, borderRadius:10,
                                         background: `linear-gradient(90deg,${C.brandTint} 25%,${C.brandTint} 50%,${C.brandTint} 75%)`,
                                         backgroundSize:'200% 100%', animation:'ezerShimmer 1.2s infinite' }} />
                 ))}
@@ -2315,7 +2315,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     const res = await fetch('/api/ess/vpf', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, stopped_reason: 'Employee requested', stopped_from_month: 4 }) })
     if (res.ok) { notify('VPF stopped'); load() } else notify('Failed to stop', 'error')
   }
-  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }
   const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '5px 0' }
 
   return (
@@ -2353,20 +2353,20 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
       <div style={{ marginBottom: 14 }}>
         <label style={{ fontSize: 12, color: V.muted, display: 'block', marginBottom: 6 }}>VPF percentage</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="number" value={pctInput} min={1} step={1} onChange={e2 => setPctInput(e2.target.value)} style={{ flex: 1, padding: 10, borderRadius: 8, border: `1px solid ${V.border}`, fontSize: 15, fontFamily: 'inherit' }} placeholder="e.g. 25" />
+          <input type="number" value={pctInput} min={1} step={1} onChange={e2 => setPctInput(e2.target.value)} style={{ flex: 1, padding: 10, borderRadius: 10, border: `1px solid ${V.border}`, fontSize: 15, fontFamily: 'inherit' }} placeholder="e.g. 25" />
           <span style={{ fontSize: 16, fontWeight: 500, color: V.purpleDark }}>%</span>
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Percentage of your EPF wages.</div>
       </div>
 
       {showHighAlert && (
-        <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
           <span style={{ color: V.red }}></span>
           <span style={{ fontSize: 12, color: C.critical, lineHeight: 1.6 }}><strong>That high?</strong> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.</span>
         </div>
       )}
       {capHit && (
-        <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
+        <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
           <span style={{ color: V.amber }}></span>
           <span style={{ fontSize: 12, color: C.warning, lineHeight: 1.6 }}>Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.</span>
         </div>
@@ -2387,7 +2387,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` — no 80C benefit on ${inr(total80c - e.c80_limit)}` : ''}</div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
         <span style={{ color: V.red }}></span>
         <div style={{ fontSize: 12, color: C.critical, lineHeight: 1.7 }}><strong>Choose carefully:</strong><br />• VPF will <strong>reduce your net in-hand salary</strong><br />• The 80C exemption only goes <strong>up to ₹1.5 lakh</strong> (EPF + VPF + your other 80C)<br />• It is deducted every month until you stop it</div>
       </div>
@@ -2397,7 +2397,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.</span>
       </label>
 
-      <button disabled={!ack || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: ack ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: ack ? V.purple : C.canvas, color: ack ? C.surface : C.muted, cursor: ack ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>
+      <button disabled={!ack || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 10, fontWeight: 500, fontFamily: 'inherit', border: ack ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: ack ? V.purple : C.canvas, color: ack ? C.surface : C.muted, cursor: ack ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>
     </div>
   )
 }
@@ -2431,9 +2431,9 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
   const pranClean = pran.replace(/\D/g, '')
   const pranValid = pranClean.length === e.pran_length
   const canSubmit = ack && (!hasPran || pranValid)
-  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }
   const label: React.CSSProperties = { fontSize: 12, color: V.muted, display: 'block', marginBottom: 6 }
-  const input: React.CSSProperties = { width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${V.border}`, fontSize: 14, boxSizing: 'border-box', fontFamily: 'inherit' }
+  const input: React.CSSProperties = { width: '100%', padding: 10, borderRadius: 10, border: `1px solid ${V.border}`, fontSize: 14, boxSizing: 'border-box', fontFamily: 'inherit' }
 
   const submit = async () => {
     setSaving(true)
@@ -2473,7 +2473,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
               <div style={{ fontSize: 12, color: V.blue, marginBottom: 8 }}>PRAN pending — generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '—'}.</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`} style={{ ...input, letterSpacing: 2 }} />
-                <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: V.purple, color: C.onAccent, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
+                <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: V.purple, color: C.onAccent, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
               </div>
             </div>
           ) : (
@@ -2504,8 +2504,8 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: V.muted, marginBottom: 8 }}>Do you already have an NPS account (PRAN)?</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setHasPran(true)} style={{ flex: 1, padding: 10, borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: hasPran ? V.bg: C.surface, color: hasPran ? V.purpleDark : V.navy }}>Yes, I have a PRAN</button>
-          <button onClick={() => setHasPran(false)} style={{ flex: 1, padding: 10, borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: !hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: !hasPran ? V.bg: C.surface, color: !hasPran ? V.purpleDark : V.navy }}>No, I need one</button>
+          <button onClick={() => setHasPran(true)} style={{ flex: 1, padding: 10, borderRadius: 10, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: hasPran ? V.bg: C.surface, color: hasPran ? V.purpleDark : V.navy }}>Yes, I have a PRAN</button>
+          <button onClick={() => setHasPran(false)} style={{ flex: 1, padding: 10, borderRadius: 10, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: !hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: !hasPran ? V.bg: C.surface, color: !hasPran ? V.purpleDark : V.navy }}>No, I need one</button>
         </div>
       </div>
 
@@ -2522,7 +2522,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
           </div>
         </>
       ) : (
-        <div style={{ background: V.blueBg, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+        <div style={{ background: V.blueBg, borderRadius: 14, padding: 16, marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <span style={{ color: V.blue }}></span>
             <div style={{ fontSize: 12, color: C.brand, lineHeight: 1.7 }}><strong>A new PRAN will be created for you.</strong><br />On submit, we'll email you the PRAN creation form. Generate your PRAN <strong>within 3 days</strong>, then resubmit here. For help, contact the <strong>Payroll team</strong>.</div>
@@ -2530,7 +2530,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
         <span style={{ color: V.amber }}></span>
         <div style={{ fontSize: 12, color: C.warning, lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product — locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
       </div>
@@ -2540,7 +2540,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.</span>
       </label>
 
-      <button disabled={!canSubmit || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: canSubmit ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: canSubmit ? V.purple : C.canvas, color: canSubmit ? C.surface : C.muted, cursor: canSubmit ? 'pointer' : 'not-allowed' }}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</button>
+      <button disabled={!canSubmit || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 10, fontWeight: 500, fontFamily: 'inherit', border: canSubmit ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: canSubmit ? V.purple : C.canvas, color: canSubmit ? C.surface : C.muted, cursor: canSubmit ? 'pointer' : 'not-allowed' }}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</button>
     </div>
   )
 }
@@ -2585,8 +2585,8 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
       setAgr(d?.agreement || null); setLoading(false)
     }).catch(() => setLoading(false))
   }, [requestId])
-  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
-  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:8, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
+  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:14, padding:16, marginBottom:14 }
+  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:10, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
 
   const submit = async () => {
     if (!agr) return
@@ -2622,7 +2622,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
           <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
         </div>
       </div>
-      <div style={{ overflowX:'auto', border:`1px solid ${V.border}`, borderRadius:8, marginBottom:14 }}>
+      <div style={{ overflowX:'auto', border:`1px solid ${V.border}`, borderRadius:10, marginBottom:14 }}>
         <table style={{ borderCollapse:'collapse', width:'100%', minWidth:520 }}>
           <thead><tr style={{ background: C.brandTint }}>
             <th style={{ ...th, textAlign:'left' }}>#</th><th style={th}>Due</th><th style={th}>EMI</th><th style={th}>Principal</th><th style={th}>Interest</th><th style={th}>Closing</th>
@@ -2643,14 +2643,14 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
         </table>
       </div>
       <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-        <button onClick={() => setMode('ESIGN')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='ESIGN' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='ESIGN' ? V.bg: C.surface, color: mode==='ESIGN' ? V.purpleDark : V.navy }}>E-sign</button>
-        <button onClick={() => setMode('UPLOAD')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='UPLOAD' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='UPLOAD' ? V.bg: C.surface, color: mode==='UPLOAD' ? V.purpleDark : V.navy }}>Upload signed PDF</button>
+        <button onClick={() => setMode('ESIGN')} style={{ flex:1, padding:9, borderRadius:10, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='ESIGN' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='ESIGN' ? V.bg: C.surface, color: mode==='ESIGN' ? V.purpleDark : V.navy }}>E-sign</button>
+        <button onClick={() => setMode('UPLOAD')} style={{ flex:1, padding:9, borderRadius:10, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='UPLOAD' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='UPLOAD' ? V.bg: C.surface, color: mode==='UPLOAD' ? V.purpleDark : V.navy }}>Upload signed PDF</button>
       </div>
       {mode === 'ESIGN' ? (
         <div style={{ marginBottom:12 }}>
           <label style={{ fontSize:12, color:V.muted, display:'block', marginBottom:6 }}>Type your full legal name to sign</label>
           <input value={esignName} onChange={e => setEsignName(e.target.value)} placeholder="e.g. Rahul Sharma" style={input} />
-          {esignName.trim() && <div style={{ marginTop:8, padding:'10px 14px', border:`1px dashed ${V.purple}`, borderRadius:8, fontFamily:'"Segoe Script","Brush Script MT",cursive', fontSize:22, color:V.purpleDark }}>{esignName}</div>}
+          {esignName.trim() && <div style={{ marginTop:8, padding:'10px 14px', border:`1px dashed ${V.purple}`, borderRadius:10, fontFamily:'"Segoe Script","Brush Script MT",cursive', fontSize:22, color:V.purpleDark }}>{esignName}</div>}
         </div>
       ) : (
         <div style={{ marginBottom:12 }}>
@@ -2658,7 +2658,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
           <input value={pdfUrl} onChange={e => setPdfUrl(e.target.value)} placeholder="https://…/signed-agreement.pdf" style={input} />
         </div>
       )}
-      <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit signed agreement'}</button>
+      <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:10, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit signed agreement'}</button>
     </div>
   )
 }
@@ -2683,9 +2683,9 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   }, [emp.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
 
-  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
+  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:14, padding:16, marginBottom:14 }
   const label: React.CSSProperties = { fontSize:12, color:V.muted, display:'block', marginBottom:6 }
-  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:8, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
+  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:10, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
 
   if (loading) return <div style={{ padding:20, color:V.muted, fontSize:13 }}>Loading…</div>
 
@@ -2776,7 +2776,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
                 <span style={{ fontSize:18, fontWeight:600, color:V.purpleDark }}>{loanInr(indicativeEmi)}<span style={{ fontSize:11, color:V.muted, fontWeight:400 }}>/mo</span></span>
               </div>
             </div>
-            <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
+            <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:10, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
           </>
         )}
       </div>
@@ -2896,7 +2896,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
     return () => { live = false }
   }, [emp.id])
 
-  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }
 
   if (status === 'loading') return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading flexi policy…</div>
   if (status === 'nopolicy') return (
@@ -3192,7 +3192,7 @@ function FeatureGrid({ features }: { features: Feature[] }) {
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12 }}>
         {features.map(f => (
-          <div key={f.name} style={{ background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:12, padding:16 }}>
+          <div key={f.name} style={{ background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, padding:16 }}>
             <div style={{ fontSize:22, marginBottom:6 }}>{f.icon}</div>
             <div style={{ fontWeight:700, fontSize:13, marginBottom:3 }}>{f.name}</div>
             <div style={{ fontSize:11, color:C.muted }}>{f.note}</div>
@@ -3337,7 +3337,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         // The panel was absolutely positioned inside that catcher, which
         // covered the viewport — so `fixed` with the same offsets puts it in
         // exactly the same place, now that the catcher is gone.
-        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:41, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:12, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
+        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:41, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
           <Notifications emp={emp} onChange={refreshUnread} />
         </div>
       )}
@@ -3365,7 +3365,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
             <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
               {SECTIONS.map(s => (
-                <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:9, border:`1px solid ${section.k === s.k ? C.brand : C.brandTint}`, background: section.k === s.k ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:C.ink }}>
+                <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:10, border:`1px solid ${section.k === s.k ? C.brand : C.brandTint}`, background: section.k === s.k ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:C.ink }}>
                   <span style={{ display:'flex' }}><EssIcon k={s.k} size={16} /></span>
                   <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
                   <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />

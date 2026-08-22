@@ -60,7 +60,7 @@ function CompanyCard({ co, isMobile }: { co: Company; isMobile: boolean }) {
           <div style={C.sec}>Branches ({co.branches.length})</div>
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:8, marginBottom:18 }}>
             {co.branches.map((b: Branch) => (
-              <div key={b.id} style={{ border: `1px solid ${TK.line}`, borderRadius:8, padding:'10px 12px' }}>
+              <div key={b.id} style={{ border: `1px solid ${TK.line}`, borderRadius:10, padding:'10px 12px' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                   <span style={{ fontSize:13, fontWeight:600 }}>{b.location_name}</span>
                   <span style={{ fontSize:10, padding:'1px 7px', borderRadius:99, background:TK.sunken, color:TK.inkSoft }}>{b.location_type}</span>

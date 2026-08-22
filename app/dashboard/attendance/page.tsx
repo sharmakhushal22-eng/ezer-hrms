@@ -14,14 +14,14 @@ import { C as TK } from '@/lib/ui'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border:'1px solid var(--ez-line)', padding:'14px 16px', marginBottom:12, boxShadow:'var(--ez-shadow-flat)' } as React.CSSProperties,
   lbl:   { fontSize:10, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
   pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
   out:   { padding:'7px 12px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep } as React.CSSProperties,
   danger:{ padding:'6px 11px', borderRadius:7, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
-  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
+  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:10, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
 }
 const hrs = (m: number | null) => m == null ? '—' : `${Math.floor(m / 60)}h ${m % 60}m`
 const tm = (s: string | null) => s ? new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
@@ -152,7 +152,7 @@ function AssignTab({ shifts, employees, assignments, onAssign }: {
         <div style={T.sec}>Pending — no active shift ({pending.length})</div>
         {pending.length === 0 ? <div style={{ fontSize:12, color:TK.faint }}>Every employee already has a shift assigned.</div> : (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))', gap:6 }}>
-            {pending.slice(0, 120).map(e => <div key={e.id} style={{ fontSize:12, padding:'5px 8px', background:TK.sunken, borderRadius:6, border: `1px solid ${TK.brandEdge}` }}>{e.full_name} <span style={{ color:TK.faint, fontSize:10 }}>{e.emp_code}</span></div>)}
+            {pending.slice(0, 120).map(e => <div key={e.id} style={{ fontSize:12, padding:'5px 8px', background:TK.sunken, borderRadius:7, border: `1px solid ${TK.brandEdge}` }}>{e.full_name} <span style={{ color:TK.faint, fontSize:10 }}>{e.emp_code}</span></div>)}
           </div>
         )}
       </div>
@@ -167,7 +167,7 @@ function RecordsTab({ employees, records, from, to, onFrom, onTo }: {
   const emp = (id: string) => employees.find(e => e.id === id)
   return (
     <>
-      <div style={{ ...T.card, display:'flex', gap:12, alignItems:'flex-end', flexWrap:'wrap', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+      <div style={{ ...T.card, display:'flex', gap:12, alignItems:'flex-end', flexWrap:'wrap', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
         <div><label style={T.lbl}>From date</label><input type="date" style={{ ...T.input, width:170 }} value={from} max={to || undefined} onChange={e => onFrom(e.target.value)} /></div>
         <div><label style={T.lbl}>To date</label><input type="date" style={{ ...T.input, width:170 }} value={to} min={from || undefined} onChange={e => onTo(e.target.value)} /></div>
         <div style={{ marginLeft:'auto', fontSize:11, color:TK.muted }}>{records.length} record(s)</div>

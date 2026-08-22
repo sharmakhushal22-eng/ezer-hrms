@@ -41,11 +41,11 @@ export interface Candidate {
 // ── Styles (C constant — matches project palette) ──────────────────
 const C = {
   page:  { background: TK.canvas, minHeight: '100vh', color: TK.ink, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: '13px' } as React.CSSProperties,
-  card:  { background: TK.surface, borderRadius: 10, border: '1px solid rgba(37,99,235,0.12)', padding: '14px 16px', marginBottom: 10, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
+  card:  { background: TK.surface, borderRadius: 10, border: '1px solid var(--ez-line)', padding: '14px 16px', marginBottom: 10, boxShadow: 'var(--ez-shadow-flat)' } as React.CSSProperties,
   btnP:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.brand, color: TK.onAccent } as React.CSSProperties,
   btnG:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.positive, color: TK.onAccent } as React.CSSProperties,
   btnO:  { padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: TK.brand } as React.CSSProperties,
-  inp:   { width: '100%', padding: '9px 11px', background: TK.sunken, border: '1px solid rgba(37,99,235,0.12)', borderRadius: 7, color: TK.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const },
+  inp:   { width: '100%', padding: '9px 11px', background: TK.sunken, border: '1px solid var(--ez-line)', borderRadius: 7, color: TK.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const },
   lbl:   { fontSize: 11, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.05em', display: 'block', marginBottom: 4 },
   g2:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as React.CSSProperties,
   g3:    { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } as React.CSSProperties,

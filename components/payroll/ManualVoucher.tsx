@@ -187,7 +187,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
     setBulkBusy(false); setBulkResults(out); refresh()
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }
+  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }
   const th: React.CSSProperties = { padding: '8px 10px', fontSize: 10, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
   const pill = (on: boolean): React.CSSProperties => ({
@@ -214,14 +214,14 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1000 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Manual Voucher</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>One-off additions and deductions for a specific employee in a specific month</div>
         </div>
       </div>
 
-      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
+      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
         {([['individual', 'Individual'], ['bulk', 'Bulk upload'], ['tracking', 'Tracking']] as [Tab, string][]).map(([k, l]) => (
@@ -236,8 +236,8 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
         </div>
       </div>
 
-      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px', marginBottom: 12 }}>{err}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>{err}</div>}
 
       {/* ── Individual ── */}
       {tab === 'individual' && (
@@ -252,7 +252,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={saveOne} disabled={busy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+                style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
                 {busy ? 'Saving…' : 'Save entry'}
               </button>
               {headType && <span style={{ fontSize: 12, fontWeight: 700, color: headType === 'Addition' ? C.green : C.red }}>{headType}</span>}
@@ -312,7 +312,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={downloadTemplate} disabled={!picked.length || !runIds.length}
-                style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: picked.length && runIds.length ? 'pointer' : 'not-allowed', opacity: picked.length && runIds.length ? 1 : 0.5 }}>
+                style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: picked.length && runIds.length ? 'pointer' : 'not-allowed', opacity: picked.length && runIds.length ? 1 : 0.5 }}>
                 ⬇ Download template
               </button>
               <span style={{ fontSize: 11, color: C.muted }}>{picked.length} head{picked.length === 1 ? '' : 's'} selected</span>
@@ -326,7 +326,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
             {bulkRows && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
                 <button onClick={processBulk} disabled={bulkBusy}
-                  style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: bulkBusy ? 'not-allowed' : 'pointer', opacity: bulkBusy ? 0.6 : 1 }}>
+                  style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: bulkBusy ? 'not-allowed' : 'pointer', opacity: bulkBusy ? 0.6 : 1 }}>
                   {bulkBusy ? 'Saving…' : `Save ${bulkRows.length} rows`}
                 </button>
                 <span style={{ fontSize: 12, color: C.purpleD }}><b>{bulkFile}</b> · {bulkRows.length} employees</span>

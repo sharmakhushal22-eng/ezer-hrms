@@ -28,7 +28,7 @@ function FilterBar({ companies, branches, company, setCompany, branch, setBranch
 }) {
   const compBranches = branches.filter(b => b.company_id === company)
   return (
-    <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+    <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
       <div style={C.sec}>Filter Employees</div>
       <div style={{ ...C.g2, marginBottom:10 }}>
         <div><label style={C.label}>Company</label>
@@ -63,7 +63,7 @@ function EmployeeSelectTable({ employees, branches, selected, setSelected }: {
     <div style={C.card}>
       <div style={C.sec}>Employees ({employees.length}) · {selected.size} selected</div>
       {employees.length === 0 ? <div style={{ fontSize:12, ...C.muted }}>No employees match the current filter.</div> : (
-        <div style={{ border: `1px solid ${TK.line}`, borderRadius:8, overflow:'hidden' }}>
+        <div style={{ border: `1px solid ${TK.line}`, borderRadius:10, overflow:'hidden' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:TK.sunken, borderBottom: `1px solid ${TK.line}`, fontSize:11, fontWeight:600, color:TK.muted }}>
             <input type="checkbox" checked={allSelected} onChange={toggleAll} />
             <span style={{ flex:'0 0 120px' }}>CODE</span>
@@ -95,7 +95,7 @@ function MidMonthWarning({ effectiveDate, toBranch, fromBranch }: { effectiveDat
     ? `Effective date is mid-month. For this month, statutory (PT/LWF/PF) will be per the PREVIOUS state (${fromBranch.state}). New state (${toBranch.state}) applies next month.`
     : `Effective mid-month; statutory stays ${fromBranch?.state || toBranch.state || '—'} this month.`
   return (
-    <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderLeft: `3px solid ${TK.warningTint}`, borderRadius:8, padding:'10px 12px', marginBottom:12, fontSize:13, color: TK.warning }}>
+    <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderLeft: `3px solid ${TK.warningTint}`, borderRadius:10, padding:'10px 12px', marginBottom:12, fontSize:13, color: TK.warning }}>
       ⚠ {msg}
     </div>
   )
@@ -120,7 +120,7 @@ function SearchSelect({ value, onChange, options, placeholder, allowCustom }: {
         onFocus={() => { setOpen(true); setQ(allowCustom ? (value || '') : '') }}
         onBlur={() => setTimeout(() => setOpen(false), 150)} />
       {open && filtered.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: TK.surface, border: `1px solid ${TK.line}`, borderRadius: 8, marginTop: 2, maxHeight: 220, overflowY: 'auto', zIndex: 30, boxShadow: '0 6px 18px rgba(0,0,0,0.10)' }}>
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: TK.surface, border: `1px solid ${TK.line}`, borderRadius: 10, marginTop: 2, maxHeight: 220, overflowY: 'auto', zIndex: 30, boxShadow: '0 6px 18px rgba(0,0,0,0.10)' }}>
           {filtered.map(o => (
             <div key={o.value} onMouseDown={() => { onChange(o.value); setQ(o.label); setOpen(false) }}
               style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', color: TK.ink, background: o.value === value ? TK.canvas: TK.surface }}>{o.label}</div>

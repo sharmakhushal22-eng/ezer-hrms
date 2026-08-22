@@ -17,10 +17,10 @@ const C = {
   page:  { background: TK.sunken, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
   card:  { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
   lbl:   { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:3 } as React.CSSProperties,
-  input: { padding:'7px 9px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const, width:'100%' } as React.CSSProperties,
-  pri:   { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:   { padding:'7px 12px', borderRadius:8, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  danger:{ padding:'5px 10px', borderRadius:8, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
+  input: { padding:'7px 9px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:10, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const, width:'100%' } as React.CSSProperties,
+  pri:   { padding:'8px 15px', borderRadius:10, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  out:   { padding:'7px 12px', borderRadius:10, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  danger:{ padding:'5px 10px', borderRadius:10, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
   sec:   { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
 }
 const numShow = (v: number | null) => v === null || v === undefined ? '—' : String(v)
@@ -200,7 +200,7 @@ export default function StatutoryLeavePage() {
         </div>
 
         {/* Toolbar */}
-        <div style={{ ...C.card, display:'flex', gap:8, flexWrap:'wrap', alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+        <div style={{ ...C.card, display:'flex', gap:8, flexWrap:'wrap', alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
           <div><label style={C.lbl}>FY</label><select style={{ ...C.input, width:120 }} value={fFy} onChange={e => setFFy(e.target.value)}><option value="">All</option>{fys.map(y => <option key={y} value={y}>{y}</option>)}</select></div>
           <div><label style={C.lbl}>Act</label><select style={{ ...C.input, width:140 }} value={fAct} onChange={e => setFAct(e.target.value as any)}><option value="">All</option><option value="SE">Shops & Estab</option><option value="FACTORY">Factories Act</option></select></div>
           <div><label style={C.lbl}>State</label><input style={{ ...C.input, width:160 }} placeholder="filter…" value={fState} onChange={e => setFState(e.target.value)} /></div>

@@ -28,7 +28,7 @@ function Row({ k, v }: { k: string; v: any }) {
   return <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}><span style={{ color:TK.muted }}>{k}</span><span style={{ fontWeight:600, color:TK.ink, textAlign:'right' }}>{v ?? '—'}</span></div>
 }
 function Banner({ color, bg, children }: { color: string; bg: string; children: React.ReactNode }) {
-  return <div style={{ background:bg, border:`1px solid ${color}33`, borderLeft:`3px solid ${color}`, borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:13, color:TK.ink }}>{children}</div>
+  return <div style={{ background:bg, border:`1px solid ${color}33`, borderLeft:`3px solid ${color}`, borderRadius:10, padding:'10px 12px', marginBottom:10, fontSize:13, color:TK.ink }}>{children}</div>
 }
 
 // ── Onboarding Info tab ─────────────────────────────────────────────

@@ -19,9 +19,9 @@ const C = {
   card:   { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
   lbl:    { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em' } as React.CSSProperties,
   val:    { fontSize:13, color:TK.ink, marginTop:2 } as React.CSSProperties,
-  input:  { padding:'6px 9px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
-  pri:    { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
-  out:    { padding:'6px 12px', borderRadius:8, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
+  input:  { padding:'6px 9px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:10, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
+  pri:    { padding:'8px 15px', borderRadius:10, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
+  out:    { padding:'6px 12px', borderRadius:10, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
   sec:    { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
 }
 const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF: TK.info, FACTORY:TK.critical }
@@ -92,7 +92,7 @@ function SearchSelect({ value, options, placeholder, onChange, disabled }: {
       </div>
       {open && !disabled && (
         <>
-          <div style={{ position:'absolute', top:'calc(100% + 3px)', left:0, width:'100%', minWidth:210, background:TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius:8, boxShadow:'0 8px 24px rgba(30,27,75,0.16)', zIndex:41, overflow:'hidden' }}>
+          <div style={{ position:'absolute', top:'calc(100% + 3px)', left:0, width:'100%', minWidth:210, background:TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius:10, boxShadow:'0 8px 24px rgba(30,27,75,0.16)', zIndex:41, overflow:'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
               style={{ width:'100%', padding:'8px 10px', border:'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:13, outline:'none', boxSizing:'border-box', fontFamily:'inherit' }} />
             <div style={{ maxHeight:220, overflowY:'auto' }}>
@@ -199,7 +199,7 @@ function CompanyCard({ co, isMobile, save, openPay }: {
           <div style={C.sec}>Branches ({co.branches.length})</div>
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:8, marginBottom:18 }}>
             {co.branches.map((b: Branch) => (
-              <div key={b.id} style={{ border: `1px solid ${TK.line}`, borderRadius:8, padding:'10px 12px' }}>
+              <div key={b.id} style={{ border: `1px solid ${TK.line}`, borderRadius:10, padding:'10px 12px' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
                   <span style={{ fontSize:13, fontWeight:600 }}>{b.location_name}</span>
                   <span style={{ fontSize:10, padding:'1px 7px', borderRadius:99, background:TK.sunken, color:TK.inkSoft }}>{b.location_type}</span>

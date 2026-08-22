@@ -24,7 +24,7 @@ const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block
 function InfoTile({ icon, label, value, hint, accent }: { icon: string; label: string; value: string; hint?: string; accent?: string }) {
   const a = accent || C.purpleD
   return (
-    <div style={{ background: TK.surface, borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(37,99,235,0.05)', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ background: TK.surface, borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: 'var(--ez-shadow-flat)', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: a }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
         <span style={{ fontSize: 13 }}>{icon}</span>
@@ -121,14 +121,14 @@ export default function EpfConfig() {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 720 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>EPF</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Provident Fund — EPF Wages = Gross − HRA, capped at each employee&apos;s PF limit</div>
         </div>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>{error}</div>}
 
       {cfg && (
         <>
@@ -146,7 +146,7 @@ export default function EpfConfig() {
           </GroupCard>
 
           {/* Contribution calculator */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Contribution calculator</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
               <div><label style={lbl}>Gross (₹/mo)</label><input type="number" value={gross} onChange={e => setGross(e.target.value)} style={inputStyle} /></div>
@@ -164,7 +164,7 @@ export default function EpfConfig() {
               {isIw && <Toggle checked={hasCoc} onChange={setHasCoc} label="Has Certificate of Coverage (excluded)" />}
             </div>
             <button onClick={runCalc}
-              style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', marginBottom: result ? 12 : 0 }}>
+              style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', marginBottom: result ? 12 : 0 }}>
               Calculate
             </button>
 
@@ -176,7 +176,7 @@ export default function EpfConfig() {
             ) : (
               <div style={{ background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 11, padding: '13px 15px' }}>
                 <div style={{ fontSize: 11, color: C.muted, marginBottom: 10 }}>EPF wages: <strong style={{ color: C.navy, fontSize: 13 }}>{inr(result.epf_wages)}</strong>{isIw && <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '2px 8px' }}>IW · full gross, no cap</span>}</div>
-                <div style={{ display: 'flex', gap: 0, background: TK.surface, borderRadius: 9, border: `1px solid ${C.greenBd}`, overflow: 'hidden', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 0, background: TK.surface, borderRadius: 10, border: `1px solid ${C.greenBd}`, overflow: 'hidden', flexWrap: 'wrap' }}>
                   {[
                     ['Employee', result.employee_contribution, C.navy],
                     ['Employer EPS', result.employer_eps_contribution, TK.info],
@@ -195,17 +195,17 @@ export default function EpfConfig() {
           </div>
 
           {/* EDLI + Admin charges (establishment) */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, boxShadow: 'var(--ez-shadow-flat)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>EDLI + Admin charges</div>
             <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>Establishment-level (employer only) — on ₹15,000 base, pro-rated by paid days.</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
               <div style={{ width: 110 }}><label style={lbl}>Paid days</label><input type="number" value={paidDays} onChange={e => setPaidDays(e.target.value)} style={inputStyle} /></div>
               <div style={{ width: 120 }}><label style={lbl}>Days in month</label><input type="number" value={daysInMonth} onChange={e => setDaysInMonth(e.target.value)} style={inputStyle} /></div>
               <div style={{ marginBottom: 9 }}><Toggle checked={hasMembers} onChange={setHasMembers} label="Has contributing members" /></div>
-              <button onClick={runCharges} style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${C.purple}`, background: TK.surface, color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 2 }}>Estimate</button>
+              <button onClick={runCharges} style={{ padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.purple}`, background: TK.surface, color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 2 }}>Estimate</button>
             </div>
             {charges && (
-              <div style={{ display: 'flex', gap: 0, background: C.gray, borderRadius: 9, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+              <div style={{ display: 'flex', gap: 0, background: C.gray, borderRadius: 10, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
                 {[['Pro-rated base', charges.prorated_base], ['EDLI', charges.edli_charge], ['Admin', charges.admin_charge]].map(([l, v], i) => (
                   <div key={l as string} style={{ flex: 1, padding: '10px 14px', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none' }}>
                     <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em', fontWeight: 700, marginBottom: 3 }}>{l as string}</div>

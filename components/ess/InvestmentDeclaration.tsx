@@ -29,14 +29,14 @@ const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN
 const num = (v: any) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0)
 
 const S = {
-  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 14 } as React.CSSProperties,
+  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px', marginBottom: 14 } as React.CSSProperties,
   h: { fontSize: 14, fontWeight: 700, color: C.navy, marginBottom: 3 } as React.CSSProperties,
   sub: { fontSize: 12, color: C.muted, lineHeight: 1.5 } as React.CSSProperties,
   lbl: { fontSize: 12, color: C.navy, display: 'block', marginBottom: 5 } as React.CSSProperties,
   inp: { width: '100%', padding: '9px 11px', background: C.soft, border: `1px solid #DDD6FE`, borderRadius: 7, color: C.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
   row: { display: 'grid', gridTemplateColumns: '1fr 200px', gap: 14, alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${C.border}` } as React.CSSProperties,
-  btnP: { padding: '11px 24px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
-  btnO: { padding: '11px 20px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
+  btnP: { padding: '11px 24px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
+  btnO: { padding: '11px 20px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
 }
 
 // Regime cards, defined outside the component so typing never remounts them.
@@ -197,7 +197,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
             blurb="HRA exemption aur Chapter VI-A deductions milti hain. Neeche apna planned investment declare karein." />
         </div>
         {regimeBlocked && (
-          <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 8, padding: '9px 12px', marginTop: 10 }}>
+          <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '9px 12px', marginTop: 10 }}>
             Ye badlaav save nahi hoga — regime ka ek switch pehle hi use ho chuka hai.
           </div>
         )}
@@ -216,7 +216,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
           <AmountRow label="LIC / Insurance premium" value={lic} onChange={setLic} />
           <AmountRow label="PPF / ELSS / other 80C" value={ppf} onChange={setPpf} />
           {over80c && (
-            <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 8, padding: '9px 12px', marginTop: 10 }}>
+            <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '9px 12px', marginTop: 10 }}>
               80C ki legal limit {inr(CAP_80C)} hai — {inr(pf + typed80c)} likhne se exemption nahi badhegi. {inr(CAP_80C)} hi count hoga.
             </div>
           )}
@@ -255,11 +255,11 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         </div>
       )}
 
-      <div style={{ fontSize: 12, color: C.muted, background: TK.sunken, borderRadius: 9, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission saal ke aakhir mein khulti hai — ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
+      <div style={{ fontSize: 12, color: C.muted, background: TK.sunken, borderRadius: 10, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission saal ke aakhir mein khulti hai — ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
       </div>
 
-      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button onClick={() => save(false)} disabled={busy} style={{ ...S.btnO, opacity: busy ? 0.6 : 1 }}>Save as draft</button>

@@ -53,7 +53,7 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: TK.surface }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 6, padding: '3px 8px' }}>{p.section}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 7, padding: '3px 8px' }}>{p.section}</span>
         <div style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 600 }}>{p.declared_item}</div>
         <span style={{ fontSize: 11, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '3px 10px' }}>{t.label}</span>
       </div>
@@ -180,24 +180,24 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
       )}
 
       {!hasDecl ? (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
           No <b>Investment Declaration</b> found for this FY. Proofs are submitted against it — fill in and submit the declaration first.
         </div>
       ) : regime === 'NEW' ? (
-        <div style={{ background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 12, padding: 20, fontSize: 13, color: C.green, lineHeight: 1.6 }}>
+        <div style={{ background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 14, padding: 20, fontSize: 13, color: C.green, lineHeight: 1.6 }}>
           You are on the <b>New regime</b> — the 80C/80D/HRA exemptions do not apply, so no proof is needed.
         </div>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
             {[['Declared', inr(declared), C.navy], ['Proven', inr(proven), C.green], ['Not yet proven', inr(Math.max(0, declared - proven)), declared - proven > 0 ? C.amber : C.muted]].map(([l, v, col]) => (
-              <div key={l} style={{ background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 120 }}>
+              <div key={l} style={{ background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 14px', minWidth: 120 }}>
                 <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{l}</div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: col as string }}>{v}</div>
               </div>
             ))}
             {deadline && (
-              <div style={{ background: overdue ? C.redBg : TK.sunken, border: `1px solid ${overdue ? '#FECACA' : C.border}`, borderRadius: 9, padding: '9px 14px' }}>
+              <div style={{ background: overdue ? C.redBg : TK.sunken, border: `1px solid ${overdue ? '#FECACA' : C.border}`, borderRadius: 10, padding: '9px 14px' }}>
                 <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Deadline</div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: overdue ? C.red : C.navy }}>{fmtDate(deadline)}</div>
               </div>
@@ -205,12 +205,12 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
           </div>
 
           {rows.length === 0 ? (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
               <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>
                 The proof window is not open yet. Use the button below to open a window for each line of your declaration.
               </div>
               <button onClick={openWindow} disabled={busy === 'open'}
-                style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
                 {busy === 'open' ? 'Opening…' : 'Proof window kholein'}
               </button>
             </div>
@@ -226,8 +226,8 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
         </>
       )}
 
-      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
     </div>
   )
 }

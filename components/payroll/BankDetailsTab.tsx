@@ -56,21 +56,21 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
     XLSX.writeFile(wb, 'Bank_Details.xlsx')
   }
 
-  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
+  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const th: React.CSSProperties = { padding: '8px 10px', fontSize: 10, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1100 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Bank Details</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Salary account per employee — maintained in the Employee Master, shown here for payroll</div>
         </div>
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, marginBottom: 12, boxShadow: 'var(--ez-shadow-flat)' }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search or paste codes — e.g. SRS0001, SRS0002" style={{ ...inp, flex: 1, minWidth: 260 }} />
           <select value={dept} onChange={e => setDept(e.target.value)} style={{ ...inp, minWidth: 160 }}>
@@ -85,7 +85,7 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
             <input type="checkbox" checked={onlyActive} onChange={e => setOnlyActive(e.target.checked)} /> Hide exited
           </label>
           <button onClick={exportXlsx} disabled={!filtered.length}
-            style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>
+            style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>
             ⬇ Export
           </button>
         </div>
@@ -94,7 +94,7 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
         </div>
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
         {loading
           ? <div style={{ fontSize: 12, color: C.muted, padding: '18px 0', textAlign: 'center' }}>Loading bank details…</div>
           : filtered.length === 0

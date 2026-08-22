@@ -113,7 +113,7 @@ function Table({ rows }: { rows: Row[] }) {
   )
 }
 
-const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 14, overflow: 'hidden', boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }
+const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 14, overflow: 'hidden', boxShadow: 'var(--ez-shadow-flat)' }
 function GroupCard({ title, icon, subtitle, children }: { title: string; icon: string; subtitle: string; children: React.ReactNode }) {
   return (
     <div style={card}>

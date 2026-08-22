@@ -16,23 +16,23 @@ import { C as TK } from '@/lib/ui'
 const T = {
   overlay:  { position:'fixed' as const, inset:0, background:'rgba(0,0,0,.45)', display:'flex', alignItems:'flex-start' as const, justifyContent:'center' as const, zIndex:1000, padding:16, overflowY:'auto' as const },
   card:     { background:TK.surface, borderRadius:14, width:'100%', maxWidth:720, boxShadow:'0 20px 60px rgba(0,0,0,.2)', margin:'24px 0', display:'flex' as const, flexDirection:'column' as const },
-  header:   { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 22px', borderBottom:'1px solid rgba(37,99,235,0.12)' },
+  header:   { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 22px', borderBottom:'1px solid var(--ez-line)' },
   hTitle:   { fontSize:15, fontWeight:600, color:TK.ink },
   closeBtn: { border:'none', background:'none', cursor:'pointer', fontSize:22, color:TK.muted, lineHeight:1 },
   body:     { padding:'18px 22px' },
-  footer:   { display:'flex', gap:10, padding:'14px 22px', borderTop:'1px solid rgba(37,99,235,0.12)', alignItems:'center' },
+  footer:   { display:'flex', gap:10, padding:'14px 22px', borderTop:'1px solid var(--ez-line)', alignItems:'center' },
   label:    { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
   input:    { width:'100%', padding:'9px 11px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   g2:       { display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 },
   field:    { marginBottom:10 },
-  chip:     { display:'inline-flex', flexDirection:'column' as const, padding:'7px 11px', background:TK.canvas, borderRadius:8, minWidth:0 },
+  chip:     { display:'inline-flex', flexDirection:'column' as const, padding:'7px 11px', background:TK.canvas, borderRadius:10, minWidth:0 },
   chipK:    { fontSize:9, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' },
   chipV:    { fontSize:12, color:TK.ink, fontWeight:500, marginTop:2 },
   sectionH: { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', margin:'4px 0 10px' },
   btn:      { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit' },
   btnPri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent },
   btnOut:   { padding:'9px 16px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:13, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep },
-  card2:    { background:TK.surface, border:'1px solid rgba(37,99,235,0.12)', borderRadius:10, padding:'14px 16px', boxShadow:'0 1px 4px rgba(37,99,235,0.06)' },
+  card2:    { background:TK.surface, border:'1px solid var(--ez-line)', borderRadius:10, padding:'14px 16px', boxShadow:'var(--ez-shadow-flat)' },
 }
 const PURPLE = TK.brand, GREEN = TK.positive, RED = TK.critical, AMBER = TK.warning, MUTED = TK.muted
 const STEP_NAMES = ['Org & Role', 'CTC & Payroll', 'IT + Admin', 'Approvals', 'Generate']
@@ -202,7 +202,7 @@ function Step2Payroll({ form, setF, checks, dups }: any) {
       </div>
 
       {(dups.pan || dups.mobile || dups.aadhaar) && (
-        <div style={{ background:TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius:8, padding:'10px 12px', marginBottom:14 }}>
+        <div style={{ background:TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius:10, padding:'10px 12px', marginBottom:14 }}>
           {dups.pan && <div style={{ color:RED, fontSize:12 }}>PAN already used by {dups.pan}</div>}
           {dups.mobile && <div style={{ color:RED, fontSize:12 }}>Mobile already used by {dups.mobile}</div>}
           {dups.aadhaar && <div style={{ color:RED, fontSize:12 }}>Aadhaar already used by {dups.aadhaar}</div>}
@@ -271,7 +271,7 @@ function Step4Approvals({ cand, onMark, onSendEmails, emailMsg, sending }: any) 
     <div>
       <div style={T.sectionH}>Approvals</div>
       {rows.map(r => (
-        <div key={r.role} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:'1px solid rgba(37,99,235,0.12)', borderRadius:8, marginBottom:8 }}>
+        <div key={r.role} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:'1px solid var(--ez-line)', borderRadius:10, marginBottom:8 }}>
           <span style={{ fontSize:13, color:TK.ink, fontWeight:500 }}>{r.label}{r.optional ? ' (optional)' : ''}</span>
           <span style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:10 }}>
             {r.at
@@ -304,7 +304,7 @@ function Step5Generate({ gates, genCode, setGenCode, codeType, codeLoading, cand
       <div style={{ marginBottom:14 }}>
         <label style={T.label}>Employee Code *</label>
         <input value={codeLoading ? '' : genCode} disabled={codeLoading} onChange={e => setGenCode(e.target.value.toUpperCase())} placeholder={codeLoading ? 'Auto-suggesting…' : 'e.g. SSMINT0001'}
-          style={{ width:'100%', padding:'10px 12px', background: codeLoading ? TK.sunken : TK.sunken, border:`2px solid ${PURPLE}`, borderRadius:8, fontSize:15, color:TK.ink, outline:'none', fontFamily:'inherit', letterSpacing:1, fontWeight:500, boxSizing:'border-box', opacity: codeLoading ? 0.6 : 1 }} />
+          style={{ width:'100%', padding:'10px 12px', background: codeLoading ? TK.sunken : TK.sunken, border:`2px solid ${PURPLE}`, borderRadius:10, fontSize:15, color:TK.ink, outline:'none', fontFamily:'inherit', letterSpacing:1, fontWeight:500, boxSizing:'border-box', opacity: codeLoading ? 0.6 : 1 }} />
         {!codeLoading && genCode && (
           <div style={{ display:'flex', gap:6, alignItems:'center', marginTop:6, fontSize:10, color:MUTED }}>
             <span>Auto-suggested · override if needed</span>
@@ -314,7 +314,7 @@ function Step5Generate({ gates, genCode, setGenCode, codeType, codeLoading, cand
         <div style={{ fontSize:10, color:MUTED, marginTop:4 }}>Format: [Company][Type][4 digits] · e.g. SSMINT0001 · unique &amp; never reused</div>
       </div>
 
-      {!pass && <div style={{ background:TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius:8, padding:'9px 12px', fontSize:12, color:RED }}>Complete all required gates above to enable code generation.</div>}
+      {!pass && <div style={{ background:TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius:10, padding:'9px 12px', fontSize:12, color:RED }}>Complete all required gates above to enable code generation.</div>}
     </div>
   )
 }

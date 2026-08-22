@@ -189,14 +189,14 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
   const { companies, locations, departments, statuses } = filterOptions(rows)
   const on = isFiltered(filter)
   const inp: React.CSSProperties = {
-    padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12,
+    padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12,
     background: TK.surface, color: C.navy, fontFamily: font, outline: 'none',
   }
   const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }
   return (
     <div style={{
       background: on ? C.purpleSoft : TK.sunken, border: `1px solid ${on ? TK.brandEdge : C.border}`,
-      borderRadius: 12, padding: '10px 12px', marginBottom: 14,
+      borderRadius: 14, padding: '10px 12px', marginBottom: 14,
     }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
@@ -245,7 +245,7 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
         </div>
         {on && (
           <button onClick={onClear} style={{
-            padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface,
+            padding: '7px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface,
             color: C.red, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: 'pointer',
           }}>Clear</button>
         )}
@@ -546,7 +546,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
           style={{
             background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '7px 16px',
             fontSize: 13, fontWeight: 600, color: C.purpleD, fontFamily: font, cursor: 'pointer', outline: 'none',
-            boxShadow: '0 1px 3px rgba(37,99,235,0.06)',
+            boxShadow: 'var(--ez-shadow-flat)',
           }}>
           {monthOpts.length === 0 && <option value="">No month created</option>}
           {monthOpts.map(r => <option key={r.month} value={String(r.month)}>📅 {periodLabel(r)}</option>)}
@@ -570,8 +570,8 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
           </div>
 
           <div style={{
-            background: C.card, borderRadius: 16, padding: '22px 24px', marginBottom: 18,
-            boxShadow: '0 1px 4px rgba(37,99,235,0.06)', border: `1px solid ${C.border}`,
+            background: C.card, borderRadius: 14, padding: '22px 24px', marginBottom: 18,
+            boxShadow: 'var(--ez-shadow-flat)', border: `1px solid ${C.border}`,
           }}>
             {active && <CheckPanel check={active} isGroup={isGroup} />}
           </div>
@@ -586,7 +586,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
         <button onClick={run} disabled={!canRun}
           style={{
             fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
-            background: canRun ? C.purple: TK.brandTint, border: 'none', borderRadius: 12,
+            background: canRun ? C.purple: TK.brandTint, border: 'none', borderRadius: 14,
             padding: '14px 28px', cursor: canRun ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', gap: 8,
             boxShadow: canRun ? '0 4px 14px rgba(37,99,235,0.25)' : 'none',

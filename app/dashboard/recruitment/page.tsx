@@ -104,7 +104,7 @@ function deptLabel(d:any, list:any[], companies:any[]) {
 // `f` shape: { company, department, position, location } — all '' means "All".
 function RecFilterBar({ companies, departments, locations, positions, f, setF }:any) {
   return (
-    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
         <label style={T.label}>Company</label>
         <select style={T.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
@@ -642,7 +642,7 @@ function CtqEditor({ items, onChange }:{ items:any[]; onChange:(v:any[])=>void }
         </div>
       )}
       {items.map((q,i)=>(
-        <div key={q.id||i} style={{ border: `1px solid ${C.brandEdge}`, borderRadius:8, padding:'10px 12px', marginBottom:8, background:C.sunken }}>
+        <div key={q.id||i} style={{ border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'10px 12px', marginBottom:8, background:C.sunken }}>
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
             <span style={{ fontSize:11, fontWeight:700, color:C.brandDeep, minWidth:22 }}>Q{i+1}</span>
             <input style={{ ...T.input, flex:1 }} value={q.question||''} placeholder="e.g. Do you have a valid B.Tech degree?"
@@ -691,7 +691,7 @@ function ApprovalChainEditor({ chain, onChange }:{ chain:any[]; onChange:(v:any[
       )}
       {chain.map((s,i)=>(
         <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 11px', border: `1px solid ${C.brandEdge}`,
-          borderRadius:8, marginBottom:6, background: s.status==='APPROVED'?C.positiveTint: s.status==='REJECTED'?C.criticalTint:C.sunken }}>
+          borderRadius:10, marginBottom:6, background: s.status==='APPROVED'?C.positiveTint: s.status==='REJECTED'?C.criticalTint:C.sunken }}>
           <span style={{ width:22, height:22, borderRadius:'50%', background:C.brandTint, color:C.brandDeep, fontSize:11,
             fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{i+1}</span>
           <span style={{ fontSize:13, fontWeight:600, flex:1 }}>{s.role}</span>
@@ -827,7 +827,7 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
   }).length
 
   const Tile = ({ label, value, sub, color }:any) => (
-    <div style={{ background:C.surface, border:'1px solid rgba(37,99,235,0.12)', borderRadius:10, padding:'11px 13px' }}>
+    <div style={{ background:C.surface, border:'1px solid var(--ez-line)', borderRadius:10, padding:'11px 13px' }}>
       <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
       <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||C.ink }}>{value}</div>
       {sub && <div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{sub}</div>}
@@ -2080,7 +2080,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         onApprove={approveMRF} onReject={rejectMRF} onHold={holdMRF} onClose={()=>setApprovalModal(null)} />}
       {deleteConfirm&&(
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }}>
-          <div style={{ background:C.surface, borderRadius:12, padding:24, width:340, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+          <div style={{ background:C.surface, borderRadius:14, padding:24, width:340, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
             <div style={{ fontSize:15, fontWeight:600, color:C.ink, marginBottom:8 }}>Delete MRF?</div>
             <div style={{ fontSize:13, color:C.faint, marginBottom:20 }}>This action cannot be undone. Linked candidates are kept but unlinked from this requisition.</div>
             <div style={{ display:'flex', gap:10 }}>
@@ -2109,13 +2109,13 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div style={{ background:C.surface, borderRadius:12, padding:24, width:'100%', maxWidth:480, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+      <div style={{ background:C.surface, borderRadius:14, padding:24, width:'100%', maxWidth:480, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{mrf.job_title||mrf.designation||mrf.position}</div>
         <div style={{ fontSize:12, color:C.faint, marginTop:3 }}>
           {mrf.mrf_number||'No MRF number'}{org?` · ${org.company} · ${org.dept}`:''}
         </div>
 
-        <div style={{ background:C.sunken, border: `1px solid ${C.brandEdge}`, borderRadius:8, padding:'11px 13px', margin:'14px 0', fontSize:12, color:C.inkSoft, display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>
+        <div style={{ background:C.sunken, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'11px 13px', margin:'14px 0', fontSize:12, color:C.inkSoft, display:'grid', gridTemplateColumns:'1fr 1fr', gap:9 }}>
           <div><b>{openings}</b> opening{openings===1?'':'s'}</div>
           <div>{mrf.employment_type||'—'}{mrf.work_mode?` · ${mrf.work_mode}`:''}</div>
           <div>{comp.label}: {payAmount(mrf.budget_max, mrf.currency, comp.period)}</div>
@@ -2128,7 +2128,7 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
         </div>
 
         {chain.length>0 && (
-          <div style={{ background:C.brandTint, borderRadius:8, padding:'10px 12px', marginBottom:14, fontSize:12, color:C.brandDeep }}>
+          <div style={{ background:C.brandTint, borderRadius:10, padding:'10px 12px', marginBottom:14, fontSize:12, color:C.brandDeep }}>
             Approving opens this requisition straight away and records the full chain
             — <b>{chain.map((s:any)=>s.role).join(' → ')}</b> — against your name.
           </div>
@@ -2511,7 +2511,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
   const hasDeadlines = scoped.some(({m}:any)=>m.validity_date || m.target_joining_date)
 
   const Tile = ({ label, value, sub, color }:any) => (
-    <div style={{ background:C.surface, border:'1px solid rgba(37,99,235,0.12)', borderRadius:10, padding:'11px 13px' }}>
+    <div style={{ background:C.surface, border:'1px solid var(--ez-line)', borderRadius:10, padding:'11px 13px' }}>
       <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
       <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||C.ink }}>{value}</div>
       {sub && <div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{sub}</div>}
@@ -3145,9 +3145,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
             const initials = c.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
             return (
               <div key={c.id} onClick={()=>{setSelCand(c);setAiQs([])}}
-                style={{ background:C.surface, borderRadius:12, padding:'14px 15px', cursor:'pointer', border: `1px solid ${C.brandEdge}`, boxShadow:'0 1px 4px rgba(37,99,235,0.06)', transition:'box-shadow .15s, transform .1s' }}
+                style={{ background:C.surface, borderRadius:14, padding:'14px 15px', cursor:'pointer', border: `1px solid ${C.brandEdge}`, boxShadow:'var(--ez-shadow-flat)', transition:'box-shadow .15s, transform .1s' }}
                 onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 6px 18px rgba(37,99,235,0.14)'; e.currentTarget.style.transform='translateY(-1px)' }}
-                onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(37,99,235,0.06)'; e.currentTarget.style.transform='' }}>
+                onMouseLeave={e=>{ e.currentTarget.style.boxShadow='var(--ez-shadow-flat)'; e.currentTarget.style.transform='' }}>
                 {/* header */}
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
                   <div style={{ width:40, height:40, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, flexShrink:0 }}>{initials}</div>
@@ -3181,7 +3181,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       {/* Add Candidate Modal */}
       {showAdd&&(
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto' }}>
-          <div style={{ background:C.surface, borderRadius:12, padding:24, width:520, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', margin:'20px auto' }}>
+          <div style={{ background:C.surface, borderRadius:14, padding:24, width:520, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', margin:'20px auto' }}>
             <div style={{ fontSize:15, fontWeight:600, color:C.ink, marginBottom:16 }}>Add Candidate</div>
             <div style={{ marginBottom:10 }}>
               <label style={T.label}>For Opening (MRF)</label>
@@ -3325,7 +3325,7 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
         </button>
       </div>
       {(aiQs.length?aiQs:(c.ai_questions||[])).map((q:string,i:number)=>(
-        <div key={i} style={{ background:C.sunken, borderRadius:6, padding:'7px 10px', marginBottom:5, fontSize:11, color:C.ink, border: `1px solid ${C.brandEdge}` }}>
+        <div key={i} style={{ background:C.sunken, borderRadius:7, padding:'7px 10px', marginBottom:5, fontSize:11, color:C.ink, border: `1px solid ${C.brandEdge}` }}>
           <span style={{ color:C.brand, marginRight:5, fontWeight:600 }}>{i+1}.</span>{q}
         </div>
       ))}
@@ -3385,7 +3385,7 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:an
         <div style={{ fontSize:13, fontWeight:600, color:C.brandDeep, marginBottom:4 }}>Stipend Calculator — {sel.full_name}</div>
         <div style={{ fontSize:11, color:C.faint, marginBottom:14 }}>{mrf?.employment_type||'Non-employee'} engagement · stipend only (no PF/HRA structure)</div>
         {!autoCompany && (
-          <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:8 }}>
+          <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
             <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
             <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
               <option value="">Select company…</option>
@@ -3410,7 +3410,7 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:an
         )}
         <button onClick={save} disabled={saving} style={{ ...T.btnPrimary, width:'100%', marginTop:12, padding:10 }}>{saving?'Saving…':'Save Stipend & Move to Offers'}</button>
         {savedLink&&(
-          <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:8, padding:'12px 14px' }}>
+          <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 14px' }}>
             <div style={{ fontSize:11, fontWeight:600, color: C.brand, marginBottom:6 }}>CANDIDATE SALARY LINK</div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
               <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace' }} />
@@ -3653,7 +3653,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
         <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
         {shownCands.map((c:Candidate)=>(
           <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
-            style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'2px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:sel?.id===c.id?C.brandTint: C.surface }}>
+            style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:sel?.id===c.id?C.brandTint: C.surface }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
               <div style={{ minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
@@ -3686,7 +3686,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
           <div style={T.cardPurple}>
             <div style={{ fontSize:13, fontWeight:600, color:C.brandDeep, marginBottom:14 }}>CTC Calculator — {sel.full_name}</div>
             {loadedNeg?.candidate_response && (
-              <div style={{ marginBottom:12, padding:'8px 12px', borderRadius:8, fontSize:12, fontWeight:600,
+              <div style={{ marginBottom:12, padding:'8px 12px', borderRadius:10, fontSize:12, fontWeight:600,
                 background: loadedNeg.candidate_response==='ACCEPTED'?C.positiveTint:C.criticalTint,
                 color: loadedNeg.candidate_response==='ACCEPTED'?C.positive:C.critical,
                 border:`1px solid ${loadedNeg.candidate_response==='ACCEPTED'?C.positiveTint:C.criticalTint}` }}>
@@ -3695,7 +3695,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
               </div>
             )}
             {!autoCompany && (
-              <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:8 }}>
+              <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
                 <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
                 <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
                   <option value="">Select company…</option>
@@ -3848,7 +3848,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
               )}
 
               {calc.hike&&(
-                <div style={{ marginTop:12, background:C.positiveTint, borderRadius:8, padding:'10px 14px', display:'flex', gap:16 }}>
+                <div style={{ marginTop:12, background:C.positiveTint, borderRadius:10, padding:'10px 14px', display:'flex', gap:16 }}>
                   <span style={{ fontSize:13, color:C.positive, fontWeight:600 }}>Hike: {calc.hike}%</span>
                   <span style={{ fontSize:12, color:C.inkSoft }}>Current: ₹{((sel?.current_ctc||0)/100000).toFixed(1)}L → Offered: ₹{(calc.ctcAnnual/100000).toFixed(1)}L</span>
                 </div>
@@ -3859,7 +3859,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
               </button>
 
               {savedLink&&(
-                <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:8, padding:'12px 14px' }}>
+                <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 14px' }}>
                   <div style={{ fontSize:11, fontWeight:600, color: C.brand, marginBottom:6 }}>CANDIDATE SALARY LINK</div>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                     <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace' }} />
@@ -4081,7 +4081,7 @@ HR Team`
         <SearchBar placeholder="Search candidate…" onApply={setOffQ} width={240} />
         <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
         {shownOffered.map((c:Candidate)=>(
-          <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'2px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:sel?.id===c.id?C.brandTint: C.surface }}
+          <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:sel?.id===c.id?C.brandTint: C.surface }}
             onClick={()=>generateLetter(c)}>
             <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
@@ -4280,7 +4280,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
 
             {!resp&&(
               choose===c.id ? (
-                <div style={{ marginTop:12, background:C.sunken, borderRadius:8, padding:'10px 12px', border: `1px solid ${C.brandEdge}` }}>
+                <div style={{ marginTop:12, background:C.sunken, borderRadius:10, padding:'10px 12px', border: `1px solid ${C.brandEdge}` }}>
                   <div style={{ fontSize:12, color:C.brandDeep, fontWeight:600, marginBottom:8 }}>Candidate type — sends the right letter:</div>
                   <div style={{ display:'flex', gap:8 }}>
                     <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'EXPERIENCED')} style={{ ...T.btn, background:C.brand, color:C.onAccent }}>{busy===c.id?'Sending…':'Experienced → Resignation Acceptance'}</button>
@@ -4301,10 +4301,10 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
               <div style={{ marginTop:10, fontSize:11, color:C.positive }}>✉️ {row.candidate_type==='EXPERIENCED'?'Resignation Acceptance':'Joining Confirmation'} letter sent · {new Date(row.acceptance_letter_sent_at).toLocaleDateString('en-IN')}</div>
             )}
             {resp==='REVISE'&&row?.revise_note&&(
-              <div style={{ marginTop:10, fontSize:11, color:C.warning, background:C.warningTint, borderRadius:6, padding:'6px 10px' }}>Revision note: {row.revise_note}</div>
+              <div style={{ marginTop:10, fontSize:11, color:C.warning, background:C.warningTint, borderRadius:7, padding:'6px 10px' }}>Revision note: {row.revise_note}</div>
             )}
             {resp==='BACKOUT'&&(
-              <div style={{ marginTop:10, fontSize:11, color: C.critical, background:C.criticalTint, borderRadius:6, padding:'6px 10px' }}>Blacklisted · MRF reopened{row?.revise_note?` · Reason: ${row.revise_note}`:''}</div>
+              <div style={{ marginTop:10, fontSize:11, color: C.critical, background:C.criticalTint, borderRadius:7, padding:'6px 10px' }}>Blacklisted · MRF reopened{row?.revise_note?` · Reason: ${row.revise_note}`:''}</div>
             )}
             {/* Backout available any day (even after acceptance) — blacklists + reopens the MRF */}
             {(resp==='ACCEPTED'||resp==='REVISE')&&(

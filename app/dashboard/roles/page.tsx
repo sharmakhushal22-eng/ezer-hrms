@@ -17,7 +17,7 @@ import { C as TK } from '@/lib/ui'
 
 const C = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border:'1px solid var(--ez-line)', padding:'14px 16px', marginBottom:10, boxShadow:'var(--ez-shadow-flat)' } as React.CSSProperties,
   lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
@@ -243,7 +243,7 @@ function ApprovalTab({ roles, selId, onSelect, pending, recruiters, onResolve }:
         {sel && (
           <div style={{ marginTop:10 }}>
             {pending.types.length === 0
-              ? <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:8, padding:'10px 12px', fontSize:12, color:TK.warning }}>⚠️ <b>{sel.role_name}</b> has no approval rights.</div>
+              ? <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:10, padding:'10px 12px', fontSize:12, color:TK.warning }}>⚠️ <b>{sel.role_name}</b> has no approval rights.</div>
               : <div style={{ fontSize:11, color:TK.muted }}>Can approve: {pending.types.map(t => <Pill key={t} text={typeLabel(t)} bg={TK.positiveTint} color={TK.positive} />)}<span style={{ display:'inline-block', width:6 }} /></div>}
           </div>
         )}
@@ -307,7 +307,7 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
       <div>
         {!sel ? <div style={C.card}><span style={{ fontSize:12, color:TK.faint }}>Pick a role — then filter employees by company, location/branch and department, and assign.</span></div> : (
           <>
-            <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+            <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:8 }}>
                 <span style={{ fontSize:14, fontWeight:600 }}>{sel.role_name}</span>
                 <Pill text={sel.role_code} bg={TK.brandTint} color={TK.brand} />

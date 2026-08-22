@@ -57,7 +57,7 @@ export default function PerquisiteTaxSummary({ employeeId, fy, baseTaxableSalary
   }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', maxWidth: 420 }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', maxWidth: 420 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>
         Perquisite tax impact — FY {fy}
       </div>
@@ -66,7 +66,7 @@ export default function PerquisiteTaxSummary({ employeeId, fy, baseTaxableSalary
       <Row label="+ Perquisite amount" value={inr(income.total_perquisite_amount)} />
 
       {Object.keys(income.breakdown_by_type).length > 0 && (
-        <div style={{ background: C.gray, borderRadius: 8, padding: '8px 10px', margin: '6px 0 10px' }}>
+        <div style={{ background: C.gray, borderRadius: 10, padding: '8px 10px', margin: '6px 0 10px' }}>
           {Object.entries(income.breakdown_by_type).map(([name, amt]) => (
             <Row key={name} label={name} value={inr(amt)} indent />
           ))}
@@ -83,7 +83,7 @@ export default function PerquisiteTaxSummary({ employeeId, fy, baseTaxableSalary
       <Row label="+ Cess (4%)" value={inr(tax.cess)} />
       <Row label="+ Surcharge" value={inr(tax.surcharge)} />
 
-      <div style={{ background: C.purpleBg, borderRadius: 8, padding: '10px 12px', marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: C.purpleBg, borderRadius: 10, padding: '10px 12px', marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: C.purpleD }}>TOTAL</span>
         <span style={{ fontSize: 17, fontWeight: 700, color: C.purpleD }}>{inr(tax.total)}</span>
       </div>

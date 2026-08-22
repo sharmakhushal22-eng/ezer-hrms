@@ -71,12 +71,12 @@ const MONTHS = ['April 2026', 'May 2026', 'June 2026', 'July 2026', 'August 2026
 
 // ── styles ──
 const s = {
-  card: { background: P.card, border: `1px solid ${P.border}`, borderRadius: 12, padding: 16, marginBottom: 14 } as React.CSSProperties,
+  card: { background: P.card, border: `1px solid ${P.border}`, borderRadius: 14, padding: 16, marginBottom: 14 } as React.CSSProperties,
   label: { fontSize: 11, color: P.muted, fontWeight: 600, display: 'block', marginBottom: 4 } as React.CSSProperties,
-  input: { width: '100%', padding: '9px 11px', background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 8, color: P.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
+  input: { width: '100%', padding: '9px 11px', background: TK.sunken, border: `1px solid ${P.border}`, borderRadius: 10, color: P.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
   g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as React.CSSProperties,
-  btn: { padding: '9px 18px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: P.purple, color: TK.onAccent } as React.CSSProperties,
-  ghost: { padding: '9px 16px', borderRadius: 8, border: `1px solid ${P.border}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.surface, color: P.navy } as React.CSSProperties,
+  btn: { padding: '9px 18px', borderRadius: 10, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: P.purple, color: TK.onAccent } as React.CSSProperties,
+  ghost: { padding: '9px 16px', borderRadius: 10, border: `1px solid ${P.border}`, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.surface, color: P.navy } as React.CSSProperties,
   sec: { fontSize: 11, fontWeight: 700, color: P.purpleDark, textTransform: 'uppercase' as const, letterSpacing: '.04em', margin: '14px 0 8px' } as React.CSSProperties,
 }
 
@@ -458,7 +458,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             )}
             {rd && <div style={{ fontSize: 11, opacity: .8 }}>Your full Special Allowance — {R(rd.specialGross || rd.special)}/month. {rd.flexiMonthly > 0 ? `${R(rd.flexiMonthly)}/month already declared, ${R(Math.max(0,(rd.specialGross||rd.special)-rd.flexiMonthly))} left.` : ''}</div>}
           </div>
-          <div style={{ marginTop: 10, background: P.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 8, padding: '9px 12px', fontSize: 12, color: P.amber }}>
+          <div style={{ marginTop: 10, background: P.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: P.amber }}>
             {rd
               ? <><b>Source:</b> full Special Allowance <b>{R(rd.specialGross || rd.special)}/month</b> × 12 = <b>{R(sal.other)} annual wallet</b>. Declared flexi is deducted from the Special Allowance paid as salary.</>
               : <><b>Formula:</b> {R(sal.fixed)} − {R(sal.basic)} (Basic) − {R(sal.hra)} (HRA) − {R(sal.epf)} (PF) = <b>Flexi Wallet {R(sal.other)}</b></>}
@@ -490,7 +490,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         </div>
         <div style={{ height: 8, background: TK.sunken, borderRadius: 99, overflow: 'hidden' }}><div style={{ width: pctv + '%', height: '100%', background: col, transition: 'width .2s' }} /></div>
         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: P.muted, marginTop: 6 }}><span>Used: {R(used)}</span><span>Budget: {R(bud)}</span></div>
-        {ov && <div style={{ marginTop: 8, background: P.redBg, color: P.red, borderRadius: 8, padding: '7px 10px', fontSize: 11 }}>Flexi wallet limit exceeded — remove some allowances.</div>}
+        {ov && <div style={{ marginTop: 8, background: P.redBg, color: P.red, borderRadius: 10, padding: '7px 10px', fontSize: 11 }}>Flexi wallet limit exceeded — remove some allowances.</div>}
       </div>
     )
   }
@@ -501,7 +501,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <div style={{ fontSize: 13, fontWeight: 700, color: P.amber, marginBottom: 8 }}>Car Lease + Driver — Perquisite Tax Applied</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10 }}>
             {[['Car Lease Perq', '₹7,000', 'per month'], ['Driver Perq', '₹3,000', 'per month'], ['Total Perquisite', '₹10,000', '₹1,20,000/yr → taxable']].map(([l, v, sub]) => (
-              <div key={l} style={{ background: TK.surface, borderRadius: 8, padding: '9px 11px', border: `1px solid ${TK.warningTint}` }}>
+              <div key={l} style={{ background: TK.surface, borderRadius: 10, padding: '9px 11px', border: `1px solid ${TK.warningTint}` }}>
                 <div style={{ fontSize: 11, color: P.muted }}>{l}</div><div style={{ fontSize: 16, fontWeight: 700, color: P.amber }}>{v}</div><div style={{ fontSize: 10, color: P.muted }}>{sub}</div>
               </div>
             ))}
@@ -588,7 +588,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             <Fg label="City Type"><select style={s.input} value={f.cityType} onChange={e => set('cityType', e.target.value)}><option value="nonmetro">Non-Metro (40% of Basic)</option><option value="metro">Metro (50% of Basic)</option></select></Fg>
             <Fg label="Landlord PAN (required if annual rent > ₹1,00,000)"><input style={{ ...s.input, textTransform: 'uppercase' }} value={f.landlordPAN} onChange={e => set('landlordPAN', e.target.value.toUpperCase())} placeholder="ABCDE1234F" /></Fg>
           </div>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: P.purpleDark, marginBottom: 10, padding: '9px 12px', background: P.purpleBg, borderRadius: 8, cursor: 'pointer' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, color: P.purpleDark, marginBottom: 10, padding: '9px 12px', background: P.purpleBg, borderRadius: 10, cursor: 'pointer' }}>
             <input type="checkbox" checked={!!f.showHra2} onChange={e => set('showHra2', e.target.checked ? 'y' : '')} /> Changed residence mid-year? Add second HRA period
           </label>
           {f.showHra2 && (
@@ -602,13 +602,13 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
               <Fg label="City Type"><select style={s.input} value={f.cityType2} onChange={e => set('cityType2', e.target.value)}><option value="nonmetro">Non-Metro (40%)</option><option value="metro">Metro (50%)</option></select></Fg>
             </div>
           )}
-          {N(f.rentM) > 0 && <div style={{ background: P.greenBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 8, padding: '8px 11px', fontSize: 12, color: P.teal, marginBottom: 10 }}>Total HRA Exempt: <b>{R(hraExempt)}</b></div>}
+          {N(f.rentM) > 0 && <div style={{ background: P.greenBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 10, padding: '8px 11px', fontSize: 12, color: P.teal, marginBottom: 10 }}>Total HRA Exempt: <b>{R(hraExempt)}</b></div>}
 
           <div style={s.sec}>Section 80C (Max ₹1,50,000)</div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 10px', background: TK.sunken, borderRadius: 8, fontSize: 11, marginBottom: 8, border: `1px solid ${P.border}` }}><span style={{ color: P.muted }}>Employee PF (auto)</span><span style={{ fontWeight: 700 }}>{R(sal.epf)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '7px 10px', background: TK.sunken, borderRadius: 10, fontSize: 11, marginBottom: 8, border: `1px solid ${P.border}` }}><span style={{ color: P.muted }}>Employee PF (auto)</span><span style={{ fontWeight: 700 }}>{R(sal.epf)}</span></div>
           <Fg label="LIC Premium">{numIn('lic')}</Fg><Fg label="PPF">{numIn('ppf')}</Fg><Fg label="ELSS / Mutual Funds">{numIn('elss')}</Fg>
           <Fg label="Tuition Fees">{numIn('tuit')}</Fg><Fg label="Home Loan Principal">{numIn('hlP')}</Fg>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700, background: c80Total >= 150000 ? P.greenBg : P.amberBg, color: c80Total >= 150000 ? P.teal : P.amber }}><span>Total 80C</span><span>{R(c80Total)} / ₹1,50,000</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', borderRadius: 10, fontSize: 12, fontWeight: 700, background: c80Total >= 150000 ? P.greenBg : P.amberBg, color: c80Total >= 150000 ? P.teal : P.amber }}><span>Total 80C</span><span>{R(c80Total)} / ₹1,50,000</span></div>
 
           <div style={s.sec}>80D, Home Loan &amp; NPS</div>
           <Fg label="80D Self + Family (max ₹25,000)">{numIn('medSelf')}</Fg>
@@ -627,7 +627,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         <div style={{ ...s.card, borderLeft: `3px solid ${P.green}` }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: TK.ink }}>New Regime Declaration</div>
           <div style={{ fontSize: 12, color: P.muted, marginBottom: 8 }}>Std Deduction ₹75,000 | No HRA / 80C / 80D</div>
-          <div style={{ background: P.greenBg, borderRadius: 9, padding: 12, marginBottom: 13, border: `1px solid ${TK.lineStrong}` }}>
+          <div style={{ background: P.greenBg, borderRadius: 10, padding: 12, marginBottom: 13, border: `1px solid ${TK.lineStrong}` }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 4 }}><span style={{ color: P.teal, fontWeight: 500 }}>Standard Deduction (auto)</span><span style={{ fontWeight: 700 }}>₹75,000</span></div>
             <div style={{ fontSize: 10, color: P.green }}>HRA · LTA · 80C · 80D · Home Loan — Not applicable</div>
           </div>
@@ -638,7 +638,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <Fg label="Incentive / Award">{numIn('iinc')}</Fg>
           <Fg label="Variable Pay Expected (rest of year)">{numIn('varEx')}</Fg>
           <Fg label="Interest Income (FD / Savings)">{numIn('iInc')}</Fg>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: P.greenBg, borderRadius: 8, fontSize: 12, fontWeight: 700, color: P.teal, border: `1px solid ${TK.lineStrong}` }}><span>Total Additional Income</span><span>{R(addITotal)}</span></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 10px', background: P.greenBg, borderRadius: 10, fontSize: 12, fontWeight: 700, color: P.teal, border: `1px solid ${TK.lineStrong}` }}><span>Total Additional Income</span><span>{R(addITotal)}</span></div>
         </div>
       </div>
     </div>
@@ -848,11 +848,11 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
             {status === 'DRAFT' && <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 10px', borderRadius: 99, background: TK.infoTint, color: TK.info }}>Draft saved</span>}
           </div>
           {!userPicked && !isSubmitted && recRegime && (
-            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, padding: '9px 12px', fontSize: 12, color: TK.brand, marginBottom: 10 }}>We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b> — it gives you the <b>lower annual tax</b>. You can change it below before submitting.
+            <div style={{ background: TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: TK.brand, marginBottom: 10 }}>We&apos;ve pre-selected the <b>{recRegime === 'OLD' ? 'Old' : 'New'} Regime</b> — it gives you the <b>lower annual tax</b>. You can change it below before submitting.
             </div>
           )}
           {isSubmitted && !editMode && (
-            <div style={{ background: P.purpleBg, border: `1px solid #DDD6FE`, borderRadius: 8, padding: '9px 12px', fontSize: 12, color: P.purpleDark, marginBottom: 10 }}>You submitted the <b>{chosenRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. Your regime is locked. {chosenRegime === 'OLD' ? 'Use Edit to change your flexi & investment declarations.' : 'Use Edit to change your flexi declaration (investment sections don’t apply to the New Regime).'}
+            <div style={{ background: P.purpleBg, border: `1px solid #DDD6FE`, borderRadius: 10, padding: '9px 12px', fontSize: 12, color: P.purpleDark, marginBottom: 10 }}>You submitted the <b>{chosenRegime === 'OLD' ? 'Old' : 'New'} Regime</b>. Your regime is locked. {chosenRegime === 'OLD' ? 'Use Edit to change your flexi & investment declarations.' : 'Use Edit to change your flexi declaration (investment sections don’t apply to the New Regime).'}
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
@@ -988,8 +988,8 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
           <button onClick={saveDraft} disabled={saving} style={{ ...s.ghost, opacity: saving ? .6 : 1, whiteSpace: 'nowrap' }}>Save Draft</button>
         )}
       </div>
-      {draftMsg && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: draftMsg.startsWith('') ? P.red : P.teal, background: draftMsg.startsWith('') ? TK.criticalTint : P.greenBg, border: `1px solid ${draftMsg.startsWith('') ? '#FCA5A5' : '#A7E3CE'}`, borderRadius: 8, padding: '8px 12px' }}>{draftMsg}</div>}
-      {viewLocked && <div style={{ marginBottom: 12, fontSize: 12, color: P.purpleDark, background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, padding: '9px 12px' }}>This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.</div>}
+      {draftMsg && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: draftMsg.startsWith('') ? P.red : P.teal, background: draftMsg.startsWith('') ? TK.criticalTint : P.greenBg, border: `1px solid ${draftMsg.startsWith('') ? '#FCA5A5' : '#A7E3CE'}`, borderRadius: 10, padding: '8px 12px' }}>{draftMsg}</div>}
+      {viewLocked && <div style={{ marginBottom: 12, fontSize: 12, color: P.purpleDark, background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px' }}>This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.</div>}
       <Stepper />
       {step === 1 && <fieldset disabled={!basicRW} style={fsReset}>{step1}</fieldset>}
       {step === 2 && <fieldset disabled={!flexiRW} style={fsReset}>{step2}</fieldset>}

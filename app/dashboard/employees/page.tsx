@@ -185,7 +185,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={onClose}>
-      <div style={{ background:C.surface, borderRadius:'12px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={{ background:C.surface, borderRadius:'14px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'14px', color:C.ink }}>Add Employee</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'12px' }}>
           <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Rahul Sharma" /></div>
@@ -249,7 +249,7 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
         <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
           {editMode ? (
             <>
-              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:C.onAccent, border:'1px solid rgba(255,255,255,.25)', borderRadius:'8px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
+              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:C.onAccent, border:'1px solid rgba(255,255,255,.25)', borderRadius:'10px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
               <button onClick={onSave} disabled={saving} style={{ ...s.saveBtn, opacity: saving ? .7 : 1 }}>
                 <span>{saving ? '' : ''}</span>{saving ? 'Saving…' : 'Save changes'}
               </button>
@@ -701,8 +701,8 @@ export default function EmployeeMaster() {
               {F('Last Working Date','last_working_date','date')}
             </Grid2>
             <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
-              <div style={{ padding:'6px 12px', borderRadius:'8px', background:emp.rehire_eligible?P.greenBg:P.page, border:`1px solid ${emp.rehire_eligible?'#BBF7D0':P.border}`, fontSize:'11px', color:emp.rehire_eligible?P.green:P.muted }}>{emp.rehire_eligible?'Rehire Eligible':'Not Rehire Eligible'}</div>
-              {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'8px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>Blacklisted</div>}
+              <div style={{ padding:'6px 12px', borderRadius:'10px', background:emp.rehire_eligible?P.greenBg:P.page, border:`1px solid ${emp.rehire_eligible?'#BBF7D0':P.border}`, fontSize:'11px', color:emp.rehire_eligible?P.green:P.muted }}>{emp.rehire_eligible?'Rehire Eligible':'Not Rehire Eligible'}</div>
+              {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'10px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>Blacklisted</div>}
             </div>
           </Section>
         )}
@@ -1002,7 +1002,7 @@ export default function EmployeeMaster() {
               {Array.from({length:Math.min(totalPages,7)},(_,i)=>{
                 const p = page<=4 ? i+1 : page-3+i
                 if(p<1||p>totalPages) return null
-                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`2px solid ${p===page?P.purple:P.border}`,borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple: C.surface,color:p===page?C.surface:P.text }}>{p}</button>
+                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`2px solid ${p===page?P.purple:P.border}`,borderRadius:'7px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple: C.surface,color:p===page?C.surface:P.text }}>{p}</button>
               })}
               <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===totalPages?.4:1 }} onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}>Next →</button>
             </div>
@@ -1020,7 +1020,7 @@ export default function EmployeeMaster() {
               <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>Employee list</button>
               <span>›</span>
               <span style={{ color:P.text, fontWeight:500 }}>{selected.full_name}</span>
-              {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'6px', fontSize:'10px', fontWeight:500 }}>Editing</span>}
+              {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'7px', fontSize:'10px', fontWeight:500 }}>Editing</span>}
             </div>
 
             {/* Profile header (with edit/save/cancel) */}
