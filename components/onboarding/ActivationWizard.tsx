@@ -84,7 +84,7 @@ function CheckRow({ ok, label, optional }: { ok: boolean; label: string; optiona
   return (
     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0', opacity: optional && !ok ? 0.65 : 1 }}>
       <span style={{ color, fontWeight:700, width:14 }}>{ok ? '' : ''}</span>
-      <span style={{ fontSize:12.5, color:TK.ink }}>{label}{optional ? ' (optional)' : ''}</span>
+      <span style={{ fontSize:13, color:TK.ink }}>{label}{optional ? ' (optional)' : ''}</span>
     </div>
   )
 }
@@ -118,7 +118,7 @@ function Toggle({ label, checked, onChange }: { label: string; checked: boolean;
       }}>
         <span style={{ width:16, height:16, borderRadius:99, background:TK.surface, transform: checked ? 'translateX(16px)' : 'translateX(0)', transition:'transform .15s' }} />
       </span>
-      <span style={{ fontSize:12.5, color:TK.ink }}>{label}</span>
+      <span style={{ fontSize:13, color:TK.ink }}>{label}</span>
     </label>
   )
 }
@@ -177,7 +177,7 @@ function Step2Payroll({ form, setF, checks, dups }: any) {
   const AiRow = ({ ok, children }: { ok: boolean; children: React.ReactNode }) => (
     <div style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
       <span style={{ color: ok ? GREEN : RED, fontWeight:700, width:14 }}>{ok ? '' : ''}</span>
-      <span style={{ fontSize:12.5, color:TK.ink }}>{children}</span>
+      <span style={{ fontSize:13, color:TK.ink }}>{children}</span>
     </div>
   )
   return (
@@ -193,11 +193,11 @@ function Step2Payroll({ form, setF, checks, dups }: any) {
         <AiRow ok={checks.basicOk}>Basic ≥ 50% of gross (Basic = {inr(checks.basicMonthly)}/mo, {checks.basicPct}%)</AiRow>
         <div style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
           <span style={{ width:14 }} />
-          <span style={{ fontSize:12.5, color:TK.ink }}>ESIC applicable: <b style={{ color: checks.esicApplicable ? GREEN : MUTED }}>{checks.esicApplicable ? 'Yes' : 'No'}</b> (monthly gross {inr(checks.monthlyGross)}, threshold ₹21,000)</span>
+          <span style={{ fontSize:13, color:TK.ink }}>ESIC applicable: <b style={{ color: checks.esicApplicable ? GREEN : MUTED }}>{checks.esicApplicable ? 'Yes' : 'No'}</b> (monthly gross {inr(checks.monthlyGross)}, threshold ₹21,000)</span>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:8, padding:'5px 0' }}>
           <span style={{ width:14 }} />
-          <span style={{ fontSize:12.5, color:TK.ink }}>EPF wage: <b>{inr(checks.epfWage)}</b>{checks.epfCapped ? <span style={{ color:AMBER }}> (capped at ₹15,000)</span> : null}</span>
+          <span style={{ fontSize:13, color:TK.ink }}>EPF wage: <b>{inr(checks.epfWage)}</b>{checks.epfCapped ? <span style={{ color:AMBER }}> (capped at ₹15,000)</span> : null}</span>
         </div>
       </div>
 
@@ -228,7 +228,7 @@ function Step2Payroll({ form, setF, checks, dups }: any) {
         </div>
       </div>
 
-      <div style={{ marginTop:6, fontSize:12.5, display:'flex', alignItems:'center', gap:8 }}>
+      <div style={{ marginTop:6, fontSize:13, display:'flex', alignItems:'center', gap:8 }}>
         <span style={{ color: bankVerified ? GREEN : RED, fontWeight:700 }}>{bankVerified ? '' : ''}</span>
         <span>Bank account {bankVerified ? 'verified' : 'NOT verified'}</span>
       </div>
@@ -285,7 +285,7 @@ function Step4Approvals({ cand, onMark, onSendEmails, emailMsg, sending }: any) 
         {sending ? 'Sending…' : 'Send approval emails (L1 + Payroll)'}
       </button>
       {emailMsg && <div style={{ fontSize:12, color:MUTED, marginTop:8 }}>{emailMsg}</div>}
-      <div style={{ fontSize:11.5, color:MUTED, marginTop:8, lineHeight:1.6 }}>
+      <div style={{ fontSize:12, color:MUTED, marginTop:8, lineHeight:1.6 }}>
         Emails are informational. HR records the actual approval using the toggle above.
       </div>
     </div>
@@ -304,7 +304,7 @@ function Step5Generate({ gates, genCode, setGenCode, codeType, codeLoading, cand
       <div style={{ marginBottom:14 }}>
         <label style={T.label}>Employee Code *</label>
         <input value={codeLoading ? '' : genCode} disabled={codeLoading} onChange={e => setGenCode(e.target.value.toUpperCase())} placeholder={codeLoading ? 'Auto-suggesting…' : 'e.g. SSMINT0001'}
-          style={{ width:'100%', padding:'10px 12px', background: codeLoading ? TK.sunken : TK.sunken, border:`1.5px solid ${PURPLE}`, borderRadius:8, fontSize:15, color:TK.ink, outline:'none', fontFamily:'inherit', letterSpacing:1, fontWeight:500, boxSizing:'border-box', opacity: codeLoading ? 0.6 : 1 }} />
+          style={{ width:'100%', padding:'10px 12px', background: codeLoading ? TK.sunken : TK.sunken, border:`2px solid ${PURPLE}`, borderRadius:8, fontSize:15, color:TK.ink, outline:'none', fontFamily:'inherit', letterSpacing:1, fontWeight:500, boxSizing:'border-box', opacity: codeLoading ? 0.6 : 1 }} />
         {!codeLoading && genCode && (
           <div style={{ display:'flex', gap:6, alignItems:'center', marginTop:6, fontSize:10, color:MUTED }}>
             <span>Auto-suggested · override if needed</span>

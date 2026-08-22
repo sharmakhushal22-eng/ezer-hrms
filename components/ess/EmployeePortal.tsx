@@ -245,7 +245,7 @@ function ClaimStepper({ status }: { status: string }) {
                             justifyContent: 'center', fontSize: 8, color: C.onAccent, fontWeight: 700 }}>
                 {on ? '' : ''}
               </div>
-              <span style={{ fontSize: 8.5, fontWeight: 600, color: on ? colour: C.line,
+              <span style={{ fontSize: 9, fontWeight: 600, color: on ? colour: C.line,
                              whiteSpace: 'nowrap' }}>{label}</span>
             </div>
             {i < steps.length - 1 && (
@@ -294,12 +294,12 @@ function TravelClaimStatus({ emp, go }: { emp: EmployeeDetail; go: (k: string) =
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
         <div style={T.section}>My Travel Claims</div>
-        <button onClick={() => go('claims')} style={{ ...T.btnO, padding: '5px 11px', fontSize: 11.5 }}>
+        <button onClick={() => go('claims')} style={{ ...T.btnO, padding: '5px 11px', fontSize: 12 }}>
           Open
         </button>
       </div>
       {open.length > 0 && (
-        <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 10 }}>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
           ₹{Math.round(owed).toLocaleString('en-IN')} across {open.length} claim
           {open.length === 1 ? '' : 's'} still moving through approval
         </div>
@@ -312,7 +312,7 @@ function TravelClaimStatus({ emp, go }: { emp: EmployeeDetail; go: (k: string) =
           <div key={c.id} style={{ padding: '10px 0', borderTop: `1px solid ${C.brandEdge}` }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>{c.claim_no}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{c.claim_no}</span>
               <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>
                 ₹{Math.round(Number(c.total_claimed) || 0).toLocaleString('en-IN')}
               </span>
@@ -320,7 +320,7 @@ function TravelClaimStatus({ emp, go }: { emp: EmployeeDetail; go: (k: string) =
             <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3, flexWrap: 'wrap' }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: st.tone }}>● {st.label}</span>
               {waited != null && !['PAID', 'REJECTED'].includes(c.status) && (
-                <span style={{ fontSize: 10.5, color: waited > 5 ? C.warning : C.faint }}>
+                <span style={{ fontSize: 11, color: waited > 5 ? C.warning : C.faint }}>
                   {waited === 0 ? 'submitted today' : `waiting ${waited} day${waited === 1 ? '' : 's'}`}
                 </span>
               )}
@@ -435,7 +435,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <div style={T.card}>
           <div style={T.section}>Announcements</div>
           {ann.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No announcements right now.</div>}
-          {ann.map(a => <div key={a.id} style={{ padding:'7px 0', borderBottom: `1px solid ${C.brandEdge}` }}><div style={{ fontSize:12.5, fontWeight:600 }}>{a.title}</div>{a.body && <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>{a.body}</div>}<div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{fmt(a.published_at)}</div></div>)}
+          {ann.map(a => <div key={a.id} style={{ padding:'7px 0', borderBottom: `1px solid ${C.brandEdge}` }}><div style={{ fontSize:13, fontWeight:600 }}>{a.title}</div>{a.body && <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{a.body}</div>}<div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{fmt(a.published_at)}</div></div>)}
         </div>
       </div>
     </div>
@@ -529,7 +529,7 @@ function Ring({ pct, size = 76 }: { pct: number; size?: number }) {
       <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center', color: C.onAccent }}>
         <span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1 }}>{pct}%</span>
-        <span style={{ fontSize: 8.5, opacity: .7, letterSpacing: '.05em', marginTop: 1 }}>DONE</span>
+        <span style={{ fontSize: 9, opacity: .7, letterSpacing: '.05em', marginTop: 1 }}>DONE</span>
       </div>
     </div>
   )
@@ -542,7 +542,7 @@ function Avatar({ emp, size = 84 }: { emp: EmployeeDetail; size?: number }) {
     <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0,
                   background: show ? C.surface : 'linear-gradient(135deg,#2563EB,#93C5FD)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: C.onAccent, fontSize: size * 0.34, fontWeight: 700, letterSpacing: '.02em',
+                  color: C.onAccent, fontSize: Math.round(size * 0.34), fontWeight: 700, letterSpacing: '.02em',
                   border: '3px solid rgba(255,255,255,0.25)',
                   boxShadow: '0 6px 20px rgba(0,0,0,0.22)', overflow: 'hidden' }}>
       {show
@@ -558,7 +558,7 @@ function Chip({ icon, children }: { icon: string; children: React.ReactNode }) {
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px',
                    borderRadius: 99, background: 'rgba(255,255,255,0.12)',
                    border: '1px solid rgba(255,255,255,0.16)', color: C.onAccent,
-                   fontSize: 11.5, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                   fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
       <span style={{ opacity: .85 }}>{icon}</span>{children}
     </span>
   )
@@ -610,7 +610,7 @@ function Field({ label, value, icon, copyable, sensitive, notify }: {
                     .catch(() => notify('Could not copy', 'error'))
                 }}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3,
-                         fontSize: 12.5, opacity: hover ? 1 : 0, transition: 'opacity .15s' }}>
+                         fontSize: 13, opacity: hover ? 1 : 0, transition: 'opacity .15s' }}>
           📋
         </button>
       )}
@@ -691,7 +691,7 @@ function ProfileHero({ emp, notify }: {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
                       minWidth: 120 }}>
           <Ring pct={c.pct} />
-          <div style={{ fontSize: 10.5, color: C.onAccentDim, textAlign: 'center' }}>
+          <div style={{ fontSize: 11, color: C.onAccentDim, textAlign: 'center' }}>
             {c.missing.length === 0
               ? 'Profile complete'
               : `${c.missing.length} of ${c.total} still missing`}
@@ -703,7 +703,7 @@ function ProfileHero({ emp, notify }: {
       {c.missing.length > 0 && (
         <div style={{ background: 'rgba(0,0,0,0.22)', padding: '10px 22px',
                       display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11.5, color: C.onAccentDim }}>Still needed:</span>
+          <span style={{ fontSize: 12, color: C.onAccentDim }}>Still needed:</span>
           {c.missing.map(m => (
             <span key={m} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99,
                                    background: 'rgba(255,255,255,0.1)', color: C.warning,
@@ -770,7 +770,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
           <button key={k} onClick={() => setTab(k)}
                   style={{ display: 'flex', alignItems: 'center', gap: 6,
                            padding: '8px 15px', borderRadius: 9, cursor: 'pointer',
-                           fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit',
+                           fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
                            border: tab === k ? 'none' : `1px solid ${P.line}`,
                            background: tab === k ? P.purple : P.white,
                            color: tab === k ? C.surface : P.purpleD,
@@ -824,7 +824,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
             <Field label="PAN" value={emp.pan_number} icon="🪪" copyable sensitive notify={notify} />
             <Field label="Aadhaar" value={emp.aadhar_last4 ? `XXXX XXXX ${emp.aadhar_last4}` : null} icon="🆔" notify={notify} />
             <Field label="UAN" value={emp.uan_number} icon="🏦" copyable sensitive notify={notify} />
-            <div style={{ fontSize: 10.5, color: P.dim, marginTop: 7, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11, color: P.dim, marginTop: 7, lineHeight: 1.5 }}>
               Hidden by default. Reveal only when you need to copy one.
             </div>
           </Panel>
@@ -1114,7 +1114,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                   <div style={{ width: 44, height: 44, borderRadius: '50%', background: t.bg, color: t.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>{initials(e.full_name)}</div>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.full_name}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.full_name}</div>
                     <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '—'}</div>
                     <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>{e.emp_code}</div>
                   </div>
@@ -1135,7 +1135,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
             <div style={{ ...T.card, gridColumn: '1 / -1', textAlign: 'center', padding: '30px 16px' }}>
               <div style={{ fontSize: 30, marginBottom: 6 }}></div>
               <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 3 }}>No colleagues match that search</div>
-              <div style={{ fontSize: 11.5, color: C.faint }}>Try a different name, code or department{(dept || loc) ? ', or clear the filters' : ''}.</div>
+              <div style={{ fontSize: 12, color: C.faint }}>Try a different name, code or department{(dept || loc) ? ', or clear the filters' : ''}.</div>
             </div>
           )}
         </div>
@@ -1421,7 +1421,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
             <button onClick={onNext} className="ezer-nav" style={nav} title="Next month">›</button>
             {!isThisMonth && (
               <button onClick={onToday} className="ezer-nav"
-                      style={{ ...nav, width: 'auto', padding: '0 11px', fontSize: 11.5, fontWeight: 600 }}>
+                      style={{ ...nav, width: 'auto', padding: '0 11px', fontSize: 12, fontWeight: 600 }}>
                 Today
               </button>
             )}
@@ -1432,7 +1432,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
               : 'No working days recorded yet'}
           </div>
           {summary.totalOTHours && summary.totalOTHours !== '0h 0m' && (
-            <div style={{ fontSize: 11.5, color: C.positive, marginTop: 5 }}>
+            <div style={{ fontSize: 12, color: C.positive, marginTop: 5 }}>
               ⏱ {summary.totalOTHours} overtime this month
             </div>
           )}
@@ -1453,7 +1453,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
             <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, lineHeight: 1 }}>
               {pct == null ? '—' : `${pct}%`}
             </span>
-            <span style={{ fontSize: 8.5, opacity: .65, letterSpacing: '.06em', marginTop: 2 }}>ATTENDANCE</span>
+            <span style={{ fontSize: 9, opacity: .65, letterSpacing: '.06em', marginTop: 2 }}>ATTENDANCE</span>
           </div>
         </div>
       </div>
@@ -1474,7 +1474,7 @@ function StatTile({ label, value, bg, fg, bar, wide }: {
                     background: empty ? C.line : bar }} />
       <div style={{ fontSize: 21, fontWeight: 700, lineHeight: 1.05, marginLeft: 4,
                     color: empty ? C.line : fg }}>{value}</div>
-      <div style={{ fontSize: 9.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
                     marginLeft: 4, marginTop: 3, color: empty ? C.line : fg, opacity: empty ? 1 : .8 }}>
         {label}
       </div>
@@ -1625,7 +1625,7 @@ function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }
       <div style={{ textAlign: 'center', padding: '6px 0 16px' }}>
         <div style={{ fontSize: 26, marginBottom: 6 }}></div>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>Pick a day</div>
-        <div style={{ fontSize: 11.5, color: C.faint, marginTop: 3, lineHeight: 1.55 }}>
+        <div style={{ fontSize: 12, color: C.faint, marginTop: 3, lineHeight: 1.55 }}>
           Its punches, hours and status appear here.
         </div>
       </div>
@@ -1763,7 +1763,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
                     : isFuture ? 'transparent' : bg,
           color: isSel ? C.surface : ink,
           border: isSel ? '1px solid #1D4ED8'
-                : isToday ? '1.5px solid #93C5FD'
+                : isToday ? '2px solid #93C5FD'
                 : '1px solid rgba(37,99,235,0.09)',
           borderRadius: 8, padding: 0,
           cursor: isFuture ? 'default' : 'pointer',
@@ -1791,14 +1791,14 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
         )}
 
         {hasTimes && (
-          <span style={{ fontSize: 7.5, lineHeight: 1, opacity: .75, marginTop: 1,
+          <span style={{ fontSize: 8, lineHeight: 1, opacity: .75, marginTop: 1,
                          fontVariantNumeric: 'tabular-nums' }}>
             {fmtT(rec!.work_in)}
           </span>
         )}
 
         {!isFuture && status === 'ON_LEAVE' && leave?.short_name && (
-          <span style={{ fontSize: 7.5, fontWeight: 700, lineHeight: 1, marginTop: 1 }}>
+          <span style={{ fontSize: 8, fontWeight: 700, lineHeight: 1, marginTop: 1 }}>
             {leave.short_name}
           </span>
         )}
@@ -1816,7 +1816,7 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
       <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom: 3,
                     transform: 'translateZ(14px)' }}>
         {WEEKDAYS.map((w, n) => (
-          <div key={w} style={{ textAlign:'center', fontSize:9.5, fontWeight:700,
+          <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:700,
                                 letterSpacing:'.05em', padding:'3px 0',
                                 color: n % 6 === 0 ? C.brand : C.line }}>
             {w[0]}{isMobile ? '' : w[1]}
@@ -2008,7 +2008,7 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
   return (
     <div style={T.card}>
       <div style={T.section}>Regularise a date range</div>
-      <div style={{ fontSize: 11.5, color: C.muted, marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
+      <div style={{ fontSize: 12, color: C.muted, marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
         For a stretch of days with the same story — biometric down, on site, working from home.
         Weekly offs, holidays, leave and days already recorded are left out automatically.
       </div>
@@ -2059,7 +2059,7 @@ function BulkRegularisationForm({ emp, onDone, onCancel }: {
 
           {preview.skipped.length > 0 && (
             <details>
-              <summary style={{ fontSize: 11.5, color: C.muted, cursor: 'pointer', marginBottom: 6 }}>
+              <summary style={{ fontSize: 12, color: C.muted, cursor: 'pointer', marginBottom: 6 }}>
                 Why {preview.skipped.length} day{preview.skipped.length === 1 ? ' was' : 's were'} left out
               </summary>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -2321,7 +2321,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Voluntary PF (VPF)</div>
-        <div style={{ fontSize: 12.5, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages — set your own percentage.</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages — set your own percentage.</div>
       </div>
 
       {!e.has_ctc && (
@@ -2456,7 +2456,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Corporate NPS enrolment</div>
-        <div style={{ fontSize: 12.5, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I) — extra tax benefit under Section 80CCD(2).</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I) — extra tax benefit under Section 80CCD(2).</div>
       </div>
 
       {!e.has_ctc && (
@@ -2726,13 +2726,13 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
     else notify(d.error || 'Failed', 'error')
   }
 
-  const row: React.CSSProperties = { display:'flex', justifyContent:'space-between', gap:10, padding:'8px 0', borderBottom:`1px solid ${V.border}`, fontSize:12.5, alignItems:'center', flexWrap:'wrap' }
+  const row: React.CSSProperties = { display:'flex', justifyContent:'space-between', gap:10, padding:'8px 0', borderBottom:`1px solid ${V.border}`, fontSize:13, alignItems:'center', flexWrap:'wrap' }
 
   return (
     <div>
       <div style={{ marginBottom:14 }}>
         <div style={{ fontSize:18, fontWeight:600, color:V.navy }}>Loans</div>
-        <div style={{ fontSize:12.5, color:V.muted, marginTop:2 }}>Apply for a company loan, track approvals, sign your agreement, and manage repayments.</div>
+        <div style={{ fontSize:13, color:V.muted, marginTop:2 }}>Apply for a company loan, track approvals, sign your agreement, and manage repayments.</div>
       </div>
 
       {!hasCtc && (
@@ -2814,7 +2814,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
                 <div style={{ fontSize:13, fontWeight:600, color:V.navy }}>{l.loan_number}</div>
                 <LoanStatusBadge status={l.status} />
               </div>
-              <div style={{ fontSize:11.5, color:V.muted, marginTop:4, lineHeight:1.7 }}>
+              <div style={{ fontSize:12, color:V.muted, marginTop:4, lineHeight:1.7 }}>
                 Principal {loanInr(l.principal)} · EMI {loanInr(l.emi_amount)}/mo · Outstanding <b style={{ color:V.navy }}>{loanInr(l.outstanding_principal)}</b><br />
                 Paid {l.paid_installments ?? 0} / {(l.paid_installments ?? 0) + (l.remaining_installments ?? 0)} installments · {l.remaining_installments ?? 0} remaining
                 {l.disbursement_date ? ` · disbursed ${fmt(l.disbursement_date)}` : ''}
@@ -2901,7 +2901,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
   if (status === 'nopolicy') return (
     <div style={card}>
       <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Flexi Benefit Plan</div>
-      <div style={{ fontSize: 12.5, color: V.muted }}>No flexi (FBP) policy is configured for {companyName || 'your company'}{annualFixed ? ` at your salary band (${inr(annualFixed)} annual fixed)` : ''} yet. Please check with HR / Payroll.</div>
+      <div style={{ fontSize: 13, color: V.muted }}>No flexi (FBP) policy is configured for {companyName || 'your company'}{annualFixed ? ` at your salary band (${inr(annualFixed)} annual fixed)` : ''} yet. Please check with HR / Payroll.</div>
     </div>
   )
 
@@ -2945,7 +2945,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
           const a = amt(r)
           const perq = num(r.perquisite_monthly) > 0 ? `${inr(num(r.perquisite_monthly))}/mo perq` : (r.comp.is_children_linked && r.children_count ? `${r.children_count} child` : '—')
           return (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '9px 14px', borderBottom: `1px solid ${V.border}`, fontSize: 12.5, background: a.muted ? '#FAFAFE' : '#fff' }}>
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '9px 14px', borderBottom: `1px solid ${V.border}`, fontSize: 13, background: a.muted ? '#FAFAFE' : '#fff' }}>
               <span style={{ color: V.navy }}>{r.comp.name}</span>
               <span style={{ textAlign: 'right', fontWeight: 600, color: a.muted ? V.muted : V.navy }}>{a.text}</span>
               <span style={{ textAlign: 'right', color: V.muted }}>{perq}</span>
@@ -2953,7 +2953,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
           )
         })}
       </div>
-      <div style={{ fontSize: 10.5, color: V.muted, padding: '0 4px' }}>FBP entitlements for your company &amp; salary band. Declaration &amp; bill submission open during the flexi window — raise via HR / Payroll.</div>
+      <div style={{ fontSize: 11, color: V.muted, padding: '0 4px' }}>FBP entitlements for your company &amp; salary band. Declaration &amp; bill submission open during the flexi window — raise via HR / Payroll.</div>
     </div>
   )
 }
@@ -3145,7 +3145,7 @@ function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean;
   const bg = active ? 'rgba(37,99,235,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.surface : C.brand, cursor:'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.brand : 'transparent'}` }}>
+      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.surface : C.brand, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.brand : 'transparent'}` }}>
       <EssIcon k={s.k} size={16} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
@@ -3162,9 +3162,9 @@ function TabHeader({ s }: { s: NavSection }) {
                       display:'flex', alignItems:'center', gap:9 }}>
           <EssIcon k={s.k} size={20} strokeWidth={1.8} />{s.label}
         </div>
-        <span style={{ fontSize:10.5, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
+        <span style={{ fontSize:11, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
       </div>
-      <div style={{ fontSize:12.5, color:C.muted }}>{s.desc}</div>
+      <div style={{ fontSize:13, color:C.muted }}>{s.desc}</div>
     </div>
   )
 }
@@ -3176,7 +3176,7 @@ function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: 
       {items.map(i => {
         const on = i.k === view
         return (
-          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:12.5, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.brand : C.line}`, background: on ? C.brand: C.surface, color: on ? C.surface : C.inkSoft, whiteSpace:'nowrap' }}>
+          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.brand : C.line}`, background: on ? C.brand: C.surface, color: on ? C.surface : C.inkSoft, whiteSpace:'nowrap' }}>
             {i.label}{i.phase ? <span style={{ marginLeft:5, fontSize:9, opacity:.7 }}>soon</span> : null}
           </button>
         )
@@ -3210,7 +3210,7 @@ function NotificationBell({ unread, open, onToggle }: { unread: number; open: bo
     <button onClick={onToggle} title="Notifications" style={{ position:'relative', width:34, height:34, borderRadius:R.md, border:`1px solid ${open ? C.brand : C.line}`, background: open ? C.brandTint : C.surface, color: open ? C.brandDeep : C.muted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit', flexShrink:0 }}>
       <IconBell size={16} />
       {unread > 0 && (
-        <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:R.pill, background:C.critical, color:C.onAccent, fontSize:9.5, fontWeight:W.bold, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
+        <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:R.pill, background:C.critical, color:C.onAccent, fontSize:10, fontWeight:W.bold, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
           {unread > 9 ? '9+' : unread}
         </span>
       )}

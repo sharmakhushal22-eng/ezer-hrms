@@ -16,8 +16,8 @@ const C = {
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
-const pri: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: font }
-const sec: React.CSSProperties = { padding: '7px 13px', background: TK.surface, color: C.purpleDark, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontFamily: font }
+const pri: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
+const sec: React.CSSProperties = { padding: '7px 13px', background: TK.surface, color: C.purpleDark, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: font }
 
 interface EmpVoucher {
   employee_id: string; emp_code: string; full_name: string; department: string; designation: string
@@ -70,7 +70,7 @@ function voucherHtml(companyName: string, companyCode: string, ym: string, vouch
     .co{font-size:13px;color:#6B7280;margin-top:2px}
     .title{text-align:right;font-size:15px;font-weight:800;color:#1E1B4B;letter-spacing:.06em}
     .title .sub{font-size:12px;color:#2563EB;font-weight:700}
-    .meta,.emp{display:flex;flex-wrap:wrap;gap:18px 34px;margin-top:18px;font-size:12.5px}
+    .meta,.emp{display:flex;flex-wrap:wrap;gap:18px 34px;margin-top:18px;font-size:13px}
     .meta div,.emp div{display:flex;flex-direction:column}
     .meta span,.emp span{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#9CA3AF;margin-bottom:2px}
     .emp{background:#F5F3FF;border:1px solid #EDE9FE;border-radius:10px;padding:14px 16px}
@@ -83,7 +83,7 @@ function voucherHtml(companyName: string, companyCode: string, ym: string, vouch
     .ft span{font-size:10px;text-transform:uppercase;color:#9CA3AF;letter-spacing:.04em;margin-right:6px}
     .sign{text-align:center;color:#6B7280;font-size:11px}
     .sign .line{width:170px;border-top:1px solid #94A3B8;margin-bottom:5px}
-    .note{margin-top:22px;font-size:10.5px;color:#9CA3AF;line-height:1.5;border-top:1px dashed #E9E7F5;padding-top:12px}
+    .note{margin-top:22px;font-size:11px;color:#9CA3AF;line-height:1.5;border-top:1px dashed #E9E7F5;padding-top:12px}
     @media print{body{background:#fff}.voucher{border:none;margin:0;border-radius:0;max-width:100%}.voucher+.voucher{page-break-before:always}}
   </style></head><body>${vouchers.map(page).join('')}
   <script>window.onload=function(){setTimeout(function(){window.print()},250)}</script></body></html>`

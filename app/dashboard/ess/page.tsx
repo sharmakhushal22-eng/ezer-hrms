@@ -614,7 +614,7 @@ export default function ESSPage() {
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
           <div style={{ ...T.card, maxWidth:440, width:'100%', marginBottom:0 }}>
             {!deact.last_working_date ? (
-              <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:8, padding:'12px 14px', marginBottom:12, fontSize:12.5, color:TK.warning, lineHeight:1.6 }}>This employee has <b>no Date of Leaving set</b>. Deactivate anyway? They will not be able to log in, or reset their password.
+              <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:8, padding:'12px 14px', marginBottom:12, fontSize:13, color:TK.warning, lineHeight:1.6 }}>This employee has <b>no Date of Leaving set</b>. Deactivate anyway? They will not be able to log in, or reset their password.
               </div>
             ) : (
               <div style={{ fontSize:13, marginBottom:12 }}>Deactivate <b>{deact.full_name}</b>? They won&apos;t be able to log in or reset their password.</div>

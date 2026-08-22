@@ -43,7 +43,7 @@ function PolicyModal({ row, company_id, nextOrder, onClose, onSave }: {
           <div><label style={C.lbl}>Title</label><input style={C.input} value={f.policy_title} onChange={e => set('policy_title', e.target.value)} placeholder="Confidentiality / NDA" /></div>
           <div><label style={C.lbl}>Sort</label><input type="number" style={C.input} value={f.sort_order} onChange={e => set('sort_order', Number(e.target.value))} /></div>
         </div>
-        <label style={{ display:'flex', alignItems:'center', gap:7, fontSize:12.5, cursor:'pointer', marginBottom:10 }}>
+        <label style={{ display:'flex', alignItems:'center', gap:7, fontSize:13, cursor:'pointer', marginBottom:10 }}>
           <input type="checkbox" checked={f.is_mandatory} onChange={e => set('is_mandatory', e.target.checked)} /> Mandatory (candidate must acknowledge to proceed)
         </label>
         <label style={C.lbl}>Policy text (markdown supported)</label>

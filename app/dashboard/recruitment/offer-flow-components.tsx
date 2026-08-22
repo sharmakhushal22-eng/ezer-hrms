@@ -13,7 +13,7 @@ import {
 const S = {
   page: { background:TK.canvas, minHeight:'100vh', fontFamily:TF.family, color:TK.ink } as React.CSSProperties,
   card: { background:TK.surface, borderRadius:R.lg, border:`1px solid ${TK.line}`, padding:'14px 16px', marginBottom:SP.md, boxShadow:E.raised } as React.CSSProperties,
-  cardP: { background:TK.surface, borderRadius:R.lg, border:`1.5px solid ${TK.brand}`, padding:'14px 16px', marginBottom:SP.md, boxShadow:E.floating } as React.CSSProperties,
+  cardP: { background:TK.surface, borderRadius:R.lg, border:`2px solid ${TK.brand}`, padding:'14px 16px', marginBottom:SP.md, boxShadow:E.floating } as React.CSSProperties,
   label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
   input: { ...inputStyle() } as React.CSSProperties,
   select: { ...inputStyle(), cursor:'pointer' } as React.CSSProperties,
@@ -575,7 +575,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             const [bg, c] = statusColor(r.status)
             return (
               <div key={r.id} onClick={()=>setSelected(r)}
-                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                   <div>
                     <div style={{ fontSize:14, fontWeight:600 }}>{r.candidates?.full_name}</div>
@@ -625,7 +625,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             {selected.hiring_manager_remark && (
               <div style={S.card}>
                 <div style={S.sec}>Hiring Manager Remark / Target</div>
-                <div style={{ fontSize:12.5, color:TK.ink, whiteSpace:'pre-wrap' }}>{selected.hiring_manager_remark}</div>
+                <div style={{ fontSize:13, color:TK.ink, whiteSpace:'pre-wrap' }}>{selected.hiring_manager_remark}</div>
               </div>
             )}
 
@@ -634,9 +634,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               <div style={S.cardP}>
                 <div style={S.sec}>Your Decision</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
-                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?TK.positiveTint:TK.sunken, action==='approve'?TK.positive:TK.muted), border:action==='approve'?'1.5px solid #059669':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Approve
+                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?TK.positiveTint:TK.sunken, action==='approve'?TK.positive:TK.muted), border:action==='approve'?'2px solid #059669':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Approve
                   </button>
-                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?TK.criticalTint:TK.sunken, action==='reject'?TK.critical:TK.muted), border:action==='reject'?'1.5px solid #DC2626':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Reject
+                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?TK.criticalTint:TK.sunken, action==='reject'?TK.critical:TK.muted), border:action==='reject'?'2px solid #DC2626':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Reject
                   </button>
                 </div>
                 <div style={{ marginBottom:12 }}>
@@ -834,7 +834,7 @@ ${company} — Human Resources`)
           )}
           {fApproved.map(r => (
             <div key={r.id} onClick={() => prepareOffer(r)}
-              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}</div>
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}

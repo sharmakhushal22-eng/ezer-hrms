@@ -21,7 +21,7 @@ const F = {
   pink: TK.critical, pinkBg: TK.criticalTint, blue:TK.info, blueBg:TK.infoTint, red:TK.critical,
 }
 const panel: React.CSSProperties = { background:TK.surface, borderRadius:16, padding:24, boxShadow:'0 2px 8px rgba(37,99,235,0.08)' }
-const btnPrimary: React.CSSProperties = { fontFamily:'inherit', fontSize:13.5, fontWeight:700, color:TK.onAccent, background:F.purple, border:'none', borderRadius:10, padding:'10px 24px', cursor:'pointer' }
+const btnPrimary: React.CSSProperties = { fontFamily:'inherit', fontSize:14, fontWeight:700, color:TK.onAccent, background:F.purple, border:'none', borderRadius:10, padding:'10px 24px', cursor:'pointer' }
 const gameTitle: React.CSSProperties = { fontSize:18, fontWeight:700, marginBottom:4 }
 const gameSub: React.CSSProperties = { fontSize:12, color:F.muted, marginBottom:18 }
 
@@ -250,8 +250,8 @@ export default function FunZone() {
           <button key={g.k} onClick={() => setGame(g.k)} style={{ ...panel, padding:20, cursor:'pointer', border:`2px solid ${F.border}`, textAlign:'left', fontFamily:'inherit', color:F.navy }}>
             <div style={{ fontSize:32, marginBottom:8 }}>{g.icon}</div>
             <div style={{ fontWeight:700, fontSize:15, marginBottom:3 }}>{g.name}</div>
-            <div style={{ fontSize:11.5, color:F.muted }}>{g.desc}</div>
-            <span style={{ display:'inline-block', fontSize:9.5, fontWeight:700, padding:'2px 8px', borderRadius:999, marginTop:8, background:g.bg, color:g.fg }}>{g.badge}</span>
+            <div style={{ fontSize:12, color:F.muted }}>{g.desc}</div>
+            <span style={{ display:'inline-block', fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:999, marginTop:8, background:g.bg, color:g.fg }}>{g.badge}</span>
           </button>
         ))}
       </div>

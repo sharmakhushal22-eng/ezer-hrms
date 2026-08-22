@@ -49,14 +49,14 @@ function SearchSelect({ value, options, placeholder, onChange }: {
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 210 }} />
           <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
-              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
               {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o} onClick={() => { onChange(o); setOpen(false) }}
                   onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
                   onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? TK.brandTint : TK.surface}
-                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
+                  style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
                   {o}
                 </div>
               ))}
@@ -131,7 +131,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
           <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise LWF config' : 'Add LWF state'}</div>
-            <div style={{ fontSize: 10.5, color: C.muted }}>Applicable months + contributions</div>
+            <div style={{ fontSize: 11, color: C.muted }}>Applicable months + contributions</div>
           </div>
         </div>
 
@@ -159,7 +159,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
 
         <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', background: C.gray, borderRadius: 8, padding: '10px 11px', marginBottom: 10, cursor: 'pointer' }}>
           <input type="checkbox" checked={exitExemption} onChange={e => setExitExemption(e.target.checked)} style={{ marginTop: 2, accentColor: C.purple }} />
-          <span style={{ fontSize: 11.5, color: C.navy, lineHeight: 1.5 }}>
+          <span style={{ fontSize: 12, color: C.navy, lineHeight: 1.5 }}>
             Exempt employees who left before the last day of an applicable month (Haryana-style rule — also fits half-yearly states like Maharashtra, exempting anyone who resigned before the 30 Jun / 31 Dec cutoff).
           </span>
         </label>
@@ -252,7 +252,7 @@ export default function LwfConfig() {
             fontSize: 9, fontWeight: 800, letterSpacing: '.05em', padding: '2px 8px', borderRadius: 99,
             background: isEmp ? C.purpleBg : TK.positiveTint, color: isEmp ? C.purpleD : C.green,
           }}>{isEmp ? 'EMPLOYEE' : 'EMPLOYER'}</span>
-          <span style={{ fontSize: 13.5, fontWeight: 700, color: C.navy }}>Contribution Table</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>Contribution Table</span>
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>
           {isEmp
@@ -281,7 +281,7 @@ export default function LwfConfig() {
                     <td style={{ ...td, textAlign: 'left', fontWeight: 600, color: C.navy }}>{r.state}</td>
                     <td style={{ ...td, textAlign: 'left' }}>
                       <span style={{
-                        fontSize: 9.5, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
+                        fontSize: 10, fontWeight: 700, padding: '1px 7px', borderRadius: 99,
                         background: r.exit_exemption_if_before_period_end ? TK.positiveTint : C.gray,
                         color: r.exit_exemption_if_before_period_end ? C.green : C.muted,
                       }}>{r.exit_exemption_if_before_period_end ? 'Yes' : 'No'}</span>
@@ -324,7 +324,7 @@ export default function LwfConfig() {
           </div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
+          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
           + Add / revise state
         </button>
       </div>
@@ -333,7 +333,7 @@ export default function LwfConfig() {
 
       {/* ── Quick check ─────────────────────────────────────────── */}
       <div style={card}>
-        <div style={{ fontSize: 13.5, fontWeight: 700, color: C.navy, marginBottom: 3 }}>Quick check</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, marginBottom: 3 }}>Quick check</div>
         <div style={{ fontSize: 11, color: C.muted, marginBottom: 13 }}>
           Pick a state and month — optionally mark a mid-month exit. Same function the payroll run calls.
         </div>
@@ -355,7 +355,7 @@ export default function LwfConfig() {
             Exiting mid-month
           </label>
           <button onClick={runCheck} disabled={qBusy || !qState}
-            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: !qState ? TK.brandTint : C.purple, cursor: !qState ? 'not-allowed' : 'pointer' }}>
+            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: !qState ? TK.brandTint : C.purple, cursor: !qState ? 'not-allowed' : 'pointer' }}>
             {qBusy ? 'Checking…' : 'Check LWF'}
           </button>
         </div>
@@ -379,15 +379,15 @@ export default function LwfConfig() {
             <div style={{ marginTop: 13 }}>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <div style={box}>
-                  <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employee contribution</div>
+                  <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employee contribution</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${ee}` : '—'}</div>
                 </div>
                 <div style={box}>
-                  <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employer contribution</div>
+                  <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employer contribution</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${er}` : '—'}</div>
                 </div>
               </div>
-              <div style={{ fontSize: 11.5, color: found ? '#047857' : TK.warning, marginTop: 8 }}>{why}</div>
+              <div style={{ fontSize: 12, color: found ? '#047857' : TK.warning, marginTop: 8 }}>{why}</div>
             </div>
           )
         })()}
@@ -402,7 +402,7 @@ export default function LwfConfig() {
         </>
       )}
 
-      <div style={{ fontSize: 10.5, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
         <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s LWF from here — by their
         <b> lwf_state</b> and that month. Note that LWF state and PT state are <b>different</b> things, and for
         300 of your 302 employees they genuinely differ.

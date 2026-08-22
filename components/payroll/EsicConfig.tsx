@@ -27,10 +27,10 @@ function InfoTile({ icon, label, value, hint, accent }: { icon: string; label: s
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: a }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
         <span style={{ fontSize: 13 }}>{icon}</span>
-        <span style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em', fontWeight: 700 }}>{label}</span>
+        <span style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em', fontWeight: 700 }}>{label}</span>
       </div>
       <div style={{ fontSize: 18, fontWeight: 800, color: C.navy, lineHeight: 1 }}>{value}</div>
-      {hint && <div style={{ fontSize: 9.5, color: C.muted, marginTop: 3 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>{hint}</div>}
     </div>
   )
 }
@@ -89,7 +89,7 @@ export default function EsicConfig() {
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>ESIC</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Employees&apos; State Insurance — wage ceiling, contributions &amp; mid-period coverage continuity</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Employees&apos; State Insurance — wage ceiling, contributions &amp; mid-period coverage continuity</div>
         </div>
       </div>
 
@@ -137,11 +137,11 @@ export default function EsicConfig() {
             {est && (
               <div style={{ background: est.covered ? C.greenBg : C.gray, border: `1px solid ${est.covered ? C.greenBd : C.border}`, borderRadius: 11, padding: '13px 15px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: est.covered ? 12 : 0 }}>
-                  <span style={{ fontSize: 10.5, fontWeight: 800, color: TK.onAccent, background: est.covered ? C.green : TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase', letterSpacing: '.03em' }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: TK.onAccent, background: est.covered ? C.green : TK.faint, borderRadius: 99, padding: '3px 11px', textTransform: 'uppercase', letterSpacing: '.03em' }}>
                     {est.covered ? 'Covered' : 'Not covered'}
                   </span>
-                  {!est.covered && <span style={{ fontSize: 11.5, color: C.muted }}>wage above {inr(est.ceiling)} ceiling</span>}
-                  {est.lowWaged && est.covered && <span style={{ fontSize: 9.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 99, padding: '2px 8px' }}>low-wage: employee share waived</span>}
+                  {!est.covered && <span style={{ fontSize: 12, color: C.muted }}>wage above {inr(est.ceiling)} ceiling</span>}
+                  {est.lowWaged && est.covered && <span style={{ fontSize: 10, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 99, padding: '2px 8px' }}>low-wage: employee share waived</span>}
                 </div>
                 {est.covered && (
                   <div style={{ display: 'flex', alignItems: 'stretch', gap: 0, background: TK.surface, borderRadius: 9, border: `1px solid ${C.greenBd}`, overflow: 'hidden' }}>
@@ -151,7 +151,7 @@ export default function EsicConfig() {
                       ['Total / month', est.employee + est.employer, C.purpleD],
                     ].map(([lbl, val, col], i) => (
                       <div key={lbl as string} style={{ flex: 1, padding: '10px 14px', borderLeft: i > 0 ? `1px solid ${C.border}` : 'none', background: i === 2 ? C.purpleBg: TK.surface }}>
-                        <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em', fontWeight: 700, marginBottom: 3 }}>{lbl as string}</div>
+                        <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.03em', fontWeight: 700, marginBottom: 3 }}>{lbl as string}</div>
                         <div style={{ fontSize: 17, fontWeight: 800, color: col as string }}>{inr(val as number)}</div>
                       </div>
                     ))}

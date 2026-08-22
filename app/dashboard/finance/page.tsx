@@ -118,7 +118,7 @@ function QueueRow({ item, moduleName, detailRoute, onAction, busy }: {
 
         <div style={{ flex: 1, minWidth: 180 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>{item.title}</div>
-          <div style={{ fontSize: 11.5, color: V.muted, marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: V.muted, marginTop: 2 }}>
             {item.subtitle}
             {item.flag_count > 0 && (
               <span style={{ color: V.amber, fontWeight: 600 }}> · ⚑ {item.flag_count} to review</span>
@@ -174,7 +174,7 @@ function TeamRow({ m, onChange, busy }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 0',
                   borderBottom: `1px solid ${V.border}`, flexWrap: 'wrap' }}>
       <div style={{ flex: 1, minWidth: 170 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: m.is_active ? V.navy : V.muted }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: m.is_active ? V.navy : V.muted }}>
           {m.employee?.full_name ?? '—'}
           <span style={{ color: V.muted, fontWeight: 500 }}> · {m.employee?.emp_code ?? ''}</span>
         </div>
@@ -184,13 +184,13 @@ function TeamRow({ m, onChange, busy }: {
       <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 99, background: V.purpleBg,
                      color: V.purpleDark, fontWeight: 600 }}>{m.role}</span>
 
-      <label style={{ fontSize: 11.5, color: V.navy, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <label style={{ fontSize: 12, color: V.navy, display: 'flex', alignItems: 'center', gap: 5 }}>
         <input type="checkbox" checked={m.can_approve} disabled={busy}
                onChange={e => onChange(m.id, { can_approve: e.target.checked })}
                style={{ accentColor: V.purple }} />
         approve
       </label>
-      <label style={{ fontSize: 11.5, color: V.navy, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <label style={{ fontSize: 12, color: V.navy, display: 'flex', alignItems: 'center', gap: 5 }}>
         <input type="checkbox" checked={m.can_disburse} disabled={busy}
                onChange={e => onChange(m.id, { can_disburse: e.target.checked })}
                style={{ accentColor: V.purple }} />
@@ -370,7 +370,7 @@ export default function FinanceDepartment() {
         {([['QUEUE', 'Approvals'], ['TEAM', 'Finance team'], ['MODULES', 'Connected modules']] as const)
           .map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-                  style={{ padding: '8px 16px', borderRadius: 7, fontSize: 12.5, fontWeight: 600,
+                  style={{ padding: '8px 16px', borderRadius: 7, fontSize: 13, fontWeight: 600,
                            fontFamily: 'inherit', cursor: 'pointer',
                            border: tab === k ? 'none' : `1px solid ${V.border}`,
                            background: tab === k ? V.purple : V.card,
@@ -387,7 +387,7 @@ export default function FinanceDepartment() {
           <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, marginBottom: 8 }}>
             Finance is not installed yet
           </div>
-          <div style={{ fontSize: 12.5, color: V.muted, lineHeight: 1.7, maxWidth: 620 }}>
+          <div style={{ fontSize: 13, color: V.muted, lineHeight: 1.7, maxWidth: 620 }}>
             {pending}
             <br /><br />
             The department, its authority rules and the shared work queue all live in
@@ -431,7 +431,7 @@ export default function FinanceDepartment() {
               </select>
             </div>
             {acting && (
-              <div style={{ fontSize: 11.5, color: V.muted, paddingBottom: 9 }}>
+              <div style={{ fontSize: 12, color: V.muted, paddingBottom: 9 }}>
                 {acting.can_approve ? '✓ can approve' : '✗ cannot approve'} ·{' '}
                 {acting.can_disburse ? '✓ can release payment' : '✗ cannot release payment'}
               </div>
@@ -458,7 +458,7 @@ export default function FinanceDepartment() {
       {!pending && tab === 'TEAM' && (
         <div style={S.card}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Finance team</div>
-          <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
             Sitting in the Finance &amp; Accounts department does not grant approval rights — a row
             here does. Approving a claim and releasing the money are separate permissions, and a
             limit caps what each person can sign off alone.
@@ -473,7 +473,7 @@ export default function FinanceDepartment() {
         <>
           <div style={S.card}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Routing work here</div>
-            <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 12, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
               Finance reads one queue, so a module connects by enqueuing rather than by growing
               this screen. Adding the next one is a row in <code>finance_modules</code> plus a call
               to <code>finance_enqueue()</code> when something needs finance.
@@ -484,10 +484,10 @@ export default function FinanceDepartment() {
                 <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 99,
                                background: V.greenBg, color: V.green, fontWeight: 600 }}>LIVE</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{m.module_name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{m.module_name}</div>
                   <div style={{ fontSize: 11, color: V.muted }}>{m.description}</div>
                 </div>
-                <span style={{ fontSize: 11.5, color: V.navy, fontWeight: 600 }}>
+                <span style={{ fontSize: 12, color: V.navy, fontWeight: 600 }}>
                   {items.filter(i => i.module_code === m.module_code).length} open
                 </span>
               </div>
@@ -496,7 +496,7 @@ export default function FinanceDepartment() {
 
           <div style={S.card}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Registered, not yet sending</div>
-            <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: V.muted, marginBottom: 12 }}>
               These describe the intended shape. Each becomes live when its module starts enqueuing.
             </div>
             {planned.map(m => (
@@ -505,7 +505,7 @@ export default function FinanceDepartment() {
                 <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 99,
                                background: V.field, color: V.muted, fontWeight: 600 }}>PLANNED</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: V.muted }}>{m.module_name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: V.muted }}>{m.module_name}</div>
                   <div style={{ fontSize: 11, color: V.muted }}>{m.description}</div>
                 </div>
               </div>

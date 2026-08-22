@@ -154,8 +154,8 @@ function ResultRow({ r }: { r: GenResult }) {
       <td style={{ padding: '9px 8px', fontSize: 12, color: C.navy }}>{r.employee_name ?? '—'}</td>
       <td style={{ padding: '9px 8px' }}>
         <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 999, background: bg, color: fg, fontWeight: 700 }}>{label}</span>
-        {r.unknown_tokens && <div style={{ fontSize: 9.5, color: C.amber, marginTop: 3 }}>{r.unknown_tokens.map(t => `{{${t}}}`).join(', ')}</div>}
-        {r.error && <div style={{ fontSize: 9.5, color: C.red, marginTop: 3 }}>{r.error}</div>}
+        {r.unknown_tokens && <div style={{ fontSize: 10, color: C.amber, marginTop: 3 }}>{r.unknown_tokens.map(t => `{{${t}}}`).join(', ')}</div>}
+        {r.error && <div style={{ fontSize: 10, color: C.red, marginTop: 3 }}>{r.error}</div>}
       </td>
       <td style={{ padding: '9px 8px' }}>
         {r.status === 'GENERATED' && (

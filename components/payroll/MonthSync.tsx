@@ -73,11 +73,11 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
     XLSX.writeFile(wb, `Month_Master_Changes_${safe(diff.curLabel)}_vs_${safe(diff.prevLabel)}.xlsx`.replace(/_+/g, '_'))
   }
 
-  const th: React.CSSProperties = { padding: '8px 12px', fontSize: 9.5, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', textAlign: 'left', whiteSpace: 'nowrap' }
+  const th: React.CSSProperties = { padding: '8px 12px', fontSize: 10, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '9px 12px', color: C.navy, borderTop: `1px solid ${C.border}` }
   const stat = (label: string, value: any, color: string) => (
     <div key={label} style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 9, padding: '8px 12px', minWidth: 96 }}>
-      <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1.25 }}>{value}</div>
     </div>
   )
@@ -88,7 +88,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
         <div style={{ width: 34, height: 34, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}></div>
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontSize: 14, fontWeight: 800, color: C.navy }}>Changes vs previous month</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
             {diff ? <>Comparing <b style={{ color: C.purpleD }}>{diff.curLabel}</b> against <b style={{ color: C.purpleD }}>{diff.prevLabel}</b> — every frozen Month Master column</>
               : 'Every frozen Month Master column, compared employee by employee'}
           </div>
@@ -97,9 +97,9 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
           <input type="checkbox" checked={withAtt} onChange={e => setWithAtt(e.target.checked)} style={{ accentColor: C.purple, cursor: 'pointer' }} />
           Include attendance &amp; OT
         </label>
-        <button onClick={compare} disabled={busy || !run} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 11.5, fontFamily: font, cursor: busy ? 'not-allowed' : 'pointer' }}>⟳ Refresh</button>
+        <button onClick={compare} disabled={busy || !run} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, fontFamily: font, cursor: busy ? 'not-allowed' : 'pointer' }}>⟳ Refresh</button>
         <button onClick={download} disabled={!diff || !diff.rows.length}
-          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? TK.brandTint : 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
+          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? TK.brandTint : 'linear-gradient(120deg,#2563EB,#5B21B6)', color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
         </button>
       </div>
 
@@ -121,7 +121,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
             {stat('No change', diff.unchangedRows, C.muted)}
           </div>
           <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead><tr style={{ background: C.purpleD }}>
                 <th style={th}>Category</th>
                 <th style={{ ...th, textAlign: 'right' }}>Employees changed</th>
@@ -132,7 +132,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
                   <tr key={c.key} style={{ background: c.changed ? '#FDFCFF' : '#fff' }}>
                     <td style={{ ...td, fontWeight: 600 }}>{c.label}</td>
                     <td style={{ ...td, textAlign: 'right' }}>
-                      {!c.comparable ? <span style={{ fontSize: 10.5, color: C.muted }}>not frozen per month</span>
+                      {!c.comparable ? <span style={{ fontSize: 11, color: C.muted }}>not frozen per month</span>
                         : <b style={{ fontSize: 14, color: c.changed ? C.purple : C.muted }}>{c.changed}</b>}
                     </td>
                     <td style={{ ...td, textAlign: 'right', color: C.muted }}>{c.comparable ? c.fields : '—'}</td>
@@ -146,7 +146,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
               </tbody>
             </table>
           </div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 8, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.5 }}>
             An employee is counted once per category, however many columns moved inside it — so “Bank details 1” means one employee’s bank data changed.
             {!withAtt && ' Attendance and OT are excluded by default because they change every month by design — tick the box to include them.'}
             {' '}<b>Download changes</b> gives one row per new or changed employee, carrying only emp code, name and the columns that actually changed — new joiners carry their full row, since all of it is new.
@@ -175,16 +175,16 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
       }}>{cat.icon}</div>
       <div style={{ flex: 1, minWidth: 180 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: ready || global_ ? C.navy : TK.faint }}>{cat.label}</div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, lineHeight: 1.45 }}>{cat.note}</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.45 }}>{cat.note}</div>
         {extra}
       </div>
       {ready ? (
         <>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>
             {count == null ? '—' : count}
           </span>
           <button onClick={onSync} disabled={busy || disabled}
-            style={{ padding: '7px 15px', borderRadius: 8, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+            style={{ padding: '7px 15px', borderRadius: 8, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
             {busy ? 'Syncing…' : 'Sync'}
           </button>
           <button onClick={onDownload} disabled={disabled} title={`Download ${cat.label} as frozen in this month`}
@@ -192,11 +192,11 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
         </>
       ) : global_ ? (
         <>
-          {count != null && <span style={{ fontSize: 11.5, fontWeight: 700, color: C.green, background: C.greenBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>{count}</span>}
-          <span style={{ fontSize: 10.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `0.5px solid ${C.greenBd}`, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Whole year</span>
+          {count != null && <span style={{ fontSize: 12, fontWeight: 700, color: C.green, background: C.greenBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>{count}</span>}
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Whole year</span>
         </>
       ) : (
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: TK.critical, background: TK.criticalTint, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Planned</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: TK.critical, background: TK.criticalTint, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Planned</span>
       )}
     </div>
   )
@@ -230,7 +230,7 @@ function FilterBar({ pool, company, location, search, onCompany, onLocation, onS
         <div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
         {companies.length > 1 && (
           <div>
-            <label style={{ fontSize: 9.5, color: C.muted, display: 'block', marginBottom: 3 }}>Company</label>
+            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Company</label>
             <select style={{ ...inp, minWidth: 170 }} value={company} onChange={e => onCompany(e.target.value)}>
               <option value="">All companies</option>
               {companies.map(c => <option key={c} value={c}>{c}</option>)}
@@ -238,20 +238,20 @@ function FilterBar({ pool, company, location, search, onCompany, onLocation, onS
           </div>
         )}
         <div>
-          <label style={{ fontSize: 9.5, color: C.muted, display: 'block', marginBottom: 3 }}>Location</label>
+          <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Location</label>
           <select style={{ ...inp, minWidth: 150 }} value={location} onChange={e => onLocation(e.target.value)}>
             <option value="">All locations</option>
             {locations.map(l => <option key={l} value={l}>{l}</option>)}
           </select>
         </div>
         <div style={{ flex: 1, minWidth: 230 }}>
-          <label style={{ fontSize: 9.5, color: C.muted, display: 'block', marginBottom: 3 }}>Emp code / name — paste a list too</label>
+          <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Emp code / name — paste a list too</label>
           <input style={{ ...inp, width: '100%' }} value={search} onChange={e => onSearch(e.target.value)}
             placeholder="OXYZO680, OXYZO741, OXYZO1013   ya   umesh" />
         </div>
-        {on && <button onClick={onClear} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: TK.critical, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer' }}>Clear</button>}
+        {on && <button onClick={onClear} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: TK.critical, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: 'pointer' }}>Clear</button>}
       </div>
-      <div style={{ fontSize: 10.5, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 11, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
         {!on ? <>No filter — Sync will run on the <b>whole month</b> ({pool.length} employees).</>
           : matched.length === 0
             ? <b style={{ color: TK.critical }}>This filter matches no employees — Sync is disabled.</b>
@@ -374,7 +374,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Snapshot Sync</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
             Sync each category on its own — nothing moves into Month Master unless you choose it. Attendance, OT and arrear are never touched by any of these.
           </div>
         </div>
@@ -402,15 +402,15 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         </div>
 
         {status?.is_locked && (
-          <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
             This month is <b>locked / disbursed</b> — every category sync is disabled. A locked month should not be changed quietly by a small sync; reopen it formally through <b>Lock / Unlock</b> first. (The database will refuse it anyway.)
           </div>
         )}
 
         {needsMigration && (
-          <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
+          <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', margin: '8px 0', lineHeight: 1.5 }}>
             Category-wise sync is off — the database could not resolve one of its functions.
-            {migrationDetail && <div style={{ marginTop: 5, fontFamily: 'ui-monospace, monospace', fontSize: 10.5, opacity: .85 }}>{migrationDetail}</div>}
+            {migrationDetail && <div style={{ marginTop: 5, fontFamily: 'ui-monospace, monospace', fontSize: 11, opacity: .85 }}>{migrationDetail}</div>}
             <div style={{ marginTop: 5 }}>Run the migration that creates that function, then reload.</div>
             <button onClick={syncEverything} disabled={busyKey === 'all' || !runIds.length}
               style={{ marginLeft: 10, padding: '5px 12px', borderRadius: 7, border: 'none', background: C.amber, color: TK.onAccent, fontWeight: 700, fontSize: 11, fontFamily: font, cursor: 'pointer' }}>
@@ -432,19 +432,19 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
             onSync={() => syncCategory(cat)}
             onDownload={() => download(cat)}
             extra={cat.key === 'employee' && status && (status.new_joiners > 0 || status.leavers > 0) ? (
-              <div style={{ fontSize: 10.5, marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {status.new_joiners > 0 && <span style={{ color: C.green, background: C.greenBg, border: `0.5px solid ${C.greenBd}`, borderRadius: 99, padding: '2px 9px', fontWeight: 700 }}>+{status.new_joiners} new joiner{status.new_joiners === 1 ? '' : 's'} waiting</span>}
-                {status.leavers > 0 && <span style={{ color: C.amber, background: C.amberBg, border: `0.5px solid ${TK.warningTint}`, borderRadius: 99, padding: '2px 9px', fontWeight: 700 }}>{status.leavers} no longer eligible</span>}
+              <div style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {status.new_joiners > 0 && <span style={{ color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 99, padding: '2px 9px', fontWeight: 700 }}>+{status.new_joiners} new joiner{status.new_joiners === 1 ? '' : 's'} waiting</span>}
+                {status.leavers > 0 && <span style={{ color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 99, padding: '2px 9px', fontWeight: 700 }}>{status.leavers} no longer eligible</span>}
               </div>
             ) : undefined}
           />
         ))}
 
-        <div style={{ fontSize: 10.5, color: C.purpleD, marginTop: 14, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11, color: C.purpleD, marginTop: 14, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
           <b>Month Create already runs Employee info, Bank, Salary and Flexi automatically.</b> Use a category’s Sync button after a CTC revision, transfer, bank change or fresh declaration — <b>only that category refreshes</b>, the rest stay exactly as they were frozen. Paid days, leave, OT and arrear stay as uploaded no matter which button you press. New joiners come in through <b>Employee info</b>, and they arrive with their full row — a joiner with a blank salary would be paid zero.
         </div>
 
-        {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
+        {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
         {err && <div style={{ fontSize: 12, color: TK.critical, background: TK.criticalTint, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
       </div>
 

@@ -50,12 +50,12 @@ const C = {
   addBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', background: TK.sunken, border: `1px dashed ${TK.line}`, borderRadius: '7px', cursor: 'pointer', fontSize: '12px', color: TK.brand, fontWeight: 500, width: 'fit-content', marginTop: '6px' } as React.CSSProperties,
   rmBtn: { padding: '3px 8px', background: TK.criticalTint, border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '10px', color: TK.critical, fontWeight: 500 } as React.CSSProperties,
   priBtn: { padding: '10px 24px', background: TK.brand, color: TK.onAccent, border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
-  secBtn: { padding: '10px 20px', background: TK.surface, color: TK.inkSoft, border: `1.5px solid ${TK.line}`, borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
+  secBtn: { padding: '10px 20px', background: TK.surface, color: TK.inkSoft, border: `2px solid ${TK.line}`, borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
   xlsBtn: { padding: '7px 14px', background: TK.positive, color: TK.onAccent, border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
   upBtn: { padding: '7px 14px', background: TK.brand, color: TK.onAccent, border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
 }
 const inp = (err?: boolean): React.CSSProperties => ({
-  width: '100%', padding: '9px 11px', border: `1.5px solid ${err ? TK.critical : TK.line}`,
+  width: '100%', padding: '9px 11px', border: `2px solid ${err ? TK.critical : TK.line}`,
   borderRadius: '8px', fontSize: '13px', outline: 'none', background: err ? TK.criticalTint : TK.sunken,
   boxSizing: 'border-box', color: TK.ink
 })
@@ -86,7 +86,7 @@ const MC = {
   priBtn: { padding:'8px 16px', background:TK.brand, color:TK.onAccent, border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
   secBtn: { padding:'8px 12px', background:TK.surface, color:TK.inkSoft, border: `1px solid ${TK.line}`, borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
   dangerBtn: { padding:'6px 12px', background:TK.criticalTint, color:TK.critical, border:'none', borderRadius:'6px', fontSize:'11px', cursor:'pointer' },
-  inp: { width:'100%', padding:'8px 10px', border: `1.5px solid ${TK.line}`, borderRadius:'8px', fontSize:'13px', outline:'none', background:TK.sunken, boxSizing:'border-box' as const, color:TK.ink },
+  inp: { width:'100%', padding:'8px 10px', border: `2px solid ${TK.line}`, borderRadius:'8px', fontSize:'13px', outline:'none', background:TK.sunken, boxSizing:'border-box' as const, color:TK.ink },
   lbl: { fontSize:'11px', fontWeight:500 as const, color:TK.inkSoft, display:'block' as const, marginBottom:'4px' },
 }
 
@@ -649,7 +649,7 @@ function CompanySetupTab() {
                   </div>
                   <div>
                     <label style={C.lbl}>Pin on Map</label>
-                    <button onClick={() => setMapModal({ locIndex: i })} style={{ ...inp(), background: TK.brandTint, color: TK.brand, cursor: 'pointer', border: `1.5px solid ${TK.brandEdge}`, textAlign: 'center' as any, fontWeight: 500 }}>
+                    <button onClick={() => setMapModal({ locIndex: i })} style={{ ...inp(), background: TK.brandTint, color: TK.brand, cursor: 'pointer', border: `2px solid ${TK.brandEdge}`, textAlign: 'center' as any, fontWeight: 500 }}>
                       📍 {loc.lat ? 'Pinned ✓' : 'Open Google Maps'}
                     </button>
                   </div>
@@ -1381,7 +1381,7 @@ export default function AdminPage() {
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
             style={{ padding: '13px 20px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
-              borderBottom: tab === t.id ? '2.5px solid #2563EB' : '2.5px solid transparent' }}>
+              borderBottom: tab === t.id ? '3px solid #2563EB' : '3px solid transparent' }}>
             <div style={{ fontSize: '13px', fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? TK.brand : TK.muted }}>{t.label}</div>
             <div style={{ fontSize: '10px', color: TK.faint, marginTop: '1px' }}>{t.desc}</div>
           </button>

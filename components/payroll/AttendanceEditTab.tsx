@@ -41,7 +41,7 @@ function NumIn({ label, value, onChange }: { label: string; value: string; onCha
 function ReadOut({ label, value, tone }: { label: string; value: any; tone?: string }) {
   return (
     <div style={{ background: C.gray, borderRadius: 8, padding: '8px 11px' }}>
-      <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 16, fontWeight: 800, color: tone || C.navy }}>{value ?? '—'}</div>
     </div>
   )
@@ -190,7 +190,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
   }
 
   const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }
-  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'right', whiteSpace: 'nowrap' }
+  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 10, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'right', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', textAlign: 'right', color: C.navy, whiteSpace: 'nowrap' }
 
   return (
@@ -199,7 +199,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Edit</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Only employees whose attendance is already processed — Unprocess to reopen, then Process to re-apply the upload checks</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Only employees whose attendance is already processed — Unprocess to reopen, then Process to re-apply the upload checks</div>
         </div>
       </div>
 
@@ -219,14 +219,14 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
           style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy || !monthVal ? 'not-allowed' : 'pointer', opacity: busy || !monthVal ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
           {busy ? 'Searching…' : 'Search'}
         </button>
-        {err && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 10 }}>{err}</div>}
+        {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 10 }}>{err}</div>}
       </div>
 
-      {saveMsg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {saveMsg}</div>}
-      {recalc && <div style={{ fontSize: 11.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', marginBottom: 12 }}>⚠️ {recalc}</div>}
+      {saveMsg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {saveMsg}</div>}
+      {recalc && <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 12px', marginBottom: 12 }}>⚠️ {recalc}</div>}
 
       {notProcessed.length > 0 && (
-        <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px', marginBottom: 12 }}>
+        <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px', marginBottom: 12 }}>
           <b>Attendance not processed</b> — these employees have no uploaded attendance for this month, so they cannot be edited: {notProcessed.slice(0, 40).join(', ')}{notProcessed.length > 40 ? ` +${notProcessed.length - 40} more` : ''}
         </div>
       )}
@@ -267,7 +267,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
                         <td style={td}>{nn(r.ot_hours)}</td>
                         <td style={{ ...td, textAlign: 'center' }}>
                           <button onClick={() => unprocess(r)}
-                            style={{ padding: '5px 12px', borderRadius: 99, border: `0.5px solid ${C.amber}`, background: C.amberBg, color: C.amber, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Unprocess
+                            style={{ padding: '5px 12px', borderRadius: 99, border: `1px solid ${C.amber}`, background: C.amberBg, color: C.amber, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Unprocess
                           </button>
                         </td>
                       </tr>
@@ -288,7 +288,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
               <span style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>Unprocessed — {editing.employee_code} · {editing.full_name}</span>
               <button onClick={() => setEditing(null)} style={{ marginLeft: 'auto', border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: C.muted }}></button>
             </div>
-            <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 14 }}>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 14 }}>
               {editing.companyName ? editing.companyName + ' · ' : ''}{editing.department || '—'}{editing.location ? ' · ' + editing.location : ''} — edit the values, then Process to re-apply the upload checks.
             </div>
 
@@ -310,18 +310,18 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
               <NumIn label="Paid Days" value={f.paid_days} onChange={v => setF({ ...f, paid_days: v })} />
             </div>
 
-            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.5 }}>
               Typing <b>Absent Days</b> sets <b>Paid Days = Max Days − Absent</b>{maxD != null && <> — right now <b>{maxD} − {nn(f.absent_days)} = {maxD - nn(f.absent_days)}</b></>}. Type over it if the case needs something else; whatever is in the box is what gets saved.
               <br />Clear the box entirely and the server falls back to the leave formula instead — that would give <b>{formulaPaid}</b> = (EL + CL + SL + Other) − Absent.
               <br />Total Days = Weekly Off + EL + CL + SL + Other + Paid Days − Absent. Both Paid Days and Total Days must be ≤ Max Days, exactly as on upload.
             </div>
 
             {violations.length > 0 && (
-              <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '10px 12px', marginTop: 12 }}>
+              <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '10px 12px', marginTop: 12 }}>
                 <b>Cannot process</b> — {violations.join(' · ')}
               </div>
             )}
-            {saveErr && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 8, padding: '9px 11px', marginTop: 12 }}>{saveErr}</div>}
+            {saveErr && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 8, padding: '9px 11px', marginTop: 12 }}>{saveErr}</div>}
 
             <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
               <button onClick={process} disabled={saveBusy || violations.length > 0}

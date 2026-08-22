@@ -40,14 +40,14 @@ function SearchSelect({ value, options, placeholder, onChange }: {
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 210 }} />
           <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
-              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
               {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o} onClick={() => { onChange(o); setOpen(false) }}
                   onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
                   onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? TK.brandTint : TK.surface}
-                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
+                  style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
                   {o}
                 </div>
               ))}
@@ -100,7 +100,7 @@ function ZoneFormModal({ preset, onClose, onSaved }: {
           <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise zone rates' : 'Add zone rates'}</div>
-            <div style={{ fontSize: 10.5, color: C.muted }}>All 4 categories, one w.e.f date</div>
+            <div style={{ fontSize: 11, color: C.muted }}>All 4 categories, one w.e.f date</div>
           </div>
         </div>
 
@@ -163,12 +163,12 @@ export default function MinimumWageConfig() {
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Minimum Wages</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>State &amp; zone-wise statutory floor · one state can have multiple zones, each tracked independently</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>State &amp; zone-wise statutory floor · one state can have multiple zones, each tracked independently</div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
           onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)'}
           onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s', whiteSpace: 'nowrap' }}>
+          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s', whiteSpace: 'nowrap' }}>
           + Add / revise zone
         </button>
       </div>
@@ -181,7 +181,7 @@ export default function MinimumWageConfig() {
             <thead>
               <tr style={{ background: C.navy }}>
                 {['State', 'Zone', 'Unskilled', 'Semi-skilled', 'Skilled', 'Highly skilled', 'W.e.f', ''].map((h, i) => (
-                  <th key={i} style={{ padding: '10px 12px', textAlign: i >= 2 && i <= 5 ? 'right' : 'left', fontSize: 9.5, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>
+                  <th key={i} style={{ padding: '10px 12px', textAlign: i >= 2 && i <= 5 ? 'right' : 'left', fontSize: 10, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>
                 ))}
               </tr>
             </thead>

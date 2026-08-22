@@ -303,7 +303,7 @@ function Banner({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: Rea
 }
 
 function Empty({ text }: { text: string }) {
-  return <div style={{ textAlign: 'center', padding: '28px 0', color: V.muted, fontSize: 12.5 }}>{text}</div>
+  return <div style={{ textAlign: 'center', padding: '28px 0', color: V.muted, fontSize: 13 }}>{text}</div>
 }
 
 /** The recorder panel shown for bill-less modes. */
@@ -334,7 +334,7 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
             <div style={{ fontSize: 26, fontWeight: 700, color: V.navy, lineHeight: 1 }}>
               {liveKm.toFixed(2)} <span style={{ fontSize: 14, color: V.muted }}>km</span>
             </div>
-            <div style={{ fontSize: 10.5, color: V.muted, marginTop: 3 }}>
+            <div style={{ fontSize: 11, color: V.muted, marginTop: 3 }}>
               {journey.points.length} location {journey.points.length === 1 ? 'point' : 'points'}
               {journey.accuracy != null && ` · ±${Math.round(journey.accuracy)} m`}
             </div>
@@ -344,7 +344,7 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
               <div style={{ fontSize: 20, fontWeight: 700, color: V.green, lineHeight: 1 }}>
                 {inr(amount)}
               </div>
-              <div style={{ fontSize: 10.5, color: V.muted, marginTop: 3 }}>
+              <div style={{ fontSize: 11, color: V.muted, marginTop: 3 }}>
                 at {inr(rate!)}/km
               </div>
             </div>
@@ -438,7 +438,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
       <input type="checkbox" checked={checked} onChange={onToggle}
              style={{ width: 15, height: 15, accentColor: V.purple, cursor: 'pointer', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: V.navy,
+        <div style={{ fontSize: 13, fontWeight: 600, color: V.navy,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {log.purpose}
         </div>
@@ -450,7 +450,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
           {log.rate_applied ? ` @ ${inr(log.rate_applied)}/km` : ''}
         </div>
       </div>
-      <div style={{ fontSize: 13.5, fontWeight: 700, color: V.navy, flexShrink: 0 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, flexShrink: 0 }}>
         {inr(log.total_amount)}
       </div>
       <button onClick={onDelete} title="Remove this entry"
@@ -512,7 +512,7 @@ function ClaimRow({ claim }: { claim: Claim }) {
         <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>{claim.claim_no}</div>
         <Pill bg={bg} fg={fg} text={text} />
       </div>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11.5, color: V.muted }}>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: V.muted }}>
         <span>{claim.line_count} {claim.line_count === 1 ? 'expense' : 'expenses'}</span>
         <span>{dmy(claim.period_from)} – {dmy(claim.period_to)}</span>
         <span>Claimed <b style={{ color: V.navy }}>{inr(claim.total_claimed)}</b></span>
@@ -824,7 +824,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
         <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, marginBottom: 6 }}>
           Travel claims are not available
         </div>
-        <div style={{ fontSize: 12.5, color: V.muted, maxWidth: 420, margin: '0 auto', lineHeight: 1.6 }}>
+        <div style={{ fontSize: 13, color: V.muted, maxWidth: 420, margin: '0 auto', lineHeight: 1.6 }}>
           {blocked}
         </div>
       </div>
@@ -863,7 +863,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                                        .reduce((s, c) => s + num(c.net_payable), 0)), V.green],
         ].map(([label, value, colour]) => (
           <div key={label} style={{ ...card, marginBottom: 0, padding: '13px 15px' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: V.muted,
+            <div style={{ fontSize: 11, fontWeight: 600, color: V.muted,
                           textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
             <div style={{ fontSize: 19, fontWeight: 700, color: colour as string, marginTop: 3 }}>{value}</div>
           </div>
@@ -985,7 +985,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                        onChange={e => setParking(e.target.value)} placeholder="0" style={inp} />
               </Field>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5,
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13,
                             color: V.navy, cursor: 'pointer', marginBottom: 12 }}>
               <input type="checkbox" checked={roundTrip} onChange={e => setRoundTrip(e.target.checked)}
                      style={{ width: 14, height: 14, accentColor: V.purple, cursor: 'pointer' }} />
@@ -1000,7 +1000,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                      onChange={e => setAmount(e.target.value)} placeholder="0" style={inp} />
             </Field>
             {num(selectedType?.bill_threshold) > 0 && (
-              <div style={{ alignSelf: 'end', fontSize: 11.5, color: V.muted, paddingBottom: 9 }}>
+              <div style={{ alignSelf: 'end', fontSize: 12, color: V.muted, paddingBottom: 9 }}>
                 A bill is required above {inr(num(selectedType?.bill_threshold))}.
               </div>
             )}
@@ -1021,7 +1021,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                                border: `1px dashed ${pendingBill ? V.green : V.border}`,
                                background: pendingBill ? V.greenBg : V.field,
                                color: pendingBill ? V.green : V.purpleDark,
-                               fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                               fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
                 {pendingBill ? '✓ ' + pendingBill.name : 'Choose Uber / Ola / taxi bill'}
               </button>
 
@@ -1039,7 +1039,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
               {!pendingBill && num(selectedType?.bill_threshold) > 0
                 && num(amount) > num(selectedType?.bill_threshold) && (
-                <span style={{ fontSize: 11.5, color: V.amber }}>
+                <span style={{ fontSize: 12, color: V.amber }}>
                   This amount needs a bill — attach it now or from the list below.
                 </span>
               )}
@@ -1076,7 +1076,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                 ? new Set()
                 : new Set(unclaimed.map(l => l.id)))}
               style={{ padding: '6px 13px', borderRadius: 7, border: `1px solid ${V.border}`,
-                       background: V.card, color: V.purpleDark, fontSize: 11.5,
+                       background: V.card, color: V.purpleDark, fontSize: 12,
                        fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer' }}>
               {picked.size === unclaimed.length ? 'Clear selection' : 'Select all'}
             </button>
@@ -1104,7 +1104,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           gap: 12, marginTop: 13, paddingTop: 13,
                           borderTop: `1px solid ${V.border}`, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 12.5, color: V.muted }}>
+              <div style={{ fontSize: 13, color: V.muted }}>
                 {picked.size === 0
                   ? 'Select the expenses you want to claim.'
                   : <>Claiming <b style={{ color: V.navy }}>{inr(pickedTotal)}</b> across {picked.size}

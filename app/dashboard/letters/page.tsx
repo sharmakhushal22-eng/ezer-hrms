@@ -28,7 +28,7 @@ export default function LettersPage() {
             <div style={{ width: 46, height: 46, borderRadius: 13, background: `color-mix(in srgb, ${TK.onAccent} 16%, transparent)`, border: `1px solid ${TK.onAccentDim}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}></div>
             <div>
               <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>HR Letters</div>
-              <div style={{ fontSize: 12.5, color: TK.onAccentSoft, marginTop: 2 }}>Configure letterheads &amp; signatories once, then draft and issue HR letters on branded stationery.</div>
+              <div style={{ fontSize: 13, color: TK.onAccentSoft, marginTop: 2 }}>Configure letterheads &amp; signatories once, then draft and issue HR letters on branded stationery.</div>
             </div>
           </div>
           {/* Segmented tabs */}
@@ -37,9 +37,9 @@ export default function LettersPage() {
               const active = tab === t.id
               return (
                 <button key={t.id} onClick={() => !t.soon && setTab(t.id)} disabled={t.soon}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 15px', borderRadius: 8, border: 'none', background: active ? TK.surface : 'transparent', color: active ? C.purple : `${TK.onAccentSoft}`, fontSize: 12.5, fontWeight: 600, cursor: t.soon ? 'not-allowed' : 'pointer', fontFamily: font, whiteSpace: 'nowrap', opacity: t.soon ? 0.55 : 1, boxShadow: active ? '0 2px 8px rgba(0,0,0,0.18)' : 'none' }}>
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 15px', borderRadius: 8, border: 'none', background: active ? TK.surface : 'transparent', color: active ? C.purple : `${TK.onAccentSoft}`, fontSize: 13, fontWeight: 600, cursor: t.soon ? 'not-allowed' : 'pointer', fontFamily: font, whiteSpace: 'nowrap', opacity: t.soon ? 0.55 : 1, boxShadow: active ? '0 2px 8px rgba(0,0,0,0.18)' : 'none' }}>
                   <span>{t.icon}</span>{t.label}
-                  {t.soon && <span style={{ fontSize: 8.5, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: `color-mix(in srgb, ${TK.onAccent} 16%, transparent)`, letterSpacing: '.04em' }}>SOON</span>}
+                  {t.soon && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: `color-mix(in srgb, ${TK.onAccent} 16%, transparent)`, letterSpacing: '.04em' }}>SOON</span>}
                 </button>
               )
             })}

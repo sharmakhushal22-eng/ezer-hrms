@@ -311,7 +311,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Upload</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Leave · absent days into the frozen month snapshot — Paid Days is computed as (EL+CL+SL+Other) − Absent</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Leave · absent days into the frozen month snapshot — Paid Days is computed as (EL+CL+SL+Other) − Absent</div>
         </div>
       </div>
 
@@ -332,7 +332,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
 
       {/* ── Upload attendance — always group-wide ── */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Upload filled attendance</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Upload filled attendance</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 }}>
           <div>
             <label style={lbl}>Company</label>
@@ -350,7 +350,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
             <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ ...inp, padding: '7px 10px', width: '100%', boxSizing: 'border-box' }} />
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10 }}>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>
           One sheet covers <b>every company</b> in the group{companyCount ? ` (${companyCount} this month)` : ''} — codes are matched across all of them.
           Columns: <b>Emp Code, Weekly Off, EL, CL, SL, Other Leave, Paid Days, Absent Days</b>. Before anything is saved every row is checked for
           <b> Paid Days ≤ Max Days</b> and <b>Total Days ≤ Max Days</b>, where Total Days = Weekly Off + EL + CL + SL + Other Leave + Paid Days − Absent Days.
@@ -358,7 +358,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
 
         {/* Upload — starts the checking pass. Nothing is read until this is clicked. */}
         {sheetErrs.length > 0 && (
-          <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '10px 12px', marginTop: 12 }}>
+          <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '10px 12px', marginTop: 12 }}>
             <div style={{ fontWeight: 800, marginBottom: 6 }}>This sheet has been modified — upload blocked.</div>
             {sheetErrs.map((e, i) => <div key={i} style={{ padding: '2px 0' }}>• {e}</div>)}
           </div>
@@ -375,12 +375,12 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
             )
           })()}
           {rows.length > 0 && !checking && sheetErrs.length === 0 && (
-            <span style={{ fontSize: 11.5, color: C.purpleD }}><b>{fileName}</b> · {rows.length} rows ready</span>
+            <span style={{ fontSize: 12, color: C.purpleD }}><b>{fileName}</b> · {rows.length} rows ready</span>
           )}
-          {!rows.length && <span style={{ fontSize: 11.5, color: C.muted }}>Choose a file to enable upload</span>}
+          {!rows.length && <span style={{ fontSize: 12, color: C.muted }}>Choose a file to enable upload</span>}
         </div>
 
-        {parseErr && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginTop: 10 }}>{parseErr}</div>}
+        {parseErr && <div style={{ fontSize: 12, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginTop: 10 }}>{parseErr}</div>}
       </div>
 
       {showVal && (
@@ -394,7 +394,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Preview · {fileName} ({rows.length} rows)</div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
-              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'WO', 'EL', 'CL', 'SL', 'Other', 'Absent', 'Paid Days', 'Total Days'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 9.5, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'WO', 'EL', 'CL', 'SL', 'Other', 'Absent', 'Paid Days', 'Total Days'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 10, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.slice(0, 8).map((r, i) => {
                   const pd = r.paid_days ?? ((r.earned_leave || 0) + (r.casual_leave || 0) + (r.sick_leave || 0) + (r.other_leave || 0) - (r.absent_days || 0))
@@ -409,7 +409,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
                 })}
               </tbody>
             </table>
-            {rows.length > 8 && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6 }}>+ {rows.length - 8} more rows…</div>}
+            {rows.length > 8 && <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>+ {rows.length - 8} more rows…</div>}
           </div>
         </div>
       )}
@@ -426,7 +426,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
               style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
               ⬇ Download processed file
             </button>
-            <span style={{ fontSize: 11.5, color: C.muted }}>Your uploaded sheet plus <b>Total Days</b> and <b>Status</b> — each employee marked <b>Processed</b>.</span>
+            <span style={{ fontSize: 12, color: C.muted }}>Your uploaded sheet plus <b>Total Days</b> and <b>Status</b> — each employee marked <b>Processed</b>.</span>
           </div>
           {notFound.length > 0 && (
             <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 9, padding: '10px 14px' }}>

@@ -264,7 +264,7 @@ export default function RouteMap({ route, height = 300, title }: {
       )}
 
       {route.concerns.length > 0 && (
-        <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 11.5, lineHeight: 1.6 }}>
+        <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, lineHeight: 1.6 }}>
           {route.concerns.map((c, i) => (
             <li key={i} style={{ color: c.severity === 'BLOCK' ? V.red : V.amber, marginBottom: 2 }}>
               {c.message}

@@ -55,7 +55,7 @@ export default function ESSPortalPage() {
   return (
     <div>
       {canViewOthers && (
-        <div style={{ background: TK.brandTint, borderBottom: `1px solid ${TK.line}`, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 12.5, color: TK.brandDeep }}>
+        <div style={{ background: TK.brandTint, borderBottom: `1px solid ${TK.line}`, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13, color: TK.brandDeep }}>
           <span>You have <b>{scope?.roleNames.join(', ')}</b> access ({scope?.scope.toLowerCase()}) — you can open {scope?.employees.length} team member{scope?.employees.length === 1 ? '' : 's'}&apos; portals.</span>
           <button onClick={() => { setPickerOpen(true); setQ('') }} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: 'none', background: TK.brand, color: TK.onAccent, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>View a team member →</button>
         </div>

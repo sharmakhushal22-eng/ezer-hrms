@@ -197,13 +197,13 @@ export default function FlexiConfigBuilder() {
   return (
     <div style={{ padding: 24, fontFamily: '"DM Sans","Segoe UI",sans-serif', maxWidth: 820, margin: '0 auto', background: C.bg, minHeight: '100vh' }}>
       <div style={{ fontSize: 20, fontWeight: 600, color: C.navy, marginBottom: 4 }}>Flexi policy — slab builder (Old + New together)</div>
-      <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 16 }}>Build the FBP policy slab-by-slab per company. Each slab covers a salary range and both regimes; saved in one action.</div>
+      <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Build the FBP policy slab-by-slab per company. Each slab covers a salary range and both regimes; saved in one action.</div>
 
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
           <span style={{ background: TK.brandTint, color: C.purpleDark, fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>{companyId ? `Slab ${slabs.length + 1}` : 'New slab'}</span>
           <span style={{ fontSize: 11, color: C.muted }}>Annual Fixed = CTC − Variable</span>
-          <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12.5, fontFamily: 'inherit', background: TK.surface, color: C.navy }}>
+          <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: 'inherit', background: TK.surface, color: C.navy }}>
             <option value="">All Companies</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
@@ -219,8 +219,8 @@ export default function FlexiConfigBuilder() {
             <input type="number" value={smax} min={0} step={10000} onChange={e => setSmax(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit' }} />
           </div>
         </div>
-        {err && <div style={{ fontSize: 12.5, color: TK.critical, background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>⚠ {err}</div>}
-        {msg && <div style={{ fontSize: 12.5, color: C.teal, background: C.tealBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>{msg}</div>}
+        {err && <div style={{ fontSize: 13, color: TK.critical, background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>⚠ {err}</div>}
+        {msg && <div style={{ fontSize: 13, color: C.teal, background: C.tealBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>{msg}</div>}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>
           <span style={{ flex: 1, fontSize: 11, color: C.muted, letterSpacing: 0.5 }}>COMPONENT</span>

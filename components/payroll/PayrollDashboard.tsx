@@ -56,7 +56,7 @@ function timeAgo(iso: string) {
 function Kpi({ label, value, accent, warn }: { label: string; value: string; accent?: string; warn?: boolean }) {
   return (
     <div style={{ background: warn ? C.amberBg : C.card, border: `1px solid ${warn ? C.amberBd : C.border}`, borderRadius: 12, padding: '13px 15px', boxShadow: '0 1px 4px rgba(37,99,235,0.05)', minWidth: 120 }}>
-      <div style={{ fontSize: 9.5, color: warn ? C.amber : C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700, marginBottom: 5 }}>{label}</div>
+      <div style={{ fontSize: 10, color: warn ? C.amber : C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700, marginBottom: 5 }}>{label}</div>
       <div style={{ fontSize: 19, fontWeight: 800, color: accent || (warn ? C.amber : C.navy), lineHeight: 1 }}>{value}</div>
     </div>
   )
@@ -300,7 +300,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
         <select style={selStyle} value={month} onChange={e => setMonth(e.target.value)}>
           {monthOpts.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
-        <span style={{ fontSize: 10.5, color: C.muted }}>FY set from the header above.</span>
+        <span style={{ fontSize: 11, color: C.muted }}>FY set from the header above.</span>
         {loading && <span style={{ fontSize: 11, color: C.purple, marginLeft: 'auto' }}>Refreshing…</span>}
       </div>
 
@@ -326,7 +326,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {deptCost.map(d => (
                   <div key={d.name}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 3 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                       <span style={{ color: C.navy, fontWeight: 600 }}>{d.name}</span>
                       <span style={{ color: C.muted }}>{inrShort(d.cost)}</span>
                     </div>
@@ -354,7 +354,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
             <div>
               {compliance.map((e, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: i < compliance.length - 1 ? `1px solid ${C.gray}` : 'none' }}>
-                  <span style={{ fontSize: 11.5, color: C.muted, fontWeight: 700, minWidth: 52 }}>{fmtDate(e.date)}</span>
+                  <span style={{ fontSize: 12, color: C.muted, fontWeight: 700, minWidth: 52 }}>{fmtDate(e.date)}</span>
                   <span style={{ fontSize: 12, color: C.navy, textAlign: 'right' }}>{e.label}</span>
                 </div>
               ))}
@@ -368,7 +368,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
               {activity.map((a, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: i < activity.length - 1 ? `1px solid ${C.gray}` : 'none' }}>
                   <span style={{ fontSize: 12, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.text}</span>
-                  <span style={{ fontSize: 10.5, color: C.muted, whiteSpace: 'nowrap' }}>{a.when}</span>
+                  <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>{a.when}</span>
                 </div>
               ))}
             </div>

@@ -80,7 +80,7 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
         flexShrink: 0, background: active ? C.purple : C.card,
         border: `1px solid ${active ? C.purple : C.border}`, borderRadius: 10,
         padding: '10px 16px', cursor: off ? 'not-allowed' : 'pointer',
-        fontSize: 12.5, fontWeight: 600, color: active ? TK.surface : C.navy,
+        fontSize: 13, fontWeight: 600, color: active ? TK.surface : C.navy,
         display: 'flex', alignItems: 'center', gap: 8, fontFamily: font,
         opacity: off ? 0.45 : 1, transition: 'all .15s',
       }}>
@@ -93,7 +93,7 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
 // ── The selected check's employee list ─────────────────────────────────────
 function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolean }) {
   const th: React.CSSProperties = {
-    textAlign: 'left', fontSize: 10.5, color: C.muted, textTransform: 'uppercase',
+    textAlign: 'left', fontSize: 11, color: C.muted, textTransform: 'uppercase',
     letterSpacing: '0.03em', padding: 8, borderBottom: `1px solid ${C.border}`, fontWeight: 600,
   }
   const td: React.CSSProperties = { padding: '10px 8px', borderBottom: `1px solid ${C.border}`, verticalAlign: 'top' }
@@ -112,7 +112,7 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr>
                 <th style={th}>Employee</th>
@@ -132,12 +132,12 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
                       }}>{e.initials}</div>
                       <div>
                         <div style={{ fontWeight: 600 }}>{e.name || '—'}</div>
-                        <div style={{ fontSize: 10.5, color: C.muted }}>{e.code}</div>
+                        <div style={{ fontSize: 11, color: C.muted }}>{e.code}</div>
                       </div>
                     </div>
                   </td>
-                  {isGroup && <td style={{ ...td, color: C.muted, fontSize: 11.5 }}>{e.company || '—'}</td>}
-                  <td style={{ ...td, color: check.blocking ? C.redDark : C.amber, fontSize: 11.5 }}>{e.impact}</td>
+                  {isGroup && <td style={{ ...td, color: C.muted, fontSize: 12 }}>{e.company || '—'}</td>}
+                  <td style={{ ...td, color: check.blocking ? C.redDark : C.amber, fontSize: 12 }}>{e.impact}</td>
                 </tr>
               ))}
             </tbody>
@@ -192,7 +192,7 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
     padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12,
     background: TK.surface, color: C.navy, fontFamily: font, outline: 'none',
   }
-  const lbl: React.CSSProperties = { fontSize: 9.5, color: C.muted, display: 'block', marginBottom: 3 }
+  const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }
   return (
     <div style={{
       background: on ? C.purpleSoft : TK.sunken, border: `1px solid ${on ? TK.brandEdge : C.border}`,
@@ -246,11 +246,11 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
         {on && (
           <button onClick={onClear} style={{
             padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface,
-            color: C.red, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer',
+            color: C.red, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: 'pointer',
           }}>Clear</button>
         )}
       </div>
-      <div style={{ fontSize: 10.5, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 11, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
         {!on ? <>No filter — payroll will run on the <b>whole month</b> ({rows.length} employees).</>
           : matched === 0
             ? <b style={{ color: C.red }}>This filter matches no employees — there is nothing to run.</b>
@@ -545,7 +545,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
         <select value={monthVal} onChange={e => { setMonthVal(e.target.value); setResult(null) }}
           style={{
             background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '7px 16px',
-            fontSize: 12.5, fontWeight: 600, color: C.purpleD, fontFamily: font, cursor: 'pointer', outline: 'none',
+            fontSize: 13, fontWeight: 600, color: C.purpleD, fontFamily: font, cursor: 'pointer', outline: 'none',
             boxShadow: '0 1px 3px rgba(37,99,235,0.06)',
           }}>
           {monthOpts.length === 0 && <option value="">No month created</option>}
@@ -604,7 +604,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
           <button onClick={() => downloadSheet(null).catch(e => setErr('Sheet download failed: ' + (e?.message || e)))}
             disabled={busy}
             style={{
-              fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.purpleD, background: C.card,
+              fontFamily: font, fontSize: 13, fontWeight: 600, color: C.purpleD, background: C.card,
               border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px',
               cursor: busy ? 'not-allowed' : 'pointer',
             }}>Download sheet</button>
@@ -612,7 +612,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
         {calculated && (
           <button onClick={downloadRegister} disabled={busy}
             style={{
-              fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.purpleD, background: C.card,
+              fontFamily: font, fontSize: 13, fontWeight: 600, color: C.purpleD, background: C.card,
               border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px', cursor: busy ? 'not-allowed' : 'pointer',
             }}>Register</button>
         )}

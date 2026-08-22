@@ -18,7 +18,7 @@ const S = {
   content: { maxWidth:1100, margin:'0 auto' } as React.CSSProperties,
   card: { background:C.card, borderRadius:12, border:`1px solid ${C.border}`, padding:'16px 18px', marginBottom:16 } as React.CSSProperties,
   h1: { fontSize:22, fontWeight:700, color:C.navy, margin:0 } as React.CSSProperties,
-  sub: { fontSize:12.5, color:C.muted, marginTop:3 } as React.CSSProperties,
+  sub: { fontSize:13, color:C.muted, marginTop:3 } as React.CSSProperties,
   section: { fontSize:14, fontWeight:600, color:C.navy, marginBottom:12 } as React.CSSProperties,
   label: { fontSize:11, fontWeight:600, color:C.purple, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 },
   input: { width:'100%', padding:'8px 10px', background:TK.surface, border:`1px solid ${C.border}`, borderRadius:8, color:C.navy, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
@@ -79,7 +79,7 @@ function PendingApprovals({ companyId, empMap, typeMap, notify }: { companyId: s
           <div key={r.id} style={S.row}>
             <div style={{ minWidth:0 }}>
               <div style={{ fontSize:13, fontWeight:600 }}>{empMap[r.employee_id] || r.employee_id} · {typeMap[r.loan_type_id] || 'Loan'}</div>
-              <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>{inr(r.requested_amount)} · {r.requested_tenure_months} mo · EMI {inr(r.indicative_emi)} · level {r.current_approval_level}{lv ? ` (${lv.approver_role})` : ''}</div>
+              <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{inr(r.requested_amount)} · {r.requested_tenure_months} mo · EMI {inr(r.indicative_emi)} · level {r.current_approval_level}{lv ? ` (${lv.approver_role})` : ''}</div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
               <button disabled={busy === r.id} onClick={() => act(r, 'APPROVED')} style={S.btnG}>Approve</button>
@@ -117,7 +117,7 @@ function AgreementsReview({ companyEmpIds, empMap, notify }: { companyEmpIds: Se
         <div key={a.id} style={S.row}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{a.agreement_number} · {empMap[a.employee_id] || a.employee_id}</div>
-            <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>Signed via {a.signature_type || '—'}{a.signed_at ? ` · ${new Date(a.signed_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}` : ''}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Signed via {a.signature_type || '—'}{a.signed_at ? ` · ${new Date(a.signed_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}` : ''}</div>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <button disabled={busy === a.id} onClick={() => act(a, 'APPROVED')} style={S.btnG}>Approve</button>
@@ -238,7 +238,7 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
                   <td style={td}>
                     {['DISBURSED','ACTIVE'].includes(String(l.status || '').toUpperCase()) && (
                       <button onClick={() => foreclose(l)} disabled={busy === l.id}
-                        style={{ padding:'4px 11px', borderRadius:99, border:`0.5px solid ${C.amber}`, background:TK.warningTint, color:C.amber, fontWeight:700, fontSize:10.5, cursor: busy === l.id ? 'not-allowed' : 'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+                        style={{ padding:'4px 11px', borderRadius:99, border:`1px solid ${C.amber}`, background:TK.warningTint, color:C.amber, fontWeight:700, fontSize:11, cursor: busy === l.id ? 'not-allowed' : 'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
                         {busy === l.id ? '…' : 'Foreclose'}
                       </button>
                     )}
@@ -271,7 +271,7 @@ function LoanTypes({ companyId }: { companyId: string }) {
         <div key={t.id} style={S.row}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{t.code ? `${t.code} · ` : ''}{t.name}</div>
-            <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>Base {t.eligibility_base || '—'} · max {t.max_loan_percent ?? '—'}% · tenure {t.min_tenure_months ?? '—'}–{t.max_tenure_months ?? '—'} mo · {t.interest_rate ?? '—'}% {t.interest_type ? `(${t.interest_type})` : ''}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Base {t.eligibility_base || '—'} · max {t.max_loan_percent ?? '—'}% · tenure {t.min_tenure_months ?? '—'}–{t.max_tenure_months ?? '—'} mo · {t.interest_rate ?? '—'}% {t.interest_type ? `(${t.interest_type})` : ''}</div>
           </div>
         </div>
       ))}

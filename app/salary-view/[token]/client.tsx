@@ -284,7 +284,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
         )}
 
         {/* TDS + FBP CALCULATOR */}
-        <div style={{ background:TK.surface, borderRadius:10, border: `1.5px solid ${TK.brandEdge}`, overflow:'hidden', marginBottom:14 }}>
+        <div style={{ background:TK.surface, borderRadius:10, border: `2px solid ${TK.brandEdge}`, overflow:'hidden', marginBottom:14 }}>
           <button onClick={() => setShowCalc(!showCalc)}
             style={{ width:'100%', padding:'13px 18px', background:showCalc?TK.brandTint:TK.brand, color:showCalc?TK.brandDeep: TK.surface, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', display:'flex', justifyContent:'space-between', alignItems:'center', textAlign:'left' as const }}>
             <span>Calculate TDS & Select Flexi Benefit Plan</span>
@@ -339,7 +339,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
                 const isLinked = c.paired && (selectedFBP.has(c.paired) || selectedFBP.has(c.code))
                 return (
                   <div key={c.code} onClick={() => toggleFBP(c.code, c.paired)}
-                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:8, marginBottom:6, cursor:'pointer', background:isSelected?TK.brandTint:TK.sunken, border:isSelected?'1.5px solid #2563EB':'1px solid #E5E7EB', transition:'all .15s' }}>
+                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:8, marginBottom:6, cursor:'pointer', background:isSelected?TK.brandTint:TK.sunken, border:isSelected?'2px solid #2563EB':'1px solid #E5E7EB', transition:'all .15s' }}>
                     <div style={{ width:18, height:18, borderRadius:4, border:isSelected?'none':'2px solid #DDD6FE', background:isSelected?TK.brand: TK.surface, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
                       {isSelected && <span style={{ color:TK.onAccent, fontSize:12, fontWeight:700 }}></span>}
                     </div>
@@ -377,7 +377,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
               {/* TDS RESULT */}
               <div style={S.sec()}>TDS Calculation</div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
-                <div style={{ background:TK.brandTint, borderRadius:8, padding:'12px', border: `1.5px solid ${TK.brandEdge}` }}>
+                <div style={{ background:TK.brandTint, borderRadius:8, padding:'12px', border: `2px solid ${TK.brandEdge}` }}>
                   <div style={{ fontSize:11, fontWeight:600, color: TK.muted, marginBottom:6, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     {regime === 'new' ? 'New Regime' : 'Old Regime'}
                     <span style={{ background:TK.brand, color:TK.onAccent, padding:'1px 6px', borderRadius:99, fontSize:9 }}>Selected</span>

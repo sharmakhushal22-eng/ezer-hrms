@@ -228,7 +228,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
               ))}
             </div>
           </div>
-          <div style={{ ...S.cd, border: `1.5px solid ${PRI}` }}>
+          <div style={{ ...S.cd, border: `2px solid ${PRI}` }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: TK.ink, marginBottom: 10 }}>{pol.name}</div>
             <div
               onScroll={e => { const el = e.currentTarget; if (el.scrollTop + el.clientHeight >= el.scrollHeight - 8) setScrolled(true) }}

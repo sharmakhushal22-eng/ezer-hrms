@@ -15,8 +15,8 @@ const C = {
   card: TK.surface, border: TK.line, muted: TK.muted, green: TK.positive, amber: TK.warning, red: TK.critical, purpleBg: TK.brandTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const lbl: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
-const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
+const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
 const GROUP_ICON: Record<ReportGroup, string> = { Attendance: '', Exceptions: '', Leave: '', Summary: '' }
 
 const today = () => new Date().toISOString().slice(0, 10)
@@ -96,7 +96,7 @@ export default function AttendanceReportsPage() {
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: font, color: C.navy, padding: 24 }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
         <div style={{ fontSize: 22, fontWeight: 700 }}>Attendance Reports</div>
-        <div style={{ fontSize: 12.5, color: C.muted, marginTop: 2, marginBottom: 16 }}>Daily punch, exceptions, leave & summary reports — filter and export to Excel.</div>
+        <div style={{ fontSize: 13, color: C.muted, marginTop: 2, marginBottom: 16 }}>Daily punch, exceptions, leave & summary reports — filter and export to Excel.</div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
           {/* Report picker */}
@@ -112,8 +112,8 @@ export default function AttendanceReportsPage() {
                       width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: 8, marginBottom: 3, cursor: 'pointer', fontFamily: font,
                       border: `1px solid ${on ? C.purple : 'transparent'}`, background: on ? C.purpleBg : 'transparent',
                     }}>
-                      <div style={{ fontSize: 12.5, fontWeight: on ? 700 : 600, color: on ? C.purpleD : C.navy }}>{r.label}</div>
-                      <div style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{r.desc}</div>
+                      <div style={{ fontSize: 13, fontWeight: on ? 700 : 600, color: on ? C.purpleD : C.navy }}>{r.label}</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{r.desc}</div>
                     </button>
                   )
                 })}
@@ -156,7 +156,7 @@ export default function AttendanceReportsPage() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14 }}>
-                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>{busy ? 'Generating…' : 'Generate report'}</button>
+                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>{busy ? 'Generating…' : 'Generate report'}</button>
                 {err && <span style={{ fontSize: 12, color: C.red }}>⚠ {err}</span>}
               </div>
             </div>

@@ -27,12 +27,12 @@ function ToggleButton({ label, sub, active, onClick }: { label: string; sub?: st
       onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.borderColor = C.border }}
       style={{
         flex: 1, padding: '11px 14px', borderRadius: 10, textAlign: 'left', cursor: 'pointer',
-        border: `1.5px solid ${active ? C.purple : C.border}`,
+        border: `2px solid ${active ? C.purple : C.border}`,
         background: active ? 'linear-gradient(135deg,#2563EB,#5B21B6)' : TK.surface,
         color: active ? TK.surface : C.navy, transition: 'border-color .12s',
         boxShadow: active ? '0 3px 10px rgba(37,99,235,0.22)' : 'none',
       }}>
-      <div style={{ fontSize: 12.5, fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>{label}</div>
       {sub && <div style={{ fontSize: 10, marginTop: 2, color: active ? 'rgba(255,255,255,0.8)' : C.muted, fontWeight: 500 }}>{sub}</div>}
     </button>
   )
@@ -105,7 +105,7 @@ export default function BonusConfig({ fy = '2026-27' }: { fy?: string }) {
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Statutory Bonus</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
             <span style={{ fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '1px 7px' }}>FY {FY}</span>
             <span> · Payment of Bonus Act 1965</span>
           </div>

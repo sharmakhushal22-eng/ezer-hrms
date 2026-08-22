@@ -34,7 +34,7 @@ export default function SubSectionDropdown({ items, active, onChange, kicker = '
       }}>
         <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', lineHeight: 1.2, minWidth: 0 }}>
           <span style={{ fontSize: 9, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em' }}>{kicker}</span>
-          <span style={{ fontSize: 13.5, fontWeight: 700, color: C.navy, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cur?.label}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: C.navy, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cur?.label}</span>
         </span>
         <span style={{ marginLeft: 'auto', color: C.purple, fontSize: 11, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}></span>
       </button>

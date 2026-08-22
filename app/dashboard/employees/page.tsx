@@ -327,7 +327,7 @@ function TabBar({ tabs, active, onChange }: any) {
           padding:'11px 16px', border:'none', background:'transparent', cursor:'pointer',
           fontSize:'12px', fontWeight: active===t.id ? 600 : 400,
           color: active===t.id ? P.purple : P.muted, whiteSpace:'nowrap',
-          borderBottom: active===t.id ? `2.5px solid ${P.purple}` : '2.5px solid transparent',
+          borderBottom: active===t.id ? `3px solid ${P.purple}` : '3px solid transparent',
           transition:'all .12s'
         }}>
           {t.icon} {t.label}
@@ -1002,7 +1002,7 @@ export default function EmployeeMaster() {
               {Array.from({length:Math.min(totalPages,7)},(_,i)=>{
                 const p = page<=4 ? i+1 : page-3+i
                 if(p<1||p>totalPages) return null
-                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`1.5px solid ${p===page?P.purple:P.border}`,borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple: C.surface,color:p===page?C.surface:P.text }}>{p}</button>
+                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`2px solid ${p===page?P.purple:P.border}`,borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple: C.surface,color:p===page?C.surface:P.text }}>{p}</button>
               })}
               <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===totalPages?.4:1 }} onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}>Next →</button>
             </div>

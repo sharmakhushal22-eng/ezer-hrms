@@ -50,9 +50,9 @@ export default function DbExportPage() {
           {busy ? 'Exporting the whole database…' : '⬇ Download entire database (Excel)'}
         </button>
 
-        {busy && <div style={{ fontSize: 11.5, color: C.muted, marginTop: 12 }}>This can take a while for large databases — please keep this tab open.</div>}
-        {done && <div style={{ fontSize: 12.5, color: C.green, marginTop: 14, fontWeight: 600 }}>Export downloaded.</div>}
-        {err && <div style={{ fontSize: 12.5, color: C.red, marginTop: 14 }}>⚠ {err}</div>}
+        {busy && <div style={{ fontSize: 12, color: C.muted, marginTop: 12 }}>This can take a while for large databases — please keep this tab open.</div>}
+        {done && <div style={{ fontSize: 13, color: C.green, marginTop: 14, fontWeight: 600 }}>Export downloaded.</div>}
+        {err && <div style={{ fontSize: 13, color: C.red, marginTop: 14 }}>⚠ {err}</div>}
 
         <div style={{ fontSize: 11, color: C.muted, marginTop: 22, borderTop: `1px dashed ${C.border}`, paddingTop: 14, lineHeight: 1.6 }}>
           Uses the service-role key server-side, so row-level security never hides anything. Encrypted columns (e.g. Aadhaar/bank) export as their stored ciphertext. For very large databases, run this on <b>localhost</b> (a hosted response has a size cap).

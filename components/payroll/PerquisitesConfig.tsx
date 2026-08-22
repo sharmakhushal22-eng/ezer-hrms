@@ -52,7 +52,7 @@ function formatValue(row: PerquisiteConfigRow): string {
 
 function MethodBadge({ method }: { method: ValuationMethod }) {
   return (
-    <span style={{ fontSize: 8.5, padding: '2px 8px', borderRadius: 999, background: `${METHOD_COLOR[method]}16`, color: METHOD_COLOR[method], fontWeight: 700, letterSpacing: '.02em', whiteSpace: 'nowrap' }}>
+    <span style={{ fontSize: 9, padding: '2px 8px', borderRadius: 999, background: `${METHOD_COLOR[method]}16`, color: METHOD_COLOR[method], fontWeight: 700, letterSpacing: '.02em', whiteSpace: 'nowrap' }}>
       {VALUATION_METHOD_LABELS[method]}
     </span>
   )
@@ -71,7 +71,7 @@ function PerquisiteRow({ row, selected, onSelect }: { row: PerquisiteConfigRow; 
       <div style={{ width: 30, height: 30, borderRadius: 8, background: selected ? '#fff' : C.gray, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>{catIcon(row.category)}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: selected ? C.purpleD : C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</span>
+          <span style={{ fontSize: 13, fontWeight: 700, color: selected ? C.purpleD : C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.name}</span>
           <span title={row.type_active ? 'Active' : 'Inactive'} style={{ width: 6, height: 6, borderRadius: 99, background: row.type_active ? C.green: TK.line, flexShrink: 0 }} />
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{formatValue(row)}</div>
@@ -261,7 +261,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
           <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Perquisites</div>
-            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
               <span style={{ fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '1px 7px' }}>FY {FY}</span>
               <span> · {rows.length} types</span>
             </div>
@@ -270,7 +270,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
         <button onClick={() => setShowAddModal(true)}
           onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)'}
           onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-          style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', marginBottom: 16, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+          style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 16, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
           + Add new perquisite
         </button>
         {Object.entries(grouped).map(([cat, catRows]) => (
@@ -365,7 +365,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
               <button onClick={handleSave} disabled={saving}
                 onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
                 {saving ? 'Saving…' : 'Save value'}
               </button>
             </div>

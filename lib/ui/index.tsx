@@ -164,6 +164,10 @@ export function UIKeyframes() {
       .ez-cta:not(:disabled):active{transform:scale(.985)}
 
       /* Scrollbars, so they belong to the palette instead of the OS. */
+      /* Tab pills. Hover only lifts the inactive ones — the active pill is
+         already filled, and lightening it on hover would read as deselecting. */
+      .ez-tab{transition:background .14s cubic-bezier(.4,0,.2,1),color .14s,border-color .14s}
+      .ez-tab[data-on="0"]:hover{background:var(--ez-sunken);color:var(--ez-ink);border-color:var(--ez-line-strong)}
       .ez-scroll::-webkit-scrollbar{width:9px;height:9px}
       .ez-scroll::-webkit-scrollbar-thumb{background:${C.lineStrong};border-radius:99px;border:2px solid transparent;background-clip:content-box}
       .ez-scroll::-webkit-scrollbar-thumb:hover{background:${C.faint};background-clip:content-box}
@@ -761,7 +765,10 @@ export function Avatar({ name, size = 32, src }: { name?: string | null; size?: 
       background: `color-mix(in srgb, hsl(${h} 58% 93%) var(--ez-avatar-tint-mix, 100%), var(--ez-surface))`,
       color: `hsl(${h} var(--ez-avatar-sat, 62%) var(--ez-avatar-light, 28%))`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: size * 0.38, fontWeight: W.bold, letterSpacing: '.01em',
+      // Rounded: a 28px disc gave 10.64px, and initials are the one place
+      // where a fractional size is most visible — two or three glyphs, bold,
+      // on a coloured ground, with no surrounding text to hide the softness.
+      fontSize: Math.round(size * 0.38), fontWeight: W.bold, letterSpacing: '.01em',
       border: `1px solid color-mix(in srgb, hsl(${h} 44% 85%) var(--ez-avatar-tint-mix, 100%), var(--ez-line))`,
     }}>{initials}</div>
   );

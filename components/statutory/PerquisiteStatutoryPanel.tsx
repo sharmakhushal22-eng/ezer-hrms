@@ -13,8 +13,8 @@ import { C as TK } from '@/lib/ui'
 
 const C = { navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface, border: TK.line, muted: TK.muted }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
-const lbl: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
+const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
 
 export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
   const [emps, setEmps] = useState<{ id: string; emp_code: string; full_name: string }[]>([])
@@ -81,7 +81,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
             <input type="number" style={inp} value={base} onChange={e => setBase(e.target.value)} placeholder="pre-perquisite" />
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>Base auto-fills from CTC (annual CTC − variable); adjust to the actual pre-perquisite taxable figure.</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Base auto-fills from CTC (annual CTC − variable); adjust to the actual pre-perquisite taxable figure.</div>
       </div>
 
       {empId && (
@@ -92,7 +92,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px', gap: 8, alignItems: 'center' }}>
                 {types.map(t => (
                   <Fragment key={t.id}>
-                    <div style={{ fontSize: 12.5, color: C.navy }}>{t.name}</div>
+                    <div style={{ fontSize: 13, color: C.navy }}>{t.name}</div>
                     <input type="number" placeholder="₹ / yr" style={{ ...inp, width: 130 }} value={amounts[t.id] ?? ''} onChange={e => setAmounts(p => ({ ...p, [t.id]: e.target.value }))} />
                   </Fragment>
                 ))}

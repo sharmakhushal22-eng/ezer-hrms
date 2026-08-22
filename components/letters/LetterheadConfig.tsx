@@ -62,7 +62,7 @@ function CardHead({ icon, title, tint, badge }: { icon: string; title: string; t
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
       <div style={{ width: 34, height: 34, borderRadius: 9, background: tint, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>{icon}</div>
-      <div style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: C.navy }}>{title}</div>
+      <div style={{ flex: 1, fontSize: 14, fontWeight: 700, color: C.navy }}>{title}</div>
       {badge}
     </div>
   )
@@ -77,8 +77,8 @@ function UploadZone({ label, sub, onPick, accept }: { label: string; sub: string
       style={{ border: `1.5px dashed ${hover ? C.purple : TK.brandEdge}`, borderRadius: 10, padding: '14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', background: hover ? TK.canvas : TK.sunken, transition: 'all .15s' }}>
       <div style={{ width: 34, height: 34, borderRadius: 9, background: hover ? C.purple : C.purpleBg, color: hover ? '#fff' : C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, transition: 'all .15s' }}>⬆</div>
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 12.5, color: C.navy, fontWeight: 600 }}>{label}</div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{sub}</div>
+        <div style={{ fontSize: 13, color: C.navy, fontWeight: 600 }}>{label}</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>
       </div>
       <span style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 7, padding: '5px 11px', flexShrink: 0 }}>Browse</span>
       <input ref={ref} type="file" accept={accept} style={{ display: 'none' }}
@@ -192,14 +192,14 @@ function LetterheadCard({
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
-      <CardHead icon="📄" title="Letterhead (PDF)" tint={C.purpleBg} badge={<span style={{ fontSize: 9.5, padding: '3px 9px', borderRadius: 999, fontWeight: 700, letterSpacing: '.04em', background: existing ? C.greenBg : TK.sunken, color: existing ? C.green : C.muted }}>{existing ? '✓ SET' : 'NOT SET'}</span>} />
+      <CardHead icon="📄" title="Letterhead (PDF)" tint={C.purpleBg} badge={<span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 999, fontWeight: 700, letterSpacing: '.04em', background: existing ? C.greenBg : TK.sunken, color: existing ? C.green : C.muted }}>{existing ? '✓ SET' : 'NOT SET'}</span>} />
 
       {existing && !file && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 12, background: `linear-gradient(90deg,${TK.brandTint},${TK.surface})`, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px' }}>
           <span style={{ fontSize: 22 }}>📄</span>
           <div style={{ flex: 1, fontSize: 12, minWidth: 0 }}>
             <div style={{ fontWeight: 600, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{existing.file_name}</div>
-            <div style={{ color: C.muted, fontSize: 10.5, marginTop: 1 }}>
+            <div style={{ color: C.muted, fontSize: 11, marginTop: 1 }}>
               {existing.page_width_mm}×{existing.page_height_mm}mm · margins T{existing.content_top_mm} B{existing.content_bottom_mm} L{existing.content_left_mm} R{existing.content_right_mm}mm · scale {existing.scale_percent}%
             </div>
           </div>
@@ -220,7 +220,7 @@ function LetterheadCard({
               <div style={{ width: 34, height: 34, borderRadius: 9, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>📄</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</div>
-                <div style={{ fontSize: 10.5, color: C.green }}>✓ {detected.label} · single page</div>
+                <div style={{ fontSize: 11, color: C.green }}>✓ {detected.label} · single page</div>
               </div>
               <button onClick={closePreview} style={{ background: 'none', border: 'none', fontSize: 22, lineHeight: 1, cursor: 'pointer', color: C.muted }}>×</button>
             </div>
@@ -240,7 +240,7 @@ function LetterheadCard({
                         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', pointerEvents: 'none', transform: `scale(${(scalePct || 100) / 100})`, transformOrigin: 'center center' }} />
                       {/* Safe content box (visual only) */}
                       <div style={{ position: 'absolute', pointerEvents: 'none', top: `${tP}%`, bottom: `${bP}%`, left: `${lP}%`, right: `${rP}%`, border: `1.5px dashed ${TK.brandEdge}`, background: 'rgba(37,99,235,0.06)', borderRadius: 3 }}>
-                        <span style={{ position: 'absolute', top: 3, left: '50%', transform: 'translateX(-50%)', fontSize: 7.5, fontWeight: 700, letterSpacing: '.04em', color: TK.brand, background: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 3, whiteSpace: 'nowrap' }}>SAFE CONTENT AREA</span>
+                        <span style={{ position: 'absolute', top: 3, left: '50%', transform: 'translateX(-50%)', fontSize: 8, fontWeight: 700, letterSpacing: '.04em', color: TK.brand, background: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 3, whiteSpace: 'nowrap' }}>SAFE CONTENT AREA</span>
                       </div>
                       {/* Drag handles on each edge */}
                       <div onPointerDown={beginDrag('top')} title="Drag to set top margin" style={{ position: 'absolute', top: `${tP}%`, left: `${lP}%`, right: `${rP}%`, height: 16, transform: 'translateY(-50%)', cursor: 'ns-resize', touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ ...grip, height: 4, width: '46%', maxWidth: 54 }} /></div>
@@ -251,26 +251,26 @@ function LetterheadCard({
                   </div>
                 )
               })()}
-              <div style={{ fontSize: 10.5, color: C.purpleD, textAlign: 'center', margin: '9px 0 2px', fontWeight: 600 }}>↔ Drag the purple edges to set where letter text can go</div>
+              <div style={{ fontSize: 11, color: C.purpleD, textAlign: 'center', margin: '9px 0 2px', fontWeight: 600 }}>↔ Drag the purple edges to set where letter text can go</div>
               {/* Live readouts */}
               <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', margin: '8px 0 4px' }}>
                 {[['Top', marginTop], ['Bottom', marginBottom], ['Left', marginLeft], ['Right', marginRight]].map(([lbl, v]: any) => (
-                  <span key={lbl} style={{ fontSize: 10.5, background: C.purpleBg, color: C.purpleD, borderRadius: 7, padding: '4px 9px', fontWeight: 600 }}>{lbl} {v}mm</span>
+                  <span key={lbl} style={{ fontSize: 11, background: C.purpleBg, color: C.purpleD, borderRadius: 7, padding: '4px 9px', fontWeight: 600 }}>{lbl} {v}mm</span>
                 ))}
               </div>
               {/* Scale slider */}
               <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 600, whiteSpace: 'nowrap' }}>Scale</span>
+                <span style={{ fontSize: 11, color: C.muted, fontWeight: 600, whiteSpace: 'nowrap' }}>Scale</span>
                 <input type="range" min={50} max={150} value={scalePct} onChange={e => setScalePct(Number(e.target.value))} style={{ flex: 1, accentColor: C.purple }} />
-                <span style={{ fontSize: 11.5, color: C.navy, fontWeight: 700, minWidth: 42, textAlign: 'right' }}>{scalePct}%</span>
+                <span style={{ fontSize: 12, color: C.navy, fontWeight: 700, minWidth: 42, textAlign: 'right' }}>{scalePct}%</span>
               </div>
-              {err && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
+              {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
             </div>
             {/* Footer */}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 18px', borderTop: `1px solid ${C.border}` }}>
-              <button onClick={closePreview} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>Cancel</button>
+              <button onClick={closePreview} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>Cancel</button>
               <button onClick={handleSave} disabled={saving}
-                style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>
+                style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>
                 {saving ? 'Uploading…' : '⬆ Upload letterhead'}
               </button>
             </div>
@@ -434,18 +434,18 @@ function SignatoryCard({
 
   const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 5000, background: 'rgba(30,27,75,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }
   const modalCard: React.CSSProperties = { background: TK.surface, borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }
-  const uploadBtn: React.CSSProperties = { padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }
-  const cancelBtn: React.CSSProperties = { padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }
+  const uploadBtn: React.CSSProperties = { padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }
+  const cancelBtn: React.CSSProperties = { padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, cursor: 'pointer', fontSize: 13, fontWeight: 600 }
 
   return (
     <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
-      <CardHead icon="✍️" title="Authorised signatory" tint={C.greenBg} badge={<span style={{ fontSize: 9.5, padding: '3px 9px', borderRadius: 999, fontWeight: 700, letterSpacing: '.04em', background: existing ? C.greenBg : TK.sunken, color: existing ? C.green : C.muted }}>{existing ? '✓ SET' : 'NOT SET'}</span>} />
+      <CardHead icon="✍️" title="Authorised signatory" tint={C.greenBg} badge={<span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 999, fontWeight: 700, letterSpacing: '.04em', background: existing ? C.greenBg : TK.sunken, color: existing ? C.green : C.muted }}>{existing ? '✓ SET' : 'NOT SET'}</span>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
         <input placeholder="Signatory name" value={name} onChange={e => setName(e.target.value)}
-          style={{ padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 12.5, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
+          style={{ padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 13, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
         <input placeholder="Designation" value={designation} onChange={e => setDesignation(e.target.value)}
-          style={{ padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 12.5, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
+          style={{ padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 8, fontSize: 13, boxSizing: 'border-box', background: TK.sunken, outline: 'none' }} />
       </div>
 
       <UploadZone label={existingPreview ? 'Replace signature image' : 'Upload signature image'} sub="PNG or JPG, max 2MB — then crop & place it" onPick={pickFile} accept="image/png,image/jpeg" />
@@ -484,8 +484,8 @@ function SignatoryCard({
                   </div>
                 </div>
               </div>
-              <div style={{ fontSize: 10.5, color: C.muted, textAlign: 'center', marginTop: 9 }}>Drag inside the box to move · drag the corner to resize. Crop tight around the signature.</div>
-              {err && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
+              <div style={{ fontSize: 11, color: C.muted, textAlign: 'center', marginTop: 9 }}>Drag inside the box to move · drag the corner to resize. Crop tight around the signature.</div>
+              {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 18px', borderTop: `1px solid ${C.border}` }}>
               <button onClick={resetFlow} style={cancelBtn}>Cancel</button>
@@ -519,13 +519,13 @@ function SignatoryCard({
                     style={{ position: 'absolute', left: `${place.xPct}%`, top: `${place.yPct}%`, width: `${place.wPct}%`, cursor: 'grab', outline: `1.5px dashed ${TK.brand}`, outlineOffset: 1, touchAction: 'none' }} />
                 </div>
               </div>
-              <div style={{ fontSize: 10.5, color: C.purpleD, textAlign: 'center', margin: '9px 0 2px', fontWeight: 600 }}>✋ Drag the signature to position it on the page</div>
+              <div style={{ fontSize: 11, color: C.purpleD, textAlign: 'center', margin: '9px 0 2px', fontWeight: 600 }}>✋ Drag the signature to position it on the page</div>
               <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 600, whiteSpace: 'nowrap' }}>Size</span>
+                <span style={{ fontSize: 11, color: C.muted, fontWeight: 600, whiteSpace: 'nowrap' }}>Size</span>
                 <input type="range" min={8} max={55} value={place.wPct} onChange={e => setPlace(p => ({ ...p, wPct: clampN(Number(e.target.value), 8, 100 - p.xPct) }))} style={{ flex: 1, accentColor: C.purple }} />
-                <span style={{ fontSize: 11.5, color: C.navy, fontWeight: 700, minWidth: 42, textAlign: 'right' }}>{Math.round(place.wPct)}%</span>
+                <span style={{ fontSize: 12, color: C.navy, fontWeight: 700, minWidth: 42, textAlign: 'right' }}>{Math.round(place.wPct)}%</span>
               </div>
-              {err && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
+              {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '8px 11px', marginTop: 12 }}>⚠ {err}</div>}
             </div>
             <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', padding: '12px 18px', borderTop: `1px solid ${C.border}` }}>
               <button onClick={() => { setErr(''); setStep('crop') }} style={cancelBtn}>← Back to crop</button>
@@ -576,7 +576,7 @@ function ResolvedPreview({ letterhead, signatory }: { letterhead: ResolvedLetter
 
 // ── Main page ────────────────────────────────────────────────────
 const selStyle: React.CSSProperties = { padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: '"DM Sans","Segoe UI",sans-serif', minWidth: 220, boxSizing: 'border-box' }
-const selLabel: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
+const selLabel: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
 
 export default function LetterheadConfig() {
   const [tree, setTree] = useState<GroupNode[]>([])
@@ -663,13 +663,13 @@ export default function LetterheadConfig() {
           <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 16, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 13 }}>
               <div style={{ width: 30, height: 30, borderRadius: 8, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>🎯</div>
-              <div style={{ fontSize: 13.5, fontWeight: 700, color: C.navy }}>Choose where to configure</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>Choose where to configure</div>
               {/* Breadcrumb */}
               <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
                 {crumbs.map((cr, i) => (
                   <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
                     {i > 0 && <span style={{ color: TK.brand, fontSize: 11 }}>›</span>}
-                    <span style={{ fontSize: 10.5, fontWeight: cr.on ? 700 : 500, color: cr.on ? C.purpleD : C.muted, background: cr.on ? C.purpleBg : 'transparent', padding: cr.on ? '2px 8px' : '2px 0', borderRadius: 99 }}>{cr.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: cr.on ? 700 : 500, color: cr.on ? C.purpleD : C.muted, background: cr.on ? C.purpleBg : 'transparent', padding: cr.on ? '2px 8px' : '2px 0', borderRadius: 99 }}>{cr.label}</span>
                   </span>
                 ))}
               </div>
@@ -701,7 +701,7 @@ export default function LetterheadConfig() {
                 </div>
               )}
             </div>
-            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 10, display: 'flex', alignItems: 'center', gap: 5 }}>
               <span style={{ color: C.purple }}>●</span> = already configured · a branch inherits Branch → Company → Group.
             </div>
           </div>

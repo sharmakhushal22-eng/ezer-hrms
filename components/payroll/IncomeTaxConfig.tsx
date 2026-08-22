@@ -24,7 +24,7 @@ function ratePill(rate: number) {
     : rate <= 10 ? [TK.brandTint, TK.brand]
     : rate <= 20 ? [TK.warningTint, TK.warning]
     : [TK.criticalTint, TK.critical]
-  return <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: bg, color: fg, minWidth: 40, display: 'inline-block', textAlign: 'center' }}>{rate}%</span>
+  return <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 99, background: bg, color: fg, minWidth: 40, display: 'inline-block', textAlign: 'center' }}>{rate}%</span>
 }
 
 function RegimeCard({ regime, slabs, surcharge, config }: {
@@ -58,17 +58,17 @@ function RegimeCard({ regime, slabs, surcharge, config }: {
           </div>
         )}
 
-        <div style={{ fontSize: 9.5, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Slabs</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Slabs</div>
         <div style={{ marginBottom: 14 }}>
           {slabs.map((s, i) => (
             <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderRadius: 7, background: i % 2 === 0 ? C.gray: TK.surface }}>
-              <span style={{ fontSize: 11.5, color: C.navy }}>{inr(s.slab_min)}{s.slab_max != null ? ` – ${inr(s.slab_max)}` : '+'}</span>
+              <span style={{ fontSize: 12, color: C.navy }}>{inr(s.slab_min)}{s.slab_max != null ? ` – ${inr(s.slab_max)}` : '+'}</span>
               {ratePill(Number(s.tax_rate))}
             </div>
           ))}
         </div>
 
-        <div style={{ fontSize: 9.5, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Surcharge</div>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Surcharge</div>
         <div>
           {surcharge.filter(s => s.surcharge_rate > 0).map(s => (
             <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 8px' }}>
@@ -143,7 +143,7 @@ export default function IncomeTaxConfig() {
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Income Tax — Old vs New</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
             <span style={{ fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '1px 7px' }}>TY 2026-27</span>
             <span> · Income Tax Act 2025</span>
           </div>
@@ -167,7 +167,7 @@ export default function IncomeTaxConfig() {
             {AGES.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
           </select>
           <button onClick={runCalculation} disabled={calculating}
-            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
             {calculating ? 'Calculating…' : 'Compare'}
           </button>
         </div>
@@ -178,10 +178,10 @@ export default function IncomeTaxConfig() {
             <>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 {([['Old Regime', oldResult, !newWins, C.purpleD], ['New Regime', newResult, newWins, C.green]] as const).map(([title, r, win, accent]) => (
-                  <div key={title} style={{ flex: 1, minWidth: 220, borderRadius: 12, padding: '12px 14px', background: win ? (accent === C.green ? C.greenBg : C.purpleBg) : C.gray, border: `1.5px solid ${win ? accent : C.border}`, boxShadow: win ? '0 3px 12px rgba(37,99,235,0.12)' : 'none' }}>
+                  <div key={title} style={{ flex: 1, minWidth: 220, borderRadius: 12, padding: '12px 14px', background: win ? (accent === C.green ? C.greenBg : C.purpleBg) : C.gray, border: `2px solid ${win ? accent : C.border}`, boxShadow: win ? '0 3px 12px rgba(37,99,235,0.12)' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-                      <span style={{ fontSize: 11.5, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '.03em' }}>{title}</span>
-                      {win && <span style={{ fontSize: 8.5, fontWeight: 800, color: TK.onAccent, background: accent, borderRadius: 99, padding: '2px 7px', textTransform: 'uppercase' }}>Lower</span>}
+                      <span style={{ fontSize: 12, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '.03em' }}>{title}</span>
+                      {win && <span style={{ fontSize: 9, fontWeight: 800, color: TK.onAccent, background: accent, borderRadius: 99, padding: '2px 7px', textTransform: 'uppercase' }}>Lower</span>}
                     </div>
                     <ResultRow label="Taxable income" value={r.taxable_income} />
                     <ResultRow label="Tax before rebate" value={r.tax_before_rebate} />

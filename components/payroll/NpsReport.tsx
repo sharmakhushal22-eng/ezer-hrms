@@ -53,8 +53,8 @@ function npsEffectiveDate(doj: string | null, mStart: string): string {
 
 const S = {
   card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' } as React.CSSProperties,
-  sel: { padding: '8px 10px', border: `1px solid #DDD6FE`, borderRadius: 7, fontSize: 12.5, fontFamily: font, background: TK.sunken, color: C.navy, outline: 'none', minWidth: 150 } as React.CSSProperties,
-  btnP: { padding: '9px 16px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
+  sel: { padding: '8px 10px', border: `1px solid #DDD6FE`, borderRadius: 7, fontSize: 13, fontFamily: font, background: TK.sunken, color: C.navy, outline: 'none', minWidth: 150 } as React.CSSProperties,
+  btnP: { padding: '9px 16px', borderRadius: 8, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
   btnO: { padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
   th: { padding: '9px 10px', fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase' as const, letterSpacing: '.04em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const, background: C.gray, borderBottom: `1px solid ${C.border}` },
   td: { padding: '8px 10px', fontSize: 12, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' as const, color: C.navy },
@@ -82,7 +82,7 @@ export interface NpsRow {
 function Stat({ label, value, color }: { label: string; value: string | number; color?: string }) {
   return (
     <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 92 }}>
-      <div style={{ fontSize: 9.5, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+      <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
       <div style={{ fontSize: 17, fontWeight: 800, color: color || C.navy, marginTop: 2 }}>{value}</div>
     </div>
   )
@@ -90,7 +90,7 @@ function Stat({ label, value, color }: { label: string; value: string | number; 
 
 function YesNo({ yes }: { yes: boolean }) {
   return (
-    <span style={{ fontSize: 10.5, fontWeight: 800, padding: '2px 10px', borderRadius: 99, background: yes ? C.greenBg : TK.sunken, color: yes ? C.green : TK.muted }}>
+    <span style={{ fontSize: 11, fontWeight: 800, padding: '2px 10px', borderRadius: 99, background: yes ? C.greenBg : TK.sunken, color: yes ? C.green : TK.muted }}>
       {yes ? 'Y' : 'N'}
     </span>
   )
@@ -125,7 +125,7 @@ const initials = (n: string) =>
 
 function DetailRow({ k, v }: { k: string; v: React.ReactNode }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderBottom: `1px solid ${C.border}`, fontSize: 12.5 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', borderBottom: `1px solid ${C.border}`, fontSize: 13 }}>
       <span style={{ color: C.muted }}>{k}</span>
       <span style={{ fontWeight: 600, textAlign: 'right', color: C.navy }}>{v}</span>
     </div>
@@ -238,8 +238,8 @@ function NpsDialog({ rows, onClose, onDone }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 20 }}></div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 15.5, fontWeight: 800 }}>Corporate NPS</div>
-              <div style={{ fontSize: 11.5, opacity: .8, marginTop: 1 }}>
+              <div style={{ fontSize: 16, fontWeight: 800 }}>Corporate NPS</div>
+              <div style={{ fontSize: 12, opacity: .8, marginTop: 1 }}>
                 {sel ? 'Turn NPS on or off for this employee' : 'Find an employee to begin'}
               </div>
             </div>
@@ -252,18 +252,18 @@ function NpsDialog({ rows, onClose, onDone }: {
             <>
               <input autoFocus value={q} onChange={ev => setQ(ev.target.value)}
                 placeholder="Employee code or name — e.g. SRS9008, Nisha"
-                style={{ ...S.sel, width: '100%', padding: '11px 13px', fontSize: 13.5, borderRadius: 9 }} />
+                style={{ ...S.sel, width: '100%', padding: '11px 13px', fontSize: 14, borderRadius: 9 }} />
 
               {terms.length < 2 ? (
                 <div style={{ textAlign: 'center', padding: '34px 20px', color: C.muted }}>
                   <div style={{ fontSize: 30, marginBottom: 8 }}></div>
-                  <div style={{ fontSize: 12.5, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 13, lineHeight: 1.6 }}>
                     Type at least two characters to search.<br />
-                    <span style={{ fontSize: 11.5, opacity: .8 }}>{rows.length} employees on record.</span>
+                    <span style={{ fontSize: 12, opacity: .8 }}>{rows.length} employees on record.</span>
                   </div>
                 </div>
               ) : results.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '30px 20px', color: C.muted, fontSize: 12.5 }}>
+                <div style={{ textAlign: 'center', padding: '30px 20px', color: C.muted, fontSize: 13 }}>
                   Nobody matched “{q.trim()}”.
                 </div>
               ) : (
@@ -284,7 +284,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 800, color: C.navy }}>{sel.full_name}</div>
-                  <div style={{ fontSize: 11.5, color: C.muted, marginTop: 1 }}>{sel.emp_code} · {sel.department} · {sel.location}</div>
+                  <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>{sel.emp_code} · {sel.department} · {sel.location}</div>
                 </div>
                 <button onClick={() => { setSel(null); setInfo(null); setErr('') }} style={{ ...S.btnO, padding: '6px 11px', fontSize: 11 }}>Change</button>
               </div>
@@ -305,7 +305,7 @@ function NpsDialog({ rows, onClose, onDone }: {
               </div>
 
               {/* Y / N */}
-              <div style={{ fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 7px' }}>Set NPS</div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 7px' }}>Set NPS</div>
               <div style={{ display: 'flex', gap: 9 }}>
                 {seg('y', 'Yes — enrol', mode === 'y', sel.opted)}
                 {seg('n', 'No — stop', mode === 'n', !sel.opted)}
@@ -318,11 +318,11 @@ function NpsDialog({ rows, onClose, onDone }: {
 
               {mode === 'y' && !sel.opted && (
                 <>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 7px' }}>PRAN</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 7px' }}>PRAN</div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     {[[true, 'Has a PRAN'], [false, 'Needs one']].map(([v, lbl]) => (
                       <button key={String(v)} onClick={() => setHasPran(v as boolean)}
-                        style={{ flex: 1, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', fontFamily: font, fontSize: 12.5, fontWeight: 600,
+                        style={{ flex: 1, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', fontFamily: font, fontSize: 13, fontWeight: 600,
                           border: hasPran === v ? `2px solid ${C.purple}` : `1px solid ${C.border}`,
                           background: hasPran === v ? C.purpleBg: TK.surface, color: hasPran === v ? C.purpleD : C.navy }}>
                         {lbl as string}
@@ -337,7 +337,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                       {pran && !pranOk && <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>{pranLen - pranClean.length} more digit(s) needed</div>}
                     </>
                   ) : (
-                    <div style={{ marginTop: 9, fontSize: 11.5, color: TK.brand, background: TK.brandTint, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
+                    <div style={{ marginTop: 9, fontSize: 12, color: TK.brand, background: TK.brandTint, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
                       A PRAN creation form is emailed to the employee and the enrolment stays
                       <b> PRAN pending</b> until they submit it — it does not go active on its own.
                     </div>
@@ -348,7 +348,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                   </select>
 
                   {e && !e.has_ctc && (
-                    <div style={{ marginTop: 10, fontSize: 11.5, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
+                    <div style={{ marginTop: 10, fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
                       No CTC in ctc_master, so Basic reads ₹0 and the contribution would be ₹0.
                       Set their CTC first — enrolling now records a contribution of nothing.
                     </div>
@@ -356,7 +356,7 @@ function NpsDialog({ rows, onClose, onDone }: {
 
                   <label style={{ display: 'flex', gap: 9, marginTop: 13, cursor: 'pointer' }}>
                     <input type="checkbox" checked={ack} onChange={ev => setAck(ev.target.checked)} style={{ marginTop: 2, width: 15, height: 15, accentColor: C.purple }} />
-                    <span style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55 }}>
+                    <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>
                       I am enrolling this employee on their behalf, with their consent on record.
                       The contribution starts from the 1st of next month and repeats monthly.
                     </span>
@@ -366,12 +366,12 @@ function NpsDialog({ rows, onClose, onDone }: {
 
               {mode === 'n' && sel.opted && (
                 <>
-                  <div style={{ marginTop: 14, fontSize: 11.5, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
+                  <div style={{ marginTop: 14, fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
                     Stopping NPS ends the employer contribution from next month. The employee&apos;s
                     take-home goes up, their retirement contribution stops, and the 80CCD(2)
                     benefit ends with it.
                   </div>
-                  <div style={{ fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '14px 0 6px' }}>Reason *</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', margin: '14px 0 6px' }}>Reason *</div>
                   <textarea value={reason} onChange={ev => setReason(ev.target.value)} rows={3}
                     placeholder="Why is this being stopped? The employee and any later audit will see this."
                     style={{ ...S.sel, width: '100%', resize: 'vertical', minHeight: 68, lineHeight: 1.5 }} />
@@ -558,13 +558,13 @@ export default function NpsReport({ fy }: { fy: string }) {
     <div style={{ fontFamily: font, color: C.navy }}>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 17, fontWeight: 800, lineHeight: 1.1 }}>Corporate NPS — Enrolment Report</div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
           FY {fy} · who is enrolled in the corporate NPS and who is not. Employer contribution
           is 80CCD(2) — over and above the ₹1.5L 80C limit.
         </div>
       </div>
 
-      {err && <div style={{ ...S.card, background: C.redBg, border: `1px solid ${TK.criticalTint}`, color: C.red, fontSize: 12.5 }}>{err}</div>}
+      {err && <div style={{ ...S.card, background: C.redBg, border: `1px solid ${TK.criticalTint}`, color: C.red, fontSize: 13 }}>{err}</div>}
 
       <div style={S.card}>
         <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap', marginBottom: 12 }}>
@@ -608,7 +608,7 @@ export default function NpsReport({ fy }: { fy: string }) {
         </div>
 
         {pending > 0 && (
-          <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', fontSize: 11.5, color: TK.brand, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
+          <div style={{ marginTop: 11, display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap', fontSize: 12, color: TK.brand, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
             <div style={{ flex: 1, minWidth: 240 }}>
               <b>{pending} employee{pending === 1 ? ' is' : 's are'} enrolled but waiting on a PRAN.</b> Nothing
               is being deducted or credited for {pending === 1 ? 'them' : 'them'} until it is submitted:{' '}
@@ -622,7 +622,7 @@ export default function NpsReport({ fy }: { fy: string }) {
         )}
 
         {regimeMismatch.length > 0 && (
-          <div style={{ marginTop: 11, fontSize: 11.5, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
+          <div style={{ marginTop: 11, fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 9, padding: '10px 12px', lineHeight: 1.55 }}>
             <b>{regimeMismatch.length} employee{regimeMismatch.length === 1 ? '' : 's'} changed tax regime after enrolling.</b> The
             NPS rate follows the regime — 10% of Basic on old, 14% on new — so the percent on
             file was worked out for the other one and the contribution is stale:{' '}
@@ -634,9 +634,9 @@ export default function NpsReport({ fy }: { fy: string }) {
 
       <div style={{ ...S.card, padding: 0, overflow: 'auto' }}>
         {loading ? (
-          <div style={{ padding: 30, textAlign: 'center', color: C.muted, fontSize: 12.5 }}>Loading…</div>
+          <div style={{ padding: 30, textAlign: 'center', color: C.muted, fontSize: 13 }}>Loading…</div>
         ) : shown.length === 0 ? (
-          <div style={{ padding: 30, textAlign: 'center', color: C.muted, fontSize: 12.5 }}>
+          <div style={{ padding: 30, textAlign: 'center', color: C.muted, fontSize: 13 }}>
             {rows.length === 0 ? 'No employees found.' : 'Nothing matched this filter.'}
           </div>
         ) : (
@@ -678,7 +678,7 @@ export default function NpsReport({ fy }: { fy: string }) {
       </div>
 
       {msg && (
-        <div style={{ ...S.card, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, color: C.green, fontSize: 12.5, fontWeight: 700 }}>✓ {msg}</div>
+        <div style={{ ...S.card, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, color: C.green, fontSize: 13, fontWeight: 700 }}>✓ {msg}</div>
       )}
 
       {picker && (
@@ -686,7 +686,7 @@ export default function NpsReport({ fy }: { fy: string }) {
           onDone={m => { setPicker(false); setMsg(m); load() }} />
       )}
 
-      <div style={{ fontSize: 10.5, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
         <b>Y</b> means a live enrolment — ACTIVE, or PENDING_PRAN where the employee has enrolled
         but not yet submitted their PRAN. <b>N</b> covers both never enrolled and enrolled-then-stopped;
         the Status column separates the two, so a stopped enrolment is never mistaken for someone

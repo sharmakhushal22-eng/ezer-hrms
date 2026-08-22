@@ -172,7 +172,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
   if (status === 'nopolicy') return (
     <div style={card}>
       <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Flexi Reimbursement</div>
-      <div style={{ fontSize: 12.5, color: V.muted }}>No claimable flexi components are configured for your company &amp; salary band yet. Once HR sets up the flexi policy slabs, your entitlements &amp; bill submission will appear here.</div>
+      <div style={{ fontSize: 13, color: V.muted }}>No claimable flexi components are configured for your company &amp; salary band yet. Once HR sets up the flexi policy slabs, your entitlements &amp; bill submission will appear here.</div>
     </div>
   )
 

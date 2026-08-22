@@ -121,12 +121,12 @@ export default function LoginPage() {
           <form onSubmit={handleLogin}>
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: d?TK.line:TK.inkSoft, marginBottom: '6px' }}>Work Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="khushal@ezerhrms.com" style={{ width:'100%',padding:'11px 14px',border:`1.5px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',outline:'none',background:d?TK.ink:TK.sunken,color:d?TK.sunken:TK.ink,boxSizing:'border-box' }} onFocus={e=>e.target.style.borderColor=TK.brand} onBlur={e=>e.target.style.borderColor=d?TK.inkSoft:TK.line}/>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="khushal@ezerhrms.com" style={{ width:'100%',padding:'11px 14px',border:`2px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',outline:'none',background:d?TK.ink:TK.sunken,color:d?TK.sunken:TK.ink,boxSizing:'border-box' }} onFocus={e=>e.target.style.borderColor=TK.brand} onBlur={e=>e.target.style.borderColor=d?TK.inkSoft:TK.line}/>
             </div>
             <div style={{ marginBottom: '8px' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: d?TK.line:TK.inkSoft, marginBottom: '6px' }}>Password</label>
               <div style={{ position: 'relative' }}>
-                <input type={showPass?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={{ width:'100%',padding:'11px 44px 11px 14px',border:`1.5px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',outline:'none',background:d?TK.ink:TK.sunken,color:d?TK.sunken:TK.ink,boxSizing:'border-box' }} onFocus={e=>e.target.style.borderColor=TK.brand} onBlur={e=>e.target.style.borderColor=d?TK.inkSoft:TK.line}/>
+                <input type={showPass?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={{ width:'100%',padding:'11px 44px 11px 14px',border:`2px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',outline:'none',background:d?TK.ink:TK.sunken,color:d?TK.sunken:TK.ink,boxSizing:'border-box' }} onFocus={e=>e.target.style.borderColor=TK.brand} onBlur={e=>e.target.style.borderColor=d?TK.inkSoft:TK.line}/>
                 <button type="button" onClick={()=>setShowPass(!showPass)} style={{ position:'absolute',right:'12px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:'16px' }}>{showPass?'':''}</button>
               </div>
             </div>
@@ -139,7 +139,7 @@ export default function LoginPage() {
             <span style={{ fontSize: '12px', color: d?'#4B5563':TK.faint }}>or</span>
             <div style={{ flex: 1, height: '1px', background: d?'#1F2937':TK.line }} />
           </div>
-          <button style={{ width:'100%',padding:'12px',background:'transparent',border:`1.5px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',fontWeight:'500',color:d?TK.line:TK.inkSoft,cursor:'pointer' }}>Contact your admin</button>
+          <button style={{ width:'100%',padding:'12px',background:'transparent',border:`2px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',fontWeight:'500',color:d?TK.line:TK.inkSoft,cursor:'pointer' }}>Contact your admin</button>
           <div style={{ textAlign: 'center', marginTop: '16px' }}>
             <a href="/ess-login" style={{ fontSize:'13px',color:TK.brand,textDecoration:'none',fontWeight:'500' }}>Employee? Log in to ESS →</a>
           </div>

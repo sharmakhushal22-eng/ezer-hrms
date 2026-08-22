@@ -94,7 +94,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.warning},${TK.warning})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(217,119,6,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>OT Upload</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Overtime hours only — a separate sheet that never overwrites leave or paid days</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Overtime hours only — a separate sheet that never overwrites leave or paid days</div>
         </div>
       </div>
 
@@ -111,7 +111,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
         })} />
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
-        <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Upload filled OT</div>
+        <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Upload filled OT</div>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
           <div>
             <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>
@@ -125,8 +125,8 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
             <input type="file" accept=".xlsx,.xls" onChange={handleFile} style={{ ...inp, padding: '7px 10px' }} />
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>Columns: <b>Emp Code, Total OT Hours</b>. Only rows whose Emp Code exists in the selected month are updated. Leave / paid days are untouched.</div>
-        {parseErr && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginTop: 10 }}>{parseErr}</div>}
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Columns: <b>Emp Code, Total OT Hours</b>. Only rows whose Emp Code exists in the selected month are updated. Leave / paid days are untouched.</div>
+        {parseErr && <div style={{ fontSize: 12, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginTop: 10 }}>{parseErr}</div>}
       </div>
 
       {showVal && (
@@ -140,7 +140,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Preview · {fileName} ({rows.length} rows)</div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 320 }}>
-              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'OT Hours'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 9.5, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'OT Hours'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 10, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.slice(0, 8).map((r, i) => (
                   <tr key={i} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 ? '#fff' : C.gray }}>
@@ -150,7 +150,7 @@ export default function OtUpload({ companyId, fy }: { companyId: string; fy: str
                 ))}
               </tbody>
             </table>
-            {rows.length > 8 && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 6 }}>+ {rows.length - 8} more rows…</div>}
+            {rows.length > 8 && <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>+ {rows.length - 8} more rows…</div>}
           </div>
         </div>
       )}

@@ -30,7 +30,7 @@ const T = {
   out:   { padding:'8px 13px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
   danger:{ padding:'5px 10px', borderRadius:7, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
   tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
-  check: { display:'flex', alignItems:'center', gap:7, fontSize:12.5, cursor:'pointer', padding:'4px 0' } as React.CSSProperties,
+  check: { display:'flex', alignItems:'center', gap:7, fontSize:13, cursor:'pointer', padding:'4px 0' } as React.CSSProperties,
 }
 const MODE_LABEL: Record<AppMode, string> = { EMPLOYEE:'Employee applies', HR_MARK:'HR marks', EARN_AVAIL:'Earn & avail' }
 const SRC_COLOR: Record<string, [string, string]> = { branch:[TK.brandTint,TK.brandDeep], company:[TK.infoTint,TK.brand], catalog:[TK.sunken,TK.muted] }

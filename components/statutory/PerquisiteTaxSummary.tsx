@@ -88,7 +88,7 @@ export default function PerquisiteTaxSummary({ employeeId, fy, baseTaxableSalary
         <span style={{ fontSize: 17, fontWeight: 700, color: C.purpleD }}>{inr(tax.total)}</span>
       </div>
 
-      <div style={{ fontSize: 9.5, color: C.muted, marginTop: 8 }}>
+      <div style={{ fontSize: 10, color: C.muted, marginTop: 8 }}>
         TDS/Cess/Surcharge shown here use a placeholder calculation — wired to EZER's existing tax engine at integration time.
       </div>
     </div>

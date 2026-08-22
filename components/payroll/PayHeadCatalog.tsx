@@ -88,15 +88,15 @@ function TypeBadge({ t }: { t: string }) {
     'Computed total': [TK.sunken, TK.inkSoft], 'Computed': [TK.sunken, TK.inkSoft],
   }
   const [bg, color] = map[t] || [TK.sunken, TK.inkSoft]
-  return <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: bg, color, whiteSpace: 'nowrap' }}>{t}</span>
+  return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: bg, color, whiteSpace: 'nowrap' }}>{t}</span>
 }
 
 function Table({ rows }: { rows: Row[] }) {
   return (
     <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead><tr style={{ background: C.bg }}>
-          {['Pay Head', 'Type', 'Calculation / Rule', 'Trigger'].map(h => <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.03em', whiteSpace: 'nowrap' }}>{h}</th>)}
+          {['Pay Head', 'Type', 'Calculation / Rule', 'Trigger'].map(h => <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.03em', whiteSpace: 'nowrap' }}>{h}</th>)}
         </tr></thead>
         <tbody>
           {rows.map(r => { const tc = toneColor(r.tone); return (
@@ -104,7 +104,7 @@ function Table({ rows }: { rows: Row[] }) {
               <td style={{ padding: '9px 12px', fontWeight: r.tone === 'total' || r.tone === 'net' ? 700 : 600, color: tc.color }}>{r.label}</td>
               <td style={{ padding: '9px 12px' }}><TypeBadge t={r.type} /></td>
               <td style={{ padding: '9px 12px', color: TK.inkSoft }}>{r.rule}</td>
-              <td style={{ padding: '9px 12px', color: C.muted, fontSize: 11.5 }}>{r.trigger || '—'}</td>
+              <td style={{ padding: '9px 12px', color: C.muted, fontSize: 12 }}>{r.trigger || '—'}</td>
             </tr>
           )})}
         </tbody>
@@ -120,7 +120,7 @@ function GroupCard({ title, icon, subtitle, children }: { title: string; icon: s
       <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 14 }}>{icon}</span>
         <span style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{title}</span>
-        <span style={{ fontSize: 11.5, color: C.muted }}>· {subtitle}</span>
+        <span style={{ fontSize: 12, color: C.muted }}>· {subtitle}</span>
       </div>
       {children}
     </div>
@@ -147,8 +147,8 @@ export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {
       {view === 'flexi' && (
         <GroupCard title="Flexi / FBP Components" icon="🎛️" subtitle="declared at FY start, claimed monthly via bills — 11 components">
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
-              <thead><tr style={{ background: C.bg }}>{['Code', 'Component', 'Bill required?', 'Regime', 'Annual limit source'].map(h => <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 10.5, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead><tr style={{ background: C.bg }}>{['Code', 'Component', 'Bill required?', 'Regime', 'Annual limit source'].map(h => <th key={h} style={{ textAlign: 'left', padding: '8px 12px', fontSize: 11, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
               <tbody>
                 {FLEXI.map(f => (
                   <tr key={f.code} style={{ borderTop: `1px solid ${C.border}` }}>
@@ -156,13 +156,13 @@ export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {
                     <td style={{ padding: '9px 12px', fontWeight: 600, color: C.navy }}>{f.name}</td>
                     <td style={{ padding: '9px 12px' }}><span style={{ fontSize: 11, color: f.bill.startsWith('No') ? C.green : C.amber }}>{f.bill}</span></td>
                     <td style={{ padding: '9px 12px', color: TK.inkSoft }}>{f.regime}</td>
-                    <td style={{ padding: '9px 12px', color: C.muted, fontSize: 11.5 }}>{f.source}</td>
+                    <td style={{ padding: '9px 12px', color: C.muted, fontSize: 12 }}>{f.source}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div style={{ padding: '10px 16px', fontSize: 11.5, color: C.muted, borderTop: `1px solid ${C.border}` }}>Balance = annual limit − SUM(approved claims). Rejected claims never reduce the limit. Configure slabs in <b>Flexi Policy</b>; approve bills in <b>Flexi Claims</b>.</div>
+          <div style={{ padding: '10px 16px', fontSize: 12, color: C.muted, borderTop: `1px solid ${C.border}` }}>Balance = annual limit − SUM(approved claims). Rejected claims never reduce the limit. Configure slabs in <b>Flexi Policy</b>; approve bills in <b>Flexi Claims</b>.</div>
         </GroupCard>
       )}
 
@@ -174,8 +174,8 @@ export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {
               <div style={{ padding: '6px 16px 14px' }}>
                 {g.heads.map(([h, rule]) => (
                   <div key={h} style={{ padding: '9px 0', borderBottom: `1px solid ${C.border}` }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 600, color: C.navy }}>{h}</div>
-                    <div style={{ fontSize: 11.5, color: C.muted, marginTop: 1 }}>{rule}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.navy }}>{h}</div>
+                    <div style={{ fontSize: 12, color: C.muted, marginTop: 1 }}>{rule}</div>
                   </div>
                 ))}
               </div>
@@ -190,7 +190,7 @@ export default function PayHeadCatalog({ view: viewProp }: { view?: string } = {
             {RULES.map((r, i) => (
               <div key={i} style={{ display: 'flex', gap: 10, padding: '9px 0', borderBottom: i < RULES.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                 <span style={{ width: 22, height: 22, borderRadius: 99, background: C.purpleBg, color: C.purpleDark, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
-                <span style={{ fontSize: 12.5, color: TK.inkSoft, lineHeight: 1.55 }}>{r}</span>
+                <span style={{ fontSize: 13, color: TK.inkSoft, lineHeight: 1.55 }}>{r}</span>
               </div>
             ))}
           </div>

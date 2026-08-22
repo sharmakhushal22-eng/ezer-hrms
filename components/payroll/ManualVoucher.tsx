@@ -188,11 +188,11 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
   }
 
   const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }
-  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
+  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 10, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
   const pill = (on: boolean): React.CSSProperties => ({
-    padding: '6px 14px', borderRadius: 99, border: `0.5px solid ${on ? C.purple : TK.brandTint}`, cursor: 'pointer',
-    fontSize: 11.5, fontWeight: on ? 600 : 500, fontFamily: 'inherit', background: on ? C.purple : TK.sunken, color: on ? TK.surface : C.navy,
+    padding: '6px 14px', borderRadius: 99, border: `1px solid ${on ? C.purple : TK.brandTint}`, cursor: 'pointer',
+    fontSize: 12, fontWeight: on ? 600 : 500, fontFamily: 'inherit', background: on ? C.purple : TK.sunken, color: on ? TK.surface : C.navy,
   })
   const okCount = bulkResults?.filter(r => r.ok).length || 0
   const badCount = bulkResults?.filter(r => !r.ok).length || 0
@@ -206,7 +206,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
     <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
       <span style={{ fontSize: 13 }}></span>
       {names.map(n => (
-        <span key={n} style={{ fontSize: 11.5, fontWeight: 700, color: C.purpleD, background: TK.brandTint, border: `0.5px solid ${C.border}`, borderRadius: 99, padding: '3px 11px' }}>{n}</span>
+        <span key={n} style={{ fontSize: 12, fontWeight: 700, color: C.purpleD, background: TK.brandTint, border: `1px solid ${C.border}`, borderRadius: 99, padding: '3px 11px' }}>{n}</span>
       ))}
     </div>
   )
@@ -217,7 +217,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Manual Voucher</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>One-off additions and deductions for a specific employee in a specific month</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>One-off additions and deductions for a specific employee in a specific month</div>
         </div>
       </div>
 
@@ -236,14 +236,14 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
         </div>
       </div>
 
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
       {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, border: `1px solid ${TK.criticalTint}`, borderRadius: 9, padding: '10px 12px', marginBottom: 12 }}>{err}</div>}
 
       {/* ── Individual ── */}
       {tab === 'individual' && (
         <>
           <div style={card}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Add an entry</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Add an entry</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12 }}>
               <div><label style={lbl}>Employee</label><SearchSelect value={empCode} options={empOpts} placeholder={empOpts.length ? 'Search emp code / name' : 'No employees in this month'} onChange={setEmpCode} /></div>
               <div><label style={lbl}>Voucher head</label><SearchSelect value={headName} options={headOpts} placeholder="Select head" onChange={setHeadName} /></div>
@@ -255,8 +255,8 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
                 style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
                 {busy ? 'Saving…' : 'Save entry'}
               </button>
-              {headType && <span style={{ fontSize: 11.5, fontWeight: 700, color: headType === 'Addition' ? C.green : C.red }}>{headType}</span>}
-              <span style={{ fontSize: 10.5, color: C.muted }}>Saving the same head again for this employee replaces the existing amount.</span>
+              {headType && <span style={{ fontSize: 12, fontWeight: 700, color: headType === 'Addition' ? C.green : C.red }}>{headType}</span>}
+              <span style={{ fontSize: 11, color: C.muted }}>Saving the same head again for this employee replaces the existing amount.</span>
             </div>
           </div>
 
@@ -279,7 +279,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
                           <td style={{ ...td, color: C.muted }}>{e.remark || '—'}</td>
                           <td style={{ ...td, color: C.muted, fontSize: 11 }}>{e.uploaded_via}</td>
                           <td style={td}>
-                            <button onClick={() => removeEntry(e)} style={{ padding: '4px 10px', borderRadius: 99, border: `0.5px solid ${C.red}`, background: C.redBg, color: C.red, fontWeight: 700, fontSize: 10.5, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                            <button onClick={() => removeEntry(e)} style={{ padding: '4px 10px', borderRadius: 99, border: `1px solid ${C.red}`, background: C.redBg, color: C.red, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
                           </td>
                         </tr>
                       ))}
@@ -295,8 +295,8 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
       {tab === 'bulk' && (
         <>
           <div style={card}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 4 }}>1 · Pick the heads to process</div>
-            <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 12 }}>The template will have one column per head, pre-filled with anything already saved.</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 4 }}>1 · Pick the heads to process</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>The template will have one column per head, pre-filled with anything already saved.</div>
             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 12 }}>
               {heads.map(h => {
                 const on = picked.includes(h.head_name)
@@ -305,14 +305,14 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
                     title={h.note || h.head_type}
                     style={{ ...pill(on), fontSize: 11, padding: '5px 11px' }}>
                     {h.head_name}
-                    <span style={{ marginLeft: 6, opacity: 0.75, fontSize: 9.5 }}>{h.head_type === 'Addition' ? '+' : '−'}</span>
+                    <span style={{ marginLeft: 6, opacity: 0.75, fontSize: 10 }}>{h.head_type === 'Addition' ? '+' : '−'}</span>
                   </button>
                 )
               })}
             </div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <button onClick={downloadTemplate} disabled={!picked.length || !runIds.length}
-                style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: picked.length && runIds.length ? 'pointer' : 'not-allowed', opacity: picked.length && runIds.length ? 1 : 0.5 }}>
+                style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: picked.length && runIds.length ? 'pointer' : 'not-allowed', opacity: picked.length && runIds.length ? 1 : 0.5 }}>
                 ⬇ Download template
               </button>
               <span style={{ fontSize: 11, color: C.muted }}>{picked.length} head{picked.length === 1 ? '' : 's'} selected</span>
@@ -321,7 +321,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
           </div>
 
           <div style={card}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>2 · Upload the filled file</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>2 · Upload the filled file</div>
             <input type="file" accept=".xlsx,.xls" onChange={handleBulkFile} style={{ ...ddInp, padding: '7px 10px' }} />
             {bulkRows && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
@@ -329,22 +329,22 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
                   style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: bulkBusy ? 'not-allowed' : 'pointer', opacity: bulkBusy ? 0.6 : 1 }}>
                   {bulkBusy ? 'Saving…' : `Save ${bulkRows.length} rows`}
                 </button>
-                <span style={{ fontSize: 11.5, color: C.purpleD }}><b>{bulkFile}</b> · {bulkRows.length} employees</span>
+                <span style={{ fontSize: 12, color: C.purpleD }}><b>{bulkFile}</b> · {bulkRows.length} employees</span>
               </div>
             )}
-            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10 }}>A blank cell is left alone. Each row saves on its own, so one bad value doesn&apos;t stop the rest.</div>
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 10 }}>A blank cell is left alone. Each row saves on its own, so one bad value doesn&apos;t stop the rest.</div>
           </div>
 
           {bulkResults && (
             <div style={card}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Result</div>
-              <div style={{ display: 'flex', gap: 14, marginBottom: 10, fontSize: 12.5, fontWeight: 700 }}>
+              <div style={{ display: 'flex', gap: 14, marginBottom: 10, fontSize: 13, fontWeight: 700 }}>
                 <span style={{ color: C.green }}>✓ {okCount} saved</span>
                 {badCount > 0 && <span style={{ color: C.red }}>✕ {badCount} failed</span>}
               </div>
               <div style={{ maxHeight: 260, overflowY: 'auto' }}>
                 {bulkResults.map((r, i) => (
-                  <div key={i} style={{ fontSize: 11.5, padding: '4px 0', color: r.ok ? C.navy : C.red, borderBottom: `1px solid ${TK.brandEdge}` }}>
+                  <div key={i} style={{ fontSize: 12, padding: '4px 0', color: r.ok ? C.navy : C.red, borderBottom: `1px solid ${TK.brandEdge}` }}>
                     {r.ok ? '' : ''} <b>{r.code}</b> · {r.head} — {r.detail}
                   </div>
                 ))}
@@ -372,7 +372,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
                           <td style={{ ...td, color: C.muted, fontSize: 11 }}>{new Date(a.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
                           <td style={{ ...td, fontWeight: 700 }}>{a.employee_code}</td>
                           <td style={td}>{a.head_name}</td>
-                          <td style={td}><span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 10.5, fontWeight: 700, background: t.bg, color: t.fg }}>{a.action}</span></td>
+                          <td style={td}><span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: t.bg, color: t.fg }}>{a.action}</span></td>
                           <td style={{ ...td, color: C.muted }}>{a.old_amount == null ? '—' : inr(a.old_amount)}</td>
                           <td style={{ ...td, fontWeight: 700 }}>{a.new_amount == null ? '—' : inr(a.new_amount)}</td>
                           <td style={{ ...td, color: C.muted, fontSize: 11 }}>{a.uploaded_via || '—'}</td>

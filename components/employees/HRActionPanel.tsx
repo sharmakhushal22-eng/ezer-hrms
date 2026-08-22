@@ -14,7 +14,7 @@ const money = (n?: number | null) => (n == null) ? '—' : '₹' + Number(n).toL
 const C = {
   card:  { background:TK.surface, borderRadius:10, padding:'12px 14px', border: `1px solid ${TK.line}`, marginBottom:10 } as React.CSSProperties,
   label: { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:7, color:TK.ink, fontSize:12.5, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
+  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   pri:   { padding:'8px 14px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
   out:   { padding:'7px 12px', borderRadius:7, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.inkSoft, marginBottom:8, display:'flex', alignItems:'center', gap:6 } as React.CSSProperties,
@@ -28,7 +28,7 @@ function Row({ k, v }: { k: string; v: any }) {
   return <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom: `1px solid ${TK.line}`, fontSize:12 }}><span style={{ color:TK.muted }}>{k}</span><span style={{ fontWeight:600, color:TK.ink, textAlign:'right' }}>{v ?? '—'}</span></div>
 }
 function Banner({ color, bg, children }: { color: string; bg: string; children: React.ReactNode }) {
-  return <div style={{ background:bg, border:`1px solid ${color}33`, borderLeft:`3px solid ${color}`, borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:12.5, color:TK.ink }}>{children}</div>
+  return <div style={{ background:bg, border:`1px solid ${color}33`, borderLeft:`3px solid ${color}`, borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:13, color:TK.ink }}>{children}</div>
 }
 
 // ── Onboarding Info tab ─────────────────────────────────────────────
@@ -343,7 +343,7 @@ function BreakupRow({ label, monthly, annual, kind }: { label: string; monthly: 
   const bg = kind === 'total' ? TK.canvas : kind === 'sub' ? TK.brandTint : kind === 'net' ? TK.positiveTint : 'transparent'
   const color = kind === 'total' ? TK.brand : kind === 'net' ? TK.positive : TK.ink
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'7px 12px', background:bg, borderBottom: `1px solid ${TK.line}`, fontSize:12.5 }}>
+    <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'7px 12px', background:bg, borderBottom: `1px solid ${TK.line}`, fontSize:13 }}>
       <span style={{ color: bold ? color : TK.inkSoft, fontWeight: bold ? 700 : 400 }}>{label}</span>
       <span style={{ textAlign:'right', fontWeight: bold ? 700 : 500, color: bold ? color : TK.ink, fontVariantNumeric:'tabular-nums' }}>{money(monthly)}</span>
       <span style={{ textAlign:'right', fontWeight: bold ? 700 : 500, color: bold ? color : TK.muted, fontVariantNumeric:'tabular-nums' }}>{annual != null ? money(annual) : '—'}</span>
@@ -390,7 +390,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
           {rows.map(([l, m, a]) => <BreakupRow key={l} label={l} monthly={m} annual={a} kind={l.startsWith('Stipend') ? 'sub' : 'plain'} />)}
           {/* TDS yes/no */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderTop: `1px solid ${TK.line}` }}>
-            <span style={{ fontSize: 12.5, color: TK.inkSoft }}>TDS applicable</span>
+            <span style={{ fontSize: 13, color: TK.inkSoft }}>TDS applicable</span>
             <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 12px', borderRadius: 99, background: d.tds ? TK.criticalTint : TK.positiveTint, color: d.tds ? TK.critical : TK.positive }}>
               {d.tds ? 'Yes' : 'No'}{isConsultant && d.tds ? ' · 194J' : ''}
             </span>

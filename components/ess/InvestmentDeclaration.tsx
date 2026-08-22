@@ -47,7 +47,7 @@ function RegimeCard({ code, title, blurb, active, disabled, onPick }: {
     <button onClick={() => !disabled && onPick(code)} disabled={disabled}
       style={{
         flex: 1, minWidth: 240, textAlign: 'left', padding: '14px 16px', borderRadius: 10,
-        border: `1.5px solid ${active ? C.purple : C.border}`,
+        border: `2px solid ${active ? C.purple : C.border}`,
         background: active ? C.purpleBg: TK.surface,
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled && !active ? 0.55 : 1,
         fontFamily: 'inherit',
@@ -57,9 +57,9 @@ function RegimeCard({ code, title, blurb, active, disabled, onPick }: {
           width: 15, height: 15, borderRadius: '50%', border: `2px solid ${active ? C.purple: TK.brandTint}`,
           background: active ? C.purple: TK.surface, boxShadow: active ? 'inset 0 0 0 3px #fff' : 'none', flexShrink: 0,
         }} />
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: C.navy }}>{title}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{title}</span>
       </div>
-      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>{blurb}</div>
+      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{blurb}</div>
     </button>
   )
 }
@@ -70,7 +70,7 @@ function AmountRow({ label, hint, value, onChange, readOnly }: {
   return (
     <div style={S.row}>
       <div>
-        <div style={{ fontSize: 12.5, color: C.navy }}>{label}</div>
+        <div style={{ fontSize: 13, color: C.navy }}>{label}</div>
         {hint && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{hint}</div>}
       </div>
       <input
@@ -171,12 +171,12 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         <div style={{ fontSize: 20, fontWeight: 800 }}>Investment Declaration</div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
           FY {FY} · {empName || '—'}{empCode ? ` · ${empCode}` : ''}
-          {status && <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: status === 'SUBMITTED' ? C.green : C.amber, background: status === 'SUBMITTED' ? C.greenBg : C.amberBg, borderRadius: 99, padding: '2px 9px' }}>{status}</span>}
+          {status && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: status === 'SUBMITTED' ? C.green : C.amber, background: status === 'SUBMITTED' ? C.greenBg : C.amberBg, borderRadius: 99, padding: '2px 9px' }}>{status}</span>}
         </div>
       </div>
 
       <div style={{ ...S.card, background: C.purpleBg, border: `1px solid #DDD6FE` }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.purpleD }}>Applies for the whole financial year.</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.purpleD }}>Applies for the whole financial year.</div>
         <div style={{ ...S.sub, color: C.purpleD, marginTop: 3 }}>
           Ye kisi ek payroll month se juda nahi hai — har month ka TDS seedha isi se calculate hota hai.
         </div>
@@ -197,7 +197,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
             blurb="HRA exemption aur Chapter VI-A deductions milti hain. Neeche apna planned investment declare karein." />
         </div>
         {regimeBlocked && (
-          <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 8, padding: '9px 12px', marginTop: 10 }}>
+          <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 8, padding: '9px 12px', marginTop: 10 }}>
             Ye badlaav save nahi hoga — regime ka ek switch pehle hi use ho chuka hai.
           </div>
         )}
@@ -216,7 +216,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
           <AmountRow label="LIC / Insurance premium" value={lic} onChange={setLic} />
           <AmountRow label="PPF / ELSS / other 80C" value={ppf} onChange={setPpf} />
           {over80c && (
-            <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 8, padding: '9px 12px', marginTop: 10 }}>
+            <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 8, padding: '9px 12px', marginTop: 10 }}>
               80C ki legal limit {inr(CAP_80C)} hai — {inr(pf + typed80c)} likhne se exemption nahi badhegi. {inr(CAP_80C)} hi count hoga.
             </div>
           )}
@@ -229,7 +229,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
           {panNeeded && (
             <div style={{ ...S.row, gridTemplateColumns: '1fr 200px' }}>
               <div>
-                <div style={{ fontSize: 12.5, color: C.navy }}>Landlord PAN</div>
+                <div style={{ fontSize: 13, color: C.navy }}>Landlord PAN</div>
                 <div style={{ fontSize: 11, color: panMissing ? C.red : C.muted, marginTop: 2 }}>
                   Zaroori hai — saal ka rent {inr(100000)} se zyada hai
                 </div>
@@ -249,16 +249,16 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
 
       {regime === 'NEW' && (
         <div style={{ ...S.card, background: C.greenBg, border: `1px solid ${TK.positiveTint}` }}>
-          <div style={{ fontSize: 12.5, color: C.green, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 13, color: C.green, lineHeight: 1.6 }}>
             <b>New regime mein kuch declare nahi karna.</b> Slab rates kam hain, par HRA exemption aur 80C/80D deductions nahi milti. Submit karte hi aapke purane declare kiye hue amounts hata diye jaayenge.
           </div>
         </div>
       )}
 
-      <div style={{ fontSize: 11.5, color: C.muted, background: TK.sunken, borderRadius: 9, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission saal ke aakhir mein khulti hai — ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
+      <div style={{ fontSize: 12, color: C.muted, background: TK.sunken, borderRadius: 9, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission saal ke aakhir mein khulti hai — ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
       </div>
 
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
       {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>

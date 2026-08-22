@@ -29,7 +29,7 @@ const C = {
   purpleBg: TK.brandTint, gray: TK.sunken, red: TK.critical, redBg: TK.criticalTint, green: TK.positive,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 12.5, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
+const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 const labelStyle: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }
 
 function summarizeMonths(r: PtRow): string {
@@ -65,14 +65,14 @@ function SearchSelect({ value, options, placeholder, onChange }: {
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 210 }} />
           <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
-              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
               {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o} onClick={() => { onChange(o); setOpen(false) }}
                   onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
                   onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? TK.brandTint : TK.surface}
-                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
+                  style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
                   {o}
                 </div>
               ))}
@@ -125,7 +125,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: PtRow | null; onCl
           <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise PT slab' : 'Add PT slab'}</div>
-            <div style={{ fontSize: 10.5, color: C.muted }}>Salary band + per-month amount</div>
+            <div style={{ fontSize: 11, color: C.muted }}>Salary band + per-month amount</div>
           </div>
         </div>
 
@@ -157,7 +157,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: PtRow | null; onCl
             </div>
           ))}
         </div>
-        <div style={{ fontSize: 10.5, color: C.muted, background: C.gray, padding: '8px 10px', borderRadius: 7, marginBottom: 10, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11, color: C.muted, background: C.gray, padding: '8px 10px', borderRadius: 7, marginBottom: 10, lineHeight: 1.5 }}>
           Use <b>Only Mar + Sep</b> for twice-yearly states (Tamil Nadu, Kerala). For Maharashtra&apos;s annual-cap adjustment, set February higher than the other months directly.
         </div>
 
@@ -256,7 +256,7 @@ export default function PtConfig() {
           </div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
+          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
           + Add / revise slab
         </button>
       </div>
@@ -266,7 +266,7 @@ export default function PtConfig() {
       {/* ── Quick check ─────────────────────────────────────────── */}
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>Quick check</div>
-        <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
           Pick a state, month and gross to see exactly which row payroll will use — same function the run calls.
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr)) auto', gap: 10, alignItems: 'end' }}>
@@ -287,7 +287,7 @@ export default function PtConfig() {
               onChange={e => { setQGross(e.target.value); setQRes(null) }} />
           </div>
           <button onClick={runCheck} disabled={qBusy || !qState || qGross.trim() === ''}
-            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: (!qState || qGross.trim() === '') ? TK.brandTint : C.purple, cursor: (!qState || qGross.trim() === '') ? 'not-allowed' : 'pointer' }}>
+            style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, whiteSpace: 'nowrap', background: (!qState || qGross.trim() === '') ? TK.brandTint : C.purple, cursor: (!qState || qGross.trim() === '') ? 'not-allowed' : 'pointer' }}>
             {qBusy ? 'Checking…' : 'Check PT'}
           </button>
         </div>
@@ -303,7 +303,7 @@ export default function PtConfig() {
             <div style={{ fontSize: 22, fontWeight: 800, color: qRes.found ? C.green : C.amber }}>
               {qRes.found ? `₹${Number(qRes.amount ?? 0).toLocaleString('en-IN')}` : 'Not configured'}
             </div>
-            <div style={{ fontSize: 11.5, color: qRes.found ? '#047857' : TK.warning, marginTop: 3 }}>
+            <div style={{ fontSize: 12, color: qRes.found ? '#047857' : TK.warning, marginTop: 3 }}>
               {!qRes.found
                 ? `${qState} has no slab covering ₹${Number(qGross).toLocaleString('en-IN')} — payroll deducts nothing and flags it.`
                 : Number(qRes.amount) === 0
@@ -322,7 +322,7 @@ export default function PtConfig() {
       {/* ── Full grid ───────────────────────────────────────────── */}
       <div style={card}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 3 }}>Full configuration table</div>
-        <div style={{ fontSize: 11.5, color: C.muted, marginBottom: 14 }}>
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
           Every state, slab and month-wise amount. A <b>no PT</b> badge means the state levies none at all —
           that row exists on purpose, so a state with no tax can be told apart from a state nobody configured.
         </div>
@@ -378,7 +378,7 @@ export default function PtConfig() {
         )}
       </div>
 
-      <div style={{ fontSize: 10.5, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
         <b>This table is payroll&apos;s only source.</b> Run Payroll reads every employee&apos;s PT from here — by their
         <b> state</b>, that month&apos;s <b>column</b> and their <b>gross</b>. No rate is written anywhere in the app,
         so a rate changed here applies to the next run on its own.

@@ -13,7 +13,7 @@ const C = {
   wrap:  { maxWidth:1100, margin:'0 auto' } as React.CSSProperties,
   card:  { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'16px 18px', marginBottom:14 } as React.CSSProperties,
   label: { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:7, color:TK.ink, fontSize:12.5, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
+  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   pri:   { padding:'9px 18px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.ink, marginBottom:10, display:'flex', alignItems:'center', gap:6 } as React.CSSProperties,
   g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } as React.CSSProperties,
@@ -72,7 +72,7 @@ function EmployeeSelectTable({ employees, branches, selected, setSelected }: {
           </div>
           <div style={{ maxHeight:320, overflowY:'auto' }}>
             {employees.map(e => (
-              <label key={e.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderBottom: `1px solid ${TK.line}`, fontSize:12.5, cursor:'pointer' }}>
+              <label key={e.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderBottom: `1px solid ${TK.line}`, fontSize:13, cursor:'pointer' }}>
                 <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggle(e.id)} />
                 <span style={{ flex:'0 0 120px', fontWeight:600 }}>{e.emp_code}</span>
                 <span style={{ flex:1 }}>{e.full_name}</span>
@@ -95,7 +95,7 @@ function MidMonthWarning({ effectiveDate, toBranch, fromBranch }: { effectiveDat
     ? `Effective date is mid-month. For this month, statutory (PT/LWF/PF) will be per the PREVIOUS state (${fromBranch.state}). New state (${toBranch.state}) applies next month.`
     : `Effective mid-month; statutory stays ${fromBranch?.state || toBranch.state || '—'} this month.`
   return (
-    <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderLeft: `3px solid ${TK.warningTint}`, borderRadius:8, padding:'10px 12px', marginBottom:12, fontSize:12.5, color: TK.warning }}>
+    <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderLeft: `3px solid ${TK.warningTint}`, borderRadius:8, padding:'10px 12px', marginBottom:12, fontSize:13, color: TK.warning }}>
       ⚠ {msg}
     </div>
   )
@@ -123,7 +123,7 @@ function SearchSelect({ value, onChange, options, placeholder, allowCustom }: {
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: TK.surface, border: `1px solid ${TK.line}`, borderRadius: 8, marginTop: 2, maxHeight: 220, overflowY: 'auto', zIndex: 30, boxShadow: '0 6px 18px rgba(0,0,0,0.10)' }}>
           {filtered.map(o => (
             <div key={o.value} onMouseDown={() => { onChange(o.value); setQ(o.label); setOpen(false) }}
-              style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', color: TK.ink, background: o.value === value ? TK.canvas: TK.surface }}>{o.label}</div>
+              style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', color: TK.ink, background: o.value === value ? TK.canvas: TK.surface }}>{o.label}</div>
           ))}
         </div>
       )}

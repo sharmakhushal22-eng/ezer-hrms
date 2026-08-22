@@ -244,7 +244,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                               border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 1,
                               background: kon ? 'rgba(37,99,235,0.09)' : 'transparent',
                             }}>
-                            <span style={{ fontSize: 12.5, fontWeight: kon ? 700 : 500, color: kon ? C.purpleDark : C.navy, flex: 1 }}>{k.label}</span>
+                            <span style={{ fontSize: 13, fontWeight: kon ? 700 : 500, color: kon ? C.purpleDark : C.navy, flex: 1 }}>{k.label}</span>
                             {kon && <span style={{ color: C.purple, fontSize: 12 }}></span>}
                           </button>
                         )
@@ -852,7 +852,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
               </>
             ) : (
               <>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 6 }}>Month · FY {fy}</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 6 }}>Month · FY {fy}</label>
                 <select style={{ ...S.input, width: '100%', marginBottom: 20 }} value={month} onChange={e => setMonth(Number(e.target.value))}>
                   {availableMonths.map(m => <option key={m} value={m}>{MONTHS[m - 1]} {calYearOf(m - 1)}</option>)}
                 </select>
@@ -880,19 +880,19 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, textAlign: 'center', marginBottom: 6 }}>
               Can&apos;t create {monthLabel} yet
             </div>
-            <div style={{ fontSize: 11.5, color: C.muted, textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: C.muted, textAlign: 'center', marginBottom: 16 }}>
               {blockers[0]?.prevLabel} has to be closed off first — attendance processed, month frozen and payroll locked.
             </div>
             <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 18 }}>
               {blockers.map(b => (
                 <div key={b.companyId} style={{ border: `1px solid ${TK.criticalTint}`, background: TK.criticalTint, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 6 }}>{b.companyName} · {b.prevLabel}</div>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 6 }}>{b.companyName} · {b.prevLabel}</div>
                   {[
                     ['Attendance processed', b.attendanceDone, b.attendanceDetail],
                     ['Month frozen', b.frozen, b.frozenDetail],
                     ['Payroll locked', b.locked, b.lockedDetail],
                   ].map(([label, ok, detail]: any) => (
-                    <div key={label} style={{ fontSize: 11.5, color: ok ? C.success : C.red, padding: '2px 0' }}>
+                    <div key={label} style={{ fontSize: 12, color: ok ? C.success : C.red, padding: '2px 0' }}>
                       {ok ? '' : ''} <b>{label}</b>{ok ? '' : ` — ${detail}`}
                     </div>
                   ))}
@@ -912,7 +912,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, textAlign: 'center', lineHeight: 1.5, marginBottom: 6 }}>
               Create the month master for<br /><span style={{ color: C.purple, fontSize: 18, fontWeight: 800 }}>{monthLabel}</span>{allCo ? <span style={{ color: C.muted, fontWeight: 600 }}> for all companies</span> : ''}?
             </div>
-            <div style={{ fontSize: 11.5, color: C.muted, textAlign: 'center', marginBottom: 20 }}>Each eligible employee&apos;s salary, statutory &amp; bank data will be frozen for this month.</div>
+            <div style={{ fontSize: 12, color: C.muted, textAlign: 'center', marginBottom: 20 }}>Each eligible employee&apos;s salary, statutory &amp; bank data will be frozen for this month.</div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button style={{ ...S.btnPrimary, flex: 1, background: GREEN }} onClick={begin}>Confirm</button>
               <button style={{ ...S.btnOutline }} onClick={() => setStep('pick')}>Cancel</button>
@@ -928,7 +928,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             <div style={{ height: 14, background: TK.sunken, borderRadius: 99, overflow: 'hidden', marginBottom: 14 }}>
               <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${TK.positive},${TK.positive})`, borderRadius: 99, transition: 'width .2s ease' }} />
             </div>
-            <div style={{ fontSize: 12.5, color: C.navy, fontWeight: 600, minHeight: 18 }}>{stage}</div>
+            <div style={{ fontSize: 13, color: C.navy, fontWeight: 600, minHeight: 18 }}>{stage}</div>
           </div>
         )}
 
@@ -936,8 +936,8 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
           <div style={{ textAlign: 'center' }}>
             <div style={{ width: 60, height: 60, borderRadius: 99, background: TK.positiveTint, border: `2px solid ${GREEN}`, color: GREEN, fontSize: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}></div>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, marginBottom: 8 }}>Month master ready</div>
-            {summary && <div style={{ fontSize: 12.5, color: C.navy, marginBottom: err ? 10 : 18 }}>{summary}</div>}
-            {err && <div style={{ fontSize: 11.5, color: C.red, background: TK.criticalTint, borderRadius: 8, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
+            {summary && <div style={{ fontSize: 13, color: C.navy, marginBottom: err ? 10 : 18 }}>{summary}</div>}
+            {err && <div style={{ fontSize: 12, color: C.red, background: TK.criticalTint, borderRadius: 8, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
             <button style={{ ...S.btnPrimary, background: GREEN, width: '100%' }} onClick={onClose}>Done</button>
           </div>
         )}

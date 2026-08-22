@@ -45,7 +45,7 @@ function PasswordField({ label, value, onChange, placeholder, autoFocus }: { lab
   )
 }
 
-const fieldStyle: React.CSSProperties = { width: '100%', padding: '12px 14px', background: TK.brandTint, border: `1.5px solid ${P.border}`, borderRadius: 10, color: P.navy, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', transition: 'border-color .15s, box-shadow .15s' }
+const fieldStyle: React.CSSProperties = { width: '100%', padding: '12px 14px', background: TK.brandTint, border: `2px solid ${P.border}`, borderRadius: 10, color: P.navy, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', transition: 'border-color .15s, box-shadow .15s' }
 const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: TK.brandDeep, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 7 }
 
 export default function ESSLoginPage() {
@@ -161,7 +161,7 @@ export default function ESSLoginPage() {
             {[['', 'Payslips & tax', 'Download anytime'], ['', 'Leave & attendance', 'Apply and track'], ['', 'Flexi & reimbursements', 'Submit bills in a tap']].map(([ic, t, s]) => (
               <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{ width: 42, height: 42, borderRadius: 11, background: 'rgba(255,255,255,0.13)', border: '1px solid rgba(255,255,255,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, flexShrink: 0 }}>{ic}</div>
-                <div><div style={{ fontSize: 14, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 12.5, color: TK.onAccentSoft }}>{s}</div></div>
+                <div><div style={{ fontSize: 14, fontWeight: 700 }}>{t}</div><div style={{ fontSize: 13, color: TK.onAccentSoft }}>{s}</div></div>
               </div>
             ))}
           </div>
@@ -191,7 +191,7 @@ export default function ESSLoginPage() {
               <h1 style={{ fontSize: 21, fontWeight: 800, margin: '0 0 5px', color: P.navy }}>
                 {step === 'email' ? 'Employee Sign In' : step === 'setpw' ? 'Create Password' : step === 'changepw' ? 'New Password' : 'Enter Password'}
               </h1>
-              <p style={{ fontSize: 13.5, color: P.muted, margin: 0 }}>{subtitle}</p>
+              <p style={{ fontSize: 14, color: P.muted, margin: 0 }}>{subtitle}</p>
             </div>
 
             {step === 'email' && (
@@ -233,11 +233,11 @@ export default function ESSLoginPage() {
             )}
 
             <div style={{ textAlign: 'center', marginTop: 24, borderTop: '1px solid rgba(37,99,235,0.10)', paddingTop: 18 }}>
-              <a href="/" style={{ fontSize: 12.5, color: P.purple, textDecoration: 'none', fontWeight: 600 }}>Admin login</a>
+              <a href="/" style={{ fontSize: 13, color: P.purple, textDecoration: 'none', fontWeight: 600 }}>Admin login</a>
             </div>
           </div>
 
-          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 11.5, color: TK.faint }}>Need help? Contact your HR team.</div>
+          <div style={{ textAlign: 'center', marginTop: 16, fontSize: 12, color: TK.faint }}>Need help? Contact your HR team.</div>
         </div>
       </div>
 
@@ -252,13 +252,13 @@ export default function ESSLoginPage() {
   )
 }
 
-const infoBox: React.CSSProperties = { fontSize: 12.5, color: TK.brandDeep, background: TK.canvas, border: `1px solid ${TK.brandEdge}`, padding: '10px 12px', borderRadius: 9, marginBottom: 16, lineHeight: 1.5 }
+const infoBox: React.CSSProperties = { fontSize: 13, color: TK.brandDeep, background: TK.canvas, border: `1px solid ${TK.brandEdge}`, padding: '10px 12px', borderRadius: 9, marginBottom: 16, lineHeight: 1.5 }
 
 function PrimaryBtn({ loading, label, loadingLabel }: { loading: boolean; label: string; loadingLabel: string }) {
   return (
     <button type="submit" disabled={loading} style={{
       width: '100%', padding: '13px', borderRadius: 10, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
-      fontSize: 14.5, fontWeight: 700, fontFamily: 'inherit', color: TK.onAccent,
+      fontSize: 15, fontWeight: 700, fontFamily: 'inherit', color: TK.onAccent,
       background: loading ? TK.brandTint : 'linear-gradient(180deg,#3B82F6,#2563EB)', boxShadow: loading ? 'none' : '0 6px 18px rgba(37,99,235,0.32)',
       transition: 'transform .1s, box-shadow .15s',
     }}
@@ -274,5 +274,5 @@ function ErrorBox({ msg }: { msg: string }) {
 }
 
 function BackLink({ onClick }: { onClick: () => void }) {
-  return <div style={{ textAlign: 'center', marginTop: 16 }}><button type="button" onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, color: TK.muted, fontFamily: 'inherit' }}>Use a different email / code</button></div>
+  return <div style={{ textAlign: 'center', marginTop: 16 }}><button type="button" onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: TK.muted, fontFamily: 'inherit' }}>Use a different email / code</button></div>
 }

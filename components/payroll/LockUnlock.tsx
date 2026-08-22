@@ -47,11 +47,11 @@ const card: React.CSSProperties = {
   boxShadow: '0 1px 4px rgba(37,99,235,0.06)', border: `1px solid ${C.border}`,
 }
 const inp: React.CSSProperties = {
-  fontFamily: font, fontSize: 12.5, color: C.navy, width: '100%',
+  fontFamily: font, fontSize: 13, color: C.navy, width: '100%',
   border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', background: TK.surface, outline: 'none',
 }
 const fieldLbl: React.CSSProperties = {
-  fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase',
+  fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase',
   letterSpacing: '0.03em', display: 'block', marginBottom: 4,
 }
 
@@ -80,15 +80,15 @@ function EmpRow({ r, checked, onToggle, isGroup }: {
           }}>{initialsOf(r.full_name)}</div>
           <div>
             <div style={{ fontWeight: 600 }}>{r.full_name || '—'}</div>
-            <div style={{ fontSize: 10.5, color: C.muted }}>{r.employee_code}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>{r.employee_code}</div>
           </div>
         </div>
       </td>
       <td style={{ ...td, color: C.muted }}>{r.department || '—'}</td>
-      {isGroup && <td style={{ ...td, color: C.muted, fontSize: 11.5 }}>{r.company || '—'}</td>}
+      {isGroup && <td style={{ ...td, color: C.muted, fontSize: 12 }}>{r.company || '—'}</td>}
       <td style={td}>
         <span style={{
-          fontSize: 10.5, fontWeight: 700, padding: '4px 11px', borderRadius: 999,
+          fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 999,
           display: 'inline-flex', alignItems: 'center', gap: 5,
           background: r.is_locked ? C.redBg : C.greenBg, color: r.is_locked ? C.red : C.green,
         }}>{r.is_locked ? 'Locked' : 'Unlocked'}</span>
@@ -312,11 +312,11 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => setApplied({ ...filter })} disabled={busy}
-            style={{ fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, background: C.purple, border: 'none', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>
+            style={{ fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: C.purple, border: 'none', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>
             Search
           </button>
           <button onClick={() => { setFilter(EMPTY_LOCK_FILTER); setApplied(EMPTY_LOCK_FILTER) }} disabled={busy}
-            style={{ fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.muted, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 16px', cursor: 'pointer' }}>
+            style={{ fontFamily: font, fontSize: 13, fontWeight: 600, color: C.muted, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 16px', cursor: 'pointer' }}>
             Clear
           </button>
         </div>
@@ -325,14 +325,14 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 14, fontWeight: 700 }}>Employees ({rows.length})</div>
-          <div style={{ fontSize: 11.5, color: C.muted }}>
+          <div style={{ fontSize: 12, color: C.muted }}>
             🔒 {lockedCount} locked · 🔓 {rows.length - lockedCount} unlocked
           </div>
           {/* Works on every row now, not just the locked ones — otherwise a company with
               nothing locked yet had no way to select anything at all. */}
           {rows.length > 0 && (
             <button onClick={toggleAll}
-              style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11.5, fontWeight: 600, color: C.purpleD, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
+              style={{ marginLeft: 'auto', fontFamily: font, fontSize: 12, fontWeight: 600, color: C.purpleD, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
               {rows.length > 0 && rows.every(r => sel.has(r.employee_code)) ? 'Clear selection' : `Select all ${rows.length}`}
             </button>
           )}
@@ -349,11 +349,11 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           </div>
         ) : (
           <div style={{ overflowX: 'auto', maxHeight: 460, overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr>
                   {['', 'Employee', 'Department', ...(isGroup ? ['Company'] : []), 'Status'].map((h, i) => (
-                    <th key={i} style={{ textAlign: 'left', fontSize: 10.5, color: C.muted, textTransform: 'uppercase', padding: 8, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, background: C.card }}>{h}</th>
+                    <th key={i} style={{ textAlign: 'left', fontSize: 11, color: C.muted, textTransform: 'uppercase', padding: 8, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, background: C.card }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -383,7 +383,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <button onClick={unlock} disabled={busy || toUnlock.length === 0}
             style={{
-              fontFamily: font, fontSize: 13.5, fontWeight: 700, color: TK.onAccent,
+              fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
               background: toUnlock.length && !busy ? C.purple: TK.brandTint, border: 'none', borderRadius: 10,
               padding: '12px 22px', cursor: toUnlock.length && !busy ? 'pointer' : 'not-allowed',
               boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(37,99,235,0.2)' : 'none',
@@ -394,7 +394,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               anyone. Reopening one does, which is why only that side demands a reason. */}
           <button onClick={lockSelected} disabled={busy || toLock.length === 0}
             style={{
-              fontFamily: font, fontSize: 13.5, fontWeight: 700,
+              fontFamily: font, fontSize: 14, fontWeight: 700,
               color: toLock.length && !busy ? C.red : TK.faint,
               background: TK.surface, border: `1px solid ${toLock.length && !busy ? C.redBd : C.border}`,
               borderRadius: 10, padding: '12px 22px',
@@ -402,12 +402,12 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
             }}>Lock Selected ({toLock.length})
           </button>
           {picked.length === 0 && (
-            <span style={{ fontSize: 11.5, color: C.muted }}>Tick a row above to enable these.</span>
+            <span style={{ fontSize: 12, color: C.muted }}>Tick a row above to enable these.</span>
           )}
         </div>
 
-        {msg && <div style={{ background: C.greenBg, border: `1px solid ${C.greenBd}`, color: C.green, borderRadius: 10, padding: '12px 16px', fontSize: 12.5, fontWeight: 600, marginTop: 12 }}>{msg}</div>}
-        {err && <div style={{ background: C.redBg, border: `1px solid ${C.redBd}`, color: C.red, borderRadius: 10, padding: '12px 16px', fontSize: 12.5, marginTop: 12 }}>{err}</div>}
+        {msg && <div style={{ background: C.greenBg, border: `1px solid ${C.greenBd}`, color: C.green, borderRadius: 10, padding: '12px 16px', fontSize: 13, fontWeight: 600, marginTop: 12 }}>{msg}</div>}
+        {err && <div style={{ background: C.redBg, border: `1px solid ${C.redBd}`, color: C.red, borderRadius: 10, padding: '12px 16px', fontSize: 13, marginTop: 12 }}>{err}</div>}
       </div>
 
       {unlockedRows.length > 0 && (
@@ -434,7 +434,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         {audit.length === 0 ? (
           <div style={{ fontSize: 12, color: C.muted }}>Nothing locked or unlocked in this month yet.</div>
         ) : audit.map((a, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i === audit.length - 1 ? 'none' : `1px solid ${C.border}`, fontSize: 11.5, flexWrap: 'wrap' }}>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i === audit.length - 1 ? 'none' : `1px solid ${C.border}`, fontSize: 12, flexWrap: 'wrap' }}>
             <span style={{
               fontWeight: 700, padding: '2px 9px', borderRadius: 999, fontSize: 10,
               background: a.action === 'EMPLOYEES_LOCKED' ? C.redBg : C.greenBg,

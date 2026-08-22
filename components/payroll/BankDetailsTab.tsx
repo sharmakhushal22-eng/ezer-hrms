@@ -56,8 +56,8 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
     XLSX.writeFile(wb, 'Bank_Details.xlsx')
   }
 
-  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
-  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
+  const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
+  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 10, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
 
   return (
@@ -66,7 +66,7 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Bank Details</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Salary account per employee — maintained in the Employee Master, shown here for payroll</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>Salary account per employee — maintained in the Employee Master, shown here for payroll</div>
         </div>
       </div>
 
@@ -85,7 +85,7 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
             <input type="checkbox" checked={onlyActive} onChange={e => setOnlyActive(e.target.checked)} /> Hide exited
           </label>
           <button onClick={exportXlsx} disabled={!filtered.length}
-            style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>
+            style={{ padding: '9px 18px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>
             ⬇ Export
           </button>
         </div>

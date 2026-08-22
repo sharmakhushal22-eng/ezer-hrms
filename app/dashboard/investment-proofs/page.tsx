@@ -55,36 +55,36 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: TK.surface }}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 9 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 6, padding: '3px 8px' }}>{r.section}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 6, padding: '3px 8px' }}>{r.section}</span>
         <div style={{ flex: 1, minWidth: 190 }}>
           <div style={{ fontSize: 13, fontWeight: 700 }}>{code} — {name}</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{r.declared_item}</div>
         </div>
-        {leaving && <span style={{ fontSize: 10, fontWeight: 700, color: C.amber, background: C.amberBg, border: `0.5px solid ${C.amberBd}`, borderRadius: 99, padding: '2px 9px' }}>Leaving {fmtDate(leaving)}</span>}
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: overdue && !done ? C.red : C.muted, background: overdue && !done ? C.redBg : TK.sunken, borderRadius: 99, padding: '3px 10px' }}>
+        {leaving && <span style={{ fontSize: 10, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 99, padding: '2px 9px' }}>Leaving {fmtDate(leaving)}</span>}
+        <span style={{ fontSize: 11, fontWeight: 700, color: overdue && !done ? C.red : C.muted, background: overdue && !done ? C.redBg : TK.sunken, borderRadius: 99, padding: '3px 10px' }}>
           {overdue && !done ? 'Deadline passed · ' : 'Deadline '}{fmtDate(r.deadline)}
         </span>
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: fg, background: bg, borderRadius: 99, padding: '3px 10px' }}>{r.status}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: fg, background: bg, borderRadius: 99, padding: '3px 10px' }}>{r.status}</span>
       </div>
 
       <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', alignItems: 'end' }}>
         <div>
-          <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Declared</div>
+          <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Declared</div>
           <div style={{ fontSize: 15, fontWeight: 700 }}>{inr(r.declared_amount)}</div>
         </div>
         <div>
-          <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Employee submitted</div>
+          <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Employee submitted</div>
           <div style={{ fontSize: 15, fontWeight: 700 }}>{inr(r.submitted_amount)}</div>
         </div>
         {r.proof_reference && (
           <div style={{ minWidth: 160 }}>
-            <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Reference</div>
+            <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Reference</div>
             <div style={{ fontSize: 12 }}>{r.proof_reference}</div>
           </div>
         )}
         {!done && (
           <div>
-            <label style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700, display: 'block', marginBottom: 3 }}>Approve amount</label>
+            <label style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700, display: 'block', marginBottom: 3 }}>Approve amount</label>
             <input style={{ ...S.inp, width: 130, textAlign: 'right' }} value={draft} inputMode="numeric"
               onChange={e => onDraft(e.target.value.replace(/[^0-9]/g, ''))} />
           </div>
@@ -97,7 +97,7 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
         </div>
       )}
       {r.status === 'REJECTED' && r.rejection_reason && (
-        <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 8 }}>Rejected: {r.rejection_reason}</div>
+        <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 8 }}>Rejected: {r.rejection_reason}</div>
       )}
       {!done && (
         <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
@@ -174,7 +174,7 @@ export default function InvestmentProofsPage() {
   })
   const stat = (label: string, v: any, color: string) => (
     <div key={label} style={{ background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 110 }}>
-      <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 18, fontWeight: 800, color }}>{v}</div>
     </div>
   )
@@ -206,13 +206,13 @@ export default function InvestmentProofsPage() {
         <button style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }} onClick={load}>⟳ Refresh</button>
       </div>
 
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
       {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
 
-      {loading ? <div style={{ fontSize: 12.5, color: C.muted }}>Loading…</div>
+      {loading ? <div style={{ fontSize: 13, color: C.muted }}>Loading…</div>
         : filtered.length === 0 ? (
           <div style={S.card}>
-            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
               {rows.length === 0
                 ? <>There are no proof lines yet. They appear once an employee submits a declaration and their proof window opens — or open everyone&apos;s at once from <b>Payroll → Data Sync → Investment proofs</b>.</>
                 : 'Nothing matched this filter.'}

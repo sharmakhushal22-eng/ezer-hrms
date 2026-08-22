@@ -91,14 +91,14 @@ function SearchSelect({ value, options, placeholder, onChange, disabled }: {
           <div onClick={() => setOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }} />
           <div style={{ position:'absolute', top:'calc(100% + 3px)', left:0, width:'100%', minWidth:210, background:TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius:8, boxShadow:'0 8px 24px rgba(30,27,75,0.16)', zIndex:41, overflow:'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
-              style={{ width:'100%', padding:'8px 10px', border:'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12.5, outline:'none', boxSizing:'border-box', fontFamily:'inherit' }} />
+              style={{ width:'100%', padding:'8px 10px', border:'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:13, outline:'none', boxSizing:'border-box', fontFamily:'inherit' }} />
             <div style={{ maxHeight:220, overflowY:'auto' }}>
               {filtered.length === 0 && <div style={{ padding:'8px 10px', fontSize:12, color:TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o} onClick={() => { onChange(o); setOpen(false) }}
                   onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
                   onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? TK.brandTint : TK.surface}
-                  style={{ padding:'7px 10px', fontSize:12.5, cursor:'pointer', background: o === value ? TK.brandTint : TK.surface, color:TK.ink }}>
+                  style={{ padding:'7px 10px', fontSize:13, cursor:'pointer', background: o === value ? TK.brandTint : TK.surface, color:TK.ink }}>
                   {o}
                 </div>
               ))}

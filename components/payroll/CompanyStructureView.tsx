@@ -51,14 +51,14 @@ export default function CompanyStructureView({ companyId }: { companyId: string 
   }, [companyId])
 
   const deptName: Record<string, string> = {}; depts.forEach(d => { deptName[d.id] = d.dept_name })
-  const co = (id: string) => allCo ? <span style={{ fontSize: 9.5, color: C.muted }}> · {comps[id] || '—'}</span> : null
+  const co = (id: string) => allCo ? <span style={{ fontSize: 10, color: C.muted }}> · {comps[id] || '—'}</span> : null
   const item = (main: React.ReactNode, sub: React.ReactNode) => (
     <div style={{ padding: '7px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: C.navy }}>{main}</div>
-      {sub && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{sub}</div>}
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.navy }}>{main}</div>
+      {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}
     </div>
   )
-  const empty = (t: string) => <div style={{ fontSize: 11.5, color: TK.faint }}>{t}</div>
+  const empty = (t: string) => <div style={{ fontSize: 12, color: TK.faint }}>{t}</div>
 
   return (
     <div style={{ fontFamily: font }}>

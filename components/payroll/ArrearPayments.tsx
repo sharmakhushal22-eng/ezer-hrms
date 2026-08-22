@@ -43,7 +43,7 @@ interface PayRow { employee_code: string; full_name: string; net_pay: number }
 
 const S = {
   card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' } as React.CSSProperties,
-  th: { padding: '8px 11px', fontSize: 9.5, color: TK.brand, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.05em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const },
+  th: { padding: '8px 11px', fontSize: 10, color: TK.brand, fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.05em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const },
   td: { padding: '8px 11px', color: C.navy, borderTop: `1px solid ${C.border}`, whiteSpace: 'nowrap' as const },
   inp: { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' } as React.CSSProperties,
   btnP: { padding: '9px 17px', borderRadius: 8, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
@@ -53,7 +53,7 @@ const S = {
 function Stat({ label, value, color }: { label: string; value: any; color: string }) {
   return (
     <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 110 }}>
-      <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
+      <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 17, fontWeight: 800, color }}>{value}</div>
     </div>
   )
@@ -197,7 +197,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
         <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Arrear &amp; Payments</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
             What is owed from earlier periods and being paid this month, and what leaves the bank this month.
           </div>
         </div>
@@ -214,7 +214,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
         <div style={{ display: 'flex', gap: 6 }}>
           {(['arrear', 'payments'] as const).map(k => (
             <button key={k} onClick={() => setTab(k)}
-              style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${tab === k ? C.purple : C.border}`, background: tab === k ? C.purple: TK.surface, color: tab === k ? TK.surface : C.navy, fontWeight: tab === k ? 700 : 500, fontSize: 12.5, cursor: 'pointer', fontFamily: font }}>
+              style={{ padding: '9px 16px', borderRadius: 8, border: `1px solid ${tab === k ? C.purple : C.border}`, background: tab === k ? C.purple: TK.surface, color: tab === k ? TK.surface : C.navy, fontWeight: tab === k ? 700 : 500, fontSize: 13, cursor: 'pointer', fontFamily: font }}>
               {k === 'arrear' ? 'Arrear' : 'Payments'}
             </button>
           ))}
@@ -225,7 +225,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
         </div>
       </div>
 
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
       {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
       {loading && <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Loading…</div>}
 
@@ -242,12 +242,12 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
           </div>
 
           {arrears.length === 0 ? (
-            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, background: C.gray, borderRadius: 9, padding: '12px 14px' }}>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, background: C.gray, borderRadius: 9, padding: '12px 14px' }}>
               There is no arrear in this month. Arrear arrives from two places — <b>Attendance → Arrear Days</b> (days from an earlier month), and the <b>Arrear Addition / Arrear Deduction</b> heads in the <b>Bulk Uploader</b> (money). Both are shown together here.
             </div>
           ) : (
             <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                 <thead><tr style={{ background: C.purpleD }}>
                   {isGroup && <th style={S.th}>Company</th>}
                   <th style={S.th}>Emp Code</th><th style={S.th}>Name</th>
@@ -275,7 +275,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
               </table>
             </div>
           )}
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.55 }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.55 }}>
             Arrear <b>days</b> and arrear <b>amounts</b> arrive by different routes. They are shown together because looking at only one is how the same arrear gets paid <b>twice</b> — once through days, once through a voucher.
           </div>
         </div>
@@ -285,7 +285,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
       {tab === 'payments' && !loading && (
         <div style={S.card}>
           {!calculated ? (
-            <div style={{ fontSize: 12.5, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 9, padding: '12px 14px', lineHeight: 1.6 }}>
+            <div style={{ fontSize: 13, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 9, padding: '12px 14px', lineHeight: 1.6 }}>
               <b>{label} has not been calculated yet.</b> A payment only exists once net pay has been worked out — run <b>Run Cycle → ⚙️ Calculate</b> first.
             </div>
           ) : (
@@ -309,16 +309,16 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
                   <b>{unbankable.length} employees cannot be paid</b> — their salary is ready but their bank details are incomplete. They will not appear in the NEFT file:
                   <div style={{ marginTop: 6 }}>
                     {unbankable.slice(0, 8).map(u => (
-                      <div key={u.employee_code} style={{ fontSize: 11.5 }}>· <b>{u.employee_code}</b> {u.full_name} — {u.missing} missing ({inr(u.net_pay)})</div>
+                      <div key={u.employee_code} style={{ fontSize: 12 }}>· <b>{u.employee_code}</b> {u.full_name} — {u.missing} missing ({inr(u.net_pay)})</div>
                     ))}
-                    {unbankable.length > 8 && <div style={{ fontSize: 11.5, marginTop: 3 }}>…and {unbankable.length - 8} more</div>}
+                    {unbankable.length > 8 && <div style={{ fontSize: 12, marginTop: 3 }}>…and {unbankable.length - 8} more</div>}
                   </div>
                   <div style={{ marginTop: 6 }}>Fix them under Employees &amp; CTC → <b>Bank Details</b>, then run <b>Data Sync → Bank</b>.</div>
                 </div>
               )}
 
               <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'auto', maxHeight: 420 }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                   <thead><tr style={{ background: C.purpleD }}>
                     <th style={S.th}>Emp Code</th><th style={S.th}>Name</th>
                     <th style={{ ...S.th, textAlign: 'right' }}>Net Pay</th>
@@ -334,7 +334,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
                   </tbody>
                 </table>
               </div>
-              <div style={{ fontSize: 10.5, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.55 }}>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 10, background: C.gray, borderRadius: 8, padding: '9px 11px', lineHeight: 1.55 }}>
                 The NEFT file carries the <b>full account number</b> (not masked — a masked file is rejected by the bank), and Excel keeps it as text so leading zeros survive. After <b>Mark disbursed</b>, changing the month needs a formal reopen.
               </div>
             </>
