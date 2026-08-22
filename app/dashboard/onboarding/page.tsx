@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase'
 import ActivationWizard from '@/components/onboarding/ActivationWizard'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { C as TK, R, E, IconChevron } from '@/lib/ui'
 
 // ── Types ─────────────────────────────────────────────────────────
 type Stage = 'NOT_INVITED'|'INVITED'|'IN_PROGRESS'|'SUBMITTED'|'HR_REVIEW'|'APPROVED'|'EMPLOYEE_CREATED'
@@ -476,8 +476,23 @@ export default function OnboardingDashboard() {
         <div>
           <SH title="Quick actions"/>
           <div style={{display:'flex',flexDirection:'column',gap:8}}>
-            <button onClick={()=>setTab('candidates')} style={{padding:'11px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:TK.onAccent,fontSize:13,fontWeight:500,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8}}>
-              <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/> Send onboarding links (All candidates)
+            <button onClick={()=>setTab('candidates')} className="ez-cta"
+              style={{
+                // This is the primary action of the whole screen and it read as
+                // one more row in a list. It now carries the brand gradient,
+                // elevation in its own colour, and an arrow that travels on
+                // hover — the three things that make a control look pressable
+                // rather than painted on.
+                padding:'14px 16px', borderRadius:R.md, border:`1px solid ${TK.brandDeep}`,
+                cursor:'pointer', background:`linear-gradient(180deg, ${TK.brand}, ${TK.brandDeep})`,
+                color:TK.onAccent, fontSize:14, fontWeight:600, fontFamily:'inherit',
+                textAlign:'left', display:'flex', alignItems:'center', gap:11,
+                boxShadow:E.brand, width:'100%',
+              }}>
+              <i className="ti ti-send" style={{fontSize:16}} aria-hidden="true"/>
+              <span style={{flex:1}}>Send onboarding links</span>
+              <span style={{fontSize:11.5, fontWeight:500, opacity:.82}}>All candidates</span>
+              <span className="ez-cta-arrow" style={{display:'flex'}}><IconChevron size={16} /></span>
             </button>
             <button onClick={()=>setTab('pending')} style={{padding:'11px 14px',borderRadius:'8px',border: `0.5px solid ${TK.brandEdge}`,cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',textAlign:'left',display:'flex',alignItems:'center',gap:8,color:TK.ink}}>
               <i className="ti ti-list-check" style={{fontSize:16,color:TK.warning}} aria-hidden="true"/> View {pendingActions.filter(a=>a.priority==='HIGH').length} urgent pending actions

@@ -130,6 +130,39 @@ export function UIKeyframes() {
 
       :focus-visible{outline:2px solid ${C.brand};outline-offset:2px;border-radius:${R.sm}px}
 
+      /* ── Buttons ───────────────────────────────────────────────────────────
+         693 of the buttons in this product are raw <button> elements with
+         their own inline styles, against 9 built from the design system. The
+         measurable result was 11 different heights, 7 different corner radii
+         and 6 font sizes across eight pages — which is most of why they read
+         as unconsidered.
+
+         Converting 693 call sites is not the move. These rules give every
+         button the same corner, the same press response and the same pointer
+         affordance, and !important is required only because the radius is set
+         inline at most of those sites. Colour, size and weight are left to the
+         call site, so nothing about intent or hierarchy is overridden. */
+      button{
+        border-radius:${R.md}px !important;
+        cursor:pointer;
+        transition:transform ${M.quick}, box-shadow ${M.quick}, background ${M.quick}, border-color ${M.quick}, opacity ${M.quick};
+        -webkit-tap-highlight-color:transparent;
+      }
+      /* Pills stay pills — a rounded chip is a deliberate shape, not a stray
+         radius, and squaring it off would be the wrong kind of consistency. */
+      button[style*="border-radius: 99"],
+      button[style*="borderRadius:99"],
+      button[style*="border-radius: 999"]{border-radius:999px !important}
+      button:not(:disabled):active{transform:scale(.97)}
+      button:not(:disabled):hover{filter:brightness(1.03)}
+      button:disabled{cursor:not-allowed;opacity:.55}
+
+      /* The arrow on a call-to-action travels a little on hover: the cheapest
+         way to say "this goes somewhere" without a word of copy. */
+      .ez-cta-arrow{transition:transform ${M.quick}}
+      .ez-cta:hover .ez-cta-arrow{transform:translateX(3px)}
+      .ez-cta:not(:disabled):active{transform:scale(.985)}
+
       /* Scrollbars, so they belong to the palette instead of the OS. */
       .ez-scroll::-webkit-scrollbar{width:9px;height:9px}
       .ez-scroll::-webkit-scrollbar-thumb{background:${C.lineStrong};border-radius:99px;border:2px solid transparent;background-clip:content-box}
@@ -162,6 +195,8 @@ export function UIKeyframes() {
         .ez-fade,.ez-rise,.ez-rise-3d,.ez-slide-l,.ez-slide-r,.ez-flash,.ez-pop,
         .ez-stagger > *,.ez-table-stagger tbody tr{animation-duration:.01ms!important;animation-delay:0ms!important}
         .ez-lift:hover{transform:none}
+        button:not(:disabled):active{transform:none}
+        .ez-cta:hover .ez-cta-arrow{transform:none}
         .ez-3d:hover > *{transform:none}
         .ez-press:active:not(:disabled){transform:none}
       }
