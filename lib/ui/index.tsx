@@ -582,7 +582,7 @@ export function Th({ children, align = 'left', width, style }: {
 }) {
   return (
     <th style={{
-      ...eyebrow, textAlign: align, padding: '11px 12px', width,
+      ...eyebrow, textAlign: align, padding: '9px 12px', width,
       borderBottom: `1px solid ${C.line}`, background: C.sunken,
       position: 'sticky', top: 0, zIndex: 1, whiteSpace: 'nowrap',
       ...style,
@@ -596,7 +596,7 @@ export function Td({ children, align = 'left', mono, strong, style }: {
 }) {
   return (
     <td style={{
-      padding: '11px 12px', textAlign: align,
+      padding: '8px 12px', textAlign: align,
       borderBottom: `1px solid ${C.line}`,
       color: strong ? C.ink : C.inkSoft,
       fontWeight: strong ? W.semi : W.regular,
@@ -733,7 +733,7 @@ export function Avatar({ name, size = 32, src }: { name?: string | null; size?: 
 }
 
 /** Avatar + name + secondary line. The standard identity cell in a table. */
-export function Person({ name, meta, size = 32, src }: {
+export function Person({ name, meta, size = 28, src }: {
   name?: string | null; meta?: React.ReactNode; size?: number; src?: string | null;
 }) {
   return (
@@ -741,11 +741,14 @@ export function Person({ name, meta, size = 32, src }: {
       <Avatar name={name} size={size} src={src} />
       <div style={{ minWidth: 0 }}>
         <div style={{
-          fontSize: F.small, fontWeight: W.semi, color: C.ink,
+          fontSize: F.small, fontWeight: W.semi, color: C.ink, lineHeight: 1.3,
           whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
         }}>{name || '—'}</div>
-        {meta != null && (
-          <div style={{ fontSize: F.micro, color: C.muted, ...numeric }}>{meta}</div>
+        {/* Rendered only when there is something to say. An empty second line
+            still reserves its height, which is how a 398-row table ends up
+            showing ten people. */}
+        {meta != null && meta !== '' && meta !== '—' && (
+          <div style={{ fontSize: F.micro, color: C.muted, lineHeight: 1.3, ...numeric }}>{meta}</div>
         )}
       </div>
     </div>

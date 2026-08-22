@@ -11,7 +11,7 @@ import {
   Page as UIPage, PageHeader, Button, Person, Th, Td, Tr, Empty, SkeletonRows,
   Badge as Chip, inputStyle, tone,
   C, F, W, S, R, E, M, numeric, eyebrow,
-  IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees,
+  IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees, IconChevronDown,
 } from '@/lib/ui'
 
 // ─── Types ────────────────────────────────────────────────────
@@ -156,7 +156,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
     if (f.company_id && f.employment_type) {
       nextEmpCode(company?.company_code || 'EZ', f.company_id, f.employment_type).then(c => { if (live) setF((p: any) => ({ ...p, emp_code: c })) })
     }
-    return () => { live = false }
+  return () => { live = false }
   }, [f.company_id, f.employment_type]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = f.full_name.trim() && f.company_id && f.emp_code.trim()
@@ -363,6 +363,10 @@ export default function EmployeeMaster() {
   const [filterType, setFType]    = useState('')
   const [filterStatus, setFStatus]= useState('Active')
   const [filterGrade, setFGrade]  = useState('')
+
+  // Shown on the Filters toggle, so a filter that is still applied is never
+  // invisible just because the panel is closed.
+  const activeFilterCount = [filterDept, filterType, filterGrade].filter(Boolean).length
   const [page, setPage]           = useState(1)
   const [selected, setSelected]   = useState<Employee|null>(null)
   const [profileTab, setProfileTab] = useState('personal')
@@ -372,6 +376,9 @@ export default function EmployeeMaster() {
   const [saving, setSaving]       = useState(false)
   const [showAdd, setShowAdd]     = useState(false)
   const [showBulk, setShowBulk]   = useState(false)
+  // The secondary filters start closed. A count on the toggle means a filter
+  // that is still applied is never invisible just because the panel is shut.
+  const [moreFilters, setMoreFilters] = useState(false)
   const [addMsg, setAddMsg]       = useState('')
   const [exporting, setExporting] = useState(false)
   const [stats, setStats] = useState({ total:0,active:0,resigned:0,employee:0,intern:0,naps:0,nats:0,consultant:0,contract:0 })
@@ -812,8 +819,8 @@ export default function EmployeeMaster() {
         {/* Sticky to the top of the viewport now — the old offset was clearing
             a topbar that the page header replaced. */}
         <div style={{ ...s.card, display:'flex', gap:S.sm, alignItems:'center', flexWrap:'wrap',
-                      padding:`${S.md}px ${S.lg}px`, position:'sticky', top:0, zIndex:30,
-                      boxShadow:E.raised }}>
+                      padding:`${S.sm}px ${S.md}px`, marginBottom:S.sm,
+                      position:'sticky', top:0, zIndex:30, boxShadow:E.raised }}>
           <div style={{ position:'relative', flex:1, minWidth:220 }}>
             <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:C.faint, display:'flex', pointerEvents:'none' }}>
               <IconSearch size={16} />
@@ -829,6 +836,25 @@ export default function EmployeeMaster() {
             <option value="">All Locations</option>
             {filteredLocs.map(l=><option key={l.id} value={l.id}>{l.location_name}</option>)}
           </select>
+          <button onClick={()=>setMoreFilters(v=>!v)} style={{ ...s.secBtn, gap:5 }}
+                  title={moreFilters ? 'Fewer filters' : 'Department, type, status and grade'}>
+            Filters
+            {activeFilterCount > 0 && (
+              <span style={{ fontSize:F.micro, fontWeight:W.bold, padding:'1px 6px',
+                             borderRadius:R.pill, background:C.brand, color:C.onAccent, ...numeric }}>
+                {activeFilterCount}
+              </span>
+            )}
+            <span style={{ display:'flex', transform:moreFilters?'rotate(180deg)':'none',
+                           transition:`transform ${M.quick}` }}><IconChevronDown size={12} /></span>
+          </button>
+        </div>
+
+        {/* The long tail of filters. Set once, then left alone — so they do not
+            hold 90px of the viewport open on every visit. */}
+        {moreFilters && (
+        <div className="ez-rise" style={{ ...s.card, display:'flex', gap:S.sm, alignItems:'center', flexWrap:'wrap',
+                      padding:`${S.sm}px ${S.md}px`, marginBottom:S.md }}>
           <select style={{ ...s.sel, width:'auto', minWidth:'130px' }} value={filterDept} onChange={e=>setFDept(e.target.value)}>
             <option value="">All Depts</option>
             {filteredDepts.map(d=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
@@ -849,6 +875,7 @@ export default function EmployeeMaster() {
             <IconClose size={12} /> Clear
           </button>
         </div>
+        )}
 
         {error && (
           <div style={{
@@ -915,10 +942,24 @@ export default function EmployeeMaster() {
                       </Td>
                       <Td><Badge val={emp.employment_type} map={TYPE_COLORS} /></Td>
                       <Td style={{ maxWidth:108 }}>
-                        <div title={(emp as any).locations?.location_name || ''} style={{
-                          color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
-                        }}>{(emp as any).locations?.location_name || '—'}</div>
-                        <div style={{ fontSize:F.micro, color:C.faint }}>{(emp as any).companies?.company_code || '—'}</div>
+                        {/* When there is no location, the company code becomes the
+                            primary line rather than sitting under a dash. Two
+                            lines to say one thing is worse than one line. */}
+                        {(() => {
+                          const loc = (emp as any).locations?.location_name
+                          const co  = (emp as any).companies?.company_code
+                          return (
+                            <>
+                              <div title={loc || co || ''} style={{
+                                color: loc ? C.ink : C.muted, whiteSpace:'nowrap',
+                                overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.3,
+                              }}>{loc || co || '—'}</div>
+                              {loc && co && (
+                                <div style={{ fontSize:F.micro, color:C.faint, lineHeight:1.3 }}>{co}</div>
+                              )}
+                            </>
+                          )
+                        })()}
                       </Td>
                       <Td>
                         <span style={{
