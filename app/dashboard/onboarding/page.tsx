@@ -994,16 +994,33 @@ export default function OnboardingDashboard() {
               {active} active · {thisWeek} joining this week
             </div>
           </div>
-          <button onClick={()=>setTab('candidates')} style={{padding:'8px 16px',borderRadius:'8px',border:'none',cursor:'pointer',background:`color-mix(in srgb, ${TK.onAccent} 16%, transparent)`,color:TK.onAccent,fontSize:12,fontWeight:500,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+          <button onClick={()=>setTab('candidates')} style={{padding:'8px 16px',borderRadius:'8px',cursor:'pointer',background:`color-mix(in srgb, ${TK.onAccent} 16%, transparent)`,border:`1px solid color-mix(in srgb, ${TK.onAccent} 40%, transparent)`,color:TK.onAccent,fontSize:12,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
             <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send onboarding links
           </button>
         </div>
 
         {/* Tab nav */}
-        <div style={{display:'flex',gap:2}}>
+        <div style={{display:'flex',gap:6,paddingBottom:12,flexWrap:'wrap'}}>
           {TABS.map(t=>(
+            // Outlined pills rather than an underline.
+            //
+            // The underline was 3px, and every button in the app is forced to
+            // border-radius:10px by the global baseline — so that thick bar got
+            // curved at both ends and read as a raised white lip under the
+            // active tab, which is the "3D" here. There is no box-shadow on
+            // these at all; the bar was doing it.
+            //
+            // Losing the bar also loses the only edge the inactive tabs had, so
+            // each now carries its own hairline. On a saturated gradient a
+            // translucent white outline holds its weight wherever the gradient
+            // happens to be light or dark behind it, which a flat colour does
+            // not.
             <button key={t.key} onClick={()=>setTab(t.key)}
-              style={{padding:'8px 14px',border:'none',cursor:'pointer',fontSize:12,fontWeight:500,fontFamily:'inherit',background:'transparent',color:tab===t.key?TK.surface:`${TK.onAccentDim}`,borderBottom:`3px solid ${tab===t.key?TK.line:'transparent'}`,display:'flex',alignItems:'center',gap:5,transition:'all .15s'}}>
+              style={{padding:'7px 13px',cursor:'pointer',fontSize:12,fontWeight:tab===t.key?600:500,fontFamily:'inherit',
+                background: tab===t.key ? `color-mix(in srgb, ${TK.onAccent} 17%, transparent)` : 'transparent',
+                color: tab===t.key ? TK.onAccent : TK.onAccentDim,
+                border: `1px solid color-mix(in srgb, ${TK.onAccent} ${tab===t.key?58:26}%, transparent)`,
+                display:'flex',alignItems:'center',gap:5,transition:'background .15s, border-color .15s, color .15s'}}>
               <i className={`ti ${t.icon}`} style={{fontSize:14}} aria-hidden="true"/>
               {t.label}
               {t.badge!==undefined && t.badge > 0 && (

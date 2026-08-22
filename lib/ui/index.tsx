@@ -153,7 +153,10 @@ export function UIKeyframes() {
       button[style*="border-radius: 99"],
       button[style*="borderRadius:99"],
       button[style*="border-radius: 999"]{border-radius:999px !important}
-      button:not(:disabled):active{transform:scale(.97)}
+      /* Softened from .97. It applies to every button in the app, and at .97 the
+         press read as the whole control dropping away from the pointer rather
+         than being pushed. */
+      button:not(:disabled):active{transform:scale(.985)}
       button:not(:disabled):hover{filter:brightness(1.03)}
       button:disabled{cursor:not-allowed;opacity:.55}
 
