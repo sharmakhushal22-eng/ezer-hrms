@@ -48,12 +48,22 @@ export default function RootLayout({
       </head>
       <body className="min-h-full flex flex-col">
         <AutoTitleCase />
-        <UiScale />
         <EyeComfortLayer />
         {children}
         {/* Last in the body so it composites over everything, including any
             modal or toast. pointer-events:none keeps clicks passing through. */}
-        <EyeComfortDock />
+        {/* Both display controls live in one fixed row, eye to the left of
+            zoom. They share a flex container rather than positioning
+            themselves independently because the zoom pill's label changes
+            width — "125% ·auto" against "150%" — so any hardcoded offset
+            between them would drift as the user zooms. */}
+        <div style={{
+          position: 'fixed', right: 14, bottom: 14, zIndex: 99999,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          <EyeComfortDock />
+          <UiScale />
+        </div>
         <EyeComfortOverlay />
       </body>
     </html>

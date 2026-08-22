@@ -233,13 +233,15 @@ export function EyeComfortDock() {
 
   return (
     <div style={{
-      position: 'fixed', right: 14, bottom: 58, zIndex: 99998,
-      display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
+      position: 'relative', display: 'flex', alignItems: 'center',
       fontFamily: '"DM Sans","Segoe UI",sans-serif',
     }}>
       {on && (
         <div className="ez-eye-panel" role="group" aria-label="Eye comfort intensity"
           style={{
+            // Absolute rather than a flex sibling, so opening the panel cannot
+            // shove the button sideways and move the thing just clicked.
+            position: 'absolute', bottom: 'calc(100% + 10px)', right: 0,
             width: 196, padding: '11px 13px 12px', borderRadius: R.lg,
             background: C.surface, border: `1px solid ${C.line}`, boxShadow: E.floating,
           }}>
@@ -276,7 +278,11 @@ export function EyeComfortDock() {
           : 'Eye comfort — warm the screen to cut blue light'}
         aria-label="Eye comfort" aria-pressed={on}
         style={{
-          width: 38, height: 38, borderRadius: 999, cursor: 'pointer',
+          // 36 is the zoom pill's exact height — 26px buttons, 4px padding
+          // either side, 1px border. Matching it means the two controls share
+          // a baseline as well as a centre line, which is what makes them read
+          // as one row rather than two things that happen to be adjacent.
+          width: 36, height: 36, borderRadius: 999, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           border: `1px solid ${on ? C.warning : C.brandEdge}`,
           background: on ? C.warningTint : C.surface,
