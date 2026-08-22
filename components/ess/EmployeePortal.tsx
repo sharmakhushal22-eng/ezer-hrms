@@ -3033,7 +3033,7 @@ const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => R
   attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
   wall: IconRecruitment, rnr: IconAi, funzone: IconAi,
 }
-function EssIcon({ k, size = 17, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
+function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
   const I = ESS_ICON[k]
   return I ? <I size={size} strokeWidth={strokeWidth} /> : null
 }
@@ -3146,7 +3146,7 @@ function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean;
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.surface : C.brand, cursor:'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.brand : 'transparent'}` }}>
-      <EssIcon k={s.k} size={15} />
+      <EssIcon k={s.k} size={16} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
     </button>
@@ -3160,7 +3160,7 @@ function TabHeader({ s }: { s: NavSection }) {
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:4 }}>
         <div style={{ fontSize:F.page, fontWeight:W.bold, letterSpacing:'-.02em',
                       display:'flex', alignItems:'center', gap:9 }}>
-          <EssIcon k={s.k} size={21} strokeWidth={1.8} />{s.label}
+          <EssIcon k={s.k} size={20} strokeWidth={1.8} />{s.label}
         </div>
         <span style={{ fontSize:10.5, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
       </div>
@@ -3208,7 +3208,7 @@ function FeatureGrid({ features }: { features: Feature[] }) {
 function NotificationBell({ unread, open, onToggle }: { unread: number; open: boolean; onToggle: () => void }) {
   return (
     <button onClick={onToggle} title="Notifications" style={{ position:'relative', width:34, height:34, borderRadius:R.md, border:`1px solid ${open ? C.brand : C.line}`, background: open ? C.brandTint : C.surface, color: open ? C.brandDeep : C.muted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit', flexShrink:0 }}>
-      <IconBell size={17} />
+      <IconBell size={16} />
       {unread > 0 && (
         <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:R.pill, background:C.critical, color:C.onAccent, fontSize:9.5, fontWeight:W.bold, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
           {unread > 9 ? '9+' : unread}
@@ -3339,7 +3339,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         <div style={{ position:'fixed', bottom:0, left:0, right:0, background:C.surface, borderTop: `1px solid ${C.brandEdge}`, display:'flex', zIndex:20 }}>
           {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
             <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? C.brand : C.faint, fontWeight: on ? 600 : 500 }}>
-              <EssIcon k={s.k} size={17} />{s.short}
+              <EssIcon k={s.k} size={16} />{s.short}
             </button>
           )})}
           <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? C.brand : C.faint, fontWeight: moreOpen ? 600 : 500 }}>

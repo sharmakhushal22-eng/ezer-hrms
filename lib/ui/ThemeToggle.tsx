@@ -65,20 +65,20 @@ function Seg({ label, title, on, onClick, children }: {
 }
 
 const Sun = () => (
-  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
        strokeWidth="1.7" strokeLinecap="round" aria-hidden>
     <circle cx="10" cy="10" r="3.2" />
     <path d="M10 2.2v1.6M10 16.2v1.6M2.2 10h1.6M16.2 10h1.6M4.5 4.5l1.1 1.1M14.4 14.4l1.1 1.1M15.5 4.5l-1.1 1.1M5.6 14.4l-1.1 1.1" />
   </svg>
 );
 const Moon = () => (
-  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
        strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M16.5 11.8A6.8 6.8 0 0 1 8.2 3.5a6.8 6.8 0 1 0 8.3 8.3Z" />
   </svg>
 );
 const Auto = () => (
-  <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
        strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <rect x="2.5" y="4" width="15" height="10" rx="1.6" />
     <path d="M7 17h6" />

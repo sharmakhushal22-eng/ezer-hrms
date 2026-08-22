@@ -24,7 +24,10 @@ export interface IconProps {
 
 /** Shared frame. Every icon below is just a path set handed to this. */
 function Svg({
-  size = 18, color = 'currentColor', strokeWidth = 1.6, style, title, children,
+  // Even default. At the quarter-step zoom factors an even size stays whole
+  // (16 -> 20 at 1.25, 24 at 1.5), so the 1.6px stroke lands on the grid
+  // rather than between two pixels.
+  size = 16, color = 'currentColor', strokeWidth = 1.6, style, title, children,
 }: IconProps & { children: React.ReactNode }) {
   return (
     <svg

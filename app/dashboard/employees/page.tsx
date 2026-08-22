@@ -763,11 +763,11 @@ export default function EmployeeMaster() {
             ? 'Loading…'
             : `${stats.total.toLocaleString('en-IN')} on record · ${stats.active.toLocaleString('en-IN')} active · showing ${employees.length.toLocaleString('en-IN')}`}
           actions={<>
-            <Button icon={<IconDownload size={15} />} disabled={exporting} onClick={exportExcel}>
+            <Button icon={<IconDownload size={16} />} disabled={exporting} onClick={exportExcel}>
               {exporting ? 'Exporting…' : 'Export Excel'}
             </Button>
-            <Button icon={<IconUpload size={15} />} onClick={() => setShowBulk(true)}>Bulk Upload</Button>
-            <Button variant="primary" icon={<IconPlus size={15} />} onClick={() => setShowAdd(true)}>Add Employee</Button>
+            <Button icon={<IconUpload size={16} />} onClick={() => setShowBulk(true)}>Bulk Upload</Button>
+            <Button variant="primary" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>Add Employee</Button>
           </>}
         />
 
@@ -816,7 +816,7 @@ export default function EmployeeMaster() {
                       boxShadow:E.raised }}>
           <div style={{ position:'relative', flex:1, minWidth:220 }}>
             <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:C.faint, display:'flex', pointerEvents:'none' }}>
-              <IconSearch size={14} />
+              <IconSearch size={16} />
             </span>
             <input style={{ ...s.inp, paddingLeft:30 }} placeholder="Name, code, designation, mobile…"
                    value={search} onChange={e=>setSearch(e.target.value)} />
@@ -846,7 +846,7 @@ export default function EmployeeMaster() {
             {['L1','L2','M1','M2','M3','E1','E2','E3','W1','W2'].map(g=><option key={g}>{g}</option>)}
           </select>
           <button style={s.secBtn} onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus('Active'); setFGrade('') }}>
-            <IconClose size={13} /> Clear
+            <IconClose size={12} /> Clear
           </button>
         </div>
 

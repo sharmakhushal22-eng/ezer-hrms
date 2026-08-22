@@ -54,6 +54,25 @@ export function UIKeyframes() {
       /* A step completing in an approval chain. */
       @keyframes ezPop{0%{transform:scale(.7);opacity:0}60%{transform:scale(1.06)}100%{transform:none;opacity:1}}
 
+      /* Section change. The page tips up from slightly below and behind, as if
+         the new section were laid onto the desk — a 1200px scene makes 8px of
+         Z read as depth without distorting anything.
+
+         It ENDS at transform:none, deliberately. Any residual transform (even
+         translateZ(0)) keeps the element on its own compositor layer, where
+         text is rasterised at the layer's scale instead of the screen's — and
+         it stays soft for as long as the page is open. Nothing scales either,
+         because a scaled glyph is a resampled glyph. */
+      @keyframes ezPageEnter{
+        from{opacity:0;transform:translate3d(0,10px,-8px) rotateX(1.4deg)}
+        60% {opacity:1}
+        to  {opacity:1;transform:none}}
+      .ez-page-enter{
+        animation:ezPageEnter .34s cubic-bezier(.22,1,.36,1) both;
+        transform-origin:50% 0;
+        backface-visibility:hidden;   /* stops the half-pixel shimmer mid-tilt */
+      }
+
       .ez-fade{animation:ezFade ${M.ease} both}
       .ez-rise{animation:ezRise ${M.ease} both}
       .ez-rise-3d{animation:ezRiseIn3d ${M.ease} both}
@@ -123,7 +142,23 @@ export function UIKeyframes() {
       /* Someone who has asked for less motion still gets the depth — the
          shadows and the hierarchy — but nothing travels. A rotation on hover
          is exactly what this setting is asking us not to do. */
+      /* ── Type and icon sharpness ───────────────────────────────────────────
+         Grayscale antialiasing renders lighter and more evenly than the
+         subpixel default, and critically it does not shift when an element is
+         promoted to its own layer mid-animation — which is what makes text
+         appear to "thicken" as a transition starts. */
+      body{
+        -webkit-font-smoothing:antialiased;
+        -moz-osx-font-smoothing:grayscale;
+        text-rendering:optimizeLegibility;
+      }
+      /* Icons are stroked geometry: at a fractional size the stroke lands
+         between pixels and blurs. crispEdges keeps the 1.6px stroke on the
+         grid at the sizes this product actually uses. */
+      svg{shape-rendering:geometricPrecision}
+
       @media (prefers-reduced-motion: reduce){
+        .ez-page-enter{animation-duration:.01ms!important}
         .ez-fade,.ez-rise,.ez-rise-3d,.ez-slide-l,.ez-slide-r,.ez-flash,.ez-pop,
         .ez-stagger > *,.ez-table-stagger tbody tr{animation-duration:.01ms!important;animation-delay:0ms!important}
         .ez-lift:hover{transform:none}

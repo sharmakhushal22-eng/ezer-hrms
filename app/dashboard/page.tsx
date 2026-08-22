@@ -287,7 +287,7 @@ export default function Dashboard() {
       <PageHeader
         title="HR Dashboard"
         context={<>{monthLabel} · {d.total.toLocaleString('en-IN')} employees across {d.companyRows.length} companies</>}
-        actions={<Button onClick={load} icon={<IconClock size={15} />}>Refresh</Button>}
+        actions={<Button onClick={load} icon={<IconClock size={16} />}>Refresh</Button>}
       />
 
       {/* Each tile is a filter. Clicking one opens the matching list below, so
@@ -324,7 +324,7 @@ export default function Dashboard() {
             <div style={{ display:'flex', alignItems:'center', gap:S.sm }}>
               <div style={{ position:'relative' }}>
                 <span style={{ position:'absolute', left:9, top:'50%', transform:'translateY(-50%)', color:C.faint, display:'flex' }}>
-                  <IconSearch size={14} />
+                  <IconSearch size={16} />
                 </span>
                 <Input value={drillQ} onChange={e => setDrillQ(e.target.value)} placeholder="Search…"
                   style={{ width:190, paddingLeft:29 }} />

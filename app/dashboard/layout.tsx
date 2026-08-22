@@ -18,6 +18,7 @@ import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { C, F, W, S, R, E, M, UIKeyframes } from '@/lib/ui';
 import { ThemeToggle } from '@/lib/ui/ThemeToggle';
+import { PageTransition, RouteProgress } from '@/lib/ui/PageTransition';
 import {
   IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconUpload, IconTransfer,
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
@@ -112,7 +113,7 @@ function RailItem({ item, open, active }: { item: NavItem; open: boolean; active
             borderRadius: '0 3px 3px 0', background: C.brand,
           }} />
         )}
-        <Icon size={17} strokeWidth={active ? 1.9 : 1.6} />
+        <Icon size={16} strokeWidth={active ? 1.9 : 1.6} />
         {open && (
           <span style={{
             fontSize: F.small, fontWeight: active ? W.semi : W.regular,
@@ -231,7 +232,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <span className="ez-brand-chev" style={{
                 marginLeft: 'auto', color: C.railFaint, display: 'flex',
                 transform: 'rotate(180deg)', transition: `transform ${M.quick}`,
-              }}><IconChevron size={15} /></span>
+              }}><IconChevron size={16} /></span>
             </>
           )}
         </button>
@@ -273,7 +274,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             color: C.railMuted, fontFamily: 'inherit', fontSize: F.small,
             borderTop: `1px solid ${C.railLine}`, borderTopLeftRadius: 0, borderTopRightRadius: 0,
           }}>
-          <IconLogout size={17} />
+          <IconLogout size={16} />
           {open && <span>Sign out</span>}
         </button>
       </nav>
@@ -281,7 +282,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <main style={{
         flex: 1, marginLeft: open ? OPEN_W : SHUT_W,
         transition: `margin-left ${M.slow}`, minWidth: 0,
-      }}>{children}</main>
+      }}>
+        {/* A route can take a moment to resolve, and in that gap the old page
+            is still on screen with nothing to say it is working. */}
+        <RouteProgress />
+        <PageTransition>{children}</PageTransition>
+      </main>
     </div>
   );
 }

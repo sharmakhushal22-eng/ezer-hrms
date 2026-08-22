@@ -118,14 +118,17 @@ export const C = {
 
 export const F = {
   family: '"DM Sans","Segoe UI",system-ui,sans-serif',
+  // Whole pixels, not halves. A 10.5px label multiplied by the app's zoom
+  // lands on a fraction twice over; integers survive the quarter-step zoom
+  // factors intact, which is a large part of why type reads crisply.
   /** Uppercase eyebrows, table column heads. */
-  micro: 10.5,
+  micro: 11,
   /** Metadata, helper text, chips. */
-  tiny: 11.5,
+  tiny: 12,
   /** Dense table cells and secondary controls. */
-  small: 12.5,
+  small: 13,
   /** Body default. */
-  body: 13.5,
+  body: 14,
   /** Card titles and emphasised values. */
   lead: 15,
   /** Section headings. */
