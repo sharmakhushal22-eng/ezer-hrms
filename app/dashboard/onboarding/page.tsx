@@ -986,45 +986,39 @@ export default function OnboardingDashboard() {
     <div style={{background:TK.canvas,minHeight:'100vh',fontFamily:'"DM Sans","Segoe UI",sans-serif',color:TK.ink}}>
 
       {/* Header */}
-      <div style={{background:`linear-gradient(135deg, ${P}, #4F46E5)`,padding:'14px 24px 0'}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}}>
-          <div>
-            <div style={{fontSize:18,fontWeight:500,color:TK.onAccent}}>Onboarding</div>
-            <div style={{fontSize:11,color:TK.onAccentDim,marginTop:1}}>
+      {/* Header — the shared band, so this page reads like the other 31.
+          It used to be a saturated blue gradient with white text. The tabs sat
+          ON that gradient, which is why they had to move: on a light band a
+          translucent white outline has nothing to hold against. They are the
+          same outlined pills the ATS uses now, below the band rather than
+          inside it. */}
+      <div style={{padding:'16px 24px 0'}}>
+        <div className="ez-page-head" style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:16,flexWrap:'wrap'}}>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:20,fontWeight:700,color:TK.ink,letterSpacing:'-.02em'}}>Onboarding</div>
+            <div style={{fontSize:13,color:TK.muted,marginTop:3}}>
               {active} active · {thisWeek} joining this week
             </div>
           </div>
-          <button onClick={()=>setTab('candidates')} style={{padding:'8px 16px',borderRadius:'8px',cursor:'pointer',background:`color-mix(in srgb, ${TK.onAccent} 16%, transparent)`,border:`1px solid color-mix(in srgb, ${TK.onAccent} 40%, transparent)`,color:TK.onAccent,fontSize:12,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6}}>
+          <button onClick={()=>setTab('candidates')} className="ez-press" style={{padding:'9px 16px',borderRadius:8,cursor:'pointer',background:TK.brand,border:`1px solid ${TK.brand}`,color:TK.onAccent,fontSize:12,fontWeight:600,fontFamily:'inherit',display:'flex',alignItems:'center',gap:6,boxShadow:E.brand}}>
             <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send onboarding links
           </button>
         </div>
 
         {/* Tab nav */}
-        <div style={{display:'flex',gap:6,paddingBottom:12,flexWrap:'wrap'}}>
+        <div style={{display:'flex',gap:6,paddingBottom:14,flexWrap:'wrap'}}>
           {TABS.map(t=>(
-            // Outlined pills rather than an underline.
-            //
-            // The underline was 3px, and every button in the app is forced to
-            // border-radius:10px by the global baseline — so that thick bar got
-            // curved at both ends and read as a raised white lip under the
-            // active tab, which is the "3D" here. There is no box-shadow on
-            // these at all; the bar was doing it.
-            //
-            // Losing the bar also loses the only edge the inactive tabs had, so
-            // each now carries its own hairline. On a saturated gradient a
-            // translucent white outline holds its weight wherever the gradient
-            // happens to be light or dark behind it, which a flat colour does
-            // not.
             <button key={t.key} onClick={()=>setTab(t.key)}
+              className="ez-tab" data-on={tab===t.key ? '1' : '0'}
               style={{padding:'7px 13px',cursor:'pointer',fontSize:12,fontWeight:tab===t.key?600:500,fontFamily:'inherit',
-                background: tab===t.key ? `color-mix(in srgb, ${TK.onAccent} 17%, transparent)` : 'transparent',
-                color: tab===t.key ? TK.onAccent : TK.onAccentDim,
-                border: `1px solid color-mix(in srgb, ${TK.onAccent} ${tab===t.key?58:26}%, transparent)`,
-                display:'flex',alignItems:'center',gap:5,transition:'background .15s, border-color .15s, color .15s'}}>
+                background: tab===t.key ? TK.brand : 'transparent',
+                color: tab===t.key ? TK.onAccent : TK.muted,
+                border: `1px solid ${tab===t.key ? TK.brand : TK.line}`,
+                display:'flex',alignItems:'center',gap:5}}>
               <i className={`ti ${t.icon}`} style={{fontSize:14}} aria-hidden="true"/>
               {t.label}
               {t.badge!==undefined && t.badge > 0 && (
-                <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background: t.key==='pending' ? TK.critical : `color-mix(in srgb, ${TK.onAccent} 22%, transparent)`,color:TK.onAccent,fontWeight:600,minWidth:16,textAlign:'center'}}>
+                <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background: t.key==='pending' ? TK.critical : (tab===t.key ? `color-mix(in srgb, ${TK.onAccent} 24%, transparent)` : TK.sunken),color: t.key==='pending' ? TK.onAccent : (tab===t.key ? TK.onAccent : TK.muted),fontWeight:600,minWidth:16,textAlign:'center'}}>
                   {t.badge}
                 </span>
               )}

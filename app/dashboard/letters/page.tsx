@@ -21,25 +21,33 @@ export default function LettersPage() {
   const [tab, setTab] = useState('letterhead')
   return (
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: font, color: C.navy }}>
-      {/* Gradient header banner */}
-      <div style={{ background: `linear-gradient(120deg,${TK.ink} 0%,${TK.brand} 55%,${TK.brand} 100%)`, padding: '22px 24px 20px', color: TK.onAccent }}>
+      {/* Header — the shared band. Was a navy-to-blue gradient with white text
+          and a white-on-translucent segmented control; both only worked
+          against a saturated ground. */}
+      <div style={{ padding: '16px 24px 0' }}>
         <div style={{ maxWidth: 940, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 13, background: `color-mix(in srgb, ${TK.onAccent} 16%, transparent)`, border: `1px solid ${TK.onAccentDim}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}></div>
-            <div>
-              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em' }}>HR Letters</div>
-              <div style={{ fontSize: 13, color: TK.onAccentSoft, marginTop: 2 }}>Configure letterheads &amp; signatories once, then draft and issue HR letters on branded stationery.</div>
+          <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+            <div style={{ width: 46, height: 46, borderRadius: 13, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}></div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.01em', color: TK.ink }}>HR Letters</div>
+              <div style={{ fontSize: 13, color: TK.muted, marginTop: 2 }}>Configure letterheads &amp; signatories once, then draft and issue HR letters on branded stationery.</div>
             </div>
           </div>
-          {/* Segmented tabs */}
-          <div style={{ display: 'inline-flex', gap: 4, marginTop: 16, background: `color-mix(in srgb, ${TK.onAccent} 16%, transparent)`, border: `1px solid ${TK.onAccentDim}`, borderRadius: 11, padding: 4, flexWrap: 'wrap' }}>
+          {/* Tabs — the same outlined pills the other modules use */}
+          <div style={{ display: 'flex', gap: 6, paddingBottom: 14, flexWrap: 'wrap' }}>
             {TABS.map(t => {
               const active = tab === t.id
               return (
                 <button key={t.id} onClick={() => !t.soon && setTab(t.id)} disabled={t.soon}
-                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '8px 15px', borderRadius: 8, border: 'none', background: active ? TK.surface : 'transparent', color: active ? C.purple : `${TK.onAccentSoft}`, fontSize: 13, fontWeight: 600, cursor: t.soon ? 'not-allowed' : 'pointer', fontFamily: font, whiteSpace: 'nowrap', opacity: t.soon ? 0.55 : 1, boxShadow: active ? '0 2px 8px rgba(0,0,0,0.18)' : 'none' }}>
+                  className="ez-tab" data-on={active ? '1' : '0'}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '7px 14px', borderRadius: 8,
+                    border: `1px solid ${active ? TK.brand : TK.line}`,
+                    background: active ? TK.brand : 'transparent',
+                    color: active ? TK.onAccent : TK.muted,
+                    fontSize: 13, fontWeight: 600, cursor: t.soon ? 'not-allowed' : 'pointer', fontFamily: font,
+                    whiteSpace: 'nowrap', opacity: t.soon ? 0.55 : 1 }}>
                   <span>{t.icon}</span>{t.label}
-                  {t.soon && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: `color-mix(in srgb, ${TK.onAccent} 16%, transparent)`, letterSpacing: '.04em' }}>SOON</span>}
+                  {t.soon && <span style={{ fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 99, background: TK.sunken, color: TK.muted, letterSpacing: '.04em' }}>SOON</span>}
                 </button>
               )
             })}

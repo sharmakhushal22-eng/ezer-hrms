@@ -1365,13 +1365,16 @@ export default function AdminPage() {
   const [tab, setTab] = useState<'company' | 'master'>('company')
   return (
     <div style={{ minHeight: '100vh', background: TK.sunken, fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
-      {/* Header */}
-      <div style={{ background: TK.dark, padding: '14px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ fontSize: '15px', fontWeight: 600, color: TK.onDark }}>Admin Setup</div>
-          <div style={{ fontSize: '11px', color: TK.onDarkFaint, marginTop: '2px' }}>Company Configuration · Master Data · ezerhrms.com</div>
+      {/* Header — the shared band. Was a flat dark slab, which differentiated
+          it from the page but from nothing else in the product. */}
+      <div style={{ padding: '16px 24px 0' }}>
+        <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: TK.ink, letterSpacing: '-.02em' }}>Admin Setup</div>
+            <div style={{ fontSize: '13px', color: TK.muted, marginTop: '3px' }}>Company Configuration · Master Data · ezerhrms.com</div>
+          </div>
+          <div style={{ fontSize: '12px', fontWeight: 600, color: TK.faint }}>Sharma Group</div>
         </div>
-        <div style={{ fontSize: '11px', color: TK.onDarkFaint }}>Sharma Group</div>
       </div>
       {/* Tabs */}
       <div style={{ background: TK.surface, borderBottom: `1px solid ${TK.line}`, padding: '0 24px', display: 'flex' }}>
