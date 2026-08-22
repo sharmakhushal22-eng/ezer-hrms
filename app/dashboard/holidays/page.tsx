@@ -508,8 +508,10 @@ export function HolidaysSection() {
 
   return (
     <>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Holiday &amp; Weekly-off Configuration</div>
-        <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Attendance &amp; Leave config layer — calendars, holidays (branch-wise), weekly offs. Only a PUBLISHED calendar reaches ESS.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Attendance &amp; Leave config layer — calendars, holidays (branch-wise), weekly offs. Only a PUBLISHED calendar reaches ESS.</div>
+        </div>
 
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
           {tabs.map(([k, label]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{label}</button>)}

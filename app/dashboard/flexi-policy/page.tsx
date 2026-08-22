@@ -196,8 +196,10 @@ export default function FlexiConfigBuilder() {
 
   return (
     <div style={{ padding: 24, fontFamily: '"DM Sans","Segoe UI",sans-serif', maxWidth: 820, margin: '0 auto', background: C.bg, minHeight: '100vh' }}>
+      <div className="ez-page-head">
       <div style={{ fontSize: 20, fontWeight: 600, color: C.navy, marginBottom: 4 }}>Flexi policy — slab builder (Old + New together)</div>
-      <div style={{ fontSize: 13, color: C.muted, marginBottom: 16 }}>Build the FBP policy slab-by-slab per company. Each slab covers a salary range and both regimes; saved in one action.</div>
+      <div style={{ fontSize: 13, color: C.muted }}>Build the FBP policy slab-by-slab per company. Each slab covers a salary range and both regimes; saved in one action.</div>
+      </div>
 
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>

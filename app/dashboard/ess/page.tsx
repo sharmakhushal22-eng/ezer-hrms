@@ -585,8 +585,10 @@ export default function ESSPage() {
         </div>
 
         {section === 'roles' ? <RolesPermissionsSection /> : (<>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>ESS &amp; Access Management</div>
-        <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Employee self-service accounts, roles, and access control.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Employee self-service accounts, roles, and access control.</div>
+        </div>
 
         <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' }}>
           {TABS.map(t => (

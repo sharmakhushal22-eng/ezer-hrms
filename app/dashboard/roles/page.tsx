@@ -522,8 +522,10 @@ export function RolesPermissionsSection() {
 
   return (
     <>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Roles &amp; Permissions</div>
-        <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Module access &amp; approval rights per role, plus a role-as-tester approval queue. (Employee→role assignment lives in the ESS 🧭 Assign Roles tab.)</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Module access &amp; approval rights per role, plus a role-as-tester approval queue. (Employee→role assignment lives in the ESS 🧭 Assign Roles tab.)</div>
+        </div>
 
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
           {tabs.map(([k, l]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}

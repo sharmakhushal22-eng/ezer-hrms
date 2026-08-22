@@ -182,7 +182,7 @@ export default function InvestmentProofsPage() {
 
   return (
     <div style={S.page}>
-      <div style={{ marginBottom: 16 }}>
+      <div className="ez-page-head" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 800 }}>Investment Proofs</div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
           FY {FY} — how much of what was declared has actually been proved. Anything unproved will not stay exempt.

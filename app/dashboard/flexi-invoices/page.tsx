@@ -142,7 +142,7 @@ export default function FlexiInvoicesPage() {
 
   return (
     <div style={{ padding: 24, background: C.bg, minHeight: '100vh', color: C.navy, fontFamily: font, fontSize: 13 }}>
-      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+      <div className="ez-page-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 220 }}>
           <div style={{ fontSize: 22, fontWeight: 700 }}>Flexi Invoices &amp; Vouchers</div>
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Generate reimbursement vouchers for approved flexi claims · one voucher per employee per month</div>

@@ -189,8 +189,10 @@ export default function StatutoryLeavePage() {
   return (
     <div style={{ ...C.page, padding:'20px 24px' }}>
       <div style={{ maxWidth:1280, margin:'0 auto' }}>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Statutory Leave Reference</div>
-        <div style={{ fontSize:12, color:TK.muted, marginBottom:12 }}>State-wise minimum EL/CL/SL (Shops &amp; Establishments + Factories Act 1948). Reference for setting Leave Policy quotas at or above the statutory floor.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>State-wise minimum EL/CL/SL (Shops &amp; Establishments + Factories Act 1948). Reference for setting Leave Policy quotas at or above the statutory floor.</div>
+        </div>
 
         {/* Legal disclaimer (mandatory per spec §7) */}
         <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:10, padding:'10px 14px', marginBottom:12, fontSize:12, color:TK.warning, lineHeight:1.5 }}>

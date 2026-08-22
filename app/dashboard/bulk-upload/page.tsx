@@ -170,7 +170,7 @@ export default function BulkUploaderPage() {
 
   return (
     <div style={{ padding: 24, background: C.bg, minHeight: '100vh', fontFamily: font, fontSize: 13, color: C.navy }}>
-      <div style={{ marginBottom: 16 }}>
+      <div className="ez-page-head" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 700 }}>Bulk Uploader</div>
         <div style={{ fontSize: 12, color: C.muted }}>Update employee data in bulk via Excel templates · 7 categories · server-validated</div>
       </div>

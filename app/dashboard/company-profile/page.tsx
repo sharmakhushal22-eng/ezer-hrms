@@ -350,8 +350,10 @@ export default function CompanyProfilePage() {
   return (
     <div style={{ ...C.page, padding: isMobile ? '14px 12px' : '20px 24px' }}>
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Company Profile</div>
-        <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Group, companies, branches, statutory registrations, bank &amp; license — view, edit, and audit. Every change is logged.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Group, companies, branches, statutory registrations, bank &amp; license — view, edit, and audit. Every change is logged.</div>
+        </div>
 
         {loading ? (
           <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div>

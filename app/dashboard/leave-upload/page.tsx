@@ -427,8 +427,10 @@ export default function LeaveConfigPage() {
         </div>
 
         {section === 'holidays' ? <HolidaysSection /> : (<>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Leave Configuration</div>
-        <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Config-driven leave: catalog (types + behaviour flags) · per company/branch quota · bulk upload. Adding a leave type is a data change, not a deploy.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Config-driven leave: catalog (types + behaviour flags) · per company/branch quota · bulk upload. Adding a leave type is a data change, not a deploy.</div>
+        </div>
 
         <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
           {tabs.map(([k, l]) => <button key={k} style={T.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}

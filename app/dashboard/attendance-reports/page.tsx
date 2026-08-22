@@ -95,8 +95,10 @@ export default function AttendanceReportsPage() {
   return (
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: font, color: C.navy, padding: 24 }}>
       <div style={{ maxWidth: 1180, margin: '0 auto' }}>
+        <div className="ez-page-head">
         <div style={{ fontSize: 22, fontWeight: 700 }}>Attendance Reports</div>
-        <div style={{ fontSize: 13, color: C.muted, marginTop: 2, marginBottom: 16 }}>Daily punch, exceptions, leave & summary reports — filter and export to Excel.</div>
+        <div style={{ fontSize: 13, color: C.muted, marginTop: 2 }}>Daily punch, exceptions, leave & summary reports — filter and export to Excel.</div>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
           {/* Report picker */}

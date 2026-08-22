@@ -83,8 +83,10 @@ export default function EssCredentialsPage() {
 
   return (
     <div style={{ padding: 24, background: C.bg, minHeight: '100vh', color: C.navy, fontFamily: font, fontSize: 13 }}>
+      <div className="ez-page-head">
       <div style={{ fontSize: 22, fontWeight: 700 }}>ESS Login Credentials</div>
-      <div style={{ fontSize: 12, color: C.muted, marginTop: 2, marginBottom: 16 }}>Generate employee self-service logins in bulk · temp password = employee code · forced change on first login</div>
+      <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Generate employee self-service logins in bulk · temp password = employee code · forced change on first login</div>
+      </div>
 
       <div style={{ background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '11px 14px', marginBottom: 16, fontSize: 13, color: C.amber, display: 'flex', gap: 8 }}>
         <span></span><span><b>Confidential.</b> Each employee&apos;s temporary password is their own <b>employee code</b> (e.g. SRS0001). They must set a new password on first login. Share the exported list securely, then delete it.</span>
