@@ -48,8 +48,8 @@ const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round',
 // ranked sequence look like ten categories and drew the eye equally to all of
 // them. Same ramp as the dashboard pipeline chart, so the two agree.
 const STAGE_COLOR:Record<string,string> = {
-  'Applied':'#B39BF5', 'AI Screened':'#9B7BF0', 'Telephonic':'#8A66EC',
-  'L1':'#7B54E8', 'L2':'#6D3BEF', 'Optional Round':'#5F30D4',
+  'Applied':'var(--ez-ramp-1)', 'AI Screened':'var(--ez-ramp-2)', 'Telephonic':'var(--ez-ramp-3)',
+  'L1':'var(--ez-ramp-4)', 'L2':'var(--ez-ramp-5)', 'Optional Round':'var(--ez-ramp-6)',
   'Shortlisted':'#0B7A5B', 'Offer Sent':'#0B7A5B', 'Joined':'#0B7A5B',
   'Rejected':'#C42B32',
 }

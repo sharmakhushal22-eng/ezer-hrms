@@ -27,8 +27,8 @@ const RECRUIT_STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional
 // through the middle stages, green once the outcome is good, red when it is not.
 // The old set gave every stage its own unrelated hue, which encoded nothing.
 const STAGE_COLOR: Record<string,string> = {
-  'Applied':'#B39BF5','AI Screened':'#9B7BF0','Telephonic':'#8A66EC','L1':'#7B54E8',
-  'L2':'#6D3BEF','Optional Round':'#5F30D4','Shortlisted':'#0B7A5B','Offer Sent':'#0B7A5B',
+  'Applied':'var(--ez-ramp-1)','AI Screened':'var(--ez-ramp-2)','Telephonic':'var(--ez-ramp-3)','L1':'var(--ez-ramp-4)',
+  'L2':'var(--ez-ramp-5)','Optional Round':'var(--ez-ramp-6)','Shortlisted':'#0B7A5B','Offer Sent':'#0B7A5B',
   'Joined':'#0B7A5B','Rejected':'#C42B32',
 }
 
