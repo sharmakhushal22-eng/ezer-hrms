@@ -193,7 +193,7 @@ export function EyeComfortLayer() {
         position:absolute; left:0; right:0; bottom:0; height:2px;
         border-bottom-left-radius:99px; border-bottom-right-radius:99px;
         transform-origin:0 50%;
-        animation:ezEyeCountdown var(--ez-eye-hold, 6s) linear forwards;
+        animation:ezEyeCountdown var(--ez-eye-hold, 3s) linear forwards;
       }
       @media (prefers-reduced-motion: reduce){
         .ez-eye-layer{transition:none}
@@ -220,8 +220,14 @@ const EyeIcon = ({ on, size = 17 }: { on: boolean; size?: number }) => (
   </svg>
 );
 
-/** How long the panel waits before dismissing itself, if left alone. */
-const HOLD_MS = 6000;
+/**
+ * How long the panel waits before dismissing itself, if left alone.
+ *
+ * The clock only runs once the pointer has left the control, and by then the
+ * user is finished with it — so this is a grace period, not a reading window.
+ * Six seconds felt like waiting for the panel to go away.
+ */
+const HOLD_MS = 3000;
 
 /** Where the slider lands the first time someone switches the filter on. */
 const DEFAULT_STRENGTH = 30;
@@ -240,8 +246,8 @@ const TickIcon = () => (
  * THE PANEL DISMISSES ITSELF, AND WHY IT DOES NOT ALSO RESET
  *
  * Setting intensity is a moment's work; the panel has no reason to sit over the
- * page afterwards. So it closes on Done, and closes on its own after six
- * seconds if Done is never pressed.
+ * page afterwards. So it closes on Done, and closes on its own
+ * shortly after if Done is never pressed.
  *
  * What it does NOT do is snap the strength back to the default when the timer
  * runs out. Dragging the slider is a deliberate act, and discarding it because
