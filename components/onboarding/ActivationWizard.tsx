@@ -16,11 +16,11 @@ import { C as TK } from '@/lib/ui'
 const T = {
   overlay:  { position:'fixed' as const, inset:0, background:'rgba(0,0,0,.45)', display:'flex', alignItems:'flex-start' as const, justifyContent:'center' as const, zIndex:1000, padding:16, overflowY:'auto' as const },
   card:     { background:TK.surface, borderRadius:14, width:'100%', maxWidth:720, boxShadow:'0 20px 60px rgba(0,0,0,.2)', margin:'24px 0', display:'flex' as const, flexDirection:'column' as const },
-  header:   { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 22px', borderBottom:'1px solid rgba(124,58,237,0.12)' },
+  header:   { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'16px 22px', borderBottom:'1px solid rgba(37,99,235,0.12)' },
   hTitle:   { fontSize:15, fontWeight:600, color:TK.ink },
   closeBtn: { border:'none', background:'none', cursor:'pointer', fontSize:22, color:TK.muted, lineHeight:1 },
   body:     { padding:'18px 22px' },
-  footer:   { display:'flex', gap:10, padding:'14px 22px', borderTop:'1px solid rgba(124,58,237,0.12)', alignItems:'center' },
+  footer:   { display:'flex', gap:10, padding:'14px 22px', borderTop:'1px solid rgba(37,99,235,0.12)', alignItems:'center' },
   label:    { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
   input:    { width:'100%', padding:'9px 11px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   g2:       { display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 },
@@ -32,7 +32,7 @@ const T = {
   btn:      { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit' },
   btnPri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' },
   btnOut:   { padding:'9px 16px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:13, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep },
-  card2:    { background:TK.surface, border:'1px solid rgba(124,58,237,0.12)', borderRadius:10, padding:'14px 16px', boxShadow:'0 1px 4px rgba(124,58,237,0.06)' },
+  card2:    { background:TK.surface, border:'1px solid rgba(37,99,235,0.12)', borderRadius:10, padding:'14px 16px', boxShadow:'0 1px 4px rgba(37,99,235,0.06)' },
 }
 const PURPLE = TK.brand, GREEN = TK.positive, RED = TK.critical, AMBER = TK.warning, MUTED = TK.muted
 const STEP_NAMES = ['Org & Role', 'CTC & Payroll', 'IT + Admin', 'Approvals', 'Generate']
@@ -271,7 +271,7 @@ function Step4Approvals({ cand, onMark, onSendEmails, emailMsg, sending }: any) 
     <div>
       <div style={T.sectionH}>Approvals</div>
       {rows.map(r => (
-        <div key={r.role} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:'1px solid rgba(124,58,237,0.12)', borderRadius:8, marginBottom:8 }}>
+        <div key={r.role} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', border:'1px solid rgba(37,99,235,0.12)', borderRadius:8, marginBottom:8 }}>
           <span style={{ fontSize:13, color:TK.ink, fontWeight:500 }}>{r.label}{r.optional ? ' (optional)' : ''}</span>
           <span style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:10 }}>
             {r.at

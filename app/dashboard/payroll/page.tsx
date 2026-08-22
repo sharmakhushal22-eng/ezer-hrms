@@ -97,7 +97,7 @@ function Badge({ text, bg, color }: { text: string; bg: string; color: string })
 const HEAD_COLORS: Record<string, { bg: string; color: string }> = {
   EARNING: { bg: 'rgba(5,150,105,0.12)', color: C.success },
   DEDUCTION: { bg: 'rgba(220,38,38,0.12)', color: C.red },
-  EMPLOYER: { bg: 'rgba(124,58,237,0.12)', color: C.purple },
+  EMPLOYER: { bg: 'rgba(37,99,235,0.12)', color: C.purple },
   NON_SALARY: { bg: 'rgba(180,83,9,0.12)', color: C.amber },
 }
 
@@ -186,7 +186,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
         display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 8,
         border: `1px solid ${isActive || open ? C.purple : C.border}`, background: isActive ? C.purple : '#fff',
         color: isActive ? '#fff' : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-        boxShadow: open ? '0 6px 20px rgba(124,58,237,0.18)' : 'none',
+        boxShadow: open ? '0 6px 20px rgba(37,99,235,0.18)' : 'none',
       }}>
         {label}
         {sections.length > 0 && <span style={{ fontSize: 10, opacity: .9, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}></span>}
@@ -217,7 +217,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                     style={{
                       width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 9,
                       border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 2,
-                      background: rowActive ? 'rgba(124,58,237,0.09)' : 'transparent',
+                      background: rowActive ? 'rgba(37,99,235,0.09)' : 'transparent',
                     }}>
                     <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{s.icon}</span>
                     <span style={{ fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.purpleDark : C.navy, flex: 1 }}>{s.label}</span>
@@ -242,7 +242,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                             style={{
                               width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8,
                               border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 1,
-                              background: kon ? 'rgba(124,58,237,0.09)' : 'transparent',
+                              background: kon ? 'rgba(37,99,235,0.09)' : 'transparent',
                             }}>
                             <span style={{ fontSize: 12.5, fontWeight: kon ? 700 : 500, color: kon ? C.purpleDark : C.navy, flex: 1 }}>{k.label}</span>
                             {kon && <span style={{ color: C.purple, fontSize: 12 }}></span>}
@@ -265,7 +265,7 @@ function Chips({ items }: { items: string[] }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14, justifyContent: 'center' }}>
       {items.map(p => (
-        <span key={p} style={{ fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 99, background: 'rgba(124,58,237,0.06)', border: `1px solid ${C.border}`, color: C.purpleDark }}>{p}</span>
+        <span key={p} style={{ fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 99, background: 'rgba(37,99,235,0.06)', border: `1px solid ${C.border}`, color: C.purpleDark }}>{p}</span>
       ))}
     </div>
   )
@@ -274,7 +274,7 @@ function Chips({ items }: { items: string[] }) {
 function PlannedPanel({ s }: { s: SubTab }) {
   return (
     <div style={{ ...S.card, textAlign: 'center', padding: '38px 24px' }}>
-      <div style={{ width: 58, height: 58, borderRadius: 16, background: 'rgba(124,58,237,0.07)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 14px' }}>{s.icon}</div>
+      <div style={{ width: 58, height: 58, borderRadius: 16, background: 'rgba(37,99,235,0.07)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 14px' }}>{s.icon}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: 6 }}>
         <span style={{ fontSize: 16, fontWeight: 700, color: C.navy }}>{s.label}</span>
         <PlannedBadge />
@@ -712,7 +712,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
                 return (
                   <div key={g[0].month} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, minWidth: 200 }}>🏛️ {groupName} · {g[0].period_label || `${g[0].fy} · M${g[0].month}`}</div>
-                    <Badge text={`${g.length} compan${g.length === 1 ? 'y' : 'ies'}`} bg="rgba(124,58,237,0.12)" color={C.purple} />
+                    <Badge text={`${g.length} compan${g.length === 1 ? 'y' : 'ies'}`} bg="rgba(37,99,235,0.12)" color={C.purple} />
                     <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: pill.bg, color: pill.color }}>{single ? statuses[0] : statuses.join(' · ')}</span>
                     {mode === 'create' && <span style={{ fontSize: 11, color: C.muted }}>{totalEmp} employees across {g.length}</span>}
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>

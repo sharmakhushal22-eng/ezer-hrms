@@ -14,14 +14,14 @@ import { C as TK } from '@/lib/ui'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   lbl:   { fontSize:10, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
   pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
   out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep } as React.CSSProperties,
   danger:{ padding:'6px 11px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.critical } as React.CSSProperties,
-  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
+  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
 }
 const hrs = (m: number | null) => m == null ? '—' : `${Math.floor(m / 60)}h ${m % 60}m`
 const tm = (s: string | null) => s ? new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'

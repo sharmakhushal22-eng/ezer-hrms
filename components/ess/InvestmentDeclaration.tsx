@@ -19,7 +19,7 @@ import { C as TK } from '@/lib/ui'
 
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
-  border: 'rgba(124,58,237,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  border: 'rgba(37,99,235,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
   purpleBg: '#F3EEFF', soft: TK.sunken,
 }

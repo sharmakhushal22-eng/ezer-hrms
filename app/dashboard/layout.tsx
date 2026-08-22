@@ -99,12 +99,19 @@ function RailItem({ item, open, active }: { item: NavItem; open: boolean; active
         height: 36, borderRadius: R.md, display: 'flex', alignItems: 'center',
         gap: 10, padding: open ? '0 10px' : 0,
         justifyContent: open ? 'flex-start' : 'center',
-        background: active ? C.brand : 'transparent',
-        boxShadow: active ? '0 2px 10px -3px rgba(109,59,239,.62)' : 'none',
-        color: active ? C.onDark : C.onDarkMuted,
-        transition: `background ${M.quick}, color ${M.quick}, box-shadow ${M.quick}`,
-        position: 'relative',
+        background: active ? C.railActiveBg : 'transparent',
+        color: active ? C.railActiveText : C.railMuted,
+        transition: `background ${M.quick}, color ${M.quick}`,
+        position: 'relative', overflow: 'hidden',
       }}>
+        {/* The bar carries the selection when the tint alone is too quiet —
+            and it survives at 60px wide, where the label does not. */}
+        {active && (
+          <span aria-hidden style={{
+            position: 'absolute', left: 0, top: 6, bottom: 6, width: 3,
+            borderRadius: '0 3px 3px 0', background: C.brand,
+          }} />
+        )}
         <Icon size={17} strokeWidth={active ? 1.9 : 1.6} />
         {open && (
           <span style={{
@@ -122,12 +129,12 @@ function GroupLabel({ label, open }: { label: string; open: boolean }) {
   // Collapsed, the words would not fit — the grouping survives as a rule, so
   // the rail keeps its rhythm instead of becoming one undifferentiated column.
   if (!open) {
-    return <div style={{ height: 1, background: C.onDarkLine, margin: '7px 12px', flexShrink: 0 }} />;
+    return <div style={{ height: 1, background: C.railLine, margin: '7px 12px', flexShrink: 0 }} />;
   }
   return (
     <div style={{
       fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.1em',
-      textTransform: 'uppercase', color: C.onDarkFaint,
+      textTransform: 'uppercase', color: C.railFaint,
       padding: '14px 10px 5px', whiteSpace: 'nowrap', flexShrink: 0,
     }}>{label}</div>
   );
@@ -183,19 +190,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: F.family, background: C.canvas }}>
       <UIKeyframes />
       <style>{`
-        .ez-nav:hover{background:${C.onDarkHover};color:${C.onDark}}
+        .ez-nav:hover{background:${C.railHover};color:${C.railText}}
         .ez-brand:hover .ez-brand-chev{transform:translateX(2px)}
       `}</style>
 
-      <nav aria-label="Main" className="ez-scroll-dark" style={{
+      <nav aria-label="Main" className="ez-scroll" style={{
         width: open ? OPEN_W : SHUT_W,
         transition: `width ${M.slow}`,
-        background: C.dark,
+        background: C.rail,
         display: 'flex', flexDirection: 'column',
         padding: open ? '12px 10px' : '12px 8px',
         flexShrink: 0, overflow: 'hidden',
         position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 100,
-        borderRight: `1px solid ${C.onDarkLine}`,
+        borderRight: `1px solid ${C.railLine}`,
       }}>
         {/* Brand, and the collapse control. One target, so the rail never
             needs a second button competing for the same corner. */}
@@ -213,23 +220,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             background: `linear-gradient(180deg,${C.brand},${C.brandDeep})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: C.onDark, fontWeight: W.bold, fontSize: F.body, letterSpacing: '-.02em',
-            boxShadow: '0 3px 12px -3px rgba(109,59,239,.7)',
+            boxShadow: E.brand,
           }}>Ez</div>
           {open && (
             <>
               <span style={{
-                fontSize: F.lead, fontWeight: W.bold, color: C.onDark,
+                fontSize: F.lead, fontWeight: W.bold, color: C.railText,
                 letterSpacing: '-.02em', whiteSpace: 'nowrap',
               }}>EZER</span>
               <span className="ez-brand-chev" style={{
-                marginLeft: 'auto', color: C.onDarkFaint, display: 'flex',
+                marginLeft: 'auto', color: C.railFaint, display: 'flex',
                 transform: 'rotate(180deg)', transition: `transform ${M.quick}`,
               }}><IconChevron size={15} /></span>
             </>
           )}
         </button>
 
-        <div className="ez-scroll-dark" style={{
+        <div className="ez-scroll" style={{
           flex: 1, minHeight: 0, width: '100%',
           overflowY: 'auto', overflowX: 'hidden',
           display: 'flex', flexDirection: 'column', gap: 1,
@@ -251,7 +258,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           flexShrink: 0, padding: open ? '10px 4px 8px' : '10px 0 8px',
           display: 'flex', justifyContent: open ? 'flex-start' : 'center',
         }}>
-          <ThemeToggle onDark compact={!open} />
+          <ThemeToggle compact={!open} />
         </div>
 
         <button
@@ -263,8 +270,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             display: 'flex', alignItems: 'center', gap: 10,
             padding: open ? '0 10px' : 0, justifyContent: open ? 'flex-start' : 'center',
             border: 'none', background: 'transparent', cursor: 'pointer',
-            color: C.onDarkMuted, fontFamily: 'inherit', fontSize: F.small,
-            borderTop: `1px solid ${C.onDarkLine}`, borderTopLeftRadius: 0, borderTopRightRadius: 0,
+            color: C.railMuted, fontFamily: 'inherit', fontSize: F.small,
+            borderTop: `1px solid ${C.railLine}`, borderTopLeftRadius: 0, borderTopRightRadius: 0,
           }}>
           <IconLogout size={17} />
           {open && <span>Sign out</span>}

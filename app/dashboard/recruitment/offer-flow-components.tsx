@@ -346,7 +346,7 @@ This document is confidential and for internal approval only.`
       <div style={{ display:'flex', gap:10, marginBottom:16 }}>
         <button onClick={generateTemplate} style={S.btn(TK.brandTint,TK.brandDeep)}>Generate Approval Template
         </button>
-        <button onClick={submitForApproval} disabled={saving || !template} style={S.btn(saving||!template?'rgba(124,58,237,0.4)':TK.brand,'#fff')}>
+        <button onClick={submitForApproval} disabled={saving || !template} style={S.btn(saving||!template?'rgba(37,99,235,0.4)':TK.brand,'#fff')}>
           {saving ? 'Submitting...' : 'Submit to HR Head'}
         </button>
       </div>
@@ -575,7 +575,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             const [bg, c] = statusColor(r.status)
             return (
               <div key={r.id} onClick={()=>setSelected(r)}
-                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?TK.brandTint:'#fff' }}>
+                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:selected?.id===r.id?TK.brandTint:'#fff' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                   <div>
                     <div style={{ fontSize:14, fontWeight:600 }}>{r.candidates?.full_name}</div>
@@ -834,7 +834,7 @@ ${company} — Human Resources`)
           )}
           {fApproved.map(r => (
             <div key={r.id} onClick={() => prepareOffer(r)}
-              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?TK.brandTint:'#fff' }}>
+              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:selected?.id===r.id?TK.brandTint:'#fff' }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}</div>
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}

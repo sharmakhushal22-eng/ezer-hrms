@@ -35,7 +35,7 @@ export default function DbExportPage() {
   return (
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: font, color: C.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
       <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 18, padding: '38px 40px', maxWidth: 520, width: '100%', textAlign: 'center', boxShadow: '0 10px 40px rgba(30,27,75,0.10)' }}>
-        <div style={{ width: 66, height: 66, borderRadius: 18, background: 'linear-gradient(135deg,#1E1B4B,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 18px' }}></div>
+        <div style={{ width: 66, height: 66, borderRadius: 18, background: 'linear-gradient(135deg,#1E1B4B,#2563EB)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 32, margin: '0 auto 18px' }}></div>
         <div style={{ fontSize: 22, fontWeight: 700 }}>Database Export</div>
         <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.6 }}>
           Download the <b>entire HRMS database</b> — every table, every column, all rows — into one Excel workbook (a sheet per table, with column headers). Nothing is left out.

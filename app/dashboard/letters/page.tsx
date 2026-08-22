@@ -22,7 +22,7 @@ export default function LettersPage() {
   return (
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: font, color: C.navy }}>
       {/* Gradient header banner */}
-      <div style={{ background: 'linear-gradient(120deg,#1E1B4B 0%,#4C1D95 55%,#7C3AED 100%)', padding: '22px 24px 20px', color: '#fff' }}>
+      <div style={{ background: 'linear-gradient(120deg,#1E1B4B 0%,#4C1D95 55%,#2563EB 100%)', padding: '22px 24px 20px', color: '#fff' }}>
         <div style={{ maxWidth: 940, margin: '0 auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
             <div style={{ width: 46, height: 46, borderRadius: 13, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}></div>

@@ -18,7 +18,7 @@ import { C as TK } from '@/lib/ui'
 // ── Style constant (exact project palette) ─────────────────────────
 const T = {
   page:       { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
-  card:       { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
+  card:       { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   label:      { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
   input:      { width:'100%', padding:'9px 11px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   btnPrimary: { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
@@ -204,7 +204,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
         <input style={{ ...T.input, maxWidth:260 }} placeholder="Search emp code / name" value={q} onChange={e => setQ(e.target.value)} />
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
           {FILTERS.map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:TK.brand, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>{f}</button>
+            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:TK.brand, color:'#fff', border:'1px solid #2563EB' } : {}) }}>{f}</button>
           ))}
         </div>
         <div style={{ marginLeft:'auto', fontSize:11, color:TK.muted }}>{filtered.length} shown</div>
@@ -579,8 +579,8 @@ export default function ESSPage() {
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
         {/* Top-level section switch — ESS & Access + Roles & Permissions in one place */}
         <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-          <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:TK.brand, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>ESS &amp; Access</button>
-          <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:TK.brand, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>Roles &amp; Permissions</button>
+          <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:TK.brand, color:'#fff', border:'1px solid #2563EB' } : {}) }}>ESS &amp; Access</button>
+          <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:TK.brand, color:'#fff', border:'1px solid #2563EB' } : {}) }}>Roles &amp; Permissions</button>
           <a href="/dashboard/ess-credentials" style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, textDecoration:'none', marginLeft:'auto' }}>Generate Login Credentials →</a>
         </div>
 
@@ -590,7 +590,7 @@ export default function ESSPage() {
 
         <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' }}>
           {TABS.map(t => (
-            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:TK.brand, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>{t.l}</button>
+            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:TK.brand, color:'#fff', border:'1px solid #2563EB' } : {}) }}>{t.l}</button>
           ))}
           <button onClick={reload} style={{ ...T.btnOutline, marginLeft:'auto' }}>Refresh</button>
         </div>

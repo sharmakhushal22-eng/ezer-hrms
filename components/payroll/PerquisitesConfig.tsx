@@ -66,7 +66,7 @@ function PerquisiteRow({ row, selected, onSelect }: { row: PerquisiteConfigRow; 
       style={{
         display: 'flex', alignItems: 'center', gap: 10, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', marginBottom: 5,
         background: selected ? C.purpleBg : C.card, border: `1px solid ${selected ? C.purple : C.border}`,
-        boxShadow: selected ? '0 2px 10px rgba(124,58,237,0.14)' : 'none', transition: 'background .12s',
+        boxShadow: selected ? '0 2px 10px rgba(37,99,235,0.14)' : 'none', transition: 'background .12s',
       }}>
       <div style={{ width: 30, height: 30, borderRadius: 8, background: selected ? '#fff' : C.gray, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>{catIcon(row.category)}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -258,7 +258,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
       {/* ── List ── */}
       <div style={{ width: 300, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 19, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
           <div>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Perquisites</div>
             <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>
@@ -270,7 +270,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
         <button onClick={() => setShowAddModal(true)}
           onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)'}
           onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-          style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', marginBottom: 16, boxShadow: '0 3px 10px rgba(124,58,237,0.22)', transition: 'filter .12s' }}>
+          style={{ width: '100%', padding: '10px', borderRadius: 10, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', marginBottom: 16, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
           + Add new perquisite
         </button>
         {Object.entries(grouped).map(([cat, catRows]) => (
@@ -297,8 +297,8 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
             </div>
             {selected.description && <div style={{ fontSize: 12, color: C.muted, marginBottom: 14, lineHeight: 1.45 }}>{selected.description}</div>}
 
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', boxShadow: '0 1px 6px rgba(124,58,237,0.07)' }}>
-              <div style={{ height: 3, borderRadius: 99, background: 'linear-gradient(90deg,#7C3AED,#5B21B6)', width: 44, marginBottom: 12 }} />
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
+              <div style={{ height: 3, borderRadius: 99, background: 'linear-gradient(90deg,#2563EB,#5B21B6)', width: 44, marginBottom: 12 }} />
               <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', marginBottom: 10 }}>Value for FY {FY}</div>
 
               {(selected.valuation_method === 'FLAT_AMOUNT') && (
@@ -365,7 +365,7 @@ export default function PerquisitesConfig({ fy = '2026-27' }: { fy?: string }) {
               <button onClick={handleSave} disabled={saving}
                 onMouseEnter={e => { if (!saving) (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)' }}
                 onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)', transition: 'filter .12s' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s' }}>
                 {saving ? 'Saving…' : 'Save value'}
               </button>
             </div>

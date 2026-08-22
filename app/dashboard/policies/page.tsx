@@ -13,7 +13,7 @@ import { C as TK } from '@/lib/ui'
 
 const C = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
   pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,

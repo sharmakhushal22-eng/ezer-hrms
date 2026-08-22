@@ -366,7 +366,7 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
   return (
     <div>
       <TransferAckCard empId={emp.id} onAck={()=>{}} />
-      <div style={{ ...T.card, borderLeft:'3px solid #7C3AED', display:'flex', alignItems:'center', gap:14 }}>
+      <div style={{ ...T.card, borderLeft:'3px solid #2563EB', display:'flex', alignItems:'center', gap:14 }}>
         <div style={{ width:52, height:52, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
         <div>
           <div style={{ fontSize:17, fontWeight:700 }}>{greet}, {emp.first_name || emp.full_name.split(' ')[0]}! {emoji}</div>
@@ -540,7 +540,7 @@ function Avatar({ emp, size = 84 }: { emp: EmployeeDetail; size?: number }) {
   const show = emp.profile_photo && !broken
   return (
     <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0,
-                  background: show ? '#fff' : 'linear-gradient(135deg,#7C3AED,#A78BFA)',
+                  background: show ? '#fff' : 'linear-gradient(135deg,#2563EB,#93C5FD)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   color: '#fff', fontSize: size * 0.34, fontWeight: 700, letterSpacing: '.02em',
                   border: '3px solid rgba(255,255,255,0.25)',
@@ -623,7 +623,7 @@ function Panel({ title, icon, children, accent }: {
 }) {
   return (
     <div style={{ background: P.white, borderRadius: 12, border: `1px solid ${P.line}`,
-                  padding: '15px 14px', boxShadow: '0 1px 3px rgba(124,58,237,0.05)' }}>
+                  padding: '15px 14px', boxShadow: '0 1px 3px rgba(37,99,235,0.05)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
                     paddingBottom: 9, borderBottom: `1px solid ${P.line}` }}>
         <span style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0,
@@ -652,7 +652,7 @@ function ProfileHero({ emp, notify }: {
       <div style={{ position: 'absolute', top: -90, right: -60, width: 260, height: 260,
                     borderRadius: '50%', background: 'rgba(167,139,250,0.16)', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', bottom: -110, left: -40, width: 220, height: 220,
-                    borderRadius: '50%', background: 'rgba(124,58,237,0.14)', pointerEvents: 'none' }} />
+                    borderRadius: '50%', background: 'rgba(37,99,235,0.14)', pointerEvents: 'none' }} />
 
       <div style={{ position: 'relative', padding: '22px 22px 20px',
                     display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
@@ -774,7 +774,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
                            border: tab === k ? 'none' : `1px solid ${P.line}`,
                            background: tab === k ? P.purple : P.white,
                            color: tab === k ? '#fff' : P.purpleD,
-                           boxShadow: tab === k ? '0 3px 10px rgba(124,58,237,0.28)' : 'none',
+                           boxShadow: tab === k ? '0 3px 10px rgba(37,99,235,0.28)' : 'none',
                            transition: 'all .18s' }}>
             <span>{icon}</span>{label}
           </button>
@@ -869,7 +869,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
 
           <button onClick={submit} disabled={busy}
                   style={{ ...T.btnP, opacity: busy ? .6 : 1,
-                           boxShadow: busy ? 'none' : '0 3px 12px rgba(124,58,237,0.3)' }}>
+                           boxShadow: busy ? 'none' : '0 3px 12px rgba(37,99,235,0.3)' }}>
             {busy ? 'Sending…' : 'Send to HR'}
           </button>
         </div>
@@ -1064,7 +1064,7 @@ function Directory({ isMobile }: { isMobile: boolean }) {
       {/* header + filters */}
       <div style={{ ...T.card, marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>Employee Directory</div>
             <div style={{ fontSize: 11, color: C.faint }}>
@@ -1300,7 +1300,7 @@ const STATUS_STYLE: Record<string,[string,string]> = {
 /** Accent bar colour per status — the saturated version of the ink. */
 const STATUS_BAR: Record<string,string> = {
   PRESENT:'#10B981', ABSENT:C.critical, HALF_DAY:C.warning, MISS_PUNCH:'#FB923C',
-  LWP:C.critical, WEEKLY_OFF:C.lineStrong, HOLIDAY:C.info, ON_LEAVE:'#8B5CF6',
+  LWP:C.critical, WEEKLY_OFF:C.lineStrong, HOLIDAY:C.info, ON_LEAVE:'#3B82F6',
 }
 const STATUS_FULL: Record<string,string> = {
   PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half day', MISS_PUNCH:'Missing punch',
@@ -1694,7 +1694,7 @@ function TiltCard({ children, disabled, style }: {
       if (sheen.current) {
         sheen.current.style.opacity = '1'
         sheen.current.style.background =
-          `radial-gradient(340px circle at ${(px * 100).toFixed(1)}% ${(py * 100).toFixed(1)}%, rgba(167,139,250,.16), rgba(124,58,237,.05) 45%, rgba(124,58,237,0) 70%)`
+          `radial-gradient(340px circle at ${(px * 100).toFixed(1)}% ${(py * 100).toFixed(1)}%, rgba(167,139,250,.16), rgba(37,99,235,.05) 45%, rgba(37,99,235,0) 70%)`
       }
     })
   }
@@ -1759,12 +1759,12 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
         title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}`}
         style={{
           height: cell, position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
-          background: isSel ? 'linear-gradient(145deg,#8B5CF6,#6D28D9)'
+          background: isSel ? 'linear-gradient(145deg,#3B82F6,#1D4ED8)'
                     : isFuture ? 'transparent' : bg,
           color: isSel ? '#fff' : ink,
-          border: isSel ? '1px solid #6D28D9'
-                : isToday ? '1.5px solid #A78BFA'
-                : '1px solid rgba(124,58,237,0.09)',
+          border: isSel ? '1px solid #1D4ED8'
+                : isToday ? '1.5px solid #93C5FD'
+                : '1px solid rgba(37,99,235,0.09)',
           borderRadius: 8, padding: 0,
           cursor: isFuture ? 'default' : 'pointer',
           opacity: isFuture ? .45 : 1,
@@ -1772,8 +1772,8 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
           // Two-layer shadow: a tight contact shadow plus a softer cast one.
           // A single blur reads as a glow; two read as height.
           boxShadow: isSel
-            ? '0 1px 2px rgba(76,29,149,.4), 0 8px 20px -4px rgba(124,58,237,.45)'
-            : isToday ? '0 1px 2px rgba(124,58,237,.12)' : 'none',
+            ? '0 1px 2px rgba(76,29,149,.4), 0 8px 20px -4px rgba(37,99,235,.45)'
+            : isToday ? '0 1px 2px rgba(37,99,235,.12)' : 'none',
           transition: 'box-shadow .18s ease, background .18s ease, transform .18s cubic-bezier(.22,1,.36,1)',
           transformStyle: 'preserve-3d',
           display: 'flex', flexDirection: 'column',
@@ -3142,7 +3142,7 @@ const BADGE: Record<Ready, [string, string, string]> = {
 function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean; onClick: () => void }) {
   // The mock's `.tab-link:hover` can't be an inline style, so the hover tint is state.
   const [hover, setHover] = useState(false)
-  const bg = active ? 'rgba(124,58,237,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
+  const bg = active ? 'rgba(37,99,235,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
       style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? '#fff' : '#C4BFEE', cursor:'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.brand : 'transparent'}` }}>

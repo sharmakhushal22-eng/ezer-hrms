@@ -53,7 +53,7 @@ export default function LoginPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: d ? '#0F1117' : TK.sunken, fontFamily: '"DM Sans","Segoe UI",sans-serif', transition: 'background 0.3s' }}>
       <div style={{ width: '46%', background: 'linear-gradient(145deg,#1E1B4B,#0F0D2E)', display: 'flex', flexDirection: 'column', padding: '44px 48px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: '-100px', right: '-80px', width: '320px', height: '320px', borderRadius: '50%', background: 'rgba(124,58,237,0.08)' }} />
+        <div style={{ position: 'absolute', top: '-100px', right: '-80px', width: '320px', height: '320px', borderRadius: '50%', background: 'rgba(37,99,235,0.08)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '48px', zIndex: 1, position: 'relative' }}>
           <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
             <rect width="44" height="44" rx="10" fill={TK.brand}/>
@@ -65,7 +65,7 @@ export default function LoginPage() {
             <rect x="29.5" y="12" width="5" height="6" rx="1" fill="#C4B5FD"/>
           </svg>
           <div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: '#fff' }}>ezer <span style={{ color: '#A78BFA' }}>hrms</span></div>
+            <div style={{ fontSize: '20px', fontWeight: '700', color: '#fff' }}>ezer <span style={{ color: '#93C5FD' }}>hrms</span></div>
             <div style={{ fontSize: '10px', color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.08em' }}>India&apos;s Intelligent HR Platform</div>
           </div>
         </div>
@@ -132,7 +132,7 @@ export default function LoginPage() {
             </div>
             <div style={{ textAlign: 'right', marginBottom: '20px' }}><a href="#" style={{ fontSize:'13px',color:TK.brand,textDecoration:'none',fontWeight:'500' }}>Forgot password?</a></div>
             {error && <div style={{ background:d?'#2D1515':TK.criticalTint,border:`1px solid ${d?'#7F1D1D':'#FECACA'}`,borderRadius:'8px',padding:'10px 14px',fontSize:'13px',color:d?'#FCA5A5':TK.critical,marginBottom:'16px' }}>⚠️ {error}</div>}
-            <button type="submit" disabled={loading} style={{ width:'100%',padding:'13px',background:loading?'#A78BFA':TK.brand,color:'#fff',border:'none',borderRadius:'10px',fontSize:'15px',fontWeight:'600',cursor:loading?'not-allowed':'pointer' }}>{loading?'Signing in...':'Sign In →'}</button>
+            <button type="submit" disabled={loading} style={{ width:'100%',padding:'13px',background:loading?'#93C5FD':TK.brand,color:'#fff',border:'none',borderRadius:'10px',fontSize:'15px',fontWeight:'600',cursor:loading?'not-allowed':'pointer' }}>{loading?'Signing in...':'Sign In →'}</button>
           </form>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '24px 0' }}>
             <div style={{ flex: 1, height: '1px', background: d?'#1F2937':TK.line }} />

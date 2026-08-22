@@ -21,14 +21,14 @@ import { C as TK } from '@/lib/ui'
 // ── Style constant (project palette) ────────────────────────────────
 const C = {
   page:    { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:    { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
+  card:    { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   lbl:     { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:     { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
   input:   { width:'100%', padding:'9px 11px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
   pri:     { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
   out:     { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
   danger:  { padding:'5px 10px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.critical } as React.CSSProperties,
-  tab:     (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
+  tab:     (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
 }
 const TYPE_COLOR: Record<HolidayType, [string, string]> = {
   NATIONAL:['#E0E7FF','#3730A3'], FESTIVAL:['#FCE7F3','#9D174D'], DISCRETIONARY:[TK.warningTint,TK.warning],

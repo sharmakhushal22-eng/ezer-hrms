@@ -35,7 +35,7 @@ const lbl: React.CSSProperties = {
 }
 const card: React.CSSProperties = {
   background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-  padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.07)',
+  padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.07)',
 }
 
 // ── Live breakup table ─────────────────────────────────────────────────────
@@ -199,7 +199,7 @@ export default function Appraisal() {
   return (
     <div style={{ fontFamily: font, fontSize: 13, color: C.navy, maxWidth: 1000 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>Appraisal &amp; Arrear</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -282,7 +282,7 @@ export default function Appraisal() {
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
                 <button onClick={save} disabled={!canSave}
-                  style={{ padding: '11px 24px', borderRadius: 9, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: '#fff', background: canSave ? 'linear-gradient(120deg,#7C3AED,#5B21B6)' : '#D8D3F5', cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? '0 3px 10px rgba(124,58,237,0.22)' : 'none' }}>
+                  style={{ padding: '11px 24px', borderRadius: 9, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: '#fff', background: canSave ? 'linear-gradient(120deg,#2563EB,#5B21B6)' : '#D8D3F5', cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? '0 3px 10px rgba(37,99,235,0.22)' : 'none' }}>
                   {busy ? 'Saving…' : 'Save appraisal'}
                 </button>
                 {!canSave && emp && <span style={{ fontSize: 11, color: C.muted }}>New CTC, effective date and pay-out month are all needed.</span>}

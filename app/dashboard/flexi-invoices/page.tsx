@@ -65,11 +65,11 @@ function voucherHtml(companyName: string, companyCode: string, ym: string, vouch
   <style>
     *{box-sizing:border-box} body{font-family:${font};color:#1E1B4B;margin:0;background:#F5F3FF}
     .voucher{background:#fff;max-width:760px;margin:22px auto;padding:34px 38px;border:1px solid #E9E7F5;border-radius:14px}
-    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7C3AED;padding-bottom:14px}
-    .brand{font-size:22px;font-weight:800;color:#7C3AED;letter-spacing:.02em}
+    .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #2563EB;padding-bottom:14px}
+    .brand{font-size:22px;font-weight:800;color:#2563EB;letter-spacing:.02em}
     .co{font-size:13px;color:#6B7280;margin-top:2px}
     .title{text-align:right;font-size:15px;font-weight:800;color:#1E1B4B;letter-spacing:.06em}
-    .title .sub{font-size:12px;color:#7C3AED;font-weight:700}
+    .title .sub{font-size:12px;color:#2563EB;font-weight:700}
     .meta,.emp{display:flex;flex-wrap:wrap;gap:18px 34px;margin-top:18px;font-size:12.5px}
     .meta div,.emp div{display:flex;flex-direction:column}
     .meta span,.emp span{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:#9CA3AF;margin-bottom:2px}
@@ -78,7 +78,7 @@ function voucherHtml(companyName: string, companyCode: string, ym: string, vouch
     table.items th{text-align:left;background:#1E1B4B;color:#fff;padding:9px 12px;font-size:11px;letter-spacing:.03em}
     table.items td{padding:9px 12px;border-bottom:1px solid #F1F0FA}
     table.items .r{text-align:right}
-    table.items tfoot td{font-weight:800;color:#7C3AED;background:#F5F3FF;border-top:2px solid #E9E7F5}
+    table.items tfoot td{font-weight:800;color:#2563EB;background:#F5F3FF;border-top:2px solid #E9E7F5}
     .ft{display:flex;justify-content:space-between;align-items:flex-end;margin-top:26px;font-size:12px}
     .ft span{font-size:10px;text-transform:uppercase;color:#9CA3AF;letter-spacing:.04em;margin-right:6px}
     .sign{text-align:center;color:#6B7280;font-size:11px}

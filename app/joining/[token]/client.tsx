@@ -14,7 +14,7 @@ type FieldConf = 'ai-high' | 'ai-verify' | 'manual' | 'normal'
 const PRI = TK.brand
 const S = {
   pg:  { background: TK.canvas, minHeight: '100vh', fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.ink } as const,
-  cd:  { background: '#fff', borderRadius: 12, border: '1px solid rgba(124,58,237,0.12)', padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(124,58,237,0.05)' } as const,
+  cd:  { background: '#fff', borderRadius: 12, border: '1px solid rgba(37,99,235,0.12)', padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(37,99,235,0.05)' } as const,
   lbl: { fontSize: 10, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.06em', display: 'block', marginBottom: 4 },
   inp: (conf: FieldConf = 'normal') => ({
     width: '100%', padding: '9px 11px', borderRadius: 7, fontSize: 13, outline: 'none',
@@ -224,7 +224,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
             <div style={{ fontSize: 12, color: TK.muted, marginTop: 2 }}>{policyIdx + 1} of {POLICIES.length} policies</div>
             <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 8 }}>
               {POLICIES.map((_, i) => (
-                <div key={i} style={{ width: 30, height: 4, borderRadius: 99, background: i < policyIdx ? PRI : i === policyIdx ? '#A78BFA' : TK.brandTint, transition: 'background .3s' }}/>
+                <div key={i} style={{ width: 30, height: 4, borderRadius: 99, background: i < policyIdx ? PRI : i === policyIdx ? '#93C5FD' : TK.brandTint, transition: 'background .3s' }}/>
               ))}
             </div>
           </div>

@@ -100,7 +100,7 @@ export default function AttendanceReportsPage() {
 
         <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 16, alignItems: 'start' }}>
           {/* Report picker */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Choose a report</div>
             {Object.entries(grouped).map(([grp, list]) => (
               <div key={grp} style={{ marginBottom: 12 }}>
@@ -123,7 +123,7 @@ export default function AttendanceReportsPage() {
 
           {/* Filters + results */}
           <div>
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>{report.label} — filters</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
                 <div>
@@ -156,13 +156,13 @@ export default function AttendanceReportsPage() {
                 )}
               </div>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14 }}>
-                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(124,58,237,0.28)' }}>{busy ? 'Generating…' : 'Generate report'}</button>
+                <button onClick={generate} disabled={busy} style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>{busy ? 'Generating…' : 'Generate report'}</button>
                 {err && <span style={{ fontSize: 12, color: C.red }}>⚠ {err}</span>}
               </div>
             </div>
 
             {out && (
-              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', boxShadow: '0 1px 4px rgba(124,58,237,0.06)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', boxShadow: '0 1px 4px rgba(37,99,235,0.06)', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
                 <div style={{ width: 46, height: 46, borderRadius: 12, background: out.rows.length ? 'rgba(5,150,105,0.10)' : TK.sunken, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{out.rows.length ? '' : ''}</div>
                 <div style={{ flex: 1, minWidth: 180 }}>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{out.rows.length ? `${report.label} ready` : 'No matching data'}</div>

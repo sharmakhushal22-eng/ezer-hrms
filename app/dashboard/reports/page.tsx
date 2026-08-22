@@ -1105,7 +1105,7 @@ export default function ReportsPage() {
         {filteredReports.map(r => (
           <div key={r.id} onClick={() => openReport(r)}
             style={{ ...s.card, cursor: 'pointer', transition: 'box-shadow .15s', marginBottom: 0 }}
-            onMouseEnter={e => (e.currentTarget.style.boxShadow = `0 4px 16px rgba(124,58,237,0.12)`)}
+            onMouseEnter={e => (e.currentTarget.style.boxShadow = `0 4px 16px rgba(37,99,235,0.12)`)}
             onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ fontSize: 28 }}>{r.icon}</div>

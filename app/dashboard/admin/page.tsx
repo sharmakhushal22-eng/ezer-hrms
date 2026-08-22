@@ -464,7 +464,7 @@ function CompanySetupTab() {
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', cursor: isDone ? 'pointer' : 'default' }} onClick={() => isDone && setStep(i)}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', background: isDone ? TK.brand : isActive ? TK.brandTint : TK.sunken, border: isActive ? '2px solid #7C3AED' : 'none', color: isDone ? '#fff' : TK.inkSoft }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', background: isDone ? TK.brand : isActive ? TK.brandTint : TK.sunken, border: isActive ? '2px solid #2563EB' : 'none', color: isDone ? '#fff' : TK.inkSoft }}>
                       {isDone ? '' : st.icon}
                     </div>
                     <span style={{ fontSize: '9px', color: isActive ? TK.brand : isDone ? TK.brand : TK.faint, fontWeight: isActive ? 600 : 400, whiteSpace: 'nowrap' }}>{st.label}</span>
@@ -1092,7 +1092,7 @@ function MasterSetupTab() {
                 style={{
                   width:'100%', padding:'10px 14px', border:'none', background: selCat?.id===cat.id ? TK.brandTint : 'transparent',
                   cursor:'pointer', textAlign:'left' as const, display:'flex', alignItems:'center', gap:'8px',
-                  borderLeft: selCat?.id===cat.id ? '3px solid #7C3AED' : '3px solid transparent',
+                  borderLeft: selCat?.id===cat.id ? '3px solid #2563EB' : '3px solid transparent',
                 }}
               >
                 <span style={{ fontSize:'16px' }}>{cat.icon}</span>
@@ -1110,7 +1110,7 @@ function MasterSetupTab() {
                     cursor:'pointer', textAlign:'left' as const,
                     fontSize:'11px', color: selType?.id===tp.id ? TK.brand : TK.muted,
                     fontWeight: selType?.id===tp.id ? 500 : 400,
-                    borderLeft: selType?.id===tp.id ? '3px solid #A78BFA' : '3px solid transparent',
+                    borderLeft: selType?.id===tp.id ? '3px solid #93C5FD' : '3px solid transparent',
                   }}
                 >
                   {tp.name}
@@ -1178,7 +1178,7 @@ function MasterSetupTab() {
                 <div
                   key={tp.id}
                   onClick={() => setSelType(tp)}
-                  style={{ ...C.card, cursor:'pointer', borderLeft:'3px solid #7C3AED', ':hover':{ background:TK.canvas } } as any}
+                  style={{ ...C.card, cursor:'pointer', borderLeft:'3px solid #2563EB', ':hover':{ background:TK.canvas } } as any}
                 >
                   <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'4px' }}>{tp.name}</div>
                   <div style={{ fontSize:'11px', color:TK.muted, marginBottom:'8px' }}>{tp.description || ''}</div>
@@ -1381,7 +1381,7 @@ export default function AdminPage() {
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
             style={{ padding: '13px 20px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
-              borderBottom: tab === t.id ? '2.5px solid #7C3AED' : '2.5px solid transparent' }}>
+              borderBottom: tab === t.id ? '2.5px solid #2563EB' : '2.5px solid transparent' }}>
             <div style={{ fontSize: '13px', fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? TK.brand : TK.muted }}>{t.label}</div>
             <div style={{ fontSize: '10px', color: TK.faint, marginTop: '1px' }}>{t.desc}</div>
           </button>

@@ -63,14 +63,14 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1100 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Bank Details</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Salary account per employee — maintained in the Employee Master, shown here for payroll</div>
         </div>
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search or paste codes — e.g. SRS0001, SRS0002" style={{ ...inp, flex: 1, minWidth: 260 }} />
           <select value={dept} onChange={e => setDept(e.target.value)} style={{ ...inp, minWidth: 160 }}>
@@ -94,7 +94,7 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
         </div>
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
         {loading
           ? <div style={{ fontSize: 12, color: C.muted, padding: '18px 0', textAlign: 'center' }}>Loading bank details…</div>
           : filtered.length === 0

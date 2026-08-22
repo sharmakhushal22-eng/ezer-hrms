@@ -44,7 +44,7 @@ const ago = (iso: string) => {
 
 const card: React.CSSProperties = {
   background: C.card, borderRadius: 16, padding: '20px 22px', marginBottom: 16,
-  boxShadow: '0 1px 4px rgba(124,58,237,0.06)', border: `1px solid ${C.border}`,
+  boxShadow: '0 1px 4px rgba(37,99,235,0.06)', border: `1px solid ${C.border}`,
 }
 const inp: React.CSSProperties = {
   fontFamily: font, fontSize: 12.5, color: C.navy, width: '100%',
@@ -386,7 +386,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               fontFamily: font, fontSize: 13.5, fontWeight: 700, color: '#fff',
               background: toUnlock.length && !busy ? C.purple : '#D8D3F5', border: 'none', borderRadius: 10,
               padding: '12px 22px', cursor: toUnlock.length && !busy ? 'pointer' : 'not-allowed',
-              boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(124,58,237,0.2)' : 'none',
+              boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(37,99,235,0.2)' : 'none',
             }}>
             {busy ? 'Working…' : `🔓 Unlock Selected (${toUnlock.length})`}
           </button>

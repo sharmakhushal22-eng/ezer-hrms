@@ -546,7 +546,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
           style={{
             background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '7px 16px',
             fontSize: 12.5, fontWeight: 600, color: C.purpleD, fontFamily: font, cursor: 'pointer', outline: 'none',
-            boxShadow: '0 1px 3px rgba(124,58,237,0.06)',
+            boxShadow: '0 1px 3px rgba(37,99,235,0.06)',
           }}>
           {monthOpts.length === 0 && <option value="">No month created</option>}
           {monthOpts.map(r => <option key={r.month} value={String(r.month)}>📅 {periodLabel(r)}</option>)}
@@ -571,7 +571,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
 
           <div style={{
             background: C.card, borderRadius: 16, padding: '22px 24px', marginBottom: 18,
-            boxShadow: '0 1px 4px rgba(124,58,237,0.06)', border: `1px solid ${C.border}`,
+            boxShadow: '0 1px 4px rgba(37,99,235,0.06)', border: `1px solid ${C.border}`,
           }}>
             {active && <CheckPanel check={active} isGroup={isGroup} />}
           </div>
@@ -589,7 +589,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
             background: canRun ? C.purple : '#D8D3F5', border: 'none', borderRadius: 12,
             padding: '14px 28px', cursor: canRun ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', gap: 8,
-            boxShadow: canRun ? '0 4px 14px rgba(124,58,237,0.25)' : 'none',
+            boxShadow: canRun ? '0 4px 14px rgba(37,99,235,0.25)' : 'none',
           }}>
           {busy ? 'Running…'
             : willRun.length === 0 ? 'Run Payroll'

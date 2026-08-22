@@ -743,15 +743,15 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Flexi & TDS Declaration — ${esc(empCode)}</title><style>
       *{box-sizing:border-box} body{font-family:"DM Sans","Segoe UI",sans-serif;color:#1E1B4B;margin:0;background:#F5F3FF}
       .doc{background:#fff;max-width:820px;margin:22px auto;padding:34px 40px;border:1px solid #E9E7F5;border-radius:14px}
-      .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #7C3AED;padding-bottom:14px;margin-bottom:16px}
-      .brand{font-size:22px;font-weight:800;color:#7C3AED}.title{text-align:right;font-size:14px;font-weight:800;letter-spacing:.05em}
-      .title .sub{font-size:11px;color:#7C3AED}
+      .hd{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #2563EB;padding-bottom:14px;margin-bottom:16px}
+      .brand{font-size:22px;font-weight:800;color:#2563EB}.title{text-align:right;font-size:14px;font-weight:800;letter-spacing:.05em}
+      .title .sub{font-size:11px;color:#2563EB}
       .badge{display:inline-block;padding:4px 14px;border-radius:99px;font-weight:800;font-size:13px;background:${isOld ? '#FFF7ED' : TK.positiveTint};color:${isOld ? '#C05621' : TK.positive};border:2px solid ${isOld ? '#C05621' : TK.positive}}
       h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#3C3489;margin:20px 0 6px}
       table{width:100%;border-collapse:collapse;font-size:12.5px}
       td,th{padding:7px 10px;border-bottom:1px solid #F1F0FA;text-align:left}
       th{background:#1E1B4B;color:#fff;font-size:11px}.r{text-align:right}.k{color:#6B7280;width:45%}.v{font-weight:600}
-      .tot td{font-weight:800;color:#7C3AED;background:#F5F3FF}
+      .tot td{font-weight:800;color:#2563EB;background:#F5F3FF}
       .note{margin-top:20px;font-size:10.5px;color:#9CA3AF;line-height:1.5;border-top:1px dashed #E9E7F5;padding-top:12px}
       @media print{body{background:#fff}.doc{border:none;margin:0;border-radius:0;max-width:100%}}
     </style></head><body><div class="doc">

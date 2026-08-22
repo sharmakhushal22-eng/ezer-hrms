@@ -55,7 +55,7 @@ function timeAgo(iso: string) {
 // ── Presentational bits (defined outside parent) ──
 function Kpi({ label, value, accent, warn }: { label: string; value: string; accent?: string; warn?: boolean }) {
   return (
-    <div style={{ background: warn ? C.amberBg : C.card, border: `1px solid ${warn ? C.amberBd : C.border}`, borderRadius: 12, padding: '13px 15px', boxShadow: '0 1px 4px rgba(124,58,237,0.05)', minWidth: 120 }}>
+    <div style={{ background: warn ? C.amberBg : C.card, border: `1px solid ${warn ? C.amberBd : C.border}`, borderRadius: 12, padding: '13px 15px', boxShadow: '0 1px 4px rgba(37,99,235,0.05)', minWidth: 120 }}>
       <div style={{ fontSize: 9.5, color: warn ? C.amber : C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700, marginBottom: 5 }}>{label}</div>
       <div style={{ fontSize: 19, fontWeight: 800, color: accent || (warn ? C.amber : C.navy), lineHeight: 1 }}>{value}</div>
     </div>
@@ -63,7 +63,7 @@ function Kpi({ label, value, accent, warn }: { label: string; value: string; acc
 }
 function Panel({ title, right, children, style }: { title: string; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '15px 17px', boxShadow: '0 1px 6px rgba(124,58,237,0.06)', ...style }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '15px 17px', boxShadow: '0 1px 6px rgba(37,99,235,0.06)', ...style }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 10, fontWeight: 800, color: C.purple, textTransform: 'uppercase', letterSpacing: '.06em' }}>{title}</span>
         {right && <span style={{ marginLeft: 'auto' }}>{right}</span>}
@@ -331,7 +331,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
                       <span style={{ color: C.muted }}>{inrShort(d.cost)}</span>
                     </div>
                     <div style={{ height: 7, background: C.gray, borderRadius: 4, overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: 'linear-gradient(90deg,#7C3AED,#5B21B6)', borderRadius: 4 }} />
+                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: 'linear-gradient(90deg,#2563EB,#5B21B6)', borderRadius: 4 }} />
                     </div>
                   </div>
                 ))}

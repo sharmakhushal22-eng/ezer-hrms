@@ -19,10 +19,10 @@ function TextField({ label, value, onChange, placeholder, icon, autoFocus }: { l
     <div style={{ marginBottom: 16 }}>
       <label style={labelStyle}>{label}</label>
       <div style={{ position: 'relative' }}>
-        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple : '#A78BFA', fontSize: 15, lineHeight: 1 }}>{icon}</span>
+        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple : '#93C5FD', fontSize: 15, lineHeight: 1 }}>{icon}</span>
         <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoFocus={autoFocus} autoCapitalize="characters"
           onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-          style={{ ...fieldStyle, paddingLeft: 38, borderColor: focus ? P.purple : P.border, boxShadow: focus ? '0 0 0 4px rgba(124,58,237,0.10)' : 'none' }} />
+          style={{ ...fieldStyle, paddingLeft: 38, borderColor: focus ? P.purple : P.border, boxShadow: focus ? '0 0 0 4px rgba(37,99,235,0.10)' : 'none' }} />
       </div>
     </div>
   )
@@ -34,10 +34,10 @@ function PasswordField({ label, value, onChange, placeholder, autoFocus }: { lab
     <div style={{ marginBottom: 14 }}>
       <label style={labelStyle}>{label}</label>
       <div style={{ position: 'relative' }}>
-        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple : '#A78BFA', fontSize: 15, lineHeight: 1 }}></span>
+        <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', color: focus ? P.purple : '#93C5FD', fontSize: 15, lineHeight: 1 }}></span>
         <input type={show ? 'text' : 'password'} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} autoFocus={autoFocus}
           onFocus={() => setFocus(true)} onBlur={() => setFocus(false)}
-          style={{ ...fieldStyle, paddingLeft: 38, paddingRight: 44, borderColor: focus ? P.purple : P.border, boxShadow: focus ? '0 0 0 4px rgba(124,58,237,0.10)' : 'none' }} />
+          style={{ ...fieldStyle, paddingLeft: 38, paddingRight: 44, borderColor: focus ? P.purple : P.border, boxShadow: focus ? '0 0 0 4px rgba(37,99,235,0.10)' : 'none' }} />
         <button type="button" onClick={() => setShow(s => !s)} tabIndex={-1}
           style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: P.muted, fontSize: 15, padding: 6, lineHeight: 1 }}>{show ? '' : ''}</button>
       </div>
@@ -181,7 +181,7 @@ export default function ESSLoginPage() {
             <div style={{ fontSize: 18, fontWeight: 800, color: P.navy }}>EZER HRMS</div>
           </div>
 
-          <div style={{ background: '#fff', borderRadius: 18, border: '1px solid rgba(124,58,237,0.10)', boxShadow: '0 12px 40px rgba(124,58,237,0.12)', padding: '34px 32px' }}>
+          <div style={{ background: '#fff', borderRadius: 18, border: '1px solid rgba(37,99,235,0.10)', boxShadow: '0 12px 40px rgba(37,99,235,0.12)', padding: '34px 32px' }}>
             {/* Step dots */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
               {[0, 1].map(i => <div key={i} style={{ height: 4, flex: 1, borderRadius: 99, background: i <= stepIndex ? P.purple : TK.brandTint, transition: 'background .2s' }} />)}
@@ -232,7 +232,7 @@ export default function ESSLoginPage() {
               </form>
             )}
 
-            <div style={{ textAlign: 'center', marginTop: 24, borderTop: '1px solid rgba(124,58,237,0.10)', paddingTop: 18 }}>
+            <div style={{ textAlign: 'center', marginTop: 24, borderTop: '1px solid rgba(37,99,235,0.10)', paddingTop: 18 }}>
               <a href="/" style={{ fontSize: 12.5, color: P.purple, textDecoration: 'none', fontWeight: 600 }}>Admin login</a>
             </div>
           </div>
@@ -259,11 +259,11 @@ function PrimaryBtn({ loading, label, loadingLabel }: { loading: boolean; label:
     <button type="submit" disabled={loading} style={{
       width: '100%', padding: '13px', borderRadius: 10, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
       fontSize: 14.5, fontWeight: 700, fontFamily: 'inherit', color: '#fff',
-      background: loading ? '#A78BFA' : 'linear-gradient(180deg,#8B5CF6,#7C3AED)', boxShadow: loading ? 'none' : '0 6px 18px rgba(124,58,237,0.32)',
+      background: loading ? '#93C5FD' : 'linear-gradient(180deg,#3B82F6,#2563EB)', boxShadow: loading ? 'none' : '0 6px 18px rgba(37,99,235,0.32)',
       transition: 'transform .1s, box-shadow .15s',
     }}
-      onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 22px rgba(124,58,237,0.4)' } }}
-      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = loading ? 'none' : '0 6px 18px rgba(124,58,237,0.32)' }}>
+      onMouseEnter={e => { if (!loading) { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 8px 22px rgba(37,99,235,0.4)' } }}
+      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = loading ? 'none' : '0 6px 18px rgba(37,99,235,0.32)' }}>
       {loading ? loadingLabel : label}
     </button>
   )

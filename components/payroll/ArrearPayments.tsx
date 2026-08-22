@@ -42,11 +42,11 @@ interface ArrearRow {
 interface PayRow { employee_code: string; full_name: string; net_pay: number }
 
 const S = {
-  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' } as React.CSSProperties,
+  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' } as React.CSSProperties,
   th: { padding: '8px 11px', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase' as const, letterSpacing: '.05em', textAlign: 'left' as const, whiteSpace: 'nowrap' as const },
   td: { padding: '8px 11px', color: C.navy, borderTop: `1px solid ${C.border}`, whiteSpace: 'nowrap' as const },
   inp: { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' } as React.CSSProperties,
-  btnP: { padding: '9px 17px', borderRadius: 8, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
+  btnP: { padding: '9px 17px', borderRadius: 8, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
   btnO: { padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
 }
 
@@ -194,7 +194,7 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 940 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)', flexShrink: 0 }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Arrear &amp; Payments</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>

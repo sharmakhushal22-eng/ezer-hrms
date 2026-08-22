@@ -31,12 +31,12 @@ function RegimeCard({ regime, slabs, surcharge, config }: {
   regime: Regime; slabs: TaxSlab[]; surcharge: SurchargeSlab[]; config: TaxRegimeConfig | null
 }) {
   const isNew = regime === 'NEW'
-  const accent = isNew ? 'linear-gradient(90deg,#059669,#10B981)' : 'linear-gradient(90deg,#7C3AED,#5B21B6)'
+  const accent = isNew ? 'linear-gradient(90deg,#059669,#10B981)' : 'linear-gradient(90deg,#2563EB,#5B21B6)'
   // zero-tax ceiling = top of the 0% slab + standard deduction (gross figure)
   const zeroSlab = slabs.find(s => s.tax_rate === 0 && s.slab_max != null)
   const zeroUpto = zeroSlab && config ? Number(zeroSlab.slab_max) + Number(config.standard_deduction) : null
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', flex: 1, minWidth: 250, boxShadow: '0 2px 10px rgba(124,58,237,0.08)' }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', flex: 1, minWidth: 250, boxShadow: '0 2px 10px rgba(37,99,235,0.08)' }}>
       <div style={{ height: 4, background: accent }} />
       <div style={{ padding: '14px 16px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
@@ -140,7 +140,7 @@ export default function IncomeTaxConfig() {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 800 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Income Tax — Old vs New</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -159,7 +159,7 @@ export default function IncomeTaxConfig() {
       </div>
 
       {/* Calculator */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, boxShadow: '0 1px 6px rgba(124,58,237,0.07)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Compare — test a gross annual income</div>
         <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
           <input type="number" value={testIncome} onChange={e => setTestIncome(e.target.value)} placeholder="Gross annual (₹)" style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
@@ -167,7 +167,7 @@ export default function IncomeTaxConfig() {
             {AGES.map(a => <option key={a.key} value={a.key}>{a.label}</option>)}
           </select>
           <button onClick={runCalculation} disabled={calculating}
-            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
+            style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: calculating ? 'not-allowed' : 'pointer', opacity: calculating ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
             {calculating ? 'Calculating…' : 'Compare'}
           </button>
         </div>
@@ -178,7 +178,7 @@ export default function IncomeTaxConfig() {
             <>
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 {([['Old Regime', oldResult, !newWins, C.purpleD], ['New Regime', newResult, newWins, C.green]] as const).map(([title, r, win, accent]) => (
-                  <div key={title} style={{ flex: 1, minWidth: 220, borderRadius: 12, padding: '12px 14px', background: win ? (accent === C.green ? C.greenBg : C.purpleBg) : C.gray, border: `1.5px solid ${win ? accent : C.border}`, boxShadow: win ? '0 3px 12px rgba(124,58,237,0.12)' : 'none' }}>
+                  <div key={title} style={{ flex: 1, minWidth: 220, borderRadius: 12, padding: '12px 14px', background: win ? (accent === C.green ? C.greenBg : C.purpleBg) : C.gray, border: `1.5px solid ${win ? accent : C.border}`, boxShadow: win ? '0 3px 12px rgba(37,99,235,0.12)' : 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
                       <span style={{ fontSize: 11.5, fontWeight: 800, color: accent, textTransform: 'uppercase', letterSpacing: '.03em' }}>{title}</span>
                       {win && <span style={{ fontSize: 8.5, fontWeight: 800, color: '#fff', background: accent, borderRadius: 99, padding: '2px 7px', textTransform: 'uppercase' }}>Lower</span>}

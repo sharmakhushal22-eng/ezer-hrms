@@ -79,7 +79,17 @@ export const C = {
   info: 'var(--ez-info)',
   infoTint: 'var(--ez-info-tint)',
 
-  /** The rail and any inverted surface. */
+  /** The navigation rail. White in light, one step above canvas in dark. */
+  rail: 'var(--ez-rail)',
+  railText: 'var(--ez-rail-text)',
+  railMuted: 'var(--ez-rail-muted)',
+  railFaint: 'var(--ez-rail-faint)',
+  railLine: 'var(--ez-rail-line)',
+  railHover: 'var(--ez-rail-hover)',
+  railActiveBg: 'var(--ez-rail-active-bg)',
+  railActiveText: 'var(--ez-rail-active-text)',
+
+  /** Any surface that is still deliberately inverted. */
   dark: 'var(--ez-dark)',
   darkSoft: 'var(--ez-dark-soft)',
   /** Text and hairlines that sit ON a dark surface. */

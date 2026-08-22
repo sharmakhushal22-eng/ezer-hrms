@@ -52,7 +52,7 @@ function npsEffectiveDate(doj: string | null, mStart: string): string {
 }
 
 const S = {
-  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.07)' } as React.CSSProperties,
+  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' } as React.CSSProperties,
   sel: { padding: '8px 10px', border: `1px solid #DDD6FE`, borderRadius: 7, fontSize: 12.5, fontFamily: font, background: TK.sunken, color: C.navy, outline: 'none', minWidth: 150 } as React.CSSProperties,
   btnP: { padding: '9px 16px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
   btnO: { padding: '8px 14px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: font } as React.CSSProperties,
@@ -234,7 +234,7 @@ function NpsDialog({ rows, onClose, onDone }: {
       <div onClick={ev => ev.stopPropagation()} style={{ background: '#fff', borderRadius: 16, width: '100%', maxWidth: 540, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,0.35)', fontFamily: font, overflow: 'hidden' }}>
 
         {/* header */}
-        <div style={{ background: 'linear-gradient(135deg,#7C3AED,#4F46E5)', padding: '16px 20px', color: '#fff', flexShrink: 0 }}>
+        <div style={{ background: 'linear-gradient(135deg,#2563EB,#4F46E5)', padding: '16px 20px', color: '#fff', flexShrink: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 20 }}></div>
             <div style={{ flex: 1, minWidth: 0 }}>

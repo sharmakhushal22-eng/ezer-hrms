@@ -330,7 +330,7 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
 }) {
   const blocked = violations.length > 0 || (!!strictUnmatched && unmatched.length > 0)
   return (
-    <div style={{ background: C.card, border: `1px solid ${blocked && !checking ? '#FECACA' : C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
+    <div style={{ background: C.card, border: `1px solid ${blocked && !checking ? '#FECACA' : C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>
         {checking ? `Checking ${kind} sheet…` : blocked ? 'Validation failed' : `Ready to process · ${total} rows`}
       </div>

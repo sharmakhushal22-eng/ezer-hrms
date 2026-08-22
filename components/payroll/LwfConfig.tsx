@@ -76,7 +76,7 @@ function MonthPicker({ selected, onToggle }: { selected: number[]; onToggle: (m:
         const active = selected.includes(m)
         return (
           <button key={m} onClick={() => onToggle(m)} type="button"
-            style={{ padding: '7px 4px', borderRadius: 7, border: `1px solid ${active ? C.purple : C.border}`, background: active ? 'linear-gradient(135deg,#7C3AED,#5B21B6)' : '#fff', color: active ? '#fff' : C.navy, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+            style={{ padding: '7px 4px', borderRadius: 7, border: `1px solid ${active ? C.purple : C.border}`, background: active ? 'linear-gradient(135deg,#2563EB,#5B21B6)' : '#fff', color: active ? '#fff' : C.navy, fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
             {name}
           </button>
         )
@@ -128,7 +128,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: font }}>
       <div style={{ background: '#fff', borderRadius: 14, padding: 22, width: '100%', maxWidth: 500, maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 50px rgba(30,27,75,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise LWF config' : 'Add LWF state'}</div>
             <div style={{ fontSize: 10.5, color: C.muted }}>Applicable months + contributions</div>
@@ -173,7 +173,7 @@ function ReviseModal({ preset, onClose, onSaved }: { preset?: LwfRow | null; onC
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button disabled={!valid || saving} onClick={handleSave}
-            style={{ flex: 1, padding: '11px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
+            style={{ flex: 1, padding: '11px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
             {saving ? 'Saving…' : 'Save'}
           </button>
           <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
@@ -230,7 +230,7 @@ export default function LwfConfig() {
 
   const card: React.CSSProperties = {
     background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-    padding: '16px 18px', marginBottom: 16, boxShadow: '0 1px 6px rgba(124,58,237,0.07)',
+    padding: '16px 18px', marginBottom: 16, boxShadow: '0 1px 6px rgba(37,99,235,0.07)',
   }
   const th: React.CSSProperties = {
     background: C.navy, color: '#A5B4FC', padding: '7px 6px', textAlign: 'right',
@@ -316,7 +316,7 @@ export default function LwfConfig() {
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1200 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 18 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 19, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Labour Welfare Fund Configuration</div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
@@ -324,7 +324,7 @@ export default function LwfConfig() {
           </div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(124,58,237,0.22)', whiteSpace: 'nowrap' }}>
+          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', whiteSpace: 'nowrap' }}>
           + Add / revise state
         </button>
       </div>

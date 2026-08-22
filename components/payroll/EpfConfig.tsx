@@ -24,7 +24,7 @@ const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block
 function InfoTile({ icon, label, value, hint, accent }: { icon: string; label: string; value: string; hint?: string; accent?: string }) {
   const a = accent || C.purpleD
   return (
-    <div style={{ background: '#fff', borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(124,58,237,0.05)', position: 'relative', overflow: 'hidden' }}>
+    <div style={{ background: '#fff', borderRadius: 11, padding: '12px 13px', border: `1px solid ${C.border}`, boxShadow: '0 1px 4px rgba(37,99,235,0.05)', position: 'relative', overflow: 'hidden' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: a }} />
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
         <span style={{ fontSize: 13 }}>{icon}</span>
@@ -66,7 +66,7 @@ function SplitBar({ eps, epf }: { eps: number; epf: number }) {
     <div style={{ marginTop: 12 }}>
       <div style={{ display: 'flex', height: 22, borderRadius: 7, overflow: 'hidden', border: `1px solid ${C.greenBd}` }}>
         <div style={{ width: `${epsPct}%`, background: 'linear-gradient(90deg,#0891B2,#0EA5B7)', minWidth: eps > 0 ? 2 : 0 }} title={`EPS ₹${eps}`} />
-        <div style={{ flex: 1, background: 'linear-gradient(90deg,#7C3AED,#5B21B6)' }} title={`EPF ₹${epf}`} />
+        <div style={{ flex: 1, background: 'linear-gradient(90deg,#2563EB,#5B21B6)' }} title={`EPF ₹${epf}`} />
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, fontWeight: 700, color: C.muted, marginTop: 4 }}>
         <span style={{ color: '#0891B2' }}>EPS (pension) {epsPct}%</span>
@@ -121,7 +121,7 @@ export default function EpfConfig() {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 720 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>EPF</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Provident Fund — EPF Wages = Gross − HRA, capped at each employee&apos;s PF limit</div>
@@ -146,7 +146,7 @@ export default function EpfConfig() {
           </GroupCard>
 
           {/* Contribution calculator */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.07)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Contribution calculator</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, marginBottom: 10 }}>
               <div><label style={lbl}>Gross (₹/mo)</label><input type="number" value={gross} onChange={e => setGross(e.target.value)} style={inputStyle} /></div>
@@ -164,7 +164,7 @@ export default function EpfConfig() {
               {isIw && <Toggle checked={hasCoc} onChange={setHasCoc} label="Has Certificate of Coverage (excluded)" />}
             </div>
             <button onClick={runCalc}
-              style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(124,58,237,0.22)', marginBottom: result ? 12 : 0 }}>
+              style={{ padding: '10px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', marginBottom: result ? 12 : 0 }}>
               Calculate
             </button>
 
@@ -195,7 +195,7 @@ export default function EpfConfig() {
           </div>
 
           {/* EDLI + Admin charges (establishment) */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, boxShadow: '0 1px 6px rgba(124,58,237,0.07)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>EDLI + Admin charges</div>
             <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 12 }}>Establishment-level (employer only) — on ₹15,000 base, pro-rated by paid days.</div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>

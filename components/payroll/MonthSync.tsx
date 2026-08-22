@@ -83,7 +83,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
   )
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginTop: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginTop: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
         <div style={{ width: 34, height: 34, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17 }}></div>
         <div style={{ flex: 1, minWidth: 220 }}>
@@ -99,7 +99,7 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
         </label>
         <button onClick={compare} disabled={busy || !run} style={{ padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 11.5, fontFamily: font, cursor: busy ? 'not-allowed' : 'pointer' }}>⟳ Refresh</button>
         <button onClick={download} disabled={!diff || !diff.rows.length}
-          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? '#C4B5FD' : 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
+          style={{ padding: '8px 15px', borderRadius: 8, border: 'none', background: !diff || !diff.rows.length ? '#C4B5FD' : 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: !diff || !diff.rows.length ? 'not-allowed' : 'pointer' }}>Download changes
         </button>
       </div>
 
@@ -371,7 +371,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 880 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)', flexShrink: 0 }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)', flexShrink: 0 }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Snapshot Sync</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
@@ -385,7 +385,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         </div>
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', marginBottom: 6 }}>
           <div>
             <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }}>Payroll month</label>

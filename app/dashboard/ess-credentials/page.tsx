@@ -90,7 +90,7 @@ export default function EssCredentialsPage() {
         <span></span><span><b>Confidential.</b> Each employee&apos;s temporary password is their own <b>employee code</b> (e.g. SRS0001). They must set a new password on first login. Share the exported list securely, then delete it.</span>
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
           <div>
             <label style={{ fontSize: 11, color: C.purpleDark, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Company</label>

@@ -191,7 +191,7 @@ function LetterheadCard({
   }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
       <CardHead icon="📄" title="Letterhead (PDF)" tint={C.purpleBg} badge={<span style={{ fontSize: 9.5, padding: '3px 9px', borderRadius: 999, fontWeight: 700, letterSpacing: '.04em', background: existing ? C.greenBg : TK.sunken, color: existing ? C.green : C.muted }}>{existing ? '✓ SET' : 'NOT SET'}</span>} />
 
       {existing && !file && (
@@ -239,7 +239,7 @@ function LetterheadCard({
                       <iframe title="Letterhead preview" src={`${previewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
                         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', pointerEvents: 'none', transform: `scale(${(scalePct || 100) / 100})`, transformOrigin: 'center center' }} />
                       {/* Safe content box (visual only) */}
-                      <div style={{ position: 'absolute', pointerEvents: 'none', top: `${tP}%`, bottom: `${bP}%`, left: `${lP}%`, right: `${rP}%`, border: '1.5px dashed #7C3AED', background: 'rgba(124,58,237,0.06)', borderRadius: 3 }}>
+                      <div style={{ position: 'absolute', pointerEvents: 'none', top: `${tP}%`, bottom: `${bP}%`, left: `${lP}%`, right: `${rP}%`, border: '1.5px dashed #2563EB', background: 'rgba(37,99,235,0.06)', borderRadius: 3 }}>
                         <span style={{ position: 'absolute', top: 3, left: '50%', transform: 'translateX(-50%)', fontSize: 7.5, fontWeight: 700, letterSpacing: '.04em', color: TK.brand, background: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 3, whiteSpace: 'nowrap' }}>SAFE CONTENT AREA</span>
                       </div>
                       {/* Drag handles on each edge */}
@@ -270,7 +270,7 @@ function LetterheadCard({
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 18px', borderTop: `1px solid ${C.border}` }}>
               <button onClick={closePreview} style={{ padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', color: C.muted, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}>Cancel</button>
               <button onClick={handleSave} disabled={saving}
-                style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 4px 12px rgba(124,58,237,0.28)' }}>
+                style={{ padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1, boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }}>
                 {saving ? 'Uploading…' : '⬆ Upload letterhead'}
               </button>
             </div>
@@ -434,11 +434,11 @@ function SignatoryCard({
 
   const overlay: React.CSSProperties = { position: 'fixed', inset: 0, zIndex: 5000, background: 'rgba(30,27,75,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }
   const modalCard: React.CSSProperties = { background: '#fff', borderRadius: 16, width: '100%', maxWidth: 520, maxHeight: '94vh', display: 'flex', flexDirection: 'column', boxShadow: '0 26px 70px rgba(0,0,0,0.35)', overflow: 'hidden' }
-  const uploadBtn: React.CSSProperties = { padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 4px 12px rgba(124,58,237,0.28)' }
+  const uploadBtn: React.CSSProperties = { padding: '9px 20px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 4px 12px rgba(37,99,235,0.28)' }
   const cancelBtn: React.CSSProperties = { padding: '9px 16px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', color: C.muted, cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
       <CardHead icon="✍️" title="Authorised signatory" tint={C.greenBg} badge={<span style={{ fontSize: 9.5, padding: '3px 9px', borderRadius: 999, fontWeight: 700, letterSpacing: '.04em', background: existing ? C.greenBg : TK.sunken, color: existing ? C.green : C.muted }}>{existing ? '✓ SET' : 'NOT SET'}</span>} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
@@ -479,7 +479,7 @@ function SignatoryCard({
                 <div ref={cropRef} style={{ position: 'relative', width: '100%', maxWidth: 420, aspectRatio: `${imgNat.w} / ${imgNat.h}`, background: TK.sunken, borderRadius: 8, overflow: 'hidden', touchAction: 'none', userSelect: 'none', backgroundImage: 'linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%)', backgroundSize: '16px 16px', backgroundPosition: '0 0,0 8px,8px -8px,-8px 0' }}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={rawUrl} alt="signature" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none' }} />
-                  <div onPointerDown={cropDrag('move')} style={{ position: 'absolute', left: `${cropBox.x}%`, top: `${cropBox.y}%`, width: `${cropBox.w}%`, height: `${cropBox.h}%`, border: '2px solid #7C3AED', boxShadow: '0 0 0 9999px rgba(30,27,75,0.4)', cursor: 'move', touchAction: 'none' }}>
+                  <div onPointerDown={cropDrag('move')} style={{ position: 'absolute', left: `${cropBox.x}%`, top: `${cropBox.y}%`, width: `${cropBox.w}%`, height: `${cropBox.h}%`, border: '2px solid #2563EB', boxShadow: '0 0 0 9999px rgba(30,27,75,0.4)', cursor: 'move', touchAction: 'none' }}>
                     <div onPointerDown={cropDrag('resize')} style={{ position: 'absolute', right: -8, bottom: -8, width: 16, height: 16, background: TK.brand, border: '2px solid #fff', borderRadius: 4, cursor: 'nwse-resize', touchAction: 'none' }} />
                   </div>
                 </div>
@@ -516,7 +516,7 @@ function SignatoryCard({
                     : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, color: C.muted, textAlign: 'center', padding: 12 }}>No letterhead set at this level — position is relative to an A4 page.</div>}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={croppedUrl} alt="signature" draggable={false} onPointerDown={startPlaceDrag}
-                    style={{ position: 'absolute', left: `${place.xPct}%`, top: `${place.yPct}%`, width: `${place.wPct}%`, cursor: 'grab', outline: '1.5px dashed #7C3AED', outlineOffset: 1, touchAction: 'none' }} />
+                    style={{ position: 'absolute', left: `${place.xPct}%`, top: `${place.yPct}%`, width: `${place.wPct}%`, cursor: 'grab', outline: '1.5px dashed #2563EB', outlineOffset: 1, touchAction: 'none' }} />
                 </div>
               </div>
               <div style={{ fontSize: 10.5, color: C.purpleD, textAlign: 'center', margin: '9px 0 2px', fontWeight: 600 }}>✋ Drag the signature to position it on the page</div>
@@ -660,7 +660,7 @@ export default function LetterheadConfig() {
       {loading ? <div style={{ color: C.muted, fontSize: 12, padding: 20 }}>Loading…</div> : (
         <>
           {/* ── Company / Branch pickers ── */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 16, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 16, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 13 }}>
               <div style={{ width: 30, height: 30, borderRadius: 8, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>🎯</div>
               <div style={{ fontSize: 13.5, fontWeight: 700, color: C.navy }}>Choose where to configure</div>

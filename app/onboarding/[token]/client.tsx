@@ -14,7 +14,7 @@ interface DocStatus { doc_code: string; ai_status: string; ai_extracted_data: an
 const P = TK.brand
 const S = {
   page: { background: TK.canvas, minHeight: '100vh', fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.ink } as const,
-  card: { background: '#fff', borderRadius: 12, border: '1px solid rgba(124,58,237,0.12)', padding: '18px 20px', marginBottom: 12, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as const,
+  card: { background: '#fff', borderRadius: 12, border: '1px solid rgba(37,99,235,0.12)', padding: '18px 20px', marginBottom: 12, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as const,
   lbl: { fontSize: 10, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.06em', display: 'block', marginBottom: 4 },
   inp: (err = false) => ({ width: '100%', padding: '9px 12px', background: err ? TK.criticalTint : TK.sunken, border: `1px solid ${err ? '#FCA5A5' : TK.brandEdge}`, borderRadius: 8, color: TK.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' }),
   sel: { width: '100%', padding: '9px 12px', background: TK.sunken, border: '1px solid #DDD6FE', borderRadius: 8, color: TK.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box' as const, fontFamily: 'inherit' },
@@ -79,7 +79,7 @@ function StepBar({ current }: { current: Step }) {
         })}
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 20px 10px' }}>
-        <div style={{ flex: 1, height: 6, background: 'rgba(124,58,237,0.1)', borderRadius: 99, overflow: 'hidden' }}>
+        <div style={{ flex: 1, height: 6, background: 'rgba(37,99,235,0.1)', borderRadius: 99, overflow: 'hidden' }}>
           <div style={{ width: `${pct}%`, height: '100%', background: P, borderRadius: 99, transition: 'width .3s' }} />
         </div>
         <span style={{ fontSize: 11, fontWeight: 600, color: P, whiteSpace: 'nowrap' }}>Step {current} of {STEPS.length} · {pct}%</span>
@@ -238,7 +238,7 @@ function AIReviewTable({ docs }: { docs: Record<string, DocStatus> }) {
       <div style={{ padding: '10px 14px', fontSize: 12, fontWeight: 600, background: TK.brandTint, color: '#534AB7' }}>AI extracted this from your documents — please verify below</div>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead>
-          <tr style={{ background: 'rgba(124,58,237,0.04)' }}>
+          <tr style={{ background: 'rgba(37,99,235,0.04)' }}>
             {['Field', 'Extracted value', 'Confidence', 'Status'].map(h => <th key={h} style={{ padding: '7px 14px', textAlign: 'left', fontSize: 10, color: TK.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>)}
           </tr>
         </thead>
@@ -247,7 +247,7 @@ function AIReviewTable({ docs }: { docs: Record<string, DocStatus> }) {
             const mismatch = r.src?.ai_status === 'MISMATCH'
             const ok = !!r.value && r.conf >= 80 && !mismatch
             return (
-              <tr key={r.field} style={{ borderTop: '1px solid rgba(124,58,237,0.08)', background: mismatch ? TK.criticalTint : !r.value ? TK.warningTint : 'transparent' }}>
+              <tr key={r.field} style={{ borderTop: '1px solid rgba(37,99,235,0.08)', background: mismatch ? TK.criticalTint : !r.value ? TK.warningTint : 'transparent' }}>
                 <td style={{ padding: '7px 14px', color: TK.muted }}>{r.field}</td>
                 <td style={{ padding: '7px 14px', fontWeight: 500 }}>{r.value || '—'}</td>
                 <td style={{ padding: '7px 14px' }}>{r.value ? <span style={{ fontSize: 10, padding: '2px 7px', borderRadius: 4, background: ok ? TK.positiveTint : TK.warningTint, color: ok ? TK.positive : TK.warning }}>{r.conf}%</span> : '—'}</td>

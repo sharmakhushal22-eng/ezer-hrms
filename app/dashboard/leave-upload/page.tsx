@@ -22,14 +22,14 @@ import { C as TK } from '@/lib/ui'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'16px 18px', marginBottom:14, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(37,99,235,0.12)', padding:'16px 18px', marginBottom:14, boxShadow:'0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
   pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
   out:   { padding:'8px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
   danger:{ padding:'5px 10px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.critical } as React.CSSProperties,
-  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
+  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
   check: { display:'flex', alignItems:'center', gap:7, fontSize:12.5, cursor:'pointer', padding:'4px 0' } as React.CSSProperties,
 }
 const MODE_LABEL: Record<AppMode, string> = { EMPLOYEE:'Employee applies', HR_MARK:'HR marks', EARN_AVAIL:'Earn & avail' }
@@ -248,7 +248,7 @@ function PreviewTable({ rows }: { rows: ParsedRow[] }) {
   if (!rows.length) return <div style={{ fontSize: 13, color: TK.muted, padding: 20, textAlign: 'center' }}>No rows parsed.</div>
   const cols = Object.keys(rows[0].cells)
   return (
-    <div style={{ maxHeight: 340, overflow: 'auto', border: '1px solid rgba(124,58,237,0.12)', borderRadius: 9 }}>
+    <div style={{ maxHeight: 340, overflow: 'auto', border: '1px solid rgba(37,99,235,0.12)', borderRadius: 9 }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
         <thead><tr style={{ position: 'sticky', top: 0, background: TK.canvas, zIndex: 1 }}>
           <th style={{ textAlign: 'left', padding: '8px 10px', fontSize: 10, color: TK.muted, textTransform: 'uppercase', width: 36 }}>#</th>
@@ -289,13 +289,13 @@ function UploadFlow({ title, desc, columns, errorFile, onTemplate, onParse, onCo
     <div style={T.card}>
       <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{title}</div>
       <div style={{ fontSize: 13, color: TK.muted, marginBottom: 16 }}>{desc}</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>{columns.map(c => <span key={c} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: TK.canvas, color: TK.brand, border: '1px solid rgba(124,58,237,0.12)' }}>{c}</span>)}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>{columns.map(c => <span key={c} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: TK.canvas, color: TK.brand, border: '1px solid rgba(37,99,235,0.12)' }}>{c}</span>)}</div>
       {!result && (<>
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <button style={T.out} disabled={tplBusy} onClick={async () => { setTplBusy(true); try { await onTemplate() } catch {} setTplBusy(false) }}>⬇ {tplBusy ? 'Preparing…' : 'Download template'}</button>
         </div>
         <div onClick={() => inputRef.current?.click()} onDragOver={e => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f) }}
-          style={{ border: `2px dashed ${drag ? TK.brand : 'rgba(124,58,237,0.3)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? TK.canvas : '#FCFBFF' }}>
+          style={{ border: `2px dashed ${drag ? TK.brand : 'rgba(37,99,235,0.3)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? TK.canvas : '#FCFBFF' }}>
           <div style={{ fontSize: 26, marginBottom: 6 }}>{file ? '' : ''}</div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{file ? file.name : 'Drag & drop Excel here, or click to browse'}</div>
           <div style={{ fontSize: 11, color: TK.muted, marginTop: 4 }}>{parsing ? 'Reading…' : '.xlsx / .xls'}</div>

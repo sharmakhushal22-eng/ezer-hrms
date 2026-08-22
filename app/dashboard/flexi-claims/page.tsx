@@ -22,7 +22,7 @@ const COMP_ORDER = ['PDA', 'TEL', 'DEVICE', 'LTA', 'CAR', 'DRIVER', 'FUEL', 'MEA
 
 const S = {
   page: { background: C.bg, minHeight: '100vh', padding: 24, color: C.navy, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13 } as React.CSSProperties,
-  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
+  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 4px rgba(37,99,235,0.06)' } as React.CSSProperties,
   inp: { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, background: TK.sunken, color: C.navy, outline: 'none', width: '100%', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
   label: { fontSize: 10, color: C.muted, fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '.04em', display: 'block', marginBottom: 3 },
   pri: { padding: '8px 16px', background: C.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' } as React.CSSProperties,

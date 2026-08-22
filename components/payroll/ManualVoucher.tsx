@@ -187,7 +187,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
     setBulkBusy(false); setBulkResults(out); refresh()
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }
+  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(37,99,235,0.06)' }
   const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
   const pill = (on: boolean): React.CSSProperties => ({
@@ -214,7 +214,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1000 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Manual Voucher</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>One-off additions and deductions for a specific employee in a specific month</div>
@@ -252,7 +252,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={saveOne} disabled={busy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1 }}>
                 {busy ? 'Saving…' : 'Save entry'}
               </button>
               {headType && <span style={{ fontSize: 11.5, fontWeight: 700, color: headType === 'Addition' ? C.green : C.red }}>{headType}</span>}
@@ -326,7 +326,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
             {bulkRows && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
                 <button onClick={processBulk} disabled={bulkBusy}
-                  style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: bulkBusy ? 'not-allowed' : 'pointer', opacity: bulkBusy ? 0.6 : 1 }}>
+                  style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: bulkBusy ? 'not-allowed' : 'pointer', opacity: bulkBusy ? 0.6 : 1 }}>
                   {bulkBusy ? 'Saving…' : `Save ${bulkRows.length} rows`}
                 </button>
                 <span style={{ fontSize: 11.5, color: C.purpleD }}><b>{bulkFile}</b> · {bulkRows.length} employees</span>

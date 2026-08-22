@@ -805,7 +805,7 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
   }).length
 
   const Tile = ({ label, value, sub, color }:any) => (
-    <div style={{ background:C.surface, border:'1px solid rgba(124,58,237,0.12)', borderRadius:10, padding:'11px 13px' }}>
+    <div style={{ background:C.surface, border:'1px solid rgba(37,99,235,0.12)', borderRadius:10, padding:'11px 13px' }}>
       <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
       <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||C.ink }}>{value}</div>
       {sub && <div style={{ fontSize:10.5, color:C.faint, marginTop:1 }}>{sub}</div>}
@@ -1031,7 +1031,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
       onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{ background:C.canvas, width:'100%', maxWidth:760, height:'100%', overflowY:'auto', boxShadow:'-8px 0 30px rgba(30,27,75,0.25)' }}>
         {/* Header */}
-        <div style={{ background:'linear-gradient(135deg,#7C3AED,#4F46E5)', padding:'16px 20px', position:'sticky', top:0, zIndex:2 }}>
+        <div style={{ background:'linear-gradient(135deg,#2563EB,#4F46E5)', padding:'16px 20px', position:'sticky', top:0, zIndex:2 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
             <div style={{ minWidth:0 }}>
               <div style={{ fontSize:17, fontWeight:700, color:'#fff' }}>{m.job_title||m.designation||m.position||'Untitled'}</div>
@@ -2489,7 +2489,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
   const hasDeadlines = scoped.some(({m}:any)=>m.validity_date || m.target_joining_date)
 
   const Tile = ({ label, value, sub, color }:any) => (
-    <div style={{ background:C.surface, border:'1px solid rgba(124,58,237,0.12)', borderRadius:10, padding:'11px 13px' }}>
+    <div style={{ background:C.surface, border:'1px solid rgba(37,99,235,0.12)', borderRadius:10, padding:'11px 13px' }}>
       <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
       <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||C.ink }}>{value}</div>
       {sub && <div style={{ fontSize:10.5, color:C.faint, marginTop:1 }}>{sub}</div>}
@@ -3123,9 +3123,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
             const initials = c.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
             return (
               <div key={c.id} onClick={()=>{setSelCand(c);setAiQs([])}}
-                style={{ background:'#fff', borderRadius:12, padding:'14px 15px', cursor:'pointer', border:'1px solid #EDE9FE', boxShadow:'0 1px 4px rgba(124,58,237,0.06)', transition:'box-shadow .15s, transform .1s' }}
-                onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 6px 18px rgba(124,58,237,0.14)'; e.currentTarget.style.transform='translateY(-1px)' }}
-                onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(124,58,237,0.06)'; e.currentTarget.style.transform='' }}>
+                style={{ background:'#fff', borderRadius:12, padding:'14px 15px', cursor:'pointer', border:'1px solid #EDE9FE', boxShadow:'0 1px 4px rgba(37,99,235,0.06)', transition:'box-shadow .15s, transform .1s' }}
+                onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 6px 18px rgba(37,99,235,0.14)'; e.currentTarget.style.transform='translateY(-1px)' }}
+                onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(37,99,235,0.06)'; e.currentTarget.style.transform='' }}>
                 {/* header */}
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
                   <div style={{ width:40, height:40, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, flexShrink:0 }}>{initials}</div>
@@ -3221,7 +3221,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       {/* ── Interview Pipeline full-screen overlay ── */}
       {interviewCand && (
         <div style={{ position:'fixed', inset:0, background:C.canvas, zIndex:300, overflowY:'auto', fontFamily:'"DM Sans","Segoe UI",sans-serif' }}>
-          <div style={{ background:'linear-gradient(135deg,#7C3AED,#4F46E5)', padding:'12px 20px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10 }}>
+          <div style={{ background:'linear-gradient(135deg,#2563EB,#4F46E5)', padding:'12px 20px', display:'flex', alignItems:'center', gap:12, position:'sticky', top:0, zIndex:10 }}>
             <button onClick={()=>setInterviewCand(null)} style={{ padding:'6px 14px', borderRadius:7, border:'1px solid rgba(255,255,255,.3)', background:'transparent', color:'#fff', cursor:'pointer', fontSize:12, fontFamily:'inherit', fontWeight:500 }}>Back to Pipeline</button>
             <div style={{ fontSize:15, fontWeight:600, color:'#fff' }}>Interview Pipeline — {interviewCand.full_name}</div>
             <div style={{ marginLeft:'auto', fontSize:12, color:'rgba(255,255,255,.65)' }}>{interviewCand.designation || '—'} · {interviewCand.current_company || '—'}</div>
@@ -3245,7 +3245,7 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
   const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
 
   return (
-    <div style={{ position:'fixed', right:0, top:0, bottom:0, width:460, background:'#fff', borderLeft:'1px solid #EDE9FE', zIndex:200, overflowY:'auto', padding:20, boxShadow:'-4px 0 20px rgba(124,58,237,0.1)' }}>
+    <div style={{ position:'fixed', right:0, top:0, bottom:0, width:460, background:'#fff', borderLeft:'1px solid #EDE9FE', zIndex:200, overflowY:'auto', padding:20, boxShadow:'-4px 0 20px rgba(37,99,235,0.1)' }}>
       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
         <div>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
@@ -3631,7 +3631,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
         <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
         {shownCands.map((c:Candidate)=>(
           <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
-            style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?C.brandTint:'#fff' }}>
+            style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:sel?.id===c.id?C.brandTint:'#fff' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
               <div style={{ minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
@@ -4059,7 +4059,7 @@ HR Team`
         <SearchBar placeholder="Search candidate…" onApply={setOffQ} width={240} />
         <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
         {shownOffered.map((c:Candidate)=>(
-          <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?C.brandTint:'#fff' }}
+          <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #2563EB':'1px solid rgba(37,99,235,0.12)', background:sel?.id===c.id?C.brandTint:'#fff' }}
             onClick={()=>generateLetter(c)}>
             <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
@@ -4228,7 +4228,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
         const resp = row?.offer_response
         const [bg,fg] = resp ? respStyle[resp] : ['#fff',C.muted]
         return (
-          <div key={c.id} style={{ ...T.card, border:`1px solid ${resp?fg+'40':'rgba(124,58,237,0.12)'}` }}>
+          <div key={c.id} style={{ ...T.card, border:`1px solid ${resp?fg+'40':'rgba(37,99,235,0.12)'}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
                 <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>{c.full_name}</div>

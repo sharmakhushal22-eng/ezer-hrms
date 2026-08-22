@@ -97,7 +97,7 @@ function ZoneFormModal({ preset, onClose, onSaved }: {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: font }}>
       <div style={{ background: '#fff', borderRadius: 14, padding: 22, width: '100%', maxWidth: 540, boxShadow: '0 20px 50px rgba(30,27,75,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise zone rates' : 'Add zone rates'}</div>
             <div style={{ fontSize: 10.5, color: C.muted }}>All 4 categories, one w.e.f date</div>
@@ -130,7 +130,7 @@ function ZoneFormModal({ preset, onClose, onSaved }: {
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button disabled={!valid || saving} onClick={handleSave}
-            style={{ flex: 1, padding: '11px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
+            style={{ flex: 1, padding: '11px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
             {saving ? 'Saving…' : 'Save all 4 rates'}
           </button>
           <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
@@ -160,7 +160,7 @@ export default function MinimumWageConfig() {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 860 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#2563EB,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Minimum Wages</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>State &amp; zone-wise statutory floor · one state can have multiple zones, each tracked independently</div>
@@ -168,14 +168,14 @@ export default function MinimumWageConfig() {
         <button onClick={() => setModal({ open: true, preset: null })}
           onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)'}
           onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(124,58,237,0.22)', transition: 'filter .12s', whiteSpace: 'nowrap' }}>
+          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#2563EB,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s', whiteSpace: 'nowrap' }}>
           + Add / revise zone
         </button>
       </div>
 
       {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 6px rgba(124,58,237,0.07)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 6px rgba(37,99,235,0.07)' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
             <thead>

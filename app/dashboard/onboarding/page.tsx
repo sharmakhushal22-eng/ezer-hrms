@@ -80,7 +80,7 @@ function Toast({msg,type,onClose}:{msg:string;type:'ok'|'err';onClose:()=>void})
 
 function ProgressBar({pct,color=P}:{pct:number;color?:string}) {
   return (
-    <div style={{height:5,background:'rgba(124,58,237,.1)',borderRadius:99,overflow:'hidden',marginTop:4}}>
+    <div style={{height:5,background:'rgba(37,99,235,.1)',borderRadius:99,overflow:'hidden',marginTop:4}}>
       <div style={{height:'100%',background:color,borderRadius:99,width:`${pct}%`,transition:'width .4s'}}/>
     </div>
   )
@@ -513,7 +513,7 @@ export default function OnboardingDashboard() {
               const pct  = progressPct(c)
               const sm   = STAGE_META[c.status]
               return (
-                <div key={c.id} style={{background:TK.surface,border:'0.5px solid rgba(124,58,237,0.12)',borderRadius:'8px',padding:'10px 12px',marginBottom:8,borderLeft:`3px solid ${days<=1?TK.critical:days<=3?TK.warning:P}`}}>
+                <div key={c.id} style={{background:TK.surface,border:'0.5px solid rgba(37,99,235,0.12)',borderRadius:'8px',padding:'10px 12px',marginBottom:8,borderLeft:`3px solid ${days<=1?TK.critical:days<=3?TK.warning:P}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
                     <div>
                       <div style={{fontSize:13,fontWeight:500}}>{c.full_name}</div>
@@ -590,13 +590,13 @@ export default function OnboardingDashboard() {
       </div>
 
       {/* Table */}
-      <div style={{border:'0.5px solid rgba(124,58,237,0.12)',borderRadius:'10px',overflow:'hidden'}}>
+      <div style={{border:'0.5px solid rgba(37,99,235,0.12)',borderRadius:'10px',overflow:'hidden'}}>
         <div style={{overflowX:'auto'}}>
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
             <thead>
               <tr style={{background:TK.sunken}}>
                 {['','Candidate','Stage','Progress','DOJ','Docs','Statutory','BGV','Risk','Actions'].map((h,hi)=>(
-                  <th key={hi} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:TK.muted,textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
+                  <th key={hi} style={{padding:'9px 12px',textAlign:'left',fontSize:10,fontWeight:500,color:TK.muted,textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(37,99,235,0.12)',whiteSpace:'nowrap'}}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -610,7 +610,7 @@ export default function OnboardingDashboard() {
                 const pct = notInvited ? 0 : progressPct(c)
                 const days = daysLeft(c.date_of_joining)
                 return (
-                  <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?TK.surface:TK.sunken}}>
+                  <tr key={c.id} style={{borderBottom:'0.5px solid rgba(37,99,235,0.12)',background:i%2===0?TK.surface:TK.sunken}}>
                     <td style={{padding:'10px 12px'}}>
                       {notInvited && <input type="checkbox" checked={selIds.has(c.id)} onChange={()=>setSelIds(prev=>{ const n=new Set(prev); n.has(c.id)?n.delete(c.id):n.add(c.id); return n })} />}
                     </td>
@@ -895,13 +895,13 @@ export default function OnboardingDashboard() {
         </div>
 
         {/* Compliance grid */}
-        <div style={{border:'0.5px solid rgba(124,58,237,0.12)',borderRadius:'10px',overflow:'hidden'}}>
+        <div style={{border:'0.5px solid rgba(37,99,235,0.12)',borderRadius:'10px',overflow:'hidden'}}>
           <div style={{overflowX:'auto'}}>
             <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
               <thead>
                 <tr style={{background:TK.sunken}}>
                   {['Employee','DOJ','EPF Form 11','EPF Form 2','Bank','Policy Ack','Laptop','ID Card','PT State','BGV'].map(h=>(
-                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontSize:9,fontWeight:600,color:TK.muted,textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(124,58,237,0.12)',whiteSpace:'nowrap'}}>{h}</th>
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontSize:9,fontWeight:600,color:TK.muted,textTransform:'uppercase',letterSpacing:'.04em',borderBottom:'0.5px solid rgba(37,99,235,0.12)',whiteSpace:'nowrap'}}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -920,7 +920,7 @@ export default function OnboardingDashboard() {
                     </span>
                   )
                   return (
-                    <tr key={c.id} style={{borderBottom:'0.5px solid rgba(124,58,237,0.12)',background:i%2===0?TK.surface:TK.sunken}}>
+                    <tr key={c.id} style={{borderBottom:'0.5px solid rgba(37,99,235,0.12)',background:i%2===0?TK.surface:TK.sunken}}>
                       <td style={{padding:'9px 10px',minWidth:130}}>
                         <div style={{fontWeight:500,fontSize:12}}>{c.full_name}</div>
                         <div style={{fontSize:10,color:TK.muted}}>{c.designation||'—'}</div>
