@@ -19,7 +19,6 @@ import { supabase } from '@/lib/supabase';
 import { C, F, W, S, R, E, M, UIKeyframes } from '@/lib/ui';
 import { ThemeToggle } from '@/lib/ui/ThemeToggle';
 import { PageTransition, RouteProgress } from '@/lib/ui/PageTransition';
-import { EyeComfort } from '@/lib/ui/EyeComfort';
 import {
   IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconUpload, IconTransfer,
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
@@ -269,7 +268,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           flexShrink: 0, padding: open ? '0 4px 8px' : '0 0 8px',
           display: 'flex', justifyContent: open ? 'flex-start' : 'center',
         }}>
-          <EyeComfort compact={!open} />
         </div>
 
         <button

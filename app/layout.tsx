@@ -8,7 +8,7 @@ import "@/lib/ui/theme.css";
 import AutoTitleCase from "@/components/AutoTitleCase";
 import UiScale from "@/components/UiScale";
 import { themeBootScript } from "@/lib/ui/ThemeToggle";
-import { eyeComfortBootScript, EyeComfortLayer, EyeComfortOverlay } from "@/lib/ui/EyeComfort";
+import { eyeComfortBootScript, EyeComfortLayer, EyeComfortOverlay, EyeComfortDock } from "@/lib/ui/EyeComfort";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -53,6 +53,7 @@ export default function RootLayout({
         {children}
         {/* Last in the body so it composites over everything, including any
             modal or toast. pointer-events:none keeps clicks passing through. */}
+        <EyeComfortDock />
         <EyeComfortOverlay />
       </body>
     </html>

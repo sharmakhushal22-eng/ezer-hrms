@@ -11,18 +11,19 @@
 // Within that limit this is real, not a decorative tint. A fixed layer sits
 // over the app in `mix-blend-mode: multiply`, so every pixel underneath is
 // multiplied by an amber colour: result = base x overlay / 255, per channel.
-// With an overlay of rgb(255, 209, 148) the blue channel of everything on
-// screen is emitted at 148/255 — a measured 42% reduction — while red is
-// untouched. Fewer blue photons actually leave the screen from this app's
-// area, which for a full-screen HR tool is most of what the user is looking at.
+// At full strength the overlay is rgb(255, 190, 92), so the blue channel of
+// everything on screen is emitted at 92/255 — a measured 64% reduction — while
+// red is untouched. Fewer blue photons actually leave the screen from this
+// app's area, which for a full-screen HR tool is most of what a user looks at.
 //
 // WHY MULTIPLY RATHER THAN A TRANSLUCENT OVERLAY
 //
 // A plain semi-opaque amber sheet washes the page toward amber, lifting blacks
 // and crushing contrast. Multiply scales both the text and its background by
-// the same factor, so contrast RATIOS are largely preserved. Measured at the
-// strongest level: primary text 13.05:1, muted text 6.65:1, brand 5.65:1 —
-// all still clear of the 4.5:1 the rest of the product is held to.
+// the same factor, so contrast RATIOS are largely preserved. Measured at full
+// strength: primary text 11.44:1, muted text 6.25:1 — both still clear of the
+// 4.5:1 the rest of the product is held to. That headroom is why the slider is
+// allowed to run all the way to a 64% cut without gating the top end.
 //
 // It also deliberately does NOT use a CSS filter on the root. That would
 // promote the whole document to its own compositor layer, which softens text
@@ -30,54 +31,85 @@
 // had to solve.
 
 import * as React from 'react';
-import { C, F, W, R, M } from './tokens';
+import { C, F, W, R, E, M, numeric } from './tokens';
 
-const KEY = 'ezer_eye_comfort';   // stored as "0".."5"; 0 is off
-export const EYE_LEVELS = 5;
-
-/**
- * Overlay colour per level. Red is held at 255 throughout — the point is to
- * remove blue, not to dim the screen. Green comes down more gently than blue
- * so the result reads as warm daylight rather than sepia.
- */
-const OVERLAY: Record<number, string> = {
-  1: 'rgb(255, 247, 232)',   //  9% blue cut
-  2: 'rgb(255, 240, 214)',   // 16%
-  3: 'rgb(255, 231, 194)',   // 24%
-  4: 'rgb(255, 221, 172)',   // 33%
-  5: 'rgb(255, 209, 148)',   // 42%
-};
-const BLUE_CUT: Record<number, number> = { 1: 9, 2: 16, 3: 24, 4: 33, 5: 42 };
+const KEY = 'ezer_eye_comfort';
 
 /**
- * Applies the saved level before React hydrates.
+ * Strength is a continuous 0–100, so the slider is smooth rather than stepped.
  *
- * Someone who turned this on because bright screens hurt should not be shown
- * an unfiltered white page for 300ms on every load.
+ * Red is pinned at 255 at every strength — the point is to remove blue, not to
+ * dim the screen. Green falls a quarter as far as blue, which is what makes the
+ * result read as warm daylight rather than sepia.
+ */
+const GREEN_DROP = 65;
+const BLUE_DROP = 163;
+
+export function eyeChannels(pct: number) {
+  const t = Math.max(0, Math.min(100, pct)) / 100;
+  return { g: Math.round(255 - GREEN_DROP * t), b: Math.round(255 - BLUE_DROP * t) };
+}
+
+/** How much blue the current strength actually removes, for the readout. */
+export function blueCut(pct: number) {
+  return Math.round((1 - eyeChannels(pct).b / 255) * 100);
+}
+
+/**
+ * Applies the saved strength before React hydrates.
+ *
+ * Someone who turned this on because bright screens hurt should not be shown an
+ * unfiltered white page for 300ms on every load.
+ *
+ * The `v <= 5` branch migrates the earlier five-notch scale, where the stored
+ * value was a level rather than a percentage. Without it, someone who had saved
+ * "level 5" would silently come back to 5% — all but off.
  */
 export const eyeComfortBootScript = `
 (function(){try{
   var v = parseInt(localStorage.getItem('${KEY}') || '0', 10);
-  if (v > 0) document.documentElement.setAttribute('data-ez-eye', String(v));
+  if (!(v > 0)) return;
+  if (v <= 5) v = [0, 14, 25, 38, 52, 66][v];
+  var t = Math.min(100, v) / 100, s = document.documentElement.style;
+  s.setProperty('--ez-eye-g', String(Math.round(255 - ${GREEN_DROP} * t)));
+  s.setProperty('--ez-eye-b', String(Math.round(255 - ${BLUE_DROP} * t)));
+  s.setProperty('--ez-eye-on', '1');
 }catch(e){}})();`;
 
-export function getEyeLevel(): number {
+export function getEyeStrength(): number {
   if (typeof window === 'undefined') return 0;
-  const v = parseInt(localStorage.getItem(KEY) || '0', 10);
-  return Number.isFinite(v) && v >= 0 && v <= EYE_LEVELS ? v : 0;
+  let v = parseInt(localStorage.getItem(KEY) || '0', 10);
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  if (v <= 5) v = [0, 14, 25, 38, 52, 66][v];   // same migration as the boot script
+  return Math.min(100, v);
 }
 
-export function setEyeLevel(v: number) {
-  const root = document.documentElement;
-  if (v <= 0) { root.removeAttribute('data-ez-eye'); localStorage.setItem(KEY, '0'); }
-  else { root.setAttribute('data-ez-eye', String(v)); localStorage.setItem(KEY, String(v)); }
+export function setEyeStrength(pct: number) {
+  const s = document.documentElement.style;
+  const v = Math.max(0, Math.min(100, Math.round(pct)));
+  if (v <= 0) {
+    s.setProperty('--ez-eye-on', '0');
+    localStorage.setItem(KEY, '0');
+    return;
+  }
+  const { g, b } = eyeChannels(v);
+  s.setProperty('--ez-eye-g', String(g));
+  s.setProperty('--ez-eye-b', String(b));
+  s.setProperty('--ez-eye-on', '1');
+  localStorage.setItem(KEY, String(v));
 }
 
 /**
- * The filter layer itself. Mounted once, near the root.
+ * The filter layer and the styles the control needs. Mounted once, near the
+ * root.
  *
- * pointer-events:none is what keeps it a filter rather than a modal — every
- * click passes straight through to the app underneath.
+ * The overlay colour is driven by CSS variables rather than by a class per
+ * level, which is what lets the slider be continuous — dragging updates two
+ * numbers and the compositor does the rest.
+ *
+ * Only `opacity` is transitioned, deliberately. Fading in on toggle reads as
+ * intentional; transitioning `background-color` too would make the colour lag
+ * behind the thumb during a drag, which feels broken.
  */
 export function EyeComfortLayer() {
   return (
@@ -86,14 +118,73 @@ export function EyeComfortLayer() {
         position:fixed; inset:0; z-index:2147483000;
         pointer-events:none;
         mix-blend-mode:multiply;
-        opacity:0;
-        transition:background-color .3s ease, opacity .3s ease;
+        background-color:rgb(255, var(--ez-eye-g, 255), var(--ez-eye-b, 255));
+        opacity:var(--ez-eye-on, 0);
       }
-      ${Object.entries(OVERLAY).map(([lvl, col]) => `
-      :root[data-ez-eye="${lvl}"] .ez-eye-layer{background-color:${col};opacity:1}`).join('')}
+      /* Both selectors exist to out-specify theme.css, which eases
+         background-color on  :root[data-ez-theme] *  so a theme switch reads as
+         one movement. That sweep is right for the app and wrong for this layer:
+         it makes the overlay colour lag the slider thumb by 220ms, so a drag
+         feels like dragging through treacle. Only opacity should ease here, and
+         only so the on/off switch is not a hard cut. Measured: with the sweep
+         applied, sampling at 90ms after a change read t=0.09 when the slider
+         said 0.01 — the colour was still in flight. */
+      :root .ez-eye-layer,
+      :root[data-ez-theme] .ez-eye-layer{
+        transition:opacity .28s ease;
+      }
       @media print{ .ez-eye-layer{display:none} }
+
+      /* The slider. A native range input, restyled — it gets smooth dragging,
+         keyboard arrows and touch for free, none of which a div reimplements
+         well. The track carries the actual warmth ramp, so the control shows
+         what it does. */
+      .ez-eye-range{
+        -webkit-appearance:none; appearance:none;
+        width:100%; height:18px; margin:0; display:block;
+        background:transparent; cursor:pointer;
+      }
+      .ez-eye-range::-webkit-slider-runnable-track{
+        height:6px; border-radius:99px;
+        background:linear-gradient(90deg,#FFFFFF,#FFE9C6 45%,#FFBE5C);
+        border:1px solid rgba(0,0,0,.10);
+      }
+      .ez-eye-range::-moz-range-track{
+        height:6px; border-radius:99px;
+        background:linear-gradient(90deg,#FFFFFF,#FFE9C6 45%,#FFBE5C);
+        border:1px solid rgba(0,0,0,.10);
+      }
+      .ez-eye-range::-webkit-slider-thumb{
+        -webkit-appearance:none; appearance:none;
+        width:16px; height:16px; margin-top:-6px; border-radius:99px;
+        background:#fff; border:2px solid #C2751B;
+        box-shadow:0 1px 4px rgba(0,0,0,.28);
+        transition:transform .12s ease, box-shadow .12s ease;
+      }
+      .ez-eye-range::-moz-range-thumb{
+        width:16px; height:16px; border-radius:99px;
+        background:#fff; border:2px solid #C2751B;
+        box-shadow:0 1px 4px rgba(0,0,0,.28);
+        transition:transform .12s ease, box-shadow .12s ease;
+      }
+      .ez-eye-range:active::-webkit-slider-thumb{transform:scale(1.18)}
+      .ez-eye-range:active::-moz-range-thumb{transform:scale(1.18)}
+      .ez-eye-range:focus-visible{outline:none}
+      .ez-eye-range:focus-visible::-webkit-slider-thumb{box-shadow:0 0 0 3px rgba(194,117,27,.38)}
+      .ez-eye-range:focus-visible::-moz-range-thumb{box-shadow:0 0 0 3px rgba(194,117,27,.38)}
+
+      /* Ends at transform:none so the panel's text is not left rasterised on
+         its own compositor layer — the sharpness rule the rest of the motion
+         work follows. */
+      @keyframes ezEyePop{
+        from{opacity:0; transform:translateY(8px) scale(.96)}
+        to  {opacity:1; transform:none}
+      }
+      .ez-eye-panel{animation:ezEyePop .22s cubic-bezier(.22,1,.36,1) both; transform-origin:100% 100%}
+
       @media (prefers-reduced-motion: reduce){
         .ez-eye-layer{transition:none}
+        .ez-eye-panel{animation:none}
       }
     `}</style>
   );
@@ -103,32 +194,8 @@ export function EyeComfortOverlay() {
   return <div className="ez-eye-layer" aria-hidden />;
 }
 
-// Declared at module level, never inside the control: a component defined
-// inside another is a new type on every render and remounts.
-function Notch({ level, current, onPick }: {
-  level: number; current: number; onPick: (n: number) => void;
-}) {
-  const on = current >= level;
-  return (
-    <button
-      onClick={() => onPick(level)}
-      title={`Level ${level} — cuts about ${BLUE_CUT[level]}% of blue light`}
-      aria-label={`Eye comfort level ${level}`}
-      style={{
-        width: 12, height: 20, padding: 0, border: 'none', cursor: 'pointer',
-        background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-      <span style={{
-        display: 'block', width: 4, height: on ? 16 : 8, borderRadius: 99,
-        background: on ? C.warning : C.lineStrong,
-        transition: `height ${M.quick}, background ${M.quick}`,
-      }} />
-    </button>
-  );
-}
-
-const EyeIcon = ({ on }: { on: boolean }) => (
-  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
+const EyeIcon = ({ on, size = 17 }: { on: boolean; size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke="currentColor"
        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
     <path d="M1.8 10S4.9 4.6 10 4.6 18.2 10 18.2 10 15.1 15.4 10 15.4 1.8 10 1.8 10Z" />
     <circle cx="10" cy="10" r="2.4" />
@@ -137,74 +204,88 @@ const EyeIcon = ({ on }: { on: boolean }) => (
 );
 
 /**
- * On/off plus five intensity notches.
+ * The floating control: an on/off button in the bottom-right corner, with the
+ * intensity slider appearing above it only while the filter is on.
  *
- * The toggle remembers the last level used, so turning it back on returns to
- * the strength that suited rather than resetting to the weakest.
+ * Keeping the slider out of the DOM when off is the point — an intensity
+ * control for something switched off is just clutter, and its presence implies
+ * the filter is active when it is not.
  */
-export function EyeComfort({ compact }: { compact?: boolean }) {
-  const [level, setLevel] = React.useState(0);
-  const [last, setLast] = React.useState(3);
+export function EyeComfortDock() {
+  const [pct, setPct] = React.useState(0);
+  const [last, setLast] = React.useState(40);
+  const [ready, setReady] = React.useState(false);
 
-  // Read after mount; reading during render would disagree with the server
-  // output and hydrate mismatched.
+  // Read after mount. Reading during render would disagree with the server
+  // output and hydrate mismatched; the control simply appears once hydrated.
   React.useEffect(() => {
-    const v = getEyeLevel();
-    setLevel(v);
-    if (v > 0) setLast(v);
+    const v = getEyeStrength();
+    setPct(v);
+    if (v > 0) { setLast(v); setEyeStrength(v); }  // rewrites a migrated level as a percentage
+    setReady(true);
   }, []);
 
-  const pick = (v: number) => { setEyeLevel(v); setLevel(v); if (v > 0) setLast(v); };
-  const toggle = () => pick(level > 0 ? 0 : last);
+  const apply = (v: number) => { setEyeStrength(v); setPct(v); if (v > 0) setLast(v); };
+  const on = pct > 0;
+  const toggle = () => apply(on ? 0 : last);
 
-  if (compact) {
-    return (
-      <button onClick={toggle} className="ez-press"
-        title={level > 0
-          ? `Eye comfort on — about ${BLUE_CUT[level]}% less blue light. Click to turn off.`
-          : 'Eye comfort — reduce blue light'}
-        aria-label="Eye comfort" aria-pressed={level > 0}
-        style={{
-          width: 34, height: 34, borderRadius: R.md, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: `1px solid ${level > 0 ? C.warning : C.railLine}`,
-          background: level > 0 ? C.warningTint : 'transparent',
-          color: level > 0 ? C.warning : C.railMuted,
-        }}>
-        <EyeIcon on={level > 0} />
-      </button>
-    );
-  }
+  if (!ready) return null;
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-      <button onClick={toggle} className="ez-press"
-        title={level > 0
-          ? `Eye comfort on — about ${BLUE_CUT[level]}% less blue light from this app. Click to turn off.`
-          : 'Eye comfort — warms the screen to cut blue light'}
-        aria-label="Eye comfort" aria-pressed={level > 0}
-        style={{
-          height: 26, padding: '0 8px', borderRadius: R.sm, cursor: 'pointer',
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          border: `1px solid ${level > 0 ? C.warning : C.railLine}`,
-          background: level > 0 ? C.warningTint : 'transparent',
-          color: level > 0 ? C.warning : C.railMuted,
-          fontFamily: 'inherit', fontSize: F.micro, fontWeight: W.semi,
-        }}>
-        <EyeIcon on={level > 0} />
-      </button>
+    <div style={{
+      position: 'fixed', right: 14, bottom: 58, zIndex: 99998,
+      display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8,
+      fontFamily: '"DM Sans","Segoe UI",sans-serif',
+    }}>
+      {on && (
+        <div className="ez-eye-panel" role="group" aria-label="Eye comfort intensity"
+          style={{
+            width: 196, padding: '11px 13px 12px', borderRadius: R.lg,
+            background: C.surface, border: `1px solid ${C.line}`, boxShadow: E.floating,
+          }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 }}>
+            <span style={{ fontSize: F.micro, fontWeight: W.semi, color: C.muted, letterSpacing: .3 }}>
+              INTENSITY
+            </span>
+            <span style={{ ...numeric, fontSize: F.small, fontWeight: W.bold, color: C.ink }}>
+              {pct}%
+            </span>
+          </div>
 
-      <div role="group" aria-label="Eye comfort intensity"
+          <input
+            type="range" min={1} max={100} step={1} value={pct}
+            onChange={e => apply(Number(e.target.value))}
+            className="ez-eye-range"
+            aria-label="Eye comfort intensity"
+            aria-valuetext={`${pct} percent, cuts about ${blueCut(pct)} percent of blue light`}
+          />
+
+          {/* Two elements rather than one wrapping sentence: left to wrap, the
+              last word orphans onto its own line at this width. The break is
+              part of the copy, so it is set here rather than left to chance. */}
+          <div style={{ marginTop: 7, fontSize: F.micro, color: C.faint, lineHeight: 1.45 }}>
+            <div>Cuts <strong style={{ color: C.warning, fontWeight: W.semi }}>~{blueCut(pct)}%</strong> of blue light</div>
+            <div>from this app</div>
+          </div>
+        </div>
+      )}
+
+      <button onClick={toggle} className="ez-press"
+        title={on
+          ? `Eye comfort on — about ${blueCut(pct)}% less blue light from this app. Click to turn off.`
+          : 'Eye comfort — warm the screen to cut blue light'}
+        aria-label="Eye comfort" aria-pressed={on}
         style={{
-          display: 'inline-flex', alignItems: 'center', padding: '0 3px',
-          borderRadius: R.sm, background: C.railHover,
-          opacity: level > 0 ? 1 : .45,
-          transition: `opacity ${M.quick}`,
+          width: 38, height: 38, borderRadius: 999, cursor: 'pointer',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: `1px solid ${on ? C.warning : C.brandEdge}`,
+          background: on ? C.warningTint : C.surface,
+          color: on ? C.warning : C.muted,
+          boxShadow: E.floating,
+          transition: `background ${M.quick}, color ${M.quick}, border-color ${M.quick}`,
         }}>
-        {[1, 2, 3, 4, 5].map(n => (
-          <Notch key={n} level={n} current={level} onPick={pick} />
-        ))}
-      </div>
+        <EyeIcon on={on} />
+      </button>
     </div>
   );
 }
