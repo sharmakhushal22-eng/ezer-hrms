@@ -190,13 +190,13 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
   }
 
   const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }
-  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: `${TK.violetEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'right', whiteSpace: 'nowrap' }
+  const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase', textAlign: 'right', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', textAlign: 'right', color: C.navy, whiteSpace: 'nowrap' }
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 1000 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.violet},${TK.violetDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Edit</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Only employees whose attendance is already processed — Unprocess to reopen, then Process to re-apply the upload checks</div>
@@ -216,7 +216,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
           <MultiSelect values={codes} options={empOpts} placeholder="Click, then type or paste codes — e.g. SRS0001, SRS0002" onChange={setCodes} />
         </div>
         <button onClick={search} disabled={busy || !monthVal}
-          style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.violet},${TK.violetDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: busy || !monthVal ? 'not-allowed' : 'pointer', opacity: busy || !monthVal ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
+          style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: busy || !monthVal ? 'not-allowed' : 'pointer', opacity: busy || !monthVal ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
           {busy ? 'Searching…' : 'Search'}
         </button>
         {err && <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 10 }}>{err}</div>}

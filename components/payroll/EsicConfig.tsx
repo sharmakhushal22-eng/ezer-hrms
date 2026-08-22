@@ -13,9 +13,9 @@ import type { EsicConfig as EsicCfg } from '@/lib/esic/types'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint, gray: TK.sunken,
+  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`
@@ -98,14 +98,14 @@ export default function EsicConfig() {
       {cfg && (
         <>
           <GroupCard title="Contribution rates">
-            <InfoTile icon="🧑‍💼" label="Employee share" value={`${cfg.employee_contribution_percent}%`} accent={TK.violet} />
-            <InfoTile icon="🏢" label="Employer share" value={`${cfg.employer_contribution_percent}%`} accent={TK.violet} />
+            <InfoTile icon="🧑‍💼" label="Employee share" value={`${cfg.employee_contribution_percent}%`} accent={TK.brand} />
+            <InfoTile icon="🏢" label="Employer share" value={`${cfg.employer_contribution_percent}%`} accent={TK.brand} />
             <InfoTile icon="♿" label="Employer (PWD)" value={`${cfg.employer_contribution_percent_pwd}%`} hint="reduced rate" accent={TK.positive} />
             <InfoTile icon="🪙" label="Low-wage exemption" value={`≤ ₹${cfg.daily_wage_exemption_threshold}/day`} hint="employee share waived" accent={TK.warning} />
           </GroupCard>
 
           <GroupCard title="Coverage & deadlines">
-            <InfoTile icon="📊" label="Wage ceiling" value={inr(cfg.wage_ceiling)} hint="standard" accent={TK.violet} />
+            <InfoTile icon="📊" label="Wage ceiling" value={inr(cfg.wage_ceiling)} hint="standard" accent={TK.brand} />
             <InfoTile icon="♿" label="PWD ceiling" value={inr(cfg.wage_ceiling_pwd)} hint="persons with disability" accent={TK.positive} />
             <InfoTile icon="📝" label="New-employee registration" value={`${cfg.new_employee_registration_days} days`} hint="from joining" accent="#0891B2" />
             <InfoTile icon="🗓️" label="Monthly deposit due" value={`${cfg.monthly_deposit_due_day}th`} hint="of next month" accent="#0891B2" />

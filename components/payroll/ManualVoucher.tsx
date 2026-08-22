@@ -191,7 +191,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
   const th: React.CSSProperties = { padding: '8px 10px', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase', textAlign: 'left', whiteSpace: 'nowrap' }
   const td: React.CSSProperties = { padding: '7px 10px', color: C.navy, whiteSpace: 'nowrap' }
   const pill = (on: boolean): React.CSSProperties => ({
-    padding: '6px 14px', borderRadius: 99, border: `0.5px solid ${on ? C.purple : TK.violetTint}`, cursor: 'pointer',
+    padding: '6px 14px', borderRadius: 99, border: `0.5px solid ${on ? C.purple : TK.brandTint}`, cursor: 'pointer',
     fontSize: 11.5, fontWeight: on ? 600 : 500, fontFamily: 'inherit', background: on ? C.purple : TK.sunken, color: on ? '#fff' : C.navy,
   })
   const okCount = bulkResults?.filter(r => r.ok).length || 0
@@ -206,7 +206,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
     <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 10 }}>
       <span style={{ fontSize: 13 }}></span>
       {names.map(n => (
-        <span key={n} style={{ fontSize: 11.5, fontWeight: 700, color: C.purpleD, background: TK.violetTint, border: `0.5px solid ${C.border}`, borderRadius: 99, padding: '3px 11px' }}>{n}</span>
+        <span key={n} style={{ fontSize: 11.5, fontWeight: 700, color: C.purpleD, background: TK.brandTint, border: `0.5px solid ${C.border}`, borderRadius: 99, padding: '3px 11px' }}>{n}</span>
       ))}
     </div>
   )

@@ -22,7 +22,7 @@ import { decodePolyline, projectToViewBox, type LatLng } from '@/lib/travel/poly
 import { C as TK } from '@/lib/ui'
 
 const V = {
-  navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line,
+  navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line,
   muted: TK.muted, card: TK.surface, green: TK.positive, amber: TK.warning,
   red: TK.critical, field: TK.sunken, grey: TK.faint,
 }

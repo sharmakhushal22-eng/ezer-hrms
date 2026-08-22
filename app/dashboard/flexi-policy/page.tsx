@@ -11,7 +11,7 @@ import { supabase } from '@/lib/supabase'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted, red: '#A32D2D',
   teal: '#0F6E56', tealBg: '#E1F5EE', purpleBg: TK.canvas,
 }
@@ -201,7 +201,7 @@ export default function FlexiConfigBuilder() {
 
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-          <span style={{ background: TK.violetTint, color: C.purpleDark, fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>{companyId ? `Slab ${slabs.length + 1}` : 'New slab'}</span>
+          <span style={{ background: TK.brandTint, color: C.purpleDark, fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>{companyId ? `Slab ${slabs.length + 1}` : 'New slab'}</span>
           <span style={{ fontSize: 11, color: C.muted }}>Annual Fixed = CTC − Variable</span>
           <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12.5, fontFamily: 'inherit', background: '#fff', color: C.navy }}>
             <option value="">All Companies</option>
@@ -245,7 +245,7 @@ export default function FlexiConfigBuilder() {
           {slabs.map(s => (
             <div key={s.id} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: C.purpleDark }}>
-                {!companyId && <span style={{ background: TK.violetTint, color: C.purpleDark, fontSize: 11, padding: '2px 8px', borderRadius: 20, marginRight: 8, fontWeight: 500 }}>{companyName(s.company_id)}</span>}
+                {!companyId && <span style={{ background: TK.brandTint, color: C.purpleDark, fontSize: 11, padding: '2px 8px', borderRadius: 20, marginRight: 8, fontWeight: 500 }}>{companyName(s.company_id)}</span>}
                 Slab {s.sort_order} · {inr(s.fixed_from)} – {inr(s.fixed_to)}
               </span>
               <button onClick={() => deleteSlab(s.id)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.red}`, background: '#fff', color: C.red, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>

@@ -30,12 +30,12 @@ interface Candidate {
 }
 
 // ── EZER theme constants ───────────────────────────────────────────
-const P = TK.violet
+const P = TK.brand
 const STAGE_META: Record<Stage, {label:string; bg:string; color:string}> = {
   NOT_INVITED:      { label:'Not invited',       bg:'#F3F4F6', color:TK.muted },
   INVITED:          { label:'Link sent',        bg:TK.warningTint, color:TK.warning },
   IN_PROGRESS:      { label:'In progress',      bg:'#EEF2FF', color:'#4338CA' },
-  SUBMITTED:        { label:'Submitted',         bg:TK.violetTint, color:P        },
+  SUBMITTED:        { label:'Submitted',         bg:TK.brandTint, color:P        },
   HR_REVIEW:        { label:'HR review',         bg:TK.infoTint, color:TK.info },
   APPROVED:         { label:'Approved',          bg:TK.positiveTint, color:TK.positive },
   EMPLOYEE_CREATED: { label:'Employee created',  bg:'#EAF3DE', color:'#3B6D11' },
@@ -459,7 +459,7 @@ export default function OnboardingDashboard() {
           {label:'Total pipeline',    val:total,     color:P},
           {label:'Active onboarding', val:active,    color:'#185FA5'},
           {label:'Joining this week', val:thisWeek,  color:TK.warning},
-          {label:'Awaiting code',     val:submitted, color:TK.violet},
+          {label:'Awaiting code',     val:submitted, color:TK.brand},
           {label:'High risk',         val:highRisk,  color:TK.critical},
           {label:'Completed',         val:joined,    color:TK.positive},
         ].map(({label,val,color})=>(
@@ -558,7 +558,7 @@ export default function OnboardingDashboard() {
           {k:'month', label:'This month'},
         ] as {k:typeof joinWindow;label:string}[]).map(w=>(
           <button key={w.k} onClick={()=>setJoinWindow(w.k)}
-            style={{padding:'6px 13px',borderRadius:99,border:'0.5px solid '+(joinWindow===w.k?P:TK.violetTint),cursor:'pointer',fontSize:11.5,fontWeight:joinWindow===w.k?600:500,fontFamily:'inherit',background:joinWindow===w.k?P:TK.sunken,color:joinWindow===w.k?'#fff':TK.ink}}>
+            style={{padding:'6px 13px',borderRadius:99,border:'0.5px solid '+(joinWindow===w.k?P:TK.brandTint),cursor:'pointer',fontSize:11.5,fontWeight:joinWindow===w.k?600:500,fontFamily:'inherit',background:joinWindow===w.k?P:TK.sunken,color:joinWindow===w.k?'#fff':TK.ink}}>
             {w.label}
           </button>
         ))}
@@ -581,7 +581,7 @@ export default function OnboardingDashboard() {
           <option value="LOW">Low risk</option>
         </select>
         <div style={{marginLeft:'auto',fontSize:11,color:TK.muted}}>{filtered.length} of {total} shown</div>
-        <button onClick={()=>{ const ni = filtered.filter(c=>c.status==='NOT_INVITED'); const all = ni.length>0 && ni.every(c=>selIds.has(c.id)); setSelIds(prev=>{ const n=new Set(prev); ni.forEach(c=>all?n.delete(c.id):n.add(c.id)); return n }) }} style={{padding:'7px 12px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.violetDeep}}>Select all (not invited)</button>
+        <button onClick={()=>{ const ni = filtered.filter(c=>c.status==='NOT_INVITED'); const all = ni.length>0 && ni.every(c=>selIds.has(c.id)); setSelIds(prev=>{ const n=new Set(prev); ni.forEach(c=>all?n.delete(c.id):n.add(c.id)); return n }) }} style={{padding:'7px 12px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:12,fontFamily:'inherit',color:TK.brandDeep}}>Select all (not invited)</button>
         {filtered.some(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)) && (
           <button onClick={bulkSend} disabled={saving} style={{padding:'7px 14px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:12,fontWeight:600,fontFamily:'inherit',opacity:saving?.6:1,display:'flex',alignItems:'center',gap:5}}>
             <i className="ti ti-send" style={{fontSize:14}} aria-hidden="true"/> Send link to {filtered.filter(c=>c.status==='NOT_INVITED'&&selIds.has(c.id)).length} selected
@@ -646,13 +646,13 @@ export default function OnboardingDashboard() {
                         <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.bank?'#EAF3DE':'#FCEBEB',color:c.bank?'#3B6D11':TK.critical,fontWeight:600}}>Bank</span>
                       </div>
                       <div style={{display:'flex',gap:3,marginTop:3}}>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.laptop_issued?'#EAF3DE':TK.violetTint,color:c.laptop_issued?'#3B6D11':P,fontWeight:600}}>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.laptop_issued?'#EAF3DE':TK.brandTint,color:c.laptop_issued?'#3B6D11':P,fontWeight:600}}>
                           {c.laptop_issued?'':''}
                         </span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.id_card_issued?'#EAF3DE':TK.violetTint,color:c.id_card_issued?'#3B6D11':P,fontWeight:600}}>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.id_card_issued?'#EAF3DE':TK.brandTint,color:c.id_card_issued?'#3B6D11':P,fontWeight:600}}>
                           {c.id_card_issued?'':''}
                         </span>
-                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.policy_ack?'#EAF3DE':TK.violetTint,color:c.policy_ack?'#3B6D11':P,fontWeight:600}}>
+                        <span style={{fontSize:9,padding:'1px 5px',borderRadius:99,background:c.policy_ack?'#EAF3DE':TK.brandTint,color:c.policy_ack?'#3B6D11':P,fontWeight:600}}>
                           {c.policy_ack?'Policy✓':'Policy'}
                         </span>
                       </div>
@@ -670,7 +670,7 @@ export default function OnboardingDashboard() {
                           </button>
                         )}
                         {notInvited && (
-                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.violetDeep}}>Edit</button>
+                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.brandDeep}}>Edit</button>
                         )}
                         {c.status==='SUBMITTED' && (
                           <button onClick={()=>{openCodeModal(c)}} style={{padding:'4px 9px',borderRadius:'8px',border:'none',cursor:'pointer',background:P,color:'#fff',fontSize:10,fontWeight:600,fontFamily:'inherit'}}>
@@ -695,7 +695,7 @@ export default function OnboardingDashboard() {
                           <button onClick={()=>extendValidity(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.ink}}>Extend</button>
                         )}
                         {(c.status==='INVITED'||c.status==='IN_PROGRESS') && (
-                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.violetDeep}}>Edit</button>
+                          <button onClick={()=>openDateEdit(c)} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.sunken,fontSize:10,fontFamily:'inherit',color:TK.brandDeep}}>Edit</button>
                         )}
                         {(c.status==='APPROVED'||c.status==='EMPLOYEE_CREATED') && !c.laptop_issued && (
                           <button onClick={()=>issueAsset(c.id,'LAPTOP')} style={{padding:'4px 9px',borderRadius:'8px',border:'0.5px solid #EDE9FE',cursor:'pointer',background:TK.warningTint,fontSize:10,fontFamily:'inherit',color:'#633806'}}>Issue
@@ -852,7 +852,7 @@ export default function OnboardingDashboard() {
             Onboarding champions — 100% complete ({champs.length})
           </div>
           {champs.length===0
-            ? <div style={{padding:16,background:TK.violetTint,borderRadius:'8px',fontSize:12,color:P}}>No 100% complete onboardings yet.</div>
+            ? <div style={{padding:16,background:TK.brandTint,borderRadius:'8px',fontSize:12,color:P}}>No 100% complete onboardings yet.</div>
             : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(160px,1fr))',gap:8}}>
               {champs.map(c=>(
                 <div key={c.id} style={{background:'#EAF3DE',border:'0.5px solid #A7F3D0',borderRadius:'8px',padding:'10px 12px',textAlign:'center'}}>
@@ -1027,7 +1027,7 @@ export default function OnboardingDashboard() {
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
               <div style={{marginBottom:8,gridColumn:'1 / -1'}}>
-                <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Company *</div>
+                <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Company *</div>
                 <select value={newForm.company_id} onChange={e=>setNewForm(f=>({...f,company_id:e.target.value}))}
                   style={{width:'100%',padding:'8px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
                   <option value="">Select company…</option>
@@ -1043,13 +1043,13 @@ export default function OnboardingDashboard() {
                 {label:'Offered CTC (₹)',   key:'offered_ctc',    type:'number',placeholder:'e.g. 800000'},
               ].map(({label,key,type,placeholder})=>(
                 <div key={key} style={{marginBottom:8}}>
-                  <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{label}</div>
+                  <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>{label}</div>
                   <input type={type} placeholder={placeholder} value={(newForm as any)[key]} onChange={e=>setNewForm(f=>({...f,[key]:e.target.value}))}
                     style={{width:'100%',padding:'8px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
                 </div>
               ))}
               <div style={{marginBottom:8}}>
-                <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Department</div>
+                <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Department</div>
                 <select value={newForm.department_id} onChange={e=>{ const d = departments.find(x=>x.id===e.target.value); setNewForm(f=>({...f, department_id:e.target.value, department: d?.dept_name || ''})) }}
                   style={{width:'100%',padding:'8px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
                   <option value="">Select department…</option>
@@ -1057,14 +1057,14 @@ export default function OnboardingDashboard() {
                 </select>
               </div>
               <div style={{marginBottom:8}}>
-                <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Employment Type</div>
+                <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Employment Type</div>
                 <select value={newForm.employment_type} onChange={e=>setNewForm(f=>({...f,employment_type:e.target.value}))}
                   style={{width:'100%',padding:'8px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:12,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}>
                   <option>Employee</option><option>Intern</option><option>Consultant</option><option>Contract</option><option>NAPS</option><option>NATS</option>
                 </select>
               </div>
             </div>
-            <div style={{background:TK.violetTint,borderRadius:'8px',padding:'9px 12px',marginTop:4,fontSize:11,color:'#534AB7',lineHeight:1.7}}>
+            <div style={{background:TK.brandTint,borderRadius:'8px',padding:'9px 12px',marginTop:4,fontSize:11,color:'#534AB7',lineHeight:1.7}}>
               <i className="ti ti-info-circle" style={{fontSize:12,verticalAlign:-1,marginRight:4}} aria-hidden="true"/>
               A 24-hour onboarding link will be generated. Share with candidate via email or WhatsApp. OTP will be sent to their mobile for verification.
             </div>
@@ -1086,13 +1086,13 @@ export default function OnboardingDashboard() {
               <div style={{fontSize:15,fontWeight:500}}>Edit candidate — {dateModal.full_name}</div>
               <button onClick={()=>setDateModal(null)} style={{border:'none',background:'none',cursor:'pointer',fontSize:20,color:TK.muted,lineHeight:1}}>×</button>
             </div>
-            <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Joining / Onboarding Date</div>
+            <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Joining / Onboarding Date</div>
             <input type="date" value={dateVal} onChange={e=>setDateVal(e.target.value)}
               style={{width:'100%',padding:'9px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box',marginBottom:10}}/>
-            <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Email</div>
+            <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Email</div>
             <input type="email" value={editEmail} onChange={e=>setEditEmail(e.target.value)} placeholder="candidate@email.com"
               style={{width:'100%',padding:'9px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box',marginBottom:10}}/>
-            <div style={{fontSize:10,fontWeight:600,color:TK.violetDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Mobile</div>
+            <div style={{fontSize:10,fontWeight:600,color:TK.brandDeep,textTransform:'uppercase',letterSpacing:'.06em',marginBottom:4}}>Mobile</div>
             <input type="tel" value={editMobile} onChange={e=>setEditMobile(e.target.value)} placeholder="+91 XXXXXXXXXX"
               style={{width:'100%',padding:'9px 11px',background:TK.sunken,border:'0.5px solid #EDE9FE',borderRadius:'8px',fontSize:13,color:TK.ink,outline:'none',fontFamily:'inherit',boxSizing:'border-box'}}/>
             <div style={{display:'flex',gap:10,marginTop:16}}>

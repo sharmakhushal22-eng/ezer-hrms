@@ -16,9 +16,9 @@ import {
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint, gray: TK.sunken,
+  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -225,7 +225,7 @@ function FilterBar({ pool, company, location, search, onCompany, onLocation, onS
   }
   const on = matched !== null
   return (
-    <div style={{ background: on ? C.purpleBg : C.gray, border: `1px solid ${on ? TK.violetEdge : C.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
+    <div style={{ background: on ? C.purpleBg : C.gray, border: `1px solid ${on ? TK.brandEdge : C.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
         {companies.length > 1 && (

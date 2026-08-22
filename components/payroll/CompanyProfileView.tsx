@@ -15,7 +15,7 @@ const C = {
   val:   { fontSize:13, color:TK.ink, marginTop:2 } as React.CSSProperties,
   sec:   { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
 }
-const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.violet, ESIC:TK.positive, PT:TK.warning, LWF:'#0891B2', FACTORY:TK.critical }
+const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF:'#0891B2', FACTORY:TK.critical }
 const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
 
 function StatusBadge({ status, days }: { status: string; days: number | null }) {
@@ -40,7 +40,7 @@ function CompanyCard({ co, isMobile }: { co: Company; isMobile: boolean }) {
     <div style={{ ...C.card, padding:0, overflow:'hidden' }}>
       <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', background:TK.sunken, borderBottom:'1px solid #E2E8F0' }}>
         <span style={{ fontSize:14, fontWeight:600 }}>{co.company_name}</span>
-        {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.violetTint, color:TK.violet, fontWeight:600 }}>{co.company_type}</span>}
+        {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.brandTint, color:TK.brand, fontWeight:600 }}>{co.company_type}</span>}
         <span style={{ fontSize:10, color:TK.faint }}>{co.company_code}</span>
         <span style={{ marginLeft:'auto' }}><StatusBadge status={co.account_status} days={co.days_to_due} /></span>
       </div>
@@ -73,7 +73,7 @@ function CompanyCard({ co, isMobile }: { co: Company; isMobile: boolean }) {
                   <ROField label="State" value={b.state} />
                 </div>
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
-                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.violet, fontSize:11 }}>map</a></> : '—'}</div></div>
+                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '—'}</div></div>
                   <ROField label="Max employees" value={b.max_employees} />
                 </div>
               </div>
@@ -145,7 +145,7 @@ export default function CompanyProfileView() {
   }, [])
   useEffect(() => { reload() }, [reload])
 
-  if (loading) return <div style={{ ...C.card, textAlign:'center', color:TK.violet, padding:40 }}>Loading company profile…</div>
+  if (loading) return <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading company profile…</div>
   if (groups.length === 0) return <div style={{ ...C.card, textAlign:'center', color:TK.faint, padding:40 }}>No group / company found yet. Add data from Company Setup first.</div>
 
   return (

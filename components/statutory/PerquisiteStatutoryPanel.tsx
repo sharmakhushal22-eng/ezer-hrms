@@ -11,7 +11,7 @@ import { getEmployeePerquisites, saveEmployeePerquisite } from '@/lib/perquisite
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 
-const C = { navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface, border: TK.line, muted: TK.muted }
+const C = { navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface, border: TK.line, muted: TK.muted }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
 const lbl: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }

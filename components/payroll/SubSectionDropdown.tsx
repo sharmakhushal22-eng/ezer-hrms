@@ -13,7 +13,7 @@ import { useState } from 'react'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 
-const C = { navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line, muted: TK.muted }
+const C = { navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 export interface SubItem { id: string; label: string }

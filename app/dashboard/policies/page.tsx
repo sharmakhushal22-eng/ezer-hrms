@@ -14,10 +14,10 @@ import { C as TK } from '@/lib/ui'
 const C = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
   card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  lbl:   { fontSize:11, fontWeight:600, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
+  lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-  pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.violetDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
+  out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
   danger:{ padding:'6px 11px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.critical } as React.CSSProperties,
 }
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -111,7 +111,7 @@ export default function CompanyPoliciesPage() {
           <button style={{ ...C.pri, marginLeft:'auto' }} disabled={!companyId} onClick={() => setEditing('new')}>+ Add policy</button>
         </div>
 
-        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.violet, padding:40 }}>Loading…</div> : !companyId ? null : (
+        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : !companyId ? null : (
           <div style={{ ...C.card, overflowX:'auto', padding:0 }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead><tr style={{ background:TK.sunken }}>
@@ -124,7 +124,7 @@ export default function CompanyPoliciesPage() {
                     <td style={{ padding:'9px 10px', color:TK.faint }}>{p.sort_order}</td>
                     <td style={{ padding:'9px 10px', fontWeight:600, whiteSpace:'nowrap' }}>{p.policy_code} <span style={{ fontSize:10, color:TK.faint, fontWeight:400 }}>v{p.version}</span></td>
                     <td style={{ padding:'9px 10px' }}>{p.policy_title}</td>
-                    <td style={{ padding:'9px 10px' }}>{p.is_mandatory ? <span style={{ fontSize:10, fontWeight:700, color:TK.violet }}>MANDATORY</span> : <span style={{ fontSize:10, color:TK.faint }}>optional</span>}</td>
+                    <td style={{ padding:'9px 10px' }}>{p.is_mandatory ? <span style={{ fontSize:10, fontWeight:700, color:TK.brand }}>MANDATORY</span> : <span style={{ fontSize:10, color:TK.faint }}>optional</span>}</td>
                     <td style={{ padding:'9px 10px' }}>{p.is_active ? <span style={{ fontSize:10, fontWeight:600, color:TK.positive }}>ON</span> : <span style={{ fontSize:10, color:TK.faint }}>OFF</span>}</td>
                     <td style={{ padding:'9px 10px', whiteSpace:'nowrap' }}>
                       <div style={{ display:'flex', gap:6 }}>

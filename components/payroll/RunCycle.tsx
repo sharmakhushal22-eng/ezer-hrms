@@ -26,7 +26,7 @@ import {
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, purpleSoft: '#F3EEFF',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, purpleSoft: '#F3EEFF',
   card: TK.surface, border: '#ECEAFB', muted: TK.muted,
   green: TK.positive, greenBg: TK.positiveTint, greenBd: '#A7F3D0',
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
@@ -195,7 +195,7 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
   const lbl: React.CSSProperties = { fontSize: 9.5, color: C.muted, display: 'block', marginBottom: 3 }
   return (
     <div style={{
-      background: on ? C.purpleSoft : TK.sunken, border: `1px solid ${on ? TK.violetEdge : C.border}`,
+      background: on ? C.purpleSoft : TK.sunken, border: `1px solid ${on ? TK.brandEdge : C.border}`,
       borderRadius: 12, padding: '10px 12px', marginBottom: 14,
     }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>

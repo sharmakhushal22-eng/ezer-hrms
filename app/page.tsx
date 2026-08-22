@@ -56,7 +56,7 @@ export default function LoginPage() {
         <div style={{ position: 'absolute', top: '-100px', right: '-80px', width: '320px', height: '320px', borderRadius: '50%', background: 'rgba(124,58,237,0.08)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '48px', zIndex: 1, position: 'relative' }}>
           <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
-            <rect width="44" height="44" rx="10" fill={TK.violet}/>
+            <rect width="44" height="44" rx="10" fill={TK.brand}/>
             <rect x="11" y="10" width="5" height="24" rx="1.5" fill="white"/>
             <rect x="11" y="10" width="19" height="6" rx="1.5" fill="white"/>
             <rect x="11" y="19" width="14" height="5" rx="1.5" fill="white"/>
@@ -99,14 +99,14 @@ export default function LoginPage() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px', background: d ? '#0F1117' : '#fff', position: 'relative' }}>
         <div style={{ position: 'absolute', top: '24px', right: '24px', display: 'flex', gap: '3px', background: d ? '#1E2030' : TK.sunken, borderRadius: '10px', padding: '4px', border: `1px solid ${d?'#2D3748':TK.line}` }}>
           {([{v:'light' as Theme,icon:''},{v:'dark' as Theme,icon:''},{v:'auto' as Theme,icon:''}]).map(t=>(
-            <button key={t.v} onClick={()=>setTheme(t.v)} style={{ padding:'5px 10px',borderRadius:'7px',border:'none',cursor:'pointer',fontSize:'13px',background:theme===t.v?TK.violet:'transparent',color:theme===t.v?'#fff':(d?TK.muted:TK.faint) }}>{t.icon}</button>
+            <button key={t.v} onClick={()=>setTheme(t.v)} style={{ padding:'5px 10px',borderRadius:'7px',border:'none',cursor:'pointer',fontSize:'13px',background:theme===t.v?TK.brand:'transparent',color:theme===t.v?'#fff':(d?TK.muted:TK.faint) }}>{t.icon}</button>
           ))}
         </div>
         <div style={{ width: '100%', maxWidth: '400px' }}>
           <div style={{ marginBottom: '32px', textAlign: 'center' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
               <svg width="48" height="48" viewBox="0 0 44 44" fill="none">
-                <rect width="44" height="44" rx="10" fill={TK.violet}/>
+                <rect width="44" height="44" rx="10" fill={TK.brand}/>
                 <rect x="11" y="10" width="5" height="24" rx="1.5" fill="white"/>
                 <rect x="11" y="10" width="19" height="6" rx="1.5" fill="white"/>
                 <rect x="11" y="19" width="14" height="5" rx="1.5" fill="white"/>
@@ -121,18 +121,18 @@ export default function LoginPage() {
           <form onSubmit={handleLogin}>
             <div style={{ marginBottom: '16px' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: d?'#D1D5DB':TK.inkSoft, marginBottom: '6px' }}>Work Email</label>
-              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="khushal@ezerhrms.com" style={{ width:'100%',padding:'11px 14px',border:`1.5px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',outline:'none',background:d?'#1E2030':TK.sunken,color:d?TK.sunken:TK.ink,boxSizing:'border-box' }} onFocus={e=>e.target.style.borderColor=TK.violet} onBlur={e=>e.target.style.borderColor=d?TK.inkSoft:TK.line}/>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="khushal@ezerhrms.com" style={{ width:'100%',padding:'11px 14px',border:`1.5px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',outline:'none',background:d?'#1E2030':TK.sunken,color:d?TK.sunken:TK.ink,boxSizing:'border-box' }} onFocus={e=>e.target.style.borderColor=TK.brand} onBlur={e=>e.target.style.borderColor=d?TK.inkSoft:TK.line}/>
             </div>
             <div style={{ marginBottom: '8px' }}>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: d?'#D1D5DB':TK.inkSoft, marginBottom: '6px' }}>Password</label>
               <div style={{ position: 'relative' }}>
-                <input type={showPass?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={{ width:'100%',padding:'11px 44px 11px 14px',border:`1.5px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',outline:'none',background:d?'#1E2030':TK.sunken,color:d?TK.sunken:TK.ink,boxSizing:'border-box' }} onFocus={e=>e.target.style.borderColor=TK.violet} onBlur={e=>e.target.style.borderColor=d?TK.inkSoft:TK.line}/>
+                <input type={showPass?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="••••••••" style={{ width:'100%',padding:'11px 44px 11px 14px',border:`1.5px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',outline:'none',background:d?'#1E2030':TK.sunken,color:d?TK.sunken:TK.ink,boxSizing:'border-box' }} onFocus={e=>e.target.style.borderColor=TK.brand} onBlur={e=>e.target.style.borderColor=d?TK.inkSoft:TK.line}/>
                 <button type="button" onClick={()=>setShowPass(!showPass)} style={{ position:'absolute',right:'12px',top:'50%',transform:'translateY(-50%)',background:'none',border:'none',cursor:'pointer',fontSize:'16px' }}>{showPass?'':''}</button>
               </div>
             </div>
-            <div style={{ textAlign: 'right', marginBottom: '20px' }}><a href="#" style={{ fontSize:'13px',color:TK.violet,textDecoration:'none',fontWeight:'500' }}>Forgot password?</a></div>
+            <div style={{ textAlign: 'right', marginBottom: '20px' }}><a href="#" style={{ fontSize:'13px',color:TK.brand,textDecoration:'none',fontWeight:'500' }}>Forgot password?</a></div>
             {error && <div style={{ background:d?'#2D1515':TK.criticalTint,border:`1px solid ${d?'#7F1D1D':'#FECACA'}`,borderRadius:'8px',padding:'10px 14px',fontSize:'13px',color:d?'#FCA5A5':TK.critical,marginBottom:'16px' }}>⚠️ {error}</div>}
-            <button type="submit" disabled={loading} style={{ width:'100%',padding:'13px',background:loading?'#A78BFA':TK.violet,color:'#fff',border:'none',borderRadius:'10px',fontSize:'15px',fontWeight:'600',cursor:loading?'not-allowed':'pointer' }}>{loading?'Signing in...':'Sign In →'}</button>
+            <button type="submit" disabled={loading} style={{ width:'100%',padding:'13px',background:loading?'#A78BFA':TK.brand,color:'#fff',border:'none',borderRadius:'10px',fontSize:'15px',fontWeight:'600',cursor:loading?'not-allowed':'pointer' }}>{loading?'Signing in...':'Sign In →'}</button>
           </form>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', margin: '24px 0' }}>
             <div style={{ flex: 1, height: '1px', background: d?'#1F2937':TK.line }} />
@@ -141,10 +141,10 @@ export default function LoginPage() {
           </div>
           <button style={{ width:'100%',padding:'12px',background:'transparent',border:`1.5px solid ${d?TK.inkSoft:TK.line}`,borderRadius:'10px',fontSize:'14px',fontWeight:'500',color:d?'#D1D5DB':TK.inkSoft,cursor:'pointer' }}>Contact your admin</button>
           <div style={{ textAlign: 'center', marginTop: '16px' }}>
-            <a href="/ess-login" style={{ fontSize:'13px',color:TK.violet,textDecoration:'none',fontWeight:'500' }}>Employee? Log in to ESS →</a>
+            <a href="/ess-login" style={{ fontSize:'13px',color:TK.brand,textDecoration:'none',fontWeight:'500' }}>Employee? Log in to ESS →</a>
           </div>
           <div style={{ textAlign: 'center', marginTop: '28px' }}>
-            <div style={{ fontSize: '12px', color: d?'#4B5563':TK.faint, marginBottom: '4px' }}>Powered by <span style={{ color:TK.violet,fontWeight:'600' }}>ezerhrms.com</span></div>
+            <div style={{ fontSize: '12px', color: d?'#4B5563':TK.faint, marginBottom: '4px' }}>Powered by <span style={{ color:TK.brand,fontWeight:'600' }}>ezerhrms.com</span></div>
             <div style={{ fontSize: '11px', color: d?TK.inkSoft:TK.lineStrong }}>SOC 2 · 🇮🇳 Data in India · ✦ DPDPA 2023</div>
           </div>
         </div>

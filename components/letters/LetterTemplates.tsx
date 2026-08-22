@@ -23,12 +23,12 @@ import type { MergeField } from '@/lib/letters/mergeFields'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted,
   green: TK.positive, greenBg: TK.positiveTint, greenBd: '#BBF7D0',
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
   red: TK.critical, redBg: TK.criticalTint, redBd: '#FCA5A5',
-  purpleBg: TK.violetTint, gray: TK.sunken,
+  purpleBg: TK.brandTint, gray: TK.sunken,
 }
 
 interface Template {

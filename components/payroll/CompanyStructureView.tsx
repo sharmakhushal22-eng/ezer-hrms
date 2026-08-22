@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 
-const C = { navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface, border: TK.line, muted: TK.muted, purpleBg: TK.violetTint, teal: '#0F6E56', amber: TK.warning }
+const C = { navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface, border: TK.line, muted: TK.muted, purpleBg: TK.brandTint, teal: '#0F6E56', amber: TK.warning }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 function SectionCard({ icon, title, count, children }: { icon: string; title: string; count: number; children: React.ReactNode }) {

@@ -12,9 +12,9 @@ import * as XLSX from 'xlsx'
 import { C as TK } from '@/lib/ui'
 
 const P = {
-  navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line, muted: TK.muted,
+  navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
   bg: TK.canvas, card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, amber: TK.warning, amberBg: TK.warningTint,
-  red: TK.critical, redBg: TK.criticalTint, teal: '#0F6E56', tealBg: '#E1F5EE', purpleBg: TK.violetTint,
+  red: TK.critical, redBg: TK.criticalTint, teal: '#0F6E56', tealBg: '#E1F5EE', purpleBg: TK.brandTint,
 }
 
 // ── Policy constants (OFB flexi + FY 2026-27 tax) ──
@@ -365,7 +365,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginBottom: 12 }}>
             {[
-              { l: 'Annual CTC', v: rd.totalCtc || rd.annualCtc, c: TK.violet, bg: TK.canvas },
+              { l: 'Annual CTC', v: rd.totalCtc || rd.annualCtc, c: TK.brand, bg: TK.canvas },
               { l: 'Net Take-home / mo', v: rd.net, c: TK.positive, bg: TK.positiveTint },
               { l: 'Fixed / mo', v: rd.fixedMonthly, c: TK.ink, bg: TK.sunken },
             ].map(x => (
@@ -387,7 +387,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
                   display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', padding: '8px 12px', borderTop: '1px solid #F1F5F9',
                   background: kind === 'total' ? TK.canvas : kind === 'net' ? TK.positiveTint : kind === 'sub' ? TK.sunken : '#fff',
                   fontWeight: kind ? 700 : 400,
-                  color: kind === 'total' ? TK.violet : kind === 'net' ? TK.positive : TK.ink,
+                  color: kind === 'total' ? TK.brand : kind === 'net' ? TK.positive : TK.ink,
                 }}>
                   <span style={{ fontSize: 12.5 }}>{label}</span>
                   <span style={{ fontSize: 12.5, textAlign: 'right' }}>{R(m)}</span>

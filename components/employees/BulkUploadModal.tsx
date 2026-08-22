@@ -21,7 +21,7 @@ const COLS = ['emp_code', 'full_name', 'employment_type', 'designation', 'depart
 const s = {
   inp:  { width:'100%', padding:'9px 11px', border:'1px solid #E2E8F0', borderRadius:7, fontSize:13, fontFamily:'inherit', background:'#fff', color:TK.ink, outline:'none', boxSizing:'border-box' as const },
   lbl:  { fontSize:10, fontWeight:600 as const, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 },
-  pri:  { padding:'9px 18px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600 as const, fontFamily:'inherit', background:TK.violet, color:'#fff' } as React.CSSProperties,
+  pri:  { padding:'9px 18px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600 as const, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
   out:  { padding:'9px 16px', borderRadius:7, border:'1px solid #E2E8F0', cursor:'pointer', fontSize:12, fontWeight:500 as const, fontFamily:'inherit', background:'#fff', color:TK.inkSoft } as React.CSSProperties,
 }
 const S = (v: any) => String(v ?? '').trim()
@@ -193,7 +193,7 @@ export default function BulkUploadModal({ companies, departments, locations, onC
               </label>
 
               <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                <button onClick={downloadTemplate} disabled={!companyId} style={{ ...s.out, borderColor:TK.violet, color:TK.violet, background:TK.violetTint, opacity: companyId ? 1 : 0.5 }}>⬇ Download Template</button>
+                <button onClick={downloadTemplate} disabled={!companyId} style={{ ...s.out, borderColor:TK.brand, color:TK.brand, background:TK.brandTint, opacity: companyId ? 1 : 0.5 }}>⬇ Download Template</button>
                 <label style={{ ...s.pri, cursor: companyId ? 'pointer' : 'not-allowed', opacity: companyId ? 1 : 0.5, display:'inline-flex', alignItems:'center', gap:6 }}>
                   {busy ? 'Processing…' : '⬆ Upload Filled Excel'}
                   <input type="file" accept=".xlsx,.xls" style={{ display:'none' }} disabled={!companyId || busy} onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f); e.target.value = '' }} />

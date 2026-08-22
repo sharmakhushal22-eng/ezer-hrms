@@ -15,19 +15,19 @@ import { C as TK } from '@/lib/ui'
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
   card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  lbl:   { fontSize:10, fontWeight:600, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
-  sec:   { fontSize:12, fontWeight:600, color:TK.violet, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
+  lbl:   { fontSize:10, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
+  sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-  pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.violetDeep } as React.CSSProperties,
+  pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
+  out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep } as React.CSSProperties,
   danger:{ padding:'6px 11px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.critical } as React.CSSProperties,
-  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.violet : '#fff', color: on ? '#fff' : TK.violetDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
+  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
 }
 const hrs = (m: number | null) => m == null ? '—' : `${Math.floor(m / 60)}h ${m % 60}m`
 const tm = (s: string | null) => s ? new Date(s).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'
 const STATUS_COLOR: Record<string, [string, string]> = {
   PRESENT:[TK.positiveTint,TK.positive], HALF_DAY:[TK.warningTint,TK.warning], ABSENT:[TK.criticalTint,TK.critical],
-  LEAVE:[TK.violetTint,TK.violetDeep], HOLIDAY:[TK.infoTint,'#1E40AF'], WEEKLY_OFF:['#F3F4F6',TK.muted], LWP:[TK.criticalTint,TK.critical],
+  LEAVE:[TK.brandTint,TK.brandDeep], HOLIDAY:[TK.infoTint,'#1E40AF'], WEEKLY_OFF:['#F3F4F6',TK.muted], LWP:[TK.criticalTint,TK.critical],
 }
 
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
@@ -249,7 +249,7 @@ export default function AttendancePage() {
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Attendance &amp; Shifts</div>
         <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Shift config (auto-coded), employee assignment, and processed attendance (first IN / last OUT). ESS app / biometric / manual punches feed one engine.</div>
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>{tabs.map(([k, l]) => <button key={k} style={T.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}</div>
-        {loading ? <div style={{ ...T.card, textAlign:'center', color:TK.violet, padding:40 }}>Loading…</div> : (
+        {loading ? <div style={{ ...T.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <>
             {tab === 'shifts' && <ShiftsTab companies={companies} locations={locations} departments={departments} shifts={shifts} onCreate={doCreate} onToggle={doToggle} onDelete={doDelete} />}
             {tab === 'assign' && <AssignTab shifts={shifts} employees={employees} assignments={assignments} onAssign={doAssign} />}

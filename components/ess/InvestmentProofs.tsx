@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: 'rgba(124,58,237,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
   soft: TK.sunken, purpleBg: '#F3EEFF',

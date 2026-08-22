@@ -10,7 +10,7 @@ import { C as TK } from '@/lib/ui'
 
 // ── Admin C palette ──────────────────────────────────────────────
 const C = {
-  page:'#F0F4F8', card:TK.surface, border:TK.line, purple:TK.violet, navy:TK.ink, muted:TK.muted,
+  page:'#F0F4F8', card:TK.surface, border:TK.line, purple:TK.brand, navy:TK.ink, muted:TK.muted,
   red:TK.critical, redBg:TK.criticalTint, green:TK.positive, greenBg:TK.positiveTint, amber:TK.warning, amberBg:TK.warningTint, blue:'#185FA5', blueBg:'#E6F1FB',
 }
 const S = {
@@ -38,7 +38,7 @@ function Badge({ status }: { status: string }) {
     REJECTED:[C.redBg, C.red], CANCELLED:[C.redBg, C.red], EXIT_RECOVERY:[C.redBg, C.red],
     CLOSED:[TK.sunken, C.muted], FORECLOSED:[TK.sunken, C.muted],
   }
-  const [bg, c] = map[s] || [TK.violetTint, C.purple]
+  const [bg, c] = map[s] || [TK.brandTint, C.purple]
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{s.replace(/_/g, ' ')}</span>
 }
 

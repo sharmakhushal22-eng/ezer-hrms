@@ -23,17 +23,17 @@ import { C as TK } from '@/lib/ui'
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
   card:  { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'16px 18px', marginBottom:14, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  lbl:   { fontSize:11, fontWeight:600, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
-  sec:   { fontSize:12, fontWeight:600, color:TK.violet, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
+  lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
+  sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-  pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:   { padding:'8px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.violetDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
+  out:   { padding:'8px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
   danger:{ padding:'5px 10px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.critical } as React.CSSProperties,
-  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.violet : '#fff', color: on ? '#fff' : TK.violetDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
+  tab:   (on: boolean) => ({ padding:'9px 18px', borderRadius:8, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
   check: { display:'flex', alignItems:'center', gap:7, fontSize:12.5, cursor:'pointer', padding:'4px 0' } as React.CSSProperties,
 }
 const MODE_LABEL: Record<AppMode, string> = { EMPLOYEE:'Employee applies', HR_MARK:'HR marks', EARN_AVAIL:'Earn & avail' }
-const SRC_COLOR: Record<string, [string, string]> = { branch:[TK.violetTint,TK.violetDeep], company:[TK.infoTint,'#1E40AF'], catalog:['#F3F4F6',TK.muted] }
+const SRC_COLOR: Record<string, [string, string]> = { branch:[TK.brandTint,TK.brandDeep], company:[TK.infoTint,'#1E40AF'], catalog:['#F3F4F6',TK.muted] }
 
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
@@ -46,12 +46,12 @@ function Flags({ t }: { t: LeaveType }) {
   const f: { k: string; on: boolean; bg: string; c: string }[] = [
     { k:'PAID', on:t.is_paid, bg:TK.positiveTint, c:TK.positive },
     { k:'UNPAID', on:!t.is_paid, bg:TK.criticalTint, c:TK.critical },
-    { k:'HALF-DAY', on:t.allow_half_day, bg:TK.canvas, c:TK.violetDeep },
+    { k:'HALF-DAY', on:t.allow_half_day, bg:TK.canvas, c:TK.brandDeep },
     { k:'LAPSES', on:t.laps, bg:TK.warningTint, c:TK.warning },
     { k:'ENCASH', on:t.is_encashable, bg:'#ECFEFF', c:'#0891B2' },
     { k:'NO-BAL OK', on:t.allow_without_balance, bg:TK.warningTint, c:TK.warning },
     { k:'AUTO-ABSENT', on:t.auto_mark_absent, bg:TK.criticalTint, c:TK.critical },
-    { k:'CF∞', on:t.carry_forward_unlimited, bg:TK.violetTint, c:TK.violetDeep },
+    { k:'CF∞', on:t.carry_forward_unlimited, bg:TK.brandTint, c:TK.brandDeep },
   ]
   return <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>{f.filter(x => x.on).map(x => <Pill key={x.k} text={x.k} bg={x.bg} color={x.c} />)}</div>
 }
@@ -62,7 +62,7 @@ const BLANK: Partial<LeaveType> = {
   probation_eligible:false, probation_limit:null, laps:false, encashment_after:null, max_times_in_tenure:null,
   allow_without_balance:false, auto_mark_absent:false, deduct_salary:false, gender:'ANY', approval_by:'HR_MANAGER',
   carry_forward_unlimited:false, is_system:false, annual_quota:0, carry_forward_max:0, is_paid:true,
-  is_encashable:false, allow_half_day:true, accrual:'YEARLY', doc_required_after:null, color:TK.violet, sort_order:0,
+  is_encashable:false, allow_half_day:true, accrual:'YEARLY', doc_required_after:null, color:TK.brand, sort_order:0,
 }
 function LeaveTypeModal({ row, companies, branches, onClose, onSave }: { row: LeaveType | null; companies: any[]; branches: any[]; onClose: () => void; onSave: (r: Partial<LeaveType>) => Promise<void> }) {
   const [f, setF] = useState<Partial<LeaveType>>(row || BLANK)
@@ -82,7 +82,7 @@ function LeaveTypeModal({ row, companies, branches, onClose, onSave }: { row: Le
         <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 0.8fr 0.8fr', gap:10, marginBottom:14 }}>
           <div><label style={T.lbl}>Name</label><input style={T.input} value={f.name || ''} onChange={e => set('name', e.target.value)} placeholder="Earned Leave" /></div>
           <div><label style={T.lbl}>Code</label><input style={T.input} value={f.short_name || ''} onChange={e => set('short_name', e.target.value.toUpperCase())} placeholder="EL" /></div>
-          <div><label style={T.lbl}>Color</label><input type="color" style={{ ...T.input, padding:2, height:36 }} value={f.color || TK.violet} onChange={e => set('color', e.target.value)} /></div>
+          <div><label style={T.lbl}>Color</label><input type="color" style={{ ...T.input, padding:2, height:36 }} value={f.color || TK.brand} onChange={e => set('color', e.target.value)} /></div>
           <div><label style={T.lbl}>Sort</label><input type="number" style={T.input} value={f.sort_order ?? 0} onChange={e => set('sort_order', Number(e.target.value))} /></div>
         </div>
 
@@ -289,13 +289,13 @@ function UploadFlow({ title, desc, columns, errorFile, onTemplate, onParse, onCo
     <div style={T.card}>
       <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4 }}>{title}</div>
       <div style={{ fontSize: 13, color: TK.muted, marginBottom: 16 }}>{desc}</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>{columns.map(c => <span key={c} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: TK.canvas, color: TK.violet, border: '1px solid rgba(124,58,237,0.12)' }}>{c}</span>)}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>{columns.map(c => <span key={c} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, background: TK.canvas, color: TK.brand, border: '1px solid rgba(124,58,237,0.12)' }}>{c}</span>)}</div>
       {!result && (<>
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <button style={T.out} disabled={tplBusy} onClick={async () => { setTplBusy(true); try { await onTemplate() } catch {} setTplBusy(false) }}>⬇ {tplBusy ? 'Preparing…' : 'Download template'}</button>
         </div>
         <div onClick={() => inputRef.current?.click()} onDragOver={e => { e.preventDefault(); setDrag(true) }} onDragLeave={() => setDrag(false)} onDrop={e => { e.preventDefault(); setDrag(false); const f = e.dataTransfer.files?.[0]; if (f) handleFile(f) }}
-          style={{ border: `2px dashed ${drag ? TK.violet : 'rgba(124,58,237,0.3)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? TK.canvas : '#FCFBFF' }}>
+          style={{ border: `2px dashed ${drag ? TK.brand : 'rgba(124,58,237,0.3)'}`, borderRadius: 12, padding: '28px 20px', textAlign: 'center', cursor: 'pointer', background: drag ? TK.canvas : '#FCFBFF' }}>
           <div style={{ fontSize: 26, marginBottom: 6 }}>{file ? '' : ''}</div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>{file ? file.name : 'Drag & drop Excel here, or click to browse'}</div>
           <div style={{ fontSize: 11, color: TK.muted, marginTop: 4 }}>{parsing ? 'Reading…' : '.xlsx / .xls'}</div>
@@ -319,7 +319,7 @@ function UploadFlow({ title, desc, columns, errorFile, onTemplate, onParse, onCo
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}><span style={{ fontSize: 28 }}>{result.failed ? '' : ''}</span><div style={{ fontSize: 15, fontWeight: 600 }}>{result.failed ? 'Uploaded with some failures' : 'Upload complete'}</div></div>
         <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
           <StatChip icon="＋" label="inserted" value={result.inserted} color={TK.positive} bg={TK.positiveTint} />
-          <StatChip icon="↻" label="updated" value={result.updated} color={TK.violet} bg={TK.canvas} />
+          <StatChip icon="↻" label="updated" value={result.updated} color={TK.brand} bg={TK.canvas} />
           {result.failed > 0 && <StatChip icon="✗" label="failed" value={result.failed} color={TK.critical} bg={TK.criticalTint} />}
         </div>
         {result.errors.length > 0 && <div style={{ maxHeight: 140, overflowY: 'auto', background: TK.warningTint, borderRadius: 8, padding: '8px 12px', marginBottom: 14 }}>{result.errors.map((e, i) => <div key={i} style={{ fontSize: 12, color: TK.warning, padding: '2px 0' }}>{e.rowNo > 0 ? `Row ${e.rowNo}: ` : ''}{e.msg}</div>)}</div>}
@@ -434,7 +434,7 @@ export default function LeaveConfigPage() {
           {tabs.map(([k, l]) => <button key={k} style={T.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}
         </div>
 
-        {loading ? <div style={{ ...T.card, textAlign:'center', color:TK.violet, padding:40 }}>Loading…</div> : (
+        {loading ? <div style={{ ...T.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <>
             {tab === 'types' && <LeaveTypesTab types={types} onEdit={setEditing} onAdd={() => setEditing('new')} onToggle={toggleType} onDelete={delType} />}
             {tab === 'quota' && <BranchQuotaTab companies={companies} branches={branches} rows={qRows} company={qCompany} branch={qBranch} fy={qFy} onCompany={v => { setQCompany(v); setQBranch('') }} onBranch={setQBranch} onFy={setQFy} onSave={saveQuota} />}

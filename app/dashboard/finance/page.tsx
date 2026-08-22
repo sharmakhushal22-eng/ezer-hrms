@@ -26,10 +26,10 @@ async function authHeaders(): Promise<Record<string, string>> {
 // Bound to the design system. Every style below reads from here, so this page
 // follows lib/ui/tokens.ts rather than restating a palette.
 const V = {
-  navy: C.ink, purple: C.violet, purpleDark: C.violetDeep, border: C.line,
+  navy: C.ink, purple: C.brand, purpleDark: C.brandDeep, border: C.line,
   muted: C.muted, card: C.surface, green: C.positive, greenBg: C.positiveTint,
   red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint,
-  purpleBg: C.violetTint, field: C.sunken, page: C.canvas,
+  purpleBg: C.brandTint, field: C.sunken, page: C.canvas,
 }
 const inr = (n: unknown) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const num = (v: unknown) => Number(v) || 0
@@ -41,10 +41,10 @@ const S = {
           padding: '16px 18px', marginBottom: SP.md, boxShadow: E.raised } as React.CSSProperties,
   inp:  { ...inputStyle(), width: 'auto' } as React.CSSProperties,
   lbl:  { ...eyebrow, display: 'block', marginBottom: 5 } as React.CSSProperties,
-  btnP: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${C.violetDeep}`,
+  btnP: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${C.brandDeep}`,
           cursor: 'pointer', fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
-          background: `linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color: '#fff',
-          boxShadow: E.violet } as React.CSSProperties,
+          background: `linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color: '#fff',
+          boxShadow: E.brand } as React.CSSProperties,
   // Approving money is the consequential action on this screen, so it is the
   // only green button — and green here means "settled", not "branded".
   btnG: { height: 36, padding: '0 16px', borderRadius: R.md, border: 'none', cursor: 'pointer',

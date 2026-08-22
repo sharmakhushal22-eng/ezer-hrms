@@ -13,7 +13,7 @@ import {
 const S = {
   page: { background:TK.canvas, minHeight:'100vh', fontFamily:TF.family, color:TK.ink } as React.CSSProperties,
   card: { background:TK.surface, borderRadius:R.lg, border:`1px solid ${TK.line}`, padding:'14px 16px', marginBottom:SP.md, boxShadow:E.raised } as React.CSSProperties,
-  cardP: { background:TK.surface, borderRadius:R.lg, border:`1.5px solid ${TK.violet}`, padding:'14px 16px', marginBottom:SP.md, boxShadow:E.floating } as React.CSSProperties,
+  cardP: { background:TK.surface, borderRadius:R.lg, border:`1.5px solid ${TK.brand}`, padding:'14px 16px', marginBottom:SP.md, boxShadow:E.floating } as React.CSSProperties,
   label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
   input: { ...inputStyle() } as React.CSSProperties,
   select: { ...inputStyle(), cursor:'pointer' } as React.CSSProperties,
@@ -37,7 +37,7 @@ function SecLine({ title }: { title: string }) {
 // ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
 // `f` shape: { company, department, position, location } — all '' means "All".
 function RecFilterBar({ companies, departments, locations, positions, f, setF }: any) {
-  const lbl = { fontSize:11, fontWeight:600 as const, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 }
+  const lbl = { fontSize:11, fontWeight:600 as const, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 }
   return (
     <div style={{ ...S.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end' }}>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
@@ -69,7 +69,7 @@ function RecFilterBar({ companies, departments, locations, positions, f, setF }:
         </select>
       </div>
       {(f.company||f.department||f.position||f.location) && (
-        <button style={{ ...S.btn('#fff',TK.violetDeep), border:'1px solid #DDD6FE' }} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
+        <button style={{ ...S.btn('#fff',TK.brandDeep), border:'1px solid #DDD6FE' }} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
       )}
     </div>
   )
@@ -265,7 +265,7 @@ This document is confidential and for internal approval only.`
       {/* PREVIOUS EMPLOYER SECTION */}
       <div style={S.cardP}>
         <SecLine title="Previous Employer Details" />
-        <div style={{ fontSize:11, color:TK.violetDeep, background:TK.violetTint, borderRadius:6, padding:'6px 10px', marginBottom:12 }}>
+        <div style={{ fontSize:11, color:TK.brandDeep, background:TK.brandTint, borderRadius:6, padding:'6px 10px', marginBottom:12 }}>
           This section is confidential — NOT shown to candidate. Only visible in HR approval request.
         </div>
         <div style={{ ...S.g2, marginBottom:10 }}>
@@ -303,7 +303,7 @@ This document is confidential and for internal approval only.`
           </div>
         </div>
         {joining.proposed_doj && (
-          <div style={{ background:TK.violetTint, borderRadius:7, padding:'8px 12px', fontSize:12, color:TK.violetDeep }}>
+          <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 12px', fontSize:12, color:TK.brandDeep }}>
             Days to join: <strong>{daysDiff(joining.proposed_doj)} days</strong> from today
           </div>
         )}
@@ -319,9 +319,9 @@ This document is confidential and for internal approval only.`
               ['Monthly In-Hand', `₹${fmt(negotiation.net_monthly || 0)}`],
               ['Hike %', `${Number(negotiation.hike_pct||0).toFixed(1)}%`],
             ].map(([l,v]) => (
-              <div key={l} style={{ background:TK.violetTint, borderRadius:8, padding:'10px 12px' }}>
+              <div key={l} style={{ background:TK.brandTint, borderRadius:8, padding:'10px 12px' }}>
                 <div style={{ fontSize:10, color:TK.faint }}>{l}</div>
-                <div style={{ fontSize:14, fontWeight:500, color:TK.violetDeep, marginTop:2 }}>{v}</div>
+                <div style={{ fontSize:14, fontWeight:500, color:TK.brandDeep, marginTop:2 }}>{v}</div>
               </div>
             ))}
           </div>
@@ -344,9 +344,9 @@ This document is confidential and for internal approval only.`
 
       {/* ACTIONS */}
       <div style={{ display:'flex', gap:10, marginBottom:16 }}>
-        <button onClick={generateTemplate} style={S.btn(TK.violetTint,TK.violetDeep)}>Generate Approval Template
+        <button onClick={generateTemplate} style={S.btn(TK.brandTint,TK.brandDeep)}>Generate Approval Template
         </button>
-        <button onClick={submitForApproval} disabled={saving || !template} style={S.btn(saving||!template?'rgba(124,58,237,0.4)':TK.violet,'#fff')}>
+        <button onClick={submitForApproval} disabled={saving || !template} style={S.btn(saving||!template?'rgba(124,58,237,0.4)':TK.brand,'#fff')}>
           {saving ? 'Submitting...' : 'Submit to HR Head'}
         </button>
       </div>
@@ -356,7 +356,7 @@ This document is confidential and for internal approval only.`
         <div style={S.card}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
             <div style={{ fontSize:13, fontWeight:500 }}>Approval Request Preview (read-only)</div>
-            <button onClick={()=>setShowTemplate(false)} style={{ ...S.btn(TK.violetTint,TK.faint), padding:'4px 10px', fontSize:11 }}>Hide</button>
+            <button onClick={()=>setShowTemplate(false)} style={{ ...S.btn(TK.brandTint,TK.faint), padding:'4px 10px', fontSize:11 }}>Hide</button>
           </div>
           <pre style={{ fontFamily:'monospace', fontSize:11, color:TK.inkSoft, background:TK.sunken, borderRadius:7, padding:12, whiteSpace:'pre-wrap', border:'1px solid #EDE9FE', maxHeight:500, overflow:'auto', margin:0 }}>
             {template}
@@ -378,8 +378,8 @@ function SearchBar({ placeholder, onApply, width=320 }:{ placeholder:string; onA
     <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
       <input style={{ ...S.input, maxWidth:width }} value={draft} placeholder={placeholder}
         onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
-      <button style={S.btn(TK.violet,'#fff')} onClick={()=>onApply(draft.trim())}>Apply</button>
-      {draft && <button style={S.btn(TK.violetTint,TK.violetDeep)} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
+      <button style={S.btn(TK.brand,'#fff')} onClick={()=>onApply(draft.trim())}>Apply</button>
+      {draft && <button style={S.btn(TK.brandTint,TK.brandDeep)} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
     </div>
   )
 }
@@ -484,7 +484,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
     SUBMITTED: [TK.infoTint,TK.info],
     HR_HEAD_APPROVED: [TK.positiveTint,TK.positive],
     HR_HEAD_REJECTED: [TK.criticalTint,TK.critical],
-    OFFER_SENT: [TK.violetTint,TK.violet],
+    OFFER_SENT: [TK.brandTint,TK.brand],
   }[s] || [TK.sunken,TK.muted])
 
   const ql = hq.trim().toLowerCase()
@@ -508,7 +508,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {/* MRF Approvals — HR Head approves new manpower requisitions here */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:TK.violetDeep, margin:'10px 0 8px' }}>MRF Approvals ({fMrfs.length})</div>
+        <div style={{ fontSize:13, fontWeight:600, color:TK.brandDeep, margin:'10px 0 8px' }}>MRF Approvals ({fMrfs.length})</div>
         {fMrfs.length === 0 && (
           <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:18, fontSize:12 }}>{ql?'No matching MRF':'No MRFs pending approval'}</div>
         )}
@@ -519,7 +519,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>
                 {m.companies?.company_name || ''} · {m.no_of_openings || m.openings || 0} openings · {m.employment_type || '—'}{m.experience_required ? ` · ${m.experience_required}` : ''}
               </div>
-              {m.skills_required && <div style={{ fontSize:11, color:TK.violetDeep, marginTop:3 }}>Skills: {m.skills_required}</div>}
+              {m.skills_required && <div style={{ fontSize:11, color:TK.brandDeep, marginTop:3 }}>Skills: {m.skills_required}</div>}
             </div>
             <div style={{ display:'flex', gap:8, flexShrink:0 }}>
               <button onClick={()=>approveMrf(m.id)} style={S.btn(TK.positive,'#fff')}>Approve</button>
@@ -531,7 +531,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 
       {/* Rehire — re-enter rejected candidates into the pipeline at a chosen stage */}
       <div style={{ marginBottom:22 }}>
-        <div style={{ fontSize:13, fontWeight:600, color:TK.violetDeep, margin:'10px 0 8px' }}>Rehire — Rejected Candidates ({fRejected.length})</div>
+        <div style={{ fontSize:13, fontWeight:600, color:TK.brandDeep, margin:'10px 0 8px' }}>Rehire — Rejected Candidates ({fRejected.length})</div>
         {fRejected.length === 0 && (
           <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:18, fontSize:12 }}>{ql?'No matching candidate':'No rejected candidates'}</div>
         )}
@@ -552,11 +552,11 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
         ))}
       </div>
 
-      <div style={{ fontSize:13, fontWeight:600, color:TK.violetDeep, margin:'4px 0 8px' }}>Offer Approvals</div>
+      <div style={{ fontSize:13, fontWeight:600, color:TK.brandDeep, margin:'4px 0 8px' }}>Offer Approvals</div>
       <div style={{ display:'flex', gap:8, marginBottom:16 }}>
         {(['pending','done'] as const).map(t => (
           <button key={t} onClick={()=>{setTab(t);setSelected(null)}}
-            style={{ ...S.btn(tab===t?TK.violet:'#fff', tab===t?'#fff':TK.muted), border: tab===t?'none':'1px solid #DDD6FE' }}>
+            style={{ ...S.btn(tab===t?TK.brand:'#fff', tab===t?'#fff':TK.muted), border: tab===t?'none':'1px solid #DDD6FE' }}>
             {t === 'pending' ? 'Pending Approval' : 'Approved'}
           </button>
         ))}
@@ -575,12 +575,12 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             const [bg, c] = statusColor(r.status)
             return (
               <div key={r.id} onClick={()=>setSelected(r)}
-                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?TK.violetTint:'#fff' }}>
+                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?TK.brandTint:'#fff' }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                   <div>
                     <div style={{ fontSize:14, fontWeight:600 }}>{r.candidates?.full_name}</div>
                     <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} CTC</div>
-                    <div style={{ fontSize:11, color:TK.violet, marginTop:2 }}>Hike: {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}</div>
+                    <div style={{ fontSize:11, color:TK.brand, marginTop:2 }}>Hike: {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}</div>
                     {r.submitted_at && <div style={{ fontSize:10, color:TK.faint, marginTop:3 }}>Submitted: {new Date(r.submitted_at).toLocaleDateString('en-IN')}</div>}
                   </div>
                   <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:bg, color:c, fontWeight:500 }}>{r.status.replace('_',' ')}</span>
@@ -834,7 +834,7 @@ ${company} — Human Resources`)
           )}
           {fApproved.map(r => (
             <div key={r.id} onClick={() => prepareOffer(r)}
-              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?TK.violetTint:'#fff' }}>
+              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:selected?.id===r.id?TK.brandTint:'#fff' }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}</div>
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}
@@ -848,7 +848,7 @@ ${company} — Human Resources`)
 
         {selected && (
           <div style={S.cardP}>
-            <div style={{ fontSize:13, fontWeight:500, color:TK.violetDeep, marginBottom:12 }}>Send Offer Letter — {selected.candidates?.full_name}</div>
+            <div style={{ fontSize:13, fontWeight:500, color:TK.brandDeep, marginBottom:12 }}>Send Offer Letter — {selected.candidates?.full_name}</div>
             <div style={{ marginBottom:8 }}>
               <label style={S.label}>To *</label>
               <input style={S.input} value={toEmail} onChange={e=>setToEmail(e.target.value)} />
@@ -865,11 +865,11 @@ ${company} — Human Resources`)
               <label style={S.label}>Email Body</label>
               <textarea style={{ ...S.textarea, minHeight:280 }} value={body} onChange={e=>setBody(e.target.value)} />
             </div>
-            <div style={{ background:TK.violetTint, borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:TK.violetDeep }}>
+            <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:TK.brandDeep }}>
               This emails the offer letter to the candidate via Gmail, records it, and marks the candidate <b>Offer Sent</b> in the pipeline.
             </div>
             <button onClick={sendOffer} disabled={sending}
-              style={{ ...S.btn(TK.violet,'#fff'), width:'100%', padding:11, fontSize:13 }}>
+              style={{ ...S.btn(TK.brand,'#fff'), width:'100%', padding:11, fontSize:13 }}>
               {sending ? 'Sending…' : 'Send Offer & Mark as Sent'}
             </button>
           </div>
@@ -920,7 +920,7 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
         const [icon, label] = actionLabel[log.action_type] || ['', log.action_type]
         return (
           <div key={log.id} style={{ display:'flex', gap:10, paddingBottom:12, borderBottom: i<logs.length-1 ? '1px solid #F3F0FF' : 'none', marginBottom:i<logs.length-1?12:0 }}>
-            <div style={{ width:28, height:28, borderRadius:99, background:TK.violetTint, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>{icon}</div>
+            <div style={{ width:28, height:28, borderRadius:99, background:TK.brandTint, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>{icon}</div>
             <div>
               <div style={{ fontSize:12, fontWeight:500, color:TK.ink }}>{label}</div>
               {log.actor_email && <div style={{ fontSize:11, color:TK.faint, marginTop:1 }}>By: {log.actor_email}</div>}

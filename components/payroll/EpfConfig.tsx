@@ -12,9 +12,9 @@ import type { EpfConfig as EpfCfg, EpfCalculationResult, EpfChargesResult } from
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint, gray: TK.sunken,
+  greenBd: '#BBF7D0', amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`
@@ -133,8 +133,8 @@ export default function EpfConfig() {
       {cfg && (
         <>
           <GroupCard title="Contribution split">
-            <InfoTile icon="🧑‍💼" label="Employee" value={`${cfg.employee_contribution_percent}%`} accent={TK.violet} />
-            <InfoTile icon="🏢" label="Employer" value={`${cfg.employer_contribution_percent}%`} accent={TK.violet} />
+            <InfoTile icon="🧑‍💼" label="Employee" value={`${cfg.employee_contribution_percent}%`} accent={TK.brand} />
+            <InfoTile icon="🏢" label="Employer" value={`${cfg.employer_contribution_percent}%`} accent={TK.brand} />
             <InfoTile icon="👵" label="EPS (pension)" value={`${cfg.eps_percent}%`} hint={`capped at ${inr(cfg.eps_max_amount)}`} accent="#0891B2" />
             <InfoTile icon="📉" label="Reduced rate" value={`${cfg.reduced_rate_percent}%`} hint={`under ${cfg.reduced_rate_headcount_threshold} employees`} accent={TK.warning} />
           </GroupCard>

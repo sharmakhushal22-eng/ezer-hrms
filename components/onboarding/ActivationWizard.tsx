@@ -21,20 +21,20 @@ const T = {
   closeBtn: { border:'none', background:'none', cursor:'pointer', fontSize:22, color:TK.muted, lineHeight:1 },
   body:     { padding:'18px 22px' },
   footer:   { display:'flex', gap:10, padding:'14px 22px', borderTop:'1px solid rgba(124,58,237,0.12)', alignItems:'center' },
-  label:    { fontSize:11, fontWeight:600, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
+  label:    { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
   input:    { width:'100%', padding:'9px 11px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
   g2:       { display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 },
   field:    { marginBottom:10 },
   chip:     { display:'inline-flex', flexDirection:'column' as const, padding:'7px 11px', background:TK.canvas, borderRadius:8, minWidth:0 },
-  chipK:    { fontSize:9, fontWeight:600, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' },
+  chipK:    { fontSize:9, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' },
   chipV:    { fontSize:12, color:TK.ink, fontWeight:500, marginTop:2 },
-  sectionH: { fontSize:12, fontWeight:600, color:TK.violet, textTransform:'uppercase' as const, letterSpacing:'.05em', margin:'4px 0 10px' },
+  sectionH: { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', margin:'4px 0 10px' },
   btn:      { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit' },
-  btnPri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff' },
-  btnOut:   { padding:'9px 16px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:13, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.violetDeep },
+  btnPri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' },
+  btnOut:   { padding:'9px 16px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:13, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep },
   card2:    { background:TK.surface, border:'1px solid rgba(124,58,237,0.12)', borderRadius:10, padding:'14px 16px', boxShadow:'0 1px 4px rgba(124,58,237,0.06)' },
 }
-const PURPLE = TK.violet, GREEN = TK.positive, RED = TK.critical, AMBER = TK.warning, MUTED = TK.muted
+const PURPLE = TK.brand, GREEN = TK.positive, RED = TK.critical, AMBER = TK.warning, MUTED = TK.muted
 const STEP_NAMES = ['Org & Role', 'CTC & Payroll', 'IT + Admin', 'Approvals', 'Generate']
 
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
@@ -59,7 +59,7 @@ function Stepper({ step }: { step: number }) {
               width:22, height:22, borderRadius:99, flexShrink:0,
               display:'inline-flex', alignItems:'center', justifyContent:'center',
               fontSize:11, fontWeight:700,
-              background: active ? PURPLE : done ? TK.violetTint : '#F3F4F6',
+              background: active ? PURPLE : done ? TK.brandTint : '#F3F4F6',
               color: active ? '#fff' : done ? PURPLE : MUTED,
             }}>{n}</span>
             <span style={{ fontSize:11, fontWeight: active ? 700 : 500, color: active ? TK.ink : MUTED, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{name}</span>
@@ -73,7 +73,7 @@ function Stepper({ step }: { step: number }) {
 function Chip({ k, v, danger }: { k: string; v: string; danger?: boolean }) {
   return (
     <div style={{ ...T.chip, background: danger ? TK.criticalTint : TK.canvas }}>
-      <span style={{ ...T.chipK, color: danger ? RED : TK.violetDeep }}>{k}</span>
+      <span style={{ ...T.chipK, color: danger ? RED : TK.brandDeep }}>{k}</span>
       <span style={{ ...T.chipV, color: danger ? RED : TK.ink }}>{v}</span>
     </div>
   )
@@ -308,7 +308,7 @@ function Step5Generate({ gates, genCode, setGenCode, codeType, codeLoading, cand
         {!codeLoading && genCode && (
           <div style={{ display:'flex', gap:6, alignItems:'center', marginTop:6, fontSize:10, color:MUTED }}>
             <span>Auto-suggested · override if needed</span>
-            <span style={{ marginLeft:'auto', padding:'1px 8px', borderRadius:99, background:TK.violetTint, color:TK.violetDeep, fontSize:10, fontWeight:600 }}>{codeType || candidate?.employment_type || 'Employee'}</span>
+            <span style={{ marginLeft:'auto', padding:'1px 8px', borderRadius:99, background:TK.brandTint, color:TK.brandDeep, fontSize:10, fontWeight:600 }}>{codeType || candidate?.employment_type || 'Employee'}</span>
           </div>
         )}
         <div style={{ fontSize:10, color:MUTED, marginTop:4 }}>Format: [Company][Type][4 digits] · e.g. SSMINT0001 · unique &amp; never reused</div>

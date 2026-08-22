@@ -21,9 +21,9 @@ import { INDIAN_STATES } from '@/lib/geo/india-states-districts'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint, gray: TK.sunken,
+  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint, gray: TK.sunken,
   red: TK.critical, redBg: TK.criticalTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'

@@ -44,7 +44,7 @@ import {
 // This file already owns the name C, so the design tokens come in as TK and
 // every value below is bound to them. Nothing here is a private hex any more.
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted,
   success: TK.positive, amber: TK.warning, red: TK.critical,
   font: TF.family,
@@ -59,10 +59,10 @@ const S = {
           padding: '16px 18px', marginBottom: SP.lg, boxShadow: E.raised } as React.CSSProperties,
   label: { ...eyebrow, display: 'block', marginBottom: 5 } as React.CSSProperties,
   input: { ...inputStyle() } as React.CSSProperties,
-  btnPrimary: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${TK.violetDeep}`,
+  btnPrimary: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${TK.brandDeep}`,
           cursor: 'pointer', fontSize: TF.small, fontWeight: W.semi, fontFamily: 'inherit',
-          background: `linear-gradient(180deg, ${TK.violet}, ${TK.violetDeep})`, color: '#fff',
-          whiteSpace: 'nowrap', boxShadow: E.violet } as React.CSSProperties,
+          background: `linear-gradient(180deg, ${TK.brand}, ${TK.brandDeep})`, color: '#fff',
+          whiteSpace: 'nowrap', boxShadow: E.brand } as React.CSSProperties,
   btnOutline: { height: 34, padding: '0 13px', borderRadius: R.md, border: `1px solid ${TK.lineStrong}`,
           cursor: 'pointer', fontSize: TF.small, fontWeight: W.medium, fontFamily: 'inherit',
           background: TK.surface, color: TK.ink, whiteSpace: 'nowrap', boxShadow: E.flat } as React.CSSProperties,
@@ -72,7 +72,7 @@ const S = {
   h1: { fontSize: TF.page, fontWeight: W.bold, color: C.navy, margin: 0, letterSpacing: '-.02em' } as React.CSSProperties,
   sub: { fontSize: TF.small, color: C.muted, marginTop: 5 } as React.CSSProperties,
   cardTitle: { fontSize: TF.lead, fontWeight: W.semi, color: C.navy, marginBottom: SP.md } as React.CSSProperties,
-  note: { background: TK.violetTint, border: `1px solid ${TK.violetEdge}`, borderRadius: R.md,
+  note: { background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: R.md,
           padding: `${SP.md}px ${SP.lg}px`, fontSize: TF.small, color: TK.inkSoft } as React.CSSProperties,
 }
 
@@ -683,7 +683,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
         </div>
         {mode === 'create' && (
           <>
-            {allCo && <div style={{ fontSize: 12, color: C.purpleDark, marginTop: 10, background: TK.violetTint, borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
+            {allCo && <div style={{ fontSize: 12, color: C.purpleDark, marginTop: 10, background: TK.brandTint, borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
             <div style={{ marginTop: 12 }}>
               <button style={{ ...S.btnPrimary }} onClick={() => setShowCreate(true)}>➕ {allCo ? 'Create for all companies' : 'Create month'}</button>
             </div>
@@ -847,7 +847,7 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{allCo ? 'A month master will be built for every company.' : 'A month master will be built for the selected company.'} Months already created are not listed.</div>
             {availableMonths.length === 0 ? (
               <>
-                <div style={{ fontSize: 13, color: C.navy, background: TK.violetTint, borderRadius: 8, padding: '12px 14px', marginBottom: 18 }}>All months for FY {fy} have already been created{allCo ? ' for every company' : ''}. 🎉</div>
+                <div style={{ fontSize: 13, color: C.navy, background: TK.brandTint, borderRadius: 8, padding: '12px 14px', marginBottom: 18 }}>All months for FY {fy} have already been created{allCo ? ' for every company' : ''}. 🎉</div>
                 <button style={{ ...S.btnOutline, width: '100%' }} onClick={onClose}>Close</button>
               </>
             ) : (

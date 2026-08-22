@@ -11,8 +11,8 @@ import { REPORTS, runReport, type ReportOutput, type ReportGroup } from '@/lib/a
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep,
-  card: TK.surface, border: TK.line, muted: TK.muted, green: TK.positive, amber: TK.warning, red: TK.critical, purpleBg: TK.violetTint,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted, green: TK.positive, amber: TK.warning, red: TK.critical, purpleBg: TK.brandTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const lbl: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }

@@ -174,9 +174,9 @@ export default function SalaryViewClient({ data }: { data: any }) {
   const S = {
     page: { background:TK.canvas, minHeight:'100vh', fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
     card: { background:'#fff', borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', overflow:'hidden', marginBottom:14 } as React.CSSProperties,
-    label: { fontSize:10, fontWeight:600 as const, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' } as React.CSSProperties,
+    label: { fontSize:10, fontWeight:600 as const, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' } as React.CSSProperties,
     inp: { padding:'7px 10px', border:'1px solid #DDD6FE', borderRadius:6, color:TK.ink, fontSize:12, outline:'none', background:TK.sunken, width:'100%', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-    sec: (margin?: string) => ({ fontSize:10, fontWeight:600 as const, color:TK.violet, textTransform:'uppercase' as const, letterSpacing:'.06em', margin:margin||'12px 0 8px', display:'flex', alignItems:'center', gap:8 }) as React.CSSProperties,
+    sec: (margin?: string) => ({ fontSize:10, fontWeight:600 as const, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.06em', margin:margin||'12px 0 8px', display:'flex', alignItems:'center', gap:8 }) as React.CSSProperties,
   }
 
   const Row = ({ l, v, red, bold, green }: { l: string; v: string; red?: boolean; bold?: boolean; green?: boolean }) => (
@@ -214,7 +214,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
 
         {/* Salary Breakdown — ANNUAL */}
         <div style={{ ...S.card }}>
-          <div style={{ background:TK.violet, padding:'9px 16px', color:'#fff', fontSize:12, fontWeight:500, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ background:TK.brand, padding:'9px 16px', color:'#fff', fontSize:12, fontWeight:500, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <span>Salary Breakdown</span>
             <span style={{ fontSize:10, background:'rgba(255,255,255,0.2)', padding:'2px 8px', borderRadius:99 }}>Annual (₹)</span>
           </div>
@@ -222,7 +222,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
           <Row l="HRA" v={`₹${fmt(hra*12)}`} />
           <Row l="Allowances / Flexi Pool" v={`₹${fmt(otherAllow*12)}`} />
           {statBonus > 0 && <Row l="Statutory Bonus" v={`₹${fmt(statBonus*12)}`} />}
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', background:TK.violetTint, borderBottom:'1px solid #D8D4FE', fontSize:14, fontWeight:600, color:TK.violetDeep }}>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', background:TK.brandTint, borderBottom:'1px solid #D8D4FE', fontSize:14, fontWeight:600, color:TK.brandDeep }}>
             <span>Gross (Annual)</span><span>₹{fmt(grossAnnual)}</span>
           </div>
           {epfEmp > 0 && <Row l="(−) EPF Employee" v={`₹${fmt(epfEmp*12)}`} red />}
@@ -250,10 +250,10 @@ export default function SalaryViewClient({ data }: { data: any }) {
 
         {/* CTC Summary */}
         <div style={S.card}>
-          <div style={{ background:TK.violetDeep, padding:'9px 16px', color:'#fff', fontSize:12, fontWeight:500 }}>CTC Summary — Annual</div>
+          <div style={{ background:TK.brandDeep, padding:'9px 16px', color:'#fff', fontSize:12, fontWeight:500 }}>CTC Summary — Annual</div>
           <Row l="Fixed Component" v={`₹${fmt(fixedAnnual)}`} />
           <Row l="Variable Component" v={`₹${fmt(varAnnual)}`} />
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 16px', fontSize:14, fontWeight:700, color:TK.violetDeep }}>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 16px', fontSize:14, fontWeight:700, color:TK.brandDeep }}>
             <span>Total CTC</span><span>₹{fmt(ctcAnnual)}</span>
           </div>
         </div>
@@ -277,7 +277,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
             {esopValue > 0 && (
               <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', fontSize:13 }}>
                 <div><span style={{ color:TK.inkSoft }}>ESOP Grant Value</span>{data.esop_remark && <span style={{ fontSize:11, color:TK.faint, marginLeft:8 }}>({data.esop_remark})</span>}</div>
-                <span style={{ fontWeight:600, color:TK.violet }}>₹{fmt(esopValue)}</span>
+                <span style={{ fontWeight:600, color:TK.brand }}>₹{fmt(esopValue)}</span>
               </div>
             )}
           </div>
@@ -286,7 +286,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
         {/* TDS + FBP CALCULATOR */}
         <div style={{ background:'#fff', borderRadius:10, border:'1.5px solid #7C3AED', overflow:'hidden', marginBottom:14 }}>
           <button onClick={() => setShowCalc(!showCalc)}
-            style={{ width:'100%', padding:'13px 18px', background:showCalc?TK.violetTint:TK.violet, color:showCalc?TK.violetDeep:'#fff', border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', display:'flex', justifyContent:'space-between', alignItems:'center', textAlign:'left' as const }}>
+            style={{ width:'100%', padding:'13px 18px', background:showCalc?TK.brandTint:TK.brand, color:showCalc?TK.brandDeep:'#fff', border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', display:'flex', justifyContent:'space-between', alignItems:'center', textAlign:'left' as const }}>
             <span>Calculate TDS & Select Flexi Benefit Plan</span>
             <span style={{ fontSize:18 }}>{showCalc ? '' : ''}</span>
           </button>
@@ -299,7 +299,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
                 {(['new','old'] as const).map(r => (
                   <button key={r} onClick={() => { setRegime(r); setSelectedFBP(new Set()) }}
-                    style={{ padding:12, border:regime===r?'none':'1px solid #DDD6FE', borderRadius:8, cursor:'pointer', fontFamily:'inherit', background:regime===r?TK.violet:TK.sunken, color:regime===r?'#fff':TK.muted, fontWeight:regime===r?600:400 }}>
+                    style={{ padding:12, border:regime===r?'none':'1px solid #DDD6FE', borderRadius:8, cursor:'pointer', fontFamily:'inherit', background:regime===r?TK.brand:TK.sunken, color:regime===r?'#fff':TK.muted, fontWeight:regime===r?600:400 }}>
                     <div style={{ fontSize:13 }}>{r==='new'?'New Regime':'Old Regime'}</div>
                     <div style={{ fontSize:10, marginTop:2, opacity:.8 }}>{r==='new'?'Default | 6 FBP components':'All 11 FBP components'}</div>
                   </button>
@@ -329,9 +329,9 @@ export default function SalaryViewClient({ data }: { data: any }) {
 
               {/* FBP SELECTION */}
               <div style={S.sec()}>Select Flexi Benefit Plan (FBP)</div>
-              <div style={{ background:TK.violetTint, borderRadius:8, padding:'8px 12px', marginBottom:12, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
-                <span style={{ color:TK.violetDeep }}>Slab {slab} — {SLAB_NAMES[slab]} &nbsp;|&nbsp; {regime === 'old' ? 'Old' : 'New'} Regime</span>
-                <span style={{ fontWeight:600, color:TK.violetDeep }}>Pool: ₹{fmt(availableFBP.filter(c => !c.paired || c.code < c.paired).reduce((s,c) => s + c.limit, 0))}/yr</span>
+              <div style={{ background:TK.brandTint, borderRadius:8, padding:'8px 12px', marginBottom:12, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
+                <span style={{ color:TK.brandDeep }}>Slab {slab} — {SLAB_NAMES[slab]} &nbsp;|&nbsp; {regime === 'old' ? 'Old' : 'New'} Regime</span>
+                <span style={{ fontWeight:600, color:TK.brandDeep }}>Pool: ₹{fmt(availableFBP.filter(c => !c.paired || c.code < c.paired).reduce((s,c) => s + c.limit, 0))}/yr</span>
               </div>
 
               {availableFBP.map(c => {
@@ -339,14 +339,14 @@ export default function SalaryViewClient({ data }: { data: any }) {
                 const isLinked = c.paired && (selectedFBP.has(c.paired) || selectedFBP.has(c.code))
                 return (
                   <div key={c.code} onClick={() => toggleFBP(c.code, c.paired)}
-                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:8, marginBottom:6, cursor:'pointer', background:isSelected?TK.violetTint:TK.sunken, border:isSelected?'1.5px solid #7C3AED':'1px solid #E5E7EB', transition:'all .15s' }}>
-                    <div style={{ width:18, height:18, borderRadius:4, border:isSelected?'none':'2px solid #DDD6FE', background:isSelected?TK.violet:'#fff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:8, marginBottom:6, cursor:'pointer', background:isSelected?TK.brandTint:TK.sunken, border:isSelected?'1.5px solid #7C3AED':'1px solid #E5E7EB', transition:'all .15s' }}>
+                    <div style={{ width:18, height:18, borderRadius:4, border:isSelected?'none':'2px solid #DDD6FE', background:isSelected?TK.brand:'#fff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
                       {isSelected && <span style={{ color:'#fff', fontSize:12, fontWeight:700 }}></span>}
                     </div>
                     <div style={{ flex:1 }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <span style={{ fontSize:13, fontWeight:isSelected?600:400, color:isSelected?TK.violetDeep:TK.ink }}>{c.label}</span>
-                        <span style={{ fontSize:13, fontWeight:600, color:isSelected?TK.violet:TK.inkSoft }}>₹{fmt(c.limit)}/yr</span>
+                        <span style={{ fontSize:13, fontWeight:isSelected?600:400, color:isSelected?TK.brandDeep:TK.ink }}>{c.label}</span>
+                        <span style={{ fontSize:13, fontWeight:600, color:isSelected?TK.brand:TK.inkSoft }}>₹{fmt(c.limit)}/yr</span>
                       </div>
                       {c.note && <div style={{ fontSize:10, color:TK.faint, marginTop:2 }}>{c.note}</div>}
                       {c.perquisite > 0 && <div style={{ fontSize:10, color:TK.warning, marginTop:2 }}>Perquisite: ₹{fmt(c.perquisite)}/mo added to taxable income</div>}
@@ -377,25 +377,25 @@ export default function SalaryViewClient({ data }: { data: any }) {
               {/* TDS RESULT */}
               <div style={S.sec()}>TDS Calculation</div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
-                <div style={{ background:TK.violetTint, borderRadius:8, padding:'12px', border:'1.5px solid #7C3AED' }}>
+                <div style={{ background:TK.brandTint, borderRadius:8, padding:'12px', border:'1.5px solid #7C3AED' }}>
                   <div style={{ fontSize:11, fontWeight:600, color:'#534AB7', marginBottom:6, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     {regime === 'new' ? 'New Regime' : 'Old Regime'}
-                    <span style={{ background:TK.violet, color:'#fff', padding:'1px 6px', borderRadius:99, fontSize:9 }}>Selected</span>
+                    <span style={{ background:TK.brand, color:'#fff', padding:'1px 6px', borderRadius:99, fontSize:9 }}>Selected</span>
                   </div>
                   <div style={{ fontSize:10, color:TK.faint, marginBottom:2 }}>Without FBP</div>
-                  <div style={{ fontSize:14, color:TK.violetDeep }}>₹{fmt(tdsCalc.taxNoFBP)}/yr</div>
+                  <div style={{ fontSize:14, color:TK.brandDeep }}>₹{fmt(tdsCalc.taxNoFBP)}/yr</div>
                   {selectedFBP.size > 0 && (
                     <>
-                      <div style={{ height:1, background:TK.violetEdge, margin:'8px 0' }} />
+                      <div style={{ height:1, background:TK.brandEdge, margin:'8px 0' }} />
                       <div style={{ fontSize:10, color:TK.faint, marginBottom:2 }}>With FBP Selected</div>
-                      <div style={{ fontSize:16, fontWeight:700, color:TK.violetDeep }}>₹{fmt(tdsCalc.taxWithFBP)}/yr</div>
+                      <div style={{ fontSize:16, fontWeight:700, color:TK.brandDeep }}>₹{fmt(tdsCalc.taxWithFBP)}/yr</div>
                       <div style={{ fontSize:11, color:TK.positive, marginTop:3 }}>
                         ₹{fmt(Math.round(tdsCalc.taxWithFBP/12))}/mo TDS
                       </div>
                     </>
                   )}
                   {selectedFBP.size === 0 && (
-                    <div style={{ fontSize:11, color:TK.violetDeep, marginTop:4 }}>₹{fmt(Math.round(tdsCalc.taxNoFBP/12))}/mo TDS</div>
+                    <div style={{ fontSize:11, color:TK.brandDeep, marginTop:4 }}>₹{fmt(Math.round(tdsCalc.taxNoFBP/12))}/mo TDS</div>
                   )}
                 </div>
                 {regime === 'new' ? (
@@ -425,7 +425,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
                 Submit invoices on time to claim FBP benefits — Quarterly: Jul/Oct/Jan/Mar &nbsp;|&nbsp; Annual: March. Unclaimed balance becomes taxable.
               </div>
 
-              <div style={{ background:TK.violetTint, borderRadius:7, padding:'8px 13px', fontSize:11, color:TK.violetDeep, textAlign:'center' as const }}>
+              <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 13px', fontSize:11, color:TK.brandDeep, textAlign:'center' as const }}>
                 This is indicative. Final TDS and FBP allocation confirmed after IT Declaration in EZER ESS portal post joining.
               </div>
             </div>
@@ -452,7 +452,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
           </div>
         ) : (
           <div style={{ background:TK.canvas, border:'1px solid #DDD6FE', borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
-            <div style={{ fontSize:14, fontWeight:600, color:TK.violetDeep, marginBottom:12 }}>Would you like to accept this offer?</div>
+            <div style={{ fontSize:14, fontWeight:600, color:TK.brandDeep, marginBottom:12 }}>Would you like to accept this offer?</div>
             <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
               <button onClick={()=>respond('ACCEPTED')} disabled={responding}
                 style={{ padding:'11px 32px', borderRadius:9, border:'none', cursor:responding?'not-allowed':'pointer', fontSize:14, fontWeight:600, fontFamily:'inherit', background:TK.positive, color:'#fff', opacity:responding?.6:1 }}>Accept Offer

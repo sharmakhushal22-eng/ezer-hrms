@@ -20,11 +20,11 @@ import type { PerquisiteConfigRow, PerquisiteSlab, ValuationMethod, PerquisiteUn
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted,
   green: TK.positive, greenBg: TK.positiveTint, greenBd: '#BBF7D0',
   amber: TK.warning, amberBg: TK.warningTint,
-  purpleBg: TK.violetTint, gray: TK.sunken,
+  purpleBg: TK.brandTint, gray: TK.sunken,
 }
 
 const METHOD_COLOR: Record<ValuationMethod, string> = {

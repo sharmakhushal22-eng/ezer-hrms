@@ -18,10 +18,10 @@ import { supabase } from '@/lib/supabase'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
-  red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.violetTint, gray: TK.sunken,
+  red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
@@ -102,7 +102,7 @@ const STATUS_STYLE: Record<string, [string, string]> = {
 }
 function StatusPill({ s }: { s: string }) {
   if (!s || s === '—') return <span style={{ color: C.muted }}>—</span>
-  const [bg, fg] = STATUS_STYLE[s] || [TK.violetTint, C.purpleD]
+  const [bg, fg] = STATUS_STYLE[s] || [TK.brandTint, C.purpleD]
   return <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 9px', borderRadius: 99, background: bg, color: fg }}>{s.replace('_', ' ')}</span>
 }
 
@@ -333,7 +333,7 @@ function NpsDialog({ rows, onClose, onDone }: {
                     <>
                       <input value={pran} maxLength={pranLen} placeholder={`${pranLen}-digit PRAN`}
                         onChange={ev => setPran(ev.target.value.replace(/\D/g, ''))}
-                        style={{ ...S.sel, width: '100%', marginTop: 9, letterSpacing: 2, borderColor: pran && !pranOk ? C.red : TK.violetEdge }} />
+                        style={{ ...S.sel, width: '100%', marginTop: 9, letterSpacing: 2, borderColor: pran && !pranOk ? C.red : TK.brandEdge }} />
                       {pran && !pranOk && <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>{pranLen - pranClean.length} more digit(s) needed</div>}
                     </>
                   ) : (

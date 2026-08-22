@@ -12,10 +12,10 @@ import { supabase } from '@/lib/supabase'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
-  purpleBg: TK.violetTint, soft: TK.sunken,
+  purpleBg: TK.brandTint, soft: TK.sunken,
 }
 const FY = '2026-27'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')

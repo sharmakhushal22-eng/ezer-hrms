@@ -10,7 +10,7 @@ import { C as TK } from '@/lib/ui'
 type Step = 'email' | 'login' | 'setpw' | 'changepw'
 
 // ── EZER palette ──
-const P = { purple: TK.violet, purpleDark: TK.violetDeep, purpleDeep: '#3C1E7A', navy: TK.ink, muted: TK.muted, border: TK.violetTint, bg: TK.canvas }
+const P = { purple: TK.brand, purpleDark: TK.brandDeep, purpleDeep: '#3C1E7A', navy: TK.ink, muted: TK.muted, border: TK.brandTint, bg: TK.canvas }
 
 // ── Reusable field components (OUTSIDE parent — no focus-loss) ──
 function TextField({ label, value, onChange, placeholder, icon, autoFocus }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; icon: React.ReactNode; autoFocus?: boolean }) {
@@ -46,7 +46,7 @@ function PasswordField({ label, value, onChange, placeholder, autoFocus }: { lab
 }
 
 const fieldStyle: React.CSSProperties = { width: '100%', padding: '12px 14px', background: '#FAFAFE', border: `1.5px solid ${P.border}`, borderRadius: 10, color: P.navy, fontSize: 14, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit', transition: 'border-color .15s, box-shadow .15s' }
-const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: TK.violetDeep, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 7 }
+const labelStyle: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: TK.brandDeep, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 7 }
 
 export default function ESSLoginPage() {
   const [step, setStep] = useState<Step>('email')
@@ -184,7 +184,7 @@ export default function ESSLoginPage() {
           <div style={{ background: '#fff', borderRadius: 18, border: '1px solid rgba(124,58,237,0.10)', boxShadow: '0 12px 40px rgba(124,58,237,0.12)', padding: '34px 32px' }}>
             {/* Step dots */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
-              {[0, 1].map(i => <div key={i} style={{ height: 4, flex: 1, borderRadius: 99, background: i <= stepIndex ? P.purple : TK.violetTint, transition: 'background .2s' }} />)}
+              {[0, 1].map(i => <div key={i} style={{ height: 4, flex: 1, borderRadius: 99, background: i <= stepIndex ? P.purple : TK.brandTint, transition: 'background .2s' }} />)}
             </div>
 
             <div style={{ marginBottom: 22 }}>
@@ -252,7 +252,7 @@ export default function ESSLoginPage() {
   )
 }
 
-const infoBox: React.CSSProperties = { fontSize: 12.5, color: TK.violetDeep, background: TK.canvas, border: '1px solid #EDE9FE', padding: '10px 12px', borderRadius: 9, marginBottom: 16, lineHeight: 1.5 }
+const infoBox: React.CSSProperties = { fontSize: 12.5, color: TK.brandDeep, background: TK.canvas, border: '1px solid #EDE9FE', padding: '10px 12px', borderRadius: 9, marginBottom: 16, lineHeight: 1.5 }
 
 function PrimaryBtn({ loading, label, loadingLabel }: { loading: boolean; label: string; loadingLabel: string }) {
   return (

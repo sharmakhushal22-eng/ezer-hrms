@@ -13,10 +13,10 @@ import { supabase } from '@/lib/supabase'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FAC775', pink: '#D4537E',
-  purpleBg: TK.violetTint, gray: TK.sunken, teal: '#0891B2',
+  purpleBg: TK.brandTint, gray: TK.sunken, teal: '#0891B2',
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const num = (v: any) => (v == null || v === '' ? 0 : Number(v) || 0)

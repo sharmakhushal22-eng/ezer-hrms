@@ -19,9 +19,9 @@ import type { TaxableIncomeResult, TaxBreakdown } from '@/lib/perquisites/employ
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted,
-  green: TK.positive, greenBg: TK.positiveTint, purpleBg: TK.violetTint, gray: TK.sunken,
+  green: TK.positive, greenBg: TK.positiveTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 
 function Row({ label, value, bold, indent }: { label: string; value: string; bold?: boolean; indent?: boolean }) {

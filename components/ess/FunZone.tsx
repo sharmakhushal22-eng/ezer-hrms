@@ -16,7 +16,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { C as TK } from '@/lib/ui'
 
 const F = {
-  navy:TK.ink, purple:TK.violet, purpleDark:TK.violetDeep, purpleSoft:'#F3EEFF',
+  navy:TK.ink, purple:TK.brand, purpleDark:TK.brandDeep, purpleSoft:'#F3EEFF',
   muted:TK.muted, border:'#ECEAFB', green:TK.positive, greenBg:TK.positiveTint,
   pink:'#DB2777', pinkBg:'#FDF2F8', blue:TK.info, blueBg:TK.infoTint, red:TK.critical,
 }

@@ -31,10 +31,10 @@ async function authHeaders(): Promise<Record<string, string>> {
 
 // Bound to the design system — see lib/ui/tokens.ts.
 const V = {
-  navy: C.ink, purple: C.violet, purpleDark: C.violetDeep, border: C.line,
+  navy: C.ink, purple: C.brand, purpleDark: C.brandDeep, border: C.line,
   muted: C.muted, card: C.surface, green: C.positive, greenBg: C.positiveTint,
   red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint,
-  purpleBg: C.violetTint, field: C.sunken, page: C.canvas,
+  purpleBg: C.brandTint, field: C.sunken, page: C.canvas,
 }
 
 const inr = (n: unknown) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -47,10 +47,10 @@ const S = {
           padding: '16px 18px', marginBottom: SP.md, boxShadow: E.raised } as React.CSSProperties,
   inp:  { ...inputStyle(), width: 'auto' } as React.CSSProperties,
   lbl:  { ...eyebrow, display: 'block', marginBottom: 5 } as React.CSSProperties,
-  btnP: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${C.violetDeep}`,
+  btnP: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${C.brandDeep}`,
           cursor: 'pointer', fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
-          background: `linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color: '#fff',
-          boxShadow: E.violet } as React.CSSProperties,
+          background: `linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color: '#fff',
+          boxShadow: E.brand } as React.CSSProperties,
   btnG: { height: 36, padding: '0 16px', borderRadius: R.md, border: 'none', cursor: 'pointer',
           fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
           background: C.positive, color: '#fff' } as React.CSSProperties,
@@ -240,7 +240,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
         <input type="number" min="0" max={line.amount_claimed} value={value}
                onChange={e => onChange(e.target.value)}
                style={{ ...S.inp, width: 92, flexShrink: 0, padding: '6px 9px',
-                        borderColor: trimmed ? V.amber : C.violetEdge }} />
+                        borderColor: trimmed ? V.amber : C.brandEdge }} />
       ) : (
         <div style={{ width: 92, textAlign: 'right', fontSize: 12.5, color: V.muted, flexShrink: 0 }}>
           {line.amount_approved != null ? inr(line.amount_approved) : '—'}

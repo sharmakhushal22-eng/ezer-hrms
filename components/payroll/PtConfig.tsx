@@ -24,9 +24,9 @@ import { INDIAN_STATES } from '@/lib/geo/india-states-districts'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, amber: TK.warning, amberBg: TK.warningTint,
-  purpleBg: TK.violetTint, gray: TK.sunken, red: TK.critical, redBg: TK.criticalTint, green: TK.positive,
+  purpleBg: TK.brandTint, gray: TK.sunken, red: TK.critical, redBg: TK.criticalTint, green: TK.positive,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inputStyle: React.CSSProperties = { width: '100%', padding: '8px 10px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 12.5, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }

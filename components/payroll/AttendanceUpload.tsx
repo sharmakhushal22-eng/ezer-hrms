@@ -308,7 +308,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 820 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.violet},${TK.violetDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}></div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Attendance Upload</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>Leave · absent days into the frozen month snapshot — Paid Days is computed as (EL+CL+SL+Other) − Absent</div>
@@ -369,7 +369,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
             const off = !rows.length || !upMonth || checking || busy || sheetErrs.length > 0
             return (
               <button onClick={() => runValidation(rows)} disabled={off}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.violet},${TK.violetDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.5 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: off ? 'not-allowed' : 'pointer', opacity: off ? 0.5 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
                 {checking ? 'Checking…' : '⬆ Upload attendance'}
               </button>
             )
@@ -394,7 +394,7 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Preview · {fileName} ({rows.length} rows)</div>
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
-              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'WO', 'EL', 'CL', 'SL', 'Other', 'Absent', 'Paid Days', 'Total Days'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 9.5, color: `${TK.violetEdge}`, fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ background: C.navy }}>{['Emp Code', 'WO', 'EL', 'CL', 'SL', 'Other', 'Absent', 'Paid Days', 'Total Days'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: h === 'Emp Code' ? 'left' : 'right', fontSize: 9.5, color: `${TK.brandEdge}`, fontWeight: 700, textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
               <tbody>
                 {rows.slice(0, 8).map((r, i) => {
                   const pd = r.paid_days ?? ((r.earned_leave || 0) + (r.casual_leave || 0) + (r.sick_leave || 0) + (r.other_leave || 0) - (r.absent_days || 0))

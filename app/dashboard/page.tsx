@@ -58,7 +58,7 @@ function daysUntilAnnual(iso?: string | null): number | null {
  * longest one — so every bar is the same violet. Colouring them differently
  * would imply the categories mean something they do not.
  */
-function BarRow({ label, count, max, colour = C.violet }: {
+function BarRow({ label, count, max, colour = C.brand }: {
   label: string; count: number; max: number; colour?: string
 }) {
   return (
@@ -147,7 +147,7 @@ export default function Dashboard() {
         .map((e: any) => ({ name: e.full_name || '—', sub: e.companies?.company_name || '—', meta: e.locations?.location_name || '—', tone:C.positive })),
       open: approvedMrfs.map((m: any) => ({ name: m.designation || m.position || '—', sub: `${Number(m.no_of_openings || m.openings || 0)} opening(s)`, meta: m.status || 'APPROVED', tone:C.info })),
       pipeline: [...pipelineCands].sort((a: any,b: any) => RECRUIT_STAGES.indexOf(a.stage) - RECRUIT_STAGES.indexOf(b.stage))
-        .map((c: any) => ({ name: c.full_name || '—', dept: deptOf(c), status: c.stage || '—', location: locOf(c), tone: STAGE_COLOR[c.stage] || C.violet })),
+        .map((c: any) => ({ name: c.full_name || '—', dept: deptOf(c), status: c.stage || '—', location: locOf(c), tone: STAGE_COLOR[c.stage] || C.brand })),
       // already ordered by joining date (undated last) when joiningCands was built
       joining: joiningCands.map((c: any) => ({ name: c.full_name || '—', sub: c.designation || '—', meta: fmtDate(c.onboarding_date), tone:'#0891B2' })),
     }
@@ -233,11 +233,11 @@ export default function Dashboard() {
   )
 
   const stats = [
-    { key:'total',    label:'Total Employees', value: d.total.toLocaleString('en-IN'), sub:`${d.companyRows.length} companies`,  t:'violet'   as const, icon:<IconEmployees size={16}/> },
+    { key:'total',    label:'Total Employees', value: d.total.toLocaleString('en-IN'), sub:`${d.companyRows.length} companies`,  t:'brand'   as const, icon:<IconEmployees size={16}/> },
     { key:'active',   label:'Active',          value: d.active.toLocaleString('en-IN'), sub: d.total ? `${Math.round(d.active/d.total*100)}% active` : '—', t:'positive' as const, icon:<IconCheck size={16}/> },
     { key:'open',     label:'Open Positions',  value: d.openPositions, sub:'approved MRFs',      t:'info'    as const, icon:<IconRecruitment size={16}/> },
     { key:'pipeline', label:'In Pipeline',     value: d.inPipeline,    sub:'active candidates',  t:'warning' as const, icon:<IconClock size={16}/> },
-    { key:'joining',  label:'Joining Soon',    value: d.joiningSoon,   sub:'in onboarding',      t:'violet'  as const, icon:<IconOnboarding size={16}/> },
+    { key:'joining',  label:'Joining Soon',    value: d.joiningSoon,   sub:'in onboarding',      t:'brand'   as const, icon:<IconOnboarding size={16}/> },
   ]
   const DRILL_TITLES: Record<string,string> = { total:'All Employees', active:'Active Employees', open:'Open Positions', pipeline:'Candidates in Pipeline', joining:'Candidates in Onboarding' }
   // A drill-down that declares columns renders as a proper headed table; the rest keep
@@ -278,7 +278,7 @@ export default function Dashboard() {
               className="ez-lift" title="Show these records"
               style={{
                 cursor:'pointer', borderRadius:R.lg, minWidth:0,
-                outline: on ? `2px solid ${C.violet}` : '2px solid transparent',
+                outline: on ? `2px solid ${C.brand}` : '2px solid transparent',
                 outlineOffset: 1, transition:`outline-color ${M.quick}`,
               }}>
               <Stat label={st.label} value={st.value} sub={capFirst(st.sub)} t={st.t} icon={st.icon} />
@@ -382,7 +382,7 @@ export default function Dashboard() {
           <div style={{ ...eyebrow, marginBottom:S.md }}>Recruitment pipeline</div>
           {d.pipeline.map((p: any) => (
             <BarRow key={p.stage} label={p.stage} count={p.count} max={maxStage}
-                    colour={STAGE_COLOR[p.stage] || C.violet} />
+                    colour={STAGE_COLOR[p.stage] || C.brand} />
           ))}
         </Card>
 
@@ -396,7 +396,7 @@ export default function Dashboard() {
                   borderBottom: i < d.activity.length - 1 ? `1px solid ${C.line}` : 'none',
                 }}>
                   <div style={{
-                    width:26, height:26, borderRadius:R.sm, background:C.violetTint,
+                    width:26, height:26, borderRadius:R.sm, background:C.brandTint,
                     display:'flex', alignItems:'center', justifyContent:'center',
                     fontSize:12, flexShrink:0,
                   }}>{a.icon}</div>
@@ -414,7 +414,7 @@ export default function Dashboard() {
         <Card>
           <div style={{ ...eyebrow, marginBottom:S.md }}>Birthdays &amp; anniversaries</div>
 
-          <div style={{ ...eyebrow, color:C.violetDeep, marginBottom:6 }}>Today</div>
+          <div style={{ ...eyebrow, color:C.brandDeep, marginBottom:6 }}>Today</div>
           {d.today.length === 0 && (
             <div style={{ fontSize:F.small, color:C.faint, marginBottom:S.md }}>Nothing today.</div>
           )}
@@ -445,7 +445,7 @@ export default function Dashboard() {
 
           {wishErr && <div style={{ marginTop:S.md }}><Notice t="critical">{wishErr}</Notice></div>}
 
-          <div style={{ ...eyebrow, color:C.violetDeep, margin:'14px 0 6px' }}>This week</div>
+          <div style={{ ...eyebrow, color:C.brandDeep, margin:'14px 0 6px' }}>This week</div>
           {d.week.length === 0 && <div style={{ fontSize:F.small, color:C.faint }}>Nothing this week.</div>}
           {d.week.map((c: any, i: number) => (
             <div key={i} style={{

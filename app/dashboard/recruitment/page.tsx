@@ -64,13 +64,13 @@ const SOURCES = ['Direct','Naukri','LinkedIn','Referral','Campus','WhatsApp','Co
 const T = {
   page: { background:C.canvas, minHeight:'100vh', color:C.ink, fontFamily:F.family } as React.CSSProperties,
   card: { background:C.surface, borderRadius:R.lg, border:`1px solid ${C.line}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
-  cardPurple: { background:C.surface, borderRadius:R.lg, border:`1.5px solid ${C.violet}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.floating } as React.CSSProperties,
+  cardPurple: { background:C.surface, borderRadius:R.lg, border:`1.5px solid ${C.brand}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.floating } as React.CSSProperties,
   label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
   input: { ...inputStyle() } as React.CSSProperties,
   select: { ...inputStyle(), cursor:'pointer' } as React.CSSProperties,
   textarea: { ...inputStyle(), height:'auto', minHeight:90, padding:'9px 11px', resize:'vertical' as const, lineHeight:1.5 } as React.CSSProperties,
   btn: { height:36, padding:'0 16px', borderRadius:R.md, border:'none', cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  btnPrimary: { height:36, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.violetDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', background:`linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color:'#fff', boxShadow:E.violet, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  btnPrimary: { height:36, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.brandDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:'#fff', boxShadow:E.brand, whiteSpace:'nowrap' as const } as React.CSSProperties,
   btnOutline: { height:34, padding:'0 13px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat, whiteSpace:'nowrap' as const } as React.CSSProperties,
   // Fixed 2/3/4-column grids collapsed badly on a laptop at the app's 130%
   // zoom. auto-fit lets each row find its own column count instead.
@@ -152,17 +152,17 @@ const distinctPositions = (cands:any[]) => Array.from(new Set(cands.map((c:any)=
 // ── HELPERS ───────────────────────────────────────────────────────
 function Badge({ text }:{ text:string }) {
   const map:Record<string,[string,string]> = {
-    DRAFT:[C.violetTint,C.violetDeep], SUBMITTED:[C.infoTint,C.info],
+    DRAFT:[C.brandTint,C.brandDeep], SUBMITTED:[C.infoTint,C.info],
     APPROVED:[C.positiveTint,C.positive], REJECTED:[C.criticalTint,C.critical],
     CLOSED:[C.sunken,C.muted], STRONG:[C.positiveTint,C.positive],
     PARTIAL:[C.warningTint,C.warning], NOT_SUITABLE:[C.criticalTint,C.critical],
     'Offer Sent':['#ECFEFF','#0891B2'], Joined:[C.positiveTint,C.positive],
     CREATED:[C.warningTint,C.warning], SENT:[C.infoTint,C.info],
-    OPENED:[C.violetTint,C.violetDeep], SUBMITTED_PRE:[C.positiveTint,C.positive],
+    OPENED:[C.brandTint,C.brandDeep], SUBMITTED_PRE:[C.positiveTint,C.positive],
     'Quick Hire':['#FFF7ED','#EA580C'], 'Full MRF':['#EEF2FF','#4338CA'],
     'Revised Offer':[C.warningTint,C.warning], 'Blacklisted':[C.criticalTint,C.critical],
   }
-  const [bg,c] = map[text] || [C.violetTint,C.violetDeep]
+  const [bg,c] = map[text] || [C.brandTint,C.brandDeep]
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{text}</span>
 }
 
@@ -182,8 +182,8 @@ function Toast({ msg, type, onClose }:{ msg:string, type:'success'|'error', onCl
 function SectionLine({ title }:{ title:string }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:10, margin:'14px 0 10px' }}>
-      <div style={{ fontSize:11, fontWeight:600, color:C.violet, textTransform:'uppercase' as const, letterSpacing:'.06em', whiteSpace:'nowrap' as const }}>{title}</div>
-      <div style={{ flex:1, height:1, background:C.violetTint }} />
+      <div style={{ fontSize:11, fontWeight:600, color:C.brand, textTransform:'uppercase' as const, letterSpacing:'.06em', whiteSpace:'nowrap' as const }}>{title}</div>
+      <div style={{ flex:1, height:1, background:C.brandTint }} />
     </div>
   )
 }
@@ -238,7 +238,7 @@ export default function RecruitmentPage() {
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
-      <div style={{ color:C.violet, fontSize:14, fontWeight:500 }}>Loading...</div>
+      <div style={{ color:C.brand, fontSize:14, fontWeight:500 }}>Loading...</div>
     </div>
   )
 
@@ -263,9 +263,9 @@ export default function RecruitmentPage() {
           return (
             // Pill tabs — same shape as the Onboarding page's join-window buttons.
             <button key={t.k} onClick={() => setTab(t.k as any)}
-              style={{ padding:'6px 13px', borderRadius:99, border:'0.5px solid '+(on?C.violet:C.violetTint),
+              style={{ padding:'6px 13px', borderRadius:99, border:'0.5px solid '+(on?C.brand:C.brandTint),
                 cursor:'pointer', fontSize:11.5, fontWeight:on?600:500, fontFamily:'inherit',
-                background:on?C.violet:C.sunken, color:on?'#fff':C.ink, whiteSpace:'nowrap', flexShrink:0 }}>
+                background:on?C.brand:C.sunken, color:on?'#fff':C.ink, whiteSpace:'nowrap', flexShrink:0 }}>
               {t.l}
             </button>
           )
@@ -303,7 +303,7 @@ function DashTab({ mrfs, candidates }:any) {
       <div style={T.g4}>
         {[{l:'Total MRFs',v:mrfs.length,c:C.ink},
           {l:'Active Openings',v:openings,c:C.ink},
-          {l:'In Pipeline',v:candidates.length,c:C.violetDeep},
+          {l:'In Pipeline',v:candidates.length,c:C.brandDeep},
           {l:'Joined This Month',v:joined.length,c:C.positive}].map(s=>(
           <div key={s.l} style={{ ...T.card, boxShadow:E.flat }}>
             <div style={{ ...eyebrow, lineHeight:1.3, minHeight:27 }}>{s.l}</div>
@@ -373,7 +373,7 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:st
       {selected.length>0 && (
         <div style={{ display:'flex', flexWrap:'wrap' as const, gap:6, marginBottom:6 }}>
           {selected.map(s=>(
-            <span key={s} style={{ fontSize:11, padding:'3px 8px', borderRadius:99, background:C.violetTint, color:C.violetDeep, fontWeight:500, display:'inline-flex', alignItems:'center' }}>
+            <span key={s} style={{ fontSize:11, padding:'3px 8px', borderRadius:99, background:C.brandTint, color:C.brandDeep, fontWeight:500, display:'inline-flex', alignItems:'center' }}>
               {s}<span onClick={()=>remove(s)} style={{ cursor:'pointer', marginLeft:5, fontWeight:700 }}>×</span>
             </span>
           ))}
@@ -388,7 +388,7 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:st
               <div key={s} onClick={()=>add(s)} style={{ padding:'7px 10px', cursor:'pointer', fontSize:13, color:C.ink }}>{s}</div>
             ))}
             {!exact && q.trim() && (
-              <div onClick={addCustom} style={{ padding:'7px 10px', cursor:'pointer', fontSize:13, color:C.violet, fontWeight:600, borderTop:matches.length?'1px solid #F3F0FF':'none' }}>+ Add custom: “{q.trim()}”</div>
+              <div onClick={addCustom} style={{ padding:'7px 10px', cursor:'pointer', fontSize:13, color:C.brand, fontWeight:600, borderTop:matches.length?'1px solid #F3F0FF':'none' }}>+ Add custom: “{q.trim()}”</div>
             )}
           </div>
         )}
@@ -622,7 +622,7 @@ function CtqEditor({ items, onChange }:{ items:any[]; onChange:(v:any[])=>void }
       {items.map((q,i)=>(
         <div key={q.id||i} style={{ border:'1px solid #EDE9FE', borderRadius:8, padding:'10px 12px', marginBottom:8, background:C.sunken }}>
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
-            <span style={{ fontSize:10.5, fontWeight:700, color:C.violetDeep, minWidth:22 }}>Q{i+1}</span>
+            <span style={{ fontSize:10.5, fontWeight:700, color:C.brandDeep, minWidth:22 }}>Q{i+1}</span>
             <input style={{ ...T.input, flex:1 }} value={q.question||''} placeholder="e.g. Do you have a valid B.Tech degree?"
               onChange={e=>set(i,{ question:e.target.value })} />
             <button onClick={()=>del(i)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border:'1px solid #FCA5A5', fontSize:11 }}></button>
@@ -670,13 +670,13 @@ function ApprovalChainEditor({ chain, onChange }:{ chain:any[]; onChange:(v:any[
       {chain.map((s,i)=>(
         <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 11px', border:'1px solid #EDE9FE',
           borderRadius:8, marginBottom:6, background: s.status==='APPROVED'?C.positiveTint: s.status==='REJECTED'?C.criticalTint:C.sunken }}>
-          <span style={{ width:22, height:22, borderRadius:'50%', background:C.violetTint, color:C.violetDeep, fontSize:11,
+          <span style={{ width:22, height:22, borderRadius:'50%', background:C.brandTint, color:C.brandDeep, fontSize:11,
             fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{i+1}</span>
           <span style={{ fontSize:12.5, fontWeight:600, flex:1 }}>{s.role}</span>
           {s.status && s.status!=='PENDING' && <Badge text={s.status} />}
           {s.actor && <span style={{ fontSize:10.5, color:C.faint }}>{s.actor}</span>}
-          <button onClick={()=>move(i,-1)} disabled={i===0} style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, fontSize:11, opacity:i===0?.4:1 }}></button>
-          <button onClick={()=>move(i,1)} disabled={i===chain.length-1} style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, fontSize:11, opacity:i===chain.length-1?.4:1 }}></button>
+          <button onClick={()=>move(i,-1)} disabled={i===0} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11, opacity:i===0?.4:1 }}></button>
+          <button onClick={()=>move(i,1)} disabled={i===chain.length-1} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11, opacity:i===chain.length-1?.4:1 }}></button>
           <button onClick={()=>del(i)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, fontSize:11 }}></button>
         </div>
       ))}
@@ -700,7 +700,7 @@ function ChannelPicker({ options, value, onChange }:{ options:any[]; value:strin
         const on = value.includes(o.label)
         return (
           <button key={o.code} onClick={()=>toggle(o.label)} style={{ ...T.btn, fontSize:11,
-            background:on?C.violet:'#fff', color:on?'#fff':C.violetDeep, border:on?'none':'1px solid #DDD6FE' }}>
+            background:on?C.brand:'#fff', color:on?'#fff':C.brandDeep, border:on?'none':'1px solid #DDD6FE' }}>
             {on?'✓ ':''}{o.label}
           </button>
         )
@@ -819,14 +819,14 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
         <div style={{ display:'flex', gap:6 }}>
           {[['cards','Cards'],['table','List']].map(([k,l])=>(
             <button key={k} onClick={()=>onView(k)} style={{ ...T.btn, fontSize:11,
-              background:view===k?C.violet:'#fff', color:view===k?'#fff':C.violetDeep,
+              background:view===k?C.brand:'#fff', color:view===k?'#fff':C.brandDeep,
               border:view===k?'none':'1px solid #DDD6FE' }}>{l}</button>
           ))}
         </div>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:9, marginBottom:13 }}>
-        <Tile label="Total MRFs" value={mrfs.length} color={C.violet} />
+        <Tile label="Total MRFs" value={mrfs.length} color={C.brand} />
         <Tile label="Open Positions" value={totalOpen} sub="on approved MRFs" color={C.info} />
         <Tile label="Available to Hire" value={available} sub={`${totalFill} already filled`} color={available?C.positive:C.faint} />
         <Tile label="Pending Approval" value={counts.SUBMITTED} sub={counts.ON_HOLD?`${counts.ON_HOLD} on hold`:'awaiting sign-off'} color={counts.SUBMITTED?C.warning:C.faint} />
@@ -836,7 +836,7 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
 
       {/* Proportional bar — the shape of the pipeline at a glance. */}
       {mrfs.length>0 && (
-        <div style={{ display:'flex', height:7, borderRadius:99, overflow:'hidden', marginBottom:10, background:C.violetTint }}>
+        <div style={{ display:'flex', height:7, borderRadius:99, overflow:'hidden', marginBottom:10, background:C.brandTint }}>
           {MRF_STATUSES.filter(s=>counts[s]>0).map(s=>(
             <div key={s} title={`${s.replace('_',' ')}: ${counts[s]}`}
               style={{ width:`${(counts[s]/mrfs.length)*100}%`, background:STATUS_TONE[s][1] }} />
@@ -846,7 +846,7 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
 
       <div style={{ display:'flex', gap:7, flexWrap:'wrap' as const }}>
         <button onClick={()=>onPickStatus('')} style={{ ...T.btn, fontSize:11,
-          background: fStatus===''?C.violet:'#fff', color: fStatus===''?'#fff':C.violetDeep,
+          background: fStatus===''?C.brand:'#fff', color: fStatus===''?'#fff':C.brandDeep,
           border: fStatus===''?'none':'1px solid #DDD6FE' }}>
           All <span style={{ fontWeight:700 }}>{mrfs.length}</span>
         </button>
@@ -869,7 +869,7 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
 
 // ── MRF TABLE (list view) ─────────────────────────────────────────
 function MrfTable({ rows, orgOf, candidates, onOpen, onReview }:any) {
-  const th:React.CSSProperties = { fontSize:10, color:C.violetDeep, fontWeight:600, textTransform:'uppercase',
+  const th:React.CSSProperties = { fontSize:10, color:C.brandDeep, fontWeight:600, textTransform:'uppercase',
     letterSpacing:'.05em', textAlign:'left', padding:'8px 10px', borderBottom:'1px solid #EDE9FE', whiteSpace:'nowrap' }
   const td:React.CSSProperties = { fontSize:12, color:C.ink, padding:'9px 10px', borderBottom:'1px solid #F3F0FF', verticalAlign:'middle' }
   return (
@@ -907,7 +907,7 @@ function MrfTable({ rows, orgOf, candidates, onOpen, onReview }:any) {
                 <td style={{ ...td, textAlign:'right', whiteSpace:'nowrap' }}>
                   {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
                     <button onClick={e=>{ e.stopPropagation(); onReview(m) }}
-                      style={{ ...T.btn, background:C.violet, color:'#fff', fontSize:10.5 }}>Review</button>
+                      style={{ ...T.btn, background:C.brand, color:'#fff', fontSize:10.5 }}>Review</button>
                   )}
                 </td>
               </tr>
@@ -927,7 +927,7 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
   const openings = m.no_of_openings || m.openings || 0
   const filled = cands.filter((c:Candidate)=>c.stage==='Offer Sent'||c.stage==='Joined').length
   const pct = openings ? Math.min(100, (filled/openings)*100) : 0
-  const [ubg,uc] = URGENCY_STYLE[m.urgency] || [C.violetTint,C.violetDeep]
+  const [ubg,uc] = URGENCY_STYLE[m.urgency] || [C.brandTint,C.brandDeep]
   const chain = asArray(m.approval_chain)
   const doneSteps = chain.filter((s:any)=>s.status==='APPROVED').length
   // §6 — flag a requisition that has run past its validity date.
@@ -957,11 +957,11 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
             {m.budget_max && <span>💰 {compOf(m.employment_type).label} {payAmount(m.budget_max, m.currency, compOf(m.employment_type).period)} max</span>}
             {m.duration_months && <span>⏳ {m.duration_months} month{m.duration_months===1?'':'s'}</span>}
             {m.target_joining_date && <span>📅 by {fmtDay(m.target_joining_date)}</span>}
-            <span style={{ color:C.violet }}>🧑 {cands.length} candidate{cands.length===1?'':'s'}</span>
+            <span style={{ color:C.brand }}>🧑 {cands.length} candidate{cands.length===1?'':'s'}</span>
             {m.assigned_recruiter && <span>👤 {m.assigned_recruiter}</span>}
           </div>
           {m.skills_required && (
-            <div style={{ fontSize:11, color:C.violetDeep, marginTop:5 }}>Skills: {m.skills_required}</div>
+            <div style={{ fontSize:11, color:C.brandDeep, marginTop:5 }}>Skills: {m.skills_required}</div>
           )}
           {m.status==='REJECTED' && m.remarks && (
             <div style={{ fontSize:11, color:C.critical, marginTop:5 }}>Rejected: {m.remarks}</div>
@@ -981,17 +981,17 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:10.5, color:C.faint, marginBottom:3 }}>
                 <span>Positions filled</span><span>{filled} / {openings}</span>
               </div>
-              <div style={{ background:C.violetTint, borderRadius:99, height:5, overflow:'hidden' }}>
-                <div style={{ width:`${pct}%`, height:'100%', background: pct>=100?C.positive:C.violet, borderRadius:99 }} />
+              <div style={{ background:C.brandTint, borderRadius:99, height:5, overflow:'hidden' }}>
+                <div style={{ width:`${pct}%`, height:'100%', background: pct>=100?C.positive:C.brand, borderRadius:99 }} />
               </div>
             </div>
           )}
         </div>
 
         <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center', flexWrap:'wrap' as const, justifyContent:'flex-end', maxWidth:290 }}>
-          <button onClick={()=>onOpen(m)} style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, border:'1px solid #DDD6FE', fontSize:11 }}>View</button>
+          <button onClick={()=>onOpen(m)} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border:'1px solid #DDD6FE', fontSize:11 }}>View</button>
           {(m.status==='SUBMITTED'||m.status==='ON_HOLD')&&(
-            <button onClick={()=>onReview(m)} style={{ ...T.btn, background:C.violet, color:'#fff', fontSize:11 }}>Review & Approve</button>
+            <button onClick={()=>onReview(m)} style={{ ...T.btn, background:C.brand, color:'#fff', fontSize:11 }}>Review & Approve</button>
           )}
           {m.status==='APPROVED' && (
             <button onClick={()=>onClose(m)} style={{ ...T.btn, background:C.sunken, color:C.inkSoft, border:'1px solid #CBD5E1', fontSize:11 }}>Close MRF</button>
@@ -1158,7 +1158,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
                 <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Mandatory Skills</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
                   {String(m.skills_required).split(',').map((s:string)=>s.trim()).filter(Boolean).map((s:string)=>(
-                    <span key={s} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.violetTint, color:C.violetDeep, fontWeight:500 }}>{s}</span>
+                    <span key={s} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.brandTint, color:C.brandDeep, fontWeight:500 }}>{s}</span>
                   ))}
                 </div>
               </div>
@@ -1203,8 +1203,8 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
               <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'8px 0', borderBottom:'1px solid #F3F0FF' }}>
                 <span style={{ width:22, height:22, borderRadius:'50%', flexShrink:0, fontSize:11, fontWeight:700,
                   display:'flex', alignItems:'center', justifyContent:'center',
-                  background: s.status==='APPROVED'?C.positiveTint: s.status==='REJECTED'?C.criticalTint:C.violetTint,
-                  color: s.status==='APPROVED'?C.positive: s.status==='REJECTED'?C.critical:C.violetDeep }}>
+                  background: s.status==='APPROVED'?C.positiveTint: s.status==='REJECTED'?C.criticalTint:C.brandTint,
+                  color: s.status==='APPROVED'?C.positive: s.status==='REJECTED'?C.critical:C.brandDeep }}>
                   {s.status==='APPROVED'?'':s.status==='REJECTED'?'':i+1}
                 </span>
                 <div style={{ minWidth:0, flex:1 }}>
@@ -1288,7 +1288,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             )}
             {logs.map((l:any)=>(
               <div key={l.id} style={{ display:'flex', gap:10, padding:'7px 0', borderBottom:'1px solid #F3F0FF' }}>
-                <div style={{ width:7, height:7, borderRadius:'50%', background:C.violet, marginTop:5, flexShrink:0 }} />
+                <div style={{ width:7, height:7, borderRadius:'50%', background:C.brand, marginTop:5, flexShrink:0 }} />
                 <div style={{ minWidth:0, flex:1 }}>
                   <div style={{ fontSize:12.5, fontWeight:600, color:C.ink }}>{String(l.action_type||'').replace(/_/g,' ')}</div>
                   {l.details && (
@@ -1622,7 +1622,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <div style={{ display:'flex', gap:10, marginBottom:16 }}>
             {['Quick Hire','Full MRF'].map(type=>(
               <button key={type} onClick={()=>F('mrf_type',type)} style={{ ...T.btn, flex:1, padding:'10px',
-                background:form.mrf_type===type?C.violet:C.violetTint, color:form.mrf_type===type?'#fff':C.violetDeep,
+                background:form.mrf_type===type?C.brand:C.brandTint, color:form.mrf_type===type?'#fff':C.brandDeep,
                 border:form.mrf_type===type?'none':'1px solid #DDD6FE', fontSize:13 }}>
                 {type==='Quick Hire'?'Quick Hire (CTC ≤ ₹6L)':'Full MRF (CTC > ₹6L)'}
               </button>
@@ -1779,7 +1779,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           </div>
           {/* Labels follow the employment type: employees draw a salary,
               interns/apprentices a stipend, contractors and consultants fees. */}
-          <div style={{ background:C.violetTint, borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:11.5, color:C.violetDeep }}>
+          <div style={{ background:C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:11.5, color:C.brandDeep }}>
             <b>{form.employment_type}</b> → paid as <b>{comp.label.toLowerCase()}</b>, quoted <b>{perLabel(comp.period)}</b>
             {comp.fixedTerm && <> · fixed-term engagement, duration required</>}
           </div>
@@ -1797,7 +1797,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
           </div>
           {form.budget_min && form.budget_max && !errors.budget_max && (
-            <div style={{ fontSize:11, color:C.violetDeep, marginBottom:10 }}>
+            <div style={{ fontSize:11, color:C.brandDeep, marginBottom:10 }}>
               {comp.label} band: {payAmount(Number(form.budget_min), form.currency, comp.period)} — {payAmount(Number(form.budget_max), form.currency, comp.period)}
               {comp.period==='MONTHLY' && form.duration_months && (
                 <> · total over {form.duration_months} month{Number(form.duration_months)===1?'':'s'}: {' '}
@@ -1917,7 +1917,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <div style={{ marginBottom:14 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
                   <label style={{ ...T.label, marginBottom:0 }}>Job Description</label>
-                  <button onClick={generateJD} disabled={aiLoading} style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, border:'1px solid #DDD6FE', fontSize:11 }}>
+                  <button onClick={generateJD} disabled={aiLoading} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border:'1px solid #DDD6FE', fontSize:11 }}>
                     {aiLoading?'Generating...':'Generate JD with AI'}
                   </button>
                 </div>
@@ -2106,7 +2106,7 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
         </div>
 
         {chain.length>0 && (
-          <div style={{ background:C.violetTint, borderRadius:8, padding:'10px 12px', marginBottom:14, fontSize:12, color:C.violetDeep }}>
+          <div style={{ background:C.brandTint, borderRadius:8, padding:'10px 12px', marginBottom:14, fontSize:12, color:C.brandDeep }}>
             Approving opens this requisition straight away and records the full chain
             — <b>{chain.map((s:any)=>s.role).join(' → ')}</b> — against your name.
           </div>
@@ -2284,7 +2284,7 @@ function DeadlineBoard({ rows, orgOf }:any) {
         <thead>
           <tr>
             {['Requisition','Department','Recruiter','Openings','Progress','Deadline','Days Left','Flag'].map((h,i)=>(
-              <th key={h} style={{ fontSize:10, color:C.violetDeep, fontWeight:600, textTransform:'uppercase' as const,
+              <th key={h} style={{ fontSize:10, color:C.brandDeep, fontWeight:600, textTransform:'uppercase' as const,
                 letterSpacing:'.05em', textAlign: i>=3&&i<=6 ? 'center':'left', padding:'8px 10px',
                 borderBottom:'1px solid #EDE9FE', whiteSpace:'nowrap' as const }}>{h}</th>
             ))}
@@ -2306,8 +2306,8 @@ function DeadlineBoard({ rows, orgOf }:any) {
                 <td style={{ fontSize:12, textAlign:'center', padding:'9px 10px', borderBottom:'1px solid #F3F0FF' }}>{js.openings}</td>
                 <td style={{ padding:'9px 10px', borderBottom:'1px solid #F3F0FF', minWidth:110 }}>
                   <div style={{ fontSize:10.5, color:C.faint, textAlign:'center', marginBottom:3 }}>{js.filledCount}/{js.openings}</div>
-                  <div style={{ background:C.violetTint, borderRadius:99, height:5, overflow:'hidden' }}>
-                    <div style={{ width:`${pct}%`, height:'100%', background:pct>=100?C.positive:C.violet }} />
+                  <div style={{ background:C.brandTint, borderRadius:99, height:5, overflow:'hidden' }}>
+                    <div style={{ width:`${pct}%`, height:'100%', background:pct>=100?C.positive:C.brand }} />
                   </div>
                 </td>
                 <td style={{ fontSize:12, color:C.muted, textAlign:'center', padding:'9px 10px', borderBottom:'1px solid #F3F0FF', whiteSpace:'nowrap' as const }}>{fmtDay(js.deadline)}</td>
@@ -2328,7 +2328,7 @@ function DeadlineBoard({ rows, orgOf }:any) {
 // ── Recruiter performance table ───────────────────────────────────
 function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:any) {
   const th = (k:string, label:string, num=false):React.CSSProperties => ({
-    fontSize:10, color:C.violetDeep, fontWeight:600, textTransform:'uppercase', letterSpacing:'.05em',
+    fontSize:10, color:C.brandDeep, fontWeight:600, textTransform:'uppercase', letterSpacing:'.05em',
     textAlign: num?'right':'left', padding:'9px 10px', borderBottom:'1px solid #EDE9FE',
     cursor:'pointer', whiteSpace:'nowrap',
   })
@@ -2357,7 +2357,7 @@ function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:a
                 style={{ cursor:'pointer', background: on?'#FAF8FF':'transparent' }}>
                 <td style={td}>
                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ width:26, height:26, borderRadius:'50%', background:C.violetTint, color:C.violetDeep,
+                    <span style={{ width:26, height:26, borderRadius:'50%', background:C.brandTint, color:C.brandDeep,
                       display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0 }}>
                       {r.name.slice(0,2).toUpperCase()}
                     </span>
@@ -2719,7 +2719,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
         <Tile label="Filled" value={filledN} sub="all openings covered" color={C.positive} />
         <Tile label="Breached" value={breachedN} sub="lapsed unfilled" color={breachedN?C.critical:C.faint} />
         <Tile label="At Risk" value={atRisk} sub="due ≤7d or overdue" color={atRisk?'#C2410C':C.faint} />
-        <Tile label="Avg Days to Fill" value={avgTtf==null?'—':avgTtf} sub="raise → first offer" color={C.violet} />
+        <Tile label="Avg Days to Fill" value={avgTtf==null?'—':avgTtf} sub="raise → first offer" color={C.brand} />
         {noDeadline>0 && <Tile label="No Deadline Set" value={noDeadline} sub="cannot be tracked" color={C.warning} />}
       </div>
 
@@ -2906,8 +2906,8 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
           )}
         </div>
         {screening&&(
-          <div style={{ marginTop:10, background:C.violetTint, borderRadius:99, height:6, overflow:'hidden' }}>
-            <div style={{ background:C.violet, height:'100%', width:`${progress}%`, transition:'width .3s', borderRadius:99 }} />
+          <div style={{ marginTop:10, background:C.brandTint, borderRadius:99, height:6, overflow:'hidden' }}>
+            <div style={{ background:C.brand, height:'100%', width:`${progress}%`, transition:'width .3s', borderRadius:99 }} />
           </div>
         )}
       </div>
@@ -2935,7 +2935,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
                 </div>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>{r.reasoning}</div>
                 {typeof r.ats_score==='number'&&(
-                  <div style={{ fontSize:11, color:C.violetDeep, marginBottom:4 }}>ATS skills match: <b>{r.ats_score}%</b> · Overall: <b>{r.score}</b></div>
+                  <div style={{ fontSize:11, color:C.brandDeep, marginBottom:4 }}>ATS skills match: <b>{r.ats_score}%</b> · Overall: <b>{r.score}</b></div>
                 )}
                 {(r.matched_skills?.length||r.missing_skills?.length)?(
                   <div style={{ display:'flex', flexWrap:'wrap' as const, gap:4, marginBottom:6 }}>
@@ -2956,7 +2956,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
                 )}
                 {r.interview_questions?.length>0&&(
                   <details style={{ cursor:'pointer' }}>
-                    <summary style={{ fontSize:11, color:C.violetDeep, fontWeight:500 }}>View {r.interview_questions.length} Interview Questions</summary>
+                    <summary style={{ fontSize:11, color:C.brandDeep, fontWeight:500 }}>View {r.interview_questions.length} Interview Questions</summary>
                     {r.interview_questions.map((q:string,qi:number)=>(
                       <div key={qi} style={{ fontSize:11, padding:'3px 0 3px 12px', color:C.muted }}>{qi+1}. {q}</div>
                     ))}
@@ -2964,7 +2964,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
                 )}
               </div>
               {!r.added&&(
-                <button onClick={()=>addToBank(results.indexOf(r))} style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, border:'1px solid #DDD6FE', flexShrink:0, fontSize:11 }}>+ Pipeline</button>
+                <button onClick={()=>addToBank(results.indexOf(r))} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border:'1px solid #DDD6FE', flexShrink:0, fontSize:11 }}>+ Pipeline</button>
               )}
             </div>
           ))}
@@ -3095,7 +3095,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       {/* Stage filter pills */}
       <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginBottom:14 }}>
         <button onClick={()=>setStageF('')} style={{ ...T.btn, fontSize:11, padding:'5px 12px', borderRadius:99,
-          background: stageF===''?C.violet:'#fff', color: stageF===''?'#fff':C.muted, border:`1px solid ${stageF===''?C.violet:C.violetTint}` }}>
+          background: stageF===''?C.brand:'#fff', color: stageF===''?'#fff':C.muted, border:`1px solid ${stageF===''?C.brand:C.brandTint}` }}>
           All <span style={{ opacity:.8 }}>({baseList.length})</span>
         </button>
         {STAGES.map(stage=>{
@@ -3128,7 +3128,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 onMouseLeave={e=>{ e.currentTarget.style.boxShadow='0 1px 4px rgba(124,58,237,0.06)'; e.currentTarget.style.transform='' }}>
                 {/* header */}
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-                  <div style={{ width:40, height:40, borderRadius:'50%', background:C.violetTint, color:C.violet, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, flexShrink:0 }}>{initials}</div>
+                  <div style={{ width:40, height:40, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, flexShrink:0 }}>{initials}</div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:14, fontWeight:700, color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}{c.offer_revised&&<span style={{ fontSize:9, color:C.warning, fontWeight:600, marginLeft:5 }}></span>}</div>
                     <div style={{ fontSize:11, color:C.faint, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.designation||mrf?.designation||'—'}</div>
@@ -3136,7 +3136,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:99, background:STAGE_COLOR[c.stage]+'18', color:STAGE_COLOR[c.stage], whiteSpace:'nowrap' }}>{c.stage}</span>
                 </div>
                 {/* role / opening */}
-                {mrf && <div style={{ fontSize:11, color:C.violet, fontWeight:500, marginBottom:8 }}>🎯 {mrf.designation||mrf.position}</div>}
+                {mrf && <div style={{ fontSize:11, color:C.brand, fontWeight:500, marginBottom:8 }}>🎯 {mrf.designation||mrf.position}</div>}
                 {/* detail rows */}
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 10px', fontSize:11.5, color:C.inkSoft }}>
                   <div><span style={{ color:C.faint }}>Company</span><div style={{ fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.current_company||'—'}</div></div>
@@ -3148,7 +3148,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, flexWrap:'wrap' as const }}>
                   {c.ai_score!=null&&<span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:99, background:tagCol+'14', color:tagCol }}>AI {c.ai_score}% {tag==='STRONG'?'':tag==='PARTIAL'?'':''}</span>}
                   {c.source&&<span style={{ fontSize:10, color:C.faint, background:C.sunken, border:'1px solid #EDE9FE', borderRadius:99, padding:'2px 8px' }}>{c.source}</span>}
-                  <span style={{ marginLeft:'auto', fontSize:11, color:C.violet, fontWeight:600 }}>View →</span>
+                  <span style={{ marginLeft:'auto', fontSize:11, color:C.brand, fontWeight:600 }}>View →</span>
                 </div>
               </div>
             )
@@ -3254,14 +3254,14 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
           </div>
           <div style={{ fontSize:12, color:C.faint, marginTop:3 }}>{c.current_company} · {c.experience_years}yr · {c.phone||c.mobile}</div>
           {c.email&&<div style={{ fontSize:11, color:C.faint, marginTop:1 }}>✉️ {c.email}</div>}
-          {mrf&&<div style={{ fontSize:11, color:C.violet, marginTop:3, fontWeight:600 }}>🎯 {mrf.designation||mrf.position}{c.source?` · Source: ${c.source}`:''}</div>}
+          {mrf&&<div style={{ fontSize:11, color:C.brand, marginTop:3, fontWeight:600 }}>🎯 {mrf.designation||mrf.position}{c.source?` · Source: ${c.source}`:''}</div>}
         </div>
-        <button onClick={onClose} style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, padding:'4px 10px' }}></button>
+        <button onClick={onClose} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, padding:'4px 10px' }}></button>
       </div>
 
       {/* Stats */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14 }}>
-        {[['Current CTC',c.current_ctc?`₹${(c.current_ctc/100000).toFixed(1)}L`:'—',C.violet],['Expected CTC',c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—',C.positive],['Notice Period',c.notice_period?c.notice_period+' days':'—',C.warning],['AI Score',c.ai_score?c.ai_score+'%':'—',(c.ai_tag||c.ai_match_tag)==='STRONG'?C.positive:C.warning]].map(([l,v,col])=>(
+        {[['Current CTC',c.current_ctc?`₹${(c.current_ctc/100000).toFixed(1)}L`:'—',C.brand],['Expected CTC',c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—',C.positive],['Notice Period',c.notice_period?c.notice_period+' days':'—',C.warning],['AI Score',c.ai_score?c.ai_score+'%':'—',(c.ai_tag||c.ai_match_tag)==='STRONG'?C.positive:C.warning]].map(([l,v,col])=>(
           <div key={l as string} style={{ background:C.sunken, borderRadius:7, padding:10, border:'1px solid #F3F0FF' }}>
             <div style={{ fontSize:10, color:C.faint, textTransform:'uppercase' as const, letterSpacing:'.04em' }}>{l}</div>
             <div style={{ fontSize:14, fontWeight:600, color:col as string, marginTop:2 }}>{v}</div>
@@ -3298,13 +3298,13 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
       {/* AI Questions */}
       <SectionLine title="Interview Questions" />
       <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:7 }}>
-        <button onClick={()=>onGetQuestions(c)} disabled={aiQLoading} style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, border:'1px solid #DDD6FE', fontSize:11 }}>
+        <button onClick={()=>onGetQuestions(c)} disabled={aiQLoading} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border:'1px solid #DDD6FE', fontSize:11 }}>
           {aiQLoading?'⏳...':'AI Questions Generate'}
         </button>
       </div>
       {(aiQs.length?aiQs:(c.ai_questions||[])).map((q:string,i:number)=>(
         <div key={i} style={{ background:C.sunken, borderRadius:6, padding:'7px 10px', marginBottom:5, fontSize:11, color:C.ink, border:'1px solid #EDE9FE' }}>
-          <span style={{ color:C.violet, marginRight:5, fontWeight:600 }}>{i+1}.</span>{q}
+          <span style={{ color:C.brand, marginRight:5, fontWeight:600 }}>{i+1}.</span>{q}
         </div>
       ))}
 
@@ -3360,7 +3360,7 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:an
   return (
     <div>
       <div style={T.cardPurple}>
-        <div style={{ fontSize:13, fontWeight:600, color:C.violetDeep, marginBottom:4 }}>Stipend Calculator — {sel.full_name}</div>
+        <div style={{ fontSize:13, fontWeight:600, color:C.brandDeep, marginBottom:4 }}>Stipend Calculator — {sel.full_name}</div>
         <div style={{ fontSize:11, color:C.faint, marginBottom:14 }}>{mrf?.employment_type||'Non-employee'} engagement · stipend only (no PF/HRA structure)</div>
         {!autoCompany && (
           <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border:'1px solid #FDE68A', borderRadius:8 }}>
@@ -3383,7 +3383,7 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:an
             <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:13 }}><span style={{ color:'#4B5563' }}>Monthly Stipend</span><span style={{ fontWeight:600 }}>₹{s.toLocaleString('en-IN')}</span></div>
             {tds&&<div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:13, color:C.critical }}><span>(-) TDS ({pct}%)</span><span>-₹{tdsAmt.toLocaleString('en-IN')}</span></div>}
             <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 0 0', fontSize:14, fontWeight:700, color:C.positive, borderTop:'1px solid #EDE9FE', marginTop:4 }}><span>Net In-Hand (monthly)</span><span>₹{net.toLocaleString('en-IN')}</span></div>
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0 0', fontSize:12, color:C.violet }}><span>Annual Stipend</span><span>₹{(s*12).toLocaleString('en-IN')}</span></div>
+            <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0 0', fontSize:12, color:C.brand }}><span>Annual Stipend</span><span>₹{(s*12).toLocaleString('en-IN')}</span></div>
           </div>
         )}
         <button onClick={save} disabled={saving} style={{ ...T.btnPrimary, width:'100%', marginTop:12, padding:10 }}>{saving?'Saving…':'Save Stipend & Move to Offers'}</button>
@@ -3437,7 +3437,7 @@ function PreNegoChecks({ candidate, supabase, showNotify, onDone }:any) {
   }
 
   const box = (docType:'AADHAAR'|'PREV_OFFER', label:string, val:string, ref:React.RefObject<HTMLInputElement|null>) => (
-    <div style={{ border:`2px dashed ${val?'#A7F3D0':C.violetEdge}`, borderRadius:10, padding:'14px 16px', background:val?C.positiveTint:C.sunken, marginBottom:12 }}>
+    <div style={{ border:`2px dashed ${val?'#A7F3D0':C.brandEdge}`, borderRadius:10, padding:'14px 16px', background:val?C.positiveTint:C.sunken, marginBottom:12 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
         <div>
           <div style={{ fontSize:13, fontWeight:600 }}>{val?'':''} {label} <span style={{ color:C.critical, fontSize:11 }}>*</span></div>
@@ -3454,7 +3454,7 @@ function PreNegoChecks({ candidate, supabase, showNotify, onDone }:any) {
 
   return (
     <div style={T.cardPurple}>
-      <div style={{ fontSize:13, fontWeight:600, color:C.violetDeep, marginBottom:6 }}>Pre-negotiation Checks — {candidate.full_name}</div>
+      <div style={{ fontSize:13, fontWeight:600, color:C.brandDeep, marginBottom:6 }}>Pre-negotiation Checks — {candidate.full_name}</div>
       <div style={{ fontSize:11, color:C.faint, marginBottom:14 }}>Upload the candidate's documents, then save to begin CTC negotiation.</div>
       {box('AADHAAR','Aadhaar Card', aadhaar, aadhaarRef)}
       {box('PREV_OFFER','Previous Offer Letter', prevOffer, prevRef)}
@@ -3624,14 +3624,14 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
     <div style={T.g2}>
       <div>
         <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' as const }}>
-          <button onClick={()=>{ setSubTab('checks'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='checks'?{ background:C.violet, color:'#fff', borderColor:C.violet }:{}) }}>Pre-negotiation Checks ({checksCands.length})</button>
-          <button onClick={()=>{ setSubTab('ctc'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='ctc'?{ background:C.violet, color:'#fff', borderColor:C.violet }:{}) }}>CTC Negotiations ({ctcCands.length})</button>
+          <button onClick={()=>{ setSubTab('checks'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='checks'?{ background:C.brand, color:'#fff', borderColor:C.brand }:{}) }}>Pre-negotiation Checks ({checksCands.length})</button>
+          <button onClick={()=>{ setSubTab('ctc'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='ctc'?{ background:C.brand, color:'#fff', borderColor:C.brand }:{}) }}>CTC Negotiations ({ctcCands.length})</button>
         </div>
         <SearchBar placeholder="Search candidate…" onApply={setNegQ} width={240} />
         <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
         {shownCands.map((c:Candidate)=>(
           <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
-            style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?C.violetTint:'#fff' }}>
+            style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?C.brandTint:'#fff' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
               <div style={{ minWidth:0 }}>
                 <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
@@ -3662,7 +3662,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
       {subTab==='ctc'&&sel&&!isStipend&&(
         <div>
           <div style={T.cardPurple}>
-            <div style={{ fontSize:13, fontWeight:600, color:C.violetDeep, marginBottom:14 }}>CTC Calculator — {sel.full_name}</div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.brandDeep, marginBottom:14 }}>CTC Calculator — {sel.full_name}</div>
             {loadedNeg?.candidate_response && (
               <div style={{ marginBottom:12, padding:'8px 12px', borderRadius:8, fontSize:12, fontWeight:600,
                 background: loadedNeg.candidate_response==='ACCEPTED'?C.positiveTint:C.criticalTint,
@@ -3725,10 +3725,10 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
               {/* Salary Table */}
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
                 <thead>
-                  <tr style={{ background:C.violetTint }}>
-                    <th style={{ padding:'7px 10px', textAlign:'left' as const, color:C.violetDeep, fontWeight:600, fontSize:11 }}>Component</th>
-                    <th style={{ padding:'7px 10px', textAlign:'right' as const, color:C.violetDeep, fontWeight:600, fontSize:11 }}>Monthly (₹)</th>
-                    <th style={{ padding:'7px 10px', textAlign:'right' as const, color:C.violetDeep, fontWeight:600, fontSize:11 }}>Annual (₹)</th>
+                  <tr style={{ background:C.brandTint }}>
+                    <th style={{ padding:'7px 10px', textAlign:'left' as const, color:C.brandDeep, fontWeight:600, fontSize:11 }}>Component</th>
+                    <th style={{ padding:'7px 10px', textAlign:'right' as const, color:C.brandDeep, fontWeight:600, fontSize:11 }}>Monthly (₹)</th>
+                    <th style={{ padding:'7px 10px', textAlign:'right' as const, color:C.brandDeep, fontWeight:600, fontSize:11 }}>Annual (₹)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3744,10 +3744,10 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                       <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.muted }}>₹{Math.round((v as number)*12).toLocaleString('en-IN')}</td>
                     </tr>
                   ))}
-                  <tr style={{ background:C.violetTint }}>
+                  <tr style={{ background:C.brandTint }}>
                     <td style={{ padding:'7px 10px', fontWeight:600, color:C.ink }}>Gross</td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.violet }}>₹{Math.round(calc.gross).toLocaleString('en-IN')}</td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.violet }}>₹{Math.round(calc.gross*12).toLocaleString('en-IN')}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.brand }}>₹{Math.round(calc.gross).toLocaleString('en-IN')}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.brand }}>₹{Math.round(calc.gross*12).toLocaleString('en-IN')}</td>
                   </tr>
                   <tr style={{ borderBottom:'1px solid #F3F0FF' }}>
                     <td style={{ padding:'6px 10px', color:C.critical, fontSize:11 }}>(-) Employee EPF</td>
@@ -3792,10 +3792,10 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                       <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.muted }}>₹{Math.round(calc.variable).toLocaleString('en-IN')}</td>
                     </tr>
                   )}
-                  <tr style={{ background:C.violetTint }}>
+                  <tr style={{ background:C.brandTint }}>
                     <td style={{ padding:'7px 10px', fontWeight:600, color:C.ink }}>CTC <span style={{ fontSize:10, fontWeight:400, color:C.faint }}>(Fixed Gross + Variable)</span></td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.violet }}>₹{Math.round(calc.totalCTCMonthly).toLocaleString('en-IN')}</td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:700, color:C.violet, fontSize:14 }}>₹{calc.ctcAnnual.toLocaleString('en-IN')}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.brand }}>₹{Math.round(calc.totalCTCMonthly).toLocaleString('en-IN')}</td>
+                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:700, color:C.brand, fontSize:14 }}>₹{calc.ctcAnnual.toLocaleString('en-IN')}</td>
                   </tr>
                 </tbody>
               </table>
@@ -3819,7 +3819,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   {calc.esop>0&&(
                     <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', fontSize:12 }}>
                       <span>ESOP Grant Value <span style={{ fontSize:10, color:C.faint }}>{form.esop_plan&&`(${form.esop_plan})`}</span></span>
-                      <span style={{ fontWeight:600, color:C.violet }}>₹{calc.esop.toLocaleString('en-IN')}</span>
+                      <span style={{ fontWeight:600, color:C.brand }}>₹{calc.esop.toLocaleString('en-IN')}</span>
                     </div>
                   )}
                 </div>
@@ -3842,7 +3842,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                     <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace' }} />
                     <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btn, background:'#0EA5E9', color:'#fff', whiteSpace:'nowrap' as const }}>Copy</button>
-                    <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, textDecoration:'none', whiteSpace:'nowrap' as const }}>Open ↗</a>
+                    <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, textDecoration:'none', whiteSpace:'nowrap' as const }}>Open ↗</a>
                   </div>
                   <div style={{ fontSize:10, color:'#0C4A6E', marginTop:6 }}>Share with the candidate — shows salary breakdown only (no internal data).</div>
                 </div>
@@ -3906,8 +3906,8 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
   if (sel) {
     return (
       <div>
-        <button style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, marginBottom:12 }} onClick={()=>{setSel(null);setNeg(null)}}>Back to candidates</button>
-        {loading ? <div style={{ ...T.card, textAlign:'center' as const, color:C.violet }}>Loading negotiation…</div>
+        <button style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, marginBottom:12 }} onClick={()=>{setSel(null);setNeg(null)}}>Back to candidates</button>
+        {loading ? <div style={{ ...T.card, textAlign:'center' as const, color:C.brand }}>Loading negotiation…</div>
           : neg ? (
             <>
               <CreateOfferApproval candidate={sel} negotiation={neg} mrf={mrf} onSubmitted={()=>{ onRefresh?.(); setSel(null); setNeg(null) }} />
@@ -3945,7 +3945,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
               {ar.submitted_at && <div style={{ fontSize:10.5, color:C.faint, marginTop:2 }}>on {new Date(ar.submitted_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>}
             </div>
           ) : (
-            <button style={{ ...T.btn, background:C.violet, color:'#fff', flexShrink:0 }} onClick={()=>pick(c)}>Create Request →</button>
+            <button style={{ ...T.btn, background:C.brand, color:'#fff', flexShrink:0 }} onClick={()=>pick(c)}>Create Request →</button>
           )}
         </div>
       )})}
@@ -4059,7 +4059,7 @@ HR Team`
         <SearchBar placeholder="Search candidate…" onApply={setOffQ} width={240} />
         <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
         {shownOffered.map((c:Candidate)=>(
-          <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?C.violetTint:'#fff' }}
+          <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'1.5px solid #7C3AED':'1px solid rgba(124,58,237,0.12)', background:sel?.id===c.id?C.brandTint:'#fff' }}
             onClick={()=>generateLetter(c)}>
             <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
@@ -4244,11 +4244,11 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
 
             {/* Onboarding date + HR email — drive the reminder emails */}
             <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:10, flexWrap:'wrap' as const }}>
-              <label style={{ fontSize:11, color:C.violetDeep, fontWeight:600 }}>Onboarding date:</label>
+              <label style={{ fontSize:11, color:C.brandDeep, fontWeight:600 }}>Onboarding date:</label>
               <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} style={{ ...T.input, width:150, fontSize:12 }} />
-              <label style={{ fontSize:11, color:C.violetDeep, fontWeight:600 }}>HR email:</label>
+              <label style={{ fontSize:11, color:C.brandDeep, fontWeight:600 }}>HR email:</label>
               <input value={hrVal(c)} onChange={e=>setHrEmails(m=>({...m,[c.id]:e.target.value}))} placeholder="hr@company.com" style={{ ...T.input, width:180, fontSize:12 }} />
-              <button onClick={()=>saveOnboarding(c)} style={{ ...T.btn, background:C.violetTint, color:C.violetDeep, fontSize:11 }}>Save</button>
+              <button onClick={()=>saveOnboarding(c)} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11 }}>Save</button>
               {(()=>{ const d=daysToJoin(c); if(d===null) return null
                 return d>=0 && d<=3
                   ? <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>Joining in {d} day{d===1?'':'s'} — start onboarding</span>
@@ -4259,9 +4259,9 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
             {!resp&&(
               choose===c.id ? (
                 <div style={{ marginTop:12, background:C.sunken, borderRadius:8, padding:'10px 12px', border:'1px solid #E9E5FF' }}>
-                  <div style={{ fontSize:12, color:C.violetDeep, fontWeight:600, marginBottom:8 }}>Candidate type — sends the right letter:</div>
+                  <div style={{ fontSize:12, color:C.brandDeep, fontWeight:600, marginBottom:8 }}>Candidate type — sends the right letter:</div>
                   <div style={{ display:'flex', gap:8 }}>
-                    <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'EXPERIENCED')} style={{ ...T.btn, background:C.violet, color:'#fff' }}>{busy===c.id?'Sending…':'Experienced → Resignation Acceptance'}</button>
+                    <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'EXPERIENCED')} style={{ ...T.btn, background:C.brand, color:'#fff' }}>{busy===c.id?'Sending…':'Experienced → Resignation Acceptance'}</button>
                     <button disabled={busy===c.id} onClick={()=>sendAcceptance(c,'FRESHER')} style={{ ...T.btn, background:C.info, color:'#fff' }}>{busy===c.id?'Sending…':'Fresher → Joining Confirmation'}</button>
                     <button onClick={()=>setChoose('')} style={{ ...T.btn, background:'transparent', color:C.faint }}>Cancel</button>
                   </div>

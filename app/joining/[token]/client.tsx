@@ -11,11 +11,11 @@ type Phase = 'form' | 'compliance' | 'policies' | 'esign' | 'done'
 type FieldConf = 'ai-high' | 'ai-verify' | 'manual' | 'normal'
 
 // ── EZER Theme ───────────────────────────────────────────────────
-const PRI = TK.violet
+const PRI = TK.brand
 const S = {
   pg:  { background: TK.canvas, minHeight: '100vh', fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.ink } as const,
   cd:  { background: '#fff', borderRadius: 12, border: '1px solid rgba(124,58,237,0.12)', padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(124,58,237,0.05)' } as const,
-  lbl: { fontSize: 10, fontWeight: 600, color: TK.violetDeep, textTransform: 'uppercase' as const, letterSpacing: '.06em', display: 'block', marginBottom: 4 },
+  lbl: { fontSize: 10, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.06em', display: 'block', marginBottom: 4 },
   inp: (conf: FieldConf = 'normal') => ({
     width: '100%', padding: '9px 11px', borderRadius: 7, fontSize: 13, outline: 'none',
     boxSizing: 'border-box' as const, fontFamily: 'inherit', color: TK.ink,
@@ -161,7 +161,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
           <div style={{ fontSize: 13, color: TK.muted, lineHeight: 1.8, marginBottom: 20 }}>
             Joining form complete!<br/>All documents have been digitally signed.
           </div>
-          <div style={{ background: TK.violetTint, borderRadius: 10, padding: 16, marginBottom: 20, textAlign: 'left' }}>
+          <div style={{ background: TK.brandTint, borderRadius: 10, padding: 16, marginBottom: 20, textAlign: 'left' }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: PRI, marginBottom: 10 }}>Completed steps</div>
             {['7-step joining form filled','EPF Form 11 + Form 2 signed','Gratuity Form F signed',`${POLICIES.length} policies accepted`,'Aadhaar OTP eSign done','PDFs sent to your email + HR Manager'].map(s => (
               <div key={s} style={{ fontSize: 12, color: TK.positive, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>✓ {s}</div>
@@ -185,7 +185,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
           <div style={{ fontSize: 13, color: TK.muted, marginTop: 4 }}>Sign every document with a single OTP</div>
         </div>
         <div style={S.cd}>
-          <div style={{ background: TK.violetTint, borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12, color: '#534AB7', lineHeight: 1.7 }}>
+          <div style={{ background: TK.brandTint, borderRadius: 8, padding: '10px 12px', marginBottom: 14, fontSize: 12, color: '#534AB7', lineHeight: 1.7 }}>
             <strong>Documents to be signed:</strong><br/>Joining form (7 steps) &nbsp;·&nbsp; ✓ EPF Form 11 + Form 2<br/>Gratuity Form F &nbsp;·&nbsp; ✓ {POLICIES.length} policy acknowledgements<br/><br/>
             <strong>Legal basis:</strong> IT Act 2000, Section 3A — legally valid Aadhaar eSign
           </div>
@@ -224,7 +224,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
             <div style={{ fontSize: 12, color: TK.muted, marginTop: 2 }}>{policyIdx + 1} of {POLICIES.length} policies</div>
             <div style={{ display: 'flex', gap: 4, justifyContent: 'center', marginTop: 8 }}>
               {POLICIES.map((_, i) => (
-                <div key={i} style={{ width: 30, height: 4, borderRadius: 99, background: i < policyIdx ? PRI : i === policyIdx ? '#A78BFA' : TK.violetTint, transition: 'background .3s' }}/>
+                <div key={i} style={{ width: 30, height: 4, borderRadius: 99, background: i < policyIdx ? PRI : i === policyIdx ? '#A78BFA' : TK.brandTint, transition: 'background .3s' }}/>
               ))}
             </div>
           </div>
@@ -237,7 +237,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
               <div style={{ height: 30 }}/>
               {!scrolled && !isAccepted && <div style={{ textAlign: 'center', color: TK.faint, fontSize: 11, marginTop: 8 }}>Scroll to bottom to enable accept</div>}
             </div>
-            <div style={{ background: TK.violetTint, borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#534AB7', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <div style={{ background: TK.brandTint, borderRadius: 8, padding: '10px 12px', marginBottom: 12, fontSize: 12, color: '#534AB7', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
               <input type="checkbox" style={{ marginTop: 1, width: 15, height: 15, flexShrink: 0, cursor: 'pointer' }} readOnly checked={isAccepted}/>
               <span>I have read this policy in full. I consent to following it.</span>
             </div>
@@ -269,7 +269,7 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
         <div style={{ ...S.cd, borderLeft: `3px solid ${PRI}` }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>EPF Form 11 — PF Declaration</div>
-            <span style={{ fontSize: 10, background: TK.violetTint, color: '#534AB7', padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>AI Pre-filled</span>
+            <span style={{ fontSize: 10, background: TK.brandTint, color: '#534AB7', padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>AI Pre-filled</span>
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8, fontSize: 12, marginBottom: 12 }}>
             {[['Name', form.full_name], ["Father's Name", form.father_name || '—'], ['DOB', form.dob || '—'], ['Gender', form.gender || '—'], ['Aadhaar', form.aadhaar ? '****'+form.aadhaar.slice(-4) : '—'], ['PAN', form.pan || '—'], ['Bank', form.bank_name || '—'], ['IFSC', form.bank_ifsc || '—'], ['DOJ', form.doj || '—']].map(([l,v]) => (
@@ -562,10 +562,10 @@ export default function JoiningClient({ tokenId, token, candidate, company }: an
       <div style={{ display: 'flex', overflowX: 'auto', padding: '9px 14px', gap: 3, background: '#fff', borderBottom: '1px solid #EDE9FE' }}>
         {STEPS.map((s, i) => (
           <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-            <div onClick={() => { if (i <= step) setStep(i) }} style={{ padding: '5px 11px', borderRadius: 99, fontSize: 11, fontWeight: 500, cursor: i <= step ? 'pointer' : 'default', whiteSpace: 'nowrap', transition: 'all .2s', background: i === step ? PRI : i < step ? TK.violetTint : '#FAFAFA', color: i === step ? '#fff' : i < step ? PRI : TK.faint }}>
+            <div onClick={() => { if (i <= step) setStep(i) }} style={{ padding: '5px 11px', borderRadius: 99, fontSize: 11, fontWeight: 500, cursor: i <= step ? 'pointer' : 'default', whiteSpace: 'nowrap', transition: 'all .2s', background: i === step ? PRI : i < step ? TK.brandTint : '#FAFAFA', color: i === step ? '#fff' : i < step ? PRI : TK.faint }}>
               {i < step ? '✓ ' : `${i+1}. `}{s}
             </div>
-            {i < STEPS.length - 1 && <div style={{ width: 10, height: 1, background: TK.violetTint, flexShrink: 0 }}/>}
+            {i < STEPS.length - 1 && <div style={{ width: 10, height: 1, background: TK.brandTint, flexShrink: 0 }}/>}
           </div>
         ))}
       </div>

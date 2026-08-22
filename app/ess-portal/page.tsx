@@ -55,9 +55,9 @@ export default function ESSPortalPage() {
   return (
     <div>
       {canViewOthers && (
-        <div style={{ background: TK.violetTint, borderBottom: '1px solid #E9E7F5', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 12.5, color: TK.violetDeep }}>
+        <div style={{ background: TK.brandTint, borderBottom: '1px solid #E9E7F5', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 12.5, color: TK.brandDeep }}>
           <span>You have <b>{scope?.roleNames.join(', ')}</b> access ({scope?.scope.toLowerCase()}) — you can open {scope?.employees.length} team member{scope?.employees.length === 1 ? '' : 's'}&apos; portals.</span>
-          <button onClick={() => { setPickerOpen(true); setQ('') }} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: 'none', background: TK.violet, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>View a team member →</button>
+          <button onClick={() => { setPickerOpen(true); setQ('') }} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: 'none', background: TK.brand, color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>View a team member →</button>
         </div>
       )}
 
@@ -71,7 +71,7 @@ export default function ESSPortalPage() {
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {list.map(e => (
                 <div key={e.id} onClick={() => { setViewing(e); setPickerOpen(false) }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8, cursor: 'pointer', borderBottom: '1px solid #F1F0FA' }} onMouseEnter={ev => (ev.currentTarget.style.background = TK.canvas)} onMouseLeave={ev => (ev.currentTarget.style.background = '')}>
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: TK.violetTint, color: TK.violet, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{e.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: TK.brandTint, color: TK.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{e.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
                   <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600, color: TK.ink }}>{e.full_name}</div><div style={{ fontSize: 11, color: TK.muted }}>{e.emp_code}{e.designation ? ` · ${e.designation}` : ''}{e.dept_name ? ` · ${e.dept_name}` : ''}</div></div>
                 </div>
               ))}

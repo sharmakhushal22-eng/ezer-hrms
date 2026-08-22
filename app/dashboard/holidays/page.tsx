@@ -22,13 +22,13 @@ import { C as TK } from '@/lib/ui'
 const C = {
   page:    { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
   card:    { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  lbl:     { fontSize:11, fontWeight:600, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
-  sec:     { fontSize:12, fontWeight:600, color:TK.violet, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
+  lbl:     { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
+  sec:     { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
   input:   { width:'100%', padding:'9px 11px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-  pri:     { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:     { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.violetDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  pri:     { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
+  out:     { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
   danger:  { padding:'5px 10px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.critical } as React.CSSProperties,
-  tab:     (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.violet : '#fff', color: on ? '#fff' : TK.violetDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
+  tab:     (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand : '#fff', color: on ? '#fff' : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
 }
 const TYPE_COLOR: Record<HolidayType, [string, string]> = {
   NATIONAL:['#E0E7FF','#3730A3'], FESTIVAL:['#FCE7F3','#9D174D'], DISCRETIONARY:[TK.warningTint,TK.warning],
@@ -84,7 +84,7 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
         {calendars.map(c => (
           <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
             <span style={{ fontSize:13, fontWeight:600 }}>{c.name}</span>
-            <Badge text={c.calendar_type} bg={TK.violetTint} color={TK.violet} />
+            <Badge text={c.calendar_type} bg={TK.brandTint} color={TK.brand} />
             {c.status === 'PUBLISHED'
               ? <Badge text="PUBLISHED" bg="#D1FAE5" color="#065F46" />
               : <Badge text="DRAFT" bg="#F3F4F6" color={TK.muted} />}
@@ -333,7 +333,7 @@ function WeeklyOffTab({ calendars, companies, branches, departments, weeklyOffs,
             <label style={C.lbl}>Which occurrences</label>
             <div style={{ display:'flex', gap:8 }}>
               {[1, 2, 3, 4, 5].map(n => (
-                <label key={n} style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', border:'1px solid #DDD6FE', borderRadius:7, padding:'5px 10px', background: nth.includes(n) ? TK.violetTint : '#fff' }}>
+                <label key={n} style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', border:'1px solid #DDD6FE', borderRadius:7, padding:'5px 10px', background: nth.includes(n) ? TK.brandTint : '#fff' }}>
                   <input type="checkbox" checked={nth.includes(n)} onChange={() => toggleNth(n)} /> {n}{n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}
                 </label>
               ))}
@@ -357,7 +357,7 @@ function WeeklyOffTab({ calendars, companies, branches, departments, weeklyOffs,
         {weeklyOffs.map(w => (
           <div key={w.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
             <span style={{ fontWeight:600, width:90 }}>{WEEKDAYS[w.weekday]}</span>
-            <Badge text={w.mode === 'EVERY' ? 'EVERY WEEK' : `WEEKS ${(w.nth_occurrences || []).join(',')}`} bg={TK.violetTint} color={TK.violet} />
+            <Badge text={w.mode === 'EVERY' ? 'EVERY WEEK' : `WEEKS ${(w.nth_occurrences || []).join(',')}`} bg={TK.brandTint} color={TK.brand} />
             {w.is_primary && <Badge text="PRIMARY" bg="#D1FAE5" color="#065F46" />}
             <span style={{ color:TK.faint }}>{coName(w.company_id)} · {brName(w.branch_id)} · {deptName(w.department_id)}{w.employment_type ? ` · ${w.employment_type}` : ''}</span>
             <button style={{ ...C.danger, marginLeft:'auto' }} onClick={() => onDelete(w.id)}>Delete</button>
@@ -515,7 +515,7 @@ export function HolidaysSection() {
           {tabs.map(([k, label]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{label}</button>)}
         </div>
 
-        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.violet, padding:40 }}>Loading…</div> : (
+        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <>
             {tab === 'cal' && <CalendarsTab calendars={calendars} companies={companies} maps={maps} onCreate={hCreateCal} onStatus={hStatus} onDelete={hDeleteCal} onMap={hMap} />}
             {tab === 'hol' && <HolidaysTab calendars={calendars} companies={companies} branches={branches} weeklyOffs={weeklyOffs} selCal={selCal} setSelCal={setSelCal} holidays={holidays} appl={appl} onAdd={hAddHoliday} onDelete={hDeleteHoliday} />}

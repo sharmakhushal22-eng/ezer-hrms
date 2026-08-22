@@ -15,7 +15,7 @@ const C = {
   card:  { background:'#fff', borderRadius:10, padding:'12px 14px', border:'1px solid #E2E8F0', marginBottom:10 } as React.CSSProperties,
   label: { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:4 },
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #E2E8F0', borderRadius:7, color:TK.ink, fontSize:12.5, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  pri:   { padding:'8px 14px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff' } as React.CSSProperties,
+  pri:   { padding:'8px 14px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
   out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #E2E8F0', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.inkSoft } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.inkSoft, marginBottom:8, display:'flex', alignItems:'center', gap:6 } as React.CSSProperties,
   g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 } as React.CSSProperties,
@@ -65,7 +65,7 @@ function OnboardingTab({ onb }: { onb: HR.OnboardingInfo | null }) {
         {onb.documents.map((d, i) => (
           <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}>
             <span>{d.doc_code} <span style={{ color:TK.faint }}>{d.file_name ? `· ${d.file_name}` : ''}</span></span>
-            <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: d.hr_verified ? TK.positiveTint : d.ai_status==='VERIFIED' ? TK.violetTint : TK.warningTint, color: d.hr_verified ? TK.positive : d.ai_status==='VERIFIED' ? TK.violet : TK.warning }}>
+            <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: d.hr_verified ? TK.positiveTint : d.ai_status==='VERIFIED' ? TK.brandTint : TK.warningTint, color: d.hr_verified ? TK.positive : d.ai_status==='VERIFIED' ? TK.brand : TK.warning }}>
               {d.hr_verified ? 'HR Verified' : d.ai_status==='VERIFIED' ? 'AI ✓' : (d.ai_status || 'Uploaded')}
             </span>
           </div>
@@ -74,7 +74,7 @@ function OnboardingTab({ onb }: { onb: HR.OnboardingInfo | null }) {
       <div style={C.card}>
         <div style={C.sec}>Statutory Forms</div>
         {onb.statutory_forms.length === 0 ? <div style={{ fontSize:12, color:TK.faint }}>None submitted.</div>
-          : <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>{onb.statutory_forms.map((s, i) => <span key={i} style={{ fontSize:10, padding:'3px 9px', borderRadius:99, background:TK.violetTint, color:TK.violetDeep, fontWeight:600 }}>{s.form_type}</span>)}</div>}
+          : <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>{onb.statutory_forms.map((s, i) => <span key={i} style={{ fontSize:10, padding:'3px 9px', borderRadius:99, background:TK.brandTint, color:TK.brandDeep, fontWeight:600 }}>{s.form_type}</span>)}</div>}
       </div>
       {(ins.father_name || ins.spouse_name || esic.prev_ip) && (
         <div style={C.card}>
@@ -198,8 +198,8 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
   const lastDay = transferDate ? addDays(transferDate, -1) : ''
 
   const pill = (active: boolean): React.CSSProperties => ({
-    padding: '7px 16px', borderRadius: 99, border: `1px solid ${active ? TK.violet : TK.line}`,
-    background: active ? TK.violet : '#fff', color: active ? '#fff' : TK.muted,
+    padding: '7px 16px', borderRadius: 99, border: `1px solid ${active ? TK.brand : TK.line}`,
+    background: active ? TK.brand : '#fff', color: active ? '#fff' : TK.muted,
     fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
   })
 
@@ -324,7 +324,7 @@ function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
             <div style={{ fontSize:10, color:TK.faint }}>{d.file_name || '—'}</div>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
-            <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: d.hr_verified ? TK.positiveTint : d.ai_status==='VERIFIED' ? TK.violetTint : TK.warningTint, color: d.hr_verified ? TK.positive : d.ai_status==='VERIFIED' ? TK.violet : TK.warning }}>
+            <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: d.hr_verified ? TK.positiveTint : d.ai_status==='VERIFIED' ? TK.brandTint : TK.warningTint, color: d.hr_verified ? TK.positive : d.ai_status==='VERIFIED' ? TK.brand : TK.warning }}>
               {d.hr_verified ? 'HR Verified' : d.ai_status==='VERIFIED' ? 'AI ✓' : (d.ai_status || 'Uploaded')}
             </span>
             {d.storage_path && <button style={C.out} onClick={() => download(d.storage_path)}>Download</button>}
@@ -341,7 +341,7 @@ function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
 function BreakupRow({ label, monthly, annual, kind }: { label: string; monthly: number; annual?: number; kind?: 'sub' | 'total' | 'net' | 'plain' }) {
   const bold = kind === 'sub' || kind === 'total' || kind === 'net'
   const bg = kind === 'total' ? TK.canvas : kind === 'sub' ? '#FAFAFE' : kind === 'net' ? TK.positiveTint : 'transparent'
-  const color = kind === 'total' ? TK.violet : kind === 'net' ? TK.positive : TK.ink
+  const color = kind === 'total' ? TK.brand : kind === 'net' ? TK.positive : TK.ink
   return (
     <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1fr 1fr', padding:'7px 12px', background:bg, borderBottom:'1px solid #F1F5F9', fontSize:12.5 }}>
       <span style={{ color: bold ? color : TK.inkSoft, fontWeight: bold ? 700 : 400 }}>{label}</span>
@@ -408,7 +408,7 @@ function SalaryView({ salary, employee }: { salary: HR.SalaryStructure | null; e
       {/* CTC summary strip */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, marginBottom:10 }}>
         {[
-          { l: 'Annual CTC', v: money(d.totalCtc || d.annualCtc), c: TK.violet, bg: TK.canvas },
+          { l: 'Annual CTC', v: money(d.totalCtc || d.annualCtc), c: TK.brand, bg: TK.canvas },
           { l: 'Net Take-home / mo', v: money(d.net), c: TK.positive, bg: TK.positiveTint },
           { l: 'Fixed / mo', v: money(d.fixedMonthly), c: TK.ink, bg: TK.sunken },
         ].map(x => (
@@ -520,7 +520,7 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
           {states.pip && <Banner color={TK.warning} bg={TK.warningTint}>PIP active since {fmt(states.pip.start_date)} (review {fmt(states.pip.review_date)})</Banner>}
           {states.sabbatical && <Banner color={TK.info} bg={TK.infoTint}>Sabbatical {fmt(states.sabbatical.from_date)} → {fmt(states.sabbatical.to_date)}</Banner>}
           {states.abscond && <Banner color={TK.critical} bg={TK.criticalTint}>Absconding since {fmt(states.abscond.abscond_from)}</Banner>}
-          {states.resignation && <Banner color={TK.violet} bg={TK.violetTint}>Resignation {states.resignation.status} · LWD {fmt(states.resignation.lwd_confirmed_by_emp)}</Banner>}
+          {states.resignation && <Banner color={TK.brand} bg={TK.brandTint}>Resignation {states.resignation.status} · LWD {fmt(states.resignation.lwd_confirmed_by_emp)}</Banner>}
         </div>
         <div style={C.card}>
           <div style={C.sec}>Action History</div>
@@ -553,7 +553,7 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
         <div style={{ marginTop:6 }}><button style={C.out} onClick={() => run(() => HR.markSabbaticalReturned(states.sabbatical.id, employee.id, todayISO(), by), 'Marked returned')}>Mark Returned (today)</button></div></Banner>}
       {states.abscond && <Banner color={TK.critical} bg={TK.criticalTint}>🚷 <b>Absconding</b> since {fmt(states.abscond.abscond_from)}.
         <div style={{ marginTop:6 }}><button style={C.out} onClick={() => run(() => HR.closeAbscond(states.abscond.id, employee.id, todayISO(), by), 'Abscond closed — returned')}>Close (returned today)</button></div></Banner>}
-      {states.resignation && <Banner color={TK.violet} bg={TK.violetTint}>🚪 <b>Resignation {states.resignation.status}</b> · LWD {fmt(states.resignation.lwd_confirmed_by_emp)} · shortfall {states.resignation.notice_shortfall_days}d
+      {states.resignation && <Banner color={TK.brand} bg={TK.brandTint}>🚪 <b>Resignation {states.resignation.status}</b> · LWD {fmt(states.resignation.lwd_confirmed_by_emp)} · shortfall {states.resignation.notice_shortfall_days}d
         <div style={{ marginTop:6 }}><button style={C.out} onClick={() => run(() => HR.withdrawResignation(states.resignation.id, employee.id, by), 'Resignation withdrawn')}>Withdraw</button></div></Banner>}
 
       {/* Approval requests */}

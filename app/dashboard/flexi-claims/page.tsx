@@ -11,10 +11,10 @@ import { COMP_NAMES, NO_INVOICE } from '@/lib/flexi/claims'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted,
   green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint,
-  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint,
+  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint,
 }
 const FY = '2026-27'
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -286,7 +286,7 @@ function MonthCalendar({ openDay, closeDay, onChange }: { openDay: number; close
           return (
             <button key={i} onClick={() => pick(d)} title={label ? `${label} on day ${d}` : `Day ${d}`}
               style={{
-                aspectRatio: '1', border: `1px solid ${edge ? C.purple : inRange ? TK.violetEdge : C.border}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
+                aspectRatio: '1', border: `1px solid ${edge ? C.purple : inRange ? TK.brandEdge : C.border}`, borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit',
                 fontSize: 12.5, fontWeight: edge ? 700 : 500, padding: 0, position: 'relative',
                 background: edge ? C.purple : inRange ? C.purpleBg : '#fff', color: edge ? '#fff' : inRange ? C.purpleDark : C.navy,
               }}>

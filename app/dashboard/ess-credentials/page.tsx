@@ -10,8 +10,8 @@ import * as XLSX from 'xlsx'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line, muted: TK.muted,
-  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
+  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }

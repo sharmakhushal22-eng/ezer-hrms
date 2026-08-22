@@ -9,7 +9,7 @@ import LetterTemplates from '@/components/letters/LetterTemplates'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 
-const C = { bg: TK.canvas, navy: TK.ink, purple: TK.violet, border: TK.line, muted: TK.muted }
+const C = { bg: TK.canvas, navy: TK.ink, purple: TK.brand, border: TK.line, muted: TK.muted }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 const TABS: { id: string; label: string; icon: string; soon?: boolean }[] = [

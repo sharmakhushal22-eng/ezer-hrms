@@ -39,8 +39,8 @@ interface Employee {
 // Bound to the design system rather than restated. Every style helper below
 // reads from here, so the whole page follows lib/ui/tokens.ts.
 const P = {
-  navy:C.ink, purple:C.violet, purpleDark:C.violetDeep,
-  purpleBg:C.violetTint, purpleLight:C.sunken,
+  navy:C.ink, purple:C.brand, purpleDark:C.brandDeep,
+  purpleBg:C.brandTint, purpleLight:C.sunken,
   border:C.line, card:C.surface, page:C.canvas,
   text:C.ink, muted:C.muted, green:C.positive, greenBg:tone('positive').bg,
   red:C.critical, redBg:tone('critical').bg, amber:C.warning, amberBg:tone('warning').bg,
@@ -63,7 +63,7 @@ const GRADE_COLORS: Record<string,{bg:string;color:string}> = {
 // Employment type IS categorical, so these stay distinct — but drawn from the
 // token palette so they belong to the same world as everything else.
 const TYPE_COLORS: Record<string,{bg:string;color:string}> = {
-  Employee:{bg:C.violetTint,color:C.violetDeep},
+  Employee:{bg:C.brandTint,color:C.brandDeep},
   Intern:{bg:C.infoTint,color:C.info},
   NAPS:{bg:C.positiveTint,color:C.positive},
   NATS:{bg:C.warningTint,color:C.warning},
@@ -85,7 +85,7 @@ const s = {
   card:   { background:P.card, borderRadius:R.lg, border:`1px solid ${P.border}`, marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
   inp:    { ...inputStyle(), height:34, fontSize:F.small },
   sel:    { ...inputStyle(), height:34, fontSize:F.small, cursor:'pointer' } as React.CSSProperties,
-  priBtn: { padding:'0 14px', height:34, background:`linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color:'#fff', border:`1px solid ${C.violetDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.violet, fontFamily:'inherit' },
+  priBtn: { padding:'0 14px', height:34, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:'#fff', border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.brand, fontFamily:'inherit' },
   secBtn: { padding:'0 13px', height:34, background:P.card, color:P.text, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.flat, fontFamily:'inherit' },
   saveBtn:{ padding:'0 14px', height:34, background:C.positive, color:'#fff', border:'none', borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, fontFamily:'inherit' },
 }
@@ -120,7 +120,7 @@ const EXPORT_NAME_COLS = ['company_name','company_code','department_name','locat
 const mc = {
   inp:   { ...inputStyle() },
   lbl:   { ...eyebrow, display:'block', marginBottom:4 } as React.CSSProperties,
-  pri:   { padding:'0 16px', height:36, background:`linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`, color:'#fff', border:`1px solid ${C.violetDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', fontFamily:'inherit', boxShadow:E.violet },
+  pri:   { padding:'0 16px', height:36, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:'#fff', border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', fontFamily:'inherit', boxShadow:E.brand },
   out:   { padding:'0 14px', height:36, background:C.surface, color:C.ink, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', fontFamily:'inherit' },
 }
 
@@ -788,10 +788,10 @@ export default function EmployeeMaster() {
               display:'inline-flex', alignItems:'center', gap:7, flexShrink:0,
               height:34, padding:'0 13px', borderRadius:R.pill, cursor:'pointer',
               fontFamily:'inherit', fontSize:F.small, fontWeight:f.on ? W.semi : W.medium,
-              background: f.on ? C.violet : C.surface,
+              background: f.on ? C.brand : C.surface,
               color: f.on ? '#fff' : C.muted,
-              border:`1px solid ${f.on ? C.violetDeep : C.line}`,
-              boxShadow: f.on ? E.violet : E.flat,
+              border:`1px solid ${f.on ? C.brandDeep : C.line}`,
+              boxShadow: f.on ? E.brand : E.flat,
             }}>
               {f.label}
               <span style={{
@@ -900,7 +900,7 @@ export default function EmployeeMaster() {
                   const sc = STATUS_COLORS[emp.employment_status] || { bg:C.sunken, color:C.muted }
                   return (
                     <Tr key={emp.id} onClick={()=>openProfile(emp)}>
-                      <Td mono strong style={{ color:C.violetDeep, fontSize:F.tiny, letterSpacing:'.02em' }}>
+                      <Td mono strong style={{ color:C.brandDeep, fontSize:F.tiny, letterSpacing:'.02em' }}>
                         {emp.emp_code}
                       </Td>
                       <Td>

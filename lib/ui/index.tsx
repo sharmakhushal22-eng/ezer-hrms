@@ -36,13 +36,13 @@ export function UIKeyframes() {
 
       /* :hover and :focus-visible cannot be expressed as inline styles, so the
          handful of states that need them live here. */
-      .ez-row:hover{background:${C.violetTint}!important}
+      .ez-row:hover{background:${C.brandTint}!important}
       .ez-press{transition:transform ${M.quick},box-shadow ${M.quick},background ${M.quick},border-color ${M.quick}}
       .ez-press:active:not(:disabled){transform:scale(.975)}
       .ez-lift{transition:transform ${M.ease},box-shadow ${M.ease}}
       .ez-lift:hover{transform:translateY(-2px);box-shadow:${E.floating}}
 
-      :focus-visible{outline:2px solid ${C.violet};outline-offset:2px;border-radius:${R.sm}px}
+      :focus-visible{outline:2px solid ${C.brand};outline-offset:2px;border-radius:${R.sm}px}
 
       /* Scrollbars, so they belong to the palette instead of the OS. */
       .ez-scroll::-webkit-scrollbar{width:9px;height:9px}
@@ -256,8 +256,8 @@ export function Button({
 
   const skin: Record<ButtonVariant, React.CSSProperties> = {
     primary: {
-      background: `linear-gradient(180deg, ${C.violet}, ${C.violetDeep})`,
-      color: '#fff', border: `1px solid ${C.violetDeep}`, boxShadow: E.violet,
+      background: `linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`,
+      color: '#fff', border: `1px solid ${C.brandDeep}`, boxShadow: E.brand,
     },
     secondary: {
       background: C.surface, color: C.ink,
@@ -378,8 +378,8 @@ export function Tabs<T extends string>({ tabs, value, onChange }: {
               padding: '9px 14px', border: 'none', background: 'transparent',
               fontFamily: 'inherit', fontSize: F.small, cursor: 'pointer',
               fontWeight: on ? W.semi : W.medium,
-              color: on ? C.violetDeep : C.muted,
-              borderBottom: `2px solid ${on ? C.violet : 'transparent'}`,
+              color: on ? C.brandDeep : C.muted,
+              borderBottom: `2px solid ${on ? C.brand : 'transparent'}`,
               marginBottom: -1, whiteSpace: 'nowrap',
               display: 'inline-flex', alignItems: 'center', gap: 6,
             }}>
@@ -387,7 +387,7 @@ export function Tabs<T extends string>({ tabs, value, onChange }: {
             {t.count != null && (
               <span style={{
                 fontSize: F.micro, fontWeight: W.bold, padding: '1px 6px', borderRadius: R.pill,
-                background: on ? C.violetTint : C.sunken, color: on ? C.violetDeep : C.faint, ...numeric,
+                background: on ? C.brandTint : C.sunken, color: on ? C.brandDeep : C.faint, ...numeric,
               }}>{t.count}</span>
             )}
           </button>
@@ -452,7 +452,7 @@ export function Tr({ children, onClick, selected }: {
     <tr className={onClick ? 'ez-row' : undefined} onClick={onClick}
       style={{
         cursor: onClick ? 'pointer' : undefined,
-        background: selected ? C.violetTint : undefined,
+        background: selected ? C.brandTint : undefined,
         transition: `background ${M.quick}`,
       }}>{children}</tr>
   );
@@ -476,8 +476,8 @@ export function Empty({ title, hint, action, icon }: {
     }}>
       {icon && (
         <div style={{
-          width: 44, height: 44, borderRadius: R.lg, background: C.violetTint,
-          color: C.violet, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          width: 44, height: 44, borderRadius: R.lg, background: C.brandTint,
+          color: C.brand, display: 'flex', alignItems: 'center', justifyContent: 'center',
           marginBottom: 2,
         }}>{icon}</div>
       )}
@@ -495,7 +495,7 @@ export function Skeleton({ w = '100%', h = 14, r = R.sm, style }: {
   return (
     <div style={{
       width: w, height: h, borderRadius: r,
-      background: `linear-gradient(90deg,${C.sunken} 25%,${C.violetTint} 50%,${C.sunken} 75%)`,
+      background: `linear-gradient(90deg,${C.sunken} 25%,${C.brandTint} 50%,${C.sunken} 75%)`,
       backgroundSize: '200% 100%', animation: 'ezShimmer 1.2s infinite',
       ...style,
     }} />

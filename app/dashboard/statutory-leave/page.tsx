@@ -18,7 +18,7 @@ const C = {
   card:  { background:TK.surface, borderRadius:10, border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
   lbl:   { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:3 } as React.CSSProperties,
   input: { padding:'7px 9px', background:TK.sunken, border:'1px solid #CBD5E1', borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const, width:'100%' } as React.CSSProperties,
-  pri:   { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
+  pri:   { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
   out:   { padding:'7px 12px', borderRadius:8, border:'1px solid #CBD5E1', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.inkSoft, whiteSpace:'nowrap' as const } as React.CSSProperties,
   danger:{ padding:'5px 10px', borderRadius:8, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.critical } as React.CSSProperties,
   sec:   { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
@@ -210,7 +210,7 @@ export default function StatutoryLeavePage() {
           </div>
         </div>
 
-        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.violet, padding:40 }}>Loading…</div> : (
+        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <div style={{ ...C.card, overflowX:'auto', padding:0 }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead><tr style={{ background:TK.sunken }}>

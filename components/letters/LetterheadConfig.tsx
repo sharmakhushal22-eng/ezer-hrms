@@ -33,12 +33,12 @@ import type {
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted,
   green: TK.positive, greenBg: TK.positiveTint, greenBd: '#BBF7D0',
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
   red: TK.critical, redBg: TK.criticalTint, redBd: '#FCA5A5',
-  purpleBg: TK.violetTint, gray: TK.sunken,
+  purpleBg: TK.brandTint, gray: TK.sunken,
 }
 
 // Supabase Storage keys only allow a restricted ASCII set — strip anything else
@@ -74,7 +74,7 @@ function UploadZone({ label, sub, onPick, accept }: { label: string; sub: string
   return (
     <div onClick={() => ref.current?.click()}
       onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ border: `1.5px dashed ${hover ? C.purple : TK.violetEdge}`, borderRadius: 10, padding: '14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', background: hover ? TK.canvas : TK.sunken, transition: 'all .15s' }}>
+      style={{ border: `1.5px dashed ${hover ? C.purple : TK.brandEdge}`, borderRadius: 10, padding: '14px', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', background: hover ? TK.canvas : TK.sunken, transition: 'all .15s' }}>
       <div style={{ width: 34, height: 34, borderRadius: 9, background: hover ? C.purple : C.purpleBg, color: hover ? '#fff' : C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, flexShrink: 0, transition: 'all .15s' }}>⬆</div>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 12.5, color: C.navy, fontWeight: 600 }}>{label}</div>
@@ -232,7 +232,7 @@ function LetterheadCard({
                 const bP = Math.max(0, (marginBottom / detected.heightMm) * 100)
                 const lP = Math.max(0, (marginLeft / detected.widthMm) * 100)
                 const rP = Math.max(0, (marginRight / detected.widthMm) * 100)
-                const grip = { background: TK.violet, borderRadius: 3, boxShadow: '0 0 0 2px #fff' }
+                const grip = { background: TK.brand, borderRadius: 3, boxShadow: '0 0 0 2px #fff' }
                 return (
                   <div style={{ display: 'flex', justifyContent: 'center' }}>
                     <div ref={previewRef} style={{ position: 'relative', width: '100%', maxWidth: 350, aspectRatio: `${detected.widthMm} / ${detected.heightMm}`, border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden', background: '#fff', boxShadow: '0 3px 14px rgba(30,27,75,0.12)', touchAction: 'none', userSelect: 'none' }}>
@@ -240,7 +240,7 @@ function LetterheadCard({
                         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', border: 'none', pointerEvents: 'none', transform: `scale(${(scalePct || 100) / 100})`, transformOrigin: 'center center' }} />
                       {/* Safe content box (visual only) */}
                       <div style={{ position: 'absolute', pointerEvents: 'none', top: `${tP}%`, bottom: `${bP}%`, left: `${lP}%`, right: `${rP}%`, border: '1.5px dashed #7C3AED', background: 'rgba(124,58,237,0.06)', borderRadius: 3 }}>
-                        <span style={{ position: 'absolute', top: 3, left: '50%', transform: 'translateX(-50%)', fontSize: 7.5, fontWeight: 700, letterSpacing: '.04em', color: TK.violet, background: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 3, whiteSpace: 'nowrap' }}>SAFE CONTENT AREA</span>
+                        <span style={{ position: 'absolute', top: 3, left: '50%', transform: 'translateX(-50%)', fontSize: 7.5, fontWeight: 700, letterSpacing: '.04em', color: TK.brand, background: 'rgba(255,255,255,0.85)', padding: '1px 5px', borderRadius: 3, whiteSpace: 'nowrap' }}>SAFE CONTENT AREA</span>
                       </div>
                       {/* Drag handles on each edge */}
                       <div onPointerDown={beginDrag('top')} title="Drag to set top margin" style={{ position: 'absolute', top: `${tP}%`, left: `${lP}%`, right: `${rP}%`, height: 16, transform: 'translateY(-50%)', cursor: 'ns-resize', touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div style={{ ...grip, height: 4, width: '46%', maxWidth: 54 }} /></div>
@@ -480,7 +480,7 @@ function SignatoryCard({
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={rawUrl} alt="signature" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', pointerEvents: 'none' }} />
                   <div onPointerDown={cropDrag('move')} style={{ position: 'absolute', left: `${cropBox.x}%`, top: `${cropBox.y}%`, width: `${cropBox.w}%`, height: `${cropBox.h}%`, border: '2px solid #7C3AED', boxShadow: '0 0 0 9999px rgba(30,27,75,0.4)', cursor: 'move', touchAction: 'none' }}>
-                    <div onPointerDown={cropDrag('resize')} style={{ position: 'absolute', right: -8, bottom: -8, width: 16, height: 16, background: TK.violet, border: '2px solid #fff', borderRadius: 4, cursor: 'nwse-resize', touchAction: 'none' }} />
+                    <div onPointerDown={cropDrag('resize')} style={{ position: 'absolute', right: -8, bottom: -8, width: 16, height: 16, background: TK.brand, border: '2px solid #fff', borderRadius: 4, cursor: 'nwse-resize', touchAction: 'none' }} />
                   </div>
                 </div>
               </div>

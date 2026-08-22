@@ -11,21 +11,21 @@ import * as XLSX from 'xlsx'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep,
   card: TK.surface, border: TK.line, muted: TK.muted,
   green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint,
-  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint,
+  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 const UPLOADERS = [
-  { id: 'personal', label: 'Personal Info', icon: '', color: TK.violet, colorBg: TK.violetTint, desc: 'Name, DOB, gender, blood group, marital status, mobile, emergency contact', payrollAlert: false, dateColumns: ['date_of_birth'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Personal_Info.xlsx' },
-  { id: 'employment', label: 'Employment Details', icon: '', color: TK.violetDeep, colorBg: TK.infoTint, desc: 'Designation, grade, department, location, DOJ, confirmation, reporting manager', payrollAlert: true, payrollAlertMsg: 'Changing Group DOJ or Company DOJ impacts gratuity seniority and EPF enrolment. Verify with payroll before uploading.', dateColumns: ['group_doj', 'company_doj', 'confirmation_date'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Employment.xlsx' },
+  { id: 'personal', label: 'Personal Info', icon: '', color: TK.brand, colorBg: TK.brandTint, desc: 'Name, DOB, gender, blood group, marital status, mobile, emergency contact', payrollAlert: false, dateColumns: ['date_of_birth'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Personal_Info.xlsx' },
+  { id: 'employment', label: 'Employment Details', icon: '', color: TK.brandDeep, colorBg: TK.infoTint, desc: 'Designation, grade, department, location, DOJ, confirmation, reporting manager', payrollAlert: true, payrollAlertMsg: 'Changing Group DOJ or Company DOJ impacts gratuity seniority and EPF enrolment. Verify with payroll before uploading.', dateColumns: ['group_doj', 'company_doj', 'confirmation_date'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Employment.xlsx' },
   { id: 'statutory', label: 'Statutory IDs', icon: '', color: '#991B1B', colorBg: TK.criticalTint, desc: 'PAN, UAN, ESIC IP, EPF method & wage limit, PT state, LWF, TDS regime', payrollAlert: true, payrollAlertMsg: 'Changing EPF method or wage limit impacts the current payroll run. Coordinate with payroll.', confidential: true, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Statutory_IDs.xlsx' },
   { id: 'bank', label: 'Bank Details', icon: '', color: '#065F46', colorBg: TK.positiveTint, desc: 'Bank name, account number, IFSC, account type — for salary disbursement', payrollAlert: true, payrollAlertMsg: 'New bank accounts require penny-drop verification. Accounts changed after the 25th apply from next month.', confidential: true, dateColumns: ['effective_from'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Bank_Details.xlsx' },
   { id: 'salary', label: 'Salary Structure', icon: '', color: TK.warning, colorBg: TK.warningTint, desc: 'CTC revision, increment, grade-wise salary breakup, variable %, effective date', payrollAlert: true, payrollAlertMsg: 'PAYROLL IMPACT — Salary changes affect the current/next payroll run. Upload before the 25th. Coordinate with payroll.', dateColumns: ['effective_date'], requiredColumns: ['emp_code', 'effective_date', 'revision_reason', 'annual_ctc'], downloadFile: 'EZER_Uploader_Salary_Structure.xlsx' },
   { id: 'exit', label: 'Exit & Separation', icon: '', color: TK.critical, colorBg: TK.criticalTint, desc: 'Resignation, last working date, separation reason, FNF initiation, blacklist', payrollAlert: true, payrollAlertMsg: 'CRITICAL — Last Working Date triggers final payroll & FNF. Verify with payroll before uploading.', dateColumns: ['date_of_resignation', 'last_working_date', 'relieving_date', 'fnf_date'], requiredColumns: ['emp_code', 'employment_status', 'last_working_date', 'leaving_reason'], downloadFile: 'EZER_Uploader_Exit_Separation.xlsx' },
-  { id: 'address', label: 'Address & Contact', icon: '', color: TK.violetDeep, colorBg: TK.violetTint, desc: 'Residential & permanent address — used for salary slip and statutory forms', payrollAlert: false, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Address_Contact.xlsx' },
+  { id: 'address', label: 'Address & Contact', icon: '', color: TK.brandDeep, colorBg: TK.brandTint, desc: 'Residential & permanent address — used for salary slip and statutory forms', payrollAlert: false, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Address_Contact.xlsx' },
 ]
 
 const sel: React.CSSProperties = { width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font }

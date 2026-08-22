@@ -10,9 +10,9 @@ import { loadEntitlements, loadWindow, ComponentLimit, NO_INVOICE, ACCEPTED_TYPE
 import { C as TK } from '@/lib/ui'
 
 const V = {
-  navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line, muted: TK.muted,
+  navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
   card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint,
-  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.violetTint,
+  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint,
 }
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 
@@ -37,7 +37,7 @@ function HistoryDrawer({ label, items, onClose }: { label: string; items: HistIt
         {items.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '40px 0', color: V.muted, fontSize: 13 }}>No claims submitted yet</div>
         ) : items.map(cl => {
-          const [bg, fg] = HIST_STATUS[cl.status] || [TK.violetTint, V.purpleDark]
+          const [bg, fg] = HIST_STATUS[cl.status] || [TK.brandTint, V.purpleDark]
           return (
             <div key={cl.id} style={{ background: V.card, border: `1px solid ${V.border}`, borderLeft: `3px solid ${fg}`, borderRadius: 10, padding: '12px 14px', marginBottom: 10 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>

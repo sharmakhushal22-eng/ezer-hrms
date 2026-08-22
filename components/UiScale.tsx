@@ -54,12 +54,12 @@ export default function UiScale() {
 
   if (!enabled) return null
 
-  const btn: React.CSSProperties = { width: 26, height: 26, borderRadius: '50%', border: 'none', background: TK.violetTint, color: TK.violetDeep, fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+  const btn: React.CSSProperties = { width: 26, height: 26, borderRadius: '50%', border: 'none', background: TK.brandTint, color: TK.brandDeep, fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }
   return (
     <div title="Adjust UI size — click % for auto-fit" style={{ position: 'fixed', bottom: 14, right: 14, zIndex: 99999, display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #DDD6FE', borderRadius: 99, padding: '4px 6px', boxShadow: '0 4px 14px rgba(124,58,237,.18)', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
       <button title="Smaller" onClick={() => nudge(-0.1)} style={btn}>−</button>
       <button title={manual ? 'Click to auto-fit to screen' : 'Auto-fit (on)'} onClick={resetAuto}
-        style={{ minWidth: 54, textAlign: 'center', fontSize: 11, fontWeight: 700, color: manual ? TK.violetDeep : TK.positive, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+        style={{ minWidth: 54, textAlign: 'center', fontSize: 11, fontWeight: 700, color: manual ? TK.brandDeep : TK.positive, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
         {Math.round(scale * 100)}%{manual ? '' : ' ·auto'}
       </button>
       <button title="Bigger" onClick={() => nudge(0.1)} style={btn}>+</button>

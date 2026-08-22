@@ -11,10 +11,10 @@ import { loadRuns, loadCompanies, MONTHS, type PayrollRun } from '@/lib/payroll/
 import { C as TK } from '@/lib/ui'
 
 export const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
   greenBd: '#BBF7D0', red: TK.critical, redBg: TK.criticalTint, amber: TK.warning, amberBg: TK.warningTint,
-  purpleBg: TK.violetTint, gray: TK.sunken,
+  purpleBg: TK.brandTint, gray: TK.sunken,
 }
 export const font = '"DM Sans","Segoe UI",sans-serif'
 export const num = (v: any) => { const n = Number(v); return isNaN(n) ? null : n }
@@ -334,7 +334,7 @@ export function ValidationCard({ pct, checking, stage, total, matched, unmatched
       <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>
         {checking ? `Checking ${kind} sheet…` : blocked ? 'Validation failed' : `Ready to process · ${total} rows`}
       </div>
-      <div style={{ height: 10, borderRadius: 99, background: TK.violetTint, overflow: 'hidden', marginBottom: 8 }}>
+      <div style={{ height: 10, borderRadius: 99, background: TK.brandTint, overflow: 'hidden', marginBottom: 8 }}>
         <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: blocked && !checking ? 'linear-gradient(90deg,#F87171,#DC2626)' : `linear-gradient(90deg,#10B981,${C.green})`, transition: 'width .15s linear' }} />
       </div>
       <div style={{ display: 'flex', gap: 14, fontSize: 11.5, color: C.muted, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>

@@ -19,11 +19,11 @@ import { C as TK } from '@/lib/ui'
 const T = {
   page:       { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
   card:       { background:TK.surface, borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  label:      { fontSize:11, fontWeight:600, color:TK.violetDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
+  label:      { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
   input:      { width:'100%', padding:'9px 11px', background:TK.sunken, border:'1px solid #DDD6FE', borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  btnPrimary: { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff' } as React.CSSProperties,
-  btnOutline: { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.violetDeep } as React.CSSProperties,
-  section:    { fontSize:12, fontWeight:600, color:TK.violet, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10, marginTop:4, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
+  btnPrimary: { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
+  btnOutline: { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.brandDeep } as React.CSSProperties,
+  section:    { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10, marginTop:4, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
 const todayStart = () => { const d = new Date(); d.setHours(0,0,0,0); return d }
 const fmt = (s?: string|null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'2-digit' }) : '—'
@@ -50,7 +50,7 @@ function StatusPill({ status }: { status?: string }) {
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{l}</span>
 }
 function RoleChip({ label }: { label:string }) {
-  return <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.violetTint, color:TK.violetDeep, fontWeight:600 }}>{label}</span>
+  return <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.brandTint, color:TK.brandDeep, fontWeight:600 }}>{label}</span>
 }
 function Metric({ label, value, color }: { label:string; value:number|string; color?:string }) {
   return (
@@ -60,12 +60,12 @@ function Metric({ label, value, color }: { label:string; value:number|string; co
     </div>
   )
 }
-function Bar({ label, value, max, color=TK.violet }: { label:string; value:number; max:number; color?:string }) {
+function Bar({ label, value, max, color=TK.brand }: { label:string; value:number; max:number; color?:string }) {
   const pct = max ? Math.round((value/max)*100) : 0
   return (
     <div style={{ marginBottom:8 }}>
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:TK.muted, marginBottom:3 }}><span>{label}</span><span style={{ fontWeight:600, color:TK.ink }}>{value}</span></div>
-      <div style={{ height:6, background:TK.violetTint, borderRadius:99, overflow:'hidden' }}><div style={{ height:'100%', width:`${pct}%`, background:color, borderRadius:99 }}/></div>
+      <div style={{ height:6, background:TK.brandTint, borderRadius:99, overflow:'hidden' }}><div style={{ height:'100%', width:`${pct}%`, background:color, borderRadius:99 }}/></div>
     </div>
   )
 }
@@ -204,7 +204,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
         <input style={{ ...T.input, maxWidth:260 }} placeholder="Search emp code / name" value={q} onChange={e => setQ(e.target.value)} />
         <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
           {FILTERS.map(f => (
-            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:TK.violet, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>{f}</button>
+            <button key={f} onClick={() => setFilter(f)} style={{ ...T.btnOutline, ...(filter===f ? { background:TK.brand, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>{f}</button>
           ))}
         </div>
         <div style={{ marginLeft:'auto', fontSize:11, color:TK.muted }}>{filtered.length} shown</div>
@@ -221,7 +221,7 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
               if (!codes) return
               router.push(`/dashboard/ess-credentials?codes=${encodeURIComponent(codes)}`)
             }}
-            style={{ ...T.btnPrimary, background:TK.violet }}
+            style={{ ...T.btnPrimary, background:TK.brand }}
           >Generate login credentials</button>
           <button onClick={() => setSel(new Set())} style={T.btnOutline}>Clear</button>
         </div>
@@ -308,7 +308,7 @@ function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign }: {
         <input style={{ ...T.input, marginBottom:10 }} placeholder="Search user" value={q} onChange={e => setQ(e.target.value)} />
         <div style={{ maxHeight:'60vh', overflowY:'auto' }}>
           {filtered.map(u => (
-            <div key={u.employee_id} onClick={() => onSelect(u)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, background: selected?.employee_id === u.employee_id ? TK.violetTint : 'transparent', border: selected?.employee_id === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
+            <div key={u.employee_id} onClick={() => onSelect(u)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, background: selected?.employee_id === u.employee_id ? TK.brandTint : 'transparent', border: selected?.employee_id === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
               <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.dept_name || '—'}</div></div>
               <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end' }}>{u.roles.map(r => <RoleChip key={r.id} label={r.role_name} />)}</div>
             </div>
@@ -348,7 +348,7 @@ function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign }: {
 function StepHead({ n, title, hint, done }: { n: number; title: string; hint?: string; done?: boolean }) {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-      <span style={{ width:22, height:22, borderRadius:99, background: done ? TK.positive : TK.violet, color:'#fff', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{done ? '' : n}</span>
+      <span style={{ width:22, height:22, borderRadius:99, background: done ? TK.positive : TK.brand, color:'#fff', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{done ? '' : n}</span>
       <span style={{ fontSize:13, fontWeight:600 }}>{title}</span>
       {hint && <span style={{ fontSize:11, color:TK.faint }}>{hint}</span>}
     </div>
@@ -432,7 +432,7 @@ function RoleAssignTab({ users, roles, org, isMobile, onAssign }: {
           <div style={{ maxHeight:300, overflowY:'auto' }}>
             {emps.length === 0 && <div style={{ fontSize:12, color:TK.faint, padding:'8px 4px' }}>{companyId ? 'No employee matched.' : 'Pick a company first.'}</div>}
             {emps.map(u => (
-              <div key={u.employee_id} onClick={() => setEmpId(u.employee_id)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, background: empId === u.employee_id ? TK.violetTint : 'transparent', border: empId === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
+              <div key={u.employee_id} onClick={() => setEmpId(u.employee_id)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, background: empId === u.employee_id ? TK.brandTint : 'transparent', border: empId === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
                 <div>
                   <div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div>
                   <div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.location_name || '—'} · {u.dept_name || '—'}</div>
@@ -579,8 +579,8 @@ export default function ESSPage() {
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
         {/* Top-level section switch — ESS & Access + Roles & Permissions in one place */}
         <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-          <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:TK.violet, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>ESS &amp; Access</button>
-          <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:TK.violet, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>Roles &amp; Permissions</button>
+          <button onClick={() => setSection('ess')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='ess' ? { background:TK.brand, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>ESS &amp; Access</button>
+          <button onClick={() => setSection('roles')} style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, ...(section==='roles' ? { background:TK.brand, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>Roles &amp; Permissions</button>
           <a href="/dashboard/ess-credentials" style={{ ...T.btnOutline, padding:'9px 16px', fontSize:13, fontWeight:600, textDecoration:'none', marginLeft:'auto' }}>Generate Login Credentials →</a>
         </div>
 
@@ -590,13 +590,13 @@ export default function ESSPage() {
 
         <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' }}>
           {TABS.map(t => (
-            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:TK.violet, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>{t.l}</button>
+            <button key={t.k} onClick={() => setTab(t.k)} style={{ ...T.btnOutline, ...(tab===t.k ? { background:TK.brand, color:'#fff', border:'1px solid #7C3AED' } : {}) }}>{t.l}</button>
           ))}
           <button onClick={reload} style={{ ...T.btnOutline, marginLeft:'auto' }}>Refresh</button>
         </div>
 
         {loading ? (
-          <div style={{ ...T.card, textAlign:'center', color:TK.violet, padding:40 }}>Loading…</div>
+          <div style={{ ...T.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div>
         ) : (
           <>
             {tab === 'dashboard' && <DashboardTab users={users} audit={audit} isMobile={isMobile} />}

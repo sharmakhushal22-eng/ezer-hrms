@@ -25,61 +25,69 @@
 // COLOUR
 // ---------------------------------------------------------------------------
 
+/**
+ * Colour.
+ *
+ * Every value is a reference into lib/ui/theme.css rather than a literal, so
+ * `background: C.surface` emits `background: var(--ez-surface)` and one
+ * attribute on <html> repaints the entire product. That is what makes a dark
+ * theme possible across 88 files of inline styles without editing any of them.
+ *
+ * The consequence to know about: these are no longer hex strings. Do not
+ * concatenate an alpha suffix onto one (`C.brand + '20'` will not work) — use
+ * a tint token, or colour-mix, instead.
+ */
 export const C = {
-  /** Primary text. Deeper than the old #1E1B4B for real contrast on white. */
-  ink: '#17143B',
-  /** Secondary text — headings' supporting line, table sub-values. */
-  inkSoft: '#3D3766',
-
-  /**
-   * Body and label text. A violet-biased grey, not #6B7280.
-   * A pure neutral grey next to violet reads as unconsidered; a grey carrying
-   * a little of the accent's hue reads as chosen.
-   */
-  muted: '#6E6A85',
+  /** Primary text. */
+  ink: 'var(--ez-ink)',
+  /** Secondary text — a heading's supporting line, table sub-values. */
+  inkSoft: 'var(--ez-ink-soft)',
+  /** Body and label text. Warm-biased, not a flat neutral grey. */
+  muted: 'var(--ez-muted)',
   /** Placeholder, disabled, and the quietest metadata. */
-  faint: '#9A96AD',
+  faint: 'var(--ez-faint)',
 
-  /** The brand. Re-tuned from #7C3AED — slightly deeper, holds white better. */
-  violet: '#6D3BEF',
-  /** Pressed states, gradient ends, and text on tinted backgrounds. */
-  violetDeep: '#5426D9',
+  /** The brand. Emerald — primary actions, active navigation, links. */
+  brand: 'var(--ez-brand)',
+  /** Pressed states and gradient ends. */
+  brandDeep: 'var(--ez-brand-deep)',
   /** Hover wash and selected rows. */
-  violetTint: '#F3F0FF',
+  brandTint: 'var(--ez-brand-tint)',
   /** Borders on tinted surfaces. */
-  violetEdge: '#E4DDFB',
+  brandEdge: 'var(--ez-brand-edge)',
 
   /** Cards, panels, inputs. */
-  surface: '#FFFFFF',
-  /** The page behind the cards. Violet-biased, not neutral #F5F5F5. */
-  canvas: '#F7F5FC',
-  /** Table stripes, disabled fields, inset wells. */
-  sunken: '#FBFAFE',
+  surface: 'var(--ez-surface)',
+  /** The page behind the cards. */
+  canvas: 'var(--ez-canvas)',
+  /** Table heads, disabled fields, inset wells. */
+  sunken: 'var(--ez-sunken)',
 
-  /** Default hairline. Deliberately soft — structure should come from spacing. */
-  line: '#E8E4F2',
+  /** Default hairline. Structure should come from spacing, not rules. */
+  line: 'var(--ez-line)',
   /** Where a divider genuinely needs to assert itself. */
-  lineStrong: '#D6CFEA',
+  lineStrong: 'var(--ez-line-strong)',
 
-  // Semantic. Kept separate from the accent on purpose: an HRMS shows money and
-  // compliance state, and "good" must never be confused with "branded".
-  positive: '#0B7A5B',
-  positiveTint: '#E8F7F1',
-  warning: '#A9620A',
-  warningTint: '#FDF3E3',
-  critical: '#C42B32',
-  criticalTint: '#FDEDEE',
-  info: '#2563EB',
-  infoTint: '#EAF1FE',
+  // State. Green = done, copper = waiting, red = wrong, teal = context.
+  // The happy path shares the brand hue on purpose; see theme.css.
+  positive: 'var(--ez-positive)',
+  positiveTint: 'var(--ez-positive-tint)',
+  warning: 'var(--ez-warning)',
+  warningTint: 'var(--ez-warning-tint)',
+  critical: 'var(--ez-critical)',
+  criticalTint: 'var(--ez-critical-tint)',
+  info: 'var(--ez-info)',
+  infoTint: 'var(--ez-info-tint)',
 
-  /** The dark rail and any inverted surface. */
-  dark: '#17143B',
-  darkSoft: '#241F52',
-  // NOT `as const`. With it, every value is its own literal type, so
-  //   useState({ color: C.violet })
-  // infers `color: "#6D3BEF"` and refuses every later colour. A palette is a
-  // set of strings, not a set of singleton types. `satisfies` keeps the keys
-  // checked and autocompleted without narrowing the values.
+  /** The rail and any inverted surface. */
+  dark: 'var(--ez-dark)',
+  darkSoft: 'var(--ez-dark-soft)',
+  /** Text and hairlines that sit ON a dark surface. */
+  onDark: 'var(--ez-on-dark)',
+  onDarkMuted: 'var(--ez-on-dark-muted)',
+  onDarkFaint: 'var(--ez-on-dark-faint)',
+  onDarkLine: 'var(--ez-on-dark-line)',
+  onDarkHover: 'var(--ez-on-dark-hover)',
 } satisfies Record<string, string>;
 
 // ---------------------------------------------------------------------------
@@ -135,12 +143,14 @@ export const R = {
  */
 export const E = {
   none: 'none',
-  flat: '0 1px 2px rgba(23,20,59,.05)',
-  raised: '0 1px 2px rgba(23,20,59,.06), 0 4px 12px -4px rgba(23,20,59,.10)',
-  floating: '0 2px 4px rgba(23,20,59,.07), 0 12px 28px -10px rgba(23,20,59,.18)',
-  overlay: '0 4px 8px rgba(23,20,59,.09), 0 24px 56px -16px rgba(23,20,59,.26)',
-  /** For a violet element that should glow in its own colour, not grey. */
-  violet: '0 1px 2px rgba(84,38,217,.28), 0 8px 20px -6px rgba(109,59,239,.42)',
+  flat: 'var(--ez-shadow-flat)',
+  raised: 'var(--ez-shadow-raised)',
+  floating: 'var(--ez-shadow-floating)',
+  overlay: 'var(--ez-shadow-overlay)',
+  /** For a brand-coloured element that should glow in its own colour. */
+  brand: 'var(--ez-shadow-brand)',
+  /** @deprecated old name for `brand`, kept so existing calls still resolve. */
+  violet: 'var(--ez-shadow-brand)',
 } as const;
 
 export const M = {
@@ -156,11 +166,11 @@ export const M = {
 // TONES — semantic colour as a set, so a status never half-matches
 // ---------------------------------------------------------------------------
 
-export type Tone = 'neutral' | 'violet' | 'positive' | 'warning' | 'critical' | 'info';
+export type Tone = 'neutral' | 'brand' | 'positive' | 'warning' | 'critical' | 'info';
 
 export const tone = (t: Tone): { fg: string; bg: string; edge: string } => ({
   neutral:  { fg: C.muted,     bg: C.sunken,        edge: C.line },
-  violet:   { fg: C.violetDeep, bg: C.violetTint,   edge: C.violetEdge },
+  brand:    { fg: C.brandDeep, bg: C.brandTint,    edge: C.brandEdge },
   positive: { fg: C.positive,  bg: C.positiveTint,  edge: '#C9EADD' },
   warning:  { fg: C.warning,   bg: C.warningTint,   edge: '#F2DFBE' },
   critical: { fg: C.critical,  bg: C.criticalTint,  edge: '#F5CFD1' },

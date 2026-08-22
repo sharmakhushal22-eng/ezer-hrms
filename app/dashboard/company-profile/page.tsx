@@ -19,11 +19,11 @@ const C = {
   lbl:    { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em' } as React.CSSProperties,
   val:    { fontSize:13, color:TK.ink, marginTop:2 } as React.CSSProperties,
   input:  { padding:'6px 9px', background:TK.sunken, border:'1px solid #CBD5E1', borderRadius:8, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
-  pri:    { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff' } as React.CSSProperties,
+  pri:    { padding:'8px 15px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
   out:    { padding:'6px 12px', borderRadius:8, border:'1px solid #CBD5E1', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:TK.inkSoft } as React.CSSProperties,
   sec:    { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
 }
-const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.violet, ESIC:TK.positive, PT:TK.warning, LWF:'#0891B2', FACTORY:TK.critical }
+const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF:'#0891B2', FACTORY:TK.critical }
 const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
 
 // ── Helper components (OUTSIDE parent — no focus-loss) ──────────────
@@ -172,10 +172,10 @@ function CompanyCard({ co, isMobile, save, openPay }: {
       <div onClick={() => setOpen(o => !o)} style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', cursor:'pointer', background:TK.sunken, borderBottom: open ? '1px solid #E2E8F0' : 'none' }}>
         <span style={{ fontSize:14, color:TK.faint }}>{open ? '' : ''}</span>
         <span style={{ fontSize:14, fontWeight:600 }}>{co.company_name}</span>
-        {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.violetTint, color:TK.violet, fontWeight:600 }}>{co.company_type}</span>}
+        {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.brandTint, color:TK.brand, fontWeight:600 }}>{co.company_type}</span>}
         <span style={{ fontSize:10, color:TK.faint }}>{co.company_code}</span>
         <span style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
-          <button onClick={e => { e.stopPropagation(); setOpen(true) }} style={{ fontSize:11, fontWeight:600, padding:'4px 11px', borderRadius:7, border:'1px solid #DDD6FE', background:'#fff', color:TK.violet, cursor:'pointer' }}>Edit</button>
+          <button onClick={e => { e.stopPropagation(); setOpen(true) }} style={{ fontSize:11, fontWeight:600, padding:'4px 11px', borderRadius:7, border:'1px solid #DDD6FE', background:'#fff', color:TK.brand, cursor:'pointer' }}>Edit</button>
           <StatusBadge status={co.account_status} days={co.days_to_due} />
         </span>
       </div>
@@ -208,7 +208,7 @@ function CompanyCard({ co, isMobile, save, openPay }: {
                   onSaveState={v => save('LOCATION', b.id, 'state', v, co.id)}
                   onSaveDistrict={v => save('LOCATION', b.id, 'district', v, co.id)} />
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
-                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.violet, fontSize:11 }}>map</a></> : '—'}</div></div>
+                  <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '—'}</div></div>
                   <EditField label="Max employees" value={b.max_employees} type="number" onSave={v => save('LOCATION', b.id, 'max_employees', v, co.id)} />
                 </div>
               </div>
@@ -351,7 +351,7 @@ export default function CompanyProfilePage() {
         <div style={{ fontSize:12, color:TK.muted, marginBottom:14 }}>Group, companies, branches, statutory registrations, bank &amp; license — view, edit, and audit. Every change is logged.</div>
 
         {loading ? (
-          <div style={{ ...C.card, textAlign:'center', color:TK.violet, padding:40 }}>Loading…</div>
+          <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div>
         ) : groups.length === 0 ? (
           <div style={{ ...C.card, textAlign:'center', color:TK.faint, padding:40 }}>No group or company found. Add data from Company Setup first.</div>
         ) : (
@@ -373,7 +373,7 @@ export default function CompanyProfilePage() {
               {audit.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No changes yet.</div>}
               {audit.map(a => (
                 <div key={a.id} style={{ display:'flex', gap:8, padding:'7px 0', borderBottom:'1px solid #F1F5F9', fontSize:12 }}>
-                  <span style={{ color:TK.violet }}>•</span>
+                  <span style={{ color:TK.brand }}>•</span>
                   <div>
                     <div><b>{a.entity_type}</b> · {a.field}: <span style={{ color:TK.faint }}>{a.old_value || '—'}</span> → <span style={{ color:TK.ink }}>{a.new_value || '—'}</span></div>
                     <div style={{ fontSize:10, color:TK.faint }}>{a.changed_by || 'Admin'} · {new Date(a.changed_at).toLocaleString('en-IN', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</div>

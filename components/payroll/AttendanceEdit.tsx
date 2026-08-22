@@ -115,7 +115,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 780 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: mode === 'arrear' ? `linear-gradient(135deg,${TK.positive},${TK.positive})` : `linear-gradient(135deg,${TK.violet},${TK.violetDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(124,58,237,0.28)' }}>{mode === 'arrear' ? '' : ''}</div>
+        <div style={{ width: 44, height: 44, borderRadius: 12, background: mode === 'arrear' ? `linear-gradient(135deg,${TK.positive},${TK.positive})` : `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(124,58,237,0.28)' }}>{mode === 'arrear' ? '' : ''}</div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>{mode === 'arrear' ? 'Arrear Days' : 'Attendance Edit'}</div>
           <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
@@ -169,7 +169,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={save} disabled={saveBusy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.violet},${TK.violetDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
                 {saveBusy ? 'Saving…' : 'Save changes'}
               </button>
               {saveMsg && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>✓ {saveMsg}</span>}

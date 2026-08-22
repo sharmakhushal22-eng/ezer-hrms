@@ -12,9 +12,9 @@ import type { TaxSlab, SurchargeSlab, TaxRegimeConfig, TaxCalculationResult, Reg
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
-  greenBd: '#BBF7D0', purpleBg: TK.violetTint, gray: TK.sunken, amber: TK.warning, amberBg: TK.warningTint,
+  greenBd: '#BBF7D0', purpleBg: TK.brandTint, gray: TK.sunken, amber: TK.warning, amberBg: TK.warningTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => `₹${Number(n).toLocaleString('en-IN')}`

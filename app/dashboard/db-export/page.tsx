@@ -5,7 +5,7 @@ import { useState } from 'react'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 
-const C = { bg: TK.canvas, navy: TK.ink, purple: TK.violet, muted: TK.muted, border: TK.line, green: TK.positive, red: TK.critical }
+const C = { bg: TK.canvas, navy: TK.ink, purple: TK.brand, muted: TK.muted, border: TK.line, green: TK.positive, red: TK.critical }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 export default function DbExportPage() {

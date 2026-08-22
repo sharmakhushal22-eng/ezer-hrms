@@ -18,7 +18,7 @@ import { supabase } from '@/lib/supabase'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: 'rgba(124,58,237,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A', red: TK.critical, redBg: TK.criticalTint,
   purpleBg: '#F3EEFF', soft: TK.sunken,
@@ -234,7 +234,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
                   Zaroori hai — saal ka rent {inr(100000)} se zyada hai
                 </div>
               </div>
-              <input style={{ ...S.inp, textTransform: 'uppercase', border: `1px solid ${panMissing ? C.red : TK.violetEdge}` }}
+              <input style={{ ...S.inp, textTransform: 'uppercase', border: `1px solid ${panMissing ? C.red : TK.brandEdge}` }}
                 value={pan} maxLength={10} placeholder="ABCDE1234F"
                 onChange={e => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
             </div>

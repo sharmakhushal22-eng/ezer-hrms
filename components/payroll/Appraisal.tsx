@@ -16,10 +16,10 @@ import {
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint, greenBd: '#A7F3D0',
   amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE68A',
-  red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.violetTint, gray: TK.sunken,
+  red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')

@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { C, F, W, S, R, E, M, UIKeyframes } from '@/lib/ui';
+import { ThemeToggle } from '@/lib/ui/ThemeToggle';
 import {
   IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconUpload, IconTransfer,
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
@@ -98,9 +99,9 @@ function RailItem({ item, open, active }: { item: NavItem; open: boolean; active
         height: 36, borderRadius: R.md, display: 'flex', alignItems: 'center',
         gap: 10, padding: open ? '0 10px' : 0,
         justifyContent: open ? 'flex-start' : 'center',
-        background: active ? C.violet : 'transparent',
+        background: active ? C.brand : 'transparent',
         boxShadow: active ? '0 2px 10px -3px rgba(109,59,239,.62)' : 'none',
-        color: active ? '#fff' : 'rgba(255,255,255,.66)',
+        color: active ? C.onDark : C.onDarkMuted,
         transition: `background ${M.quick}, color ${M.quick}, box-shadow ${M.quick}`,
         position: 'relative',
       }}>
@@ -121,12 +122,12 @@ function GroupLabel({ label, open }: { label: string; open: boolean }) {
   // Collapsed, the words would not fit — the grouping survives as a rule, so
   // the rail keeps its rhythm instead of becoming one undifferentiated column.
   if (!open) {
-    return <div style={{ height: 1, background: 'rgba(255,255,255,.10)', margin: '7px 12px', flexShrink: 0 }} />;
+    return <div style={{ height: 1, background: C.onDarkLine, margin: '7px 12px', flexShrink: 0 }} />;
   }
   return (
     <div style={{
       fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.1em',
-      textTransform: 'uppercase', color: 'rgba(255,255,255,.36)',
+      textTransform: 'uppercase', color: C.onDarkFaint,
       padding: '14px 10px 5px', whiteSpace: 'nowrap', flexShrink: 0,
     }}>{label}</div>
   );
@@ -169,9 +170,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <UIKeyframes />
         <div style={{
           width: 38, height: 38, borderRadius: R.md,
-          background: `linear-gradient(180deg,${C.violet},${C.violetDeep})`,
+          background: `linear-gradient(180deg,${C.brand},${C.brandDeep})`,
           color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontWeight: W.bold, fontSize: F.body, boxShadow: E.violet,
+          fontWeight: W.bold, fontSize: F.body, boxShadow: E.brand,
         }}>Ez</div>
         Checking access…
       </div>
@@ -182,7 +183,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: F.family, background: C.canvas }}>
       <UIKeyframes />
       <style>{`
-        .ez-nav:hover{background:rgba(255,255,255,.07);color:#fff}
+        .ez-nav:hover{background:${C.onDarkHover};color:${C.onDark}}
         .ez-brand:hover .ez-brand-chev{transform:translateX(2px)}
       `}</style>
 
@@ -194,7 +195,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         padding: open ? '12px 10px' : '12px 8px',
         flexShrink: 0, overflow: 'hidden',
         position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 100,
-        borderRight: '1px solid rgba(255,255,255,.07)',
+        borderRight: `1px solid ${C.onDarkLine}`,
       }}>
         {/* Brand, and the collapse control. One target, so the rail never
             needs a second button competing for the same corner. */}
@@ -209,19 +210,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           }}>
           <div style={{
             width: 34, height: 34, borderRadius: R.md, flexShrink: 0,
-            background: `linear-gradient(180deg,${C.violet},${C.violetDeep})`,
+            background: `linear-gradient(180deg,${C.brand},${C.brandDeep})`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#fff', fontWeight: W.bold, fontSize: F.body, letterSpacing: '-.02em',
+            color: C.onDark, fontWeight: W.bold, fontSize: F.body, letterSpacing: '-.02em',
             boxShadow: '0 3px 12px -3px rgba(109,59,239,.7)',
           }}>Ez</div>
           {open && (
             <>
               <span style={{
-                fontSize: F.lead, fontWeight: W.bold, color: '#fff',
+                fontSize: F.lead, fontWeight: W.bold, color: C.onDark,
                 letterSpacing: '-.02em', whiteSpace: 'nowrap',
               }}>EZER</span>
               <span className="ez-brand-chev" style={{
-                marginLeft: 'auto', color: 'rgba(255,255,255,.38)', display: 'flex',
+                marginLeft: 'auto', color: C.onDarkFaint, display: 'flex',
                 transform: 'rotate(180deg)', transition: `transform ${M.quick}`,
               }}><IconChevron size={15} /></span>
             </>
@@ -244,6 +245,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ))}
         </div>
 
+        {/* Theme lives with the account controls rather than in a page
+            header — it is a preference, not part of any one screen. */}
+        <div style={{
+          flexShrink: 0, padding: open ? '10px 4px 8px' : '10px 0 8px',
+          display: 'flex', justifyContent: open ? 'flex-start' : 'center',
+        }}>
+          <ThemeToggle onDark compact={!open} />
+        </div>
+
         <button
           onClick={() => { supabase.auth.signOut().then(() => { window.location.href = '/'; }); }}
           className="ez-nav"
@@ -253,8 +263,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             display: 'flex', alignItems: 'center', gap: 10,
             padding: open ? '0 10px' : 0, justifyContent: open ? 'flex-start' : 'center',
             border: 'none', background: 'transparent', cursor: 'pointer',
-            color: 'rgba(255,255,255,.5)', fontFamily: 'inherit', fontSize: F.small,
-            borderTop: '1px solid rgba(255,255,255,.08)', borderTopLeftRadius: 0, borderTopRightRadius: 0,
+            color: C.onDarkMuted, fontFamily: 'inherit', fontSize: F.small,
+            borderTop: `1px solid ${C.onDarkLine}`, borderTopLeftRadius: 0, borderTopRightRadius: 0,
           }}>
           <IconLogout size={17} />
           {open && <span>Sign out</span>}

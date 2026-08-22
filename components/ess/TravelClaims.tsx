@@ -62,9 +62,9 @@ import {
 
 // Bound to the design system — see lib/ui/tokens.ts.
 const V = {
-  navy: C.ink, purple: C.violet, purpleDark: C.violetDeep, border: C.line, muted: C.muted,
+  navy: C.ink, purple: C.brand, purpleDark: C.brandDeep, border: C.line, muted: C.muted,
   card: C.surface, green: C.positive, greenBg: C.positiveTint, red: C.critical, redBg: C.criticalTint,
-  amber: C.warning, amberBg: C.warningTint, purpleBg: C.violetTint, field: C.sunken,
+  amber: C.warning, amberBg: C.warningTint, purpleBg: C.brandTint, field: C.sunken,
 }
 
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')

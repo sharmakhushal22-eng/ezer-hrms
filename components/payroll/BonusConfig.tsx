@@ -13,9 +13,9 @@ import type { PaymentFrequency, PercentPreset } from '@/lib/bonus/types'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: TK.ink, purple: TK.violet, purpleD: TK.violetDeep, card: TK.surface,
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
   border: TK.line, muted: TK.muted, green: TK.positive, gray: TK.sunken,
-  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE8C8', purpleBg: TK.violetTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: '#FDE8C8', purpleBg: TK.brandTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }

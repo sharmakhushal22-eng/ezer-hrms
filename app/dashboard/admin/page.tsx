@@ -47,9 +47,9 @@ const C = {
   g2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' } as React.CSSProperties,
   g3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px' } as React.CSSProperties,
   secTitle: { fontSize: '13px', fontWeight: 600, color: TK.ink, marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', gap: '8px' } as React.CSSProperties,
-  addBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', background: TK.sunken, border: '1px dashed #CBD5E1', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', color: TK.violet, fontWeight: 500, width: 'fit-content', marginTop: '6px' } as React.CSSProperties,
+  addBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', background: TK.sunken, border: '1px dashed #CBD5E1', borderRadius: '7px', cursor: 'pointer', fontSize: '12px', color: TK.brand, fontWeight: 500, width: 'fit-content', marginTop: '6px' } as React.CSSProperties,
   rmBtn: { padding: '3px 8px', background: TK.criticalTint, border: 'none', borderRadius: '5px', cursor: 'pointer', fontSize: '10px', color: TK.critical, fontWeight: 500 } as React.CSSProperties,
-  priBtn: { padding: '10px 24px', background: TK.violet, color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
+  priBtn: { padding: '10px 24px', background: TK.brand, color: '#fff', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
   secBtn: { padding: '10px 20px', background: '#fff', color: TK.inkSoft, border: '1.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
   xlsBtn: { padding: '7px 14px', background: TK.positive, color: '#fff', border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
   upBtn: { padding: '7px 14px', background: '#0EA5E9', color: '#fff', border: 'none', borderRadius: '7px', fontSize: '11px', fontWeight: 500, cursor: 'pointer' } as React.CSSProperties,
@@ -83,7 +83,7 @@ const MC = {
   topbar: { background:'#fff', padding:'11px 20px', borderBottom:'1px solid #E2E8F0', display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const },
   body: { flex:1, padding:'16px 20px', overflowY:'auto' as const },
   card: { background:'#fff', borderRadius:'10px', border:'1px solid #E2E8F0', padding:'14px 16px', marginBottom:'10px' },
-  priBtn: { padding:'8px 16px', background:TK.violet, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
+  priBtn: { padding:'8px 16px', background:TK.brand, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer' },
   secBtn: { padding:'8px 12px', background:'#fff', color:TK.inkSoft, border:'1px solid #E2E8F0', borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
   dangerBtn: { padding:'6px 12px', background:TK.criticalTint, color:TK.critical, border:'none', borderRadius:'6px', fontSize:'11px', cursor:'pointer' },
   inp: { width:'100%', padding:'8px 10px', border:'1.5px solid #E2E8F0', borderRadius:'8px', fontSize:'13px', outline:'none', background:TK.sunken, boxSizing:'border-box' as const, color:TK.ink },
@@ -122,7 +122,7 @@ async function saveType(payload: any) {
 }
 
 // ── Color Picker ───────────────────────────────────────────────────
-const COLORS = [TK.violet,TK.info,TK.positive,TK.warning,TK.critical,'#0D9488','#9333EA','#BE185D','#0369A1',TK.inkSoft,TK.positive,'#CA8A04']
+const COLORS = [TK.brand,TK.info,TK.positive,TK.warning,TK.critical,'#0D9488','#9333EA','#BE185D','#0369A1',TK.inkSoft,TK.positive,'#CA8A04']
 
 
 // ═══════════════════════════════════════════════
@@ -391,7 +391,7 @@ function CompanySetupTab() {
       <div style={C.top}>
         <div style={{ fontSize: '12px', color: TK.muted }}>
           {savedGroup || 'Admin Setup'} &nbsp;›&nbsp;
-          <span style={{ color: TK.violet, fontWeight: 500 }}>
+          <span style={{ color: TK.brand, fontWeight: 500 }}>
             {companyCount > 1 ? `Company ${companyCount}` : 'Company Setup Wizard'}
           </span>
         </div>
@@ -399,7 +399,7 @@ function CompanySetupTab() {
           <button style={C.xlsBtn} onClick={downloadTemplate}>Template</button>
           <button style={C.upBtn} onClick={() => fileRef.current?.click()}>Upload Excel</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={handleUpload} />
-          <div style={{ width: '30px', height: '30px', background: TK.violet, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '11px', fontWeight: 600 }}>KS</div>
+          <div style={{ width: '30px', height: '30px', background: TK.brand, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '11px', fontWeight: 600 }}>KS</div>
         </div>
       </div>
 
@@ -410,13 +410,13 @@ function CompanySetupTab() {
             <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '4px' }}>Excel Upload Preview</div>
             <div style={{ fontSize: '12px', color: TK.muted, marginBottom: '14px' }}>{uploadPreview.length} locations found — review and confirm</div>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-              <thead><tr style={{ background: TK.violet, color: '#fff' }}>
+              <thead><tr style={{ background: TK.brand, color: '#fff' }}>
                 {['Name','Type','State','District','PIN'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left' }}>{h}</th>)}
               </tr></thead>
               <tbody>{uploadPreview.map((r, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #F1F5F9', background: i % 2 ? TK.sunken : '#fff' }}>
                   <td style={{ padding: '7px 10px', fontWeight: 500 }}>{r.name}</td>
-                  <td style={{ padding: '7px 10px' }}><span style={{ padding: '2px 6px', background: TK.violetTint, color: TK.violet, borderRadius: '6px', fontSize: '10px' }}>{r.type}</span></td>
+                  <td style={{ padding: '7px 10px' }}><span style={{ padding: '2px 6px', background: TK.brandTint, color: TK.brand, borderRadius: '6px', fontSize: '10px' }}>{r.type}</span></td>
                   <td style={{ padding: '7px 10px' }}>{r.state}</td>
                   <td style={{ padding: '7px 10px' }}>{r.district}</td>
                   <td style={{ padding: '7px 10px' }}>{r.pincode}</td>
@@ -464,12 +464,12 @@ function CompanySetupTab() {
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '3px', cursor: isDone ? 'pointer' : 'default' }} onClick={() => isDone && setStep(i)}>
-                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', background: isDone ? TK.violet : isActive ? TK.violetTint : TK.sunken, border: isActive ? '2px solid #7C3AED' : 'none', color: isDone ? '#fff' : TK.inkSoft }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', background: isDone ? TK.brand : isActive ? TK.brandTint : TK.sunken, border: isActive ? '2px solid #7C3AED' : 'none', color: isDone ? '#fff' : TK.inkSoft }}>
                       {isDone ? '' : st.icon}
                     </div>
-                    <span style={{ fontSize: '9px', color: isActive ? TK.violet : isDone ? TK.violet : TK.faint, fontWeight: isActive ? 600 : 400, whiteSpace: 'nowrap' }}>{st.label}</span>
+                    <span style={{ fontSize: '9px', color: isActive ? TK.brand : isDone ? TK.brand : TK.faint, fontWeight: isActive ? 600 : 400, whiteSpace: 'nowrap' }}>{st.label}</span>
                   </div>
-                  {i < STEPS.length - 1 && <div style={{ flex: 1, height: '2px', background: isDone ? TK.violet : TK.line, margin: '0 4px', marginBottom: '14px' }} />}
+                  {i < STEPS.length - 1 && <div style={{ flex: 1, height: '2px', background: isDone ? TK.brand : TK.line, margin: '0 4px', marginBottom: '14px' }} />}
                 </div>
               )
             })}
@@ -506,7 +506,7 @@ function CompanySetupTab() {
         {/* STEP 1: COMPANY */}
         {step === 1 && (
           <div style={C.card}>
-            <div style={C.secTitle}>Company Details — <span style={{ color: TK.violet, fontSize: '12px' }}>{savedGroup}</span></div>
+            <div style={C.secTitle}>Company Details — <span style={{ color: TK.brand, fontSize: '12px' }}>{savedGroup}</span></div>
             <div style={C.g2}>
               <div>
                 <label style={C.lbl}>Name of Establishment<span style={C.req}>*</span></label>
@@ -649,7 +649,7 @@ function CompanySetupTab() {
                   </div>
                   <div>
                     <label style={C.lbl}>Pin on Map</label>
-                    <button onClick={() => setMapModal({ locIndex: i })} style={{ ...inp(), background: TK.violetTint, color: TK.violet, cursor: 'pointer', border: '1.5px solid #C4B5FD', textAlign: 'center' as any, fontWeight: 500 }}>
+                    <button onClick={() => setMapModal({ locIndex: i })} style={{ ...inp(), background: TK.brandTint, color: TK.brand, cursor: 'pointer', border: '1.5px solid #C4B5FD', textAlign: 'center' as any, fontWeight: 500 }}>
                       📍 {loc.lat ? 'Pinned ✓' : 'Open Google Maps'}
                     </button>
                   </div>
@@ -720,7 +720,7 @@ function CompanySetupTab() {
                     <label style={C.lbl}>Select Locations</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
                       {namedLocs.map(loc => (
-                        <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'pointer', padding: '5px 9px', borderRadius: '6px', background: epf.locations.includes(loc.name) ? TK.violetTint : TK.sunken, border: `1px solid ${epf.locations.includes(loc.name) ? '#C4B5FD' : TK.line}` }}>
+                        <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', cursor: 'pointer', padding: '5px 9px', borderRadius: '6px', background: epf.locations.includes(loc.name) ? TK.brandTint : TK.sunken, border: `1px solid ${epf.locations.includes(loc.name) ? '#C4B5FD' : TK.line}` }}>
                           <input type="checkbox" checked={epf.locations.includes(loc.name)} onChange={() => toggleEpfLoc(i, loc.name)} style={{ width: '13px', height: '13px' }} />
                           {loc.name}
                         </label>
@@ -769,7 +769,7 @@ function CompanySetupTab() {
                     <label style={C.lbl}>Override — Select Specific Locations</label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
                       {namedLocs.map(loc => (
-                        <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', background: esic.locations.includes(loc.name) ? TK.violetTint : TK.sunken, border: `1px solid ${esic.locations.includes(loc.name) ? '#C4B5FD' : TK.line}` }}>
+                        <label key={loc.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', background: esic.locations.includes(loc.name) ? TK.brandTint : TK.sunken, border: `1px solid ${esic.locations.includes(loc.name) ? '#C4B5FD' : TK.line}` }}>
                           <input type="checkbox" checked={esic.locations.includes(loc.name)} onChange={e => setEsicList(p => p.map((x, idx) => idx === i ? { ...x, locations: e.target.checked ? [...x.locations.filter(l => l !== loc.name), loc.name] : x.locations.filter(l => l !== loc.name) } : x))} style={{ width: '12px', height: '12px' }} />
                           {loc.name}
                         </label>
@@ -837,7 +837,7 @@ function CompanySetupTab() {
                   <label style={C.lbl}>LWF Applicable States</label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                     {ALL_STATES.map(st => (
-                      <label key={st} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', background: lwfStates.includes(st) ? TK.violetTint : TK.sunken, border: `1px solid ${lwfStates.includes(st) ? '#C4B5FD' : TK.line}` }}>
+                      <label key={st} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', cursor: 'pointer', padding: '4px 8px', borderRadius: '6px', background: lwfStates.includes(st) ? TK.brandTint : TK.sunken, border: `1px solid ${lwfStates.includes(st) ? '#C4B5FD' : TK.line}` }}>
                         <input type="checkbox" checked={lwfStates.includes(st)} onChange={e => setLwfStates(p => e.target.checked ? [...p, st] : p.filter(s => s !== st))} style={{ width: '12px', height: '12px' }} />
                         {st}
                       </label>
@@ -874,7 +874,7 @@ function CompanySetupTab() {
 
             {!sameBank ? (
               <div style={C.sub}>
-                <div style={{ background: TK.violetTint, borderRadius: '6px', padding: '7px 10px', marginBottom: '10px', fontSize: '11px', color: TK.violet }}>Monthly salary NEFT/RTGS payments will be processed from this account
+                <div style={{ background: TK.brandTint, borderRadius: '6px', padding: '7px 10px', marginBottom: '10px', fontSize: '11px', color: TK.brand }}>Monthly salary NEFT/RTGS payments will be processed from this account
                 </div>
                 <div style={C.g2}>
                   <div><label style={C.lbl}>Bank Name</label><input style={inp()} value={salBank.bankName} onChange={e => setSalBank({ ...salBank, bankName: e.target.value })} placeholder="ICICI Bank" /></div>
@@ -904,8 +904,8 @@ function CompanySetupTab() {
                   ...prev, plan: p,
                   maxEmployees: p === 'Starter' ? '50' : p === 'Growth' ? '200' : 'Unlimited',
                   maxLocations: p === 'Starter' ? '5' : p === 'Growth' ? '20' : 'Unlimited'
-                }))} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: `2px solid ${license.plan === p ? TK.violet : TK.line}`, background: license.plan === p ? TK.violetTint : '#fff', cursor: 'pointer', textAlign: 'center' as any }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: license.plan === p ? TK.violet : TK.inkSoft }}>{p}</div>
+                }))} style={{ flex: 1, padding: '12px', borderRadius: '10px', border: `2px solid ${license.plan === p ? TK.brand : TK.line}`, background: license.plan === p ? TK.brandTint : '#fff', cursor: 'pointer', textAlign: 'center' as any }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: license.plan === p ? TK.brand : TK.inkSoft }}>{p}</div>
                   <div style={{ fontSize: '11px', color: TK.muted, marginTop: '4px' }}>
                     {p === 'Starter' ? 'Up to 50 employees' : p === 'Growth' ? 'Up to 200 employees' : 'Unlimited employees'}
                   </div>
@@ -961,7 +961,7 @@ function MasterSetupTab() {
   const [error, setError] = useState('')
 
   // Value form state
-  const [vf, setVf] = useState({ code:'', label:'', description:'', color:TK.violet, sort_order:0, extra_data:'{}' })
+  const [vf, setVf] = useState({ code:'', label:'', description:'', color:TK.brand, sort_order:0, extra_data:'{}' })
 
   // Type form state
   const [tf, setTf] = useState({ code:'', name:'', description:'', has_color:false, has_code:true, has_parent:false, has_extra_data:false, is_system:false })
@@ -985,13 +985,13 @@ function MasterSetupTab() {
 
   const openAddValue = () => {
     setEditValue(null)
-    setVf({ code:'', label:'', description:'', color:TK.violet, sort_order: values.length + 1, extra_data:'{}' })
+    setVf({ code:'', label:'', description:'', color:TK.brand, sort_order: values.length + 1, extra_data:'{}' })
     setError(''); setShowValueForm(true)
   }
 
   const openEditValue = (v: MasterValue) => {
     setEditValue(v)
-    setVf({ code: v.code, label: v.label, description: v.description||'', color: v.color||TK.violet, sort_order: v.sort_order, extra_data: v.extra_data ? JSON.stringify(v.extra_data, null, 2) : '{}' })
+    setVf({ code: v.code, label: v.label, description: v.description||'', color: v.color||TK.brand, sort_order: v.sort_order, extra_data: v.extra_data ? JSON.stringify(v.extra_data, null, 2) : '{}' })
     setError(''); setShowValueForm(true)
   }
 
@@ -1090,13 +1090,13 @@ function MasterSetupTab() {
               <button
                 onClick={() => { setSelCat(cat); setSearch('') }}
                 style={{
-                  width:'100%', padding:'10px 14px', border:'none', background: selCat?.id===cat.id ? TK.violetTint : 'transparent',
+                  width:'100%', padding:'10px 14px', border:'none', background: selCat?.id===cat.id ? TK.brandTint : 'transparent',
                   cursor:'pointer', textAlign:'left' as const, display:'flex', alignItems:'center', gap:'8px',
                   borderLeft: selCat?.id===cat.id ? '3px solid #7C3AED' : '3px solid transparent',
                 }}
               >
                 <span style={{ fontSize:'16px' }}>{cat.icon}</span>
-                <span style={{ fontSize:'12px', fontWeight: selCat?.id===cat.id ? 600 : 400, color: selCat?.id===cat.id ? TK.violet : TK.inkSoft }}>{cat.name}</span>
+                <span style={{ fontSize:'12px', fontWeight: selCat?.id===cat.id ? 600 : 400, color: selCat?.id===cat.id ? TK.brand : TK.inkSoft }}>{cat.name}</span>
               </button>
 
               {/* Sub types under selected category */}
@@ -1108,7 +1108,7 @@ function MasterSetupTab() {
                     width:'100%', padding:'7px 14px 7px 36px', border:'none',
                     background: selType?.id===tp.id ? TK.canvas : 'transparent',
                     cursor:'pointer', textAlign:'left' as const,
-                    fontSize:'11px', color: selType?.id===tp.id ? TK.violet : TK.muted,
+                    fontSize:'11px', color: selType?.id===tp.id ? TK.brand : TK.muted,
                     fontWeight: selType?.id===tp.id ? 500 : 400,
                     borderLeft: selType?.id===tp.id ? '3px solid #A78BFA' : '3px solid transparent',
                   }}
@@ -1183,7 +1183,7 @@ function MasterSetupTab() {
                   <div style={{ fontSize:'13px', fontWeight:600, marginBottom:'4px' }}>{tp.name}</div>
                   <div style={{ fontSize:'11px', color:TK.muted, marginBottom:'8px' }}>{tp.description || ''}</div>
                   <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' as const }}>
-                    {tp.has_color && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.violetTint, color:TK.violet, borderRadius:'4px' }}>Color</span>}
+                    {tp.has_color && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.brandTint, color:TK.brand, borderRadius:'4px' }}>Color</span>}
                     {tp.has_code && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.infoTint, color:TK.info, borderRadius:'4px' }}>Code</span>}
                     {tp.has_parent && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.positiveTint, color:TK.positive, borderRadius:'4px' }}>Hierarchy</span>}
                     {tp.has_extra_data && <span style={{ fontSize:'9px', padding:'1px 6px', background:TK.warningTint, color:TK.warning, borderRadius:'4px' }}>Extra Fields</span>}
@@ -1202,7 +1202,7 @@ function MasterSetupTab() {
                 <span style={{ fontSize:'11px', color:TK.muted }}>Total: <strong style={{ color:TK.inkSoft }}>{values.length}</strong></span>
                 <span style={{ fontSize:'11px', color:TK.muted }}>Active: <strong style={{ color:TK.positive }}>{values.filter(v=>v.is_active).length}</strong></span>
                 <span style={{ fontSize:'11px', color:TK.muted }}>Disabled: <strong style={{ color:TK.critical }}>{values.filter(v=>!v.is_active).length}</strong></span>
-                <span style={{ fontSize:'11px', color:TK.muted }}>System: <strong style={{ color:TK.violet }}>{values.filter(v=>v.is_system).length}</strong></span>
+                <span style={{ fontSize:'11px', color:TK.muted }}>System: <strong style={{ color:TK.brand }}>{values.filter(v=>v.is_system).length}</strong></span>
               </div>
 
               {loading ? (
@@ -1236,14 +1236,14 @@ function MasterSetupTab() {
                         )}
                         {selType.has_code && (
                           <td style={{ padding:'8px 10px' }}>
-                            <span style={{ padding:'2px 7px', background: v.color||TK.violetTint, color:'#fff', borderRadius:'5px', fontSize:'10px', fontWeight:600 }}>{v.code}</span>
+                            <span style={{ padding:'2px 7px', background: v.color||TK.brandTint, color:'#fff', borderRadius:'5px', fontSize:'10px', fontWeight:600 }}>{v.code}</span>
                           </td>
                         )}
                         <td style={{ padding:'8px 10px', fontWeight:500 }}>{v.label}</td>
                         <td style={{ padding:'8px 10px', color:TK.muted, fontSize:'11px' }}>{v.description||'—'}</td>
                         {selType.has_extra_data && (
                           <td style={{ padding:'8px 10px' }}>
-                            {v.extra_data && <button onClick={() => alert(JSON.stringify(v.extra_data, null, 2))} style={{ padding:'2px 8px', background:TK.violetTint, border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:TK.violet }}>View</button>}
+                            {v.extra_data && <button onClick={() => alert(JSON.stringify(v.extra_data, null, 2))} style={{ padding:'2px 8px', background:TK.brandTint, border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:TK.brand }}>View</button>}
                           </td>
                         )}
                         <td style={{ padding:'8px 10px' }}>
@@ -1254,7 +1254,7 @@ function MasterSetupTab() {
                         </td>
                         <td style={{ padding:'8px 10px' }}>
                           <div style={{ display:'flex', gap:'4px' }}>
-                            <button onClick={() => openEditValue(v)} style={{ padding:'4px 8px', background:TK.violetTint, border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:TK.violet }}>Edit</button>
+                            <button onClick={() => openEditValue(v)} style={{ padding:'4px 8px', background:TK.brandTint, border:'none', borderRadius:'5px', cursor:'pointer', fontSize:'10px', color:TK.brand }}>Edit</button>
                             <button onClick={() => handleToggle(v)} disabled={v.is_system && v.is_active} style={{ padding:'4px 8px', border:'none', borderRadius:'5px', cursor: v.is_system && v.is_active ? 'not-allowed':'pointer', fontSize:'10px', background: v.is_active ? TK.criticalTint:TK.positiveTint, color: v.is_active ? TK.critical:TK.positive, opacity: v.is_system && v.is_active ? 0.4:1 }}>
                               {v.is_active ? 'Disable' : 'Enable'}
                             </button>
@@ -1303,7 +1303,7 @@ function MasterSetupTab() {
           {selType.has_extra_data && selType.extra_schema && (
             <div style={{ marginBottom:'12px' }}>
               <label style={MC.lbl}>Extra Fields (as per schema)</label>
-              <div style={{ padding:'8px 12px', background:TK.violetTint, borderRadius:'8px', fontSize:'11px', color:TK.violet, marginBottom:'8px' }}>
+              <div style={{ padding:'8px 12px', background:TK.brandTint, borderRadius:'8px', fontSize:'11px', color:TK.brand, marginBottom:'8px' }}>
                 Fields: {Object.keys(selType.extra_schema).map((k: string) => `${k} (${selType.extra_schema[k]?.label})`).join(' · ')}
               </div>
               <textarea style={{ ...C.inp, height:'100px', resize:'vertical' as const, fontFamily:'monospace', fontSize:'11px' }}
@@ -1382,7 +1382,7 @@ export default function AdminPage() {
           <button key={t.id} onClick={() => setTab(t.id as any)}
             style={{ padding: '13px 20px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
               borderBottom: tab === t.id ? '2.5px solid #7C3AED' : '2.5px solid transparent' }}>
-            <div style={{ fontSize: '13px', fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? TK.violet : TK.muted }}>{t.label}</div>
+            <div style={{ fontSize: '13px', fontWeight: tab === t.id ? 600 : 400, color: tab === t.id ? TK.brand : TK.muted }}>{t.label}</div>
             <div style={{ fontSize: '10px', color: TK.faint, marginTop: '1px' }}>{t.desc}</div>
           </button>
         ))}

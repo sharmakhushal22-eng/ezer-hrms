@@ -10,8 +10,8 @@ import { COMP_NAMES } from '@/lib/flexi/claims'
 import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: TK.canvas, navy: TK.ink, purple: TK.violet, purpleDark: TK.violetDeep, border: TK.line, muted: TK.muted,
-  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, amber: TK.warning, purpleBg: TK.violetTint,
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
+  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, amber: TK.warning, purpleBg: TK.brandTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')

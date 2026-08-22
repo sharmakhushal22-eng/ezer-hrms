@@ -1,0 +1,198 @@
+/* ============================================================================
+   EZER HRMS — theme
+   Deep emerald on warm sand. Light and dark.
+
+   WHY THIS FILE EXISTS, GIVEN THE APP USES INLINE STYLES
+
+   Every colour in the product comes from lib/ui/tokens.ts, and those tokens
+   now resolve to the custom properties defined here rather than to literal
+   hex. So an inline style still reads `background: C.surface`, but what lands
+   in the DOM is `background: var(--ez-surface)` — which means one class on
+   <html> repaints all 88 files at once. Static imports could never have done
+   that; a React context could, but only by touching every one of those files.
+
+   THE PALETTE, AND WHY
+
+   Almost every HRMS in this market is blue or purple — Keka, Darwinbox,
+   greytHR, Zoho People, Zimyo. Emerald is both distinctive and apt: this is a
+   product built around approvals, and green is what "approved" already means
+   to the people using it. The neutrals are warm-biased rather than flat grey,
+   so surfaces read as one family instead of a green accent sitting on generic
+   chrome.
+
+   ONE DELIBERATE OVERLAP
+
+   Normally semantic colour is kept clear of the brand, so "good" is never
+   confused with "branded". Here the brand IS green, and inventing a second,
+   different green for success would read as a mistake rather than a
+   distinction. So the happy path shares the brand hue, and the other states
+   are unmistakably not it: copper for pending, red for a problem, deep teal
+   for information. Three states, no two of which can be confused.
+   ============================================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* Text */
+  --ez-ink:           #0E2A22;   /* deep forest — headings, primary text     */
+  --ez-ink-soft:      #33473F;   /* secondary text, table values             */
+  --ez-muted:         #6B6B60;   /* body labels — warm-biased, not flat grey */
+  --ez-faint:         #9A9A8C;   /* placeholders, quietest metadata          */
+
+  /* Brand */
+  --ez-brand:         #0F7A5C;   /* emerald — primary actions, active nav    */
+  --ez-brand-deep:    #0A5C45;   /* pressed, gradient end                    */
+  --ez-brand-tint:    #E8F5EF;   /* hover wash, selected rows                */
+  --ez-brand-edge:    #C9E6DA;   /* borders on tinted surfaces               */
+
+  /* Surfaces */
+  --ez-surface:       #FFFFFF;   /* cards, panels, inputs                    */
+  --ez-canvas:        #FAF8F4;   /* warm sand — the page behind the cards    */
+  --ez-sunken:        #F5F2EC;   /* table heads, wells, disabled fields      */
+  --ez-line:          #E7E2D8;   /* default hairline                         */
+  --ez-line-strong:   #D5CEC0;   /* where a divider must assert itself       */
+
+  /* State. Green = done, copper = waiting, red = wrong, teal = context. */
+  --ez-positive:      #0F7A5C;
+  --ez-positive-tint: #E8F5EF;
+  --ez-warning:       #B4622A;   /* copper                                   */
+  --ez-warning-tint:  #FBEEE4;
+  --ez-critical:      #B3261E;
+  --ez-critical-tint: #FBEAE8;
+  --ez-info:          #1F6F8B;   /* deep teal-blue                           */
+  --ez-info-tint:     #E6F0F4;
+
+  /* Inverted chrome — the rail, and anything on a dark ground */
+  --ez-dark:          #0E2A22;
+  --ez-dark-soft:     #163A2F;
+  --ez-on-dark:       #F2F7F4;
+  --ez-on-dark-muted: rgba(242,247,244,.62);
+  --ez-on-dark-faint: rgba(242,247,244,.36);
+  --ez-on-dark-line:  rgba(242,247,244,.10);
+  --ez-on-dark-hover: rgba(242,247,244,.07);
+
+  /* Elevation. Two layers throughout: a tight contact shadow plus a softer
+     cast one. A single blur reads as a glow; two read as height. Tinted with
+     the ink colour rather than black, so shadows belong to the palette. */
+  --ez-shadow-flat:     0 1px 2px rgba(14,42,34,.05);
+  --ez-shadow-raised:   0 1px 2px rgba(14,42,34,.06), 0 4px 12px -4px rgba(14,42,34,.10);
+  --ez-shadow-floating: 0 2px 4px rgba(14,42,34,.07), 0 12px 28px -10px rgba(14,42,34,.18);
+  --ez-shadow-overlay:  0 4px 8px rgba(14,42,34,.09), 0 24px 56px -16px rgba(14,42,34,.26);
+  --ez-shadow-brand:    0 1px 2px rgba(10,92,69,.28), 0 8px 20px -6px rgba(15,122,92,.42);
+}
+
+/* ---------------------------------------------------------------------------
+   DARK
+
+   Not an inversion. The ground is a warm near-black with green in it, so it
+   belongs to the same family as the light theme, and the brand is lifted to
+   #2FA37E because #0F7A5C does not carry enough contrast against a dark
+   surface to be read as an action.
+
+   Applies when the user has chosen dark, or when they have expressed no
+   preference and the OS is dark. An explicit light choice always wins.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-ez-theme="light"]) {
+    color-scheme: dark;
+
+    --ez-ink:           #E9EFEB;
+    --ez-ink-soft:      #C2CFC8;
+    --ez-muted:         #8E9C94;
+    --ez-faint:         #6C7A73;
+
+    --ez-brand:         #2FA37E;
+    --ez-brand-deep:    #248C6A;
+    --ez-brand-tint:    #14261F;
+    --ez-brand-edge:    #1F3B31;
+
+    --ez-surface:       #161C19;
+    --ez-canvas:        #0F1512;
+    --ez-sunken:        #131A16;
+    --ez-line:          #243029;
+    --ez-line-strong:   #33443B;
+
+    --ez-positive:      #2FA37E;
+    --ez-positive-tint: #14261F;
+    --ez-warning:       #D98A4A;
+    --ez-warning-tint:  #2A1D12;
+    --ez-critical:      #E5675C;
+    --ez-critical-tint: #2C1614;
+    --ez-info:          #4FA3C0;
+    --ez-info-tint:     #12242B;
+
+    --ez-dark:          #0B100D;
+    --ez-dark-soft:     #131B16;
+
+    /* Shadows do almost nothing on a dark ground — depth comes from the
+       surface being lighter than the canvas. Kept shallow so cards do not
+       sit in visible black halos. */
+    --ez-shadow-flat:     0 1px 2px rgba(0,0,0,.34);
+    --ez-shadow-raised:   0 1px 2px rgba(0,0,0,.38), 0 4px 12px -4px rgba(0,0,0,.44);
+    --ez-shadow-floating: 0 2px 4px rgba(0,0,0,.42), 0 12px 28px -10px rgba(0,0,0,.55);
+    --ez-shadow-overlay:  0 4px 8px rgba(0,0,0,.48), 0 24px 56px -16px rgba(0,0,0,.62);
+    --ez-shadow-brand:    0 1px 2px rgba(0,0,0,.4), 0 8px 20px -6px rgba(47,163,126,.34);
+  }
+}
+
+/* The toggle must win in both directions: dark on a light OS, light on a dark
+   OS. Redefining under the attribute selector does that. */
+:root[data-ez-theme="dark"] {
+  color-scheme: dark;
+
+  --ez-ink:           #E9EFEB;
+  --ez-ink-soft:      #C2CFC8;
+  --ez-muted:         #8E9C94;
+  --ez-faint:         #6C7A73;
+
+  --ez-brand:         #2FA37E;
+  --ez-brand-deep:    #248C6A;
+  --ez-brand-tint:    #14261F;
+  --ez-brand-edge:    #1F3B31;
+
+  --ez-surface:       #161C19;
+  --ez-canvas:        #0F1512;
+  --ez-sunken:        #131A16;
+  --ez-line:          #243029;
+  --ez-line-strong:   #33443B;
+
+  --ez-positive:      #2FA37E;
+  --ez-positive-tint: #14261F;
+  --ez-warning:       #D98A4A;
+  --ez-warning-tint:  #2A1D12;
+  --ez-critical:      #E5675C;
+  --ez-critical-tint: #2C1614;
+  --ez-info:          #4FA3C0;
+  --ez-info-tint:     #12242B;
+
+  --ez-dark:          #0B100D;
+  --ez-dark-soft:     #131B16;
+
+  --ez-shadow-flat:     0 1px 2px rgba(0,0,0,.34);
+  --ez-shadow-raised:   0 1px 2px rgba(0,0,0,.38), 0 4px 12px -4px rgba(0,0,0,.44);
+  --ez-shadow-floating: 0 2px 4px rgba(0,0,0,.42), 0 12px 28px -10px rgba(0,0,0,.55);
+  --ez-shadow-overlay:  0 4px 8px rgba(0,0,0,.48), 0 24px 56px -16px rgba(0,0,0,.62);
+  --ez-shadow-brand:    0 1px 2px rgba(0,0,0,.4), 0 8px 20px -6px rgba(47,163,126,.34);
+}
+
+/* The viewport paints its own ground behind the app; without this the body
+   borrows whatever the browser defaults to and the theme only half-applies. */
+html, body {
+  background: var(--ez-canvas);
+  color: var(--ez-ink);
+}
+
+/* Colour changes are eased so switching themes reads as one movement rather
+   than a flash. Deliberately not applied to transform, which would make the
+   interaction feel laggy. */
+:root[data-ez-theme] * ,
+:root[data-ez-theme] *::before,
+:root[data-ez-theme] *::after {
+  transition: background-color .22s ease, border-color .22s ease, color .22s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-ez-theme] *,
+  :root[data-ez-theme] *::before,
+  :root[data-ez-theme] *::after { transition: none !important; }
+}

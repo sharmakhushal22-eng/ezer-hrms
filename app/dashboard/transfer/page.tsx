@@ -14,7 +14,7 @@ const C = {
   card:  { background:'#fff', borderRadius:10, border:'1px solid #E2E8F0', padding:'16px 18px', marginBottom:14 } as React.CSSProperties,
   label: { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:4 },
   input: { width:'100%', padding:'8px 10px', background:TK.sunken, border:'1px solid #CBD5E1', borderRadius:7, color:TK.ink, fontSize:12.5, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  pri:   { padding:'9px 18px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.violet, color:'#fff' } as React.CSSProperties,
+  pri:   { padding:'9px 18px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:'#fff' } as React.CSSProperties,
   sec:   { fontSize:12, fontWeight:600, color:TK.ink, marginBottom:10, display:'flex', alignItems:'center', gap:6 } as React.CSSProperties,
   g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } as React.CSSProperties,
   muted: { color:TK.muted } as React.CSSProperties,

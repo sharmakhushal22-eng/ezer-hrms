@@ -42,11 +42,11 @@ export interface Candidate {
 const C = {
   page:  { background: TK.canvas, minHeight: '100vh', color: TK.ink, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: '13px' } as React.CSSProperties,
   card:  { background: TK.surface, borderRadius: 10, border: '1px solid rgba(124,58,237,0.12)', padding: '14px 16px', marginBottom: 10, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  btnP:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.violet, color: '#fff' } as React.CSSProperties,
+  btnP:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.brand, color: '#fff' } as React.CSSProperties,
   btnG:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.positive, color: '#fff' } as React.CSSProperties,
-  btnO:  { padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(124,58,237,0.2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: TK.violet } as React.CSSProperties,
+  btnO:  { padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(124,58,237,0.2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: TK.brand } as React.CSSProperties,
   inp:   { width: '100%', padding: '9px 11px', background: TK.sunken, border: '1px solid rgba(124,58,237,0.12)', borderRadius: 7, color: TK.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const },
-  lbl:   { fontSize: 11, fontWeight: 600, color: TK.violetDeep, textTransform: 'uppercase' as const, letterSpacing: '.05em', display: 'block', marginBottom: 4 },
+  lbl:   { fontSize: 11, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.05em', display: 'block', marginBottom: 4 },
   g2:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as React.CSSProperties,
   g3:    { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 } as React.CSSProperties,
   pill:  (bg: string, color: string): React.CSSProperties => ({ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600, background: bg, color }),
@@ -85,7 +85,7 @@ const ROUND_CONFIGS: Record<string, RoundConfig> = {
     { id: 'vision',    label: 'Vision alignment',     tags: ['Shared vision', 'Unclear', 'Divergent'] },
     { id: 'orgfit',    label: 'Org fit',              tags: ['Excellent', 'Average', 'Risk'] },
   ]},
-  'Final HR Round': { badge: 'FHR', color: TK.violet, lightBg: TK.violetTint, params: [
+  'Final HR Round': { badge: 'FHR', color: TK.brand, lightBg: TK.brandTint, params: [
     { id: 'comp',      label: 'Compensation alignment', tags: ['Agreed', 'Negotiating', 'Gap'] },
     { id: 'joining',   label: 'Joining & timeline',     tags: ['Immediate', 'Notice period', 'Delayed'] },
     { id: 'bgv',       label: 'BGV readiness',          tags: ['Docs ready', 'Pending', 'Concern'] },
@@ -105,7 +105,7 @@ const RATING_LABELS = ['', 'Poor', 'Below average', 'Average', 'Good', 'Excellen
 const MODES = ['In-person', 'Video call', 'Telephonic']
 
 const cfgFor = (t: string): RoundConfig =>
-  ROUND_CONFIGS[t] || { badge: t.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'RND', color: TK.violet, lightBg: TK.violetTint, params: GENERIC_PARAMS }
+  ROUND_CONFIGS[t] || { badge: t.replace(/[^A-Za-z]/g, '').slice(0, 3).toUpperCase() || 'RND', color: TK.brand, lightBg: TK.brandTint, params: GENERIC_PARAMS }
 const scoreOf = (params: ParamFeedback[]): number => {
   const rated = params.filter(p => p.rating > 0)
   if (!rated.length) return 0
@@ -171,7 +171,7 @@ function RoundNode({ round, isLast }: { round: Round; isLast: boolean }) {
         <div style={{ fontSize: 9, color: TK.muted, whiteSpace: 'nowrap', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{round.round_type.replace(' Interview', '').replace(' Round', '')}</div>
         {done && <div style={{ fontSize: 9, fontWeight: 700, color: cfg.color }}>{round.overall_score ?? 0}</div>}
       </div>
-      {!isLast && <div style={{ width: 26, height: 2, background: TK.violetTint, margin: '0 2px', marginBottom: 18 }} />}
+      {!isLast && <div style={{ width: 26, height: 2, background: TK.brandTint, margin: '0 2px', marginBottom: 18 }} />}
     </div>
   )
 }
@@ -216,7 +216,7 @@ function PrevFeedbackBlock({ rounds }: { rounds: Round[] }) {
   return (
     <div style={{ ...C.card, background: TK.sunken }}>
       <div onClick={() => setOpen(o => !o)} style={{ cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: TK.violetDeep }}>Previous rounds feedback ({done.length}) — read-only</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: TK.brandDeep }}>Previous rounds feedback ({done.length}) — read-only</span>
         <span style={{ fontSize: 12, color: TK.muted }}>{open ? 'Hide' : 'Show'}</span>
       </div>
       {open && (
@@ -338,7 +338,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0' }}>
             {def.tags.map(tg => (
               <button key={tg} onClick={() => setParam(tab, { text: clampWords((cur.text ? cur.text + ' ' : '') + tg, 100) })}
-                style={{ padding: '3px 9px', borderRadius: 99, border: '1px solid rgba(124,58,237,0.2)', background: TK.sunken, color: TK.violetDeep, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '3px 9px', borderRadius: 99, border: '1px solid rgba(124,58,237,0.2)', background: TK.sunken, color: TK.brandDeep, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
                 + {tg}
               </button>
             ))}
@@ -408,7 +408,7 @@ function DetailView({ round, onBack }: { round: Round; onBack: () => void }) {
             {p.text && <div style={{ fontSize: 12, color: TK.inkSoft, marginTop: 2 }}>{p.text}</div>}
           </div>
         ))}
-        {round.next_round_suggestion && <div style={{ fontSize: 12, color: TK.violetDeep, marginTop: 12 }}>Suggested next: <strong>{round.next_round_suggestion}</strong>{round.suggested_interviewer ? ` (by ${round.suggested_interviewer})` : ''}</div>}
+        {round.next_round_suggestion && <div style={{ fontSize: 12, color: TK.brandDeep, marginTop: 12 }}>Suggested next: <strong>{round.next_round_suggestion}</strong>{round.suggested_interviewer ? ` (by ${round.suggested_interviewer})` : ''}</div>}
         {round.notes_for_recruiter && <div style={{ fontSize: 12, color: TK.muted, marginTop: 6, fontStyle: 'italic' }}>Note: {round.notes_for_recruiter}</div>}
       </div>
     </div>
@@ -525,7 +525,7 @@ export default function InterviewPipeline({ candidate, initialRounds }: { candid
               <div style={{ fontSize: 12, color: TK.muted, marginTop: 2 }}>{candidate.designation || '—'}{candidate.department ? ` · ${candidate.department}` : ''}</div>
             </div>
             <div style={{ display: 'flex', gap: 16 }}>
-              {candidate.ai_score != null && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, color: TK.faint }}>AI SCORE</div><div style={{ fontSize: 18, fontWeight: 700, color: TK.violet }}>{candidate.ai_score}</div></div>}
+              {candidate.ai_score != null && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, color: TK.faint }}>AI SCORE</div><div style={{ fontSize: 18, fontWeight: 700, color: TK.brand }}>{candidate.ai_score}</div></div>}
               {avgScore != null && <div style={{ textAlign: 'center' }}><div style={{ fontSize: 10, color: TK.faint }}>AVG ROUNDS</div><div style={{ fontSize: 18, fontWeight: 700, color: TK.positive }}>{avgScore}</div></div>}
             </div>
           </div>
