@@ -183,11 +183,25 @@ export function UIKeyframes() {
          of the product's blue without becoming a coloured slab. Both stops are
          theme variables, so it inverts with everything else. */
       .ez-page-head{
-        background:linear-gradient(135deg, var(--ez-surface) 0%, var(--ez-brand-tint) 100%);
-        border:1px solid var(--ez-brand-edge);
+        background:linear-gradient(135deg, var(--ez-head-from) 0%, var(--ez-head-to) 100%);
+        border:1px solid var(--ez-head-edge);
         border-radius:14px;
         padding:16px 18px;
         margin-bottom:16px;
+        /* Elevation is per-theme, not one value: a drop shadow on the light
+           ground, an inset top highlight on the dark one where a shadow would
+           be invisible. See theme.css for the reasoning. */
+        box-shadow:var(--ez-head-elev);
+        /* The band is a deeper surface, so it carries its own on-colours.
+           Because the design tokens ARE css variables, redefining them here
+           cascades to every header on every page — no per-page edits, and any
+           header added later inherits it for free. This is the only reason a
+           genuinely darker band is possible: --ez-faint and --ez-brand clear
+           AA on white by barely half a point, so on a deeper ground they have
+           to move with it. */
+        --ez-muted:var(--ez-head-muted);
+        --ez-faint:var(--ez-head-faint);
+        --ez-brand:var(--ez-head-brand);
       }
       /* For a header sitting in a container with no padding of its own. */
       .ez-page-head-bleed{ margin:16px 24px 16px }

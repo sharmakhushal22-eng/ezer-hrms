@@ -52,6 +52,24 @@
   --ez-brand-deep:    #1D4ED8;   /* pressed, gradient end         */
   --ez-brand-tint:    #EFF6FF;   /* hover wash, selected rows     */
   --ez-brand-edge:    #BFDBFE;   /* borders on tinted surfaces    */
+
+  /* PAGE HEADER BAND — DAY
+     The header is the DARKEST plane on the page, not the lightest. Cards are
+     white and sit above the canvas; the header sits below it. That gives three
+     distinct planes and a header that cannot be mistaken for a card.
+
+     Darkening the fill alone was not possible: --ez-faint and --ez-brand clear
+     AA on white by only 5.23 and 5.17, so any band deep enough to read as
+     highlighted pushed both under 4.5. The band carries its own darker text
+     tokens instead. Shadows read on a light ground, so elevation is a real
+     drop shadow here. */
+  --ez-head-from:   #E4EDFA;
+  --ez-head-to:     #CFDEF3;   /* 1.249 deeper than the canvas */
+  --ez-head-edge:   #B4CCEB;
+  --ez-head-muted:  #3D4757;   /* 6.88 on the deepest stop */
+  --ez-head-faint:  #4A5567;   /* 5.53 */
+  --ez-head-brand:  #1D4ED8;   /* 4.91 */
+  --ez-head-elev:   0 1px 2px rgba(15,23,42,.06);
   /* Text that sits ON a saturated accent fill — a primary button, a filled
      badge. White works in light because every accent is dark there. */
   --ez-on-accent:     #FFFFFF;
@@ -168,6 +186,28 @@
     --ez-brand-deep:    #93C5FD;
     --ez-brand-tint:    #172033;
     --ez-brand-edge:    #24344F;
+
+    /* PAGE HEADER BAND — NIGHT
+       Not the day treatment inverted. In dark mode the cards are ALREADY
+       lighter than the canvas, so simply lightening the header makes it read
+       as one more card: at its lightest stop it is only 1.28 against a card,
+       which the eye does not reliably separate.
+
+       So night differentiates by HUE rather than brightness. The cards are
+       neutral grey at 30% saturation; this band is blue at 62%. That reads as
+       a distinct kind of surface at any size, where a brightness step alone
+       does not.
+
+       Elevation changes too: a drop shadow is invisible on a dark ground, so
+       the lift comes from an inset highlight along the top edge — the way a
+       raised surface actually catches light from above. */
+    --ez-head-from:   #1E2E4E;
+    --ez-head-to:     #141D31;
+    --ez-head-edge:   #2C4370;
+    --ez-head-muted:  #AAB4C2;   /* 6.44 on the lightest stop */
+    --ez-head-faint:  #99A4B4;   /* 5.35 */
+    --ez-head-brand:  #8CC0FC;   /* 7.11 */
+    --ez-head-elev:   inset 0 1px 0 rgba(255,255,255,.07);
     /* In dark every accent LIGHTENS (#2563EB becomes #60A5FA), so white text
        on a primary button drops to 2.54:1. It has to invert. */
     --ez-on-accent:     #0D1117;
@@ -262,6 +302,28 @@
   --ez-brand-deep:    #93C5FD;
   --ez-brand-tint:    #172033;
   --ez-brand-edge:    #24344F;
+
+    /* PAGE HEADER BAND — NIGHT
+       Not the day treatment inverted. In dark mode the cards are ALREADY
+       lighter than the canvas, so simply lightening the header makes it read
+       as one more card: at its lightest stop it is only 1.28 against a card,
+       which the eye does not reliably separate.
+
+       So night differentiates by HUE rather than brightness. The cards are
+       neutral grey at 30% saturation; this band is blue at 62%. That reads as
+       a distinct kind of surface at any size, where a brightness step alone
+       does not.
+
+       Elevation changes too: a drop shadow is invisible on a dark ground, so
+       the lift comes from an inset highlight along the top edge — the way a
+       raised surface actually catches light from above. */
+    --ez-head-from:   #1E2E4E;
+    --ez-head-to:     #141D31;
+    --ez-head-edge:   #2C4370;
+    --ez-head-muted:  #AAB4C2;   /* 6.44 on the lightest stop */
+    --ez-head-faint:  #99A4B4;   /* 5.35 */
+    --ez-head-brand:  #8CC0FC;   /* 7.11 */
+    --ez-head-elev:   inset 0 1px 0 rgba(255,255,255,.07);
   --ez-on-accent:     #0D1117;
   --ez-on-accent-soft: rgba(13,17,23,.92);
   --ez-on-accent-dim:  rgba(13,17,23,.86);
