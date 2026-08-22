@@ -19,6 +19,7 @@ import { INDIAN_STATES } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { useDismiss } from '@/lib/ui/useDismiss'
 
 const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
@@ -35,10 +36,13 @@ function SearchSelect({ value, options, placeholder, onChange }: {
   value: string; options: string[]; placeholder: string; onChange: (v: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  // One click, not two: a document listener lets the click through to whatever
+  // is under it, so moving straight to another trigger opens that one.
+  const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
   const [q, setQ] = useState('')
   const filtered = (q.trim() ? options.filter(o => o.toLowerCase().includes(q.toLowerCase())) : options).slice(0, 100)
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={pop} style={{ position: 'relative' }}>
       <div onClick={() => { setOpen(o => !o); setQ('') }}
         style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, color: value ? C.navy : TK.faint }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value || placeholder}</span>
@@ -46,7 +50,6 @@ function SearchSelect({ value, options, placeholder, onChange }: {
       </div>
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 210 }} />
           <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
               style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />

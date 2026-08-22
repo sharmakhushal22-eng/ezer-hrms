@@ -39,6 +39,7 @@ import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 import {
   C as TK, F as TF, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
+import { useDismiss } from '@/lib/ui/useDismiss'
 
 // ── Palette (guide-mandated) ──────────────────────────────────────
 // This file already owns the name C, so the design tokens come in as TK and
@@ -150,6 +151,9 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
   label: string; isActive: boolean; sections: SubTab[]; activeSub: string; activeChild?: string; onPick: (id: string, childId?: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  // One click, not two: a document listener lets the click through to whatever
+  // is under it, so moving straight to another trigger opens that one.
+  const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
   const [alignRight, setAlignRight] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())   // which sections have their children expanded
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -181,7 +185,7 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
   }
   const toggleExpand = (id: string) => setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   return (
-    <div style={{ position: 'relative', flexShrink: 0 }}>
+    <div ref={pop} style={{ position: 'relative', flexShrink: 0 }}>
       <button ref={btnRef} onClick={toggle} style={{
         display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 8,
         border: `1px solid ${isActive || open ? C.purple : C.border}`, background: isActive ? C.purple: TK.surface,
@@ -193,7 +197,6 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
       </button>
       {open && sections.length > 0 && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000 }} />
           <div style={{
             position: 'absolute', top: 'calc(100% + 6px)',
             ...(alignRight ? { right: 0 } : { left: 0 }),

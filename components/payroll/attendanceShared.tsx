@@ -9,6 +9,7 @@ import { loadRuns, loadCompanies, MONTHS, type PayrollRun } from '@/lib/payroll/
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { useDismiss } from '@/lib/ui/useDismiss'
 
 export const C = {
   navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
@@ -31,11 +32,14 @@ export const splitCodes = (text: string): string[] =>
 // ── Searchable single-select ────────────────────────────────────────
 export function SearchSelect({ value, options, placeholder, onChange, disabled }: { value: string; options: Opt[]; placeholder: string; onChange: (v: string) => void; disabled?: boolean }) {
   const [open, setOpen] = useState(false)
+  // One click, not two: a document listener lets the click through to whatever
+  // is under it, so moving straight to another trigger opens that one.
+  const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
   const [q, setQ] = useState('')
   const sel = options.find(o => o.value === value)
   const filtered = (q.trim() ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase())) : options).slice(0, 150)
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={pop} style={{ position: 'relative' }}>
       <div onClick={() => { if (!disabled) { setOpen(o => !o); setQ('') } }}
         style={{ ...ddInp, cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', gap: 6, alignItems: 'center', color: sel ? C.navy : TK.faint, background: disabled ? TK.sunken: TK.surface }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sel ? sel.label : placeholder}</span>
@@ -43,7 +47,6 @@ export function SearchSelect({ value, options, placeholder, onChange, disabled }
       </div>
       {open && !disabled && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 500 }} />
           <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…" style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: font }} />
             <div style={{ maxHeight: 210, overflowY: 'auto' }}>
@@ -65,6 +68,9 @@ export function SearchSelect({ value, options, placeholder, onChange, disabled }
 // e.g. "OXYZO680, OXYZO741, OXYZO1013" → four chips at once.
 export function MultiSelect({ values, options, placeholder, onChange }: { values: string[]; options: Opt[]; placeholder: string; onChange: (v: string[]) => void }) {
   const [open, setOpen] = useState(false)
+  // One click, not two: a document listener lets the click through to whatever
+  // is under it, so moving straight to another trigger opens that one.
+  const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
   const [q, setQ] = useState('')
   const filtered = (q.trim() ? options.filter(o => o.label.toLowerCase().includes(q.toLowerCase())) : options).slice(0, 150)
   const toggle = (v: string) => onChange(values.includes(v) ? values.filter(x => x !== v) : [...values, v])
@@ -84,7 +90,7 @@ export function MultiSelect({ values, options, placeholder, onChange }: { values
   const onQChange = (v: string) => { if (/[\s,;]/.test(v)) addTokens(v); else setQ(v) }
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={pop} style={{ position: 'relative' }}>
       <div onClick={() => { setOpen(o => !o); setQ('') }}
         style={{ ...ddInp, cursor: 'pointer', minHeight: 36, display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
         {values.length === 0 && <span style={{ color: TK.faint }}>{placeholder}</span>}
@@ -95,7 +101,6 @@ export function MultiSelect({ values, options, placeholder, onChange }: { values
       </div>
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 500 }} />
           <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 240, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.18)', zIndex: 501, overflow: 'hidden' }}>
             <input autoFocus value={q}
               onChange={e => onQChange(e.target.value)}

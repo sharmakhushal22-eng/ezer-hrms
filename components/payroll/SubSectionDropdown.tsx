@@ -12,6 +12,7 @@ import { useState } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { useDismiss } from '@/lib/ui/useDismiss'
 
 const C = { navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted }
 const font = '"DM Sans","Segoe UI",sans-serif'
@@ -22,11 +23,14 @@ export default function SubSectionDropdown({ items, active, onChange, kicker = '
   items: SubItem[]; active: string; onChange: (id: string) => void; kicker?: string
 }) {
   const [open, setOpen] = useState(false)
+  // One click, not two: a document listener lets the click through to whatever
+  // is under it, so moving straight to another trigger opens that one.
+  const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
   const cur = items.find(i => i.id === active) || items[0]
   const toggle = () => setOpen(o => !o)
 
   return (
-    <div style={{ position: 'relative', marginBottom: 14, maxWidth: 340 }}>
+    <div ref={pop} style={{ position: 'relative', marginBottom: 14, maxWidth: 340 }}>
       <button onClick={toggle} style={{
         width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 14px', borderRadius: 10,
         border: `1px solid ${open ? C.purple : C.border}`, background: TK.surface, cursor: 'pointer', fontFamily: font,
@@ -40,7 +44,6 @@ export default function SubSectionDropdown({ items, active, onChange, kicker = '
       </button>
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000 }} />
           <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, minWidth: 240, width: '100%', zIndex: 1001, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6, maxHeight: '70vh', overflowY: 'auto' }}>
             {items.map(i => {
               const on = i.id === active

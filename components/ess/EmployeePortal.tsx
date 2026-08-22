@@ -41,6 +41,7 @@ import {
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
   IconLetters, IconReports, IconRecruitment, IconAi, IconBell,
 } from '@/lib/ui'
+import { useDismiss } from '@/lib/ui/useDismiss'
 
 // ── Styles ─────────────────────────────────────────────────────────
 // Bound to the design system. See lib/ui/tokens.ts.
@@ -3224,6 +3225,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   const [view, setView] = useState('home')
   const [isMobile, setIsMobile] = useState(false)
   const [bellOpen, setBellOpen] = useState(false)
+  // The bell sits in the header and the panel hangs off the viewport, so they
+  // are not in one wrapper — the trigger is exempted by selector instead.
+  // Without that, clicking the bell to close would dismiss on pointerdown and
+  // re-open on the click, and the panel could never be shut from its own button.
+  const bellPop = useDismiss<HTMLDivElement>(bellOpen, () => setBellOpen(false), '[data-ez-bell]')
   const [moreOpen, setMoreOpen] = useState(false)
   const [unread, setUnread] = useState(0)
   const [toast, setToast] = useState<{ msg: string; type: 'success'|'error' } | null>(null)
@@ -3305,7 +3311,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
           <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9 }}>
-            <NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} />
+            <span data-ez-bell><NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} /></span>
             <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
             {!isMobile && (
               <div style={{ lineHeight:1.2, textAlign:'right' }}>
@@ -3326,10 +3332,13 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
       {/* Notification panel — anchored to the bell, not a sidebar entry */}
       {bellOpen && (
-        <div onClick={() => setBellOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }}>
-          <div onClick={e => e.stopPropagation()} style={{ position:'absolute', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:12, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
-            <Notifications emp={emp} onChange={refreshUnread} />
-          </div>
+        // No full-screen catcher: it used to swallow the next click, so
+        // dismissing this panel and pressing anything else took two clicks.
+        // The panel was absolutely positioned inside that catcher, which
+        // covered the viewport — so `fixed` with the same offsets puts it in
+        // exactly the same place, now that the catcher is gone.
+        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:41, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:12, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
+          <Notifications emp={emp} onChange={refreshUnread} />
         </div>
       )}
 
