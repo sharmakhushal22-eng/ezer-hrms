@@ -8,6 +8,7 @@ import "@/lib/ui/theme.css";
 import AutoTitleCase from "@/components/AutoTitleCase";
 import UiScale from "@/components/UiScale";
 import { themeBootScript } from "@/lib/ui/ThemeToggle";
+import { eyeComfortBootScript, EyeComfortLayer, EyeComfortOverlay } from "@/lib/ui/EyeComfort";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -40,8 +41,20 @@ export default function RootLayout({
             renders light, then corrects itself once React runs — a white
             flash on every load for anyone using dark. */}
         <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        {/* Same reasoning as the theme: someone who turned eye comfort on
+            because bright screens hurt should not be shown an unfiltered
+            white page for 300ms on every load. */}
+        <script dangerouslySetInnerHTML={{ __html: eyeComfortBootScript }} />
       </head>
-      <body className="min-h-full flex flex-col"><AutoTitleCase /><UiScale />{children}</body>
+      <body className="min-h-full flex flex-col">
+        <AutoTitleCase />
+        <UiScale />
+        <EyeComfortLayer />
+        {children}
+        {/* Last in the body so it composites over everything, including any
+            modal or toast. pointer-events:none keeps clicks passing through. */}
+        <EyeComfortOverlay />
+      </body>
     </html>
   );
 }
