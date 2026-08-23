@@ -624,7 +624,7 @@ function Panel({ title, icon, children, accent }: {
 }) {
   return (
     <div style={{ background: P.white, borderRadius: 14, border: `1px solid ${P.line}`,
-                  padding: '15px 14px', boxShadow: '0 1px 3px rgba(37,99,235,0.05)' }}>
+                  padding: '15px 14px', boxShadow: 'var(--ez-shadow-flat)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
                     paddingBottom: 9, borderBottom: `1px solid ${P.line}` }}>
         <span style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0,
@@ -3146,7 +3146,13 @@ function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean;
   const bg = active ? 'rgba(37,99,235,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.surface : C.brand, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.brand : 'transparent'}` }}>
+        // This rail is dark in BOTH themes, so its text must come from the
+        // theme-independent onDark family. It used C.brand and C.surface,
+        // which flip: in light the ten inactive labels were #2563EB on
+        // #111827 — 3.43:1, below AA — and in dark the ACTIVE label was
+        // C.surface, which is #171B21 there, giving 1.12:1. The selected
+        // item was effectively invisible.
+      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.onDark : C.onDarkMuted, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.onDark : 'transparent'}` }}>
       <EssIcon k={s.k} size={16} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
@@ -3156,8 +3162,10 @@ function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean;
 
 function TabHeader({ s }: { s: NavSection }) {
   const [label, bg, fg] = BADGE[s.status]
+  // Same header band as the 32 dashboard routes. This sat directly on the
+  // canvas, so ESS read as a different product from the admin side.
   return (
-    <div style={{ marginBottom:16 }}>
+    <div className="ez-page-head">
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:4 }}>
         <div style={{ fontSize:F.page, fontWeight:W.bold, letterSpacing:'-.02em',
                       display:'flex', alignItems:'center', gap:9 }}>
@@ -3290,6 +3298,12 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   return (
     <div style={{ minHeight:'100vh', background:C.canvas, fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+      {/* The shared stylesheet. It was imported here but never rendered, so
+          ESS was running without the header band, the tab and press classes,
+          the global button baseline, the page-enter animation and the text
+          sharpness rules — the whole design system the dashboard uses. That
+          one missing element is most of why the two halves looked unrelated. */}
+      <UIKeyframes />
       {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
       {!isMobile && (
         <div style={{ width:220, background: C.dark, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
