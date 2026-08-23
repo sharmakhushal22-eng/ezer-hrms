@@ -119,6 +119,7 @@
 
   /* Kept for anything still asking for an inverted surface. */
   --ez-dark:          #111827;
+  --ez-dark-accent:   #1E2E4E;   /* gradient end for always-dark planes */
   --ez-dark-soft:     #1F2937;
   --ez-on-dark:       #F9FAFB;
   --ez-on-dark-muted: rgba(249,250,251,.78);
@@ -253,6 +254,7 @@
     --ez-rail-active-text: #93C5FD;
 
     --ez-dark:          #0B0E12;
+    --ez-dark-accent:   #17233A;
     --ez-dark-soft:     #141920;
 
     /* Depth on a dark ground comes from the surface being lighter than the
@@ -359,6 +361,7 @@
   --ez-rail-active-text: #93C5FD;
 
   --ez-dark:          #0B0E12;
+    --ez-dark-accent:   #17233A;
   --ez-dark-soft:     #141920;
 
   --ez-shadow-flat:     0 1px 2px rgba(0,0,0,.34);
