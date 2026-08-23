@@ -37,7 +37,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   // and the text stays resampled for as long as the page is open.
   React.useEffect(() => {
     setSettled(false);
-    const t = setTimeout(() => setSettled(true), 380);
+    const t = setTimeout(() => setSettled(true), 260);   // must outlast the 220ms entrance
     return () => clearTimeout(t);
   }, [pathname]);
 
@@ -79,11 +79,16 @@ export function RouteProgress() {
     setOn(true); setPct(8);
     // Ease toward 90 and wait. Reaching 100 before the page is ready would be
     // a lie, and users notice that faster than they notice a slow page.
-    const creep = setInterval(() => setPct(p => (p < 90 ? p + (90 - p) * 0.18 : p)), 120);
+    const creep = setInterval(() => setPct(p => (p < 90 ? p + (90 - p) * 0.18 : p)), 90);
+    // Shortened from 340 + 260. usePathname only changes once navigation has
+    // committed, so by the time this effect runs the new route is already on
+    // screen — the bar was showing progress for work that had finished, and
+    // holding the "still loading" signal for 600ms after the fact is a large
+    // part of why navigation felt slow when it was not.
     const done = setTimeout(() => {
       clearInterval(creep); setPct(100);
-      setTimeout(() => { setOn(false); setPct(0); }, 260);
-    }, 340);
+      setTimeout(() => { setOn(false); setPct(0); }, 160);
+    }, 150);
     return () => { clearInterval(creep); clearTimeout(done); };
   }, [pathname]);
 

@@ -68,7 +68,10 @@ export function UIKeyframes() {
         60% {opacity:1}
         to  {opacity:1;transform:none}}
       .ez-page-enter{
-        animation:ezPageEnter .34s cubic-bezier(.22,1,.36,1) both;
+        /* 340ms was long enough to be the thing you wait for: the data now
+           lands in ~290ms, so the animation was the tail. 220ms keeps the
+           movement and stops it being the bottleneck. */
+        animation:ezPageEnter .22s cubic-bezier(.22,1,.36,1) both;
         transform-origin:50% 0;
         backface-visibility:hidden;   /* stops the half-pixel shimmer mid-tilt */
       }

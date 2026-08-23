@@ -143,13 +143,45 @@ export default function OnboardingDashboard() {
 
     if (error) { showToast('Load error: '+error.message,'err'); setLoading(false); return }
 
-    // Enrich with documents + statutory forms
-    const enriched: Candidate[] = await Promise.all((cands||[]).map(async (c) => {
-      const [{ data: docs }, { data: forms }, { data: assets }] = await Promise.all([
-        supabase.from('onboarding_documents').select('doc_code,ai_status').eq('onboarding_id',c.id),
-        supabase.from('onboarding_statutory_forms').select('form_type').eq('onboarding_id',c.id),
-        supabase.from('onboarding_asset_requests').select('asset_type,status').eq('onboarding_id',c.id),
-      ])
+    // Enrich with documents + statutory forms.
+    //
+    // This used to run three queries PER CANDIDATE. With 14 candidates that is
+    // 42 round trips for data that is three queries — 84 in dev, where React
+    // StrictMode invokes the effect twice. Measured: 84 requests, 8.4 seconds
+    // of cumulative request time. It also got worse with every candidate
+    // added, which is the part that matters.
+    //
+    // Now: every row for the whole set in one query per table, grouped in
+    // memory. Three requests regardless of how many candidates there are.
+    //
+    // Chunked at 150 ids because PostgREST takes the filter in the URL and a
+    // few hundred UUIDs would run past the request line limit.
+    const ids = (cands || []).map(c => c.id)
+    const chunk = <T,>(a: T[], n: number) =>
+      Array.from({ length: Math.ceil(a.length / n) }, (_, i) => a.slice(i * n, i * n + n))
+    const fetchAll = async (table: string, cols: string) => {
+      if (!ids.length) return [] as any[]
+      const parts = await Promise.all(
+        chunk(ids, 150).map(part => supabase.from(table).select(cols).in('onboarding_id', part))
+      )
+      return parts.flatMap(p => (p.data as any[]) || [])
+    }
+    const [allDocs, allForms, allAssets] = await Promise.all([
+      fetchAll('onboarding_documents',       'onboarding_id,doc_code,ai_status'),
+      fetchAll('onboarding_statutory_forms', 'onboarding_id,form_type'),
+      fetchAll('onboarding_asset_requests',  'onboarding_id,asset_type,status'),
+    ])
+    const groupBy = (rows: any[]) => {
+      const m = new Map<string, any[]>()
+      rows.forEach(r => { const a = m.get(r.onboarding_id); a ? a.push(r) : m.set(r.onboarding_id, [r]) })
+      return m
+    }
+    const docsBy = groupBy(allDocs), formsBy = groupBy(allForms), assetsBy = groupBy(allAssets)
+
+    const enriched: Candidate[] = (cands || []).map((c) => {
+      const docs = docsBy.get(c.id) || []
+      const forms = formsBy.get(c.id) || []
+      const assets = assetsBy.get(c.id) || []
       const docCodes  = (docs||[]).map(d=>d.doc_code)
       const flagged   = (docs||[]).filter(d=>d.ai_status==='MISMATCH'||d.ai_status==='FAILED').length
       const formTypes = (forms||[]).map(f=>f.form_type)
@@ -177,7 +209,7 @@ export default function OnboardingDashboard() {
         ai_risk:         risk,
         ai_risk_reason:  riskReason,
       } as Candidate
-    }))
+    })
 
     // ── Auto-pull joiners from recruitment ───────────────────────
     // A candidate appears here once they reach pre-onboarding (offer accepted /

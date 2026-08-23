@@ -51,10 +51,20 @@ function PendingApprovals({ companyId, empMap, typeMap, notify }: { companyId: s
     const { data } = await supabase.from('loan_requests').select('*').eq('company_id', companyId).eq('status', 'IN_APPROVAL').order('created_at', { ascending: false })
     const reqs = data || []
     setRows(reqs)
+    // One query, not one per request. This was an await inside a for loop, so
+    // the round trips ran end to end rather than together — with N pending
+    // requests it cost N times the latency, and the panel sat empty for all of
+    // it. Fetching every approval row for the visible requests and picking the
+    // matching level in memory makes it a single trip.
     const lvlMap: Record<string, any> = {}
-    for (const r of reqs) {
-      const { data: lv } = await supabase.from('loan_approvals').select('*').eq('request_id', r.id).eq('level_order', r.current_approval_level).maybeSingle()
-      if (lv) lvlMap[r.id] = lv
+    if (reqs.length) {
+      const { data: lvls } = await supabase
+        .from('loan_approvals').select('*')
+        .in('request_id', reqs.map((r: any) => r.id))
+      ;(lvls || []).forEach((lv: any) => {
+        const req = reqs.find((r: any) => r.id === lv.request_id)
+        if (req && lv.level_order === req.current_approval_level) lvlMap[lv.request_id] = lv
+      })
     }
     setLevels(lvlMap)
   }, [companyId])
