@@ -11,12 +11,10 @@
 // "connect the next module" is a row in a table, not an edit here.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { authToken } from '@/lib/rms-client'
 
 async function authHeaders(): Promise<Record<string, string>> {
-  // Prefers the ESS session, falling back to the legacy Supabase one. Dashboard users
-  // arrive through /ess-login now, so sending only the Supabase token would 401 them.
-  const t = await authToken()
+  const { data } = await supabase.auth.getSession()
+  const t = data?.session?.access_token
   return t ? { Authorization: `Bearer ${t}` } : {}
 }
 

@@ -1,14 +1,10 @@
 // lib/supabase-ess.ts — ESS data helpers (Phase 1: admin access & roles)
 import { supabase } from '@/lib/supabase'
-import { rmsAdmin } from '@/lib/rms-client'
 
 export interface EssRole {
   id: string; role_code: string; role_name: string
-  // One vocabulary for both, widest first, since migration 055:
-  //   GROUP > COMPANY > BRANCH > DEPARTMENT > TEAM > SELF
-  // The old spellings (ORG, DEPT, ALL, OWN) were rewritten by that migration.
-  salary_visibility: 'GROUP' | 'COMPANY' | 'BRANCH' | 'DEPARTMENT' | 'TEAM' | 'SELF' | 'NONE'
-  scope: 'GROUP' | 'COMPANY' | 'BRANCH' | 'DEPARTMENT' | 'TEAM' | 'SELF'
+  salary_visibility: 'NONE' | 'OWN' | 'TEAM' | 'DEPT' | 'BRANCH' | 'ALL'
+  scope: 'SELF' | 'TEAM' | 'DEPT' | 'BRANCH' | 'ORG'
   sort_order: number
 }
 export interface EssAccount {
@@ -30,20 +26,6 @@ export interface OrgUnit { id: string; name: string; company_id?: string }
 export interface AuditRow {
   id: string; action: string; performed_by_name: string | null; reason: string | null
   details: any; created_at: string; ess_account_id: string | null
-}
-
-// ── Where account rows are read from ─────────────────────────────────────────
-// Migration 055 locks ess_accounts to the service role and exposes
-// ess_accounts_safe — the same rows without password_hash or password_salt — to
-// the browser. Until that migration runs the view does not exist, so the source
-// is probed once and remembered. This is what makes the code safe to deploy
-// before or after the migration rather than only after it.
-let ACCT_SRC: 'ess_accounts_safe' | 'ess_accounts' | null = null
-export async function accountSource(): Promise<'ess_accounts_safe' | 'ess_accounts'> {
-  if (ACCT_SRC) return ACCT_SRC
-  const { error } = await supabase.from('ess_accounts_safe').select('id').limit(1)
-  ACCT_SRC = error ? 'ess_accounts' : 'ess_accounts_safe'
-  return ACCT_SRC
 }
 
 export async function loadRoles(): Promise<EssRole[]> {
@@ -71,7 +53,7 @@ export async function loadUsers(): Promise<EssUser[]> {
     supabase.from('employees')
       .select('id, emp_code, full_name, designation, company_id, location_id, department_id, date_of_resignation, last_working_date, departments(dept_name), companies(company_name), locations!location_id(location_name)')
       .order('emp_code'),
-    supabase.from(await accountSource()).select('*'),
+    supabase.from('ess_accounts').select('*'),
     supabase.from('ess_user_roles').select('ess_account_id, role_id').eq('is_active', true),
     supabase.from('ess_roles').select('*'),
   ])
@@ -103,43 +85,62 @@ export async function loadAudit(): Promise<AuditRow[]> {
 
 // Set ACTIVE / INACTIVE. Deactivation also blocks password reset (per spec).
 export async function setStatus(u: EssUser, status: 'ACTIVE' | 'INACTIVE', opts: { reason?: string; byName?: string } = {}) {
-  // This used to write ess_accounts straight from the browser on the anon key. Migration
-  // 055 takes that write away — activating somebody's login is not something a page
-  // should be able to do on its own — so it goes through the guarded route instead.
-  const res = await rmsAdmin({ action: 'set_status', employee_id: u.employee_id, status, reason: opts.reason || '' })
-  if (res.error) return { error: { message: res.error } }
-  return { ok: true }
+  const patch: any = { employee_id: u.employee_id, status }
+  if (status === 'INACTIVE') {
+    patch.password_reset_allowed = false
+    patch.deactivated_at = new Date().toISOString()
+    patch.deactivation_reason = opts.reason || null
+  } else {
+    patch.password_reset_allowed = true
+    patch.deactivated_at = null
+    patch.deactivation_reason = null
+  }
+  const { data: acct, error } = await supabase.from('ess_accounts')
+    .upsert(patch, { onConflict: 'employee_id' }).select('*').single()
+  if (error) return { error }
+  await supabase.from('ess_access_audit').insert({
+    ess_account_id: acct?.id,
+    action: status === 'ACTIVE' ? 'ACTIVATE' : 'DEACTIVATE',
+    performed_by_name: opts.byName || null, reason: opts.reason || null,
+    details: { emp_code: u.emp_code, full_name: u.full_name },
+  })
+  return { account: acct as EssAccount }
 }
 
 // Replace the user's roles with exactly the selected set. Auto-creates an account if needed.
-export async function assignRoles(u: EssUser, roleIds: string[], byName?: string, reason?: string) {
-  // Same reason as setStatus: the anon key can no longer write ess_user_roles, because
-  // anyone holding it could otherwise grant themselves SUPER_ADMIN. The route checks the
-  // caller, refuses to remove the last Super Admin, stamps valid_from for effective
-  // dating, and writes the audit row with who actually did it.
-  const res = await rmsAdmin({
-    action: 'assign_roles',
-    employee_ids: [u.employee_id],
-    role_ids: roleIds,
-    mode: 'replace',
-    reason: reason || 'Role change from ESS & Access',
+export async function assignRoles(u: EssUser, roleIds: string[], byName?: string) {
+  let acctId = u.account?.id
+  if (!acctId) {
+    const { data } = await supabase.from('ess_accounts')
+      .upsert({ employee_id: u.employee_id, status: u.account?.status || 'INACTIVE' }, { onConflict: 'employee_id' })
+      .select('id').single()
+    acctId = data?.id
+  }
+  if (!acctId) return { error: { message: 'Could not create ESS account' } }
+  await supabase.from('ess_user_roles').delete().eq('ess_account_id', acctId)
+  if (roleIds.length) {
+    const rows = roleIds.map(rid => ({ ess_account_id: acctId, role_id: rid }))
+    const { error } = await supabase.from('ess_user_roles').insert(rows)
+    if (error) return { error }
+  }
+  await supabase.from('ess_access_audit').insert({
+    ess_account_id: acctId, action: 'ROLE_ASSIGN', performed_by_name: byName || null,
+    details: { emp_code: u.emp_code, role_count: roleIds.length },
   })
-  if (res.error) return { error: { message: res.error } }
-  const failed = (res.results || []).find((r: any) => !r.ok)
-  if (failed) return { error: { message: failed.message || 'Could not update roles' } }
   return { ok: true }
 }
 
 export async function startImpersonation(u: EssUser, adminName?: string): Promise<string | null> {
-  // The admin's identity used to come from auth.getUser() in the browser, which returns
-  // nothing once the legacy Supabase login is retired — the log would have carried a
-  // zero-uuid and the name the caller happened to pass. The route takes it from the
-  // signed session instead, so the record says who actually did this.
-  const res = await rmsAdmin({ action: 'impersonate_start', employee_id: u.employee_id })
-  return res.error ? null : (res.log_id || null)
+  let adminId: string | null = null
+  try { const { data } = await supabase.auth.getUser(); adminId = data?.user?.id || null } catch {}
+  const { data } = await supabase.from('ess_impersonation_log').insert({
+    admin_id: adminId || '00000000-0000-0000-0000-000000000000',
+    admin_name: adminName || 'Admin', employee_id: u.employee_id,
+  }).select('id').single()
+  return data?.id || null
 }
 export async function endImpersonation(logId: string) {
-  await rmsAdmin({ action: 'impersonate_end', log_id: logId })
+  await supabase.from('ess_impersonation_log').update({ ended_at: new Date().toISOString() }).eq('id', logId)
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -186,7 +187,7 @@ export async function loadEmployeeDetail(employeeId: string): Promise<EmployeeDe
     const { data: mgrs } = await supabase.from('employees').select('id, full_name').in('id', mgrIds)
     mgrNames = Object.fromEntries((mgrs || []).map((m: any) => [m.id, m.full_name]))
   }
-  const { data: acct } = await supabase.from(await accountSource()).select('status, password_reset_allowed').eq('employee_id', employeeId).maybeSingle()
+  const { data: acct } = await supabase.from('ess_accounts').select('status, password_reset_allowed').eq('employee_id', employeeId).maybeSingle()
   // Profile photo loaded separately + best-effort, so a missing column never breaks the portal.
   const { data: photoRow } = await supabase.from('employees').select('profile_photo').eq('id', employeeId).maybeSingle()
   const x: any = e
@@ -411,7 +412,7 @@ export async function loadRecruiters(): Promise<Recruiter[]> {
   const { data: ur } = await supabase.from('ess_user_roles').select('ess_account_id').eq('role_id', role.id).eq('is_active', true)
   const acctIds = (ur || []).map((x: any) => x.ess_account_id)
   if (!acctIds.length) return []
-  const { data: accts } = await supabase.from(await accountSource()).select('employee_id').in('id', acctIds)
+  const { data: accts } = await supabase.from('ess_accounts').select('employee_id').in('id', acctIds)
   const empIds = [...new Set((accts || []).map((a: any) => a.employee_id))]
   if (!empIds.length) return []
   const { data: emps } = await supabase.from('employees').select('id, full_name, emp_code').in('id', empIds).neq('is_test', true).order('full_name')

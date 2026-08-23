@@ -36,36 +36,21 @@ export async function POST(req: NextRequest) {
     .update({ last_login_at: new Date().toISOString(), first_login_at: account.login_count ? undefined : new Date().toISOString(), login_count: (account.login_count || 0) + 1 })
     .eq('id', account.id)
 
-  // A temp password is the employee code, which anyone can read off the employee list.
-  // So a session is not issued while must_change_password stands — the flag used to be
-  // advisory and a valid token came with it anyway. Withholding it costs the employee
-  // nothing: /api/ess-auth/change-password takes the identifier and the current password
-  // and needs no session, so they can still set a real one and get a token then.
-  if (account.must_change_password) {
-    return NextResponse.json({
-      ok: true,
-      employee_id: employee.id,
-      name: employee.full_name,
-      must_change_password: true,
-      token: null,
-      session_available: false,
-    })
-  }
-
-  // The signed session token. issueEssToken was imported in 9cb7f8c but never called, so
-  // this response carried no token: ess-login stored null, essAuthHeaders() sent no
-  // Authorization header, and every travel route answered 401 for every signed-in
-  // employee. The gate was working — there was simply nothing to present to it.
+  // The signed session token. issueEssToken was imported in 9cb7f8c but never
+  // called, so this response carried no token: ess-login stored null,
+  // essAuthHeaders() sent no Authorization header, and every travel route
+  // answered 401 for every signed-in employee. The gate was working — there
+  // was simply nothing to present to it.
   const token = issueEssToken(employee.id)
 
   return NextResponse.json({
     ok: true,
     employee_id: employee.id,
     name: employee.full_name,
-    must_change_password: false,
+    must_change_password: !!account.must_change_password,
     token,
-    // Null means no signing secret is configured on this deployment. Said out loud
-    // rather than left to surface as a 401 the employee cannot act on.
+    // Null means no signing secret is configured on this deployment. Said out
+    // loud rather than left to surface as a 401 the employee cannot act on.
     session_available: !!token,
   })
 }

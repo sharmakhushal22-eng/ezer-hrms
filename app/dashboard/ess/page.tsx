@@ -3,7 +3,6 @@
 // Tabs: Dashboard · Access Control · Roles · Audit. Deactivation guard,
 // role assignment, and admin impersonation entry. Responsive (web/mobile).
 import { useState, useEffect, useCallback } from 'react'
-import { widerScope, SCOPE_LADDER } from '@/lib/permissions'
 import { useRouter } from 'next/navigation'
 import {
   loadUsers, loadRoles, loadAudit, loadOrgUnits, setStatus, assignRoles,
@@ -298,13 +297,7 @@ function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign }: {
   const filtered = users.filter(u => !q || u.full_name.toLowerCase().includes(q.toLowerCase()) || (u.emp_code||'').toLowerCase().includes(q.toLowerCase()))
   const toggle = (id: string) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const pickedRoles = roles.filter(r => picked.has(r.id))
-  // Widest visibility across the picked roles. This used to special-case 'ALL', a word
-  // migration 055 replaced — GROUP is the widest level now, and the ladder decides.
-  const salaryVis = pickedRoles.reduce((acc, r) => {
-    if (r.salary_visibility === 'NONE') return acc
-    if (acc === 'NONE') return r.salary_visibility as string
-    return widerScope(acc, r.salary_visibility as string, SCOPE_LADDER)
-  }, 'NONE' as string)
+  const salaryVis = pickedRoles.reduce((acc, r) => (acc === 'ALL' || r.salary_visibility === 'ALL') ? 'ALL' : (r.salary_visibility !== 'NONE' ? r.salary_visibility : acc), 'NONE' as string)
 
   return (
     <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 280px', gap:10, alignItems:'start' }}>
@@ -393,13 +386,7 @@ function RoleAssignTab({ users, roles, org, isMobile, onAssign }: {
 
   const toggle = (id: string) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const pickedRoles = roles.filter(r => picked.has(r.id))
-  // Widest visibility across the picked roles. This used to special-case 'ALL', a word
-  // migration 055 replaced — GROUP is the widest level now, and the ladder decides.
-  const salaryVis = pickedRoles.reduce((acc, r) => {
-    if (r.salary_visibility === 'NONE') return acc
-    if (acc === 'NONE') return r.salary_visibility as string
-    return widerScope(acc, r.salary_visibility as string, SCOPE_LADDER)
-  }, 'NONE' as string)
+  const salaryVis = pickedRoles.reduce((acc, r) => (acc === 'ALL' || r.salary_visibility === 'ALL') ? 'ALL' : (r.salary_visibility !== 'NONE' ? r.salary_visibility : acc), 'NONE' as string)
 
   const SEL = { ...T.input, maxWidth: isMobile ? '100%' : 360 } as React.CSSProperties
 

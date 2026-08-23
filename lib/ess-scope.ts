@@ -2,7 +2,6 @@
 // SELF → only own portal. TEAM → direct reports. DEPT → same department.
 // BRANCH → same location. ORG → everyone. (Highest scope among the employee's roles wins.)
 import { supabase } from '@/lib/supabase'
-import { accountSource } from '@/lib/supabase-ess'
 
 export type Scope = 'SELF' | 'TEAM' | 'DEPT' | 'BRANCH' | 'ORG'
 const RANK: Record<Scope, number> = { SELF: 0, TEAM: 1, DEPT: 2, BRANCH: 3, ORG: 4 }
@@ -14,7 +13,7 @@ export async function loadAccessScope(employeeId: string): Promise<AccessScope> 
   const none: AccessScope = { scope: 'SELF', roleNames: [], canViewOthers: false, employees: [] }
 
   // Employee's ess_account → active roles → scopes.
-  const { data: acct } = await supabase.from(await accountSource()).select('id').eq('employee_id', employeeId).maybeSingle()
+  const { data: acct } = await supabase.from('ess_accounts').select('id').eq('employee_id', employeeId).maybeSingle()
   if (!acct) return none
   const { data: ur } = await supabase.from('ess_user_roles').select('role_id').eq('ess_account_id', acct.id).eq('is_active', true)
   const roleIds = (ur || []).map((r: any) => r.role_id)

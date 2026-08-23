@@ -5,7 +5,6 @@
 // Employee→role ASSIGNMENT lives in ESS → 🧭 Assign Roles (not duplicated here).
 // Inline styles only. All sub-components OUTSIDE parent.
 import { useState, useEffect, useCallback } from 'react'
-import AssignPeople from '@/components/roles/AssignPeople'
 import {
   loadRoles, loadUsers, assignRoles, loadOrgUnits, loadRolePermissions, upsertRolePermission, loadApprovalRights, setApprovalRight,
   loadPendingForRole, resolveApproval, loadRecruiters,
@@ -435,7 +434,7 @@ function ESSPortalTab({ users, perms, rights, selId, onSelect, isMobile }: {
 
 // ══════════════════════════════════════════════════════════════════
 export function RolesPermissionsSection() {
-  const [tab, setTab] = useState<'people' | 'assign' | 'ess' | 'overview' | 'modules' | 'approvals' | 'queue'>('people')
+  const [tab, setTab] = useState<'assign' | 'ess' | 'overview' | 'modules' | 'approvals' | 'queue'>('assign')
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -516,12 +515,12 @@ export function RolesPermissionsSection() {
     reloadQueue(queueRole)
   }
 
-  const tabs: [typeof tab, string][] = [['people', '👥 Assign to People'], ['assign', '🔐 Role Assignment'], ['ess', '📱 ESS Portal View'], ['overview', 'Overview'], ['modules', 'Module Access'], ['approvals', 'Approval Rights'], ['queue', '✅ Approval / Rejection']]
+  const tabs: [typeof tab, string][] = [['assign', '🔐 Role Assignment'], ['ess', '📱 ESS Portal View'], ['overview', 'Overview'], ['modules', 'Module Access'], ['approvals', 'Approval Rights'], ['queue', '✅ Approval / Rejection']]
 
   return (
     <>
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Roles &amp; Permissions</div>
-        <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Who holds which role, what each role opens, and who may approve what — all in one place.</div>
+        <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Module access &amp; approval rights per role, plus a role-as-tester approval queue. (Employee→role assignment lives in the ESS 🧭 Assign Roles tab.)</div>
 
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
           {tabs.map(([k, l]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}
@@ -529,7 +528,6 @@ export function RolesPermissionsSection() {
 
         {loading ? <div style={{ ...C.card, textAlign:'center', color:'#7C3AED', padding:40 }}>Loading…</div> : (
           <>
-            {tab === 'people' && <AssignPeople users={users} roles={roles} perms={perms} rights={rights} org={org} isMobile={isMobile} onChanged={reload} notify={notify} />}
             {tab === 'assign' && <AssignRoleTab roles={roles} users={users} rights={rights} org={org} selId={assignRole} onSelect={setAssignRole} onToggle={doAssignToggle} isMobile={isMobile} />}
             {tab === 'ess' && <ESSPortalTab users={users} perms={perms} rights={rights} selId={essEmp} onSelect={setEssEmp} isMobile={isMobile} />}
             {tab === 'overview' && <OverviewTab roles={roles} perms={perms} rights={rights} />}
