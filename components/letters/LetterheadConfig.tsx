@@ -708,7 +708,12 @@ export default function LetterheadConfig() {
 
           {/* ── Configure panel for the selected scope ── */}
           {selection && (
-            <div style={{ maxWidth: 660 }}>
+            // No inner width cap. The page column is already 892 and the
+            // "Choose where to configure" card above spans all of it, so a
+            // 660 cap here left these two cards stopping 232px short with
+            // nothing beside them — a ragged right edge and two different
+            // measures on one page.
+            <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 17, fontWeight: 700, color: C.navy }}>{selection.display_name}</div>

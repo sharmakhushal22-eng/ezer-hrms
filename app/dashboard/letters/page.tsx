@@ -24,8 +24,16 @@ export default function LettersPage() {
       {/* Header — the shared band. Was a navy-to-blue gradient with white text
           and a white-on-translucent segmented control; both only worked
           against a saturated ground. */}
-      <div style={{ padding: '16px 24px 0' }}>
-        <div style={{ maxWidth: 940, margin: '0 auto' }}>
+      {/* One gutter for the whole page. The header used to sit flush against
+          the 940 wrapper while the content below it carried its own 24px
+          padding, so the band and tabs started 24px to the LEFT of every card
+          under them — measured 128 against 152.
+
+          boxSizing is explicit because this project has no global
+          border-box rule: without it, maxWidth 940 plus 24px padding makes a
+          988px box and the header overshoots the content the other way. */}
+      <div style={{ maxWidth: 940, margin: '0 auto', padding: '16px 24px 0', boxSizing: 'border-box' }}>
+        <div>
           <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
             <div style={{ width: 46, height: 46, borderRadius: 14, background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 23, flexShrink: 0 }}></div>
             <div style={{ minWidth: 0 }}>
