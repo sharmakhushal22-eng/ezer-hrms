@@ -7,14 +7,14 @@
 // "what needs doing" but "who is allowed to do it".
 import { NextRequest, NextResponse } from 'next/server';
 import { serviceClient } from '@/lib/travel/access';
-import { requireDashboardUser } from '@/lib/api-auth';
+import { requireModule } from '@/lib/api-auth';
 import { errorResponse } from '@/lib/travel/errors';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
-    const gate = await requireDashboardUser(req);
+    const gate = await requireModule(req, 'Finance');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();
@@ -43,7 +43,7 @@ export async function GET(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   try {
-    const gate = await requireDashboardUser(req);
+    const gate = await requireModule(req, 'Finance');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();

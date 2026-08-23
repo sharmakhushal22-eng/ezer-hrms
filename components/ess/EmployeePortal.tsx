@@ -24,6 +24,8 @@ import {
   type MonthlyData, type DayPunch, type RegularisationRequest,
 } from '@/lib/supabase-attendance'
 import * as HR from '@/lib/employees/hr-actions'
+import { useGrant, useManagerChain } from '@/lib/rms/client'
+import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
@@ -783,7 +785,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
           </Panel>
 
           <Panel title="Your people" icon="👥" accent="#EEF2FF">
-            <Field label="Reporting manager" value={emp.l1_manager_name} icon="👔" notify={notify} />
+            <MyReportingLine employeeId={emp.id} fallbackL1={emp.l1_manager_name} notify={notify} />
             <Field label="HR contact" value={emp.hr_manager_name} icon="🧑‍💼" notify={notify} />
             <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
           </Panel>
@@ -3125,6 +3127,78 @@ function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean;
   )
 }
 
+/** The way into the admin dashboard, and the only one. It appears for somebody whose
+ *  roles open at least one admin module and stays invisible for everyone else, so an
+ *  ordinary employee never sees a door that will not open. Rendered apart from the
+ *  section list because it leaves ESS rather than switching a tab. */
+function AdminEntry({ isMobile }: { isMobile?: boolean }) {
+  const { grant, loading } = useGrant()
+  const [hover, setHover] = useState(false)
+  // An unresolved grant hides the button rather than showing it: a door that might not
+  // open is worse than no door, and the dashboard's own guard is the authority anyway.
+  if (loading || !grant.resolved || !hasAdminAccess(grant)) return null
+
+  const roleLine = grant.isSuperAdmin ? 'Super Admin'
+    : grant.roles.length ? grant.roles.map(r => r.role_name).join(', ')
+    : 'Admin access'
+
+  if (isMobile) {
+    return (
+      <button onClick={() => { window.location.href = '/dashboard' }}
+        style={{ gridColumn: '1 / -1', padding: '12px 10px', borderRadius: 9, border: '1px solid #7C3AED', background: '#7C3AED', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, color: '#fff', fontWeight: 600 }}>
+        <span style={{ fontSize: 16 }}>🛠️</span>
+        <span style={{ flex: 1, minWidth: 0 }}>Admin</span>
+        <span style={{ fontSize: 10, opacity: .75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{roleLine}</span>
+      </button>
+    )
+  }
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+      <button onClick={() => { window.location.href = '/dashboard' }}
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', color: '#fff', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', background: hover ? 'rgba(124,58,237,0.45)' : 'rgba(124,58,237,0.28)', border: 'none', borderLeft: '3px solid #7C3AED' }}>
+        <span>🛠️</span>
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Admin</span>
+        <span style={{ marginLeft: 'auto', fontSize: 14, opacity: .7 }}>→</span>
+      </button>
+      <div style={{ padding: '4px 18px 0', fontSize: 10, color: 'rgba(255,255,255,0.42)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLine}</div>
+    </div>
+  )
+}
+
+/** The employee's own reporting line, from employee_relationships rather than from the
+ *  single joined manager name the panel used to show. Somebody with an L2 and a head of
+ *  department can now see them, and a change made by HR shows up here without anybody
+ *  editing a field. */
+function MyReportingLine({ employeeId, fallbackL1, notify }: {
+  employeeId: string
+  fallbackL1: string | null
+  notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const { managers, reportCount, loading } = useManagerChain(employeeId)
+  const LABEL: Record<string, string> = { L1: 'Reporting manager', L2: 'L2 manager', L3: 'L3 manager', L4: 'L4 manager', HOD: 'Head of department' }
+
+  if (loading) return <Field label="Reporting manager" value="…" icon="👔" notify={notify} />
+  if (!managers.length) {
+    // Nothing in the relationship table yet — fall back to the joined name so the panel
+    // is never emptier than it was before.
+    return <Field label="Reporting manager" value={fallbackL1} icon="👔" notify={notify} />
+  }
+  return (
+    <>
+      {managers.map(m => (
+        <Field key={m.relationship_type}
+          label={LABEL[m.relationship_type] || m.relationship_type}
+          value={m.manager ? [m.manager.full_name, m.manager.designation].filter(Boolean).join(' · ') : null}
+          icon={m.relationship_type === 'HOD' ? '🏛️' : '👔'} notify={notify} />
+      ))}
+      {reportCount > 0 && (
+        <Field label="Reports to you" value={`${reportCount} ${reportCount === 1 ? 'person' : 'people'}`} icon="👥" notify={notify} />
+      )}
+    </>
+  )
+}
+
 function TabHeader({ s }: { s: NavSection }) {
   const [label, bg, fg] = BADGE[s.status]
   return (
@@ -3260,6 +3334,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           {SECTIONS.map(s => (
             <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
           ))}
+          <AdminEntry />
         </div>
       )}
 
@@ -3331,6 +3406,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
                   <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
                 </button>
               ))}
+              <AdminEntry isMobile />
             </div>
           </div>
         </div>

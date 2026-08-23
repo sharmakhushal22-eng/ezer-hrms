@@ -5,6 +5,7 @@ import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
+import ManagerInformation from '@/components/rms/ManagerInformation'
 
 // ─── Types ────────────────────────────────────────────────────
 interface Employee {
@@ -659,6 +660,9 @@ export default function EmployeeMaster() {
               <div style={{fontSize:'13px',color:P.text}}>{(emp as any).departments?.dept_name || '—'}</div>
             </div>
           </Grid2>
+        </Section>
+        <Section title="Manager Information" icon="🧭">
+          <ManagerInformation employeeId={emp.id} employeeName={emp.full_name} />
         </Section>
         {emp.employment_status === 'Resigned' && (
           <Section title="Exit Details" icon="🚪">
