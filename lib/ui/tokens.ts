@@ -102,7 +102,8 @@ export const C = {
   dark: 'var(--ez-dark)',
   darkSoft: 'var(--ez-dark-soft)',
   /** Text and hairlines that sit ON a dark surface. */
-  /** Gradient partner for `dark`, so an always-dark plane has depth. */
+  /** Gradient partners for `dark`, so an always-dark plane has depth. */
+  darkMid: 'var(--ez-dark-mid)',
   darkAccent: 'var(--ez-dark-accent)',
   onDark: 'var(--ez-on-dark)',
   onDarkMuted: 'var(--ez-on-dark-muted)',

@@ -17,12 +17,22 @@ export function GroupHeader({ g, card }: { g: GroupTree; card?: React.CSSPropert
   const atRisk   = g.companies.filter(c => c.account_status && c.account_status !== 'ACTIVE');
 
   return (
-    // Stays dark on purpose: a dark parent over white children is what makes
-    // the Group → Company hierarchy readable at a glance. What it no longer is
-    // is empty — it was a name and a caption with ~900px of nothing beside them.
+    // Stays dark: a dark parent over white children is what makes the
+    // Group → Company hierarchy readable at a glance.
+    //
+    // The gradient it had was invisible. Measured between its two stops,
+    // #111827 -> #1E2E4E is a luminance ratio of 1.31, and spread across a
+    // block 1148px wide and 73px tall at 135deg — an angle that wants a tall
+    // box — it simply read as flat black. Now three stops at 104deg, which
+    // sweeps along the block's actual long axis, ending on --ez-dark-accent
+    // at a ratio of 1.67. That is a gradient you can see.
+    //
+    // The end stop is as light as it can go: the 10px uppercase metric labels
+    // sit on it at rgba(249,250,251,.58), which measures 4.74:1 there. Any
+    // lighter and they fall under AA.
     <div style={{
       ...card, border: 'none', padding: '15px 18px', color: TK.onDark,
-      background: `linear-gradient(135deg, ${TK.dark} 0%, ${TK.darkAccent} 100%)`,
+      background: `linear-gradient(104deg, ${TK.dark} 0%, ${TK.darkMid} 52%, ${TK.darkAccent} 100%)`,
       display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
     }}>
       <div style={{
