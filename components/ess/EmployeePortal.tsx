@@ -135,15 +135,20 @@ function PunchButton({ employeeId }: { employeeId: string }) {
   return (
     // The accent tracks the button it frames. Left green, it would be the
     // only green element on a card whose primary action is now brand blue.
-    <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? C.critical : C.brand}` }}>
+    <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? C.lineStrong : C.brand}` }}>
       <div style={T.section}>Attendance</div>
-      {/* Punch In is the primary action of this page, so it takes the primary
-          colour the rest of the product uses. It was C.positive, the only green
-          primary button in the app. C.onAccent already flips per theme
-          (#FFFFFF light, #0D1117 dark), so the label stays legible on the
-          lighter dark-mode brand fill. */}
+      {/* Punch In and Punch Out are the same kind of act — recording attendance.
+          Neither is destructive, which is why Punch Out is no longer C.critical:
+          red claimed danger or irreversibility that does not apply to clocking off.
+      
+          What DOES differ is urgency, so weight carries it rather than hue. Not yet
+          punched in is something you must act on, so it is the solid brand button.
+          Already punched in is a settled state whose remaining action is routine, so
+          it is the app's neutral button — sunken fill, hairline, ink label. Colour
+          means "something to do"; neutral means "you are set". The left accent on
+          the card follows the same rule. */}
       <button onClick={punch} disabled={busy || punchedToday === null}
-        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: C.onAccent, background: isOut ? C.critical : C.brand, opacity: (busy || punchedToday === null) ? .6 : 1 }}>
+        style={{ width: '100%', padding: 14, borderRadius: 10, border: isOut ? `1px solid ${C.lineStrong}` : '1px solid transparent', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: isOut ? C.ink : C.onAccent, background: isOut ? C.sunken : C.brand, opacity: (busy || punchedToday === null) ? .6 : 1 }}>
         {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? 'Punch Out' : 'Punch In')}
       </button>
       {msg && <div style={{ fontSize: 12, color: msg.startsWith('') ? C.positive : C.critical, marginTop: 8, textAlign: 'center' }}>{msg}</div>}
