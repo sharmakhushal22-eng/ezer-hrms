@@ -12,6 +12,7 @@ import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
+import { GroupHeader } from '@/components/company/GroupHeader'
 
 // ── Style constant (employees/admin palette — C) ───────────────────
 const C = {
@@ -363,53 +364,7 @@ export default function CompanyProfilePage() {
           <>
             {groups.map(g => (
               <div key={g.id} style={{ marginBottom:18 }}>
-                {/* GROUP HEADER — the parent of the company rows beneath it.
-                    It was a flat black bar carrying a name and a caption with
-                    roughly 900px of empty space to its right. It stays dark,
-                    because a dark parent over white children is what makes the
-                    hierarchy readable at a glance, but it now earns that space.
-
-                    The billing chip is the reason this is worth doing rather
-                    than just decorating: a company in GRACE or SUSPENDED used
-                    to require opening each company card to discover. The group
-                    says so up front now. */}
-                {(() => {
-                  const branches = g.companies.reduce((s, c) => s + (c.branches?.length || 0), 0)
-                  const regs     = g.companies.reduce((s, c) => s + (c.registrations?.length || 0), 0)
-                  const atRisk   = g.companies.filter(c => c.account_status && c.account_status !== 'ACTIVE')
-                  return (
-                    <div style={{ ...C.card, border:'none', padding:'15px 18px', color:TK.onDark,
-                                  background:`linear-gradient(135deg, ${TK.dark} 0%, ${TK.darkAccent} 100%)`,
-                                  display:'flex', alignItems:'center', gap:14, flexWrap:'wrap' }}>
-                      <div style={{ width:42, height:42, borderRadius:14, flexShrink:0,
-                                    background:`color-mix(in srgb, ${TK.onDark} 14%, transparent)`,
-                                    border:`1px solid ${TK.onDarkLine}`, display:'flex',
-                                    alignItems:'center', justifyContent:'center',
-                                    fontSize:14, fontWeight:700, letterSpacing:'.02em' }}>
-                        {(g.group_code || g.group_name || '?').slice(0, 3).toUpperCase()}
-                      </div>
-                      <div style={{ minWidth:0, flex:1 }}>
-                        <div style={{ fontSize:16, fontWeight:700, letterSpacing:'-.01em' }}>{g.group_name}</div>
-                        <div style={{ fontSize:11, color:TK.onDarkMuted, marginTop:2 }}>{g.group_code} · {g.country}</div>
-                      </div>
-                      {atRisk.length > 0 && (
-                        <span title={atRisk.map(c => c.company_name + ': ' + c.account_status).join(' · ')}
-                              style={{ fontSize:11, fontWeight:700, padding:'5px 11px', borderRadius:999,
-                                       background:TK.criticalTint, color:TK.critical, whiteSpace:'nowrap' }}>
-                          {atRisk.length} need{atRisk.length === 1 ? 's' : ''} billing attention
-                        </span>
-                      )}
-                      <div style={{ display:'flex', alignItems:'center', gap:22, marginLeft:'auto' }}>
-                        {([[g.companies.length,'Companies'],[branches,'Branches'],[regs,'Registrations']] as [number,string][]).map(([n,label]) => (
-                          <div key={label} style={{ textAlign:'right', minWidth:64 }}>
-                            <div style={{ fontSize:20, fontWeight:700, lineHeight:1.1, fontVariantNumeric:'tabular-nums' }}>{n}</div>
-                            <div style={{ fontSize:10, fontWeight:600, letterSpacing:'.06em', textTransform:'uppercase', color:TK.onDarkFaint, marginTop:3 }}>{label}</div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })()}
+                <GroupHeader g={g} card={C.card} />
                 {g.companies.map(co => (
                   <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay} />
                 ))}

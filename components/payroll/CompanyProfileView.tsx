@@ -8,6 +8,7 @@ import { loadHierarchy, type GroupTree, type Company, type Branch, type Registra
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { GroupHeader } from '@/components/company/GroupHeader'
 
 const C = {
   card:  { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
@@ -153,10 +154,7 @@ export default function CompanyProfileView() {
       <div style={{ fontSize:12, color:TK.muted, marginBottom:12 }}>Group, companies, branches, statutory registrations, bank &amp; license — view only. To edit, open Company Profile from Admin.</div>
       {groups.map(g => (
         <div key={g.id} style={{ marginBottom:18 }}>
-          <div style={{ ...C.card, display:'flex', alignItems:'center', gap:12, background: TK.dark, color:TK.onDark, border:'none' }}>
-            <span style={{ fontSize:18 }}></span>
-            <div><div style={{ fontSize:15, fontWeight:600 }}>{g.group_name}</div><div style={{ fontSize:11, color: TK.brand }}>{g.group_code} · {g.country} · {g.companies.length} companies</div></div>
-          </div>
+          <GroupHeader g={g} card={C.card} />
           {g.companies.map(co => <CompanyCard key={co.id} co={co} isMobile={isMobile} />)}
         </div>
       ))}
