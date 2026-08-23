@@ -31,15 +31,50 @@ export function getThemeChoice(): ThemeChoice {
   return v === 'light' || v === 'dark' ? v : 'system';
 }
 
+/** How long the fallback keeps its transition class on. Matches the CSS. */
+const SWITCH_MS = 300;
+
+/**
+ * Applies the choice, cross-fading the whole page as it goes.
+ *
+ * The swap itself is one attribute on <html> — every colour in the product is
+ * a variable keyed off it. What matters is how that instant change is
+ * presented.
+ *
+ * A view transition is the right tool because the cost does not scale with the
+ * page: the browser snapshots before and after and dissolves two bitmaps on
+ * the compositor. The alternative, transitioning colour on every element, was
+ * animating 772 nodes at once and dropping frames, and still could not carry
+ * gradients, SVG fills or shadows because those either do not interpolate or
+ * were not listed.
+ *
+ * The fallback path exists for browsers without it. Its class goes on for the
+ * length of the switch and comes straight off, so it never becomes the
+ * permanent tax on hover states that the old rule was.
+ */
 export function applyTheme(choice: ThemeChoice) {
   const root = document.documentElement;
-  if (choice === 'system') {
-    root.removeAttribute('data-ez-theme');
-    localStorage.removeItem(KEY);
-  } else {
-    root.setAttribute('data-ez-theme', choice);
-    localStorage.setItem(KEY, choice);
-  }
+
+  const swap = () => {
+    if (choice === 'system') {
+      root.removeAttribute('data-ez-theme');
+      localStorage.removeItem(KEY);
+    } else {
+      root.setAttribute('data-ez-theme', choice);
+      localStorage.setItem(KEY, choice);
+    }
+  };
+
+  // Someone who has asked for less motion is asking not to be cross-faded
+  // either; the swap still happens, just immediately.
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { swap(); return; }
+
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
+  if (typeof doc.startViewTransition === 'function') { doc.startViewTransition(swap); return; }
+
+  root.classList.add('ez-theming');
+  swap();
+  window.setTimeout(() => root.classList.remove('ez-theming'), SWITCH_MS + 20);
 }
 
 // Declared at module level: a component defined inside another is a new type

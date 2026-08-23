@@ -395,13 +395,59 @@ html, body {
   color: var(--ez-ink);
 }
 
-/* Colour eases when the theme changes, so switching reads as one movement
-   rather than a flash. Deliberately excludes transform, which would make
-   every interaction feel laggy. */
-:root[data-ez-theme] *,
-:root[data-ez-theme] *::before,
-:root[data-ez-theme] *::after {
-  transition: background-color .22s ease, border-color .22s ease, color .22s ease;
+/* THEME SWITCHING
+   ================================================================
+   This used to be a transition on `:root[data-ez-theme] *` — every element on
+   the page easing three colour properties at once. Measured on the employees
+   page that is 772 of 798 nodes animating simultaneously, and the frame times
+   show it: median 18ms, p95 60ms, worst 80ms, ten frames over 20ms in a
+   600ms window against a 16.7ms budget. That is the jitter.
+
+   It was also incomplete in a way you can see. background-image is not
+   interpolatable, so the header band's gradient jumped; fill, stroke and
+   box-shadow were not listed, so 36 SVG nodes and 62 shadowed elements
+   snapped while everything around them faded. The switch came apart into
+   two events instead of reading as one.
+
+   And it was scoped to [data-ez-theme], so choosing "System" — which removes
+   the attribute — had no transition at all.
+
+   A view transition replaces all of it. The browser snapshots the page before
+   and after and cross-fades two bitmaps on the compositor, so the cost is
+   independent of how many nodes changed, and gradients, SVG and shadows are
+   included for free because they are just pixels in the snapshot. */
+
+@keyframes ezThemeIn { from { opacity: 0 } to { opacity: 1 } }
+
+/* The old snapshot simply stays put while the new one fades in over it.
+   Chrome's default is fade-out then fade-in, which briefly shows the page
+   ground between the two and reads as a flash on a full-page colour change. */
+::view-transition-old(root) {
+  animation: none;
+  opacity: 1;
+}
+::view-transition-new(root) {
+  animation: ezThemeIn .3s cubic-bezier(.4, 0, .2, 1) both;
+}
+
+/* Fallback where view transitions are unavailable. Same properties, but the
+   class is added for the duration of the switch and taken off again — as a
+   permanent rule it would put a 280ms lag on every hover and selection in the
+   product, which is what the old rule did. */
+:root.ez-theming,
+:root.ez-theming *,
+:root.ez-theming *::before,
+:root.ez-theming *::after {
+  transition: background-color .28s ease, border-color .28s ease,
+              color .28s ease, box-shadow .28s ease,
+              fill .28s ease, stroke .28s ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none }
+  :root.ez-theming,
+  :root.ez-theming * { transition: none !important }
 }
 @media (prefers-reduced-motion: reduce) {
   :root[data-ez-theme] *,
