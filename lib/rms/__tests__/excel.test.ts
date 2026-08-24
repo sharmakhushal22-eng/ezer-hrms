@@ -79,11 +79,13 @@ describe('the two encodings in the sheet', () => {
     assert.equal(relationshipRows(p).length, 0)
   })
 
-  test('a level that repeats the person named below it does not exist for that employee', () => {
-    // L1 and L2 are both M1, HOD is M1 as well — one real relationship, not three
+  test('a level that repeats the person named below it does not exist for that employee — except HOD', () => {
+    // L1 and L2 are both M1: L2 collapses into L1, one real relationship there.
+    // HOD is M1 too, but HOD is never collapsed — "who heads my department" stands on
+    // its own even when the head is also this employee's L1.
     const p = parseOrgSheet([BAND, HEADER, row('E1', 'Emp', 'M1', 'M1', 'M1'), row('M1', 'Mgr', 'M1', 'M1', 'M1')])
-    assert.deepEqual(p.rows[0].hierarchy, { L1: 'M1' })
-    assert.equal(relationshipRows(p).length, 1)
+    assert.deepEqual(p.rows[0].hierarchy, { L1: 'M1', HOD: 'M1' })
+    assert.equal(relationshipRows(p).length, 2)
   })
 
   test('genuinely distinct levels are all kept', () => {
@@ -95,11 +97,11 @@ describe('the two encodings in the sheet', () => {
     assert.equal(relationshipRows(p).length, 3)
   })
 
-  test('HOD repeating L2 collapses, but L1 stays', () => {
+  test('HOD is kept even when it names the same person as L2', () => {
     const grid = [BAND, HEADER,
       row('E1', 'Emp', 'M1', 'M2', 'M2'),
       row('M1', 'A', 'M1', 'M1', 'M1'), row('M2', 'B', 'M2', 'M2', 'M2')]
-    assert.deepEqual(parseOrgSheet(grid).rows[0].hierarchy, { L1: 'M1', L2: 'M2' })
+    assert.deepEqual(parseOrgSheet(grid).rows[0].hierarchy, { L1: 'M1', L2: 'M2', HOD: 'M2' })
   })
 })
 
@@ -180,8 +182,10 @@ describe('summary', () => {
       row('P001', 'Pay', 'M1', 'M1', 'M1')]
     const s = summarise(parseOrgSheet(grid))
     assert.equal(s.employees, 5)
-    assert.equal(s.relationships, 4)          // E1 has three, P001 has one
-    assert.deepEqual(s.byLevel, { L1: 2, L2: 1, HOD: 1 })
+    // E1: L1, L2, HOD all distinct — 3. P001: L1=M1, L2 collapses into it, HOD=M1 is
+    // kept regardless — 2.
+    assert.equal(s.relationships, 5)
+    assert.deepEqual(s.byLevel, { L1: 2, L2: 1, HOD: 2 })
     assert.equal(s.errors, 0)
   })
 })

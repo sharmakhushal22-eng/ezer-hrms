@@ -217,9 +217,15 @@ export function parseOrgSheet(grid: unknown[][]): ParsedSheet {
     }
 
     // Encoding 2 — a level that merely repeats somebody already named lower down does
-    // not exist for this employee. Walk the levels in order so L2 is compared against
-    // L1, and HOD against both.
-    const ordered: RelationshipType[] = ['L1', 'L2', 'L3', 'L4', 'HOD']
+    // not exist for this employee. Walk the levels in order so L2 is compared against L1,
+    // and so on.
+    //
+    // HOD is deliberately NOT part of this collapse. "Who heads my department" is a fact
+    // on its own, independent of the reporting chain — it stays true even when the head
+    // happens to also be this employee's L1 or L2. Dropping it whenever it matched a
+    // lower level was hiding a real answer behind an encoding meant for the chain, not
+    // for department headship.
+    const ordered: RelationshipType[] = ['L1', 'L2', 'L3', 'L4']
     const kept: string[] = []
     for (const lvl of ordered) {
       const v = hierarchy[lvl]
