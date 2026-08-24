@@ -209,3 +209,88 @@ export async function allReportsFor(managerId: string, maxDepth = 12) {
   if (error) return []
   return (data || []) as { employee_id: string; emp_code: string; full_name: string; depth: number }[]
 }
+
+// ── Peers, the whole tree, and diagnostics (migration 060) ──────────────────
+
+export interface PeerRef {
+  id: string
+  emp_code: string | null
+  full_name: string | null
+  designation: string | null
+  department: string | null
+  isSelf: boolean
+  directReports: number
+}
+
+/** Everyone sharing this person's L1 manager. Empty for anyone at the top of
+ *  their chain — an org root has no peers. */
+export async function peersFor(employeeId: string, includeSelf = true): Promise<PeerRef[]> {
+  const { data, error } = await sb.rpc('org_peers', { p_employee_id: employeeId, p_include_self: includeSelf })
+  if (error) return []
+  return (data || []).map((r: any) => ({
+    id: r.employee_id, emp_code: r.emp_code, full_name: r.full_name,
+    designation: r.designation, department: r.department,
+    isSelf: !!r.is_self, directReports: r.direct_reports || 0,
+  }))
+}
+
+export interface OrgTreeNode {
+  id: string
+  companyId: string
+  empCode: string | null
+  fullName: string | null
+  designation: string | null
+  department: string | null
+  grade: string | null
+  managerId: string | null
+  depth: number
+  directReports: number
+  isHod: boolean
+}
+
+/** The whole company as one flat, parent-linked list — the org chart lays
+ *  this out client-side rather than asking the database once per node. */
+export async function orgTreeFor(companyId: string): Promise<OrgTreeNode[]> {
+  const { data, error } = await sb
+    .from('v_org_tree')
+    .select('id, company_id, emp_code, full_name, designation, department, grade, l1_manager_id, depth, direct_reports, is_hod')
+    .eq('company_id', companyId)
+    .order('depth')
+  if (error) return []
+  return (data || []).map((r: any) => ({
+    id: r.id, companyId: r.company_id, empCode: r.emp_code, fullName: r.full_name,
+    designation: r.designation, department: r.department, grade: r.grade,
+    managerId: r.l1_manager_id, depth: r.depth,
+    directReports: r.direct_reports || 0, isHod: !!r.is_hod,
+  }))
+}
+
+export interface OrphanRef { emp_code: string; full_name: string; designation: string | null; department: string | null }
+
+/** Active employees with nobody above them and no department-head tag of
+ *  their own. Their approvals have nowhere to land. */
+export async function orphansFor(companyId?: string): Promise<OrphanRef[]> {
+  const { data, error } = await sb.rpc('org_orphans', { p_company_id: companyId ?? null })
+  return error ? [] : ((data || []) as OrphanRef[])
+}
+
+export interface SpanRow { emp_code: string; full_name: string; designation: string | null; department: string | null; direct_reports: number }
+
+/** Managers ranked by direct reports, widest first. */
+export async function spanOfControlFor(companyId?: string, limit = 20): Promise<SpanRow[]> {
+  let q = sb.from('v_span_of_control').select('emp_code, full_name, designation, department, direct_reports').order('direct_reports', { ascending: false }).limit(limit)
+  if (companyId) q = q.eq('company_id', companyId)
+  const { data, error } = await q
+  return error ? [] : ((data || []) as SpanRow[])
+}
+
+export interface DriftRow { emp_code: string; full_name: string; field: string; stored: string | null; tree: string | null }
+
+/** Rows where employees.l1_manager_id / l2_manager_id disagree with
+ *  employee_relationships — a real risk, since the classic `employment`
+ *  bulk-uploader still writes l1_manager_id directly and bypasses the
+ *  relationship table entirely. */
+export async function driftReportFor(companyId?: string): Promise<DriftRow[]> {
+  const { data, error } = await sb.rpc('org_drift_report', { p_company_id: companyId ?? null })
+  return error ? [] : ((data || []) as DriftRow[])
+}

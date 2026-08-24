@@ -14,6 +14,7 @@ const nav: { icon: string; label: string; href: string; module: Module | null }[
   { icon: '🎯', label: 'Recruitment', href: '/dashboard/recruitment', module: 'Recruitment' },
   { icon: '🚀', label: 'Onboarding', href: '/dashboard/onboarding', module: 'Onboarding' },
   { icon: '👥', label: 'Employees', href: '/dashboard/employees', module: 'Employees' },
+  { icon: '🌳', label: 'Org Chart', href: '/dashboard/org-chart', module: 'Employees' },
   { icon: '📤', label: 'Bulk Uploader', href: '/dashboard/bulk-upload', module: 'Bulk Upload' },
   { icon: '🔄', label: 'Transfer', href: '/dashboard/transfer', module: 'Transfer' },
   { icon: '📅', label: 'Attendance & Leave', href: '/dashboard/attendance', module: 'Attendance' },

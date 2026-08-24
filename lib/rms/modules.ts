@@ -67,6 +67,7 @@ export const ROUTE_MODULE: Record<string, Module> = {
   '/dashboard/recruitment':        'Recruitment',
   '/dashboard/onboarding':         'Onboarding',
   '/dashboard/employees':          'Employees',
+  '/dashboard/org-chart':          'Employees',
   '/dashboard/bulk-upload':        'Bulk Upload',
   '/dashboard/transfer':           'Transfer',
   '/dashboard/attendance':         'Attendance',
