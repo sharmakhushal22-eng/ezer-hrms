@@ -93,12 +93,12 @@ export default function ManagerInformation({ employeeId, employeeName }: {
     return <div style={{ fontSize: 12.5, color: P.muted, padding: '8px 0' }}>{error}</div>
   }
   if (!managers.length) {
+    // A fact about THIS employee, nothing more — no mention of how the data gets in.
+    // That belongs on the import screen, not on a person's own record.
     return (
       <div style={{ fontSize: 12.5, color: P.muted, padding: '8px 0', lineHeight: 1.6 }}>
         No reporting line on record{employeeName ? ` for ${employeeName}` : ''}.
-        {reportCount > 0
-          ? ` They are at the top of their chain — ${reportCount} ${reportCount === 1 ? 'person reports' : 'people report'} to them.`
-          : ' Import the org chart from Bulk Uploader → Org Structure & Roles, or set it on this employee.'}
+        {reportCount > 0 && ` They are at the top of their chain — ${reportCount} ${reportCount === 1 ? 'person reports' : 'people report'} to them.`}
       </div>
     )
   }
