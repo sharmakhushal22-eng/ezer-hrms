@@ -497,66 +497,7 @@ CREATE TABLE IF NOT EXISTS pms_audit_log (
 );
 
 
--- ---------------------------------------------------------------------
--- HOD RESOLUTION  (added for EZER — not in the supplied spec)
---
--- The HOD finalises, so who that is has to be unambiguous. Order:
---
---   1. employees.hod_id            explicit override — matrix teams and
---                                  dotted-line reporting, where the person's
---                                  HOD is not their department's HOD
---   2. departments.hod_employee_id primary source — the normal case
---   3. BLOCK                       no guess. Not RM L2, not the parent
---                                  department, not "the most senior person in
---                                  the department". A wrong finaliser signs off
---                                  somebody's appraisal, and a silent fallback
---                                  makes that impossible to notice.
---
--- departments.hod_employee_id does not exist in this database yet, so it is
--- added here. NOTE FOR REVIEW: this is the one place migration 055 touches an
--- existing HR table rather than only creating new pms_* tables.
--- ---------------------------------------------------------------------
-ALTER TABLE departments
-  ADD COLUMN IF NOT EXISTS hod_employee_id uuid;
 
-COMMENT ON COLUMN departments.hod_employee_id IS
-  'Head of Department. Primary source for the PMS finalise step. Overridden '
-  'per-employee by employees.hod_id where reporting is matrix or dotted-line.';
-
--- Returns the HOD for an employee, or NULL when neither source is set.
--- NULL means BLOCK: the caller must refuse to finalise, not pick somebody.
-CREATE OR REPLACE FUNCTION pms_resolve_hod(p_employee_id uuid)
-RETURNS TABLE (hod_id uuid, source text)
-LANGUAGE sql STABLE AS $$
-  SELECT
-    COALESCE(e.hod_id, d.hod_employee_id)                        AS hod_id,
-    CASE WHEN e.hod_id           IS NOT NULL THEN 'EMPLOYEE_OVERRIDE'
-         WHEN d.hod_employee_id  IS NOT NULL THEN 'DEPARTMENT'
-         ELSE                                     'UNRESOLVED'
-    END                                                          AS source
-  FROM employees e
-  LEFT JOIN departments d ON d.id = e.department_id
-  WHERE e.id = p_employee_id;
-$$;
-
--- Which employees cannot reach the finalise step, and why. Drives the warning
--- on the HR Admin screen and the export that goes with it.
-CREATE OR REPLACE VIEW vw_pms_hod_resolution AS
-SELECT e.id                AS employee_id,
-       e.emp_code          AS employee_code,
-       e.full_name         AS employee_name,
-       e.department_id,
-       d.dept_name,
-       e.hod_id            AS employee_override,
-       d.hod_employee_id   AS department_hod,
-       COALESCE(e.hod_id, d.hod_employee_id) AS resolved_hod_id,
-       CASE WHEN e.hod_id          IS NOT NULL THEN 'EMPLOYEE_OVERRIDE'
-            WHEN d.hod_employee_id IS NOT NULL THEN 'DEPARTMENT'
-            ELSE                                    'UNRESOLVED'
-       END                 AS resolution_source
-FROM employees e
-LEFT JOIN departments d ON d.id = e.department_id
-WHERE e.date_of_leaving IS NULL OR e.date_of_leaving > CURRENT_DATE;
 
 
 -- =====================================================================
@@ -690,7 +631,7 @@ CREATE OR REPLACE FUNCTION pms_finalise(p_employee_id uuid, p_period_id uuid,
                                         p_actor_id uuid, p_actor_role text,
                                         p_rating numeric, p_reason text DEFAULT NULL)
 RETURNS text LANGUAGE plpgsql AS $$
-DECLARE pol pms_policies%ROWTYPE; v_allowed text[]; v_code text; v_121 int; v_hod uuid; v_hod_src text;
+DECLARE pol pms_policies%ROWTYPE; v_allowed text[]; v_code text; v_121 int; v_hod uuid;
 BEGIN
   SELECT p.* INTO pol FROM pms_policies p
     JOIN pms_periods pe ON pe.policy_id = p.id WHERE pe.id = p_period_id;
@@ -705,33 +646,34 @@ BEGIN
     RETURN 'BLOCKED: role ' || p_actor_role || ' cannot finalise under this policy';
   END IF;
 
-      -- HOD RESOLUTION GATE  (added for EZER)
+      -- HOD GATE — reads the FROZEN chain, not a live lookup.
       --
-      -- Two separate things, both needed:
-      --   a) an unresolved HOD blocks. No fallback to RM L2, no parent
-      --      department, no "senior-most in the team". A wrong finaliser signs
-      --      off somebody's appraisal, and a silent guess makes that invisible.
-      --   b) whoever presents as HOD must BE the resolved HOD for THIS
-      --      employee. Without this the role string is self-asserted and any
-      --      HOD could finalise anyone's appraisal.
+      -- 056 resolves the chain once at period open and snapshots it into
+      -- pms_overall_rating. Re-resolving here would defeat that: somebody who
+      -- moved department in week six would acquire a different finaliser
+      -- mid-cycle, which is the exact failure the snapshot exists to prevent.
+      -- So this checks what was frozen at the start.
       --
-      -- HR_MANAGER / HR_HEAD / ADMIN are deliberately exempt: HR Admin runs the
-      -- cycle and is the escalation path when a department has no HOD mapped.
-      -- Their finalise records their own role, so an HR override stays
-      -- distinguishable from an HOD sign-off in pms_overall_rating.
+      -- Whoever presents as HOD must BE the HOD recorded for THIS employee and
+      -- period. Without that the role string is self-asserted and any HOD could
+      -- finalise anyone's appraisal.
+      --
+      -- HR_MANAGER / HR_HEAD / ADMIN stay exempt: HR Admin runs the cycle and is
+      -- the escalation path. Their finalise records their own role, so an HR
+      -- override remains distinguishable from an HOD sign-off.
       IF p_actor_role = 'HOD' THEN
-        SELECT r.hod_id, r.source INTO v_hod, v_hod_src
-          FROM pms_resolve_hod(p_employee_id) r;
+        SELECT o.hod_id INTO v_hod
+          FROM pms_overall_rating o
+         WHERE o.employee_id = p_employee_id AND o.period_id = p_period_id;
 
         IF v_hod IS NULL THEN
-          RETURN 'BLOCKED: no HOD resolved for this employee. Set '
-              || 'departments.hod_employee_id for their department, or '
-              || 'employees.hod_id for a matrix/dotted-line exception.';
+          RETURN 'BLOCKED: no HOD in this period''s frozen chain. The period '
+              || 'should not have opened — see vw_pms_org_readiness.';
         END IF;
 
         IF v_hod <> p_actor_id THEN
-          RETURN 'BLOCKED: you are not the HOD for this employee (resolved via '
-              || v_hod_src || ').';
+          RETURN 'BLOCKED: you are not the HOD recorded for this employee in '
+              || 'this period.';
         END IF;
       END IF;
 
