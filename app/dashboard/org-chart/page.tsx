@@ -221,10 +221,13 @@ export default function OrgChartPage() {
   const [orphans, setOrphans] = useState<any[]>([])
   const [span, setSpan] = useState<any[]>([])
   const [diagLoading, setDiagLoading] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const refs = useRef<Map<string, HTMLDivElement>>(new Map())
   const registerRef = useCallback((id: string, el: HTMLDivElement | null) => {
     if (el) refs.current.set(id, el); else refs.current.delete(id)
   }, [])
+  const outerRef = useRef<HTMLDivElement>(null)
+  const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
@@ -256,6 +259,50 @@ export default function OrgChartPage() {
     setCollapsedIds(new Set(allIds.filter(id => (depthOf.get(id) ?? 0) >= 1)))
   }, [forest, allIds])
   useEffect(() => { resetToDefault() }, [rows]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Scale the whole tree down until it fits the visible frame in both directions,
+  // so opening the page — or expanding a big branch — shows the full shape at once
+  // instead of handing back a chart you can only see one scroll-page of at a time.
+  // Measured against the tree's own natural size (transform briefly cleared), never
+  // upscaled past 100% for a small chart.
+  const fitToScreen = useCallback(() => {
+    const outer = outerRef.current, wrap = wrapRef.current
+    if (!outer || !wrap) return
+    const prevTransform = wrap.style.transform
+    wrap.style.transform = 'none'
+    const naturalW = wrap.scrollWidth, naturalH = wrap.scrollHeight
+    wrap.style.transform = prevTransform
+    if (!naturalW || !naturalH) return
+    const availW = outer.clientWidth - 40, availH = outer.clientHeight - 40
+    const scale = Math.min(availW / naturalW, availH / naturalH, 1)
+    setZoom(Math.max(15, Math.min(140, Math.round(scale * 100))))
+  }, [])
+  useEffect(() => {
+    const id = setTimeout(fitToScreen, 60)
+    return () => clearTimeout(id)
+  }, [forest, collapsedIds, fitToScreen])
+
+  const downloadJpeg = useCallback(async () => {
+    const wrap = wrapRef.current
+    if (!wrap || downloading) return
+    setDownloading(true)
+    const prevTransform = wrap.style.transform
+    wrap.style.transform = 'none'
+    try {
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+      const { default: html2canvas } = await import('html2canvas')
+      const canvas = await html2canvas(wrap, { backgroundColor: P.page, scale: 2, useCORS: true })
+      const companyName = companies.find(c => c.id === companyId)?.company_name || 'company'
+      const safeName = companyName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
+      const link = document.createElement('a')
+      link.download = `org-chart-${safeName}.jpg`
+      link.href = canvas.toDataURL('image/jpeg', 0.92)
+      link.click()
+    } finally {
+      wrap.style.transform = prevTransform
+      setDownloading(false)
+    }
+  }, [companies, companyId, downloading])
 
   useEffect(() => {
     if (!showDiag || !companyId) return
@@ -309,15 +356,20 @@ export default function OrgChartPage() {
         <button onClick={search} style={btn}>🔍 Find</button>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={() => setZoom(z => Math.max(50, z - 10))} style={{ ...btn, padding: '7px 10px' }}>−</button>
+          <button onClick={() => setZoom(z => Math.max(15, z - 10))} style={{ ...btn, padding: '7px 10px' }}>−</button>
           <span style={{ fontSize: 11.5, color: P.muted, width: 38, textAlign: 'center' }}>{zoom}%</span>
           <button onClick={() => setZoom(z => Math.min(140, z + 10))} style={{ ...btn, padding: '7px 10px' }}>+</button>
         </div>
 
+        <button onClick={fitToScreen} style={btn}>⛶ Fit to screen</button>
         <button onClick={() => setCollapsedIds(new Set())} style={btn}>⤢ Expand all</button>
         <button onClick={resetToDefault} style={btn}>⤡ Collapse to my level</button>
-        <button onClick={() => setShowDiag(s => !s)} style={{ ...btn, marginLeft: 'auto', background: showDiag ? P.purple : '#fff', color: showDiag ? '#fff' : P.purpleDark, borderColor: showDiag ? P.purple : P.border }}>
+        <button onClick={() => setShowDiag(s => !s)} style={{ ...btn, background: showDiag ? P.purple : '#fff', color: showDiag ? '#fff' : P.purpleDark, borderColor: showDiag ? P.purple : P.border }}>
           ⚠ Diagnostics
+        </button>
+        <button onClick={downloadJpeg} disabled={downloading || forest.length === 0}
+          style={{ ...btn, marginLeft: 'auto', background: P.purple, color: '#fff', borderColor: P.purple, opacity: downloading || forest.length === 0 ? 0.6 : 1, cursor: downloading || forest.length === 0 ? 'default' : 'pointer' }}>
+          {downloading ? 'Preparing…' : '⬇ Download JPEG'}
         </button>
       </div>
 
@@ -326,7 +378,7 @@ export default function OrgChartPage() {
       </div>
 
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-        <div style={{ flex: 1, minWidth: 0, background: P.card, border: `1px solid ${P.border}`, borderRadius: 10, padding: 20, overflow: 'auto', maxHeight: '75vh' }}>
+        <div ref={outerRef} style={{ flex: 1, minWidth: 0, background: P.card, border: `1px solid ${P.border}`, borderRadius: 10, padding: 20, overflow: 'auto', maxHeight: '75vh', textAlign: 'center' }}>
           {loading ? (
             <div style={{ textAlign: 'center', color: P.purple, padding: 60, fontSize: 13 }}>Loading the chart…</div>
           ) : forest.length === 0 ? (
@@ -334,8 +386,8 @@ export default function OrgChartPage() {
               No reporting lines for this company yet. Import the org chart from Bulk Uploader → Org Structure &amp; Roles.
             </div>
           ) : (
-            <div style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', display: 'inline-block', minWidth: '100%' }}>
-              <ul className="org-tree" style={{ justifyContent: 'center', width: '100%' }}>
+            <div ref={wrapRef} style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', display: 'inline-block' }}>
+              <ul className="org-tree" style={{ justifyContent: 'center' }}>
                 {forest.map(n => (
                   <TreeLI key={n.node.id} node={n} selfId={grant.employeeId} collapsedIds={collapsedIds}
                     onToggle={toggle} registerRef={registerRef} highlightId={highlightId} />
