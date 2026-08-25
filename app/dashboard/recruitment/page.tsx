@@ -562,6 +562,68 @@ function MasterSelect({ options, value, onChange, placeholder, style, useCode }:
   )
 }
 
+// Type-to-filter person picker for RM1/RM2/HOD — the plain <select> made finding
+// one name in a few hundred employees a scroll hunt. Shows the selected person's
+// name+designation when idle; switches to a filter box while typing. Closes on
+// pick or on a click outside the box.
+function PersonSearchSelect({ people, value, onChange, placeholder }:{ people:any[]; value:string; onChange:(id:string)=>void; placeholder?:string }) {
+  const [open, setOpen] = useState(false)
+  const [q, setQ] = useState('')
+  const boxRef = useRef<HTMLDivElement>(null)
+  const selected = people.find((p:any)=>p.id===value)
+
+  useEffect(() => {
+    const onDocClick = (e:MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) { setOpen(false); setQ('') }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [])
+
+  const needle = q.trim().toLowerCase()
+  const filtered = (needle
+    ? people.filter((p:any) =>
+        (p.full_name||'').toLowerCase().includes(needle) ||
+        (p.emp_code||'').toLowerCase().includes(needle) ||
+        (p.designation||'').toLowerCase().includes(needle))
+    : people
+  ).slice(0, 50)
+
+  return (
+    <div ref={boxRef} style={{ position:'relative' }}>
+      <input
+        style={{ ...T.input, paddingRight: value ? 28 : undefined }}
+        value={open ? q : (selected ? `${selected.full_name}${selected.designation?` — ${selected.designation}`:''}` : '')}
+        onChange={e=>setQ(e.target.value)}
+        onFocus={()=>{ setOpen(true); setQ('') }}
+        placeholder={placeholder||'Search by name, code or designation…'}
+      />
+      {value && !open && (
+        <button type="button" onClick={()=>onChange('')} title="Clear"
+          style={{ position:'absolute', right:8, top:'50%', transform:'translateY(-50%)', border:'none', background:'transparent', color:'#9CA3AF', cursor:'pointer', fontSize:13, padding:2, lineHeight:1 }}
+        >✕</button>
+      )}
+      {open && (
+        <div style={{ position:'absolute', zIndex:20, top:'calc(100% + 4px)', left:0, right:0, maxHeight:220, overflowY:'auto', background:'#fff', border:'1px solid #DDD6FE', borderRadius:7, boxShadow:'0 6px 20px rgba(30,27,75,0.12)' }}>
+          {filtered.length===0 ? (
+            <div style={{ padding:'10px 12px', fontSize:12, color:'#9CA3AF' }}>No match</div>
+          ) : filtered.map((p:any)=>(
+            <div key={p.id}
+              onMouseDown={e=>{ e.preventDefault(); onChange(p.id); setOpen(false); setQ('') }}
+              style={{ padding:'8px 12px', fontSize:12.5, cursor:'pointer', color:'#1E1B4B', borderBottom:'1px solid #F3F0FF' }}
+              onMouseEnter={e=>{ (e.currentTarget as HTMLDivElement).style.background='#F5F3FF' }}
+              onMouseLeave={e=>{ (e.currentTarget as HTMLDivElement).style.background='#fff' }}
+            >
+              <div style={{ fontWeight:600 }}>{p.full_name}</div>
+              <div style={{ fontSize:10.5, color:'#9CA3AF' }}>{p.emp_code||'—'}{p.designation?` · ${p.designation}`:''}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // The recruitment upload/share routes run on the service-role key, so they check for a
 // dashboard session of their own. The browser already holds one — this hands it over.
 async function authHeaders(supabase:any): Promise<Record<string,string>> {
@@ -1043,7 +1105,9 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
               <MrfMeta label="Business Unit" value={m.business_unit} />
               <MrfMeta label="Grade / Band" value={m.grade} />
               <MrfMeta label="Job Code" value={m.job_code} />
-              <MrfMeta label="Reporting Manager" value={m.reporting_manager_id ? nameOf(m.reporting_manager_id) : '—'} />
+              <MrfMeta label="RM1 — Reporting Manager" value={m.reporting_manager_id ? nameOf(m.reporting_manager_id) : '—'} />
+              <MrfMeta label="RM2 — Skip-level Manager" value={m.rm2_id ? nameOf(m.rm2_id) : '—'} />
+              <MrfMeta label="HOD — Department Head" value={m.hod_id ? nameOf(m.hod_id) : '—'} />
               <MrfMeta label="Reports-to Designation" value={m.reports_to_designation} />
               <MrfMeta label="Openings" value={`${openings} (filled ${filled})`} />
             </div>
@@ -1280,7 +1344,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     raised_by_name:'', raised_by_role:'',
     // §2 Position Details
     company_id:'', location_id:'', department_id:'', job_title:'', designation:'',
-    business_unit:'', grade:'', job_code:'', reporting_manager_id:'', no_of_openings:1,
+    business_unit:'', grade:'', job_code:'', reporting_manager_id:'', rm2_id:'', hod_id:'', no_of_openings:1,
     // §3 Employment Details
     employment_type:'Employee', work_mode:'Onsite', shift_schedule:'',
     // §4 Budget & Cost
@@ -1363,7 +1427,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       company_id:m.company_id||'', location_id:m.location_id||'', department_id:m.department_id||'',
       job_title:a.job_title||m.designation||m.position||'', designation:m.designation||m.position||'',
       business_unit:a.business_unit||'', grade:a.grade||'', job_code:a.job_code||'',
-      reporting_manager_id:a.reporting_manager_id||'', no_of_openings:m.no_of_openings||m.openings||1,
+      reporting_manager_id:a.reporting_manager_id||'', rm2_id:a.rm2_id||'', hod_id:a.hod_id||'', no_of_openings:m.no_of_openings||m.openings||1,
       employment_type:m.employment_type||'Employee', work_mode:a.work_mode||'Onsite', shift_schedule:a.shift_schedule||'',
       cost_center:a.cost_center||'', is_budgeted: a.is_budgeted==null?'':(a.is_budgeted?'yes':'no'),
       headcount_ref:a.headcount_ref||'', budget_min:m.budget_min||'', budget_max:m.budget_max||'', currency:a.currency||'INR',
@@ -1437,6 +1501,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       business_unit:form.business_unit||null, grade:form.grade||null, job_code:form.job_code||null,
       reporting_manager_id:form.reporting_manager_id||null,
       reports_to_designation: mgr?.designation || null,
+      rm2_id:form.rm2_id||null, hod_id:form.hod_id||null,
       work_mode:form.work_mode||null, shift_schedule:form.shift_schedule||null,
       cost_center:form.cost_center||null,
       is_budgeted: form.is_budgeted==='' ? null : form.is_budgeted==='yes',
@@ -1689,13 +1754,18 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             <Field label="Job Code" hint="Position-based staffing only">
               <input style={T.input} value={form.job_code} onChange={e=>F('job_code',e.target.value)} placeholder="e.g. ENG-BE-02" />
             </Field>
-            <Field label="Reporting Manager"
+          </div>
+          <div style={{ ...T.g3, marginBottom:10 }}>
+            <Field label="RM1 — Reporting Manager"
               hint={people.find((p:any)=>p.id===form.reporting_manager_id)?.designation
                 ? `Reports to: ${people.find((p:any)=>p.id===form.reporting_manager_id)?.designation}` : undefined}>
-              <select style={T.select} value={form.reporting_manager_id} onChange={e=>F('reporting_manager_id',e.target.value)}>
-                <option value="">Select Manager</option>
-                {people.map((p:any)=><option key={p.id} value={p.id}>{p.full_name} — {p.designation||'—'}</option>)}
-              </select>
+              <PersonSearchSelect people={people} value={form.reporting_manager_id} onChange={(id:string)=>F('reporting_manager_id',id)} />
+            </Field>
+            <Field label="RM2 — Skip-level Manager">
+              <PersonSearchSelect people={people} value={form.rm2_id} onChange={(id:string)=>F('rm2_id',id)} />
+            </Field>
+            <Field label="HOD — Department Head">
+              <PersonSearchSelect people={people} value={form.hod_id} onChange={(id:string)=>F('hod_id',id)} />
             </Field>
           </div>
 
