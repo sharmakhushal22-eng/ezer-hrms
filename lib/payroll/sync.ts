@@ -222,6 +222,26 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     rpc: 'sync_month_investment_proof', countKey: 'with_decl',
     columns: ['employee_code', 'full_name'],
   },
+  {
+    // Last of all: the monthly figure depends on everything above it having already
+    // settled — this FY's arrear (now taxed as actual income), professional tax for the
+    // year, and which regime the investment declaration put the employee on. sql125/126
+    // built this to replace tds_declarations.monthly_tds, a single number typed once by
+    // the flexi calculator and then frozen for the whole year regardless of an appraisal,
+    // unpaid leave, a resignation or an incentive. Every step of the calculation is its
+    // own column here, on purpose — see the Payroll Run sheet's TDS block.
+    key: 'tds', label: 'TDS', icon: '🧾', status: 'ready',
+    note: 'Monthly TDS recomputed from this month’s own numbers — actual income so far this FY, this month, and projected to March (or the date of leaving), less HRA / LTA / professional tax / Chapter VI-A and whatever has already been deducted this FY, divided by the months left. Incentive, variable, bonus and buyout are never projected and instead drive Additional TDS — their tax is taken in full this month, not spread.',
+    rpc: 'sync_month_tds', countKey: 'eligible',
+    columns: [
+      'employee_code', 'full_name',
+      'tds_regime_used', 'tds_actual_ytd', 'tds_current_gross', 'tds_arrear', 'tds_projected', 'tds_annual_gross',
+      'tds_hra_exempt', 'tds_lta_exempt', 'tds_pt_deduction', 'tds_std_deduction', 'tds_chapter_via',
+      'tds_taxable_income', 'tds_slab_tax', 'tds_rebate_87a', 'tds_surcharge', 'tds_cess',
+      'tds_annual_liability', 'tds_paid_ytd', 'tds_months_remaining',
+      'tds_monthly', 'tds_additional', 'tds_reason',
+    ],
+  },
 ]
 
 export interface SyncStatus {
