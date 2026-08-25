@@ -21,6 +21,7 @@ import { ThemeToggle } from '@/lib/ui/ThemeToggle';
 import { PageTransition, RouteProgress } from '@/lib/ui/PageTransition';
 import {
   IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconUpload, IconTransfer,
+  IconPerformance,
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
   IconLoans, IconCompliance, IconLetters, IconMobile, IconAdmin, IconPolicies,
   IconSliders, IconBuilding, IconReports, IconDatabase, IconAi, IconSupport,
@@ -41,6 +42,7 @@ const NAV: NavGroup[] = [
     { label: 'Employees',     href: '/dashboard/employees',   Icon: IconEmployees },
     { label: 'Bulk Uploader', href: '/dashboard/bulk-upload', Icon: IconUpload },
     { label: 'Transfer',      href: '/dashboard/transfer',    Icon: IconTransfer },
+    { label: 'Performance',   href: '/dashboard/pms',         Icon: IconPerformance },
   ]},
   { group: 'Time & Attendance', items: [
     { label: 'Attendance & Leave',     href: '/dashboard/attendance',         Icon: IconCalendar },

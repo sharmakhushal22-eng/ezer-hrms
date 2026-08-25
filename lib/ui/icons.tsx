@@ -109,6 +109,16 @@ export const IconSliders = (p: IconProps) => (
 export const IconBuilding = (p: IconProps) => (
   <Svg {...p}><path d="M4 17V4.5A1.5 1.5 0 0 1 5.5 3h6A1.5 1.5 0 0 1 13 4.5V17" /><path d="M13 8.5h2.5A1.5 1.5 0 0 1 17 10v7" /><path d="M2.5 17h15M6.8 6.5h3.4M6.8 9.5h3.4M6.8 12.5h3.4" /></Svg>
 );
+// A target with an arrow in it — PMS is goals set, then hit. Drawn on the same
+// 20x20 grid as the rest: rings at r=7 and r=3, arrow entering from the
+// top-right so it does not collide with either ring at 16px.
+export const IconPerformance = (p: IconProps) => (
+  <Svg {...p}>
+    <circle cx="9" cy="11" r="7" /><circle cx="9" cy="11" r="3" />
+    <path d="M9 11l7-7M13 4h3v3" />
+  </Svg>
+);
+
 export const IconReports = (p: IconProps) => (
   <Svg {...p}><path d="M3 3v14h14" /><path d="M6.5 13.5V10M10 13.5V6.5M13.5 13.5v-5" /></Svg>
 );
