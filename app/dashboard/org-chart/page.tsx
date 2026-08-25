@@ -72,25 +72,28 @@ function OrgCard({ node, isSelf, onToggle, collapsed, hasChildren, registerRef, 
       ref={el => registerRef(n.id, el)}
       className="org-node"
       style={{
-        width: 168, background: P.card, borderRadius: 8,
+        width: 172, background: P.card, borderRadius: 12, position: 'relative', flexShrink: 0,
         border: `1px solid ${highlighted ? P.purple : P.border}`,
-        boxShadow: highlighted ? `0 0 0 3px ${P.purpleBg}, 0 4px 14px rgba(124,58,237,0.18)` : '0 1px 4px rgba(30,27,75,0.06)',
-        overflow: 'hidden', flexShrink: 0,
+        boxShadow: highlighted
+          ? `0 0 0 3px ${P.purpleBg}, 0 10px 24px rgba(124,58,237,0.22)`
+          : '0 2px 8px rgba(30,27,75,0.07)',
       }}
       title={`${n.fullName || '—'} · ${n.designation || '—'}${n.department ? ' · ' + n.department : ''}`}
     >
-      <div style={{ height: 6, background: style.bar }} />
-      <div style={{ padding: '10px 10px 8px', textAlign: 'center', position: 'relative' }}>
+      <div style={{ height: 5, borderRadius: '12px 12px 0 0', background: `linear-gradient(90deg, ${style.bar}, ${style.bar}AA)` }} />
+      <div style={{ padding: '12px 11px 10px', textAlign: 'center', position: 'relative', borderRadius: isSelf ? 0 : '0 0 12px 12px', overflow: 'hidden' }}>
         {n.directReports > 0 && (
           <div style={{
-            position: 'absolute', top: 6, right: 6, fontSize: 9.5, fontWeight: 700,
-            background: P.purpleBg, color: P.purpleDark, borderRadius: 99, padding: '1px 6px',
-          }}>{n.directReports}</div>
+            position: 'absolute', top: 8, right: 7, fontSize: 9.5, fontWeight: 700,
+            background: P.purpleBg, color: P.purpleDark, borderRadius: 99, padding: '2px 7px',
+          }}>👥 {n.directReports}</div>
         )}
         <div style={{
-          width: 40, height: 40, borderRadius: '50%', background: style.bar + '22',
-          color: style.bar, fontSize: 13, fontWeight: 700, margin: '0 auto 6px',
+          width: 42, height: 42, borderRadius: '50%',
+          background: `linear-gradient(135deg, ${style.bar}, ${style.bar}99)`,
+          color: '#fff', fontSize: 13, fontWeight: 700, margin: '0 auto 7px',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
+          border: '2px solid #fff', boxShadow: `0 3px 8px ${style.bar}55`,
         }}>{initials(n.fullName)}</div>
         <div style={{
           fontSize: 12, fontWeight: 700, color: P.text, lineHeight: 1.25,
@@ -101,19 +104,31 @@ function OrgCard({ node, isSelf, onToggle, collapsed, hasChildren, registerRef, 
           fontSize: 10.5, color: P.muted, marginTop: 3, lineHeight: 1.3,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>{n.designation || '—'}</div>
+        <div style={{
+          display: 'inline-block', marginTop: 7, fontSize: 8.5, fontWeight: 700, color: style.bar,
+          background: style.bar + '18', borderRadius: 99, padding: '2px 8px',
+          textTransform: 'uppercase', letterSpacing: '.03em',
+        }}>{style.label}</div>
       </div>
       {isSelf && (
-        <div style={{ fontSize: 9, fontWeight: 700, color: '#fff', background: P.purple, textAlign: 'center', padding: '2px 0' }}>YOU</div>
+        <div style={{
+          fontSize: 9, fontWeight: 700, color: '#fff', textAlign: 'center', padding: '3px 0',
+          borderRadius: '0 0 12px 12px', background: `linear-gradient(90deg, ${P.purple}, ${P.purpleDark})`,
+        }}>YOU ARE HERE</div>
       )}
       {hasChildren && (
         <button
           onClick={onToggle}
+          title={collapsed ? `Show ${n.directReports} direct report${n.directReports === 1 ? '' : 's'}` : 'Collapse this branch'}
           style={{
-            width: '100%', border: 'none', borderTop: `1px solid ${P.border}`,
-            background: P.purpleLight, color: P.purpleDark, fontSize: 11, fontWeight: 700,
-            padding: '4px 0', cursor: 'pointer', fontFamily: 'inherit',
+            position: 'absolute', left: '50%', bottom: -13, transform: 'translateX(-50%)',
+            minWidth: 26, height: 26, padding: collapsed ? '0 9px' : 0, zIndex: 2,
+            borderRadius: 99, border: `1.5px solid ${P.border}`, background: '#fff', color: P.purpleDark,
+            fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 2px 6px rgba(30,27,75,0.14)',
           }}
-        >{collapsed ? `+ ${n.directReports}` : '− collapse'}</button>
+        >{collapsed ? `+ ${n.directReports}` : '−'}</button>
       )}
     </div>
   )
@@ -153,10 +168,16 @@ function TreeLI({ node, selfId, collapsedIds, onToggle, registerRef, highlightId
 function Legend() {
   const items: Tier[] = ['root', 'hod', 'manager', 'ic']
   return (
-    <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {items.map(t => (
-        <div key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: P.muted }}>
-          <span style={{ width: 10, height: 10, borderRadius: 3, background: TIER_STYLE[t].bar, flexShrink: 0 }} />
+        <div key={t} style={{
+          display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 500, color: P.text,
+          background: P.card, border: `1px solid ${P.border}`, borderRadius: 99, padding: '4px 10px 4px 8px',
+        }}>
+          <span style={{
+            width: 9, height: 9, borderRadius: '50%', background: TIER_STYLE[t].bar, flexShrink: 0,
+            boxShadow: `0 0 0 3px ${TIER_STYLE[t].bar}22`,
+          }} />
           {TIER_STYLE[t].label}
         </div>
       ))}
@@ -171,9 +192,10 @@ function DiagPanel({ orphans, span, loading }: {
 }) {
   return (
     <div style={{ width: 300, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div style={{ background: P.card, border: `1px solid ${P.border}`, borderRadius: 10, padding: 14 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: P.red, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
-          ⚠ No one to approve for them
+      <div style={{ background: P.card, border: `1px solid ${P.border}`, borderRadius: 12, padding: 14, boxShadow: '0 1px 4px rgba(30,27,75,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <span style={{ width: 22, height: 22, borderRadius: '50%', background: P.redBg, color: P.red, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>⚠</span>
+          <div style={{ fontSize: 11, fontWeight: 700, color: P.red, textTransform: 'uppercase', letterSpacing: '.05em' }}>No one to approve for them</div>
         </div>
         {loading ? <div style={{ fontSize: 12, color: P.muted }}>Loading…</div> : orphans.length === 0 ? (
           <div style={{ fontSize: 12, color: P.muted }}>Nobody — every active employee has a manager or is a named department head.</div>
@@ -189,9 +211,10 @@ function DiagPanel({ orphans, span, loading }: {
         )}
       </div>
 
-      <div style={{ background: P.card, border: `1px solid ${P.border}`, borderRadius: 10, padding: 14 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: P.amber, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>
-          Widest inboxes
+      <div style={{ background: P.card, border: `1px solid ${P.border}`, borderRadius: 12, padding: 14, boxShadow: '0 1px 4px rgba(30,27,75,0.05)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          <span style={{ width: 22, height: 22, borderRadius: '50%', background: P.amberBg, color: P.amber, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, flexShrink: 0 }}>📊</span>
+          <div style={{ fontSize: 11, fontWeight: 700, color: P.amber, textTransform: 'uppercase', letterSpacing: '.05em' }}>Widest inboxes</div>
         </div>
         {loading ? <div style={{ fontSize: 12, color: P.muted }}>Loading…</div> : span.slice(0, 8).map(s => (
           <div key={s.emp_code} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: `1px solid ${P.border}`, fontSize: 11.5 }}>
@@ -333,42 +356,65 @@ export default function OrgChartPage() {
   }
 
   const btn: React.CSSProperties = { padding: '7px 13px', borderRadius: 7, border: `1px solid ${P.border}`, background: '#fff', color: P.purpleDark, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: font, whiteSpace: 'nowrap' }
+  const zoomBtn: React.CSSProperties = { width: 24, height: 24, border: 'none', borderRadius: '50%', background: '#fff', color: P.purpleDark, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center' }
+  const divider = <div style={{ width: 1, height: 22, background: P.border, flexShrink: 0 }} />
 
   return (
     <div style={{ padding: 20, background: P.page, minHeight: '100vh', fontFamily: font, color: P.text }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 19, fontWeight: 700 }}>🌳 Organisation chart</div>
-        <span style={{ fontSize: 12, color: P.muted }}>{loading ? 'Loading…' : `${total} people`}</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 4, flexWrap: 'wrap' }}>
+        <div style={{
+          width: 38, height: 38, borderRadius: 11, flexShrink: 0,
+          background: `linear-gradient(135deg, ${P.purple}, ${P.purpleDark})`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+          boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
+        }}>🌳</div>
+        <div style={{ fontSize: 19, fontWeight: 700 }}>Organisation chart</div>
+        <span style={{
+          fontSize: 11, fontWeight: 700, color: P.purpleDark, background: P.purpleBg,
+          borderRadius: 99, padding: '3px 10px',
+        }}>{loading ? 'Loading…' : `${total} people`}</span>
       </div>
-      <div style={{ fontSize: 12, color: P.muted, marginBottom: 14 }}>
+      <div style={{ fontSize: 12, color: P.muted, marginBottom: 14, marginLeft: 50 }}>
         Read straight from the reporting lines set on the Employee Master and the org-chart import — moving somebody’s manager there moves them here.
       </div>
 
-      <div style={{ background: P.card, border: `1px solid ${P.border}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+      <div style={{ background: P.card, border: `1px solid ${P.border}`, borderRadius: 12, padding: '10px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 1px 4px rgba(124,58,237,0.05)' }}>
         <select value={companyId} onChange={e => setCompanyId(e.target.value)}
           style={{ padding: '7px 10px', borderRadius: 7, border: `1px solid ${P.border}`, fontSize: 12, background: '#FAFAFE', color: P.text, fontFamily: font }}>
           {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
         </select>
 
-        <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && search()}
-          placeholder="Find by name or employee code…"
-          style={{ flex: '1 1 200px', minWidth: 160, padding: '7px 10px', borderRadius: 7, border: `1px solid ${P.border}`, fontSize: 12, background: '#FAFAFE', color: P.text, fontFamily: font }} />
-        <button onClick={search} style={btn}>🔍 Find</button>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={() => setZoom(z => Math.max(15, z - 10))} style={{ ...btn, padding: '7px 10px' }}>−</button>
-          <span style={{ fontSize: 11.5, color: P.muted, width: 38, textAlign: 'center' }}>{zoom}%</span>
-          <button onClick={() => setZoom(z => Math.min(140, z + 10))} style={{ ...btn, padding: '7px 10px' }}>+</button>
+        <div style={{ position: 'relative', flex: '1 1 200px', minWidth: 160 }}>
+          <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: P.muted, pointerEvents: 'none' }}>🔍</span>
+          <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && search()}
+            placeholder="Find by name or employee code…"
+            style={{ width: '100%', boxSizing: 'border-box', padding: '7px 10px 7px 28px', borderRadius: 7, border: `1px solid ${P.border}`, fontSize: 12, background: '#FAFAFE', color: P.text, fontFamily: font }} />
         </div>
+        <button onClick={search} style={btn}>Find</button>
 
+        {divider}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: P.purpleLight, borderRadius: 99, padding: 3 }}>
+          <button onClick={() => setZoom(z => Math.max(15, z - 10))} style={zoomBtn}>−</button>
+          <span style={{ fontSize: 11.5, fontWeight: 700, color: P.purpleDark, width: 38, textAlign: 'center' }}>{zoom}%</span>
+          <button onClick={() => setZoom(z => Math.min(140, z + 10))} style={zoomBtn}>+</button>
+        </div>
         <button onClick={fitToScreen} style={btn}>⛶ Fit to screen</button>
+
+        {divider}
+
         <button onClick={() => setCollapsedIds(new Set())} style={btn}>⤢ Expand all</button>
         <button onClick={resetToDefault} style={btn}>⤡ Collapse to my level</button>
         <button onClick={() => setShowDiag(s => !s)} style={{ ...btn, background: showDiag ? P.purple : '#fff', color: showDiag ? '#fff' : P.purpleDark, borderColor: showDiag ? P.purple : P.border }}>
           ⚠ Diagnostics
         </button>
         <button onClick={downloadJpeg} disabled={downloading || forest.length === 0}
-          style={{ ...btn, marginLeft: 'auto', background: P.purple, color: '#fff', borderColor: P.purple, opacity: downloading || forest.length === 0 ? 0.6 : 1, cursor: downloading || forest.length === 0 ? 'default' : 'pointer' }}>
+          style={{
+            ...btn, marginLeft: 'auto', color: '#fff', border: 'none',
+            background: `linear-gradient(135deg, ${P.purple}, ${P.purpleDark})`,
+            boxShadow: '0 3px 10px rgba(124,58,237,0.3)',
+            opacity: downloading || forest.length === 0 ? 0.6 : 1, cursor: downloading || forest.length === 0 ? 'default' : 'pointer',
+          }}>
           {downloading ? 'Preparing…' : '⬇ Download JPEG'}
         </button>
       </div>
@@ -378,7 +424,12 @@ export default function OrgChartPage() {
       </div>
 
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-        <div ref={outerRef} style={{ flex: 1, minWidth: 0, background: P.card, border: `1px solid ${P.border}`, borderRadius: 10, padding: 20, overflow: 'auto', maxHeight: '75vh', textAlign: 'center' }}>
+        <div ref={outerRef} style={{
+          flex: 1, minWidth: 0, background: P.card,
+          backgroundImage: `radial-gradient(circle, ${P.border} 1.2px, transparent 1.2px)`, backgroundSize: '24px 24px',
+          border: `1px solid ${P.border}`, borderRadius: 14, padding: 28, overflow: 'auto', maxHeight: '75vh', textAlign: 'center',
+          boxShadow: 'inset 0 1px 3px rgba(30,27,75,0.04)',
+        }}>
           {loading ? (
             <div style={{ textAlign: 'center', color: P.purple, padding: 60, fontSize: 13 }}>Loading the chart…</div>
           ) : forest.length === 0 ? (

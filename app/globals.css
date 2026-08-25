@@ -161,14 +161,14 @@ body {
   position: absolute;
   top: 0;
   right: 50%;
-  border-top: 1px solid #DDD6FE;
+  border-top: 1.5px solid #C9BFF0;
   width: 50%;
   height: 22px;
 }
 .org-tree li::after {
   right: auto;
   left: 50%;
-  border-left: 1px solid #DDD6FE;
+  border-left: 1.5px solid #C9BFF0;
 }
 .org-tree li:only-child {
   padding-top: 0;
@@ -196,10 +196,14 @@ body {
   position: absolute;
   left: 50%;
   bottom: -22px;
-  width: 1px;
+  width: 1.5px;
   height: 22px;
-  background: #DDD6FE;
+  background: #C9BFF0;
 }
 .org-node {
   position: relative;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.org-node:hover {
+  transform: translateY(-3px);
 }
