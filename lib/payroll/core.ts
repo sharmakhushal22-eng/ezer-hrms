@@ -227,14 +227,20 @@ const TAXABLE_COLS = [
   'taxable_flexi_telephone_internet', 'taxable_flexi_meal_card', 'taxable_flexi_gadget_device',
   'taxable_flexi_attire_uniform', 'taxable_flexi_books_periodicals', 'taxable_flexi_lta',
 ]
-// Monthly TDS (sql125/126) — every step of the calculation as its own column, in the
-// order it runs, so the final figure can be tied out by hand instead of trusted on
-// faith: actual + current + projected income, less exemptions and deductions, taxed,
-// less what this FY already deducted, divided by the months left.
+// Monthly TDS (sql125/126, extended by 064 to the rest of the spec) — every step
+// of the calculation as its own column, in the order it runs, so the final
+// figure can be tied out by hand instead of trusted on faith: actual + current +
+// projected income (now including perquisites, house property and a previous
+// employer's income), less exemptions and the full Chapter VI-A, taxed with
+// age-aware slabs and marginal relief, less what this FY already deducted,
+// divided by the months left.
 const TDS_COLS = [
-  'tds_regime_used', 'tds_actual_ytd', 'tds_current_gross', 'tds_arrear', 'tds_projected', 'tds_annual_gross',
+  'tds_regime_used', 'tds_age_category', 'tds_actual_ytd', 'tds_current_gross', 'tds_arrear', 'tds_projected',
+  'tds_perquisites', 'tds_employer_contrib_excess', 'tds_house_property', 'tds_other_income',
+  'tds_prev_employer_income', 'tds_prev_employer_tds', 'tds_annual_gross',
   'tds_hra_exempt', 'tds_lta_exempt', 'tds_pt_deduction', 'tds_std_deduction', 'tds_chapter_via',
-  'tds_taxable_income', 'tds_slab_tax', 'tds_rebate_87a', 'tds_surcharge', 'tds_cess',
+  'tds_taxable_income', 'tds_slab_tax', 'tds_rebate_87a', 'tds_marginal_relief_87a',
+  'tds_surcharge', 'tds_marginal_relief_surcharge', 'tds_cess',
   'tds_annual_liability', 'tds_paid_ytd', 'tds_months_remaining',
   'tds_monthly', 'tds_additional', 'tds_reason',
 ]
