@@ -133,7 +133,10 @@ FROM vw_pms_org_readiness
 GROUP BY readiness_status ORDER BY 2 DESC;
 
 -- The individuals still blocking, with the reason:
-SELECT employee_code, employee_name, dept_name, readiness_status, block_reason
+-- vw_pms_org_readiness (067) exposes this column as department_name, not
+-- dept_name — that is only the raw departments.dept_name, which the view
+-- re-aliases on the way out.
+SELECT employee_code, employee_name, department_name, readiness_status, block_reason
 FROM vw_pms_org_readiness
 WHERE readiness_status <> 'READY'
 ORDER BY readiness_status, employee_code;
