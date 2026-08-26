@@ -297,11 +297,18 @@ END $$;
 -- 079 assumed rm_l1_id / rm_l2_id on employees. Actual: l1_manager_id /
 -- l2_manager_id. pms_overall_rating keeps its own rm_* snapshot columns —
 -- those are correct and stay. Only the employees-side reads change.
+--
+-- l1_manager_id / l2_manager_id are appended at the END of the SELECT list
+-- rather than inserted after date_of_resignation, where 066 originally put
+-- employment_flag: vw_pms_fill_status and vw_pms_exit_priority already
+-- depend on this view, and CREATE OR REPLACE VIEW refuses to rename or
+-- retype a column at an existing ordinal position — it can only append.
+-- Inserting in the middle shifts employment_flag from position 7 to 9 and
+-- fails with 42P16. Appending keeps every existing position identical.
 -- =====================================================================
 CREATE OR REPLACE VIEW vw_pms_employment_flag AS
 SELECT e.id AS employee_id, e.emp_code AS employee_code, e.full_name AS employee_name,
        e.company_doj, e.date_of_leaving, e.date_of_resignation,
-       e.l1_manager_id, e.l2_manager_id,
        CASE
          WHEN e.date_of_leaving   IS NOT NULL AND e.date_of_leaving <= CURRENT_DATE THEN 'EXITED'
          WHEN e.date_of_leaving   IS NOT NULL AND e.date_of_leaving  > CURRENT_DATE THEN 'NOTICE_PERIOD'
@@ -311,7 +318,8 @@ SELECT e.id AS employee_id, e.emp_code AS employee_code, e.full_name AS employee
        END AS employment_flag,
        e.date_of_leaving AS last_working_day,
        CASE WHEN e.date_of_leaving IS NOT NULL
-            THEN e.date_of_leaving - CURRENT_DATE END AS days_to_lwd
+            THEN e.date_of_leaving - CURRENT_DATE END AS days_to_lwd,
+       e.l1_manager_id, e.l2_manager_id
 FROM employees e;
 
 
