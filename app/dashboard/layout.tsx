@@ -156,14 +156,6 @@ const FONT = '"DM Sans","Segoe UI",sans-serif'
 // ── Sub-components live outside the parent. Declared inside, they re-mount on every
 //    render and any input in a child loses focus after one keystroke. ──
 
-function Splash({ text }: { text: string }) {
-  return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT, color: '#7C3AED', fontSize: 13 }}>
-      {text}
-    </div>
-  )
-}
-
 /** Shown when somebody types the URL of a module they do not hold. A silent redirect
  *  leaves people convinced the page is broken; this says what happened and who to ask. */
 function NoAccess({ module, grant }: { module: Module; grant: Grant }) {
