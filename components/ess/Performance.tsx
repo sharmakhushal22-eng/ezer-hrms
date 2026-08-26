@@ -627,6 +627,8 @@ function NoPeriod() {
 function TeamQueue({ employeeId, n }: { employeeId: string; n: number }) {
   const { period, loading } = usePeriod(employeeId)
   const [rows, setRows] = useState<Record<string, unknown>[]>([])
+  const [rating, setRating] = useState<{ id: string; name: string; code: string; role: 'RM_L1' | 'RM_L2' } | null>(null)
+  const [tick, setTick] = useState(0)
 
   useEffect(() => {
     (async () => {
@@ -635,7 +637,7 @@ function TeamQueue({ employeeId, n }: { employeeId: string; n: number }) {
       // of who reports to me — a reorg mid-cycle must not move work between
       // managers. Same reason pms_finalise reads the snapshot.
       const { data } = await supabase.from('pms_overall_rating')
-        .select('employee_id,workflow_status,kra_count,total_weightage,self_score,rm_l1_score,employment_flag')
+        .select('employee_id,workflow_status,kra_count,total_weightage,self_score,rm_l1_score,rm_l2_score,rm_l1_id,rm_l2_id,employment_flag')
         .eq('period_id', period.id)
         .or(`rm_l1_id.eq.${employeeId},rm_l2_id.eq.${employeeId}`)
       if (!data?.length) { setRows([]); return }
@@ -646,7 +648,12 @@ function TeamQueue({ employeeId, n }: { employeeId: string; n: number }) {
       const byId = new Map((emps || []).map(e => [e.id, e]))
       setRows(data.map(d => ({ ...d, emp: byId.get(d.employee_id) })))
     })()
-  }, [employeeId, period])
+  }, [employeeId, period, tick])
+
+  if (rating && period) return (
+    <RateReportee meId={employeeId} reportee={rating} period={period} myRole={rating.role}
+      onDone={() => { setRating(null); setTick(t => t + 1) }} />
+  )
 
   if (loading) return <Muted>Loading…</Muted>
   if (!period)  return <NoPeriod />
@@ -670,6 +677,15 @@ function TeamQueue({ employeeId, n }: { employeeId: string; n: number }) {
           // Notice-period and exited people are highlighted because their
           // window closes with their last working day — spec §4.1.
           const edge = flag === 'EXITED' ? TK.critical : flag === 'NOTICE_PERIOD' ? TK.warning : TK.line
+          // Which seat do I occupy for THIS person? The frozen chain decides,
+          // not a live reporting lookup — somebody can be L1 for one report and
+          // L2 for another.
+          const myRole: 'RM_L1' | 'RM_L2' | null =
+            r.rm_l1_id === employeeId ? 'RM_L1' : r.rm_l2_id === employeeId ? 'RM_L2' : null
+          // L2 waits for L1, and nobody rates before the self rating lands.
+          const canRate = Boolean(myRole) && r.self_score != null
+            && (myRole === 'RM_L1' || r.rm_l1_score != null)
+          const already = myRole === 'RM_L1' ? r.rm_l1_score != null : r.rm_l2_score != null
           return (
             <div key={String(r.employee_id)} style={{ border: `1px solid ${edge}`, background: TK.surface,
                           borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 12,
@@ -695,11 +711,234 @@ function TeamQueue({ employeeId, n }: { employeeId: string; n: number }) {
                              background: TK.sunken, color: TK.muted, whiteSpace: 'nowrap' }}>
                 {String(r.workflow_status || 'NOT_STARTED').replace(/_/g, ' ').toLowerCase()}
               </span>
+              {/* A button only where there is something to press. Where there is
+                  not, the reason is given instead of a dead control. */}
+              {canRate ? (
+                <button onClick={() => setRating({
+                  id: String(r.employee_id),
+                  name: String((r.emp as Record<string, unknown>)?.full_name || ''),
+                  code: String((r.emp as Record<string, unknown>)?.emp_code || ''),
+                  role: myRole as 'RM_L1' | 'RM_L2',
+                })}
+                  style={{ ...ghost, borderColor: already ? TK.line : TK.brand,
+                           color: already ? TK.muted : TK.brand }}>
+                  {already ? 'Revise rating' : 'Rate'}
+                </button>
+              ) : (
+                <span style={{ fontSize: F.micro, color: TK.faint, whiteSpace: 'nowrap' }}>
+                  {r.self_score == null ? 'awaiting self rating'
+                    : myRole === 'RM_L2' ? 'awaiting RM L1' : 'not yours to rate'}
+                </span>
+              )}
             </div>
           )
         })}
       </div>
     </div>
+  )
+}
+
+// ── Rating a reportee ──────────────────────────────────────────────────────
+//
+// Spec §4.3. The manager rates against what the employee actually claimed, so
+// their achievement text and self rating sit next to each input — rating in the
+// dark invites a number pulled from memory of the last conversation.
+//
+// Two orderings are enforced, both mirroring the database rather than trusting
+// the UI to be the only guard:
+//   * self rating must be submitted first — trg_pms_self_first rejects the
+//     insert otherwise, so the screen refuses rather than letting somebody type
+//     for ten minutes into a form that cannot save.
+//   * RM L2 rates after RM L1. L2 sees L1's numbers; L1 does not see L2's.
+
+function RateReportee({
+  meId, reportee, period, myRole, onDone,
+}: {
+  meId: string
+  reportee: { id: string; name: string; code: string }
+  period: Period
+  myRole: 'RM_L1' | 'RM_L2'
+  onDone: () => void
+}) {
+  const [goals, setGoals] = useState<Record<string, unknown>[]>([])
+  const [others, setOthers] = useState<Record<string, Record<string, unknown>>>({})
+  const [draft, setDraft] = useState<Record<string, { rating: number; comment: string }>>({})
+  const [overallComment, setOverallComment] = useState('')
+  const [selfSubmitted, setSelfSubmitted] = useState<boolean | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
+
+  useEffect(() => {
+    (async () => {
+      const { data: g } = await supabase.from('pms_employee_goals')
+        .select('id,seq_no,kra_title,kpi_metric,target_value,weightage')
+        .eq('employee_id', reportee.id).eq('period_id', period.id).order('seq_no')
+      setGoals(g || [])
+
+      // Everything already said about these KRAs: the employee's own rating,
+      // and RM L1's if I am L2.
+      const roles = myRole === 'RM_L2' ? ['SELF', 'RM_L1'] : ['SELF']
+      const { data: r } = await supabase.from('pms_reviews')
+        .select('goal_id,rater_role,rating,achievement_value,comments,submitted')
+        .eq('employee_id', reportee.id).eq('period_id', period.id).in('rater_role', roles)
+
+      const byGoal: Record<string, Record<string, unknown>> = {}
+      ;(r || []).forEach(row => {
+        const k = `${row.goal_id}:${row.rater_role}`
+        byGoal[k] = row as Record<string, unknown>
+      })
+      setOthers(byGoal)
+      setSelfSubmitted((r || []).some(x => x.rater_role === 'SELF' && x.submitted))
+
+      // Resume a rating already in progress rather than starting blank.
+      const { data: mine } = await supabase.from('pms_reviews')
+        .select('goal_id,rating,comments')
+        .eq('employee_id', reportee.id).eq('period_id', period.id).eq('rater_role', myRole)
+      const d: Record<string, { rating: number; comment: string }> = {}
+      ;(mine || []).forEach(m => { d[String(m.goal_id)] = { rating: Number(m.rating) || 0, comment: String(m.comments || '') } })
+      setDraft(d)
+    })()
+  }, [reportee.id, period.id, myRole])
+
+  // Same formula as pms_score(): weighted by weightage, divided by the
+  // weightage actually rated — not by 100. They agree even on a part-finished
+  // set that way.
+  const rated = goals.filter(g => draft[String(g.id)]?.rating)
+  const wSum = rated.reduce((s, g) => s + Number(g.weightage || 0), 0)
+  const score = wSum
+    ? rated.reduce((s, g) => s + draft[String(g.id)].rating * Number(g.weightage || 0), 0) / wSum
+    : 0
+
+  const complete = goals.length > 0 && rated.length === goals.length
+
+  const submit = async () => {
+    setSaving(true); setMsg(null)
+    const rows = goals.map(g => ({
+      period_id: period.id, employee_id: reportee.id, goal_id: g.id,
+      rater_id: meId, rater_role: myRole,
+      rating: draft[String(g.id)].rating,
+      comments: draft[String(g.id)].comment || null,
+      submitted: true, submitted_at: new Date().toISOString(),
+    }))
+    const { error } = await supabase.from('pms_reviews')
+      .upsert(rows, { onConflict: 'period_id,employee_id,goal_id,rater_role' })
+    setSaving(false)
+    if (error) { setMsg(error.message); return }
+    onDone()
+  }
+
+  if (selfSubmitted === false) return (
+    <div>
+      <BackLink onDone={onDone} name={reportee.name} />
+      <Muted>
+        {reportee.name} has not submitted their self rating yet, so rating is not open. The database
+        rejects a manager rating before the employee&apos;s own — you would lose the work.
+      </Muted>
+    </div>
+  )
+
+  return (
+    <div>
+      <BackLink onDone={onDone} name={reportee.name} />
+
+      <div style={{ border: `1px solid ${TK.brandEdge}`, background: TK.brandTint, borderRadius: 14,
+                    padding: '12px 16px', display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: F.small, fontWeight: W.bold, color: TK.ink }}>{reportee.name}</div>
+          <div style={{ fontSize: F.micro, color: TK.muted }}>
+            {reportee.code} · you are rating as {myRole.replace('_', ' ')}
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: F.micro, color: TK.muted }}>Weighted score</div>
+          <div style={{ ...numeric, fontSize: 22, fontWeight: W.bold, color: TK.brandDeep, lineHeight: 1.2 }}>
+            {score ? score.toFixed(2) : '—'}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+        {goals.map(g => {
+          const id = String(g.id)
+          const d = draft[id] || { rating: 0, comment: '' }
+          const put = (patch: Partial<typeof d>) => setDraft(x => ({ ...x, [id]: { ...d, ...patch } }))
+          const self = others[`${id}:SELF`]
+          const l1 = others[`${id}:RM_L1`]
+          return (
+            <div key={id} style={{ border: `1px solid ${TK.line}`, background: TK.surface,
+                          borderRadius: 14, padding: 12 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
+                <span style={{ ...numeric, fontSize: F.micro, fontWeight: W.bold, color: TK.brandDeep }}>
+                  {String(g.seq_no)}
+                </span>
+                <strong style={{ fontSize: F.small, color: TK.ink }}>{String(g.kra_title)}</strong>
+                <span style={{ ...numeric, marginLeft: 'auto', fontSize: F.micro, color: TK.faint }}>
+                  weightage {String(g.weightage)}
+                </span>
+              </div>
+
+              {/* What they said they did, and how they rated it. Rating without
+                  this in view is rating from memory. */}
+              <div style={{ marginTop: 8, padding: '8px 10px', background: TK.sunken, borderRadius: 10 }}>
+                <div style={{ fontSize: F.micro, color: TK.faint, marginBottom: 3 }}>
+                  Their claim{self?.rating ? ` · self-rated ${String(self.rating)}` : ''}
+                </div>
+                <div style={{ fontSize: F.small, color: TK.ink, lineHeight: 1.5 }}>
+                  {String(self?.achievement_value || '—')}
+                </div>
+                {Boolean(self?.comments) && (
+                  <div style={{ fontSize: F.micro, color: TK.muted, marginTop: 4 }}>{String(self?.comments)}</div>
+                )}
+                {l1?.rating != null && (
+                  <div style={{ fontSize: F.micro, color: TK.muted, marginTop: 6 }}>
+                    RM L1 rated <strong style={{ ...numeric, color: TK.ink }}>{String(l1.rating)}</strong>
+                    {l1.comments ? ` — ${String(l1.comments)}` : ''}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: 'grid', gap: 8, marginTop: 10,
+                            gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
+                <select value={d.rating || ''} onChange={e => put({ rating: Number(e.target.value) })} style={inp}>
+                  <option value="">Your rating…</option>
+                  {RATINGS.map(r => <option key={r.v} value={r.v}>{r.v} — {r.label}</option>)}
+                </select>
+                <input value={d.comment} onChange={e => put({ comment: e.target.value })}
+                  placeholder="Why — evidence, not adjectives" style={inp} />
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <textarea value={overallComment} onChange={e => setOverallComment(e.target.value)}
+        placeholder="Overall comment for the appraisal conversation"
+        rows={3} style={{ ...inp, marginTop: 12, resize: 'vertical' }} />
+
+      <button onClick={submit} disabled={!complete || saving}
+        style={{ marginTop: 12, padding: '9px 18px', borderRadius: 10,
+                 cursor: complete ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
+                 fontSize: F.small, fontWeight: W.semi,
+                 border: `1px solid ${complete ? TK.brand : TK.line}`,
+                 background: complete ? TK.brand : TK.sunken,
+                 color: complete ? TK.onAccent : TK.faint }}>
+        {saving ? 'Submitting…' : `Submit as ${myRole.replace('_', ' ')}`}
+      </button>
+      {!complete && (
+        <div style={{ fontSize: F.small, color: TK.muted, marginTop: 8 }}>
+          {goals.length - rated.length} of {goals.length} KRAs still need a rating.
+        </div>
+      )}
+      {msg && <div style={{ fontSize: F.small, color: TK.critical, marginTop: 8 }}>{msg}</div>}
+    </div>
+  )
+}
+
+function BackLink({ onDone, name }: { onDone: () => void; name: string }) {
+  return (
+    <button onClick={onDone} style={{ ...ghost, marginBottom: 12 }}>
+      ← Back to team{name ? '' : ''}
+    </button>
   )
 }
 
