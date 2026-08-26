@@ -17,11 +17,14 @@
 // Rendering nothing would hide a journey that was genuinely recorded.
 import { useEffect, useRef, useState } from 'react'
 import { decodePolyline, projectToViewBox, type LatLng } from '@/lib/travel/polyline'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const V = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#6D28D9', border: '#E9E7F5',
-  muted: '#6B6B7B', card: '#FFFFFF', green: '#059669', amber: '#D97706',
-  red: '#DC2626', field: '#FAFAF8', grey: '#9CA3AF',
+  navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line,
+  muted: TK.muted, card: TK.surface, green: TK.positive, amber: TK.warning,
+  red: TK.critical, field: TK.sunken, grey: TK.faint,
 }
 
 export interface RouteData {
@@ -100,7 +103,7 @@ function TraceFallback({ actual, optimal, height }: {
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height, display: 'block',
-         background: V.field, borderRadius: 8, border: `1px solid ${V.border}` }}>
+         background: V.field, borderRadius: 10, border: `1px solid ${V.border}` }}>
       <defs>
         <pattern id="rm-grid" width="30" height="30" patternUnits="userSpaceOnUse">
           <path d="M30 0H0V30" fill="none" stroke={V.border} strokeWidth="1" />
@@ -115,10 +118,10 @@ function TraceFallback({ actual, optimal, height }: {
         <path d={d(a)} fill="none" stroke={V.purple} strokeWidth="3.5"
               strokeLinecap="round" strokeLinejoin="round" />
       )}
-      {a.length > 0 && <circle cx={a[0].x} cy={a[0].y} r="6" fill={V.green} stroke="#fff" strokeWidth="2" />}
+      {a.length > 0 && <circle cx={a[0].x} cy={a[0].y} r="6" fill={V.green} stroke={TK.surface} strokeWidth="2" />}
       {a.length > 1 && (
         <circle cx={a[a.length - 1].x} cy={a[a.length - 1].y} r="6"
-                fill={V.red} stroke="#fff" strokeWidth="2" />
+                fill={V.red} stroke={TK.surface} strokeWidth="2" />
       )}
     </svg>
   )
@@ -170,10 +173,10 @@ export default function RouteMap({ route, height = 300, title }: {
 
       new G.maps.Marker({ position: actualPts[0], map, title: 'Start',
         icon: { path: G.maps.SymbolPath.CIRCLE, scale: 7, fillColor: V.green,
-                fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 } })
+                fillOpacity: 1, strokeColor: TK.onAccent, strokeWeight: 2 } })
       new G.maps.Marker({ position: actualPts[actualPts.length - 1], map, title: 'End',
         icon: { path: G.maps.SymbolPath.CIRCLE, scale: 7, fillColor: V.red,
-                fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 } })
+                fillOpacity: 1, strokeColor: TK.onAccent, strokeWeight: 2 } })
 
       const bounds = new G.maps.LatLngBounds()
       for (const p of [...actualPts, ...(optimalPts ?? [])]) bounds.extend(p)
@@ -216,7 +219,7 @@ export default function RouteMap({ route, height = 300, title }: {
       )}
 
       {useMap
-        ? <div ref={mapRef} style={{ width: '100%', height, borderRadius: 8,
+        ? <div ref={mapRef} style={{ width: '100%', height, borderRadius: 10,
                                      border: `1px solid ${V.border}` }} />
         : <TraceFallback actual={actualPts} optimal={optimalPts} height={height} />}
 
@@ -261,7 +264,7 @@ export default function RouteMap({ route, height = 300, title }: {
       )}
 
       {route.concerns.length > 0 && (
-        <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 11.5, lineHeight: 1.6 }}>
+        <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: 12, lineHeight: 1.6 }}>
           {route.concerns.map((c, i) => (
             <li key={i} style={{ color: c.severity === 'BLOCK' ? V.red : V.amber, marginBottom: 2 }}>
               {c.message}

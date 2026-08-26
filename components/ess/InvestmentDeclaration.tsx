@@ -13,12 +13,15 @@
 // The UI mirrors them so the employee finds out before pressing Submit, not after.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#6D28D9', card: '#FFFFFF',
-  border: 'rgba(124,58,237,0.12)', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A', red: '#DC2626', redBg: '#FEF2F2',
-  purpleBg: '#F3EEFF', soft: '#FAFAF8',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
+  border: 'rgba(37,99,235,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, red: TK.critical, redBg: TK.criticalTint,
+  purpleBg: TK.brandTint, soft: TK.sunken,
 }
 const FY = '2026-27'
 const CAP_80C = 150000
@@ -26,14 +29,14 @@ const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN
 const num = (v: any) => (v === '' || v === null || v === undefined ? 0 : Number(v) || 0)
 
 const S = {
-  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '18px 20px', marginBottom: 14 } as React.CSSProperties,
+  card: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '18px 20px', marginBottom: 14 } as React.CSSProperties,
   h: { fontSize: 14, fontWeight: 700, color: C.navy, marginBottom: 3 } as React.CSSProperties,
   sub: { fontSize: 12, color: C.muted, lineHeight: 1.5 } as React.CSSProperties,
   lbl: { fontSize: 12, color: C.navy, display: 'block', marginBottom: 5 } as React.CSSProperties,
   inp: { width: '100%', padding: '9px 11px', background: C.soft, border: `1px solid #DDD6FE`, borderRadius: 7, color: C.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
   row: { display: 'grid', gridTemplateColumns: '1fr 200px', gap: 14, alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${C.border}` } as React.CSSProperties,
-  btnP: { padding: '11px 24px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
-  btnO: { padding: '11px 20px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
+  btnP: { padding: '11px 24px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
+  btnO: { padding: '11px 20px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
 }
 
 // Regime cards, defined outside the component so typing never remounts them.
@@ -44,19 +47,19 @@ function RegimeCard({ code, title, blurb, active, disabled, onPick }: {
     <button onClick={() => !disabled && onPick(code)} disabled={disabled}
       style={{
         flex: 1, minWidth: 240, textAlign: 'left', padding: '14px 16px', borderRadius: 10,
-        border: `1.5px solid ${active ? C.purple : C.border}`,
-        background: active ? C.purpleBg : '#fff',
+        border: `2px solid ${active ? C.purple : C.border}`,
+        background: active ? C.purpleBg: TK.surface,
         cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled && !active ? 0.55 : 1,
         fontFamily: 'inherit',
       }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span style={{
-          width: 15, height: 15, borderRadius: '50%', border: `2px solid ${active ? C.purple : '#C4B5FD'}`,
-          background: active ? C.purple : '#fff', boxShadow: active ? 'inset 0 0 0 3px #fff' : 'none', flexShrink: 0,
+          width: 15, height: 15, borderRadius: '50%', border: `2px solid ${active ? C.purple: TK.brandTint}`,
+          background: active ? C.purple: TK.surface, boxShadow: active ? 'inset 0 0 0 3px #fff' : 'none', flexShrink: 0,
         }} />
-        <span style={{ fontSize: 13.5, fontWeight: 700, color: C.navy }}>{title}</span>
+        <span style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{title}</span>
       </div>
-      <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.5 }}>{blurb}</div>
+      <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>{blurb}</div>
     </button>
   )
 }
@@ -67,11 +70,11 @@ function AmountRow({ label, hint, value, onChange, readOnly }: {
   return (
     <div style={S.row}>
       <div>
-        <div style={{ fontSize: 12.5, color: C.navy }}>{label}</div>
+        <div style={{ fontSize: 13, color: C.navy }}>{label}</div>
         {hint && <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{hint}</div>}
       </div>
       <input
-        style={{ ...S.inp, textAlign: 'right', background: readOnly ? '#F3F4F6' : C.soft, color: readOnly ? C.muted : C.navy }}
+        style={{ ...S.inp, textAlign: 'right', background: readOnly ? TK.sunken : C.soft, color: readOnly ? C.muted : C.navy }}
         value={value} readOnly={readOnly} inputMode="numeric"
         onChange={e => onChange && onChange(e.target.value.replace(/[^0-9]/g, ''))} />
     </div>
@@ -349,12 +352,12 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         <div style={{ fontSize: 20, fontWeight: 800 }}>Investment Declaration</div>
         <div style={{ fontSize: 12, color: C.muted, marginTop: 3 }}>
           FY {FY} · {empName || '—'}{empCode ? ` · ${empCode}` : ''}
-          {status && <span style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: status === 'SUBMITTED' ? C.green : C.amber, background: status === 'SUBMITTED' ? C.greenBg : C.amberBg, borderRadius: 99, padding: '2px 9px' }}>{status}</span>}
+          {status && <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, color: status === 'SUBMITTED' ? C.green : C.amber, background: status === 'SUBMITTED' ? C.greenBg : C.amberBg, borderRadius: 99, padding: '2px 9px' }}>{status}</span>}
         </div>
       </div>
 
       <div style={{ ...S.card, background: C.purpleBg, border: `1px solid #DDD6FE` }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: C.purpleD }}>Applies for the whole financial year.</div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.purpleD }}>Applies for the whole financial year.</div>
         <div style={{ ...S.sub, color: C.purpleD, marginTop: 3 }}>
           Ye kisi ek payroll month se juda nahi hai — har month ka TDS seedha isi se calculate hota hai.
         </div>
@@ -375,7 +378,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
             blurb="HRA exemption aur Chapter VI-A deductions milti hain. Neeche apna planned investment declare karein." />
         </div>
         {regimeBlocked && (
-          <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 8, padding: '9px 12px', marginTop: 10 }}>
+          <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '9px 12px', marginTop: 10 }}>
             Ye badlaav save nahi hoga — regime ka ek switch pehle hi use ho chuka hai.
           </div>
         )}
@@ -394,7 +397,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
           <AmountRow label="LIC / Insurance premium" value={lic} onChange={setLic} />
           <AmountRow label="PPF / ELSS / other 80C" value={ppf} onChange={setPpf} />
           {over80c && (
-            <div style={{ fontSize: 11.5, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 8, padding: '9px 12px', marginTop: 10 }}>
+            <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '9px 12px', marginTop: 10 }}>
               80C ki legal limit {inr(CAP_80C)} hai — {inr(pf + typed80c)} likhne se exemption nahi badhegi. {inr(CAP_80C)} hi count hoga.
             </div>
           )}
@@ -451,12 +454,12 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
           {panNeeded && (
             <div style={{ ...S.row, gridTemplateColumns: '1fr 200px' }}>
               <div>
-                <div style={{ fontSize: 12.5, color: C.navy }}>Landlord PAN</div>
+                <div style={{ fontSize: 13, color: C.navy }}>Landlord PAN</div>
                 <div style={{ fontSize: 11, color: panMissing ? C.red : C.muted, marginTop: 2 }}>
                   Zaroori hai — saal ka rent {inr(100000)} se zyada hai
                 </div>
               </div>
-              <input style={{ ...S.inp, textTransform: 'uppercase', border: `1px solid ${panMissing ? C.red : '#DDD6FE'}` }}
+              <input style={{ ...S.inp, textTransform: 'uppercase', border: `1px solid ${panMissing ? C.red : TK.brandEdge}` }}
                 value={pan} maxLength={10} placeholder="ABCDE1234F"
                 onChange={e => setPan(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))} />
             </div>
@@ -470,8 +473,8 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       )}
 
       {regime === 'NEW' && (
-        <div style={{ ...S.card, background: C.greenBg, border: '1px solid #BBF7D0' }}>
-          <div style={{ fontSize: 12.5, color: C.green, lineHeight: 1.6 }}>
+        <div style={{ ...S.card, background: C.greenBg, border: `1px solid ${TK.positiveTint}` }}>
+          <div style={{ fontSize: 13, color: C.green, lineHeight: 1.6 }}>
             <b>New regime mein kuch declare nahi karna.</b> Slab rates kam hain, par HRA exemption aur 80C/80D deductions nahi milti. Submit karte hi aapke purane declare kiye hue amounts hata diye jaayenge.
           </div>
         </div>
@@ -503,12 +506,11 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         <button onClick={savePreviousEmployer} disabled={busy} style={{ ...S.btnO, marginTop: 10, opacity: busy ? 0.6 : 1 }}>Save previous employer details</button>
       </div>
 
-      <div style={{ fontSize: 11.5, color: C.muted, background: '#F8F7FF', borderRadius: 9, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>
-        🔒 Proof submission saal ke aakhir mein khulti hai — ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
+      <div style={{ fontSize: 12, color: C.muted, background: TK.sunken, borderRadius: 10, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission saal ke aakhir mein khulti hai — ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
       </div>
 
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>{err}</div>}
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         <button onClick={() => save(false)} disabled={busy} style={{ ...S.btnO, opacity: busy ? 0.6 : 1 }}>Save as draft</button>

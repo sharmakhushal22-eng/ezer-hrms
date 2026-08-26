@@ -11,6 +11,11 @@
 // "connect the next module" is a row in a table, not an edit here.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// This file declares its own S, Stat, Empty and Note, so the system's spacing
+// scale is imported as SP and the colliding components are not imported at all.
+import {
+  C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
 
 async function authHeaders(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession()
@@ -18,11 +23,13 @@ async function authHeaders(): Promise<Record<string, string>> {
   return t ? { Authorization: `Bearer ${t}` } : {}
 }
 
+// Bound to the design system. Every style below reads from here, so this page
+// follows lib/ui/tokens.ts rather than restating a palette.
 const V = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#6D28D9', border: 'rgba(124,58,237,0.12)',
-  muted: '#6B7280', card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5',
-  red: '#DC2626', redBg: '#FEF2F2', amber: '#B45309', amberBg: '#FFFBEB',
-  purpleBg: '#EDE9FE', field: '#FAFAF8', page: '#F5F3FF',
+  navy: C.ink, purple: C.brand, purpleDark: C.brandDeep, border: C.line,
+  muted: C.muted, card: C.surface, green: C.positive, greenBg: C.positiveTint,
+  red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint,
+  purpleBg: C.brandTint, field: C.sunken, page: C.canvas,
 }
 const inr = (n: unknown) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
 const num = (v: unknown) => Number(v) || 0
@@ -30,20 +37,25 @@ const dmy = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
 const S = {
-  card: { background: V.card, borderRadius: 10, border: `1px solid ${V.border}`,
-          padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  inp:  { padding: '9px 11px', background: V.field, border: '1px solid #DDD6FE', borderRadius: 7,
-          color: V.navy, fontSize: 13, outline: 'none', fontFamily: 'inherit' } as React.CSSProperties,
-  lbl:  { fontSize: 11, fontWeight: 600, color: V.purpleDark, textTransform: 'uppercase',
-          letterSpacing: '.05em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  btnP: { padding: '8px 17px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
-          fontWeight: 600, fontFamily: 'inherit', background: V.purple, color: '#fff' } as React.CSSProperties,
-  btnG: { padding: '8px 17px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
-          fontWeight: 600, fontFamily: 'inherit', background: V.green, color: '#fff' } as React.CSSProperties,
-  btnO: { padding: '7px 14px', borderRadius: 7, border: '1px solid #DDD6FE', cursor: 'pointer',
-          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: V.purpleDark } as React.CSSProperties,
-  btnR: { padding: '7px 14px', borderRadius: 7, border: `1px solid ${V.red}33`, cursor: 'pointer',
-          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: V.red } as React.CSSProperties,
+  card: { background: V.card, borderRadius: R.lg, border: `1px solid ${V.border}`,
+          padding: '16px 18px', marginBottom: SP.md, boxShadow: E.raised } as React.CSSProperties,
+  inp:  { ...inputStyle(), width: 'auto' } as React.CSSProperties,
+  lbl:  { ...eyebrow, display: 'block', marginBottom: 5 } as React.CSSProperties,
+  btnP: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${C.brandDeep}`,
+          cursor: 'pointer', fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: `linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color: C.onAccent,
+          boxShadow: E.brand } as React.CSSProperties,
+  // Approving money is the consequential action on this screen, so it is the
+  // only green button — and green here means "settled", not "branded".
+  btnG: { height: 36, padding: '0 16px', borderRadius: R.md, border: 'none', cursor: 'pointer',
+          fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: C.positive, color: C.onAccent } as React.CSSProperties,
+  btnO: { height: 32, padding: '0 13px', borderRadius: R.md, border: `1px solid ${C.lineStrong}`,
+          cursor: 'pointer', fontSize: F.tiny, fontWeight: W.medium, fontFamily: 'inherit',
+          background: C.surface, color: C.ink, boxShadow: E.flat } as React.CSSProperties,
+  btnR: { height: 32, padding: '0 13px', borderRadius: R.md, border: `1px solid ${tone('critical').edge}`,
+          cursor: 'pointer', fontSize: F.tiny, fontWeight: W.medium, fontFamily: 'inherit',
+          background: C.surface, color: C.critical, boxShadow: E.flat } as React.CSSProperties,
 }
 
 interface Company { id: string; company_name: string }
@@ -69,21 +81,22 @@ interface Member {
 // Sub-components outside the parent — inside, they remount on every render.
 // ---------------------------------------------------------------------------
 function Empty({ text }: { text: string }) {
-  return <div style={{ textAlign: 'center', padding: '34px 0', color: V.muted, fontSize: 12.5 }}>{text}</div>
+  return <div style={{ textAlign: 'center', padding: '40px 0', color: C.muted, fontSize: F.small }}>{text}</div>
 }
 
-function Note({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
-  const [bg, fg] = tone === 'ok' ? [V.greenBg, V.green] : tone === 'warn' ? [V.amberBg, V.amber] : [V.redBg, V.red]
-  return <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 8,
-                       padding: '10px 13px', fontSize: 12, marginBottom: 12, lineHeight: 1.55 }}>{children}</div>
+function Note({ tone: t, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
+  const k = tone(t === 'ok' ? 'positive' : t === 'warn' ? 'warning' : 'critical')
+  return <div style={{ background: k.bg, color: C.inkSoft, border: `1px solid ${k.edge}`,
+                       borderRadius: R.md, padding: `${SP.md}px ${SP.lg}px`, fontSize: F.small,
+                       marginBottom: SP.md, lineHeight: 1.55 }}>{children}</div>
 }
 
 function Stat({ label, value, colour }: { label: string; value: string; colour?: string }) {
   return (
-    <div style={{ ...S.card, marginBottom: 0, padding: '13px 15px' }}>
-      <div style={{ fontSize: 10.5, fontWeight: 600, color: V.muted,
-                    textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
-      <div style={{ fontSize: 19, fontWeight: 700, color: colour || V.navy, marginTop: 3 }}>{value}</div>
+    <div style={{ ...S.card, marginBottom: 0, padding: '13px 15px', boxShadow: E.flat }}>
+      <div style={{ ...eyebrow, lineHeight: 1.3, minHeight: 27 }}>{label}</div>
+      <div style={{ fontSize: F.display, fontWeight: W.bold, color: colour || C.ink,
+                    marginTop: 4, letterSpacing: '-.02em', lineHeight: 1.05, ...numeric }}>{value}</div>
     </div>
   )
 }
@@ -98,14 +111,14 @@ function QueueRow({ item, moduleName, detailRoute, onAction, busy }: {
   const [open, setOpen] = useState(false)
 
   return (
-    <div style={{ border: `1px solid ${V.border}`, borderRadius: 9, marginBottom: 9, background: V.card }}>
+    <div style={{ border: `1px solid ${V.border}`, borderRadius: 10, marginBottom: 9, background: V.card }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 14px', flexWrap: 'wrap' }}>
         <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 99, background: V.purpleBg,
                        color: V.purpleDark, fontWeight: 600 }}>{moduleName}</span>
 
         <div style={{ flex: 1, minWidth: 180 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>{item.title}</div>
-          <div style={{ fontSize: 11.5, color: V.muted, marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: V.muted, marginTop: 2 }}>
             {item.subtitle}
             {item.flag_count > 0 && (
               <span style={{ color: V.amber, fontWeight: 600 }}> · ⚑ {item.flag_count} to review</span>
@@ -161,7 +174,7 @@ function TeamRow({ m, onChange, busy }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '10px 0',
                   borderBottom: `1px solid ${V.border}`, flexWrap: 'wrap' }}>
       <div style={{ flex: 1, minWidth: 170 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: m.is_active ? V.navy : V.muted }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: m.is_active ? V.navy : V.muted }}>
           {m.employee?.full_name ?? '—'}
           <span style={{ color: V.muted, fontWeight: 500 }}> · {m.employee?.emp_code ?? ''}</span>
         </div>
@@ -171,13 +184,13 @@ function TeamRow({ m, onChange, busy }: {
       <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 99, background: V.purpleBg,
                      color: V.purpleDark, fontWeight: 600 }}>{m.role}</span>
 
-      <label style={{ fontSize: 11.5, color: V.navy, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <label style={{ fontSize: 12, color: V.navy, display: 'flex', alignItems: 'center', gap: 5 }}>
         <input type="checkbox" checked={m.can_approve} disabled={busy}
                onChange={e => onChange(m.id, { can_approve: e.target.checked })}
                style={{ accentColor: V.purple }} />
         approve
       </label>
-      <label style={{ fontSize: 11.5, color: V.navy, display: 'flex', alignItems: 'center', gap: 5 }}>
+      <label style={{ fontSize: 12, color: V.navy, display: 'flex', alignItems: 'center', gap: 5 }}>
         <input type="checkbox" checked={m.can_disburse} disabled={busy}
                onChange={e => onChange(m.id, { can_disburse: e.target.checked })}
                style={{ accentColor: V.purple }} />
@@ -314,12 +327,16 @@ export default function FinanceDepartment() {
   const planned = modules.filter(m => !m.is_enabled)
 
   return (
-    <div style={{ background: V.page, minHeight: '100vh', padding: 20,
-                  fontFamily: '"DM Sans","Segoe UI",sans-serif', color: V.navy, fontSize: 13 }}>
-      <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 3 }}>Finance</div>
-      <div style={{ fontSize: 12.5, color: V.muted, marginBottom: 14 }}>
-        Approvals and payouts across the company. {enabled.length} module
-        {enabled.length === 1 ? '' : 's'} currently route work here.
+    <div style={{ background: V.page, minHeight: '100vh',
+                  padding: `${SP.xl}px ${SP.xl}px ${SP.huge}px`, maxWidth: 1440, margin: '0 auto',
+                  fontFamily: F.family, color: C.ink, fontSize: F.body }}>
+      <div className="ez-page-head">
+        <h1 style={{ margin: 0, fontSize: F.page, fontWeight: W.bold, color: C.ink,
+                     letterSpacing: '-.02em' }}>Finance</h1>
+        <div style={{ marginTop: 5, fontSize: F.small, color: C.muted }}>
+          Approvals and payouts across the company · {enabled.length} module
+          {enabled.length === 1 ? '' : 's'} routing work here
+        </div>
       </div>
 
       <div style={{ ...S.card, display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
@@ -353,11 +370,11 @@ export default function FinanceDepartment() {
         {([['QUEUE', 'Approvals'], ['TEAM', 'Finance team'], ['MODULES', 'Connected modules']] as const)
           .map(([k, label]) => (
           <button key={k} onClick={() => setTab(k)}
-                  style={{ padding: '8px 16px', borderRadius: 7, fontSize: 12.5, fontWeight: 600,
+                  style={{ padding: '8px 16px', borderRadius: 7, fontSize: 13, fontWeight: 600,
                            fontFamily: 'inherit', cursor: 'pointer',
                            border: tab === k ? 'none' : `1px solid ${V.border}`,
                            background: tab === k ? V.purple : V.card,
-                           color: tab === k ? '#fff' : V.purpleDark }}>
+                           color: tab === k ? C.surface : V.purpleDark }}>
             {label}{k === 'QUEUE' && totals.count > 0 ? ` · ${totals.count}` : ''}
           </button>
         ))}
@@ -370,7 +387,7 @@ export default function FinanceDepartment() {
           <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, marginBottom: 8 }}>
             Finance is not installed yet
           </div>
-          <div style={{ fontSize: 12.5, color: V.muted, lineHeight: 1.7, maxWidth: 620 }}>
+          <div style={{ fontSize: 13, color: V.muted, lineHeight: 1.7, maxWidth: 620 }}>
             {pending}
             <br /><br />
             The department, its authority rules and the shared work queue all live in
@@ -379,7 +396,7 @@ export default function FinanceDepartment() {
             in as soon as it runs.
           </div>
           <div style={{ marginTop: 14, padding: '10px 13px', background: V.field,
-                        border: `1px solid ${V.border}`, borderRadius: 8,
+                        border: `1px solid ${V.border}`, borderRadius: 10,
                         fontFamily: 'ui-monospace, monospace', fontSize: 12, color: V.navy }}>
             supabase/migrations/053_finance_department.sql
           </div>
@@ -414,7 +431,7 @@ export default function FinanceDepartment() {
               </select>
             </div>
             {acting && (
-              <div style={{ fontSize: 11.5, color: V.muted, paddingBottom: 9 }}>
+              <div style={{ fontSize: 12, color: V.muted, paddingBottom: 9 }}>
                 {acting.can_approve ? '✓ can approve' : '✗ cannot approve'} ·{' '}
                 {acting.can_disburse ? '✓ can release payment' : '✗ cannot release payment'}
               </div>
@@ -441,7 +458,7 @@ export default function FinanceDepartment() {
       {!pending && tab === 'TEAM' && (
         <div style={S.card}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Finance team</div>
-          <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
             Sitting in the Finance &amp; Accounts department does not grant approval rights — a row
             here does. Approving a claim and releasing the money are separate permissions, and a
             limit caps what each person can sign off alone.
@@ -456,7 +473,7 @@ export default function FinanceDepartment() {
         <>
           <div style={S.card}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Routing work here</div>
-            <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 12, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
               Finance reads one queue, so a module connects by enqueuing rather than by growing
               this screen. Adding the next one is a row in <code>finance_modules</code> plus a call
               to <code>finance_enqueue()</code> when something needs finance.
@@ -467,10 +484,10 @@ export default function FinanceDepartment() {
                 <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 99,
                                background: V.greenBg, color: V.green, fontWeight: 600 }}>LIVE</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{m.module_name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{m.module_name}</div>
                   <div style={{ fontSize: 11, color: V.muted }}>{m.description}</div>
                 </div>
-                <span style={{ fontSize: 11.5, color: V.navy, fontWeight: 600 }}>
+                <span style={{ fontSize: 12, color: V.navy, fontWeight: 600 }}>
                   {items.filter(i => i.module_code === m.module_code).length} open
                 </span>
               </div>
@@ -479,7 +496,7 @@ export default function FinanceDepartment() {
 
           <div style={S.card}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Registered, not yet sending</div>
-            <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: V.muted, marginBottom: 12 }}>
               These describe the intended shape. Each becomes live when its module starts enqueuing.
             </div>
             {planned.map(m => (
@@ -488,7 +505,7 @@ export default function FinanceDepartment() {
                 <span style={{ fontSize: 10, padding: '3px 9px', borderRadius: 99,
                                background: V.field, color: V.muted, fontWeight: 600 }}>PLANNED</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 600, color: V.muted }}>{m.module_name}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: V.muted }}>{m.module_name}</div>
                   <div style={{ fontSize: 11, color: V.muted }}>{m.description}</div>
                 </div>
               </div>

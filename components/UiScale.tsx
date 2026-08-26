@@ -5,15 +5,32 @@
 // persists in localStorage. Disabled on the public onboarding portal.
 import { useEffect, useState, useCallback } from 'react'
 import { usePathname } from 'next/navigation'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const KEY = 'ezer_ui_scale'      // saved value: a number (manual) or 'auto'
 const BASE = 1150                 // design width at which zoom = 1
 const MIN = 0.8, MAX = 1.6
 
+/**
+ * Auto-fit, snapped to quarter steps.
+ *
+ * The previous version rounded to two decimals, which typically landed on
+ * 1.3 — and at 1.3 a 1px hairline renders as 1.3 device pixels, an even
+ * icon stroke lands between pixels, and the whole interface reads very
+ * slightly soft. It is not the text rasteriser; `zoom` re-lays-out and
+ * re-rasterises text correctly. It is every 1px rule and 1.6px icon stroke
+ * being drawn off the pixel grid.
+ *
+ * 1.0 / 1.25 / 1.5 are the factors where the 4px spacing grid and even icon
+ * sizes stay whole, which is what actually makes the UI look sharp.
+ */
 function autoScale(): number {
   if (typeof window === 'undefined') return 1
-  const s = window.innerWidth / BASE
-  return Math.min(MAX, Math.max(1, Math.round(s * 100) / 100))
+  const raw = window.innerWidth / BASE
+  const snapped = Math.round(raw * 4) / 4
+  return Math.min(MAX, Math.max(1, snapped))
 }
 
 export default function UiScale() {
@@ -44,22 +61,23 @@ export default function UiScale() {
   }, [enabled, manual, apply])
 
   const nudge = (delta: number) => {
-    const v = Math.min(MAX, Math.max(MIN, Math.round((scale + delta) * 100) / 100))
+    // Manual nudges move in the same quarter steps, for the same reason.
+    const v = Math.min(MAX, Math.max(MIN, Math.round((scale + delta) * 4) / 4))
     setManual(true); localStorage.setItem(KEY, String(v)); apply(v)
   }
   const resetAuto = () => { setManual(false); localStorage.setItem(KEY, 'auto'); apply(autoScale()) }
 
   if (!enabled) return null
 
-  const btn: React.CSSProperties = { width: 26, height: 26, borderRadius: '50%', border: 'none', background: '#EDE9FE', color: '#6D28D9', fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+  const btn: React.CSSProperties = { width: 26, height: 26, borderRadius: '50%', border: 'none', background: TK.brandTint, color: TK.brandDeep, fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }
   return (
-    <div title="Adjust UI size — click % for auto-fit" style={{ position: 'fixed', bottom: 14, right: 14, zIndex: 99999, display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #DDD6FE', borderRadius: 99, padding: '4px 6px', boxShadow: '0 4px 14px rgba(124,58,237,.18)', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
-      <button title="Smaller" onClick={() => nudge(-0.1)} style={btn}>−</button>
+    <div title="Adjust UI size — click % for auto-fit" style={{ display: 'flex', alignItems: 'center', gap: 4, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 99, padding: '4px 6px', boxShadow: '0 4px 14px rgba(37,99,235,.18)', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
+      <button title="Smaller" onClick={() => nudge(-0.25)} style={btn}>−</button>
       <button title={manual ? 'Click to auto-fit to screen' : 'Auto-fit (on)'} onClick={resetAuto}
-        style={{ minWidth: 54, textAlign: 'center', fontSize: 11, fontWeight: 700, color: manual ? '#6D28D9' : '#059669', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+        style={{ minWidth: 54, textAlign: 'center', fontSize: 11, fontWeight: 700, color: manual ? TK.brandDeep : TK.positive, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
         {Math.round(scale * 100)}%{manual ? '' : ' ·auto'}
       </button>
-      <button title="Bigger" onClick={() => nudge(0.1)} style={btn}>+</button>
+      <button title="Bigger" onClick={() => nudge(0.25)} style={btn}>+</button>
     </div>
   )
 }

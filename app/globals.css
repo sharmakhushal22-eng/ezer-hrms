@@ -4,15 +4,17 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* Onboarding module theme — matches the rest of the app
-     (page #F5F3FF · white cards · #1E1B4B text · #7C3AED purple). */
-  --color-background-primary:   #ffffff;  /* cards / surfaces */
-  --color-background-secondary: #fafafb;  /* secondary surfaces / stat tiles */
-  --color-background-tertiary:  #f5f3ff;  /* page background */
-  --color-text-primary:         #1e1b4b;  /* headings / body */
-  --color-text-secondary:       #6b7280;  /* muted text */
-  --color-border-secondary:     #e5e7eb;
-  --color-border-tertiary:      #ede9fe;
+  /* Onboarding module theme.
+     Aliased onto the EZER tokens rather than restating a palette, so this
+     module follows the theme — including dark — like everything else.
+     See lib/ui/theme.css. */
+  --color-background-primary:   var(--ez-surface);
+  --color-background-secondary: var(--ez-sunken);
+  --color-background-tertiary:  var(--ez-canvas);
+  --color-text-primary:         var(--ez-ink);
+  --color-text-secondary:       var(--ez-muted);
+  --color-border-secondary:     var(--ez-line);
+  --color-border-tertiary:      var(--ez-brand-edge);
   --border-radius-md:           10px;
   --border-radius-lg:           14px;
   --border-radius-xl:           16px;
@@ -60,7 +62,7 @@ body {
 @supports not selector(::-webkit-scrollbar) {
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(124, 58, 237, 0.35) transparent;
+    scrollbar-color: rgba(37,99,235,0.35) transparent;
   }
 }
 
@@ -90,13 +92,13 @@ body {
 /* Reveal while the pointer is anywhere over the scrolling area (which is the
    case whenever you are wheel-scrolling it), and deepen on direct interaction. */
 *:hover::-webkit-scrollbar-thumb {
-  background-color: rgba(124, 58, 237, 0.35);
+  background-color: rgba(37,99,235,0.35);
 }
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(124, 58, 237, 0.6);
+  background-color: rgba(37,99,235,0.6);
 }
 *::-webkit-scrollbar-thumb:active {
-  background-color: rgba(124, 58, 237, 0.75);
+  background-color: rgba(37,99,235,0.75);
 }
 
 /* Dark surfaces (sidebar / navy panels) — light thumb instead of purple,

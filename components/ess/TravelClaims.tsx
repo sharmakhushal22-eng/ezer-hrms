@@ -55,11 +55,16 @@ function isPreview(): boolean {
 import { supabase } from '@/lib/supabase'
 import { measureTrail, isValidPoint, type GpsPoint } from '@/lib/travel/gps'
 import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
+// Local S / Field names exist here, so spacing is imported as SP.
+import {
+  C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
 
+// Bound to the design system — see lib/ui/tokens.ts.
 const V = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489', border: '#E9E7F5', muted: '#6B6B7B',
-  card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5', red: '#DC2626', redBg: '#FEF2F2',
-  amber: '#D97706', amberBg: '#FFFBEB', purpleBg: '#EEEDFE', field: '#FAFAF8',
+  navy: C.ink, purple: C.brand, purpleDark: C.brandDeep, border: C.line, muted: C.muted,
+  card: C.surface, green: C.positive, greenBg: C.positiveTint, red: C.critical, redBg: C.criticalTint,
+  amber: C.warning, amberBg: C.warningTint, purpleBg: C.brandTint, field: C.sunken,
 }
 
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -267,18 +272,11 @@ function useJourneyRecorder() {
 // Sub-components live outside the parent — defined inside, they remount on
 // every keystroke and the form loses focus mid-word.
 // ---------------------------------------------------------------------------
-const lbl: React.CSSProperties = {
-  fontSize: 11, fontWeight: 600, color: '#6D28D9', textTransform: 'uppercase',
-  letterSpacing: '.05em', display: 'block', marginBottom: 4,
-}
-const inp: React.CSSProperties = {
-  width: '100%', padding: '9px 11px', background: V.field, border: `1px solid ${V.border}`,
-  borderRadius: 7, color: V.navy, fontSize: 13, outline: 'none',
-  fontFamily: 'inherit', boxSizing: 'border-box',
-}
+const lbl: React.CSSProperties = { ...eyebrow, display: 'block', marginBottom: 5 }
+const inp: React.CSSProperties = { ...inputStyle() }
 const card: React.CSSProperties = {
-  background: V.card, borderRadius: 10, border: `1px solid ${V.border}`,
-  padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)',
+  background: V.card, borderRadius: R.lg, border: `1px solid ${V.border}`,
+  padding: '16px 18px', marginBottom: SP.lg, boxShadow: E.raised,
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -297,7 +295,7 @@ function Banner({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: Rea
                  : tone === 'warn' ? [V.amberBg, V.amber]
                  : [V.redBg, V.red]
   return (
-    <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 8,
+    <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 10,
                   padding: '10px 13px', fontSize: 12, marginBottom: 12, lineHeight: 1.5 }}>
       {children}
     </div>
@@ -305,7 +303,7 @@ function Banner({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: Rea
 }
 
 function Empty({ text }: { text: string }) {
-  return <div style={{ textAlign: 'center', padding: '28px 0', color: V.muted, fontSize: 12.5 }}>{text}</div>
+  return <div style={{ textAlign: 'center', padding: '28px 0', color: V.muted, fontSize: 13 }}>{text}</div>
 }
 
 /** The recorder panel shown for bill-less modes. */
@@ -318,7 +316,7 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
   const amount = rate != null ? liveKm * rate : null
 
   return (
-    <div style={{ border: `1px solid ${tracking ? V.purple : V.border}`, borderRadius: 9,
+    <div style={{ border: `1px solid ${tracking ? V.purple : V.border}`, borderRadius: 10,
                   padding: '14px 16px', marginBottom: 12,
                   background: tracking ? V.purpleBg : V.field }}>
       <div style={{ fontSize: 12, color: V.muted, marginBottom: 10, lineHeight: 1.55 }}>
@@ -336,7 +334,7 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
             <div style={{ fontSize: 26, fontWeight: 700, color: V.navy, lineHeight: 1 }}>
               {liveKm.toFixed(2)} <span style={{ fontSize: 14, color: V.muted }}>km</span>
             </div>
-            <div style={{ fontSize: 10.5, color: V.muted, marginTop: 3 }}>
+            <div style={{ fontSize: 11, color: V.muted, marginTop: 3 }}>
               {journey.points.length} location {journey.points.length === 1 ? 'point' : 'points'}
               {journey.accuracy != null && ` · ±${Math.round(journey.accuracy)} m`}
             </div>
@@ -346,13 +344,13 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
               <div style={{ fontSize: 20, fontWeight: 700, color: V.green, lineHeight: 1 }}>
                 {inr(amount)}
               </div>
-              <div style={{ fontSize: 10.5, color: V.muted, marginTop: 3 }}>
+              <div style={{ fontSize: 11, color: V.muted, marginTop: 3 }}>
                 at {inr(rate!)}/km
               </div>
             </div>
           )}
           {tracking && (
-            <span style={{ fontSize: 11, color: V.purpleDark, fontWeight: 600 }}>● Recording</span>
+            <span style={{ fontSize: 11, color: V.purpleDark, fontWeight: 600 }}>Recording</span>
           )}
         </div>
       )}
@@ -361,25 +359,24 @@ function JourneyPanel({ journey, liveKm, rate, onStart, onEnd, onReset, typeName
         {journey.state === 'IDLE' && (
           <button onClick={onStart}
                   style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: V.purple,
-                           color: '#fff', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                           color: C.onAccent, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
             Start travel
           </button>
         )}
         {tracking && (
           <button onClick={onEnd}
                   style={{ padding: '9px 20px', borderRadius: 7, border: 'none', background: V.green,
-                           color: '#fff', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                           color: C.onAccent, fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
             End travel
           </button>
         )}
         {recorded && (
           <>
-            <span style={{ fontSize: 12, color: V.green, fontWeight: 600, alignSelf: 'center' }}>
-              ✓ Journey recorded — add the details below and save.
+            <span style={{ fontSize: 12, color: V.green, fontWeight: 600, alignSelf: 'center' }}>Journey recorded — add the details below and save.
             </span>
             <button onClick={onReset}
                     style={{ padding: '7px 14px', borderRadius: 7, border: `1px solid ${V.border}`,
-                             background: '#fff', color: V.muted, fontSize: 12,
+                             background: C.surface, color: V.muted, fontSize: 12,
                              fontFamily: 'inherit', cursor: 'pointer' }}>
               Discard
             </button>
@@ -434,14 +431,14 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
 
   const gps = log.distance_source === 'GPS_TRACKED' || log.distance_source === 'GPS_SNAPPED'
   return (
-    <div style={{ border: `1px solid ${checked ? V.purple : V.border}`, borderRadius: 8,
+    <div style={{ border: `1px solid ${checked ? V.purple : V.border}`, borderRadius: 10,
                   background: checked ? V.purpleBg : V.card, marginBottom: 7,
                   padding: '10px 12px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
       <input type="checkbox" checked={checked} onChange={onToggle}
              style={{ width: 15, height: 15, accentColor: V.purple, cursor: 'pointer', flexShrink: 0 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: V.navy,
+        <div style={{ fontSize: 13, fontWeight: 600, color: V.navy,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {log.purpose}
         </div>
@@ -453,7 +450,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
           {log.rate_applied ? ` @ ${inr(log.rate_applied)}/km` : ''}
         </div>
       </div>
-      <div style={{ fontSize: 13.5, fontWeight: 700, color: V.navy, flexShrink: 0 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, flexShrink: 0 }}>
         {inr(log.total_amount)}
       </div>
       <button onClick={onDelete} title="Remove this entry"
@@ -470,7 +467,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
                                       fontSize: 11, background: V.greenBg, color: V.green,
                                       border: `1px solid ${V.green}33`, borderRadius: 99,
                                       padding: '3px 9px' }}>
-              {b.mime_type === 'application/pdf' ? '📄' : '🧾'}
+              {b.mime_type === 'application/pdf' ? '' : ''}
               {b.url
                 ? <a href={b.url} target="_blank" rel="noreferrer"
                      style={{ color: V.green, textDecoration: 'underline' }}>
@@ -490,7 +487,7 @@ function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, onAttac
                   style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
                            fontSize: 11, fontWeight: 600, fontFamily: 'inherit',
                            color: busy ? V.muted : V.purpleDark }}>
-            {busy ? 'Uploading…' : bills.length ? '+ another bill' : '📎 Attach bill slip'}
+            {busy ? 'Uploading…' : bills.length ? '+ another bill' : 'Attach bill slip'}
           </button>
 
           {loaded && bills.length === 0 && needsBill !== false && (
@@ -509,13 +506,13 @@ function ClaimRow({ claim }: { claim: Claim }) {
   const settled = claim.status === 'PAID' || claim.status === 'APPROVED'
   return (
     <div style={{ border: `1px solid ${V.border}`, borderLeft: `3px solid ${fg}`,
-                  borderRadius: 9, padding: '12px 14px', marginBottom: 9 }}>
+                  borderRadius: 10, padding: '12px 14px', marginBottom: 9 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                     gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>{claim.claim_no}</div>
         <Pill bg={bg} fg={fg} text={text} />
       </div>
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11.5, color: V.muted }}>
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 12, color: V.muted }}>
         <span>{claim.line_count} {claim.line_count === 1 ? 'expense' : 'expenses'}</span>
         <span>{dmy(claim.period_from)} – {dmy(claim.period_to)}</span>
         <span>Claimed <b style={{ color: V.navy }}>{inr(claim.total_claimed)}</b></span>
@@ -823,11 +820,11 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
   if (blocked) {
     return (
       <div style={{ ...card, textAlign: 'center', padding: '38px 22px' }}>
-        <div style={{ fontSize: 30, marginBottom: 10 }}>🚫</div>
+        <div style={{ fontSize: 30, marginBottom: 10 }}></div>
         <div style={{ fontSize: 14, fontWeight: 700, color: V.navy, marginBottom: 6 }}>
           Travel claims are not available
         </div>
-        <div style={{ fontSize: 12.5, color: V.muted, maxWidth: 420, margin: '0 auto', lineHeight: 1.6 }}>
+        <div style={{ fontSize: 13, color: V.muted, maxWidth: 420, margin: '0 auto', lineHeight: 1.6 }}>
           {blocked}
         </div>
       </div>
@@ -866,7 +863,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                                        .reduce((s, c) => s + num(c.net_payable), 0)), V.green],
         ].map(([label, value, colour]) => (
           <div key={label} style={{ ...card, marginBottom: 0, padding: '13px 15px' }}>
-            <div style={{ fontSize: 10.5, fontWeight: 600, color: V.muted,
+            <div style={{ fontSize: 11, fontWeight: 600, color: V.muted,
                           textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
             <div style={{ fontSize: 19, fontWeight: 700, color: colour as string, marginTop: 3 }}>{value}</div>
           </div>
@@ -988,7 +985,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                        onChange={e => setParking(e.target.value)} placeholder="0" style={inp} />
               </Field>
             </div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12.5,
+            <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13,
                             color: V.navy, cursor: 'pointer', marginBottom: 12 }}>
               <input type="checkbox" checked={roundTrip} onChange={e => setRoundTrip(e.target.checked)}
                      style={{ width: 14, height: 14, accentColor: V.purple, cursor: 'pointer' }} />
@@ -1003,7 +1000,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                      onChange={e => setAmount(e.target.value)} placeholder="0" style={inp} />
             </Field>
             {num(selectedType?.bill_threshold) > 0 && (
-              <div style={{ alignSelf: 'end', fontSize: 11.5, color: V.muted, paddingBottom: 9 }}>
+              <div style={{ alignSelf: 'end', fontSize: 12, color: V.muted, paddingBottom: 9 }}>
                 A bill is required above {inr(num(selectedType?.bill_threshold))}.
               </div>
             )}
@@ -1024,8 +1021,8 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                                border: `1px dashed ${pendingBill ? V.green : V.border}`,
                                background: pendingBill ? V.greenBg : V.field,
                                color: pendingBill ? V.green : V.purpleDark,
-                               fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
-                {pendingBill ? '✓ ' + pendingBill.name : '📎 Choose Uber / Ola / taxi bill'}
+                               fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: 'pointer' }}>
+                {pendingBill ? '✓ ' + pendingBill.name : 'Choose Uber / Ola / taxi bill'}
               </button>
 
               {pendingBill && (
@@ -1042,7 +1039,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
 
               {!pendingBill && num(selectedType?.bill_threshold) > 0
                 && num(amount) > num(selectedType?.bill_threshold) && (
-                <span style={{ fontSize: 11.5, color: V.amber }}>
+                <span style={{ fontSize: 12, color: V.amber }}>
                   This amount needs a bill — attach it now or from the list below.
                 </span>
               )}
@@ -1056,7 +1053,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
         <button onClick={addExpense} disabled={saving || preview}
                 title={preview ? 'Only the employee can file their own expense' : undefined}
                 style={{ padding: '9px 20px', borderRadius: 7, border: 'none',
-                         background: saving || preview ? V.muted : V.purple, color: '#fff',
+                         background: saving || preview ? V.muted : V.purple, color: C.onAccent,
                          fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
                          cursor: saving || preview ? 'not-allowed' : 'pointer' }}>
           {saving ? 'Saving…' : preview ? 'Add expense — employee only' : 'Add expense'}
@@ -1079,7 +1076,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
                 ? new Set()
                 : new Set(unclaimed.map(l => l.id)))}
               style={{ padding: '6px 13px', borderRadius: 7, border: `1px solid ${V.border}`,
-                       background: V.card, color: V.purpleDark, fontSize: 11.5,
+                       background: V.card, color: V.purpleDark, fontSize: 12,
                        fontWeight: 500, fontFamily: 'inherit', cursor: 'pointer' }}>
               {picked.size === unclaimed.length ? 'Clear selection' : 'Select all'}
             </button>
@@ -1107,7 +1104,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                           gap: 12, marginTop: 13, paddingTop: 13,
                           borderTop: `1px solid ${V.border}`, flexWrap: 'wrap' }}>
-              <div style={{ fontSize: 12.5, color: V.muted }}>
+              <div style={{ fontSize: 13, color: V.muted }}>
                 {picked.size === 0
                   ? 'Select the expenses you want to claim.'
                   : <>Claiming <b style={{ color: V.navy }}>{inr(pickedTotal)}</b> across {picked.size}
@@ -1116,7 +1113,7 @@ export default function TravelClaims({ employeeId }: { employeeId: string }) {
               <button onClick={submitClaim} disabled={picked.size === 0 || submitting}
                       style={{ padding: '9px 20px', borderRadius: 7, border: 'none',
                                background: picked.size === 0 || submitting ? V.border : V.green,
-                               color: picked.size === 0 || submitting ? V.muted : '#fff',
+                               color: picked.size === 0 || submitting ? V.muted: C.surface,
                                fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
                                cursor: picked.size === 0 || submitting ? 'default' : 'pointer' }}>
                 {submitting ? 'Submitting…' : 'Submit claim'}

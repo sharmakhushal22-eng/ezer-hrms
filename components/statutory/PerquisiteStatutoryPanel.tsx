@@ -7,11 +7,14 @@ import { supabase } from '@/lib/supabase'
 import PerquisiteTaxSummary from './PerquisiteTaxSummary'
 import { getPerquisiteConfig } from '@/lib/perquisites/actions'
 import { getEmployeePerquisites, saveEmployeePerquisite } from '@/lib/perquisites/employeeActions'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
-const C = { navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280' }
+const C = { navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface, border: TK.line, muted: TK.muted }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12.5, background: '#FAFAF8', color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
-const lbl: React.CSSProperties = { fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
+const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const lbl: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }
 
 export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
   const [emps, setEmps] = useState<{ id: string; emp_code: string; full_name: string }[]>([])
@@ -63,7 +66,7 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
 
   return (
     <div style={{ fontFamily: font }}>
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, maxWidth: 560 }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, maxWidth: 560 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>Perquisite tax impact</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 12 }}>
           <div>
@@ -78,23 +81,23 @@ export default function PerquisiteStatutoryPanel({ fy }: { fy: string }) {
             <input type="number" style={inp} value={base} onChange={e => setBase(e.target.value)} placeholder="pre-perquisite" />
           </div>
         </div>
-        <div style={{ fontSize: 10.5, color: C.muted, marginTop: 8 }}>Base auto-fills from CTC (annual CTC − variable); adjust to the actual pre-perquisite taxable figure.</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>Base auto-fills from CTC (annual CTC − variable); adjust to the actual pre-perquisite taxable figure.</div>
       </div>
 
       {empId && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, maxWidth: 560 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, maxWidth: 560 }}>
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>This employee&apos;s perquisite amounts · FY {fy}</div>
           {types.length === 0 ? <div style={{ fontSize: 12, color: C.muted }}>No active perquisite types — configure them in Configuration → Perquisite (run sql63/sql64 first).</div> : (
             <>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px', gap: 8, alignItems: 'center' }}>
                 {types.map(t => (
                   <Fragment key={t.id}>
-                    <div style={{ fontSize: 12.5, color: C.navy }}>{t.name}</div>
+                    <div style={{ fontSize: 13, color: C.navy }}>{t.name}</div>
                     <input type="number" placeholder="₹ / yr" style={{ ...inp, width: 130 }} value={amounts[t.id] ?? ''} onChange={e => setAmounts(p => ({ ...p, [t.id]: e.target.value }))} />
                   </Fragment>
                 ))}
               </div>
-              <button onClick={saveAmounts} disabled={saving} style={{ marginTop: 12, padding: '8px 16px', borderRadius: 8, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : '💾 Save amounts'}</button>
+              <button onClick={saveAmounts} disabled={saving} style={{ marginTop: 12, padding: '8px 16px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: saving ? 'not-allowed' : 'pointer', opacity: saving ? 0.6 : 1 }}>{saving ? 'Saving…' : 'Save amounts'}</button>
             </>
           )}
         </div>

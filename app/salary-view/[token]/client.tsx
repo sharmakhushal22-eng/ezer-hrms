@@ -1,6 +1,9 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 function fmt(n: number) { return Math.round(n).toLocaleString('en-IN') }
 
@@ -169,49 +172,49 @@ export default function SalaryViewClient({ data }: { data: any }) {
   }
 
   const S = {
-    page: { background:'#F5F3FF', minHeight:'100vh', fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
-    card: { background:'#fff', borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', overflow:'hidden', marginBottom:14 } as React.CSSProperties,
-    label: { fontSize:10, fontWeight:600 as const, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.06em' } as React.CSSProperties,
-    inp: { padding:'7px 10px', border:'1px solid #DDD6FE', borderRadius:6, color:'#1E1B4B', fontSize:12, outline:'none', background:'#FAFAF8', width:'100%', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-    sec: (margin?: string) => ({ fontSize:10, fontWeight:600 as const, color:'#7C3AED', textTransform:'uppercase' as const, letterSpacing:'.06em', margin:margin||'12px 0 8px', display:'flex', alignItems:'center', gap:8 }) as React.CSSProperties,
+    page: { background:TK.canvas, minHeight:'100vh', fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
+    card: { background:TK.surface, borderRadius:10, border:'1px solid var(--ez-line)', overflow:'hidden', marginBottom:14 } as React.CSSProperties,
+    label: { fontSize:10, fontWeight:600 as const, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' } as React.CSSProperties,
+    inp: { padding:'7px 10px', border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:12, outline:'none', background:TK.sunken, width:'100%', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
+    sec: (margin?: string) => ({ fontSize:10, fontWeight:600 as const, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.06em', margin:margin||'12px 0 8px', display:'flex', alignItems:'center', gap:8 }) as React.CSSProperties,
   }
 
   const Row = ({ l, v, red, bold, green }: { l: string; v: string; red?: boolean; bold?: boolean; green?: boolean }) => (
-    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 16px', borderBottom:'1px solid #F3F0FF', fontSize:13 }}>
-      <span style={{ color: red ? '#DC2626' : '#374151' }}>{l}</span>
-      <span style={{ fontWeight: bold ? 600 : 500, color: red ? '#DC2626' : green ? '#059669' : '#1E1B4B' }}>{v}</span>
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 16px', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:13 }}>
+      <span style={{ color: red ? TK.critical : TK.inkSoft }}>{l}</span>
+      <span style={{ fontWeight: bold ? 600 : 500, color: red ? TK.critical : green ? TK.positive : TK.ink }}>{v}</span>
     </div>
   )
 
   return (
     <div style={S.page}>
       {/* Header */}
-      <div style={{ background:'linear-gradient(135deg,#7C3AED,#4F46E5)', padding:'18px 20px', color:'#fff' }}>
+      <div style={{ background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, padding:'18px 20px', color:TK.onAccent }}>
         <div style={{ maxWidth:680, margin:'0 auto' }}>
-          <div style={{ fontSize:11, color:'rgba(255,255,255,0.55)', marginBottom:3 }}>{data.company_name || 'EZER HRMS'}</div>
+          <div style={{ fontSize:11, color:TK.onAccentDim, marginBottom:3 }}>{data.company_name || 'EZER HRMS'}</div>
           <div style={{ fontSize:20, fontWeight:600 }}>Your Salary Structure</div>
-          {data.candidate_name && <div style={{ fontSize:13, color:'rgba(255,255,255,0.75)', marginTop:3 }}>Dear {data.candidate_name}</div>}
-          {data.position_title && <div style={{ fontSize:12, color:'rgba(255,255,255,0.55)', marginTop:1 }}>{data.position_title}</div>}
+          {data.candidate_name && <div style={{ fontSize:13, color:TK.onAccentSoft, marginTop:3 }}>Dear {data.candidate_name}</div>}
+          {data.position_title && <div style={{ fontSize:12, color:TK.onAccentDim, marginTop:1 }}>{data.position_title}</div>}
         </div>
       </div>
 
       <div style={{ maxWidth:680, margin:'0 auto', padding:'16px' }}>
 
         {/* In-Hand Highlight */}
-        <div style={{ background:'#fff', borderRadius:12, border:'2px solid #7C3AED', padding:'18px 20px', marginBottom:14, textAlign:'center' as const }}>
-          <div style={{ fontSize:11, color:'#9CA3AF', textTransform:'uppercase' as const, letterSpacing:'.08em', marginBottom:3 }}>Estimated Monthly In-Hand</div>
-          <div style={{ fontSize:38, fontWeight:700, color:'#059669', letterSpacing:-1 }}>₹{fmt(inHand)}</div>
-          <div style={{ fontSize:11, color:'#9CA3AF', marginTop:3 }}>Annual: ₹{fmt(inHand*12)} &nbsp;|&nbsp; Excl. TDS</div>
+        <div style={{ background:TK.surface, borderRadius:14, border: `2px solid ${TK.brandEdge}`, padding:'18px 20px', marginBottom:14, textAlign:'center' as const }}>
+          <div style={{ fontSize:11, color:TK.faint, textTransform:'uppercase' as const, letterSpacing:'.08em', marginBottom:3 }}>Estimated Monthly In-Hand</div>
+          <div style={{ fontSize:38, fontWeight:700, color:TK.positive, letterSpacing:-1 }}>₹{fmt(inHand)}</div>
+          <div style={{ fontSize:11, color:TK.faint, marginTop:3 }}>Annual: ₹{fmt(inHand*12)} &nbsp;|&nbsp; Excl. TDS</div>
           {data.hike_pct && (
-            <div style={{ background:'#ECFDF5', borderRadius:99, padding:'4px 14px', display:'inline-block', marginTop:8, border:'1px solid #A7F3D0' }}>
-              <span style={{ fontSize:13, fontWeight:600, color:'#059669' }}>Hike: {Number(data.hike_pct).toFixed(1)}%</span>
+            <div style={{ background:TK.positiveTint, borderRadius:99, padding:'4px 14px', display:'inline-block', marginTop:8, border: `1px solid ${TK.positiveTint}` }}>
+              <span style={{ fontSize:13, fontWeight:600, color:TK.positive }}>Hike: {Number(data.hike_pct).toFixed(1)}%</span>
             </div>
           )}
         </div>
 
         {/* Salary Breakdown — ANNUAL */}
         <div style={{ ...S.card }}>
-          <div style={{ background:'#7C3AED', padding:'9px 16px', color:'#fff', fontSize:12, fontWeight:500, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <div style={{ background:TK.brand, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <span>Salary Breakdown</span>
             <span style={{ fontSize:10, background:'rgba(255,255,255,0.2)', padding:'2px 8px', borderRadius:99 }}>Annual (₹)</span>
           </div>
@@ -219,38 +222,38 @@ export default function SalaryViewClient({ data }: { data: any }) {
           <Row l="HRA" v={`₹${fmt(hra*12)}`} />
           <Row l="Allowances / Flexi Pool" v={`₹${fmt(otherAllow*12)}`} />
           {statBonus > 0 && <Row l="Statutory Bonus" v={`₹${fmt(statBonus*12)}`} />}
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', background:'#EDE9FE', borderBottom:'1px solid #D8D4FE', fontSize:14, fontWeight:600, color:'#4C1D95' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', background:TK.brandTint, borderBottom: `1px solid ${TK.brandEdge}`, fontSize:14, fontWeight:600, color:TK.brandDeep }}>
             <span>Gross (Annual)</span><span>₹{fmt(grossAnnual)}</span>
           </div>
           {epfEmp > 0 && <Row l="(−) EPF Employee" v={`₹${fmt(epfEmp*12)}`} red />}
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 16px', background:'#FFFAFA', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 16px', background: TK.criticalTint, borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
             <div>
-              <span style={{ color: esicEmp > 0 ? '#DC2626' : '#9CA3AF' }}>(−) ESIC Employee</span>
-              <div style={{ fontSize:10, color:'#9CA3AF', marginTop:1 }}>
+              <span style={{ color: esicEmp > 0 ? TK.critical : TK.faint }}>(−) ESIC Employee</span>
+              <div style={{ fontSize:10, color:TK.faint, marginTop:1 }}>
                 {esicEmp > 0
                   ? `Gross/mo ₹${fmt(grossMonthly)} ≤ ₹21,000 → 0.75% = ₹${fmt(esicEmp)}/mo`
                   : `Gross/mo ₹${fmt(grossMonthly)} > ₹21,000 → Not applicable`}
               </div>
             </div>
-            <span style={{ fontWeight:500, color: esicEmp > 0 ? '#DC2626' : '#059669' }}>
+            <span style={{ fontWeight:500, color: esicEmp > 0 ? TK.critical : TK.positive }}>
               {esicEmp > 0 ? `₹${fmt(esicEmp*12)}` : 'Nil'}
             </span>
           </div>
           {ptMonthly > 0 && <Row l="(−) Professional Tax" v={`₹${fmt(ptMonthly*12)}`} red />}
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 16px', background:'#FFF5F5', borderBottom:'1px solid #F3F0FF', fontSize:12, fontWeight:500, color:'#991B1B' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 16px', background: TK.criticalTint, borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12, fontWeight:500, color: TK.critical }}>
             <span>Total Deductions</span><span>₹{fmt(totalDed*12)}</span>
           </div>
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 16px', background:'#ECFDF5', fontSize:15, fontWeight:700, color:'#064E3B' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 16px', background:TK.positiveTint, fontSize:15, fontWeight:700, color: TK.positive }}>
             <span>In Hand (Annual)</span><span>₹{fmt(inHand*12)}</span>
           </div>
         </div>
 
         {/* CTC Summary */}
         <div style={S.card}>
-          <div style={{ background:'#4C1D95', padding:'9px 16px', color:'#fff', fontSize:12, fontWeight:500 }}>CTC Summary — Annual</div>
+          <div style={{ background:TK.brandDeep, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>CTC Summary — Annual</div>
           <Row l="Fixed Component" v={`₹${fmt(fixedAnnual)}`} />
           <Row l="Variable Component" v={`₹${fmt(varAnnual)}`} />
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 16px', fontSize:14, fontWeight:700, color:'#4C1D95' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 16px', fontSize:14, fontWeight:700, color:TK.brandDeep }}>
             <span>Total CTC</span><span>₹{fmt(ctcAnnual)}</span>
           </div>
         </div>
@@ -258,34 +261,34 @@ export default function SalaryViewClient({ data }: { data: any }) {
         {/* One-time payments */}
         {(joiningBonus > 0 || retentionBonus > 0 || esopValue > 0) && (
           <div style={S.card}>
-            <div style={{ background:'#059669', padding:'9px 16px', color:'#fff', fontSize:12, fontWeight:500 }}>One-time Payments</div>
+            <div style={{ background:TK.positive, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>One-time Payments</div>
             {joiningBonus > 0 && (
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', borderBottom:'1px solid #F3F0FF', fontSize:13 }}>
-                <div><span style={{ color:'#374151' }}>Joining Bonus</span>{data.joining_bonus_freq && <span style={{ fontSize:11, color:'#9CA3AF', marginLeft:8 }}>({data.joining_bonus_freq})</span>}</div>
-                <span style={{ fontWeight:600, color:'#059669' }}>₹{fmt(joiningBonus)}</span>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:13 }}>
+                <div><span style={{ color:TK.inkSoft }}>Joining Bonus</span>{data.joining_bonus_freq && <span style={{ fontSize:11, color:TK.faint, marginLeft:8 }}>({data.joining_bonus_freq})</span>}</div>
+                <span style={{ fontWeight:600, color:TK.positive }}>₹{fmt(joiningBonus)}</span>
               </div>
             )}
             {retentionBonus > 0 && (
-              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', borderBottom:'1px solid #F3F0FF', fontSize:13 }}>
-                <div><span style={{ color:'#374151' }}>Retention Bonus</span>{data.retention_bonus_freq && <span style={{ fontSize:11, color:'#9CA3AF', marginLeft:8 }}>({data.retention_bonus_freq})</span>}</div>
-                <span style={{ fontWeight:600, color:'#059669' }}>₹{fmt(retentionBonus)}</span>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:13 }}>
+                <div><span style={{ color:TK.inkSoft }}>Retention Bonus</span>{data.retention_bonus_freq && <span style={{ fontSize:11, color:TK.faint, marginLeft:8 }}>({data.retention_bonus_freq})</span>}</div>
+                <span style={{ fontWeight:600, color:TK.positive }}>₹{fmt(retentionBonus)}</span>
               </div>
             )}
             {esopValue > 0 && (
               <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', fontSize:13 }}>
-                <div><span style={{ color:'#374151' }}>ESOP Grant Value</span>{data.esop_remark && <span style={{ fontSize:11, color:'#9CA3AF', marginLeft:8 }}>({data.esop_remark})</span>}</div>
-                <span style={{ fontWeight:600, color:'#7C3AED' }}>₹{fmt(esopValue)}</span>
+                <div><span style={{ color:TK.inkSoft }}>ESOP Grant Value</span>{data.esop_remark && <span style={{ fontSize:11, color:TK.faint, marginLeft:8 }}>({data.esop_remark})</span>}</div>
+                <span style={{ fontWeight:600, color:TK.brand }}>₹{fmt(esopValue)}</span>
               </div>
             )}
           </div>
         )}
 
         {/* TDS + FBP CALCULATOR */}
-        <div style={{ background:'#fff', borderRadius:10, border:'1.5px solid #7C3AED', overflow:'hidden', marginBottom:14 }}>
+        <div style={{ background:TK.surface, borderRadius:10, border: `2px solid ${TK.brandEdge}`, overflow:'hidden', marginBottom:14 }}>
           <button onClick={() => setShowCalc(!showCalc)}
-            style={{ width:'100%', padding:'13px 18px', background:showCalc?'#EDE9FE':'#7C3AED', color:showCalc?'#4C1D95':'#fff', border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', display:'flex', justifyContent:'space-between', alignItems:'center', textAlign:'left' as const }}>
-            <span>🧮 Calculate TDS & Select Flexi Benefit Plan</span>
-            <span style={{ fontSize:18 }}>{showCalc ? '▲' : '▼'}</span>
+            style={{ width:'100%', padding:'13px 18px', background:showCalc?TK.brandTint:TK.brand, color:showCalc?TK.brandDeep: TK.surface, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', display:'flex', justifyContent:'space-between', alignItems:'center', textAlign:'left' as const }}>
+            <span>Calculate TDS & Select Flexi Benefit Plan</span>
+            <span style={{ fontSize:18 }}>{showCalc ? '' : ''}</span>
           </button>
 
           {showCalc && (
@@ -296,7 +299,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:16 }}>
                 {(['new','old'] as const).map(r => (
                   <button key={r} onClick={() => { setRegime(r); setSelectedFBP(new Set()) }}
-                    style={{ padding:12, border:regime===r?'none':'1px solid #DDD6FE', borderRadius:8, cursor:'pointer', fontFamily:'inherit', background:regime===r?'#7C3AED':'#F9FAFB', color:regime===r?'#fff':'#6B7280', fontWeight:regime===r?600:400 }}>
+                    style={{ padding:12, border:regime===r?'none':'1px solid #DDD6FE', borderRadius:10, cursor:'pointer', fontFamily:'inherit', background:regime===r?TK.brand:TK.sunken, color:regime===r?TK.surface:TK.muted, fontWeight:regime===r?600:400 }}>
                     <div style={{ fontSize:13 }}>{r==='new'?'New Regime':'Old Regime'}</div>
                     <div style={{ fontSize:10, marginTop:2, opacity:.8 }}>{r==='new'?'Default | 6 FBP components':'All 11 FBP components'}</div>
                   </button>
@@ -326,9 +329,9 @@ export default function SalaryViewClient({ data }: { data: any }) {
 
               {/* FBP SELECTION */}
               <div style={S.sec()}>Select Flexi Benefit Plan (FBP)</div>
-              <div style={{ background:'#F3F0FF', borderRadius:8, padding:'8px 12px', marginBottom:12, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
-                <span style={{ color:'#4C1D95' }}>Slab {slab} — {SLAB_NAMES[slab]} &nbsp;|&nbsp; {regime === 'old' ? 'Old' : 'New'} Regime</span>
-                <span style={{ fontWeight:600, color:'#4C1D95' }}>Pool: ₹{fmt(availableFBP.filter(c => !c.paired || c.code < c.paired).reduce((s,c) => s + c.limit, 0))}/yr</span>
+              <div style={{ background:TK.brandTint, borderRadius:10, padding:'8px 12px', marginBottom:12, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
+                <span style={{ color:TK.brandDeep }}>Slab {slab} — {SLAB_NAMES[slab]} &nbsp;|&nbsp; {regime === 'old' ? 'Old' : 'New'} Regime</span>
+                <span style={{ fontWeight:600, color:TK.brandDeep }}>Pool: ₹{fmt(availableFBP.filter(c => !c.paired || c.code < c.paired).reduce((s,c) => s + c.limit, 0))}/yr</span>
               </div>
 
               {availableFBP.map(c => {
@@ -336,35 +339,35 @@ export default function SalaryViewClient({ data }: { data: any }) {
                 const isLinked = c.paired && (selectedFBP.has(c.paired) || selectedFBP.has(c.code))
                 return (
                   <div key={c.code} onClick={() => toggleFBP(c.code, c.paired)}
-                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:8, marginBottom:6, cursor:'pointer', background:isSelected?'#EDE9FE':'#F9FAFB', border:isSelected?'1.5px solid #7C3AED':'1px solid #E5E7EB', transition:'all .15s' }}>
-                    <div style={{ width:18, height:18, borderRadius:4, border:isSelected?'none':'2px solid #DDD6FE', background:isSelected?'#7C3AED':'#fff', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
-                      {isSelected && <span style={{ color:'#fff', fontSize:12, fontWeight:700 }}>✓</span>}
+                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:10, marginBottom:6, cursor:'pointer', background:isSelected?TK.brandTint:TK.sunken, border:isSelected?'2px solid #2563EB':'1px solid #E5E7EB', transition:'all .15s' }}>
+                    <div style={{ width:18, height:18, borderRadius:7, border:isSelected?'none':'2px solid #DDD6FE', background:isSelected?TK.brand: TK.surface, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
+                      {isSelected && <span style={{ color:TK.onAccent, fontSize:12, fontWeight:700 }}></span>}
                     </div>
                     <div style={{ flex:1 }}>
                       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                        <span style={{ fontSize:13, fontWeight:isSelected?600:400, color:isSelected?'#4C1D95':'#1E1B4B' }}>{c.label}</span>
-                        <span style={{ fontSize:13, fontWeight:600, color:isSelected?'#7C3AED':'#374151' }}>₹{fmt(c.limit)}/yr</span>
+                        <span style={{ fontSize:13, fontWeight:isSelected?600:400, color:isSelected?TK.brandDeep:TK.ink }}>{c.label}</span>
+                        <span style={{ fontSize:13, fontWeight:600, color:isSelected?TK.brand:TK.inkSoft }}>₹{fmt(c.limit)}/yr</span>
                       </div>
-                      {c.note && <div style={{ fontSize:10, color:'#9CA3AF', marginTop:2 }}>{c.note}</div>}
-                      {c.perquisite > 0 && <div style={{ fontSize:10, color:'#D97706', marginTop:2 }}>Perquisite: ₹{fmt(c.perquisite)}/mo added to taxable income</div>}
+                      {c.note && <div style={{ fontSize:10, color:TK.faint, marginTop:2 }}>{c.note}</div>}
+                      {c.perquisite > 0 && <div style={{ fontSize:10, color:TK.warning, marginTop:2 }}>Perquisite: ₹{fmt(c.perquisite)}/mo added to taxable income</div>}
                     </div>
                   </div>
                 )
               })}
 
               {selectedFBP.size > 0 && (
-                <div style={{ background:'#ECFDF5', border:'1px solid #A7F3D0', borderRadius:8, padding:'10px 14px', marginTop:4, marginBottom:16 }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:600, color:'#064E3B', marginBottom:6 }}>
+                <div style={{ background:TK.positiveTint, border: `1px solid ${TK.positiveTint}`, borderRadius:10, padding:'10px 14px', marginTop:4, marginBottom:16 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:13, fontWeight:600, color: TK.positive, marginBottom:6 }}>
                     <span>Selected FBP Total</span>
                     <span>₹{fmt(fbpSummary.totalNonTaxable)}/yr</span>
                   </div>
                   {fbpSummary.perquisiteAnnual > 0 && (
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#D97706', marginBottom:4 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:TK.warning, marginBottom:4 }}>
                       <span>Car+Driver perquisite (taxable)</span>
                       <span>+₹{fmt(fbpSummary.perquisiteAnnual)}/yr</span>
                     </div>
                   )}
-                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:'#059669', fontWeight:500 }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, color:TK.positive, fontWeight:500 }}>
                     <span>Net non-taxable FBP</span>
                     <span>₹{fmt(fbpSummary.netNonTaxable)}/yr</span>
                   </div>
@@ -374,55 +377,55 @@ export default function SalaryViewClient({ data }: { data: any }) {
               {/* TDS RESULT */}
               <div style={S.sec()}>TDS Calculation</div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
-                <div style={{ background:'#EDE9FE', borderRadius:8, padding:'12px', border:'1.5px solid #7C3AED' }}>
-                  <div style={{ fontSize:11, fontWeight:600, color:'#534AB7', marginBottom:6, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div style={{ background:TK.brandTint, borderRadius:10, padding:'12px', border: `2px solid ${TK.brandEdge}` }}>
+                  <div style={{ fontSize:11, fontWeight:600, color: TK.muted, marginBottom:6, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                     {regime === 'new' ? 'New Regime' : 'Old Regime'}
-                    <span style={{ background:'#7C3AED', color:'#fff', padding:'1px 6px', borderRadius:99, fontSize:9 }}>Selected</span>
+                    <span style={{ background:TK.brand, color:TK.onAccent, padding:'1px 6px', borderRadius:99, fontSize:9 }}>Selected</span>
                   </div>
-                  <div style={{ fontSize:10, color:'#9CA3AF', marginBottom:2 }}>Without FBP</div>
-                  <div style={{ fontSize:14, color:'#6D28D9' }}>₹{fmt(tdsCalc.taxNoFBP)}/yr</div>
+                  <div style={{ fontSize:10, color:TK.faint, marginBottom:2 }}>Without FBP</div>
+                  <div style={{ fontSize:14, color:TK.brandDeep }}>₹{fmt(tdsCalc.taxNoFBP)}/yr</div>
                   {selectedFBP.size > 0 && (
                     <>
-                      <div style={{ height:1, background:'#DDD6FE', margin:'8px 0' }} />
-                      <div style={{ fontSize:10, color:'#9CA3AF', marginBottom:2 }}>With FBP Selected</div>
-                      <div style={{ fontSize:16, fontWeight:700, color:'#4C1D95' }}>₹{fmt(tdsCalc.taxWithFBP)}/yr</div>
-                      <div style={{ fontSize:11, color:'#059669', marginTop:3 }}>
+                      <div style={{ height:1, background:TK.brandEdge, margin:'8px 0' }} />
+                      <div style={{ fontSize:10, color:TK.faint, marginBottom:2 }}>With FBP Selected</div>
+                      <div style={{ fontSize:16, fontWeight:700, color:TK.brandDeep }}>₹{fmt(tdsCalc.taxWithFBP)}/yr</div>
+                      <div style={{ fontSize:11, color:TK.positive, marginTop:3 }}>
                         ₹{fmt(Math.round(tdsCalc.taxWithFBP/12))}/mo TDS
                       </div>
                     </>
                   )}
                   {selectedFBP.size === 0 && (
-                    <div style={{ fontSize:11, color:'#6D28D9', marginTop:4 }}>₹{fmt(Math.round(tdsCalc.taxNoFBP/12))}/mo TDS</div>
+                    <div style={{ fontSize:11, color:TK.brandDeep, marginTop:4 }}>₹{fmt(Math.round(tdsCalc.taxNoFBP/12))}/mo TDS</div>
                   )}
                 </div>
                 {regime === 'new' ? (
-                  <div style={{ background:'#F9FAFB', borderRadius:8, padding:'12px', border:'1px solid #EDE9FE' }}>
-                    <div style={{ fontSize:11, fontWeight:500, color:'#9CA3AF', marginBottom:6 }}>Old Regime (comparison)</div>
-                    <div style={{ fontSize:10, color:'#9CA3AF', marginBottom:2 }}>With 80C/80D etc.</div>
-                    <div style={{ fontSize:14, color:'#374151' }}>₹{fmt(calcTax(Math.max(0,grossAnnual-50000-150000-25000-epfEmp*12),'old'))}/yr</div>
-                    <div style={{ fontSize:11, color:'#9CA3AF', marginTop:4 }}>Switch to Old regime to configure</div>
+                  <div style={{ background:TK.sunken, borderRadius:10, padding:'12px', border: `1px solid ${TK.brandEdge}` }}>
+                    <div style={{ fontSize:11, fontWeight:500, color:TK.faint, marginBottom:6 }}>Old Regime (comparison)</div>
+                    <div style={{ fontSize:10, color:TK.faint, marginBottom:2 }}>With 80C/80D etc.</div>
+                    <div style={{ fontSize:14, color:TK.inkSoft }}>₹{fmt(calcTax(Math.max(0,grossAnnual-50000-150000-25000-epfEmp*12),'old'))}/yr</div>
+                    <div style={{ fontSize:11, color:TK.faint, marginTop:4 }}>Switch to Old regime to configure</div>
                   </div>
                 ) : (
-                  <div style={{ background:'#F9FAFB', borderRadius:8, padding:'12px', border:'1px solid #EDE9FE' }}>
-                    <div style={{ fontSize:11, fontWeight:500, color:'#9CA3AF', marginBottom:6 }}>New Regime (comparison)</div>
-                    <div style={{ fontSize:10, color:'#9CA3AF', marginBottom:2 }}>Default | No deductions</div>
-                    <div style={{ fontSize:14, color:'#374151' }}>₹{fmt(calcTax(Math.max(0,grossAnnual-75000),'new'))}/yr</div>
-                    <div style={{ fontSize:11, color:'#9CA3AF', marginTop:4 }}>Switch to New regime to configure</div>
+                  <div style={{ background:TK.sunken, borderRadius:10, padding:'12px', border: `1px solid ${TK.brandEdge}` }}>
+                    <div style={{ fontSize:11, fontWeight:500, color:TK.faint, marginBottom:6 }}>New Regime (comparison)</div>
+                    <div style={{ fontSize:10, color:TK.faint, marginBottom:2 }}>Default | No deductions</div>
+                    <div style={{ fontSize:14, color:TK.inkSoft }}>₹{fmt(calcTax(Math.max(0,grossAnnual-75000),'new'))}/yr</div>
+                    <div style={{ fontSize:11, color:TK.faint, marginTop:4 }}>Switch to New regime to configure</div>
                   </div>
                 )}
               </div>
 
               {selectedFBP.size > 0 && tdsCalc.fbpSaving > 0 && (
-                <div style={{ background:'#ECFDF5', border:'1px solid #A7F3D0', borderRadius:8, padding:'10px 14px', marginBottom:14, fontSize:13, fontWeight:500, color:'#059669' }}>
-                  <i>🎉</i> FBP selection saves you <strong>₹{fmt(tdsCalc.fbpSaving)}/yr</strong> in tax (₹{fmt(Math.round(tdsCalc.fbpSaving/12))}/mo less TDS)
+                <div style={{ background:TK.positiveTint, border: `1px solid ${TK.positiveTint}`, borderRadius:10, padding:'10px 14px', marginBottom:14, fontSize:13, fontWeight:500, color:TK.positive }}>
+                  <i></i> FBP selection saves you <strong>₹{fmt(tdsCalc.fbpSaving)}/yr</strong> in tax (₹{fmt(Math.round(tdsCalc.fbpSaving/12))}/mo less TDS)
                 </div>
               )}
 
-              <div style={{ background:'#FFFBEB', borderRadius:7, padding:'9px 13px', fontSize:11, color:'#92400E', lineHeight:1.6, marginBottom:8 }}>
+              <div style={{ background:TK.warningTint, borderRadius:7, padding:'9px 13px', fontSize:11, color:TK.warning, lineHeight:1.6, marginBottom:8 }}>
                 Submit invoices on time to claim FBP benefits — Quarterly: Jul/Oct/Jan/Mar &nbsp;|&nbsp; Annual: March. Unclaimed balance becomes taxable.
               </div>
 
-              <div style={{ background:'#EDE9FE', borderRadius:7, padding:'8px 13px', fontSize:11, color:'#4C1D95', textAlign:'center' as const }}>
+              <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 13px', fontSize:11, color:TK.brandDeep, textAlign:'center' as const }}>
                 This is indicative. Final TDS and FBP allocation confirmed after IT Declaration in EZER ESS portal post joining.
               </div>
             </div>
@@ -430,39 +433,38 @@ export default function SalaryViewClient({ data }: { data: any }) {
         </div>
 
         {/* Disclaimer */}
-        <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8, padding:'11px 15px', marginBottom:14, fontSize:12, color:'#92400E', lineHeight:1.6, borderLeft:'3px solid #FDE68A', borderRadius:'0 8px 8px 0' as any }}>
+        <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:10, padding:'11px 15px', marginBottom:14, fontSize:12, color:TK.warning, lineHeight:1.6, borderLeft: `3px solid ${TK.warningTint}`, borderRadius:'0 8px 8px 0' as any }}>
           <strong>Disclaimer:</strong> Indicative calculation only. Actual in-hand depends on IT declaration, applicable TDS, company policy, and FBP bill submission. Please review your formal offer letter for confirmed figures.
         </div>
 
         {/* Accept / Reject the offer */}
         {response ? (
-          <div style={{ background: response==='ACCEPTED'?'#ECFDF5':'#FEF2F2', border:`1px solid ${response==='ACCEPTED'?'#A7F3D0':'#FCA5A5'}`, borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
-            <div style={{ fontSize:26, marginBottom:8 }}>{response==='ACCEPTED'?'🎉':'🙏'}</div>
-            <div style={{ fontSize:15, fontWeight:600, color: response==='ACCEPTED'?'#059669':'#DC2626', marginBottom:4 }}>
+          <div style={{ background: response==='ACCEPTED'?TK.positiveTint:TK.criticalTint, border:`1px solid ${response==='ACCEPTED'?'#A7F3D0':'#FCA5A5'}`, borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
+            <div style={{ fontSize:26, marginBottom:8 }}>{response==='ACCEPTED'?'':''}</div>
+            <div style={{ fontSize:15, fontWeight:600, color: response==='ACCEPTED'?TK.positive:TK.critical, marginBottom:4 }}>
               {response==='ACCEPTED' ? 'You have accepted this offer' : 'You have declined this offer'}
             </div>
-            <div style={{ fontSize:13, color:'#6B7280', lineHeight:1.6 }}>
+            <div style={{ fontSize:13, color:TK.muted, lineHeight:1.6 }}>
               {response==='ACCEPTED'
                 ? 'Thank you! Our HR team will reach out with the next steps shortly.'
                 : 'Thank you for letting us know. Our recruiter may connect with you.'}
             </div>
           </div>
         ) : (
-          <div style={{ background:'#F5F3FF', border:'1px solid #DDD6FE', borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
-            <div style={{ fontSize:14, fontWeight:600, color:'#4C1D95', marginBottom:12 }}>Would you like to accept this offer?</div>
+          <div style={{ background:TK.canvas, border: `1px solid ${TK.brandEdge}`, borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
+            <div style={{ fontSize:14, fontWeight:600, color:TK.brandDeep, marginBottom:12 }}>Would you like to accept this offer?</div>
             <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
               <button onClick={()=>respond('ACCEPTED')} disabled={responding}
-                style={{ padding:'11px 32px', borderRadius:9, border:'none', cursor:responding?'not-allowed':'pointer', fontSize:14, fontWeight:600, fontFamily:'inherit', background:'#059669', color:'#fff', opacity:responding?.6:1 }}>
-                ✓ Accept Offer
+                style={{ padding:'11px 32px', borderRadius:10, border:'none', cursor:responding?'not-allowed':'pointer', fontSize:14, fontWeight:600, fontFamily:'inherit', background:TK.positive, color:TK.onAccent, opacity:responding?.6:1 }}>Accept Offer
               </button>
             </div>
-            <div style={{ fontSize:12, color:'#6B7280', lineHeight:1.6, marginTop:12 }}>
+            <div style={{ fontSize:12, color:TK.muted, lineHeight:1.6, marginTop:12 }}>
               Any questions about your salary structure? Please connect with your recruiter directly.
             </div>
           </div>
         )}
 
-        <div style={{ textAlign:'center' as const, color:'#9CA3AF', fontSize:11, paddingBottom:24 }}>
+        <div style={{ textAlign:'center' as const, color:TK.faint, fontSize:11, paddingBottom:24 }}>
           Powered by <strong>EZER HRMS</strong> · {data.company_name || ''} · Confidential
         </div>
       </div>

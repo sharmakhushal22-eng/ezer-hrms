@@ -15,6 +15,10 @@
 // inbox by, so a person only ever sees claims genuinely routed to them.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Local S / Field names exist here, so spacing is imported as SP.
+import {
+  C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
 import RouteMap, { type RouteData } from '@/components/travel/RouteMap'
 
 // These endpoints require a signed-in dashboard session (lib/api-auth.ts).
@@ -25,11 +29,12 @@ async function authHeaders(): Promise<Record<string, string>> {
   return t ? { Authorization: `Bearer ${t}` } : {}
 }
 
+// Bound to the design system — see lib/ui/tokens.ts.
 const V = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#6D28D9', border: 'rgba(124,58,237,0.12)',
-  muted: '#6B7280', card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5',
-  red: '#DC2626', redBg: '#FEF2F2', amber: '#B45309', amberBg: '#FFFBEB',
-  purpleBg: '#EDE9FE', field: '#FAFAF8', page: '#F5F3FF',
+  navy: C.ink, purple: C.brand, purpleDark: C.brandDeep, border: C.line,
+  muted: C.muted, card: C.surface, green: C.positive, greenBg: C.positiveTint,
+  red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint,
+  purpleBg: C.brandTint, field: C.sunken, page: C.canvas,
 }
 
 const inr = (n: unknown) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -38,20 +43,23 @@ const dmy = (d: string | null) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
 const S = {
-  card: { background: V.card, borderRadius: 10, border: `1px solid ${V.border}`,
-          padding: '16px 18px', marginBottom: 12, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  inp:  { padding: '9px 11px', background: V.field, border: '1px solid #DDD6FE', borderRadius: 7,
-          color: V.navy, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' } as React.CSSProperties,
-  lbl:  { fontSize: 11, fontWeight: 600, color: V.purpleDark, textTransform: 'uppercase',
-          letterSpacing: '.05em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  btnP: { padding: '8px 17px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
-          fontWeight: 600, fontFamily: 'inherit', background: V.purple, color: '#fff' } as React.CSSProperties,
-  btnG: { padding: '8px 17px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12.5,
-          fontWeight: 600, fontFamily: 'inherit', background: V.green, color: '#fff' } as React.CSSProperties,
-  btnO: { padding: '7px 14px', borderRadius: 7, border: '1px solid #DDD6FE', cursor: 'pointer',
-          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: V.purpleDark } as React.CSSProperties,
-  btnR: { padding: '7px 14px', borderRadius: 7, border: `1px solid ${V.red}33`, cursor: 'pointer',
-          fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: V.red } as React.CSSProperties,
+  card: { background: V.card, borderRadius: R.lg, border: `1px solid ${V.border}`,
+          padding: '16px 18px', marginBottom: SP.md, boxShadow: E.raised } as React.CSSProperties,
+  inp:  { ...inputStyle(), width: 'auto' } as React.CSSProperties,
+  lbl:  { ...eyebrow, display: 'block', marginBottom: 5 } as React.CSSProperties,
+  btnP: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${C.brandDeep}`,
+          cursor: 'pointer', fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: `linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color: C.onAccent,
+          boxShadow: E.brand } as React.CSSProperties,
+  btnG: { height: 36, padding: '0 16px', borderRadius: R.md, border: 'none', cursor: 'pointer',
+          fontSize: F.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: C.positive, color: C.onAccent } as React.CSSProperties,
+  btnO: { height: 32, padding: '0 13px', borderRadius: R.md, border: `1px solid ${C.lineStrong}`,
+          cursor: 'pointer', fontSize: F.tiny, fontWeight: W.medium, fontFamily: 'inherit',
+          background: C.surface, color: C.ink, boxShadow: E.flat } as React.CSSProperties,
+  btnR: { height: 32, padding: '0 13px', borderRadius: R.md, border: `1px solid ${tone('critical').edge}`,
+          cursor: 'pointer', fontSize: F.tiny, fontWeight: W.medium, fontFamily: 'inherit',
+          background: C.surface, color: C.critical, boxShadow: E.flat } as React.CSSProperties,
 }
 
 interface Company { id: string; company_name: string }
@@ -124,12 +132,12 @@ function Pill({ status }: { status: string }) {
 }
 
 function Empty({ text }: { text: string }) {
-  return <div style={{ textAlign: 'center', padding: '34px 0', color: V.muted, fontSize: 12.5 }}>{text}</div>
+  return <div style={{ textAlign: 'center', padding: '34px 0', color: V.muted, fontSize: 13 }}>{text}</div>
 }
 
 function Note({ tone, children }: { tone: 'ok' | 'warn' | 'err'; children: React.ReactNode }) {
   const [bg, fg] = tone === 'ok' ? [V.greenBg, V.green] : tone === 'warn' ? [V.amberBg, V.amber] : [V.redBg, V.red]
-  return <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 8,
+  return <div style={{ background: bg, color: fg, border: `1px solid ${fg}22`, borderRadius: 10,
                        padding: '10px 13px', fontSize: 12, marginBottom: 12 }}>{children}</div>
 }
 
@@ -182,7 +190,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
     <div style={{ borderBottom: `1px solid ${V.border}` }}>
     <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '9px 0' }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, color: V.navy, fontWeight: 500 }}>
+        <div style={{ fontSize: 13, color: V.navy, fontWeight: 500 }}>
           {line.description || line.type_code}
         </div>
         <div style={{ fontSize: 11, color: V.muted, marginTop: 2 }}>
@@ -202,7 +210,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
             <button onClick={showRoute}
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer',
                              fontSize: 11, fontWeight: 600, color: V.purpleDark, fontFamily: 'inherit' }}>
-              {open ? '▲ Hide route' : '📍 View route on map'}
+              {open ? 'Hide route' : 'View route on map'}
             </button>
           )}
 
@@ -214,7 +222,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
                         fontWeight: 600, color: V.green, textDecoration: 'none',
                         background: V.greenBg, border: `1px solid ${V.green}33`,
                         borderRadius: 99, padding: '2px 9px' }}>
-              {b.mime_type === 'application/pdf' ? '📄' : '🧾'} {b.file_name || 'bill'}
+              {b.mime_type === 'application/pdf' ? '' : ''} {b.file_name || 'bill'}
             </a>
           ))}
           {bills !== null && bills.length === 0 && (
@@ -224,7 +232,7 @@ function LineRow({ line, editable, value, onChange, flags }: {
           )}
         </div>
       </div>
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: V.navy, width: 84,
+      <div style={{ fontSize: 13, fontWeight: 600, color: V.navy, width: 84,
                     textAlign: 'right', flexShrink: 0, paddingTop: 1 }}>
         {inr(line.amount_claimed)}
       </div>
@@ -232,9 +240,9 @@ function LineRow({ line, editable, value, onChange, flags }: {
         <input type="number" min="0" max={line.amount_claimed} value={value}
                onChange={e => onChange(e.target.value)}
                style={{ ...S.inp, width: 92, flexShrink: 0, padding: '6px 9px',
-                        borderColor: trimmed ? V.amber : '#DDD6FE' }} />
+                        borderColor: trimmed ? V.amber : C.brandEdge }} />
       ) : (
-        <div style={{ width: 92, textAlign: 'right', fontSize: 12.5, color: V.muted, flexShrink: 0 }}>
+        <div style={{ width: 92, textAlign: 'right', fontSize: 13, color: V.muted, flexShrink: 0 }}>
           {line.amount_approved != null ? inr(line.amount_approved) : '—'}
         </div>
       )}
@@ -303,15 +311,15 @@ function ClaimCard({ claim, stage, onAction, busy }: {
   const approveAction = isFinance ? 'FINANCE_APPROVE' : stage === 'HR' ? 'HR_APPROVE' : 'RM_APPROVE'
 
   return (
-    <div style={{ border: `1px solid ${V.border}`, borderRadius: 9, marginBottom: 10, background: V.card }}>
+    <div style={{ border: `1px solid ${V.border}`, borderRadius: 10, marginBottom: 10, background: V.card }}>
       <div onClick={expand}
            style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '12px 14px', cursor: 'pointer' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: V.navy }}>
             {claim.full_name || '—'}
-            <span style={{ color: V.muted, fontWeight: 500, fontSize: 11.5 }}> · {claim.emp_code || '—'}</span>
+            <span style={{ color: V.muted, fontWeight: 500, fontSize: 12 }}> · {claim.emp_code || '—'}</span>
           </div>
-          <div style={{ fontSize: 11.5, color: V.muted, marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: V.muted, marginTop: 2 }}>
             {claim.claim_no} · {claim.line_count} {claim.line_count === 1 ? 'expense' : 'expenses'} ·
             {' '}{dmy(claim.period_from)} – {dmy(claim.period_to)}
             {claim.flag_count > 0 && <span style={{ color: V.amber }}> · ⚑ {claim.flag_count}</span>}
@@ -321,7 +329,7 @@ function ClaimCard({ claim, stage, onAction, busy }: {
           {inr(claim.total_claimed)}
         </div>
         <Pill status={claim.status} />
-        <span style={{ color: V.muted, fontSize: 12, flexShrink: 0 }}>{open ? '▲' : '▼'}</span>
+        <span style={{ color: V.muted, fontSize: 12, flexShrink: 0 }}>{open ? '' : ''}</span>
       </div>
 
       {open && (
@@ -330,7 +338,7 @@ function ClaimCard({ claim, stage, onAction, busy }: {
             <div style={{ padding: '18px 0', color: V.muted, fontSize: 12 }}>Loading expenses…</div>
           ) : (
             <>
-              <div style={{ display: 'flex', gap: 10, fontSize: 10.5, fontWeight: 600, color: V.purpleDark,
+              <div style={{ display: 'flex', gap: 10, fontSize: 11, fontWeight: 600, color: V.purpleDark,
                             textTransform: 'uppercase', letterSpacing: '.05em', padding: '10px 0 2px' }}>
                 <div style={{ flex: 1 }}>Expense</div>
                 <div style={{ width: 84, textAlign: 'right' }}>Claimed</div>
@@ -346,7 +354,7 @@ function ClaimCard({ claim, stage, onAction, busy }: {
 
               {isFinance && (
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10,
-                              padding: '10px 0', fontSize: 12.5 }}>
+                              padding: '10px 0', fontSize: 13 }}>
                   <span style={{ color: V.muted }}>Approving</span>
                   <b style={{ color: trimmed ? V.amber : V.green }}>{inr(approvedTotal)}</b>
                   {trimmed && (
@@ -389,14 +397,14 @@ function ClaimCard({ claim, stage, onAction, busy }: {
 function PayoutRow({ claim, onPay, busy }: { claim: Claim; onPay: () => void; busy: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px',
-                  border: `1px solid ${V.border}`, borderRadius: 8, marginBottom: 8 }}>
+                  border: `1px solid ${V.border}`, borderRadius: 10, marginBottom: 8 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: V.navy }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: V.navy }}>
           {claim.full_name} <span style={{ color: V.muted, fontWeight: 500 }}>· {claim.emp_code}</span>
         </div>
         <div style={{ fontSize: 11, color: V.muted, marginTop: 2 }}>{claim.claim_no}</div>
       </div>
-      <div style={{ fontSize: 13.5, fontWeight: 700, color: V.green, flexShrink: 0 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: V.green, flexShrink: 0 }}>
         {inr(claim.net_payable)}
       </div>
       <button onClick={onPay} disabled={busy} style={S.btnP}>Mark paid</button>
@@ -427,10 +435,10 @@ function RateRow({ type, current, history, onSet, busy }: {
   const past = history.filter(r => r.in_force && r.id !== current?.id)
 
   return (
-    <div style={{ border: `1px solid ${V.border}`, borderRadius: 8, padding: '12px 14px', marginBottom: 8 }}>
+    <div style={{ border: `1px solid ${V.border}`, borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ flex: 1, minWidth: 160 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 600, color: V.navy }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: V.navy }}>
             {type.type_name}
             {type.requires_gps && (
               <span style={{ fontSize: 10, color: V.purpleDark, fontWeight: 500 }}> · 📍 recorded</span>
@@ -454,7 +462,7 @@ function RateRow({ type, current, history, onSet, busy }: {
       </div>
 
       {scheduled.length > 0 && (
-        <div style={{ fontSize: 11.5, color: V.amber, marginTop: 7 }}>
+        <div style={{ fontSize: 12, color: V.amber, marginTop: 7 }}>
           ⏱ {inr(scheduled[0].rate_per_km)}/km scheduled from {dmy(scheduled[0].effective_from)}
         </div>
       )}
@@ -493,7 +501,7 @@ function RateRow({ type, current, history, onSet, busy }: {
           </button>
 
           {past.length > 0 && (
-            <div style={{ marginTop: 12, fontSize: 11.5, color: V.muted }}>
+            <div style={{ marginTop: 12, fontSize: 12, color: V.muted }}>
               <b style={{ color: V.navy }}>Earlier rates</b>
               {past.slice(0, 4).map(r => (
                 <div key={r.id} style={{ marginTop: 3 }}>
@@ -517,7 +525,7 @@ function TypeToggleRow({ type, onToggle, busy }: {
     <div style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '8px 0',
                   borderBottom: `1px solid ${V.border}` }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 12.5, color: type.is_active ? V.navy : V.muted, fontWeight: 500 }}>
+        <div style={{ fontSize: 13, color: type.is_active ? V.navy : V.muted, fontWeight: 500 }}>
           {type.type_name}
           {!type.bill_required && (
             <span style={{ fontSize: 10, color: V.muted }}> · no bill</span>
@@ -526,7 +534,7 @@ function TypeToggleRow({ type, onToggle, busy }: {
             <span style={{ fontSize: 10, color: V.purpleDark }}> · 📍</span>
           )}
         </div>
-        <div style={{ fontSize: 10.5, color: V.muted }}>
+        <div style={{ fontSize: 11, color: V.muted }}>
           {type.calc_method === 'PER_KM' ? 'Paid on distance'
             : type.calc_method === 'ZERO' ? 'Not reimbursed'
             : type.bill_threshold > 0 ? `Bill required above ${inr(type.bill_threshold)}` : 'Paid on the bill'}
@@ -554,12 +562,12 @@ function PeriodRow({ p, onAct, busy }: {
   const needsReason = showReason && p.status === 'CLOSED'
 
   return (
-    <div style={{ border: `1px solid ${V.border}`, borderRadius: 8, padding: '12px 14px', marginBottom: 8 }}>
+    <div style={{ border: `1px solid ${V.border}`, borderRadius: 10, padding: '12px 14px', marginBottom: 8 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 11, flexWrap: 'wrap' }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: V.navy, minWidth: 90 }}>{p.period_label}</div>
         <span style={{ fontSize: 10, padding: '3px 10px', borderRadius: 99,
                        background: tone[0], color: tone[1], fontWeight: 600 }}>{p.status}</span>
-        <div style={{ fontSize: 11.5, color: V.muted, flex: 1 }}>
+        <div style={{ fontSize: 12, color: V.muted, flex: 1 }}>
           {p.claim_counts.total} {p.claim_counts.total === 1 ? 'claim' : 'claims'}
           {p.claim_counts.pending > 0 && <span style={{ color: V.amber }}> · {p.claim_counts.pending} still in flight</span>}
         </div>
@@ -585,7 +593,7 @@ function PeriodRow({ p, onAct, busy }: {
           </>
         )}
         {p.status === 'LOCKED' && (
-          <span style={{ fontSize: 11.5, color: V.muted }}>Paid through payroll — permanent</span>
+          <span style={{ fontSize: 12, color: V.muted }}>Paid through payroll — permanent</span>
         )}
       </div>
 
@@ -614,6 +622,18 @@ export default function TravelClaimsAdmin() {
 
   const [rmEnabled, setRmEnabled] = useState(false)
   const [hrEnabled, setHrEnabled] = useState(true)
+
+  // Keep the selected tab valid against the policy.
+  //
+  // `tab` starts at 'HR', but a company can have the HR stage switched off —
+  // and then its tab is not rendered while the selection still points at it.
+  // The result was a screen headed "Awaiting your approval as HR Head" with
+  // Manager showing as the selected tab: two different answers to "whose
+  // queue am I looking at?" on one screen, about approvals.
+  useEffect(() => {
+    if (tab === 'HR' && !hrEnabled) setTab(rmEnabled ? 'RM' : 'FINANCE')
+    else if (tab === 'RM' && !rmEnabled) setTab(hrEnabled ? 'HR' : 'FINANCE')
+  }, [rmEnabled, hrEnabled, tab])
   const [approvers, setApprovers] = useState<Approver[]>([])
   const [actingId, setActingId] = useState('')
 
@@ -842,11 +862,15 @@ export default function TravelClaimsAdmin() {
   ]
 
   return (
-    <div style={{ background: V.page, minHeight: '100vh', padding: 20,
-                  fontFamily: '"DM Sans","Segoe UI",sans-serif', color: V.navy, fontSize: 13 }}>
-      <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 3 }}>Travel Claims</div>
-      <div style={{ fontSize: 12.5, color: V.muted, marginBottom: 14 }}>
-        Reimbursement requests route {chain}.
+    <div style={{ background: V.page, minHeight: '100vh',
+                  padding: `${SP.xl}px ${SP.xl}px ${SP.huge}px`, maxWidth: 1440, margin: '0 auto',
+                  fontFamily: F.family, color: C.ink, fontSize: F.body }}>
+      <div className="ez-page-head">
+        <h1 style={{ margin: 0, fontSize: F.page, fontWeight: W.bold, color: C.ink,
+                     letterSpacing: '-.02em' }}>Travel Claims</h1>
+        <div style={{ marginTop: 5, fontSize: F.small, color: C.muted }}>
+          Reimbursement requests route {chain}
+        </div>
       </div>
 
       {/* ---- controls ---- */}
@@ -881,11 +905,11 @@ export default function TravelClaimsAdmin() {
       <div style={{ display: 'flex', gap: 7, marginBottom: 12, flexWrap: 'wrap' }}>
         {TABS.map(t => (
           <button key={t.k} onClick={() => setTab(t.k)}
-                  style={{ padding: '8px 16px', borderRadius: 7, fontSize: 12.5, fontWeight: 600,
+                  style={{ padding: '8px 16px', borderRadius: 7, fontSize: 13, fontWeight: 600,
                            fontFamily: 'inherit', cursor: 'pointer',
                            border: tab === t.k ? 'none' : `1px solid ${V.border}`,
                            background: tab === t.k ? V.purple : V.card,
-                           color: tab === t.k ? '#fff' : V.purpleDark }}>
+                           color: tab === t.k ? C.surface : V.purpleDark }}>
             {t.label}
             {t.k === tab && claims.length > 0 && t.k !== 'PERIODS' && ` · ${claims.length}`}
           </button>
@@ -901,7 +925,7 @@ export default function TravelClaimsAdmin() {
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
               Rate per kilometre
             </div>
-            <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
+            <div style={{ fontSize: 12, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>
               These modes leave no bill behind, so the journey is recorded from the employee&apos;s
               device and paid at the rate you set here. A new rate is a new version dated from
               when it applies — claims already settled keep the rate they were paid at.
@@ -924,7 +948,7 @@ export default function TravelClaimsAdmin() {
 
           <div style={S.card}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Expense types</div>
-            <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 12 }}>
+            <div style={{ fontSize: 12, color: V.muted, marginBottom: 12 }}>
               Turning a type off removes it from the employee&apos;s picker. Existing claims that
               already use it are untouched.
             </div>
@@ -937,7 +961,7 @@ export default function TravelClaimsAdmin() {
                   }, {} as Record<string, TypeRow[]>)
                 ).map(([cat, items]) => (
                   <div key={cat} style={{ marginBottom: 14 }}>
-                    <div style={{ fontSize: 10.5, fontWeight: 600, color: V.purpleDark,
+                    <div style={{ fontSize: 11, fontWeight: 600, color: V.purpleDark,
                                   textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 4 }}>
                       {CATEGORY_LABEL[cat] ?? cat}
                     </div>
@@ -955,7 +979,7 @@ export default function TravelClaimsAdmin() {
             <div style={{ fontSize: 13, fontWeight: 700 }}>Expense months</div>
             <button onClick={openThisMonth} disabled={busy} style={S.btnO}>Open this month</button>
           </div>
-          <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 12, lineHeight: 1.6 }}>
+          <div style={{ fontSize: 12, color: V.muted, marginBottom: 12, lineHeight: 1.6 }}>
             A month must be <b>open</b> before anyone can log or submit expenses dated in it.
             Closing makes it read-only but reversible; locking is permanent and is meant for a
             month already paid through payroll.
@@ -967,7 +991,7 @@ export default function TravelClaimsAdmin() {
       ) : (
         <>
           <div style={S.card}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>
+            <div style={{ fontSize: F.lead, fontWeight: W.semi, marginBottom: SP.md, color: C.ink }}>
               {tab === 'FINANCE' ? 'Awaiting Finance verification'
                 : tab === 'HR' ? 'Awaiting your approval as HR Head'
                 : 'Awaiting your approval as reporting manager'}
@@ -985,7 +1009,7 @@ export default function TravelClaimsAdmin() {
           {tab === 'FINANCE' && (
             <div style={S.card}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Approved — ready to pay</div>
-              <div style={{ fontSize: 11.5, color: V.muted, marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: V.muted, marginBottom: 12 }}>
                 Marking paid closes the claim and stamps the payout date.
               </div>
               {payouts.length === 0

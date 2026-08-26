@@ -4,17 +4,20 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as HR from '@/lib/employees/hr-actions'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  page:  { background:'#F0F4F8', minHeight:'100vh', color:'#0F172A', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px', padding:'24px 20px' } as React.CSSProperties,
+  page:  { background: TK.sunken, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px', padding:'24px 20px' } as React.CSSProperties,
   wrap:  { maxWidth:1100, margin:'0 auto' } as React.CSSProperties,
-  card:  { background:'#fff', borderRadius:10, border:'1px solid #E2E8F0', padding:'16px 18px', marginBottom:14 } as React.CSSProperties,
-  label: { fontSize:10, fontWeight:600, color:'#64748B', textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'8px 10px', background:'#F8FAFC', border:'1px solid #CBD5E1', borderRadius:7, color:'#0F172A', fontSize:12.5, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  pri:   { padding:'9px 18px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:'#7C3AED', color:'#fff' } as React.CSSProperties,
-  sec:   { fontSize:12, fontWeight:600, color:'#0F172A', marginBottom:10, display:'flex', alignItems:'center', gap:6 } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'16px 18px', marginBottom:14 } as React.CSSProperties,
+  label: { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:4 },
+  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
+  pri:   { padding:'9px 18px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
+  sec:   { fontSize:12, fontWeight:600, color:TK.ink, marginBottom:10, display:'flex', alignItems:'center', gap:6 } as React.CSSProperties,
   g2:    { display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 } as React.CSSProperties,
-  muted: { color:'#64748B' } as React.CSSProperties,
+  muted: { color:TK.muted } as React.CSSProperties,
 }
 const todayISO = () => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString().slice(0,10) }
 
@@ -25,8 +28,8 @@ function FilterBar({ companies, branches, company, setCompany, branch, setBranch
 }) {
   const compBranches = branches.filter(b => b.company_id === company)
   return (
-    <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
-      <div style={C.sec}>🔎 Filter Employees</div>
+    <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
+      <div style={C.sec}>Filter Employees</div>
       <div style={{ ...C.g2, marginBottom:10 }}>
         <div><label style={C.label}>Company</label>
           <select style={C.input} value={company} onChange={e => { setCompany(e.target.value); setBranch('') }}>
@@ -58,10 +61,10 @@ function EmployeeSelectTable({ employees, branches, selected, setSelected }: {
   }
   return (
     <div style={C.card}>
-      <div style={C.sec}>👥 Employees ({employees.length}) · {selected.size} selected</div>
+      <div style={C.sec}>Employees ({employees.length}) · {selected.size} selected</div>
       {employees.length === 0 ? <div style={{ fontSize:12, ...C.muted }}>No employees match the current filter.</div> : (
-        <div style={{ border:'1px solid #E2E8F0', borderRadius:8, overflow:'hidden' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:'#F8FAFC', borderBottom:'1px solid #E2E8F0', fontSize:11, fontWeight:600, color:'#64748B' }}>
+        <div style={{ border: `1px solid ${TK.line}`, borderRadius:10, overflow:'hidden' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', background:TK.sunken, borderBottom: `1px solid ${TK.line}`, fontSize:11, fontWeight:600, color:TK.muted }}>
             <input type="checkbox" checked={allSelected} onChange={toggleAll} />
             <span style={{ flex:'0 0 120px' }}>CODE</span>
             <span style={{ flex:1 }}>NAME</span>
@@ -69,7 +72,7 @@ function EmployeeSelectTable({ employees, branches, selected, setSelected }: {
           </div>
           <div style={{ maxHeight:320, overflowY:'auto' }}>
             {employees.map(e => (
-              <label key={e.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderBottom:'1px solid #F1F5F9', fontSize:12.5, cursor:'pointer' }}>
+              <label key={e.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 12px', borderBottom: `1px solid ${TK.line}`, fontSize:13, cursor:'pointer' }}>
                 <input type="checkbox" checked={selected.has(e.id)} onChange={() => toggle(e.id)} />
                 <span style={{ flex:'0 0 120px', fontWeight:600 }}>{e.emp_code}</span>
                 <span style={{ flex:1 }}>{e.full_name}</span>
@@ -92,7 +95,7 @@ function MidMonthWarning({ effectiveDate, toBranch, fromBranch }: { effectiveDat
     ? `Effective date is mid-month. For this month, statutory (PT/LWF/PF) will be per the PREVIOUS state (${fromBranch.state}). New state (${toBranch.state}) applies next month.`
     : `Effective mid-month; statutory stays ${fromBranch?.state || toBranch.state || '—'} this month.`
   return (
-    <div style={{ background:'#FEF3C7', border:'1px solid #FCD34D', borderLeft:'3px solid #D97706', borderRadius:8, padding:'10px 12px', marginBottom:12, fontSize:12.5, color:'#78350F' }}>
+    <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderLeft: `3px solid ${TK.warningTint}`, borderRadius:10, padding:'10px 12px', marginBottom:12, fontSize:13, color: TK.warning }}>
       ⚠ {msg}
     </div>
   )
@@ -117,10 +120,10 @@ function SearchSelect({ value, onChange, options, placeholder, allowCustom }: {
         onFocus={() => { setOpen(true); setQ(allowCustom ? (value || '') : '') }}
         onBlur={() => setTimeout(() => setOpen(false), 150)} />
       {open && filtered.length > 0 && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #E2E8F0', borderRadius: 8, marginTop: 2, maxHeight: 220, overflowY: 'auto', zIndex: 30, boxShadow: '0 6px 18px rgba(0,0,0,0.10)' }}>
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: TK.surface, border: `1px solid ${TK.line}`, borderRadius: 10, marginTop: 2, maxHeight: 220, overflowY: 'auto', zIndex: 30, boxShadow: '0 6px 18px rgba(0,0,0,0.10)' }}>
           {filtered.map(o => (
             <div key={o.value} onMouseDown={() => { onChange(o.value); setQ(o.label); setOpen(false) }}
-              style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', color: '#0F172A', background: o.value === value ? '#F5F3FF' : '#fff' }}>{o.label}</div>
+              style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', color: TK.ink, background: o.value === value ? TK.canvas: TK.surface }}>{o.label}</div>
           ))}
         </div>
       )}
@@ -138,7 +141,7 @@ function TransferDetailsForm({ branches, managers, departments, designations, fo
   const desigOpts = designations.map(s => ({ value: s, label: s }))
   return (
     <div style={C.card}>
-      <div style={C.sec}>📝 Transfer Details</div>
+      <div style={C.sec}>Transfer Details</div>
       <div style={{ ...C.g2, marginBottom:10 }}>
         <div><label style={C.label}>To Branch *</label>
           <SearchSelect value={form.to_branch_id} onChange={v => set('to_branch_id', v)} options={branchOpts} placeholder="Search branch…" /></div>
@@ -167,7 +170,7 @@ function TransferDetailsForm({ branches, managers, departments, designations, fo
 }
 
 function Toast({ t }: { t: { msg: string; type: 'success'|'error' } }) {
-  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:99999, background: t.type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{t.type==='success'?'✓':'✗'} {t.msg}</div>
+  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:99999, background: t.type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{t.type==='success'?'':''} {t.msg}</div>
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -246,8 +249,8 @@ export default function TransferPage() {
   return (
     <div style={C.page}>
       <div style={C.wrap}>
-        <div style={{ marginBottom:18 }}>
-          <div style={{ fontSize:22, fontWeight:700, color:'#0F172A' }}>Employee Transfer</div>
+        <div className="ez-page-head">
+          <div style={{ fontSize:22, fontWeight:700, color:TK.ink }}>Employee Transfer</div>
           <div style={{ fontSize:13, ...C.muted, marginTop:2 }}>Bulk move employees between branches within the same company. Transfer letters are generated and sent for acknowledgement.</div>
         </div>
 

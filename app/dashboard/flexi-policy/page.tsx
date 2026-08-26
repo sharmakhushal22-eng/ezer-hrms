@@ -6,11 +6,14 @@
 // Writes flexi_policy_slabs + flexi_slab_limits (migration 043). Sub-components OUTSIDE parent.
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B6B7B', red: '#A32D2D',
-  teal: '#0F6E56', tealBg: '#E1F5EE', purpleBg: '#F5F3FF',
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted, red: TK.critical,
+  teal: TK.positive, tealBg: TK.sunken, purpleBg: TK.canvas,
 }
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 
@@ -51,7 +54,7 @@ function RegimeCell({ c, reg, rs, onToggle, onAmt }: {
       <button onClick={onToggle} style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: `1px solid ${on ? color : C.border}`, background: on ? bg : 'transparent', color: on ? dark : C.muted }}>{on ? 'Y' : 'N'}</button>
       {c.formula
         ? <span style={{ width: 66, fontSize: 10, color: C.muted }}>{on ? '8.33%' : '—'}</span>
-        : <input type="number" min={0} step={1000} placeholder="amt" disabled={!on} value={amt} onChange={e => onAmt(e.target.value)} style={{ width: 66, padding: 5, borderRadius: 6, border: `1px solid ${C.border}`, opacity: on ? 1 : 0.35, fontFamily: 'inherit', boxSizing: 'border-box' }} />}
+        : <input type="number" min={0} step={1000} placeholder="amt" disabled={!on} value={amt} onChange={e => onAmt(e.target.value)} style={{ width: 66, padding: 5, borderRadius: 7, border: `1px solid ${C.border}`, opacity: on ? 1 : 0.35, fontFamily: 'inherit', boxSizing: 'border-box' }} />}
     </div>
   )
 }
@@ -66,11 +69,11 @@ function ComponentRow({ c, rs, onToggle, onField }: {
       <RegimeCell c={c} reg="old" rs={rs} onToggle={() => onToggle('old')} onAmt={v => onField('oldAmt', v)} />
       <RegimeCell c={c} reg="new" rs={rs} onToggle={() => onToggle('new')} onAmt={v => onField('newAmt', v)} />
       {c.kids ? (
-        <select value={rs.kids} onChange={e => onField('kids', e.target.value)} style={{ width: 76, padding: 5, borderRadius: 6, border: `1px solid ${C.border}`, fontFamily: 'inherit' }}>
+        <select value={rs.kids} onChange={e => onField('kids', e.target.value)} style={{ width: 76, padding: 5, borderRadius: 7, border: `1px solid ${C.border}`, fontFamily: 'inherit' }}>
           <option value="1">1 kid</option><option value="2">2 kids</option>
         </select>
       ) : c.perq ? (
-        <input type="number" min={0} step={500} placeholder="perq/mo" disabled={!anyOn} value={rs.perqMo} onChange={e => onField('perqMo', e.target.value)} style={{ width: 76, padding: 5, borderRadius: 6, border: `1px solid ${C.border}`, opacity: anyOn ? 1 : 0.35, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+        <input type="number" min={0} step={500} placeholder="perq/mo" disabled={!anyOn} value={rs.perqMo} onChange={e => onField('perqMo', e.target.value)} style={{ width: 76, padding: 5, borderRadius: 7, border: `1px solid ${C.border}`, opacity: anyOn ? 1 : 0.35, fontFamily: 'inherit', boxSizing: 'border-box' }} />
       ) : <span style={{ width: 76 }} />}
     </div>
   )
@@ -189,18 +192,20 @@ export default function FlexiConfigBuilder() {
     loadSlabs()
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }
+  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 16 }
 
   return (
     <div style={{ padding: 24, fontFamily: '"DM Sans","Segoe UI",sans-serif', maxWidth: 820, margin: '0 auto', background: C.bg, minHeight: '100vh' }}>
+      <div className="ez-page-head">
       <div style={{ fontSize: 20, fontWeight: 600, color: C.navy, marginBottom: 4 }}>Flexi policy — slab builder (Old + New together)</div>
-      <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 16 }}>Build the FBP policy slab-by-slab per company. Each slab covers a salary range and both regimes; saved in one action.</div>
+      <div style={{ fontSize: 13, color: C.muted }}>Build the FBP policy slab-by-slab per company. Each slab covers a salary range and both regimes; saved in one action.</div>
+      </div>
 
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' }}>
-          <span style={{ background: '#EEEDFE', color: C.purpleDark, fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>{companyId ? `Slab ${slabs.length + 1}` : 'New slab'}</span>
+          <span style={{ background: TK.brandTint, color: C.purpleDark, fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>{companyId ? `Slab ${slabs.length + 1}` : 'New slab'}</span>
           <span style={{ fontSize: 11, color: C.muted }}>Annual Fixed = CTC − Variable</span>
-          <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 10px', borderRadius: 8, border: `1px solid ${C.border}`, fontSize: 12.5, fontFamily: 'inherit', background: '#fff', color: C.navy }}>
+          <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 10px', borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: 'inherit', background: TK.surface, color: C.navy }}>
             <option value="">All Companies</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
@@ -209,15 +214,15 @@ export default function FlexiConfigBuilder() {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
           <div>
             <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>Min salary ₹</label>
-            <input type="number" value={smin} min={0} step={10000} onChange={e => setSmin(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            <input type="number" value={smin} min={0} step={10000} onChange={e => setSmin(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit' }} />
           </div>
           <div>
             <label style={{ fontSize: 12, color: C.muted, display: 'block', marginBottom: 4 }}>Max salary ₹</label>
-            <input type="number" value={smax} min={0} step={10000} onChange={e => setSmax(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit' }} />
+            <input type="number" value={smax} min={0} step={10000} onChange={e => setSmax(e.target.value)} style={{ width: '100%', padding: 10, borderRadius: 10, border: `1px solid ${C.border}`, boxSizing: 'border-box', fontFamily: 'inherit' }} />
           </div>
         </div>
-        {err && <div style={{ fontSize: 12.5, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>⚠ {err}</div>}
-        {msg && <div style={{ fontSize: 12.5, color: C.teal, background: C.tealBg, border: '1px solid #A7E3CE', borderRadius: 8, padding: '9px 12px', marginBottom: 10 }}>{msg}</div>}
+        {err && <div style={{ fontSize: 13, color: TK.critical, background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '9px 12px', marginBottom: 10 }}>⚠ {err}</div>}
+        {msg && <div style={{ fontSize: 13, color: C.teal, background: C.tealBg, border: `1px solid ${TK.lineStrong}`, borderRadius: 10, padding: '9px 12px', marginBottom: 10 }}>{msg}</div>}
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>
           <span style={{ flex: 1, fontSize: 11, color: C.muted, letterSpacing: 0.5 }}>COMPONENT</span>
@@ -230,7 +235,7 @@ export default function FlexiConfigBuilder() {
           <ComponentRow key={c.code} c={c} rs={rows[c.code]} onToggle={reg => toggle(c.code, reg)} onField={(f, v) => setField(c.code, f, v)} />
         ))}
 
-        <button onClick={saveSlab} disabled={saving || companies.length === 0} style={{ width: '100%', marginTop: 12, padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: `1px solid ${C.purple}`, background: saving ? '#C4B5FD' : C.purple, color: '#fff', cursor: saving ? 'not-allowed' : 'pointer' }}>
+        <button onClick={saveSlab} disabled={saving || companies.length === 0} style={{ width: '100%', marginTop: 12, padding: 12, borderRadius: 10, fontWeight: 500, fontFamily: 'inherit', border: `1px solid ${C.purple}`, background: saving ? TK.brandTint : C.purple, color: TK.onAccent, cursor: saving ? 'not-allowed' : 'pointer' }}>
           {saving ? 'Saving…' : companyId ? 'Save slab (Old + New together) & create next' : `Save slab for all ${companies.length} companies`}
         </button>
         {!companyId && <div style={{ fontSize: 11, color: C.muted, marginTop: 8, textAlign: 'center' }}>This slab range + components will be added to every company at once.</div>}
@@ -240,12 +245,12 @@ export default function FlexiConfigBuilder() {
         <div>
           <div style={{ fontSize: 13, fontWeight: 500, color: C.navy, marginBottom: 8 }}>Saved slabs ({slabs.length}){!companyId && ' · all companies'}</div>
           {slabs.map(s => (
-            <div key={s.id} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div key={s.id} style={{ background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 13, fontWeight: 500, color: C.purpleDark }}>
-                {!companyId && <span style={{ background: '#EEEDFE', color: C.purpleDark, fontSize: 11, padding: '2px 8px', borderRadius: 20, marginRight: 8, fontWeight: 500 }}>{companyName(s.company_id)}</span>}
+                {!companyId && <span style={{ background: TK.brandTint, color: C.purpleDark, fontSize: 11, padding: '2px 8px', borderRadius: 20, marginRight: 8, fontWeight: 500 }}>{companyName(s.company_id)}</span>}
                 Slab {s.sort_order} · {inr(s.fixed_from)} – {inr(s.fixed_to)}
               </span>
-              <button onClick={() => deleteSlab(s.id)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 6, border: `1px solid ${C.red}`, background: '#fff', color: C.red, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+              <button onClick={() => deleteSlab(s.id)} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 7, border: `1px solid ${C.red}`, background: TK.surface, color: C.red, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
             </div>
           ))}
         </div>
