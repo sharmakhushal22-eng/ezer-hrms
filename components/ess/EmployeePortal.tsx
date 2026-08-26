@@ -24,6 +24,8 @@ import {
   type MonthlyData, type DayPunch, type RegularisationRequest,
 } from '@/lib/supabase-attendance'
 import * as HR from '@/lib/employees/hr-actions'
+import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
+import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
@@ -801,7 +803,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
           </Panel>
 
           <Panel title="Your people" icon="👥" accent="#EEF2FF">
-            <Field label="Reporting manager" value={emp.l1_manager_name} icon="👔" notify={notify} />
+            <MyReportingLine employeeId={emp.id} fallbackL1={emp.l1_manager_name} notify={notify} />
             <Field label="HR contact" value={emp.hr_manager_name} icon="🧑‍💼" notify={notify} />
             <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
           </Panel>
@@ -1031,6 +1033,90 @@ const DIR_TINTS = [
   { bg: C.infoTint, fg: C.info }, { bg: C.warningTint, fg: C.warning },
 ]
 const dirTint = (s: string) => DIR_TINTS[Array.from(s || '?').reduce((a, c) => a + c.charCodeAt(0), 0) % DIR_TINTS.length]
+
+function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
+  const { managers, reportCount, loading: chainLoading } = useManagerChain(emp.id)
+  const [peers, setPeers] = useState<{ id: string; full_name: string; designation: string | null; department: string | null; isSelf: boolean; direct_reports: number }[]>([])
+  const [reports, setReports] = useState<{ id: string; emp_code: string | null; full_name: string | null; designation: string | null; department: string | null }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let live = true
+    setLoading(true)
+    ;(async () => {
+      const token = await authToken()
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+      const [peersRes, reportsRes] = await Promise.all([
+        fetch(`/api/rms/orgchart?view=peers&employee_id=${emp.id}`, { headers, cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
+        fetch(`/api/rms/hierarchy?employee_id=${emp.id}&view=reports`, { headers, cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
+      ])
+      if (!live) return
+      setPeers((peersRes.peers || []).map((p: any) => ({ id: p.employee_id, full_name: p.full_name, designation: p.designation, department: p.department, isSelf: p.is_self, direct_reports: p.direct_reports })))
+      setReports(reportsRes.reports || [])
+      setLoading(false)
+    })()
+    return () => { live = false }
+  }, [emp.id])
+
+  // The same screen for everyone — an individual contributor, a manager and the person
+  // at the top of a chain all see chain-above / peers / people-below. Only the contents
+  // move: the MD case is not special-cased, it just has an empty chain and no peers.
+  const CardRow = ({ id, name, sub, right }: { id: string; name: string | null; sub: string | null; right?: string }) => (
+    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: '1px solid #F3F0FF' }}>
+      <div style={{ width: 32, height: 32, borderRadius: 99, background: '#EEEDFE', color: '#7C3AED', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {(name || '?').split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase()}
+      </div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || '—'}</div>
+        <div style={{ fontSize: 11, color: '#6B7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '—'}</div>
+      </div>
+      {right && <span style={{ fontSize: 10.5, color: '#7C3AED', fontWeight: 700, background: '#EEEDFE', borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{right}</span>}
+    </div>
+  )
+
+  const Section = ({ title, icon, empty, children }: { title: string; icon: string; empty: string; children: React.ReactNode }) => (
+    <div style={{ background: '#fff', borderRadius: 10, border: '1px solid rgba(124,58,237,0.12)', padding: '14px 16px', marginBottom: 10, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>{icon} {title}</div>
+      {loading || chainLoading ? <div style={{ fontSize: 12, color: '#9CA3AF', padding: '6px 0' }}>Loading…</div> : children}
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, alignItems: 'start' }}>
+      <Section title="Reporting line above you" icon="🧭" empty="Nobody above you — you are at the top of your chain.">
+        {managers.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody above you — you are at the top of your chain.</div>
+        ) : managers.map(m => (
+          <CardRow key={m.relationship_type} id={m.relationship_type}
+            name={m.manager?.full_name ?? null}
+            sub={[m.relationship_type === 'HOD' ? 'Head of Department' : m.relationship_type, m.manager?.designation].filter(Boolean).join(' · ')} />
+        ))}
+      </Section>
+
+      <Section title="Your team" icon="👥" empty="Nobody reports to you yet.">
+        {reports.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody reports to you directly.</div>
+        ) : reports.map(r => (
+          <CardRow key={r.id} id={r.id} name={r.full_name} sub={[r.designation, r.department].filter(Boolean).join(' · ')} />
+        ))}
+      </Section>
+
+      <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
+        <Section title={`Your team-mates${peers.length ? ' (' + peers.length + ')' : ''}`} icon="🤝" empty="Nobody else shares your reporting manager.">
+          {peers.filter(p => !p.isSelf).length === 0 ? (
+            <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody else shares your reporting manager — or you have no manager on record.</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: '0 16px' }}>
+              {peers.filter(p => !p.isSelf).map(p => (
+                <CardRow key={p.id} id={p.id} name={p.full_name} sub={p.designation} right={p.direct_reports > 0 ? String(p.direct_reports) + ' reports' : undefined} />
+              ))}
+            </div>
+          )}
+        </Section>
+      </div>
+    </div>
+  )
+}
 
 function Directory({ isMobile }: { isMobile: boolean }) {
   const [rows, setRows] = useState<DirectoryEntry[]>([])
@@ -3060,14 +3146,9 @@ const SECTIONS: NavSection[] = [
       { k:'letters',     label:'My Letters' },
     ]},
 
-  { k:'team', label:'Team', short:'Team', icon:'', status:'soon',
-    desc:'For managers — see and manage your team',
-    items:[{ k:'team', label:'Team' }],
-    features:[
-      { icon:'', name:'Team List',          note:'Non-salary details visible' },
-      { icon:'', name:'Task Assign',        note:'Give tasks to team members' },
-      { icon:'', name:'TODO / Deliverables',note:'Track what is owed' },
-    ]},
+  { k:'team', label:'Team', short:'Team', icon:'', status:'ready',
+    desc:'Who is above you, who is beside you, who reports to you — read from the same reporting lines HR maintains',
+    items:[{ k:'team', label:'Team' }]},
 
   { k:'payroll', label:'Payroll', short:'Payroll', icon:'', status:'partial',
     desc:'Salary, benefits, declarations and claims — all in one place',
@@ -3164,6 +3245,78 @@ function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean;
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
     </button>
+  )
+}
+
+/** The way into the admin dashboard, and the only one. It appears for somebody whose
+ *  roles open at least one admin module and stays invisible for everyone else, so an
+ *  ordinary employee never sees a door that will not open. Rendered apart from the
+ *  section list because it leaves ESS rather than switching a tab. */
+function AdminEntry({ isMobile }: { isMobile?: boolean }) {
+  const { grant, loading } = useGrant()
+  const [hover, setHover] = useState(false)
+  // An unresolved grant hides the button rather than showing it: a door that might not
+  // open is worse than no door, and the dashboard's own guard is the authority anyway.
+  if (loading || !grant.resolved || !hasAdminAccess(grant)) return null
+
+  const roleLine = grant.isSuperAdmin ? 'Super Admin'
+    : grant.roles.length ? grant.roles.map(r => r.role_name).join(', ')
+    : 'Admin access'
+
+  if (isMobile) {
+    return (
+      <button onClick={() => { window.location.href = '/dashboard' }}
+        style={{ gridColumn: '1 / -1', padding: '12px 10px', borderRadius: 9, border: '1px solid #7C3AED', background: '#7C3AED', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, color: '#fff', fontWeight: 600 }}>
+        <span style={{ fontSize: 16 }}>🛠️</span>
+        <span style={{ flex: 1, minWidth: 0 }}>Admin</span>
+        <span style={{ fontSize: 10, opacity: .75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{roleLine}</span>
+      </button>
+    )
+  }
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+      <button onClick={() => { window.location.href = '/dashboard' }}
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', color: '#fff', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', background: hover ? 'rgba(124,58,237,0.45)' : 'rgba(124,58,237,0.28)', border: 'none', borderLeft: '3px solid #7C3AED' }}>
+        <span>🛠️</span>
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Admin</span>
+        <span style={{ marginLeft: 'auto', fontSize: 14, opacity: .7 }}>→</span>
+      </button>
+      <div style={{ padding: '4px 18px 0', fontSize: 10, color: 'rgba(255,255,255,0.42)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLine}</div>
+    </div>
+  )
+}
+
+/** The employee's own reporting line, from employee_relationships rather than from the
+ *  single joined manager name the panel used to show. Somebody with an L2 and a head of
+ *  department can now see them, and a change made by HR shows up here without anybody
+ *  editing a field. */
+function MyReportingLine({ employeeId, fallbackL1, notify }: {
+  employeeId: string
+  fallbackL1: string | null
+  notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const { managers, reportCount, loading } = useManagerChain(employeeId)
+  const LABEL: Record<string, string> = { L1: 'Reporting manager', L2: 'L2 manager', L3: 'L3 manager', L4: 'L4 manager', HOD: 'Head of department' }
+
+  if (loading) return <Field label="Reporting manager" value="…" icon="👔" notify={notify} />
+  if (!managers.length) {
+    // Nothing in the relationship table yet — fall back to the joined name so the panel
+    // is never emptier than it was before.
+    return <Field label="Reporting manager" value={fallbackL1} icon="👔" notify={notify} />
+  }
+  return (
+    <>
+      {managers.map(m => (
+        <Field key={m.relationship_type}
+          label={LABEL[m.relationship_type] || m.relationship_type}
+          value={m.manager ? [m.manager.full_name, m.manager.designation].filter(Boolean).join(' · ') : null}
+          icon={m.relationship_type === 'HOD' ? '🏛️' : '👔'} notify={notify} />
+      ))}
+      {reportCount > 0 && (
+        <Field label="Reports to you" value={`${reportCount} ${reportCount === 1 ? 'person' : 'people'}`} icon="👥" notify={notify} />
+      )}
+    </>
   )
 }
 
@@ -3294,6 +3447,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
       case 'requests':      return <Requests emp={emp} notify={notify} />
+      case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
       case 'directory':     return <Directory isMobile={isMobile} />
           case 'performance':   return <Performance employeeId={emp.id} />
       case 'funzone':       return <FunZone />
@@ -3319,6 +3473,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           {SECTIONS.map(s => (
             <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
           ))}
+          <AdminEntry />
         </div>
       )}
 
@@ -3393,6 +3548,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
                   <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
                 </button>
               ))}
+              <AdminEntry isMobile />
             </div>
           </div>
         </div>

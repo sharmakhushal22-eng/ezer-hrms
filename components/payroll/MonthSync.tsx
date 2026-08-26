@@ -362,9 +362,15 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
 
   const isGroup = !companyId
   const label = sel ? periodLabel(sel) : ''
-  const readyCount = SYNC_CATEGORIES.filter(c => c.status === 'ready').length
-  const globalCount = SYNC_CATEGORIES.filter(c => c.status === 'global').length
-  const plannedCount = SYNC_CATEGORIES.length - readyCount - globalCount
+  // TDS is deliberately not a button here. It reads this month's arrear, professional tax
+  // and earned income — all of which only mean anything once Run Payroll has settled
+  // them — so syncing it on its own ahead of time would show a number the run is about
+  // to overwrite anyway. Run Payroll calls sync_month_tds() itself, last, and the figure
+  // shows up on the downloaded sheet from there.
+  const DATA_SYNC_CATEGORIES = SYNC_CATEGORIES.filter(c => c.key !== 'tds')
+  const readyCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready').length
+  const globalCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'global').length
+  const plannedCount = DATA_SYNC_CATEGORIES.length - readyCount - globalCount
   const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const monthOpts = Array.from(new Map(runs.map(r => [r.month, r])).values()).sort((a, b) => (a.month || 0) - (b.month || 0))
 
@@ -424,7 +430,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
           onClear={() => { setFCompany(''); setFLocation(''); setFSearch('') }}
           matched={matched} />
 
-        {SYNC_CATEGORIES.map(cat => (
+        {DATA_SYNC_CATEGORIES.map(cat => (
           <CategoryRow key={cat.key} cat={cat}
             count={status && cat.countKey ? status[cat.countKey] : null}
             busy={busyKey === cat.key}

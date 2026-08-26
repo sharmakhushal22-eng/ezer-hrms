@@ -11,16 +11,24 @@
 //
 // Collapsed, the rail keeps just the icons and each group becomes a hairline,
 // so the shape of the menu survives at 60px and muscle memory still works.
+//
+// Every entry also carries the module it belongs to, so the sidebar and the
+// direct-URL guard answer from the same place (RMS — see lib/rms). A route
+// with module: null (Home) is open to anyone who can reach the dashboard at
+// all; anything else is filtered through canSee() before it ever renders.
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useGrant } from '@/lib/rms/client';
+import { moduleForPath, type Module } from '@/lib/rms/modules';
+import { canSee, hasAdminAccess, type Grant } from '@/lib/rms/resolve';
 import { C, F, W, S, R, E, M, UIKeyframes } from '@/lib/ui';
 import { ThemeToggle } from '@/lib/ui/ThemeToggle';
 import { PageTransition, RouteProgress } from '@/lib/ui/PageTransition';
 import {
-  IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconUpload, IconTransfer,
+  IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconOrgChart, IconUpload, IconTransfer,
   IconPerformance,
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
   IconLoans, IconCompliance, IconLetters, IconMobile, IconAdmin, IconPolicies,
@@ -28,50 +36,52 @@ import {
   IconChevron, IconLogout, type IconProps,
 } from '@/lib/ui/icons';
 
-interface NavItem { label: string; href: string; Icon: (p: IconProps) => React.ReactElement }
+interface NavItem { label: string; href: string; Icon: (p: IconProps) => React.ReactElement; module: Module | null }
 interface NavGroup { group: string; items: NavItem[] }
 
-// Every href here is identical to the previous flat list. Nothing moved.
+// Every href here is identical to the previous flat list. Nothing moved except
+// Org Chart, which did not exist when this grouping was first drawn.
 const NAV: NavGroup[] = [
   { group: '', items: [
-    { label: 'Home', href: '/dashboard', Icon: IconHome },
+    { label: 'Home', href: '/dashboard', Icon: IconHome, module: null },
   ]},
   { group: 'People', items: [
-    { label: 'Recruitment',   href: '/dashboard/recruitment', Icon: IconRecruitment },
-    { label: 'Onboarding',    href: '/dashboard/onboarding',  Icon: IconOnboarding },
-    { label: 'Employees',     href: '/dashboard/employees',   Icon: IconEmployees },
-    { label: 'Bulk Uploader', href: '/dashboard/bulk-upload', Icon: IconUpload },
-    { label: 'Transfer',      href: '/dashboard/transfer',    Icon: IconTransfer },
-    { label: 'Performance',   href: '/dashboard/pms',         Icon: IconPerformance },
+    { label: 'Recruitment',   href: '/dashboard/recruitment', Icon: IconRecruitment, module: 'Recruitment' },
+    { label: 'Onboarding',    href: '/dashboard/onboarding',  Icon: IconOnboarding,  module: 'Onboarding' },
+    { label: 'Employees',     href: '/dashboard/employees',   Icon: IconEmployees,   module: 'Employees' },
+    { label: 'Org Chart',     href: '/dashboard/org-chart',   Icon: IconOrgChart,    module: 'Employees' },
+    { label: 'Bulk Uploader', href: '/dashboard/bulk-upload', Icon: IconUpload,      module: 'Bulk Upload' },
+    { label: 'Transfer',      href: '/dashboard/transfer',    Icon: IconTransfer,    module: 'Transfer' },
+    { label: 'Performance',   href: '/dashboard/pms',         Icon: IconPerformance, module: 'Performance' },
   ]},
   { group: 'Time & Attendance', items: [
-    { label: 'Attendance & Leave',     href: '/dashboard/attendance',         Icon: IconCalendar },
-    { label: 'Attendance Reports',     href: '/dashboard/attendance-reports', Icon: IconClock },
-    { label: 'Leave & Holiday Config', href: '/dashboard/leave-upload',       Icon: IconLeave },
+    { label: 'Attendance & Leave',     href: '/dashboard/attendance',         Icon: IconCalendar, module: 'Attendance' },
+    { label: 'Attendance Reports',     href: '/dashboard/attendance-reports', Icon: IconClock,    module: 'Attendance Reports' },
+    { label: 'Leave & Holiday Config', href: '/dashboard/leave-upload',       Icon: IconLeave,    module: 'Leave Config' },
   ]},
   { group: 'Money', items: [
-    { label: 'Payroll',            href: '/dashboard/payroll',       Icon: IconPayroll },
-    { label: 'Finance Department', href: '/dashboard/finance',       Icon: IconFinance },
-    { label: 'Flexi Claims',       href: '/dashboard/flexi-claims',  Icon: IconCard },
-    { label: 'Travel Claims',      href: '/dashboard/travel-claims', Icon: IconTravel },
-    { label: 'Loans',              href: '/dashboard/loans',         Icon: IconLoans },
+    { label: 'Payroll',            href: '/dashboard/payroll',       Icon: IconPayroll, module: 'Payroll' },
+    { label: 'Finance Department', href: '/dashboard/finance',       Icon: IconFinance, module: 'Finance' },
+    { label: 'Flexi Claims',       href: '/dashboard/flexi-claims',  Icon: IconCard,    module: 'Flexi Claims' },
+    { label: 'Travel Claims',      href: '/dashboard/travel-claims', Icon: IconTravel,  module: 'Travel Claims' },
+    { label: 'Loans',              href: '/dashboard/loans',         Icon: IconLoans,   module: 'Loans' },
   ]},
   { group: 'Compliance & Docs', items: [
-    { label: 'Compliance',       href: '/dashboard/compliance', Icon: IconCompliance },
-    { label: 'HR Letters',       href: '/dashboard/letters',    Icon: IconLetters },
-    { label: 'Company Policies', href: '/dashboard/policies',   Icon: IconPolicies },
-    { label: 'Reports',          href: '/dashboard/reports',    Icon: IconReports },
+    { label: 'Compliance',       href: '/dashboard/compliance', Icon: IconCompliance, module: 'Compliance' },
+    { label: 'HR Letters',       href: '/dashboard/letters',    Icon: IconLetters,    module: 'HR Letters' },
+    { label: 'Company Policies', href: '/dashboard/policies',   Icon: IconPolicies,   module: 'Policies' },
+    { label: 'Reports',          href: '/dashboard/reports',    Icon: IconReports,    module: 'Reports' },
   ]},
   { group: 'Setup', items: [
-    { label: 'ESS & Role Management', href: '/dashboard/ess',             Icon: IconMobile },
-    { label: 'Admin Setup',           href: '/dashboard/admin',           Icon: IconAdmin },
-    { label: 'Flexi Policy',          href: '/dashboard/flexi-policy',    Icon: IconSliders },
-    { label: 'Company Profile',       href: '/dashboard/company-profile', Icon: IconBuilding },
-    { label: 'Database Export',       href: '/dashboard/db-export',       Icon: IconDatabase },
+    { label: 'ESS & Role Management', href: '/dashboard/ess',             Icon: IconMobile,   module: 'ESS & Roles' },
+    { label: 'Admin Setup',           href: '/dashboard/admin',           Icon: IconAdmin,    module: 'Admin Setup' },
+    { label: 'Flexi Policy',          href: '/dashboard/flexi-policy',    Icon: IconSliders,  module: 'Flexi Claims' },
+    { label: 'Company Profile',       href: '/dashboard/company-profile', Icon: IconBuilding, module: 'Company Profile' },
+    { label: 'Database Export',       href: '/dashboard/db-export',       Icon: IconDatabase, module: 'Database Export' },
   ]},
   { group: 'Help', items: [
-    { label: 'Ezer AI', href: '/dashboard/ai',      Icon: IconAi },
-    { label: 'Support', href: '/dashboard/support', Icon: IconSupport },
+    { label: 'Ezer AI', href: '/dashboard/ai',      Icon: IconAi,      module: 'Ezer AI' },
+    { label: 'Support', href: '/dashboard/support', Icon: IconSupport, module: 'Support' },
   ]},
 ];
 
@@ -143,21 +153,80 @@ function GroupLabel({ label, open }: { label: string; open: boolean }) {
   );
 }
 
+const FONT = '"DM Sans","Segoe UI",sans-serif'
+
+// ── Sub-components live outside the parent. Declared inside, they re-mount on every
+//    render and any input in a child loses focus after one keystroke. ──
+
+/** Shown when somebody types the URL of a module they do not hold. A silent redirect
+ *  leaves people convinced the page is broken; this says what happened and who to ask. */
+function NoAccess({ module, grant }: { module: Module; grant: Grant }) {
+  return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT, background: '#F5F3FF', padding: 20 }}>
+      <div style={{ background: '#fff', borderRadius: 10, border: '1px solid rgba(124,58,237,0.12)', boxShadow: '0 1px 4px rgba(124,58,237,0.06)', padding: '26px 28px', maxWidth: 460, textAlign: 'center' }}>
+        <div style={{ fontSize: 26, marginBottom: 10 }}>🔒</div>
+        <div style={{ fontSize: 16, fontWeight: 600, color: '#1E1B4B', marginBottom: 6 }}>{module} is not part of your access</div>
+        <div style={{ fontSize: 13, color: '#6B7280', lineHeight: 1.6, marginBottom: 16 }}>
+          {grant.roles.length
+            ? <>You are signed in as <b style={{ color: '#1E1B4B' }}>{grant.name || 'this user'}</b> with{' '}
+                {grant.roles.map(r => r.role_name).join(', ')} — that does not include {module}.</>
+            : <>No role has been assigned to you yet, so only your own ESS portal is open.</>}
+          <br />Ask HR to add it if you need it.
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+          <Link href="/dashboard" style={{ padding: '8px 16px', borderRadius: 7, background: '#7C3AED', color: '#fff', fontSize: 12, fontWeight: 600, textDecoration: 'none' }}>Dashboard home</Link>
+          <Link href="/ess-portal" style={{ padding: '8px 16px', borderRadius: 7, border: '1px solid #DDD6FE', background: '#fff', color: '#6D28D9', fontSize: 12, fontWeight: 500, textDecoration: 'none' }}>My ESS portal</Link>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** Whose session this is, pinned to the bottom of the sidebar, with the way back to ESS.
+ *  Both are questions people started having once the dashboard stopped being one shared
+ *  login. */
+function SidebarFooter({ grant, open }: { grant: Grant; open: boolean }) {
+  const initials = (grant.name || '?').split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase()
+  const subtitle = grant.isSuperAdmin ? 'Super Admin'
+    : grant.roles.length ? grant.roles.map(r => r.role_name).join(', ')
+    : grant.legacy ? 'Legacy login' : 'No role'
+  return (
+    <div style={{ width: '100%', borderTop: `1px solid ${C.railLine}`, paddingTop: 10, marginTop: 6, display: 'flex', flexDirection: 'column', alignItems: open ? 'stretch' : 'center', gap: 8, flexShrink: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: open ? '0 4px' : 0, justifyContent: open ? 'flex-start' : 'center' }}>
+        <div style={{ width: 28, height: 28, borderRadius: 99, background: C.railActiveBg, color: C.railActiveText, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
+        {open && (
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: C.railText, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{grant.name || 'Signed in'}</div>
+            <div style={{ fontSize: 10, color: C.railFaint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{subtitle}</div>
+          </div>
+        )}
+      </div>
+      <Link href="/ess-portal" className="ez-nav" style={{ textDecoration: 'none', width: '100%' }}>
+        <div style={{ height: 30, borderRadius: R.md, display: 'flex', alignItems: 'center', gap: 8, padding: open ? '0 10px' : 0, justifyContent: open ? 'flex-start' : 'center' }}>
+          <span style={{ fontSize: 13, width: 20, textAlign: 'center', flexShrink: 0, color: C.railMuted }}>↩</span>
+          {open && <span style={{ fontSize: 11, color: C.railMuted, whiteSpace: 'nowrap' }}>Back to my ESS</span>}
+        </div>
+      </Link>
+    </div>
+  )
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
-  const [authed, setAuthed] = useState<boolean | null>(null);
   const path = usePathname();
+  const { grant, loading } = useGrant();
 
-  // Auth guard: /dashboard is admin-only. Reads the Supabase session
-  // (localStorage) and bounces to the login page if not signed in. Client-side
-  // so it works with the existing signInWithPassword session — a cookie-based
-  // server middleware would lock everyone out.
+  // The door. Nobody signed in goes to the login page; somebody signed in with
+  // no admin module at all goes back to their own portal rather than staring
+  // at an empty sidebar.
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (!data.session) window.location.href = '/';
-      else setAuthed(true);
-    });
-  }, []);
+    if (loading) return;
+    // The answer never arrived — a timed-out request, say. Somebody holding a
+    // token is not thrown out because of that; they stay, unenforced.
+    if (!grant.resolved) return;
+    if (!grant.employeeId && !grant.legacy) { window.location.href = '/'; return; }
+    if (!hasAdminAccess(grant)) { window.location.href = '/ess-portal'; }
+  }, [loading, grant]);
 
   // Remember the rail. Read after mount so the server and client first paint
   // agree; a value read during render would hydrate mismatched.
@@ -170,7 +239,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return !v;
   });
 
-  if (authed === null) {
+  const showGate = loading || (grant.resolved && (!grant.employeeId && !grant.legacy || !hasAdminAccess(grant)));
+  if (showGate) {
+    const gateText = loading ? 'Checking access…'
+      : !grant.employeeId && !grant.legacy ? 'Taking you to sign in…'
+      : 'Taking you to your ESS portal…';
     return (
       <div style={{
         minHeight: '100vh', display: 'flex', flexDirection: 'column',
@@ -184,10 +257,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           color: C.onAccent, display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontWeight: W.bold, fontSize: F.body, boxShadow: E.brand,
         }}>Ez</div>
-        Checking access…
+        {gateText}
       </div>
     );
   }
+
+  // Every route is filtered through the same grant a direct URL is checked
+  // against below — a module the sidebar hides is a module the URL guard
+  // blocks too, from one source of truth (lib/rms).
+  const current = moduleForPath(path);
+  const blocked = current !== null && !canSee(grant, current);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: F.family, background: C.canvas }}>
@@ -244,15 +323,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           overflowY: 'auto', overflowX: 'hidden',
           display: 'flex', flexDirection: 'column', gap: 1,
         }}>
-          {NAV.map(g => (
-            <div key={g.group || 'root'} style={{ display: 'contents' }}>
-              <GroupLabel label={g.group} open={open} />
-              {g.items.map(item => (
-                <RailItem key={item.href} item={item} open={open}
-                  active={isActive(path, item.href)} />
-              ))}
-            </div>
-          ))}
+          {/* Filtered through the same grant the direct-URL guard below reads —
+              a route the sidebar hides here is a route "blocked" catches if
+              typed straight into the address bar. A group with nothing left
+              in it does not render its own empty divider. */}
+          {NAV.map(g => {
+            const items = g.items.filter(item => canSee(grant, item.module));
+            if (!items.length) return null;
+            return (
+              <div key={g.group || 'root'} style={{ display: 'contents' }}>
+                <GroupLabel label={g.group} open={open} />
+                {items.map(item => (
+                  <RailItem key={item.href} item={item} open={open}
+                    active={isActive(path, item.href)} />
+                ))}
+              </div>
+            );
+          })}
         </div>
 
         {/* Theme lives with the account controls rather than in a page
@@ -264,13 +351,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <ThemeToggle compact={!open} />
         </div>
 
-        {/* Eye comfort sits with the theme: both are display preferences that
-            belong to the person, not to any one screen. */}
-        <div style={{
-          flexShrink: 0, padding: open ? '0 4px 8px' : '0 0 8px',
-          display: 'flex', justifyContent: open ? 'flex-start' : 'center',
-        }}>
-        </div>
+        <SidebarFooter grant={grant} open={open} />
 
         <button
           onClick={() => { supabase.auth.signOut().then(() => { window.location.href = '/'; }); }}
@@ -293,10 +374,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         flex: 1, marginLeft: open ? OPEN_W : SHUT_W,
         transition: `margin-left ${M.slow}`, minWidth: 0,
       }}>
-        {/* A route can take a moment to resolve, and in that gap the old page
-            is still on screen with nothing to say it is working. */}
-        <RouteProgress />
-        <PageTransition>{children}</PageTransition>
+        {blocked ? <NoAccess module={current as Module} grant={grant} /> : (
+          <>
+            {/* A route can take a moment to resolve, and in that gap the old page
+                is still on screen with nothing to say it is working. */}
+            <RouteProgress />
+            <PageTransition>{children}</PageTransition>
+          </>
+        )}
       </main>
     </div>
   );

@@ -227,6 +227,23 @@ const TAXABLE_COLS = [
   'taxable_flexi_telephone_internet', 'taxable_flexi_meal_card', 'taxable_flexi_gadget_device',
   'taxable_flexi_attire_uniform', 'taxable_flexi_books_periodicals', 'taxable_flexi_lta',
 ]
+// Monthly TDS (sql125/126, extended by 064 to the rest of the spec) — every step
+// of the calculation as its own column, in the order it runs, so the final
+// figure can be tied out by hand instead of trusted on faith: actual + current +
+// projected income (now including perquisites, house property and a previous
+// employer's income), less exemptions and the full Chapter VI-A, taxed with
+// age-aware slabs and marginal relief, less what this FY already deducted,
+// divided by the months left.
+const TDS_COLS = [
+  'tds_regime_used', 'tds_age_category', 'tds_actual_ytd', 'tds_current_gross', 'tds_arrear', 'tds_projected',
+  'tds_perquisites', 'tds_employer_contrib_excess', 'tds_house_property', 'tds_other_income',
+  'tds_prev_employer_income', 'tds_prev_employer_tds', 'tds_annual_gross',
+  'tds_hra_exempt', 'tds_lta_exempt', 'tds_pt_deduction', 'tds_std_deduction', 'tds_chapter_via',
+  'tds_taxable_income', 'tds_slab_tax', 'tds_rebate_87a', 'tds_marginal_relief_87a',
+  'tds_surcharge', 'tds_marginal_relief_surcharge', 'tds_cess',
+  'tds_annual_liability', 'tds_paid_ytd', 'tds_months_remaining',
+  'tds_monthly', 'tds_additional', 'tds_reason',
+]
 
 // ── Month Master column groups ─────────────────────────────────────────────
 // The export is grouped so related fields sit together and each block reads as a
@@ -312,6 +329,7 @@ export const MM_GROUPS: MmGroup[] = [
       'ded_parking', 'ded_insurance', 'ded_canteen',
       'total_deduction', 'net_pay'],
   },
+  { key: 'tds', label: 'TDS', cols: [...TDS_COLS] },
   { key: 'investment', label: 'Investment', cols: [...TAXABLE_COLS] },
   {
     key: 'bank', label: 'Bank details',
@@ -407,6 +425,15 @@ export const RUN_SHEET_COLS: string[] = [
   'arrear_basic', 'arrear_hra', 'arrear_special_allowance',
   'arrear_epf_wage', 'arrear_employee_pf', 'arrear_employer_pf',
   'arrear_total', 'final_net_pay',
+
+  // Monthly TDS (sql125/126) — recomputed from this run's own income rather than a
+  // frozen number typed once in April. The columns run in calculation order — actual
+  // + current + projected income, less HRA/LTA/PT/Chapter VI-A, taxed, less what this
+  // FY already deducted, divided by the months left — so tds_monthly at the end can be
+  // tied out by reading the row left to right. tds_reason is the one-line explanation:
+  // which regime, how many months the date of leaving cut, whether a one-off pushed
+  // Additional TDS this month.
+  ...TDS_COLS,
 ]
 
 // Month-to-month attendance columns. These are *expected* to differ every month, so the

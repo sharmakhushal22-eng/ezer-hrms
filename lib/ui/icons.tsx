@@ -58,6 +58,9 @@ export const IconOnboarding = (p: IconProps) => (
 export const IconEmployees = (p: IconProps) => (
   <Svg {...p}><circle cx="7.5" cy="6.5" r="2.8" /><path d="M2 16.5c0-2.9 2.5-4.8 5.5-4.8s5.5 1.9 5.5 4.8" /><path d="M13.5 4.2a2.8 2.8 0 0 1 0 5.3M14.8 11.9c1.9.5 3.2 2 3.2 4.1" /></Svg>
 );
+export const IconOrgChart = (p: IconProps) => (
+  <Svg {...p}><circle cx="10" cy="4.3" r="2.2" /><path d="M10 6.5v3M10 9.5H5.5M10 9.5h4.5M5.5 9.5v2.7M14.5 9.5v2.7" /><circle cx="5.5" cy="14.8" r="2.2" /><circle cx="14.5" cy="14.8" r="2.2" /></Svg>
+);
 export const IconUpload = (p: IconProps) => (
   <Svg {...p}><path d="M10 13V3.5M6.5 7 10 3.5 13.5 7" /><path d="M3 13v2.5a1.5 1.5 0 0 0 1.5 1.5h11a1.5 1.5 0 0 0 1.5-1.5V13" /></Svg>
 );

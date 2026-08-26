@@ -5,6 +5,7 @@ import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
+import EmployeeOrgFlow from '@/components/rms/EmployeeOrgFlow'
 // This page keeps its own local Badge / Field / Section, so the system's
 // equivalents are aliased where the names would clash.
 import {
@@ -693,6 +694,9 @@ export default function EmployeeMaster() {
               <div style={{fontSize:'13px',color:P.text}}>{(emp as any).departments?.dept_name || '—'}</div>
             </div>
           </Grid2>
+        </Section>
+        <Section title="Manager Information" icon="🧭">
+          <EmployeeOrgFlow employeeId={emp.id} companyId={emp.company_id} employeeName={emp.full_name} />
         </Section>
         {emp.employment_status === 'Resigned' && (
           <Section title="Exit Details" icon="🚪">

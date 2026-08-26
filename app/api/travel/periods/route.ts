@@ -15,7 +15,7 @@
 // ============================================================================
 
 import { NextRequest, NextResponse } from 'next/server';
-import { requireDashboardUser } from '@/lib/api-auth';
+import { requireModule } from '@/lib/api-auth';
 import { errorResponse } from '@/lib/travel/errors';
 import { serviceClient, monthStart } from '@/lib/travel/access';
 
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   try {
     // Opening, closing and locking an expense month is an HR/Finance
     // action, not an employee one.
-    const gate = await requireDashboardUser(req);
+    const gate = await requireModule(req, 'Travel Claims');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
   try {
     // Opening, closing and locking an expense month is an HR/Finance
     // action, not an employee one.
-    const gate = await requireDashboardUser(req);
+    const gate = await requireModule(req, 'Travel Claims');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();
@@ -172,7 +172,7 @@ export async function PATCH(req: NextRequest) {
   try {
     // Opening, closing and locking an expense month is an HR/Finance
     // action, not an employee one.
-    const gate = await requireDashboardUser(req);
+    const gate = await requireModule(req, 'Travel Claims');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();

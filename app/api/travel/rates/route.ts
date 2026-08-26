@@ -17,7 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { errorResponse } from '@/lib/travel/errors';
 import { serviceClient, getActivePolicy, todayISO } from '@/lib/travel/access';
-import { requireDashboardUser } from '@/lib/api-auth';
+import { requireModule } from '@/lib/api-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
   try {
     // Money: this sets what the company pays per kilometre. Dashboard
     // session required — it ran open to the internet otherwise.
-    const gate = await requireDashboardUser(req);
+    const gate = await requireModule(req, 'Travel Claims');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();
@@ -87,7 +87,7 @@ export async function POST(req: NextRequest) {
   try {
     // Money: this sets what the company pays per kilometre. Dashboard
     // session required — it ran open to the internet otherwise.
-    const gate = await requireDashboardUser(req);
+    const gate = await requireModule(req, 'Travel Claims');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();
@@ -214,7 +214,7 @@ export async function PATCH(req: NextRequest) {
   try {
     // Money: this sets what the company pays per kilometre. Dashboard
     // session required — it ran open to the internet otherwise.
-    const gate = await requireDashboardUser(req);
+    const gate = await requireModule(req, 'Travel Claims');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();

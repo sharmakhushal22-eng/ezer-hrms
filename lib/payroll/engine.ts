@@ -51,6 +51,7 @@ interface MonthRow {
   voluntary_pf_applicable: any; vpf_percent: any
   days_in_month: any; total_days: any; paid_days: any
   attendance_uploaded_at: any; arrear_days: any; ot_hours: any
+  tds_monthly: any; tds_additional: any; tds_annual_liability: any; tds_regime_used: any; tds_reason: any
 }
 
 // Voucher money for one employee this month, split the way payroll needs it.
@@ -152,7 +153,15 @@ function calcLineFromMonth(
 
   const dedNPS = num(npsMonthly)
   const dedLoan = v.loan
-  const dedTDS = num(tdsMonthly)
+  // sql125/126's engine, wired through Data Sync → TDS (sync_month_tds), recomputes this
+  // every run from the month's own actual + projected income, arrear, professional tax
+  // and regime — replacing tds_declarations.monthly_tds, a single figure typed once by
+  // the flexi calculator in April and then frozen regardless of an appraisal, unpaid
+  // leave, a resignation or an incentive. tds_monthly is null only for a month that has
+  // never been through that sync (or ran before sql125 existed), so the frozen figure
+  // stays the fallback rather than silently becoming zero.
+  const tdsSynced = row.tds_monthly != null
+  const dedTDS = tdsSynced ? round(num(row.tds_monthly) + num(row.tds_additional)) : num(tdsMonthly)
 
   const totalDed = dedEPF + dedVPF + dedESIC + dedPT + dedLWF + dedTDS + dedNPS + dedLoan + v.otherDeductions
   // Approved flexi reimbursement is paid on top of gross, tax-exempt within the declared limit.
@@ -181,6 +190,14 @@ function calcLineFromMonth(
     deductions_json: {
       epf: dedEPF, vpf: dedVPF, esic: dedESIC, pt: dedPT, lwf: dedLWF,
       tds: dedTDS, nps: dedNPS, loan_emi: dedLoan, voucher_deductions: v.otherDeductions,
+      // Kept even when tdsSynced is false — the frozen declaration figure still deserves
+      // a "why", and false is itself the answer to "was this month's own engine used".
+      tds_synced: tdsSynced,
+      tds_monthly: tdsSynced ? num(row.tds_monthly) : null,
+      tds_additional: tdsSynced ? num(row.tds_additional) : null,
+      tds_annual_liability: tdsSynced ? num(row.tds_annual_liability) : null,
+      tds_regime_used: tdsSynced ? row.tds_regime_used : null,
+      tds_reason: tdsSynced ? row.tds_reason : null,
     },
   }
 }
@@ -199,6 +216,7 @@ const MONTH_COLS = [
   'lwf_employee', 'lwf_rate_found',
   'arrear_total', 'arrear_employee_pf', 'arrear_months',
   'days_in_month', 'total_days', 'paid_days', 'attendance_uploaded_at', 'arrear_days', 'ot_hours',
+  'tds_monthly', 'tds_additional', 'tds_annual_liability', 'tds_regime_used', 'tds_reason',
 ].join(', ')
 
 // Manual vouchers for the run, split per employee. Loan EMI is separated out because
