@@ -35,6 +35,7 @@ import FlexiClaims from '@/components/ess/FlexiClaims'
 import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
 import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
+import Performance from '@/components/ess/Performance'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -3183,13 +3184,12 @@ const SECTIONS: NavSection[] = [
       { k:'exit',        label:'Exit Process',           phase:4, needs:'Exit & FnF' },
     ]},
 
-  { k:'performance', label:'Performance', short:'PMS', icon:'', status:'soon',
-    desc:'Review and rating submission',
-    items:[{ k:'performance', label:'Performance' }],
-    features:[
-      { icon:'', name:'Self Review',    note:'Employee assessment' },
-      { icon:'', name:'Manager Review', note:'Rating submission' },
-    ]},
+  // Which tabs a person sees inside this is decided by the component from org
+  // data — everyone gets My KRAs, managers additionally get My Team, HODs get
+  // Department. One section, three audiences.
+  { k:'performance', label:'Performance', short:'PMS', icon:'', status:'ready',
+    desc:'Your KRAs, and the reviews you owe',
+    items:[{ k:'performance', label:'Performance' }] },
 
   { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'soon',
     desc:'Peer-to-peer appreciation, casual and public',
@@ -3449,6 +3449,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'requests':      return <Requests emp={emp} notify={notify} />
       case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
       case 'directory':     return <Directory isMobile={isMobile} />
+          case 'performance':   return <Performance employeeId={emp.id} />
       case 'funzone':       return <FunZone />
       default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
     }

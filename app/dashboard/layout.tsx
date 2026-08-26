@@ -29,6 +29,7 @@ import { ThemeToggle } from '@/lib/ui/ThemeToggle';
 import { PageTransition, RouteProgress } from '@/lib/ui/PageTransition';
 import {
   IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconOrgChart, IconUpload, IconTransfer,
+  IconPerformance,
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
   IconLoans, IconCompliance, IconLetters, IconMobile, IconAdmin, IconPolicies,
   IconSliders, IconBuilding, IconReports, IconDatabase, IconAi, IconSupport,
@@ -47,6 +48,7 @@ const NAV: NavGroup[] = [
   { group: 'People', items: [
     { label: 'Recruitment',   href: '/dashboard/recruitment', Icon: IconRecruitment, module: 'Recruitment' },
     { label: 'Onboarding',    href: '/dashboard/onboarding',  Icon: IconOnboarding,  module: 'Onboarding' },
+    { label: 'Performance',   href: '/dashboard/pms',         Icon: IconPerformance, module: 'Performance' },
     { label: 'Employees',     href: '/dashboard/employees',   Icon: IconEmployees,   module: 'Employees' },
     { label: 'Org Chart',     href: '/dashboard/org-chart',   Icon: IconOrgChart,    module: 'Employees' },
     { label: 'Bulk Uploader', href: '/dashboard/bulk-upload', Icon: IconUpload,      module: 'Bulk Upload' },

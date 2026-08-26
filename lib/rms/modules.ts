@@ -29,6 +29,7 @@ export const MODULES = [
   'Employees',
   'Recruitment',
   'Onboarding',
+  'Performance',
   'Attendance',
   'Attendance Reports',
   'Leave Config',
@@ -66,6 +67,7 @@ export type Module = (typeof MODULES)[number]
 export const ROUTE_MODULE: Record<string, Module> = {
   '/dashboard/recruitment':        'Recruitment',
   '/dashboard/onboarding':         'Onboarding',
+  '/dashboard/pms':                'Performance',
   '/dashboard/employees':          'Employees',
   '/dashboard/org-chart':          'Employees',
   '/dashboard/bulk-upload':        'Bulk Upload',
