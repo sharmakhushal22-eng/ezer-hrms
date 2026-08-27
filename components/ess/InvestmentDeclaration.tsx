@@ -164,6 +164,9 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
   const [ppf, setPpf] = useState('')
   const [rent, setRent] = useState('')
   const [pan, setPan] = useState('')
+  // §2.1 — the 50%/40% leg follows the city the rent is PAID in, so it is asked, not
+  // inferred from the office. Written to tds_declarations.is_metro (066).
+  const [isMetro, setIsMetro] = useState(false)
   const [pf, setPf] = useState(0)               // auto from the salary structure
   const [savedRegime, setSavedRegime] = useState<string | null>(null)
   const [switches, setSwitches] = useState(0)
@@ -226,6 +229,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         setLic(typed ? String(typed) : '')
         setRent(num(d.monthly_rent) ? String(num(d.monthly_rent)) : '')
         setPan(d.landlord_pan || '')
+        setIsMetro(!!d.is_metro)
         setSwitches(num(d.regime_switches)); setLockedAt(d.regime_locked_at || null)
         setStatus(d.declaration_status || '')
 
@@ -303,8 +307,24 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       p_income_interest_savings: num(incSavings), p_income_interest_fd: num(incFd),
       p_income_dividend: num(incDividend), p_income_other: num(incOther),
     })
+    if (error) { setBusy(false); setErr(error.message); return }
+    // The RPC predates 066 and has no metro parameter; the flag rides on a plain update.
+    await supabase.from('tds_declarations').update({ is_metro: isNew ? null : isMetro }).eq('employee_id', employeeId).eq('fy', FY)
+    // The itemised split (C1c), one row per section — what the payslip prints under
+    // "Investments u/s 80C". PF is the structure's figure, the rest is what was typed.
+    try {
+      const lines: [string, number][] = isNew ? [] : [
+        ['80C_EPF', pf], ['80C_LIC', num(lic)], ['80C_PPF', num(ppf)],
+        ['80D_SELF', num(d80dSelf)], ['80D_PARENTS', num(d80dParents)], ['80E', num(d80e)], ['24B_SELF', num(d24b)],
+        ['80DD', num(d80dd)], ['80DDB', num(d80ddb)], ['80EEB', num(d80eeb)], ['80G', num(d80g)], ['80U', num(d80u)],
+      ]
+      if (lines.length) {
+        await supabase.from('investment_declaration_lines').upsert(
+          lines.map(([section_code, declared_amount]) => ({ employee_id: employeeId, fy: FY, section_code, declared_amount, source: 'ess-form', updated_at: new Date().toISOString() })),
+          { onConflict: 'employee_id,fy,section_code' })
+      }
+    } catch { /* lines table optional (needs 066) */ }
     setBusy(false)
-    if (error) { setErr(error.message); return }
     setMsg(submit ? 'Declaration submit ho gayi. Har month ka TDS ab isi se banega.' : 'Draft save ho gaya.')
     load()
   }
@@ -451,6 +471,17 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
 
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 18, marginBottom: 2 }}>HRA exemption</div>
           <AmountRow label="Monthly rent paid" hint={annualRent > 0 ? `Saal ka ${inr(annualRent)}` : undefined} value={rent} onChange={setRent} />
+          {annualRent > 0 && (
+            <div style={{ ...S.row, gridTemplateColumns: '1fr 200px' }}>
+              <div>
+                <div style={{ fontSize: 12.5, color: C.navy }}>Rented house is in a metro city?</div>
+                <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>Mumbai, Delhi, Kolkata, Chennai — 50% of Basic counts instead of 40%</div>
+              </div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, justifySelf: 'end', fontSize: 12, color: C.muted }}>
+                <input type="checkbox" checked={isMetro} onChange={e => setIsMetro(e.target.checked)} /> Yes, metro
+              </label>
+            </div>
+          )}
           {panNeeded && (
             <div style={{ ...S.row, gridTemplateColumns: '1fr 200px' }}>
               <div>

@@ -801,9 +801,29 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         employer_nps_80ccd2: isOld ? T.eNpsO : T.eNpsN,
         total_declared: T.c80 + T.medS + T.medP + T.hlI + T.eduLoan + T.npsS,
         annual_tax_old: T.fO, annual_tax_new: T.fN, monthly_tds: monthlyTds,
+        // Write-through (C1a): the engine reads the RENT, the metro flag and the landlord
+        // PAN from tds_declarations — not hra_claimed, which is this calculator's own
+        // working. Leaving them behind here is how monthly_rent went missing on STC9064
+        // and HRA exemption computed to zero.
+        monthly_rent: N(f.rentM), is_metro: f.cityType === 'metro',
+        landlord_pan: f.landlordPAN ? String(f.landlordPAN).toUpperCase() : null,
+        sec_80d_self: T.medS, sec_80d_parents: T.medP,
         declaration_status: 'SUBMITTED', submitted_at: new Date().toISOString(),
       }, { onConflict: 'employee_id,fy' })
     } catch { /* tds_declarations optional (needs sql44) */ }
+    // The itemised split (C1c) — one row per section, so the payslip can print
+    // "Provident Fund / LIC / PPF" under 80C instead of one capped total.
+    try {
+      const lines = [
+        ['80C_LIC', N(f.lic)], ['80C_PPF', N(f.ppf)], ['80C_ELSS', N(f.elss)], ['80C_TUITION', N(f.tuit)],
+        ['80C_PRINCIPAL', N(f.hlP)], ['80CCC', N(f.pmFund)], ['80CCD_1B', N(f.npsSelf)],
+        ['80D_SELF', N(f.medSelf)], ['80D_PARENTS', N(f.medParents)], ['80E', N(f.eduLoan)], ['24B_SELF', N(f.hlInt)],
+      ] as [string, number][]
+      const rows = lines.map(([section_code, declared_amount]) => ({
+        employee_id: employeeId, fy: FY, section_code, declared_amount, source: 'calculator', updated_at: new Date().toISOString(),
+      }))
+      await supabase.from('investment_declaration_lines').upsert(rows, { onConflict: 'employee_id,fy,section_code' })
+    } catch { /* lines table optional (needs 066) */ }
     setSaving(false)
     if (error) { alert('Could not save your regime: ' + error.message); return }
     setSaved(true); setDefaultedNew(false); setStatus('SUBMITTED'); setEditMode(null)

@@ -327,7 +327,11 @@ export const MM_GROUPS: MmGroup[] = [
     cols: [...EARN_COLS, 'earn_gross_monthly',
       'pay_incentive', 'pay_variable', 'pay_bonus', 'pay_buyout',
       'ded_parking', 'ded_insurance', 'ded_canteen',
-      'total_deduction', 'net_pay'],
+      // The snapshot's own partial figures, renamed so nobody mistakes them for the
+      // bank transfer (C3): structural statutory + company deductions, before TDS,
+      // loan and NPS. The real totals come from payroll_lines, below.
+      'structural_deductions', 'earnings_less_statutory',
+      'gross_earnings', 'total_deductions', 'net_pay'],
   },
   { key: 'tds', label: 'TDS', cols: [...TDS_COLS] },
   { key: 'investment', label: 'Investment', cols: [...TAXABLE_COLS] },
@@ -369,7 +373,11 @@ export const RUN_SHEET_COLS: string[] = [
   // esic_wages / esic_employee. Showing both invites the reader to reconcile two numbers
   // that were never meant to agree.
   'ded_parking', 'ded_insurance', 'ded_canteen',
-  'total_deduction',
+  // What the snapshot itself summed — structural PF/ESIC/PT/LWF plus the three company
+  // deductions, BEFORE the statutory recompute and before TDS, loan and NPS. Kept for
+  // reconciliation, named so it cannot be read as net pay (C3). The bank figures —
+  // gross_earnings / total_deductions / net_pay — sit at the very end of the sheet.
+  'structural_deductions', 'earnings_less_statutory',
 
   // Code of Wages — the 50% basic floor. Reported alongside the structured basic
   // rather than replacing it: this figure is a compliance measure, and folding it
@@ -424,7 +432,7 @@ export const RUN_SHEET_COLS: string[] = [
   'arrear_appraisal_effective_date', 'arrear_months',
   'arrear_basic', 'arrear_hra', 'arrear_special_allowance',
   'arrear_epf_wage', 'arrear_employee_pf', 'arrear_employer_pf',
-  'arrear_total', 'final_net_pay',
+  'arrear_total',
 
   // Monthly TDS (sql125/126) — recomputed from this run's own income rather than a
   // frozen number typed once in April. The columns run in calculation order — actual
@@ -434,6 +442,11 @@ export const RUN_SHEET_COLS: string[] = [
   // which regime, how many months the date of leaving cut, whether a one-off pushed
   // Additional TDS this month.
   ...TDS_COLS,
+
+  // THE BANK FIGURES — from payroll_lines, which is what the engine actually paid.
+  // Everything deducted, TDS and Additional TDS included; net_pay is the transfer
+  // amount. Last on the sheet so a row reads left to right and ends on the answer.
+  'ded_tds', 'ded_additional_tax', 'gross_earnings', 'total_deductions', 'net_pay',
 ]
 
 // Month-to-month attendance columns. These are *expected* to differ every month, so the
@@ -466,6 +479,15 @@ export async function loadMonthMaster(runs: { id: string; company_name?: string 
   const empIds: string[] = []
   const fys = new Set<string>()
   for (const r of runs) {
+    // What the engine actually paid this run — the only net pay that goes to the bank.
+    const lineBy = new Map<string, any>()
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase.from('payroll_lines')
+        .select('employee_id, gross_earning, total_deductions, net_pay, ded_tds, ded_additional_tax')
+        .eq('run_id', r.id).range(from, from + 999)
+      ;(data || []).forEach((l: any) => lineBy.set(l.employee_id, l))
+      if ((data || []).length < 1000) break
+    }
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase.from('payroll_employee_snapshot')
         .select('*').eq('run_id', r.id).order('employee_code').range(from, from + 999)
@@ -474,9 +496,21 @@ export async function loadMonthMaster(runs: { id: string; company_name?: string 
       batch.forEach((row: any) => {
         empIds.push(row.employee_id)
         if (row.fy) fys.add(row.fy)
+        // The snapshot's net_pay is earn_gross − structural statutory − company deductions,
+        // computed BEFORE TDS, loan and NPS exist. Two columns named net_pay three
+        // characters apart is how a bank file gets built from the wrong one (C3), so the
+        // snapshot's pair is renamed here and the payroll_lines figures take the names.
+        const { net_pay: partialNet, total_deduction: structuralDed, ...rest } = row
+        delete rest.final_net_pay   // the same partial figure again, under a name that promises more
+        const l = lineBy.get(row.employee_id)
         // id / run_id / employee_id are part of the agreed column spec (System / Base),
         // so they are carried through rather than stripped as internal keys.
-        out.push({ Company: r.company_name || '', ...row })
+        out.push({
+          Company: r.company_name || '', ...rest,
+          structural_deductions: structuralDed ?? null, earnings_less_statutory: partialNet ?? null,
+          ded_tds: l?.ded_tds ?? null, ded_additional_tax: l?.ded_additional_tax ?? null,
+          gross_earnings: l?.gross_earning ?? null, total_deductions: l?.total_deductions ?? null, net_pay: l?.net_pay ?? null,
+        })
       })
       if (batch.length < 1000) break
     }
