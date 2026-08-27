@@ -280,7 +280,12 @@ export async function processPayrollRun(runId: string, codes: string[] | null = 
   const all: MonthRow[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from('payroll_employee_snapshot')
-      .select(MONTH_COLS).eq('run_id', runId).order('employee_code').range(from, from + 999)
+      // '*', not MONTH_COLS: the arrear family (arrear_employee_pf and friends) is
+      // added by a migration some databases have not run, and naming one absent
+      // column here made the whole engine refuse to run — "Month Master read
+      // failed: column … does not exist" — on every Run Payroll. Absent columns
+      // simply read as undefined → 0 below. MONTH_COLS stays as the documented contract.
+      .select('*').eq('run_id', runId).order('employee_code').range(from, from + 999)
     if (error) return { ...empty, errors: ['Month Master read failed: ' + error.message] }
     const batch = (data || []) as any as MonthRow[]
     all.push(...batch)
