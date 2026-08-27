@@ -50,11 +50,15 @@ function b64ToBytes(b64: string): Uint8Array {
   return out
 }
 
-function saveBlob(name: string, data: Uint8Array | Blob, type: string) {
+// Returns the object URL so the panel can keep a visible "click here" link: the
+// programmatic click fires minutes after the user's gesture (300 payslips take a
+// while) and some browsers quietly drop a download that far from a click.
+function saveBlob(name: string, data: Uint8Array | Blob, type: string): string {
   const blob = data instanceof Blob ? data : new Blob([data as BlobPart], { type })
   const url = URL.createObjectURL(blob)
-  const a = document.createElement('a'); a.href = url; a.download = name; a.click()
-  setTimeout(() => URL.revokeObjectURL(url), 5000)
+  const a = document.createElement('a'); a.href = url; a.download = name; a.style.display = 'none'
+  document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 1000)
+  return url
 }
 
 function chunk<T>(list: T[], n: number): T[][] {
@@ -76,6 +80,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
   const [open, setOpen] = useState(false)
   const [err, setErr] = useState('')
   const [progress, setProgress] = useState<{ done: number; total: number; phase: string } | null>(null)
+  const [ready, setReady] = useState<{ name: string; url: string; count: number; size: number } | null>(null)
   const [showMissing, setShowMissing] = useState(false)
   const [showIssues, setShowIssues] = useState(false)
 
@@ -102,6 +107,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
   async function generate(mode: 'combined' | 'zip') {
     if (!pre) return
     setErr('')
+    if (ready) { URL.revokeObjectURL(ready.url); setReady(null) }
     const files: { file: string; bytes: Uint8Array }[] = []
     const refused: { code: string; reasons: string[] }[] = []
     const totalCodes = eligible
@@ -129,11 +135,13 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
           pages.forEach(pg => doc.addPage(pg))
         }
         const merged = await doc.save()
-        saveBlob(pre.length > 1 ? `${stem}_Payslips.pdf` : combinedFileName(stem, first.run.fy, first.run.month), merged, 'application/pdf')
+        const name = pre.length > 1 ? `${stem}_Payslips.pdf` : combinedFileName(stem, first.run.fy, first.run.month)
+        setReady({ name, url: saveBlob(name, merged, 'application/pdf'), count: files.length, size: merged.length })
       } else {
         setProgress({ done, total: totalCodes, phase: 'Zipping' })
         const zip = zipStore(files.map(f => ({ name: f.file, data: f.bytes })))
-        saveBlob(`${stem}_${monthLabel(first.run.fy, first.run.month).replace(' ', '')}_Payslips.zip`, zip, 'application/zip')
+        const name = `${stem}_${monthLabel(first.run.fy, first.run.month).replace(' ', '')}_Payslips.zip`
+        setReady({ name, url: saveBlob(name, zip, 'application/zip'), count: files.length, size: zip.length })
       }
       if (refused.length) setErr(`${files.length} generated; ${refused.length} refused: ${refused.map(r => `${r.code} (${r.reasons[0]})`).join('; ')}`)
     } catch (e: any) {
@@ -192,6 +200,16 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
             <span style={{ fontSize: 11.5, color: C.muted }}>Generated in batches of {pre[0].batch}. Every download is recorded in the payroll audit log.</span>
           </div>
           {err && <div style={{ marginTop: 8, fontSize: 12, color: C.red }}>{err}</div>}
+          {ready && (
+            <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#ECFDF5', border: '1px solid #A7F3D0', color: C.green, fontSize: 12.5, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span>✅ {ready.count} payslip{ready.count === 1 ? '' : 's'} ready — <b>{ready.name}</b> ({(ready.size / 1048576).toFixed(1)} MB).</span>
+              <a href={ready.url} download={ready.name}
+                style={{ fontFamily: font, fontSize: 12.5, fontWeight: 700, color: TK.onAccent, background: C.green, borderRadius: 8, padding: '7px 14px', textDecoration: 'none' }}>
+                ⬇ Save file
+              </a>
+              <span style={{ color: C.muted, fontSize: 11.5 }}>If the download did not start on its own, click Save file.</span>
+            </div>
+          )}
 
           {missing.length > 0 && (
             <div style={{ marginTop: 12 }}>
