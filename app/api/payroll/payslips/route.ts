@@ -102,25 +102,57 @@ function eligibility(ctx: RunCtx) {
   return { eligible, missing }
 }
 
-async function assembleFor(ctx: RunCtx, s: any): Promise<PayslipData> {
-  const l = ctx.lines.get(s.employee_id)
+// Everything the assembler needs beyond the snapshot and the line, loaded ONCE for
+// the whole run in a handful of batched queries. The first version fetched these
+// per employee — four round-trips × 300 employees × 3 companies was a 504 before
+// a single payslip existed.
+interface Aux {
+  decl: Map<string, any>
+  declLines: Map<string, { section_code: string; declared_amount: number }[]>
+  vouchers: Map<string, { head_name: string; head_type: string; amount: number }[]>
+  prior: Map<string, { month: number; tds_monthly: number; tds_additional: number }[]>
+}
+
+function chunk<T>(list: T[], n: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < list.length; i += n) out.push(list.slice(i, i + n))
+  return out
+}
+
+async function loadAux(ctx: RunCtx, employeeIds: string[]): Promise<Aux> {
   const fy = ctx.run.fy as string
-  const [{ data: decl }, { data: declLines }, { data: vouchers }, { data: prior }] = await Promise.all([
-    sb.from('tds_declarations').select('*').eq('employee_id', s.employee_id).eq('fy', fy).maybeSingle(),
-    sb.from('investment_declaration_lines').select('section_code, declared_amount').eq('employee_id', s.employee_id).eq('fy', fy),
-    sb.from('manual_voucher_entries').select('head_name, head_type, amount').eq('run_id', ctx.run.id).eq('employee_id', s.employee_id),
-    sb.from('payroll_employee_snapshot')
-      .select('tds_monthly, tds_additional, payroll_runs!inner(fy, month, status)')
-      .eq('employee_id', s.employee_id).eq('payroll_runs.fy', fy).lt('payroll_runs.month', ctx.run.month).neq('payroll_runs.status', 'CANCELLED'),
-  ])
+  const aux: Aux = { decl: new Map(), declLines: new Map(), vouchers: new Map(), prior: new Map() }
+  const push = <T,>(m: Map<string, T[]>, k: string, v: T) => { const a = m.get(k); if (a) a.push(v); else m.set(k, [v]) }
+
+  const { data: vouchers } = await sb.from('manual_voucher_entries').select('employee_id, head_name, head_type, amount').eq('run_id', ctx.run.id)
+  ;(vouchers || []).forEach((v: any) => push(aux.vouchers, v.employee_id, v))
+
+  // Prior months of this FY for the same company — one query per chunk of ids,
+  // filtered through the run join rather than per employee.
+  for (const ids of chunk(employeeIds, 150)) {
+    const [{ data: decls }, { data: lines }, { data: prior }] = await Promise.all([
+      sb.from('tds_declarations').select('*').eq('fy', fy).in('employee_id', ids),
+      sb.from('investment_declaration_lines').select('employee_id, section_code, declared_amount').eq('fy', fy).in('employee_id', ids),
+      sb.from('payroll_employee_snapshot')
+        .select('employee_id, tds_monthly, tds_additional, payroll_runs!inner(fy, month, status)')
+        .in('employee_id', ids).eq('payroll_runs.fy', fy).lt('payroll_runs.month', ctx.run.month).neq('payroll_runs.status', 'CANCELLED'),
+    ])
+    ;(decls || []).forEach((d: any) => aux.decl.set(d.employee_id, d))
+    ;(lines || []).forEach((l: any) => push(aux.declLines, l.employee_id, l))
+    ;(prior || []).forEach((p: any) => push(aux.prior, p.employee_id, { month: p.payroll_runs?.month, tds_monthly: p.tds_monthly, tds_additional: p.tds_additional }))
+  }
+  return aux
+}
+
+function assembleFor(ctx: RunCtx, aux: Aux, s: any): PayslipData {
   return assemblePayslip({
-    run: { fy, month: ctx.run.month, period_label: ctx.run.period_label },
+    run: { fy: ctx.run.fy, month: ctx.run.month, period_label: ctx.run.period_label },
     company: ctx.company || {},
-    snapshot: s, line: l,
-    declaration: decl || null,
-    declarationLines: declLines || [],
-    vouchers: vouchers || [],
-    priorMonths: (prior || []).map((p: any) => ({ month: p.payroll_runs?.month, tds_monthly: p.tds_monthly, tds_additional: p.tds_additional })),
+    snapshot: s, line: ctx.lines.get(s.employee_id),
+    declaration: aux.decl.get(s.employee_id) || null,
+    declarationLines: aux.declLines.get(s.employee_id) || [],
+    vouchers: aux.vouchers.get(s.employee_id) || [],
+    priorMonths: aux.prior.get(s.employee_id) || [],
   })
 }
 
@@ -139,9 +171,10 @@ export async function GET(req: NextRequest) {
   // C5 — the data-quality sweep, one screen before the download rather than 300
   // payslips with holes. Assembling is cheap; rendering is what costs.
   const issues: { code: string; name: string; text: string; blocking: boolean }[] = []
-  for (const s of ctx.snapshots) {
-    if (!ctx.lines.has(s.employee_id)) continue
-    const p = await assembleFor(ctx, s)
+  const paid = ctx.snapshots.filter(s => ctx.lines.has(s.employee_id))
+  const aux = await loadAux(ctx, paid.map(s => s.employee_id))
+  for (const s of paid) {
+    const p = assembleFor(ctx, aux, s)
     p.issues.forEach(i => issues.push({ code: s.employee_code, name: s.full_name, ...i }))
   }
   return NextResponse.json({
@@ -168,10 +201,11 @@ export async function POST(req: NextRequest) {
   const want = new Set(codes)
   const files: { code: string; name: string; file: string; pdf: string }[] = []
   const refused: { code: string; reasons: string[] }[] = []
-  for (const s of ctx.snapshots) {
-    if (!want.has(String(s.employee_code))) continue
+  const targets = ctx.snapshots.filter(s => want.has(String(s.employee_code)))
+  const aux = await loadAux(ctx, targets.map(s => s.employee_id))
+  for (const s of targets) {
     if (!ctx.lines.has(s.employee_id)) { refused.push({ code: s.employee_code, reasons: ['No payroll line — not paid in this run.'] }); continue }
-    const p = await assembleFor(ctx, s)
+    const p = assembleFor(ctx, aux, s)
     const blocking = p.issues.filter(i => i.blocking)
     if (blocking.length) { refused.push({ code: s.employee_code, reasons: blocking.map(i => i.text) }); continue }
     const bytes = await renderPayslipPdf(p)
