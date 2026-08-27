@@ -681,7 +681,7 @@ export interface PayrollEmployee {
 }
 export async function loadPayrollEmployees(companyId: string): Promise<PayrollEmployee[]> {
   let q = supabase.from('employees')
-    .select('id, emp_code, full_name, designation, tds_regime, pf_applicable, esic_applicable, pt_applicable, lwf_applicable, bank_name, ifsc_code, bank_account_last4, companies(company_name), departments(dept_name), locations!location_id(location_name)')
+    .select('id, emp_code, full_name, designation, tds_regime, pf_applicable, esic_applicable, pt_applicable, lwf_applicable, bank_name, ifsc_code, bank_account_last4, companies!employees_company_id_fkey(company_name), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
     .eq('employment_status', 'Active').order('emp_code')
   if (companyId) q = q.eq('company_id', companyId)   // '' = all companies (Group Companies mode)
   const { data: emps } = await q
@@ -715,7 +715,7 @@ export interface BankRow {
 }
 export async function loadBankDetails(companyId: string): Promise<BankRow[]> {
   let q = supabase.from('employees')
-    .select('emp_code, full_name, company_doj, date_of_leaving, last_working_date, relieving_date, bank_name, bank_account_number, bank_account_last4, ifsc_code, account_type, companies(company_name), departments(dept_name), locations!location_id(location_name)')
+    .select('emp_code, full_name, company_doj, date_of_leaving, last_working_date, relieving_date, bank_name, bank_account_number, bank_account_last4, ifsc_code, account_type, companies!employees_company_id_fkey(company_name), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
     .neq('is_test', true).order('emp_code')
   if (companyId) q = q.eq('company_id', companyId)
   const { data } = await q

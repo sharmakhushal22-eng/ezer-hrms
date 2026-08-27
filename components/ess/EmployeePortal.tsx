@@ -2955,7 +2955,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
     let live = true
     ;(async () => {
       setStatus('loading')
-      const { data: e } = await supabase.from('employees').select('company_id, tds_regime, companies(company_name)').eq('id', emp.id).maybeSingle()
+      const { data: e } = await supabase.from('employees').select('company_id, tds_regime, companies!employees_company_id_fkey(company_name)').eq('id', emp.id).maybeSingle()
       const companyId = (e as any)?.company_id
       if ((e as any)?.companies?.company_name) setCompanyName((e as any).companies.company_name)
       if ((e as any)?.tds_regime) setRegime(String((e as any).tds_regime).toLowerCase().includes('new') ? 'new' : 'old')

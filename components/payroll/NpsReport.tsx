@@ -426,7 +426,7 @@ export default function NpsReport({ fy }: { fy: string }) {
         // locations!location_id — employees reaches locations through more than one key,
         // so the FK has to be named or the join is ambiguous.
         supabase.from('employees')
-          .select('id, emp_code, full_name, group_doj, date_of_leaving, employment_status, tds_regime, companies(company_name), departments(dept_name), locations!location_id(location_name)')
+          .select('id, emp_code, full_name, group_doj, date_of_leaving, employment_status, tds_regime, companies!employees_company_id_fkey(company_name), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
           .order('emp_code'),
         supabase.from('nps_declarations')
           .select('employee_id, fy, status, tax_regime, pran_number, tier_type, contribution_percent, monthly_nps_amount, created_at')

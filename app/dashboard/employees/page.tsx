@@ -422,7 +422,7 @@ export default function EmployeeMaster() {
       // locations!location_id — employees has two FKs to locations (location_id +
       // actual_posted_location_id); disambiguate or the embed 400s.
       let q = supabase.from('employees').select(
-        `*, companies(company_name,company_code), locations!location_id(location_name,city), departments(dept_name)`,
+        `*, companies!employees_company_id_fkey(company_name,company_code), locations!location_id(location_name,city), departments!employees_department_id_fkey(dept_name)`,
         { count: 'exact' }
       ).neq('is_test', true).order('emp_code')
 
@@ -449,7 +449,7 @@ export default function EmployeeMaster() {
     setExporting(true)
     try {
       let q = supabase.from('employees')
-        .select('*, companies(company_name, company_code), departments(dept_name), locations!location_id(location_name, city)')
+        .select('*, companies!employees_company_id_fkey(company_name, company_code), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, city)')
         .neq('is_test', true).order('emp_code')
       if (filterCompany)  q = q.eq('company_id', filterCompany)
       if (filterLocation) q = q.eq('location_id', filterLocation)

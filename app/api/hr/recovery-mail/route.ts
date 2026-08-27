@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     if (error || !r) return NextResponse.json({ error: 'resignation not found' }, { status: 404 })
 
     const { data: emp } = await supa.from('employees')
-      .select('full_name, emp_code, designation, office_email, departments(dept_name)')
+      .select('full_name, emp_code, designation, office_email, departments!employees_department_id_fkey(dept_name)')
       .eq('id', r.employee_id).single()
 
     const user = process.env.GMAIL_USER

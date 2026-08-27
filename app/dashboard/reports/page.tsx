@@ -679,7 +679,7 @@ function empSubset(e: any) {
 // Load & flatten all employees for a company (or all companies when companyId empty).
 async function loadEmployees(companyId: string) {
   let q = supabase.from('employees')
-    .select('*, departments(dept_name), locations!location_id(location_name, state), companies(company_name)')
+    .select('*, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, state), companies!employees_company_id_fkey(company_name)')
     .order('emp_code');
   if (companyId) q = q.eq('company_id', companyId);
   const { data } = await q.limit(5000);
