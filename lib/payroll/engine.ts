@@ -209,6 +209,10 @@ function calcLineFromMonth(
     deductions_json: {
       epf: dedEPF, vpf: dedVPF, esic: dedESIC, pt: dedPT, lwf: dedLWF,
       tds: dedTDS, additional_tax: dedAddlTax, nps: dedNPS, loan_emi: dedLoan, voucher_deductions: v.otherDeductions,
+      // When THIS line was computed. payroll_lines is upserted, so created_at is the
+      // first-ever calculation and says nothing about re-runs; the payslip stale
+      // guard compares this against the snapshot's synced_at.
+      calculated_at: new Date().toISOString(),
       // Kept even when tdsSynced is false — the frozen declaration figure still deserves
       // a "why", and false is itself the answer to "was this month's own engine used".
       tds_synced: tdsSynced,
