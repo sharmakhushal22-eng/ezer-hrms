@@ -51,7 +51,7 @@ export async function loadOrgUnits(): Promise<{ companies: OrgUnit[]; locations:
 export async function loadUsers(): Promise<EssUser[]> {
   const [{ data: emps }, { data: accts }, { data: ur }, { data: roles }] = await Promise.all([
     supabase.from('employees')
-      .select('id, emp_code, full_name, designation, company_id, location_id, department_id, date_of_resignation, last_working_date, departments(dept_name), companies(company_name), locations!location_id(location_name)')
+      .select('id, emp_code, full_name, designation, company_id, location_id, department_id, date_of_resignation, last_working_date, departments!employees_department_id_fkey(dept_name), companies!employees_company_id_fkey(company_name), locations!location_id(location_name)')
       .order('emp_code'),
     supabase.from('ess_accounts').select('*'),
     supabase.from('ess_user_roles').select('ess_account_id, role_id').eq('is_active', true),
@@ -176,7 +176,7 @@ const EMP_FIELDS = `id, emp_code, full_name, first_name, last_name, designation,
   pan_number, aadhar_last4, uan_number, group_doj, company_doj, confirmation_status,
   employment_status, employment_type, l1_manager_id, hr_manager_id,
   date_of_resignation, last_working_date,
-  departments(dept_name), companies(company_name), locations!location_id(location_name, city)`
+  departments!employees_department_id_fkey(dept_name), companies!employees_company_id_fkey(company_name), locations!location_id(location_name, city)`
 
 export async function loadEmployeeDetail(employeeId: string): Promise<EmployeeDetail | null> {
   const { data: e } = await supabase.from('employees').select(EMP_FIELDS).eq('id', employeeId).maybeSingle()
@@ -216,7 +216,7 @@ export async function loadDirectory(): Promise<DirectoryEntry[]> {
   // Throw rather than return [] — a rejected query previously rendered as a silently
   // empty directory, which is indistinguishable from "no colleagues found".
   const { data, error } = await supabase.from('employees')
-    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, blacklisted, last_working_date, departments(dept_name), locations!location_id(location_name), companies(company_name)')
+    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, blacklisted, last_working_date, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name), companies!employees_company_id_fkey(company_name)')
     .order('full_name')
   if (error) throw new Error(error.message)
   const t0 = new Date(); t0.setHours(0, 0, 0, 0)
@@ -381,7 +381,7 @@ export async function loadPendingForRole(role_id: string): Promise<{ types: stri
   const essTypes = types.filter((t: string) => ESS_LIVE_TYPES.includes(t))
   if (essTypes.length) {
     const { data } = await supabase.from('ess_service_requests')
-      .select('*, employees(full_name, emp_code, departments(dept_name))')
+      .select('*, employees(full_name, emp_code, departments!employees_department_id_fkey(dept_name))')
       .in('request_type', essTypes).in('status', ['PENDING', 'IN_REVIEW'])
       .order('submitted_at', { ascending: false })
     for (const r of (data || []) as any[]) items.push({

@@ -110,7 +110,7 @@ export default function FlexiInvoicesPage() {
     const from = `${yr}-${String(mo).padStart(2, '0')}-01`
     const to = mo >= 12 ? `${yr + 1}-01-01` : `${yr}-${String(mo + 1).padStart(2, '0')}-01`
     const { data } = await supabase.from('flexi_claims')
-      .select('employee_id, component_code, claim_amount, status, reviewed_at, employees(emp_code, full_name, designation, departments(dept_name))')
+      .select('employee_id, component_code, claim_amount, status, reviewed_at, employees(emp_code, full_name, designation, departments!employees_department_id_fkey(dept_name))')
       .eq('company_id', companyId).in('status', ['APPROVED', 'PAYROLL_PROCESSED'])
       .gte('submitted_at', from).lt('submitted_at', to)
     const byEmp = new Map<string, EmpVoucher>()

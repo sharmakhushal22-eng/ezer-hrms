@@ -153,7 +153,7 @@ export async function GET(req: NextRequest) {
 
   if (compId) {
     let q = supa.from('flexi_claims')
-      .select('*, employees(emp_code, full_name, department_id, location_id, company_id, departments(dept_name), locations!location_id(location_name)), flexi_claim_files(id, file_name, file_type, file_url)')
+      .select('*, employees(emp_code, full_name, department_id, location_id, company_id, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)), flexi_claim_files(id, file_name, file_type, file_url)')
       .eq('company_id', compId)
     if (status) q = q.eq('status', status)
     if (month && year) {

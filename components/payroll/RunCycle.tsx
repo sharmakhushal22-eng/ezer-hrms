@@ -16,6 +16,7 @@ import { loadRuns, loadRunsForPeriod, loadRunRegister, loadMonthMaster, RUN_SHEE
 import { calculateRun } from '@/lib/payroll/engine'
 import { SYNC_CATEGORIES, runCategorySync } from '@/lib/payroll/sync'
 import { lockEmployees } from '@/lib/payroll/lock'
+import PayslipDownload from '@/components/payroll/PayslipDownload'
 import {
   loadSnapshotRows, computeReadiness, applyFilter, filterOptions, blockerSummary,
   EMPTY_FILTER, isFiltered, NOT_ACTIVE,
@@ -621,6 +622,15 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
               fontFamily: font, fontSize: 13, fontWeight: 600, color: C.purpleD, background: C.card,
               border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px', cursor: busy ? 'not-allowed' : 'pointer',
             }}>Register</button>
+        )}
+        {/* Payslips exist only for a calculated month; the server confirms payroll_lines
+            are there and that the run is not older than its own inputs before anything
+            is rendered. Re-mounted per month AND per run result, so a stale preflight
+            never survives a month change or a re-run. */}
+        {monthRuns.length > 0 && (
+          <PayslipDownload key={`${monthRuns.map(r => r.id).join(',')}|${result ? `${result.processed}:${result.net}` : ''}`}
+            runs={monthRuns.map(r => ({ id: r.id, company_name: r.company_name }))}
+            enabled={calculated} busyOutside={busy} />
         )}
         <span style={{ fontSize: 12, color: C.muted }}>{hint}</span>
       </div>

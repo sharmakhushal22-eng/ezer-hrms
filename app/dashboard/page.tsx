@@ -113,7 +113,7 @@ export default function Dashboard() {
     setLoading(true)
     const today = new Date(); today.setHours(0,0,0,0)
     const [empR, compR, candR, mrfR, audR, deptR, locR] = await Promise.all([
-      supabase.from('employees').select('id, full_name, first_name, employment_status, blacklisted, date_of_birth, group_doj, last_working_date, company_id, location_id, companies(company_name), locations!location_id(location_name)').neq('is_test', true),
+      supabase.from('employees').select('id, full_name, first_name, employment_status, blacklisted, date_of_birth, group_doj, last_working_date, company_id, location_id, companies!employees_company_id_fkey(company_name), locations!location_id(location_name)').neq('is_test', true),
       supabase.from('companies').select('id, company_name'),
       supabase.from('candidates').select('id, full_name, stage, onboarding_date, blacklisted, created_at, designation, mrf_id, offer_accepted'),
       supabase.from('manpower_requisitions').select('id, status, no_of_openings, openings, designation, position, department_id, location_id'),
