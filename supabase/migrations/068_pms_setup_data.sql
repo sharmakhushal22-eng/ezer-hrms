@@ -154,7 +154,7 @@ ORDER BY readiness_status, employee_code;
 
 --     INSERT INTO pms_policies (
 --       company_id, policy_code, policy_name,
---       frequency, kra_min_count, kra_max_count,
+--       frequency, min_kra_count, max_kra_count,
 --       total_weightage, min_weightage_per_kra,
 --       one_to_one_mandatory, final_review_one_to_one,
 --       who_can_finalise, approval_chain
