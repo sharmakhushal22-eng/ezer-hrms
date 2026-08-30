@@ -51,6 +51,11 @@ export const MODULES = [
   'ESS & Roles',
   'Support',
   'Ezer AI',
+  // ESS-side read-only tabs (071). They live in the same role_permissions table
+  // as the dashboard modules so one grant decides both surfaces — an HR Head who
+  // can open Company Dashboard in ESS is the same row that lets her in here.
+  'Company Dashboard',
+  'ESS Reports',
 ] as const
 
 export type Module = (typeof MODULES)[number]
