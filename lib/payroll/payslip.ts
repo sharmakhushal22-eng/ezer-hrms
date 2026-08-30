@@ -60,6 +60,8 @@ export interface PayslipData {
   tdsMonthly: { month: string; amount: number; additional: number }[]
   tdsMonthlyTotal: number
   footnotes: string[]
+  /** Monthly taxable value of the car-lease and driver perquisites; null = not received ("NA"). */
+  perquisites: { car: number | null; driver: number | null }
   /** C5 — data missing on the record. `blocking` ones stop the payslip from being issued. */
   issues: { text: string; blocking: boolean }[]
 }
@@ -74,6 +76,9 @@ export interface AssembleInput {
   vouchers: { head_name: string; head_type: string; amount: number | string | null }[]
   /** Earlier runs of the same FY for this employee — for "TDS Deducted Monthly". */
   priorMonths: { month: number; tds_monthly: number | string | null; tds_additional: number | string | null }[]
+  /** ANNUAL perquisite valuations on record (employee_perquisites) — optional; the flexi
+   *  car / driver heads paid this month are the fallback when nothing is entered. */
+  perquisites?: { car?: number | string | null; driver?: number | string | null } | null
 }
 
 export const MONTHS = ['April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December', 'January', 'February', 'March']
@@ -335,7 +340,21 @@ export function assemblePayslip(inp: AssembleInput): PayslipData {
   const projected = Math.max(0, num(s.tds_months_remaining) - 1)
   if (s.date_of_leaving) footnotes.push('Tax projection stops at the date of leaving.')
 
+  // Perquisites — an annual valuation entered against the employee wins (÷12 for the
+  // month); otherwise the flexi car-lease / driver head actually paid this month. Zero
+  // means the employee does not receive it, which the slip prints as "NA".
+  const perqMonthly = (annual: any, paid: number): number | null => {
+    const a = num(annual)
+    const v = a > 0 ? R(a / 12) : R(paid)
+    return v > 0 ? v : null
+  }
+  const perquisites = {
+    car: perqMonthly(inp.perquisites?.car, num(s.earn_flexi_car ?? s.flexi_car)),
+    driver: perqMonthly(inp.perquisites?.driver, num(s.earn_flexi_driver ?? s.flexi_driver)),
+  }
+
   return {
+    perquisites,
     company: {
       name: String(company?.company_name || ''),
       address: String(company?.reg_office || company?.corp_office || ''),

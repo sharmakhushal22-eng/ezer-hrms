@@ -161,6 +161,15 @@ test('Additional TDS is its own deduction line, labelled with its cause', () => 
   assert.deepEqual(p.issues, [])
 })
 
+test('perquisites: amount for who gets one, NA for who does not', () => {
+  const p = assemblePayslip(RAHUL_NAIR)                       // driver 3,000 paid, no car lease
+  assert.deepEqual(p.perquisites, { car: null, driver: 3000 })
+  const q = assemblePayslip({ ...RAHUL_NAIR, snapshot: { ...RAHUL_NAIR.snapshot, earn_flexi_driver: 0, flexi_driver: 0 } })
+  assert.deepEqual(q.perquisites, { car: null, driver: null })
+  const r = assemblePayslip({ ...RAHUL_NAIR, perquisites: { car: 96000, driver: 0 } })   // annual valuation on record wins
+  assert.deepEqual(r.perquisites, { car: 8000, driver: 3000 })
+})
+
 test('renders a real PDF — one page for one employee, N pages combined', async () => {
   const p = assemblePayslip(RAHUL_NAIR)
   const one = await renderPayslipPdf(p)
