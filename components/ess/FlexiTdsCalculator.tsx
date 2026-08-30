@@ -109,6 +109,9 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
   const [saved, setSaved] = useState(false)
   const [defaultedNew, setDefaultedNew] = useState(false)   // mid-year joiner auto-defaulted to New
   const [userPicked, setUserPicked] = useState(false)       // has the employee explicitly chosen a regime?
+  // Set by the "no election by the 4th ⇒ New" rule (072). Shown, not enforced — the
+  // employee may still submit their own choice, which overwrites the default.
+  const [defaultedByRule, setDefaultedByRule] = useState<string | null>(null)
   const [status, setStatus] = useState<'NEW' | 'DRAFT' | 'SUBMITTED'>('NEW')
   const [editMode, setEditMode] = useState<null | 'flexi' | 'all'>(null)  // after submit: what can be edited
   const [draftMsg, setDraftMsg] = useState('')
@@ -160,6 +163,7 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
       // Default regime: submitted declaration → saved tds_regime → (mid-year joiner, no declaration ⇒ NEW).
       const decl: any = (declRes as any)?.data
       if (decl?.declaration_status === 'SUBMITTED' && decl?.regime) { setChosenRegime(norm(decl.regime)); setUserPicked(true); return }
+      if (decl?.declaration_status === 'DEFAULTED') setDefaultedByRule(decl.updated_at || decl.created_at || 'the 5th')
       if ((emp as any)?.tds_regime) { setChosenRegime(norm((emp as any).tds_regime)); setUserPicked(true); return }
       if (doj) {
         const d = new Date(String(doj).slice(0, 10)).getTime()
@@ -1009,6 +1013,11 @@ export default function FlexiTdsCalculator({ employeeId, empName, empCode }: { e
         )}
       </div>
       {draftMsg && <div style={{ marginBottom: 10, fontSize: 12, fontWeight: 600, color: draftMsg.startsWith('') ? P.red : P.teal, background: draftMsg.startsWith('') ? TK.criticalTint : P.greenBg, border: `1px solid ${draftMsg.startsWith('') ? '#FCA5A5' : '#A7E3CE'}`, borderRadius: 10, padding: '8px 12px' }}>{draftMsg}</div>}
+      {defaultedByRule && !isSubmitted && (
+        <div style={{ marginBottom: 12, fontSize: 12, color: '#8a5a08', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 10, padding: '9px 12px' }}>
+          <b>New Regime applied by default</b> — no regime was chosen by the 4th of the month{/^\d{4}-/.test(defaultedByRule) ? ` (set on ${new Date(defaultedByRule).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })})` : ''}. Payroll is taxing you on the New Regime. You can still submit your own choice here; submitting replaces the default.
+        </div>
+      )}
       {viewLocked && <div style={{ marginBottom: 12, fontSize: 12, color: P.purpleDark, background: P.purpleBg, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, padding: '9px 12px' }}>This declaration is submitted &amp; locked. Go to <b>Step 4</b> and press <b>Edit</b> to change {chosenRegime === 'OLD' ? 'flexi or investments' : 'your flexi'}.</div>}
       <Stepper />
       {step === 1 && <fieldset disabled={!basicRW} style={fsReset}>{step1}</fieldset>}
