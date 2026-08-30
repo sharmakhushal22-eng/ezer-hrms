@@ -111,6 +111,8 @@ interface Aux {
   declLines: Map<string, { section_code: string; declared_amount: number }[]>
   vouchers: Map<string, { head_name: string; head_type: string; amount: number }[]>
   prior: Map<string, { month: number; tds_monthly: number; tds_additional: number }[]>
+  /** Annual perquisite valuations on record (employee_perquisites × perquisite_types), by employee. */
+  perq: Map<string, { car: number; driver: number }>
 }
 
 function chunk<T>(list: T[], n: number): T[][] {
@@ -121,7 +123,7 @@ function chunk<T>(list: T[], n: number): T[][] {
 
 async function loadAux(ctx: RunCtx, employeeIds: string[]): Promise<Aux> {
   const fy = ctx.run.fy as string
-  const aux: Aux = { decl: new Map(), declLines: new Map(), vouchers: new Map(), prior: new Map() }
+  const aux: Aux = { decl: new Map(), declLines: new Map(), vouchers: new Map(), prior: new Map(), perq: new Map() }
   const push = <T,>(m: Map<string, T[]>, k: string, v: T) => { const a = m.get(k); if (a) a.push(v); else m.set(k, [v]) }
 
   const { data: vouchers } = await sb.from('manual_voucher_entries').select('employee_id, head_name, head_type, amount').eq('run_id', ctx.run.id)
@@ -140,6 +142,16 @@ async function loadAux(ctx: RunCtx, employeeIds: string[]): Promise<Aux> {
     ;(decls || []).forEach((d: any) => aux.decl.set(d.employee_id, d))
     ;(lines || []).forEach((l: any) => push(aux.declLines, l.employee_id, l))
     ;(prior || []).forEach((p: any) => push(aux.prior, p.employee_id, { month: p.payroll_runs?.month, tds_monthly: p.tds_monthly, tds_additional: p.tds_additional }))
+    // Perquisite valuations entered against the employee (Rule 3 car, driver). The
+    // table is optional — when it is empty the payslip falls back to the flexi heads.
+    const { data: pq } = await sb.from('employee_perquisites').select('employee_id, amount, perquisite_types(code, name)').eq('fy', fy).in('employee_id', ids)
+    ;(pq || []).forEach((p: any) => {
+      const code = String(p.perquisite_types?.code || '').toUpperCase(), name = String(p.perquisite_types?.name || '').toUpperCase()
+      const cur = aux.perq.get(p.employee_id) || { car: 0, driver: 0 }
+      if (code === 'CAR' || name.includes('CAR')) cur.car += Number(p.amount || 0)
+      else if (code.includes('DRIVER') || name.includes('DRIVER')) cur.driver += Number(p.amount || 0)
+      aux.perq.set(p.employee_id, cur)
+    })
   }
   return aux
 }
@@ -153,6 +165,7 @@ function assembleFor(ctx: RunCtx, aux: Aux, s: any): PayslipData {
     declarationLines: aux.declLines.get(s.employee_id) || [],
     vouchers: aux.vouchers.get(s.employee_id) || [],
     priorMonths: aux.prior.get(s.employee_id) || [],
+    perquisites: aux.perq.get(s.employee_id) || null,
   })
 }
 

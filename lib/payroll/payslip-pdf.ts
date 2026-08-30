@@ -182,6 +182,19 @@ async function drawPayslip(s: Sheet, d: PayslipData) {
   s.y -= LH + 2
   s.hline(x0, x0 + width, s.y)
 
+  // ── Perquisites band — car lease and driver, "NA" for whoever does not get one ──
+  {
+    const p = d.perquisites
+    const cell = (v: number | null) => v && v > 0 ? inr2(v) : 'NA'
+    const line = p.car || p.driver
+      ? `Perquisites (taxable value, this month)   —   Car lease : ${cell(p.car)}      Driver : ${cell(p.driver)}`
+      : 'Perquisites (Car lease / Driver) : NA'
+    s.need(LH + 2)
+    s.text(line, x0, s.y - LH + 2, { size: 7.5, align: 'c', w: width })
+    s.y -= LH + 1
+    s.hline(x0, x0 + width, s.y)
+  }
+
   // ── Income tax worksheet — three columns like the reference ────────────
   s.y -= 3
   s.section(`Income Tax Worksheet for the Period ${d.period.fyFrom} - ${d.period.fyTo} (Investment Declaration)`)

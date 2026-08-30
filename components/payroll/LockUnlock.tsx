@@ -119,6 +119,9 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
+  // The employee list is not fetched on arrival — HR asked for it only after "View".
+  // Until then the screen shows the month, the filters and the audit trail.
+  const [viewed, setViewed] = useState(false)
 
   const isGroup = !companyId
 
@@ -145,6 +148,12 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
       const list = await loadRunsForPeriod(companyId, fy, Number(monthVal))
       setMonthRuns(list)
       const thin = list.map(r => ({ id: r.id, company_name: r.company_name }))
+      if (!viewed) {
+        // Audit trail only; the list waits for the View button.
+        setAudit(await loadLockAudit(list.map(r => r.id)))
+        setRows([]); setOptionRows([])
+        return
+      }
       const [data, log] = await Promise.all([loadLockList(thin, applied), loadLockAudit(list.map(r => r.id))])
       setRows(data)
       // Snapshot of the full month, kept for the dropdowns. Only refreshed when nothing
@@ -165,7 +174,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         : (e?.message || String(e)))
       setRows([])
     } finally { setLoading(false) }
-  }, [companyId, fy, monthVal, applied])
+  }, [companyId, fy, monthVal, applied, viewed])
   useEffect(() => { refresh() }, [refresh])
 
   // Dropdown choices come from the UNFILTERED list. Building them from the visible rows
@@ -311,9 +320,9 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setApplied({ ...filter })} disabled={busy}
+          <button onClick={() => { setViewed(true); setApplied({ ...filter }) }} disabled={busy || !monthVal}
             style={{ fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: C.purple, border: 'none', borderRadius: 10, padding: '9px 20px', cursor: 'pointer' }}>
-            Search
+            {viewed ? 'Search' : '👁 View employees'}
           </button>
           <button onClick={() => { setFilter(EMPTY_LOCK_FILTER); setApplied(EMPTY_LOCK_FILTER) }} disabled={busy}
             style={{ fontFamily: font, fontSize: 13, fontWeight: 600, color: C.muted, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 16px', cursor: 'pointer' }}>
@@ -324,9 +333,9 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
 
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>Employees ({rows.length})</div>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Employees{viewed ? ` (${rows.length})` : ''}</div>
           <div style={{ fontSize: 12, color: C.muted }}>
-            🔒 {lockedCount} locked · 🔓 {rows.length - lockedCount} unlocked
+            {viewed ? <>🔒 {lockedCount} locked · 🔓 {rows.length - lockedCount} unlocked</> : 'Set your filters, then press View employees to load the list.'}
           </div>
           {/* Works on every row now, not just the locked ones — otherwise a company with
               nothing locked yet had no way to select anything at all. */}

@@ -14,7 +14,7 @@ import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { loadRuns, loadRunsForPeriod, loadRunRegister, loadMonthMaster, RUN_SHEET_COLS, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { calculateRun } from '@/lib/payroll/engine'
-import { SYNC_CATEGORIES, runCategorySync } from '@/lib/payroll/sync'
+import { SYNC_CATEGORIES, runCategorySync, defaultRegimesForFy } from '@/lib/payroll/sync'
 import { lockEmployees } from '@/lib/payroll/lock'
 import PayslipDownload from '@/components/payroll/PayslipDownload'
 import {
@@ -381,6 +381,11 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       // engine falls back to the frozen figures for whatever is missing. One of them
       // breaking used to abort the whole run, so a single bad step meant nobody got paid
       // and no sheet came out. Now the error is reported and payroll still runs.
+      //
+      // Regime rule first: anyone still undecided after the 4th goes on the New
+      // Regime before the TDS step reads the snapshot (072). Reported, never fatal.
+      const rd = await defaultRegimesForFy(r.fy)
+      if (rd.error) fails.push(`${r.company_name || label}: regime default — ${rd.error}`)
       let prereqFailed = false
       for (const [what, cat] of [['earnings', EARN_CAT], ['EPF', EPF_CAT], ['ESIC', ESIC_CAT], ['PT', PT_CAT], ['LWF', LWF_CAT], ['employer NPS', NPS_CAT], ['arrear', ARREAR_CAT], ['TDS', TDS_CAT]] as const) {
         if (!cat) continue

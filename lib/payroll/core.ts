@@ -386,6 +386,11 @@ export const RUN_SHEET_COLS: string[] = [
   // "CTC" figures (agreed CTC, fixed cost, total cost) that differ from each other, and
   // putting one of them next to earned pay reads as a contradiction rather than context.
   'basic_50_floor', 'basic_for_wages', 'earn_basic_for_wages', 'basic_50_applied',
+  // Skill band under the state's minimum-wage notification, derived at sheet time from
+  // basic_for_wages against minimum_wage_pivot for location_state: the highest band
+  // whose rate the wage meets. Below even the unskilled rate is still "Unskilled",
+  // with min_wage_status saying so.
+  'employee_type', 'min_wage_rate', 'min_wage_status',
 
   // EPF · EPS · EDLI · Admin. The inputs sit next to the outputs on purpose — a
   // ceiling that did or did not apply is unarguable when pf_gross_limit, the actual
@@ -478,6 +483,30 @@ export async function loadMonthMaster(runs: { id: string; company_name?: string 
   const out: Record<string, any>[] = []
   const empIds: string[] = []
   const fys = new Set<string>()
+
+  // State minimum-wage bands, once per sheet. Keyed by lower-cased state name; the
+  // pivot carries one row per state (zone ALL) with the four category rates.
+  const bands = new Map<string, { unskilled: number; semi: number; skilled: number; highly: number }>()
+  {
+    const { data } = await supabase.from('minimum_wage_pivot').select('state, zone, unskilled, semi_skilled, skilled, highly_skilled')
+    ;(data || []).forEach((w: any) => {
+      const k = String(w.state || '').trim().toLowerCase()
+      if (!k || (bands.has(k) && String(w.zone || 'ALL') !== 'ALL')) return
+      bands.set(k, { unskilled: Number(w.unskilled || 0), semi: Number(w.semi_skilled || 0), skilled: Number(w.skilled || 0), highly: Number(w.highly_skilled || 0) })
+    })
+  }
+  const skillBand = (row: any): { employee_type: string | null; min_wage_rate: number | null; min_wage_status: string | null } => {
+    const b = bands.get(String(row.location_state || row.actual_posted_state || '').trim().toLowerCase())
+    const wage = Number(row.basic_for_wages ?? row.basic_monthly ?? 0)
+    if (!b || !wage) return { employee_type: null, min_wage_rate: null, min_wage_status: b ? 'No wage on record' : 'State not in minimum-wage table' }
+    // highest band whose rate the wage meets; below unskilled is still unskilled
+    const type = wage >= b.highly && b.highly > 0 ? 'Highly skilled'
+      : wage >= b.skilled && b.skilled > 0 ? 'Skilled'
+      : wage >= b.semi && b.semi > 0 ? 'Semi-skilled'
+      : 'Unskilled'
+    return { employee_type: type, min_wage_rate: b.unskilled, min_wage_status: wage < b.unskilled ? `Below minimum wage by ${Math.round(b.unskilled - wage)}` : 'OK' }
+  }
+
   for (const r of runs) {
     // What the engine actually paid this run — the only net pay that goes to the bank.
     const lineBy = new Map<string, any>()
@@ -507,6 +536,7 @@ export async function loadMonthMaster(runs: { id: string; company_name?: string 
         // so they are carried through rather than stripped as internal keys.
         out.push({
           Company: r.company_name || '', ...rest,
+          ...skillBand(row),
           structural_deductions: structuralDed ?? null, earnings_less_statutory: partialNet ?? null,
           ded_tds: l?.ded_tds ?? null, ded_additional_tax: l?.ded_additional_tax ?? null,
           gross_earnings: l?.gross_earning ?? null, total_deductions: l?.total_deductions ?? null, net_pay: l?.net_pay ?? null,

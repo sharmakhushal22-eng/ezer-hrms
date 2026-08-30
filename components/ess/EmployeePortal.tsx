@@ -36,6 +36,7 @@ import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
 import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
+import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -401,6 +402,10 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
         <Stat label="Attendance %" value="—" color={C.faint} />
         <Stat label="Pending Actions" value={String(pending)} color={pending ? C.warning : C.positive} />
       </div>
+
+      {/* Role-wise KPIs and "pending on you" — the same card for an employee, an RM
+          and an HR Head; only the data behind it differs (/api/ess/home). */}
+      <PendingOnYou employeeId={emp.id} go={go} notify={notify} />
 
       {/* where the employee's travel claims currently sit */}
       <TravelClaimStatus emp={emp} go={go} />
@@ -1036,6 +1041,8 @@ const dirTint = (s: string) => DIR_TINTS[Array.from(s || '?').reduce((a, c) => a
 
 function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
   const { managers, reportCount, loading: chainLoading } = useManagerChain(emp.id)
+  // Scope-aware roster with status pills for an RM / HOD; renders nothing otherwise.
+  const { menu: essMenu } = useEssMenu(emp.id)
   const [peers, setPeers] = useState<{ id: string; full_name: string; designation: string | null; department: string | null; isSelf: boolean; direct_reports: number }[]>([])
   const [reports, setReports] = useState<{ id: string; emp_code: string | null; full_name: string | null; designation: string | null; department: string | null }[]>([])
   const [loading, setLoading] = useState(true)
@@ -1083,6 +1090,11 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, alignItems: 'start' }}>
+      {(essMenu.is_rm || essMenu.is_hod) && (
+        <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
+          <TeamRoster employeeId={emp.id} isRm={essMenu.is_rm} isHod={essMenu.is_hod} />
+        </div>
+      )}
       <Section title="Reporting line above you" icon="🧭" empty="Nobody above you — you are at the top of your chain.">
         {managers.length === 0 ? (
           <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody above you — you are at the top of your chain.</div>
@@ -3180,9 +3192,20 @@ const SECTIONS: NavSection[] = [
     items:[
       { k:'directory',   label:'Team Directory' },
       { k:'requests',    label:'Raise a Request' },
-      { k:'approvals',   label:'Tasks & Approvals',      phase:4, needs:'Approval workflow' },
-      { k:'exit',        label:'Exit Process',           phase:4, needs:'Exit & FnF' },
+      // Approvals appears only for a login the menu says can approve (RM, HOD, or a
+      // functional approver) — decided from /api/ess/menu, not from a role name here.
+      { k:'approvals',   label:'Tasks & Approvals' },
+      { k:'exit',        label:'Exit Process' },
     ]},
+
+  // ── Role-wise tabs (071) — shown only when /api/ess/menu says so ──
+  { k:'company', label:'Company', short:'Company', icon:'', status:'ready',
+    desc:'Headcount, why people are leaving, regime election — company-wide',
+    items:[{ k:'company', label:'Company' }] },
+
+  { k:'reports', label:'Reports', short:'Reports', icon:'', status:'ready',
+    desc:'Attrition, regime comparison, declaration status, TDS register, span of control',
+    items:[{ k:'reports', label:'Reports' }] },
 
   // Which tabs a person sees inside this is decided by the component from org
   // data — everyone gets My KRAs, managers additionally get My Team, HODs get
@@ -3423,8 +3446,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   const goSection = (s: NavSection) => go(s.items.some(i => i.k === view) ? view : s.items[0].k)
   const salaryVisible = false // role-based salary visibility wired with auth in a later pass
 
+  // The nav as data (guide §5). Company / Reports appear only when the menu says
+  // so; Approvals only for a login that can approve. Nothing here names a role.
+  const { menu: essMenu } = useEssMenu(emp?.id)
+  const sections = SECTIONS.filter(s => s.k === 'company' ? essMenu.can.company : s.k === 'reports' ? essMenu.can.reports : true)
+
   const meta = viewMeta(view)
   const section = SECTIONS.find(s => s.k === meta.section)!
+  const sectionItems = section.k === 'hris' && !essMenu.can.approvals ? section.items.filter(i => i.k !== 'approvals') : section.items
 
   const renderView = () => {
     if (!emp) return null
@@ -3449,6 +3478,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'requests':      return <Requests emp={emp} notify={notify} />
       case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
       case 'directory':     return <Directory isMobile={isMobile} />
+      case 'approvals':     return <ApprovalsSection employeeId={emp.id} go={go} notify={notify} />
+      case 'exit':          return <ExitSection employeeId={emp.id} notify={notify} />
+      case 'company':       return <CompanySection employeeId={emp.id} />
+      case 'reports':       return <ReportsSection employeeId={emp.id} />
           case 'performance':   return <Performance employeeId={emp.id} />
       case 'funzone':       return <FunZone />
       default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
@@ -3470,7 +3503,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {!isMobile && (
         <div style={{ width:220, background: C.dark, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
           <div style={{ padding:'0 18px 16px', color:C.onDark, fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
-          {SECTIONS.map(s => (
+          {sections.map(s => (
             <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
           ))}
           <AdminEntry />
@@ -3483,7 +3516,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           {/* The tab's own name and badge live in TabHeader below, so this bar carries
               only what that header can't: the sub-tab you're on, and who you are. */}
           <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-            {isMobile ? 'EZER ESS' : (section.items.length > 1 ? meta.label : '')}
+            {isMobile ? 'EZER ESS' : (sectionItems.length > 1 ? meta.label : '')}
           </div>
           {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
@@ -3502,7 +3535,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
         <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
           <TabHeader s={section} />
-          <SubTabs items={section.items} view={view} go={go} />
+          <SubTabs items={sectionItems} view={view} go={go} />
           {renderView()}
         </div>
       </div>
@@ -3541,7 +3574,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           <div onClick={e => e.stopPropagation()} style={{ background:C.surface, width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
             <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-              {SECTIONS.map(s => (
+              {sections.map(s => (
                 <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:10, border:`1px solid ${section.k === s.k ? C.brand : C.brandTint}`, background: section.k === s.k ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:C.ink }}>
                   <span style={{ display:'flex' }}><EssIcon k={s.k} size={16} /></span>
                   <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>

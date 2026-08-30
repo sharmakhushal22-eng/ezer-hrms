@@ -375,3 +375,15 @@ export async function loadCategoryRows(cat: SyncCategory, runs: { id: string; co
   const want = new Set(codes)
   return out.filter(r => want.has(String(r.employee_code)))
 }
+
+/**
+ * "No election by the 4th ⇒ New Regime" (072). Called by Run Payroll just before the
+ * TDS sync so a run on or after the 5th taxes an undecided employee on the New
+ * Regime; the database function itself does nothing on the 1st–4th. Errors are
+ * returned, not thrown — a missing migration must not stop payroll.
+ */
+export async function defaultRegimesForFy(fy: string): Promise<{ error: string | null; defaulted: number }> {
+  const { data, error } = await supabase.rpc('fn_default_regime_new', { p_fy: fy, p_force: false })
+  if (error) return { error: error.message, defaulted: 0 }
+  return { error: null, defaulted: Number((data as any)?.defaulted || 0) }
+}
