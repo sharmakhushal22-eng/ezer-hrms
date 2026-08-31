@@ -61,7 +61,7 @@ export default function LoginPage() {
               variant is forced rather than left to the theme. The wordmark is
               in the artwork now — repeating "ezer hrms" beside it would say the
               same thing twice. */}
-          <Logo height={54} onDark />
+          <Logo height={40} onDark tagline />
           <div style={{ fontSize: '10px', color: TK.inkSoft, textTransform: 'uppercase', letterSpacing: '0.08em' }}>India&apos;s Intelligent HR Platform</div>
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
@@ -101,7 +101,7 @@ export default function LoginPage() {
           <div style={{ marginBottom: '32px', textAlign: 'center' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
               {/* The card follows the theme, so this picks its own variant. */}
-              <Logo height={56} />
+              <Logo height={40} />
             </div>
             <h2 style={{ fontSize: '26px', fontWeight: '700', color: d?TK.sunken:TK.ink, marginBottom: '6px' }}>Welcome back</h2>
             <p style={{ fontSize: '13px', color: d?TK.muted:TK.muted }}>Sign in to your Ezer account</p>

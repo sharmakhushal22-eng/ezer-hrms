@@ -3595,7 +3595,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
               "ESS" stays, because which of the two products you are in is the
               one thing the logo does not tell you. */}
           <div style={{ padding:'0 18px 16px', borderBottom:`1px solid ${C.railLine}`, marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
-            <Logo height={30} />
+            <Logo height={24} />
             <span style={{ color:C.railMuted, fontWeight:700, fontSize:12, letterSpacing:'.08em' }}>ESS</span>
           </div>
           {sections.map(s => (

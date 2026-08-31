@@ -302,10 +302,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* Collapsed shows the emblem alone — the wordmark at 34px tall would
               be unreadable. Expanded shows the full mark, which already
               contains the word, so the text span beside it is gone. */}
-          {!open && <Logo variant="mark" height={30} />}
+          {!open && <Logo variant="mark" height={36} />}
           {open && (
             <>
-              <Logo height={34} />
+              <Logo height={26} />
               <span className="ez-brand-chev" style={{
                 marginLeft: 'auto', color: C.railFaint, display: 'flex',
                 transform: 'rotate(180deg)', transition: `transform ${M.quick}`,

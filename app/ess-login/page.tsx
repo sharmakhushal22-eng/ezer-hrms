@@ -143,7 +143,7 @@ export default function ESSLoginPage() {
         <div style={{ position: 'relative' }}>
           {/* This panel is a saturated brand gradient in both themes, so the
               light-ink variant is forced rather than left to the theme. */}
-          <Logo height={46} onDark />
+          <Logo height={38} onDark tagline />
         </div>
 
         <div style={{ position: 'relative' }}>
@@ -169,7 +169,7 @@ export default function ESSLoginPage() {
         <div style={{ width: '100%', maxWidth: 404 }}>
           {/* Mobile brand header */}
           <div className="ezer-mobile-brand" style={{ display: 'none', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 22 }}>
-            <Logo height={40} />
+            <Logo height={34} />
           </div>
 
           <div style={{ background: TK.surface, borderRadius: 20, border: '1px solid var(--ez-line)', boxShadow: '0 12px 40px rgba(37,99,235,0.12)', padding: '34px 32px' }}>
