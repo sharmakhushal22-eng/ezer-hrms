@@ -112,6 +112,45 @@ CREATE INDEX IF NOT EXISTS idx_ess_kudos_from_created
   ON ess_kudos (from_employee_id, created_at DESC);
 
 
+-- ── Indexes for the derived feed ────────────────────────────────────────
+-- The bell does not only read stored rows: on open it derives what SHOULD be
+-- there from live data (lib/notifications/derive.ts) and writes what is
+-- missing. That runs on every portal load, so its lookups need support.
+--
+-- Every column below was checked against the live schema before this was
+-- written. A CREATE INDEX on a column that does not exist aborts the whole
+-- migration, and these are other people's tables.
+
+-- "leave requests waiting on me" — the RM inbox, the most common of these.
+CREATE INDEX IF NOT EXISTS idx_leave_applications_approver
+  ON leave_applications (current_approver_id, status);
+
+-- "my own leave, once somebody has decided"
+CREATE INDEX IF NOT EXISTS idx_leave_applications_employee_status
+  ON leave_applications (employee_id, status);
+
+-- Same two shapes for travel.
+CREATE INDEX IF NOT EXISTS idx_travel_claims_approver
+  ON travel_claims (current_approver_id, status);
+CREATE INDEX IF NOT EXISTS idx_travel_claims_employee_status
+  ON travel_claims (employee_id, status);
+
+-- Proofs: the employee's own, and the HR queue.
+CREATE INDEX IF NOT EXISTS idx_idl_employee_proof
+  ON investment_declaration_lines (employee_id, proof_status);
+CREATE INDEX IF NOT EXISTS idx_idl_proof_status
+  ON investment_declaration_lines (proof_status);
+
+-- Appraisals waiting on an HOD to finalise.
+CREATE INDEX IF NOT EXISTS idx_pms_overall_hod_status
+  ON pms_overall_rating (hod_id, workflow_status);
+
+-- The dedupe lookup. Sync reads every notification this employee already has
+-- and matches on `link`, which carries the source row's id.
+CREATE INDEX IF NOT EXISTS idx_ess_notifications_employee_link
+  ON ess_notifications (employee_id, link);
+
+
 -- =====================================================================
 -- RLS — DELIBERATELY NOT SET HERE
 --
