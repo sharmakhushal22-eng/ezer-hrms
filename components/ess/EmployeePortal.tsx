@@ -3274,16 +3274,16 @@ const BADGE: Record<Ready, [string, string, string]> = {
 function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean; onClick: () => void }) {
   // The mock's `.tab-link:hover` can't be an inline style, so the hover tint is state.
   const [hover, setHover] = useState(false)
-  const bg = active ? 'rgba(37,99,235,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
+  const bg = active ? C.railActiveBg : hover ? C.railHover : 'transparent'
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        // This rail is dark in BOTH themes, so its text must come from the
-        // theme-independent onDark family. It used C.brand and C.surface,
-        // which flip: in light the ten inactive labels were #2563EB on
-        // #111827 — 3.43:1, below AA — and in dark the ACTIVE label was
-        // C.surface, which is #171B21 there, giving 1.12:1. The selected
-        // item was effectively invisible.
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.onDark : C.onDarkMuted, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.onDark : 'transparent'}` }}>
+        // The rail follows the theme now — white in day, #171B21 in night —
+        // so its text comes from the rail family, which is defined for both.
+        // It must NOT use the onDark family: those are fixed near-white and
+        // would be invisible on a white rail in day mode. That was the
+        // original complaint. The earlier onDark fix was right for a rail
+        // that stayed dark; this replaces the premise, not the reasoning.
+      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.railActiveText : C.railMuted, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.railActiveText : 'transparent'}` }}>
       <EssIcon k={s.k} size={16} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
@@ -3317,15 +3317,19 @@ function AdminEntry({ isMobile }: { isMobile?: boolean }) {
     )
   }
   return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.railLine}` }}>
       <button onClick={() => { window.location.href = '/dashboard' }}
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', color: C.onAccent, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', background: hover ? 'rgba(124,58,237,0.45)' : 'rgba(124,58,237,0.28)', border: 'none', borderLeft: `3px solid ${C.brand}` }}>
+        // A translucent brand wash worked on a permanently dark rail. Over the
+        // day-mode white rail it resolves to pale lavender, and C.onAccent is
+        // white there — white on near-white. A solid fill keeps onAccent
+        // meaning what it says, and matches the mobile variant above.
+        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', color: C.onAccent, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', background: hover ? C.brandDeep : C.brand, border: 'none', borderLeft: `3px solid ${C.brandDeep}` }}>
         <span>🛠️</span>
         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Admin</span>
         <span style={{ marginLeft: 'auto', fontSize: 14, opacity: .7 }}>→</span>
       </button>
-      <div style={{ padding: '4px 18px 0', fontSize: 10, color: 'rgba(255,255,255,0.42)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLine}</div>
+      <div style={{ padding: '4px 18px 0', fontSize: 10, color: C.railFaint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLine}</div>
     </div>
   )
 }
@@ -3388,7 +3392,7 @@ function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: 
       {items.map(i => {
         const on = i.k === view
         return (
-          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.brand : C.line}`, background: on ? C.brand: C.surface, color: on ? C.surface : C.inkSoft, whiteSpace:'nowrap' }}>
+          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.brand : C.line}`, background: on ? C.brand: C.surface, color: on ? C.onAccent : C.inkSoft, whiteSpace:'nowrap' }}>
             {i.label}{i.phase ? <span style={{ marginLeft:5, fontSize:9, opacity:.7 }}>soon</span> : null}
           </button>
         )
@@ -3521,8 +3525,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       <UIKeyframes />
       {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
       {!isMobile && (
-        <div style={{ width:220, background: C.dark, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
-          <div style={{ padding:'0 18px 16px', color:C.onDark, fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
+        <div style={{ width:220, background: C.rail, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0, borderRight:`1px solid ${C.railLine}` }}>
+          <div style={{ padding:'0 18px 16px', color:C.railText, fontWeight:700, fontSize:16, borderBottom:`1px solid ${C.railLine}`, marginBottom:10 }}>EZER ESS</div>
           {sections.map(s => (
             <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
           ))}
