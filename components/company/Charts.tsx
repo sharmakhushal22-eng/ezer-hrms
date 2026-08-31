@@ -32,11 +32,15 @@ export function BarList({ data, max, unit = '', emptyText = 'No data' }: {
             fontSize: F.micro, color: C.muted, whiteSpace: 'nowrap',
             overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{d.label}</span>
-          <div style={{ height: 16, background: C.sunken, borderRadius: R.sm, overflow: 'hidden' }}>
-            <div style={{
-              width: `${Math.max((d.value / top) * 100, d.value > 0 ? 2 : 0)}%`, height: '100%',
+          <div className="cp-bar" style={{ height: 18, background: C.sunken, borderRadius: R.sm,
+                                            overflow: 'hidden', boxShadow: 'inset 0 1px 2px rgba(15,23,42,.07)' }}>
+            <i style={{
+              width: `${Math.max((d.value / top) * 100, d.value > 0 ? 2 : 0)}%`,
               background: d.colour ?? `linear-gradient(90deg, ${C.brand}, ${C.brandDeep})`,
-              borderRadius: R.sm, transition: 'width .4s cubic-bezier(.2,.8,.2,1)',
+              borderRadius: R.sm,
+              // The inner highlight is what stops a filled rectangle reading
+              // as a block of colour and makes it read as a solid bar.
+              boxShadow: 'inset 0 1px 0 rgba(255,255,255,.30)',
             }} />
           </div>
           <span style={{
@@ -148,12 +152,25 @@ export function Capacity({ used, cap, label }: { used: number; cap: number | nul
 export function Field({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   const empty = value === null || value === undefined || value === '' || value === '—'
   return (
+    // Label and value were 11px faint over 13px ink — half a step apart, which
+    // is why a grid of them read as undifferentiated grey. The label is now
+    // bolder and tighter, the value a size larger and heavier, and an empty
+    // one is dashed rather than merely paler so "missing" is a shape, not a
+    // shade you have to compare against its neighbour.
     <div>
-      <div style={{ fontSize: F.micro, color: C.faint, textTransform: 'uppercase',
-                    letterSpacing: .3, fontWeight: W.semi, marginBottom: 3 }}>{label}</div>
-      <div style={{ fontSize: F.small, color: empty ? C.faint : C.ink, fontWeight: empty ? 400 : 500,
-                    fontVariantNumeric: mono ? 'tabular-nums' : undefined,
-                    fontFamily: mono ? 'ui-monospace, monospace' : undefined, wordBreak: 'break-word' }}>
+      <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase',
+                    letterSpacing: '.06em', fontWeight: W.bold, marginBottom: 3 }}>{label}</div>
+      <div style={{
+        fontSize: 14, color: empty ? C.faint : C.ink, fontWeight: empty ? 400 : 500,
+        lineHeight: 1.4,
+        fontVariantNumeric: mono ? 'tabular-nums' : undefined,
+        fontFamily: mono ? 'ui-monospace, monospace' : undefined,
+        wordBreak: 'break-word',
+        ...(empty ? {
+          display: 'inline-block', padding: '1px 9px', borderRadius: R.sm,
+          border: `1px dashed ${C.line}`, fontSize: 12,
+        } : {}),
+      }}>
         {empty ? 'Not recorded' : value}
       </div>
     </div>

@@ -20,6 +20,7 @@ import { C, F, W, R } from '@/lib/ui'
 import { BarList, Donut, Capacity, Field } from './Charts'
 import { GenderSplit, GenderInline } from './GenderSplit'
 import { Compliance } from './Compliance'
+import { ACCENT, CSS, card, heading, rule, label as lblS, value as valS, stat, statValue, statLabel } from './ui'
 import {
   REG_TYPES, regHealth, DOC_TYPES, shiftHours,
   type Company, type Registration, type Branch, type BankAccount,
@@ -97,14 +98,18 @@ function completeness(id: SectionId, d: SectionData): { done: number; total: num
 const grid = (cols: number): React.CSSProperties => ({
   display: 'grid', gridTemplateColumns: `repeat(${cols}, minmax(0,1fr))`, gap: '14px 18px',
 })
-const block: React.CSSProperties = {
-  border: `1px solid ${C.line}`, borderRadius: 12, padding: '14px 16px', marginBottom: 14,
-}
-const h = (t: string): React.CSSProperties => ({})
+/** Every card in a section carries that section's hue on its left rail, so a
+ *  scrolled-past card still tells you which tab you are in. */
+let ACC = ACCENT.basic
+const block = (): React.CSSProperties => card(ACC)
 
 function Head({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: F.micro, fontWeight: W.bold, color: C.muted, letterSpacing: .4,
-                       textTransform: 'uppercase', marginBottom: 10 }}>{children}</div>
+  return (
+    <div style={heading(ACC)}>
+      <span aria-hidden style={rule(ACC)} />
+      {children}
+    </div>
+  )
 }
 
 export function CompanySections({ d, isMobile, saveReg }: {
@@ -114,6 +119,9 @@ export function CompanySections({ d, isMobile, saveReg }: {
   const [tab, setTab] = useState<SectionId>('basic')
   const co = d.co
   const cols = isMobile ? 1 : 3
+  // Module-level so block() and Head() can read it without every call site
+  // threading it through. Set once per render, before any of them run.
+  ACC = ACCENT[tab] ?? ACCENT.basic
 
   const complete = useMemo(() =>
     Object.fromEntries(SECTIONS.map(s => [s.id, completeness(s.id, d)])) as Record<SectionId, { done: number; total: number }>,
@@ -142,6 +150,7 @@ export function CompanySections({ d, isMobile, saveReg }: {
 
   return (
     <div>
+      <style>{CSS}</style>
       {/* Tab strip. The dot is the section's completeness, so somebody filling
           this in can see where the gaps are without opening all ten. */}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 14 }}>
@@ -150,14 +159,21 @@ export function CompanySections({ d, isMobile, saveReg }: {
           const { done, total } = complete[s.id]
           const tone = done === 0 ? C.critical : done < total ? C.warning : C.positive
           return (
-            <button key={s.id} onClick={() => setTab(s.id)} style={{
+            <button key={s.id} onClick={() => setTab(s.id)} className="cp-tab" style={{
               display: 'flex', alignItems: 'center', gap: 6,
-              padding: '6px 12px', borderRadius: R.pill, cursor: 'pointer', fontFamily: 'inherit',
+              padding: '7px 13px', borderRadius: R.pill, cursor: 'pointer', fontFamily: 'inherit',
               fontSize: F.micro, fontWeight: on ? W.bold : W.semi,
-              border: `1px solid ${on ? C.brand : C.line}`,
-              background: on ? C.brand : C.surface,
-              color: on ? C.onAccent : C.inkSoft,
-              transition: 'background .15s, border-color .15s',
+              border: `1px solid ${on ? 'transparent' : C.line}`,
+              // The active tab is filled with ITS OWN hue, not one shared
+              // brand colour — that is what makes the section you are in
+              // identifiable at a glance rather than only by reading.
+              background: on
+                ? `linear-gradient(145deg, ${ACCENT[s.id]}, ${ACCENT[s.id]}CC)`
+                : C.surface,
+              color: on ? '#FFFFFF' : C.inkSoft,
+              boxShadow: on
+                ? `inset 0 1px 0 rgba(255,255,255,.28), 0 4px 12px -3px ${ACCENT[s.id]}70`
+                : '0 1px 2px rgba(15,23,42,.05)',
             }}>
               <span aria-hidden style={{ width: 6, height: 6, borderRadius: '50%',
                 background: on ? C.onAccent : tone, opacity: on ? .8 : 1 }} />
@@ -170,11 +186,14 @@ export function CompanySections({ d, isMobile, saveReg }: {
 
       {/* ── 1. BASIC ── */}
       {tab === 'basic' && (
-        <div style={block}>
+        <div key={tab} className="cp-in" style={block()}>
           <Head>Company identity</Head>
           <div style={grid(cols)}>
             <Field label="Legal entity name" value={co.company_name} />
-            <Field label="Short name / code" value={[co.short_name, co.company_code].filter(Boolean).join(' · ')} />
+            {/* Deduped: short_name and company_code are frequently the same string,
+                and joining them blind printed "SRS · SRS". */}
+            <Field label="Short name / code" value={
+              Array.from(new Set([co.short_name, co.company_code].filter(Boolean))).join(' · ')} />
             <Field label="Established" value={co.date_of_inc ? new Date(co.date_of_inc + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : null} />
             <Field label="Company type" value={co.company_type} />
             <Field label="Industry sector" value={co.industry} />
@@ -197,18 +216,18 @@ export function CompanySections({ d, isMobile, saveReg }: {
 
       {/* ── 2. REGISTRATION & COMPLIANCE ── */}
       {tab === 'compliance' && (
-        <>
-          <div style={block}>
+        <div key={tab} className="cp-in">
+          <div style={block()}>
             <Head>Certificate health</Head>
             <Donut slices={regHealthSlices} centre={`${regHealthSlices[0].value}/${REG_TYPES.length}`} />
           </div>
           <Compliance co={co} regs={d.regs} isMobile={isMobile} onSave={saveReg} />
-        </>
+        </div>
       )}
 
       {/* ── 3. LOCATION ── */}
       {tab === 'location' && (
-        <div style={block}>
+        <div key={tab} className="cp-in" style={block()}>
           <Head>Addresses</Head>
           <div style={grid(isMobile ? 1 : 2)}>
             <Field label="Registered office" value={co.reg_office} />
@@ -250,7 +269,7 @@ export function CompanySections({ d, isMobile, saveReg }: {
 
       {/* ── 4. CONTACT ── */}
       {tab === 'contact' && (
-        <div style={block}>
+        <div key={tab} className="cp-in" style={block()}>
           <Head>Contacts</Head>
           <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>
             Contacts live in <code style={{ fontFamily: 'ui-monospace, monospace', fontSize: F.micro }}>company_contacts</code>,
@@ -266,7 +285,7 @@ export function CompanySections({ d, isMobile, saveReg }: {
 
       {/* ── 5. BANKING ── */}
       {tab === 'finance' && (
-        <div style={block}>
+        <div key={tab} className="cp-in" style={block()}>
           <Head>Financial</Head>
           <div style={grid(cols)}>
             <Field label="Currency" value={co.currency ?? 'INR'} />
@@ -298,8 +317,8 @@ export function CompanySections({ d, isMobile, saveReg }: {
 
       {/* ── 6. STRUCTURE ── */}
       {tab === 'org' && (
-        <>
-          <div style={block}>
+        <div key={tab} className="cp-in">
+          <div style={block()}>
             <Head>Organisation</Head>
             <div style={grid(cols)}>
               <Field label="Structure type" value={co.structure_type} />
@@ -309,25 +328,25 @@ export function CompanySections({ d, isMobile, saveReg }: {
                 Array.from(new Set(d.departments.map(x => x.cost_center).filter(Boolean))).length || null} />
             </div>
           </div>
-          <div style={block}>
+          <div style={block()}>
             <Head>Headcount by department</Head>
             <BarList data={d.departments
               .map(dep => ({ label: dep.dept_name, value: d.deptHeadcount[dep.id] ?? 0 }))
               .filter(x => x.value > 0)
               .sort((a, b) => b.value - a.value)} />
           </div>
-          <div style={block}>
+          <div style={block()}>
             <Head>Headcount by site</Head>
             <BarList data={d.branches
               .map(b => ({ label: b.location_name, value: d.head?.byLocation[b.id]?.total ?? 0 }))
               .sort((a, b) => b.value - a.value)} />
           </div>
-        </>
+        </div>
       )}
 
       {/* ── 7. PAYROLL ── */}
       {tab === 'payroll' && (
-        <div style={block}>
+        <div key={tab} className="cp-in" style={block()}>
           <Head>Payroll configuration</Head>
           <div style={grid(cols)}>
             <Field label="Frequency" value={co.payroll_frequency?.replace('_', '-').toLowerCase()} />
@@ -345,7 +364,7 @@ export function CompanySections({ d, isMobile, saveReg }: {
 
       {/* ── 8. STATUTORY ── */}
       {tab === 'statutory' && (
-        <div style={block}>
+        <div key={tab} className="cp-in" style={block()}>
           <Head>Statutory status</Head>
           <div style={grid(cols)}>
             <Field label="Provident Fund" value={co.pf_status?.replace('_', ' ').toLowerCase()} />
@@ -388,8 +407,8 @@ export function CompanySections({ d, isMobile, saveReg }: {
 
       {/* ── 9. PEOPLE ── */}
       {tab === 'hr' && (
-        <>
-          <div style={block}>
+        <div key={tab} className="cp-in">
+          <div style={block()}>
             <Head>Headcount</Head>
             <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', alignItems: 'center' }}>
               <GenderSplit counts={d.head?.company ?? { male:0, female:0, other:0, unknown:0, total:0 }} size={86} />
@@ -406,13 +425,13 @@ export function CompanySections({ d, isMobile, saveReg }: {
               </div>
             </div>
           </div>
-          <div style={block}>
+          <div style={block()}>
             <Head>Employment type</Head>
             <BarList data={Object.entries(d.employmentMix)
               .map(([k, v]) => ({ label: k, value: v }))
               .sort((a, b) => b.value - a.value)} />
           </div>
-          <div style={block}>
+          <div style={block()}>
             <Head>HR defaults</Head>
             <div style={grid(cols)}>
               <Field label="Sanctioned strength" value={co.approved_strength} mono />
@@ -423,12 +442,12 @@ export function CompanySections({ d, isMobile, saveReg }: {
               <Field label="Leave year starts" value={co.leave_year_start_month ? MONTH[co.leave_year_start_month] : null} />
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* ── 10. BRAND ── */}
       {tab === 'brand' && (
-        <div style={block}>
+        <div key={tab} className="cp-in" style={block()}>
           <Head>Brand &amp; culture</Head>
           <div style={{ display: 'grid', gap: 14 }}>
             <Field label="Tagline" value={co.tagline} />
@@ -480,8 +499,8 @@ export function CompanySections({ d, isMobile, saveReg }: {
 
       {/* ── 11. DOCUMENTS ── */}
       {tab === 'documents' && (
-        <>
-          <div style={block}>
+        <div key={tab} className="cp-in">
+          <div style={block()}>
             <Head>Document repository</Head>
             <div style={{ display: 'grid', gap: 8 }}>
               {DOC_TYPES.map(t => {
@@ -533,7 +552,7 @@ export function CompanySections({ d, isMobile, saveReg }: {
             </div>
           </div>
 
-          <div style={block}>
+          <div style={block()}>
             <Head>Directors &amp; board ({d.policy?.directors.length ?? 0})</Head>
             <div style={{ display: 'grid', gap: 7 }}>
               {(d.policy?.directors ?? []).map(dir => (
@@ -559,13 +578,13 @@ export function CompanySections({ d, isMobile, saveReg }: {
               )}
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {/* ── 12. POLICIES ── */}
       {tab === 'policy' && (
-        <>
-          <div style={block}>
+        <div key={tab} className="cp-in">
+          <div style={block()}>
             <Head>Working days &amp; hours</Head>
             <div style={grid(isMobile ? 1 : 2)}>
               <Field label="Weekly off" value={
@@ -586,7 +605,7 @@ export function CompanySections({ d, isMobile, saveReg }: {
             </div>
           </div>
 
-          <div style={block}>
+          <div style={block()}>
             <Head>Shifts ({d.policy?.shifts.length ?? 0})</Head>
             <div style={{ display: 'grid', gap: 7 }}>
               {(d.policy?.shifts ?? []).map(sh => {
@@ -620,7 +639,7 @@ export function CompanySections({ d, isMobile, saveReg }: {
             </div>
           </div>
 
-          <div style={block}>
+          <div style={block()}>
             <Head>Leave types ({d.policy?.leaveTypes.length ?? 0})</Head>
             <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
               {(d.policy?.leaveTypes ?? []).map(l => (
@@ -647,7 +666,7 @@ export function CompanySections({ d, isMobile, saveReg }: {
             </div>
           </div>
 
-          <div style={block}>
+          <div style={block()}>
             <Head>Bonus &amp; gratuity</Head>
             <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>
               Gratuity eligibility is held per employee
@@ -657,7 +676,7 @@ export function CompanySections({ d, isMobile, saveReg }: {
               exists but has no rows. There is no company-level bonus policy to show yet.
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   )

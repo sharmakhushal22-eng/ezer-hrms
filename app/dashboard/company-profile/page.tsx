@@ -12,6 +12,7 @@ import {
 import { GenderSplit, GenderInline } from '@/components/company/GenderSplit'
 import { BranchCertificate } from '@/components/company/Compliance'
 import { CompanySections } from '@/components/company/Sections'
+import { CSS as CP_CSS, ACCENT, monogram, stat, statValue, statLabel } from '@/components/company/ui'
 import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -22,13 +23,17 @@ import { GroupHeader } from '@/components/company/GroupHeader'
 // ── Style constant (employees/admin palette — C) ───────────────────
 const C = {
   page:   { background: TK.sunken, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
-  card:   { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
-  lbl:    { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em' } as React.CSSProperties,
-  val:    { fontSize:13, color:TK.ink, marginTop:2 } as React.CSSProperties,
+  // Was a hairline border and no shadow — a rectangle, not a card. Two-layer
+  // shadow: tight contact, soft cast. That is the whole difference.
+  card:   { background:TK.surface, borderRadius:14, border: `1px solid ${TK.line}`,
+            boxShadow:'0 1px 2px rgba(15,23,42,.06), 0 8px 24px -8px rgba(15,23,42,.14)',
+            padding:'16px 18px', marginBottom:12 } as React.CSSProperties,
+  lbl:    { fontSize:10, fontWeight:700, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.06em' } as React.CSSProperties,
+  val:    { fontSize:14, fontWeight:500, color:TK.ink, marginTop:3, lineHeight:1.4 } as React.CSSProperties,
   input:  { padding:'6px 9px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:10, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
   pri:    { padding:'8px 15px', borderRadius:10, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
   out:    { padding:'6px 12px', borderRadius:10, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
-  sec:    { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
+  sec:    { fontSize:12, fontWeight:700, color:TK.ink, textTransform:'uppercase' as const, letterSpacing:'.06em', marginBottom:10 } as React.CSSProperties,
 }
 const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF: TK.info, FACTORY:TK.critical }
 const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
@@ -176,18 +181,51 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, policy, 
   saveReg: (company_id: string, reg_type: string, patch: Record<string, string | null>, location_id?: string | null) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
+  // A stable hue per company, so the three cards are told apart by colour
+  // before they are told apart by reading. Derived from the code rather than
+  // the index, so it does not change when a company is added above.
+  const PALETTE = ['#2563EB', '#0D9488', '#7C3AED', '#D97706', '#DB2777', '#0891B2']
+  const accent = PALETTE[[...co.company_code].reduce((a, ch) => a + ch.charCodeAt(0), 0) % PALETTE.length]
+  const headTotal = head?.company.total ?? 0
   const regsByType: Record<string, Registration[]> = {}
   for (const r of co.registrations) { (regsByType[r.reg_type] = regsByType[r.reg_type] || []).push(r) }
   const lic = co.license
   const empUsed = '—' // headcount comes from employees module; shown as cap here
 
   return (
-    <div style={{ ...C.card, padding:0, overflow:'hidden' }}>
-      <div onClick={() => setOpen(o => !o)} style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', cursor:'pointer', background:TK.sunken, borderBottom: open ? '1px solid #E2E8F0' : 'none' }}>
-        <span style={{ fontSize:14, color:TK.faint }}>{open ? '' : ''}</span>
-        <span style={{ fontSize:14, fontWeight:600 }}>{co.company_name}</span>
-        {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.brandTint, color:TK.brand, fontWeight:600 }}>{co.company_type}</span>}
-        <span style={{ fontSize:10, color:TK.faint }}>{co.company_code}</span>
+    <div className="cp-card" style={{ ...C.card, padding:0, overflow:'hidden',
+                 borderLeft:`3px solid ${accent}` }}>
+      {/* Was a flat grey strip with an empty chevron span and 14px semibold
+          text — nothing signalled that it opens, and nothing distinguished one
+          company from the next. Now: a tinted band, a coloured monogram, a
+          chevron that actually rotates, and headcount on the closed row so the
+          card says something before you open it. */}
+      <div onClick={() => setOpen(o => !o)} className="cp-head" style={{
+        display:'flex', alignItems:'center', gap:12, padding:'13px 16px', cursor:'pointer',
+        background:`linear-gradient(100deg, ${accent}12, ${accent}05 60%, transparent)`,
+        borderBottom: open ? `1px solid ${TK.line}` : 'none',
+      }}>
+        <span className="cp-chev" data-open={open ? '1' : '0'} aria-hidden
+              style={{ display:'flex', color:accent, flexShrink:0 }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+               strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 2.5 10 7l-5 4.5" />
+          </svg>
+        </span>
+        <span style={monogram(accent)}>{co.company_code}</span>
+        <span style={{ display:'flex', flexDirection:'column', minWidth:0 }}>
+          <span style={{ fontSize:15, fontWeight:700, letterSpacing:'-.01em', color:TK.ink,
+                         whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{co.company_name}</span>
+          <span style={{ fontSize:11, color:TK.muted, marginTop:1 }}>
+            {[co.company_type, co.industry].filter(Boolean).join(' · ') || 'No type recorded'}
+          </span>
+        </span>
+        {headTotal > 0 && (
+          <span style={{ ...stat(accent), padding:'5px 11px', marginLeft:6 }}>
+            <span style={{ fontSize:15, fontWeight:800, color:TK.ink, fontVariantNumeric:'tabular-nums' }}>{headTotal}</span>
+            <span style={{ fontSize:10, color:TK.muted, marginLeft:5 }}>people</span>
+          </span>
+        )}
         <span style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
           <button onClick={e => { e.stopPropagation(); setOpen(true) }} style={{ fontSize:11, fontWeight:600, padding:'4px 11px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, background:TK.surface, color:TK.brand, cursor:'pointer' }}>Edit</button>
           <StatusBadge status={co.account_status} days={co.days_to_due} />
@@ -468,9 +506,13 @@ export default function CompanyProfilePage() {
 
   return (
     <div style={{ ...C.page, padding: isMobile ? '14px 12px' : '20px 24px' }}>
+      {/* Mounted at the page root, not inside a card: the chevron and the
+          card hover are on the CLOSED row, which renders before any
+          section does. */}
+      <style>{CP_CSS}</style>
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
         <div className="ez-page-head">
-        <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Company Profile</div>
+        <div style={{ fontSize:22, fontWeight:800, letterSpacing:'-.02em', marginBottom:2 }}>Company Profile</div>
         <div style={{ fontSize:12, color:TK.muted }}>Group, companies, branches, statutory registrations, bank &amp; license — view, edit, and audit. Every change is logged.</div>
         </div>
 
