@@ -26,6 +26,32 @@ import * as React from 'react';
 
 let uid = 0;
 
+// ── Lockup metrics ─────────────────────────────────────────────────────────
+// The emblem spans from the TOP OF THE E in EZER to the BOTTOM OF THE H in
+// HRMS. Both of those are glyph edges, not box edges, so the two constants
+// below are the measured distance from each box edge to the glyph — tuned
+// against a render rather than derived from font metrics, because line-height
+// 1 leaves the half-leading up to the font.
+const EZER_EM   = 0.86;   // wordmark type size, as a multiple of `height`
+const HRMS_EM   = 0.34;
+const ROW_GAP   = 0.10;   // between the EZER and HRMS lines
+/** Cap top of EZER, below its own box top. */
+const CAP_INSET = 0.065;
+/** Baseline of HRMS, above its own box bottom. */
+const BASE_INSET = 0.085;
+/** Emblem height: cap top of E through the bottom of the H.
+ *  Measured off a render rather than derived — the box-to-glyph distances that
+ *  line-height 1 produces depend on the font's own metrics, and the arithmetic
+ *  version came out 28px short at height=40. */
+const SPAN = 1.32;
+/** Emblem width follows the artwork's aspect. */
+const EMB_W = SPAN * (108 / 105);
+/** Space between the emblem and the E. */
+const GAPX = 0.18;
+/** Where the E starts. HRMS and the tagline share it, so all three lines
+ *  begin at exactly the same x. */
+const INDENT = (h: number) => h * (EMB_W + GAPX);
+
 /** Injected once per page. Keyframes and the theme-dependent ink. */
 export function LogoStyles() {
   return (
@@ -83,7 +109,11 @@ export function LogoStyles() {
 
 function Emblem({ size, id }: { size: number; id: string }) {
   return (
-    <svg className="ez-logo__emblem" width={size} height={size} viewBox="0 0 128 128"
+    // viewBox is the artwork's own bounds, not 0 0 128 128. The drawing spans
+    // x 10..118 and y 9..114 inside that square, so a box sized to the type was
+    // 19% empty and the mark never actually reached the edges it was aligned
+    // to. Tightened, `size` is the height of what you can SEE.
+    <svg className="ez-logo__emblem" width={size * (108 / 105)} height={size} viewBox="10 9 108 105"
          fill="none" aria-hidden focusable="false" style={{ overflow: 'visible', flexShrink: 0 }}>
       <defs>
         {/* Light from the top-left: bright cyan shoulder, deep blue terminator. */}
@@ -205,41 +235,50 @@ export function Logo({
   }
 
   return (
-    <span className={cls} title={title} role="img" aria-label={title}>
-      <Emblem size={height * 1.28} id={id} />
-      <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1 }}>
-        <span className="ez-logo__word" style={{
-          fontSize: height * 0.86, fontWeight: 800, letterSpacing: '-.03em',
-          color: 'var(--ez-logo-word)', whiteSpace: 'nowrap',
-        }}>
-          EZER
-          <span className="ez-logo__sheen" />
-        </span>
-        <span style={{
-          display: 'flex', alignItems: 'center', gap: height * 0.13,
-          marginTop: height * 0.1,
-        }}>
-          <span aria-hidden style={{
-            height: 1, width: height * 0.28,
-            background: 'linear-gradient(90deg, transparent, var(--ez-logo-word-soft))',
-          }} />
-          <span style={{
-            fontSize: height * 0.34, fontWeight: 700, letterSpacing: '.34em',
-            color: 'var(--ez-logo-word-soft)', whiteSpace: 'nowrap',
-          }}>HRMS</span>
-          <span aria-hidden style={{
-            height: 1, flex: 1, minWidth: height * 0.28,
-            background: 'linear-gradient(90deg, var(--ez-logo-word-soft), transparent)',
-          }} />
-        </span>
-        {tagline && (
-          <span style={{
-            fontSize: height * 0.22, fontWeight: 600, letterSpacing: '.2em',
-            color: 'var(--ez-logo-word-soft)', opacity: .85, marginTop: height * 0.14,
-            whiteSpace: 'nowrap',
-          }}>PEOPLE · PROCESS · PERFORMANCE</span>
-        )}
+    // The emblem is top-aligned and spans two lines; EZER, HRMS and the tagline
+    // all start at INDENT, so the three of them share one left edge and the
+    // mark reads as a single lockup rather than three stacked things.
+    <span className={cls} title={title} role="img" aria-label={title}
+      style={{ display:'inline-flex', flexDirection:'column', alignItems:'flex-start', position:'relative' }}>
+      <span style={{
+        position:'absolute', left:0, top: height * CAP_INSET,
+        display:'flex', lineHeight:0,
+      }}>
+        <Emblem size={height * SPAN} id={id} />
       </span>
+
+      <span className="ez-logo__word" style={{
+        fontSize: height * EZER_EM, fontWeight: 800, letterSpacing: '-.03em',
+        color: 'var(--ez-logo-word)', whiteSpace: 'nowrap', lineHeight: 1,
+        marginLeft: INDENT(height),
+      }}>
+        EZER
+        <span className="ez-logo__sheen" />
+      </span>
+
+      <span style={{
+        display: 'flex', alignItems: 'center', gap: height * 0.13,
+        marginTop: height * ROW_GAP, marginLeft: INDENT(height),
+      }}>
+        <span style={{
+          fontSize: height * HRMS_EM, fontWeight: 700, letterSpacing: '.34em',
+          color: 'var(--ez-logo-word-soft)', whiteSpace: 'nowrap', lineHeight: 1,
+        }}>HRMS</span>
+        {/* Bounded rather than flex:1 — left to grow, the rule ran the full
+            width of whatever container the logo sat in. */}
+        <span aria-hidden style={{
+          height: 1, width: height * 0.5,
+          background: 'linear-gradient(90deg, var(--ez-logo-word-soft), transparent)',
+        }} />
+      </span>
+
+      {tagline && (
+        <span style={{
+          fontSize: height * 0.21, fontWeight: 600, letterSpacing: '.19em',
+          color: 'var(--ez-logo-word-soft)', opacity: .9,
+          marginTop: height * 0.16, marginLeft: INDENT(height), whiteSpace: 'nowrap',
+        }}>PEOPLE · PROCESS · PERFORMANCE</span>
+      )}
     </span>
   );
 }
