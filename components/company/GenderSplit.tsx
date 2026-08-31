@@ -25,6 +25,14 @@ const SLICE = {
 const LABEL: Record<keyof typeof SLICE, string> = {
   male: 'Male', female: 'Female', other: 'Other', unknown: 'Not recorded',
 }
+/** A wash of each hue for the chip ground. Kept at ~12% so the label stays
+ *  legible on it in both themes rather than needing a per-theme pair. */
+const TINT: Record<keyof typeof SLICE, string> = {
+  male:    'rgba(37,99,235,.12)',
+  female:  'rgba(219,39,119,.12)',
+  other:   'rgba(124,58,237,.12)',
+  unknown: 'rgba(148,163,184,.16)',
+}
 
 /** A pie slice as an SVG path. Angles run clockwise from twelve o'clock, which
  *  is where a reader expects a pie to start. */
@@ -109,24 +117,52 @@ export function GenderSplit({ counts, size = 78, dense = false }: {
   )
 }
 
-/** The one-line version, for a branch row. No pie — a 20px pie is decoration,
- *  not information. */
+/** The branch row version. Labelled chips, not bare dots.
+ *
+ * This showed a coloured dot and a number and nothing else — you had to know
+ * that blue meant male, and at 11px against a legend that was somewhere else
+ * on the page. The words and the percentage are the point: "how many women
+ * work at this branch, and is that a lot" is one question, and a number
+ * without its share cannot answer the second half.
+ *
+ * The percentage is of the BRANCH, not the company — this row is about this
+ * site, and mixing the two denominators in one line is how a reader ends up
+ * with the wrong figure. */
 export function GenderInline({ counts }: { counts: GenderCount }) {
-  if (!counts.total) return <span style={{ fontSize: F.micro, color: C.faint }}>—</span>
-  const cell = (k: keyof typeof SLICE) => counts[k] > 0 ? (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-      <span aria-hidden style={{ width: 7, height: 7, borderRadius: 2, background: SLICE[k] }} />
-      <span style={{ fontSize: F.micro, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>
+  if (!counts.total) {
+    return <span style={{ fontSize: F.micro, color: C.faint }}>No employees at this site</span>
+  }
+  const pct = (n: number) => Math.round((n / counts.total) * 100)
+
+  const chip = (k: keyof typeof SLICE) => counts[k] > 0 ? (
+    <span key={k} style={{
+      display: 'inline-flex', alignItems: 'baseline', gap: 5,
+      padding: '3px 10px', borderRadius: R.pill,
+      background: TINT[k], border: `1px solid ${SLICE[k]}33`,
+      whiteSpace: 'nowrap',
+    }}>
+      <span style={{ fontSize: F.micro, color: SLICE[k], fontWeight: W.semi }}>{LABEL[k]}</span>
+      <strong style={{ fontSize: F.small, color: C.ink, fontVariantNumeric: 'tabular-nums' }}>
         {counts[k]}
+      </strong>
+      <span style={{ fontSize: F.micro, color: C.muted, fontVariantNumeric: 'tabular-nums' }}>
+        {pct(counts[k])}%
       </span>
     </span>
   ) : null
+
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-      {cell('male')}{cell('female')}{cell('other')}{cell('unknown')}
-      <span style={{ fontSize: F.micro, fontWeight: W.bold, color: C.ink,
-                     fontVariantNumeric: 'tabular-nums',
-                     paddingLeft: 6, borderLeft: `1px solid ${C.line}` }}>{counts.total}</span>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+      {chip('male')}{chip('female')}{chip('other')}{chip('unknown')}
+      <span style={{
+        display: 'inline-flex', alignItems: 'baseline', gap: 5,
+        paddingLeft: 9, borderLeft: `1px solid ${C.line}`, whiteSpace: 'nowrap',
+      }}>
+        <span style={{ fontSize: F.micro, color: C.muted }}>Total</span>
+        <strong style={{ fontSize: F.small, color: C.ink, fontVariantNumeric: 'tabular-nums' }}>
+          {counts.total}
+        </strong>
+      </span>
     </span>
   )
 }

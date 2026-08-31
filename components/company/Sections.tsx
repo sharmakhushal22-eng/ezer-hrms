@@ -18,7 +18,7 @@
 import { useMemo, useState } from 'react'
 import { C, F, W, R } from '@/lib/ui'
 import { BarList, Donut, Capacity, Field } from './Charts'
-import { GenderSplit } from './GenderSplit'
+import { GenderSplit, GenderInline } from './GenderSplit'
 import { Compliance } from './Compliance'
 import {
   REG_TYPES, regHealth, DOC_TYPES, shiftHours,
@@ -233,6 +233,13 @@ export function CompanySections({ d, isMobile, saveReg }: {
                     <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer"
                        style={{ fontSize: F.micro, color: C.brand }}>map</a>
                   ) : <span style={{ fontSize: F.micro, color: C.faint }}>no coords</span>}
+                  {/* Headcount belongs on the site row too — this tab lists the
+                      sites, and "how many people are here" is the first thing
+                      asked about one. */}
+                  <div style={{ flexBasis: '100%', paddingTop: 7, marginTop: 2,
+                                borderTop: `1px solid ${C.line}` }}>
+                    <GenderInline counts={d.head?.byLocation[b.id] ?? { male:0, female:0, other:0, unknown:0, total:0 }} />
+                  </div>
                 </div>
               ))}
               {!d.branches.length && <span style={{ fontSize: F.micro, color: C.faint }}>No sites recorded.</span>}
