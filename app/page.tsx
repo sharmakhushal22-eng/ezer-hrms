@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { Logo, LogoStyles } from '@/lib/ui/Logo'
 import { supabase } from '@/lib/supabase'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -52,22 +53,16 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: d ? '#0F1117' : TK.sunken, fontFamily: '"DM Sans","Segoe UI",sans-serif', transition: 'background 0.3s' }}>
+      <LogoStyles />
       <div style={{ width: '46%', background: `linear-gradient(145deg,${TK.ink},${TK.brand})`, display: 'flex', flexDirection: 'column', padding: '44px 48px', position: 'relative', overflow: 'hidden' }}>
         <div style={{ position: 'absolute', top: '-100px', right: '-80px', width: '320px', height: '320px', borderRadius: '50%', background: 'rgba(37,99,235,0.08)' }} />
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '48px', zIndex: 1, position: 'relative' }}>
-          <svg width="44" height="44" viewBox="0 0 44 44" fill="none">
-            <rect width="44" height="44" rx="10" fill={TK.brand}/>
-            <rect x="11" y="10" width="5" height="24" rx="1.5" fill="white"/>
-            <rect x="11" y="10" width="19" height="6" rx="1.5" fill="white"/>
-            <rect x="11" y="19" width="14" height="5" rx="1.5" fill="white"/>
-            <rect x="11" y="28" width="19" height="6" rx="1.5" fill="white"/>
-            <polygon points="32,5 38,12 26,12" fill={TK.brandTint}/>
-            <rect x="29.5" y="12" width="5" height="6" rx="1" fill={TK.brandTint}/>
-          </svg>
-          <div>
-            <div style={{ fontSize: '20px', fontWeight: '700', color: TK.onAccent }}>ezer <span style={{ color: TK.brand }}>hrms</span></div>
-            <div style={{ fontSize: '10px', color: TK.inkSoft, textTransform: 'uppercase', letterSpacing: '0.08em' }}>India&apos;s Intelligent HR Platform</div>
-          </div>
+          {/* This panel is a dark gradient in every theme, so the light-ink
+              variant is forced rather than left to the theme. The wordmark is
+              in the artwork now — repeating "ezer hrms" beside it would say the
+              same thing twice. */}
+          <Logo height={54} onDark />
+          <div style={{ fontSize: '10px', color: TK.inkSoft, textTransform: 'uppercase', letterSpacing: '0.08em' }}>India&apos;s Intelligent HR Platform</div>
         </div>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', position: 'relative', zIndex: 1 }}>
           <div style={{ height: '1px', background: 'linear-gradient(90deg,rgba(245,184,0,0.6),transparent)', marginBottom: '28px' }} />
@@ -105,15 +100,8 @@ export default function LoginPage() {
         <div style={{ width: '100%', maxWidth: '400px' }}>
           <div style={{ marginBottom: '32px', textAlign: 'center' }}>
             <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
-              <svg width="48" height="48" viewBox="0 0 44 44" fill="none">
-                <rect width="44" height="44" rx="10" fill={TK.brand}/>
-                <rect x="11" y="10" width="5" height="24" rx="1.5" fill="white"/>
-                <rect x="11" y="10" width="19" height="6" rx="1.5" fill="white"/>
-                <rect x="11" y="19" width="14" height="5" rx="1.5" fill="white"/>
-                <rect x="11" y="28" width="19" height="6" rx="1.5" fill="white"/>
-                <polygon points="32,5 38,12 26,12" fill={TK.brandTint}/>
-                <rect x="29.5" y="12" width="5" height="6" rx="1" fill={TK.brandTint}/>
-              </svg>
+              {/* The card follows the theme, so this picks its own variant. */}
+              <Logo height={56} />
             </div>
             <h2 style={{ fontSize: '26px', fontWeight: '700', color: d?TK.sunken:TK.ink, marginBottom: '6px' }}>Welcome back</h2>
             <p style={{ fontSize: '13px', color: d?TK.muted:TK.muted }}>Sign in to your Ezer account</p>

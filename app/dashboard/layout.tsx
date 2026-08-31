@@ -26,6 +26,7 @@ import { moduleForPath, type Module } from '@/lib/rms/modules';
 import { canSee, hasAdminAccess, type Grant } from '@/lib/rms/resolve';
 import { C, F, W, S, R, E, M, UIKeyframes } from '@/lib/ui';
 import { ThemeToggle } from '@/lib/ui/ThemeToggle';
+import { Logo, LogoStyles } from '@/lib/ui/Logo';
 import { PageTransition, RouteProgress } from '@/lib/ui/PageTransition';
 import {
   IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconOrgChart, IconUpload, IconTransfer,
@@ -270,6 +271,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: F.family, background: C.canvas }}>
+      <LogoStyles />
       <UIKeyframes />
       <style>{`
         .ez-nav:hover{background:${C.railHover};color:${C.railText}}
@@ -297,19 +299,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             cursor: 'pointer', fontFamily: 'inherit', flexShrink: 0,
             justifyContent: open ? 'flex-start' : 'center', width: '100%',
           }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: R.md, flexShrink: 0,
-            background: `linear-gradient(180deg,${C.brand},${C.brandDeep})`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: C.onAccent, fontWeight: W.bold, fontSize: F.body, letterSpacing: '-.02em',
-            boxShadow: E.brand,
-          }}>Ez</div>
+          {/* Collapsed shows the emblem alone — the wordmark at 34px tall would
+              be unreadable. Expanded shows the full mark, which already
+              contains the word, so the text span beside it is gone. */}
+          {!open && <Logo variant="mark" height={30} />}
           {open && (
             <>
-              <span style={{
-                fontSize: F.lead, fontWeight: W.bold, color: C.railText,
-                letterSpacing: '-.02em', whiteSpace: 'nowrap',
-              }}>EZER</span>
+              <Logo height={34} />
               <span className="ez-brand-chev" style={{
                 marginLeft: 'auto', color: C.railFaint, display: 'flex',
                 transform: 'rotate(180deg)', transition: `transform ${M.quick}`,

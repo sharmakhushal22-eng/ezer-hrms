@@ -38,6 +38,7 @@ import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
+import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
 import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 
@@ -3580,6 +3581,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   return (
     <div style={{ minHeight:'100vh', background:C.canvas, fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+      <LogoStyles />
       {/* The shared stylesheet. It was imported here but never rendered, so
           ESS was running without the header band, the tab and press classes,
           the global button baseline, the page-enter animation and the text
@@ -3589,7 +3591,13 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
       {!isMobile && (
         <div style={{ width:220, background: C.rail, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0, borderRight:`1px solid ${C.railLine}` }}>
-          <div style={{ padding:'0 18px 16px', color:C.railText, fontWeight:700, fontSize:16, borderBottom:`1px solid ${C.railLine}`, marginBottom:10 }}>EZER ESS</div>
+          {/* The mark carries the wordmark, so "EZER" is not repeated as text.
+              "ESS" stays, because which of the two products you are in is the
+              one thing the logo does not tell you. */}
+          <div style={{ padding:'0 18px 16px', borderBottom:`1px solid ${C.railLine}`, marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
+            <Logo height={30} />
+            <span style={{ color:C.railMuted, fontWeight:700, fontSize:12, letterSpacing:'.08em' }}>ESS</span>
+          </div>
           {sections.map(s => (
             <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
           ))}
