@@ -3485,7 +3485,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   // The nav as data (guide §5). Company / Reports appear only when the menu says
   // so; Approvals only for a login that can approve. Nothing here names a role.
-  const { menu: essMenu } = useEssMenu(emp?.id)
+  const { menu: essMenu, error: essMenuError } = useEssMenu(emp?.id)
   const sections = SECTIONS.filter(s => s.k === 'company' ? essMenu.can.company : s.k === 'reports' ? essMenu.can.reports : true)
 
   // The admin modules THIS EMPLOYEE holds — from /api/ess/menu, which resolves the
@@ -3553,18 +3553,33 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {!isMobile && (
         <div style={{ width:220, background: C.dark, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
           <div style={{ padding:'0 18px 16px', color:C.onDark, fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
-          {sections.map(s => (
-            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
-          ))}
+          {/* What you manage comes FIRST for anyone who manages something. It used to
+              sit under thirteen personal tabs, which put it below the fold — a payroll
+              manager opened their portal and saw no sign of Payroll at all. For an
+              employee who holds nothing this block renders nothing and the personal
+              tabs stay at the top, exactly as before. */}
           {adminGroups.length > 0 && (
             <>
-              <div style={{ height:1, background:'rgba(255,255,255,0.12)', margin:'14px 12px 2px' }} />
               <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase',
-                            color:'rgba(255,255,255,0.3)', padding:'6px 18px 0' }}>What you manage</div>
+                            color:'rgba(255,255,255,0.3)', padding:'2px 18px 0' }}>What you manage</div>
               {adminGroups.map(g => (
                 <AdminRailGroup key={g.group} group={g.group} items={g.items} activeKey={adminKey} onPick={goAdmin} />
               ))}
+              <div style={{ height:1, background:'rgba(255,255,255,0.12)', margin:'14px 12px 2px' }} />
+              <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase',
+                            color:'rgba(255,255,255,0.3)', padding:'6px 18px 4px' }}>My portal</div>
             </>
+          )}
+          {sections.map(s => (
+            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
+          ))}
+          {/* A silent empty sidebar is indistinguishable from "you hold nothing", so
+              say when the answer could not be fetched rather than implying it. */}
+          {essMenuError && (
+            <div style={{ margin:'10px 12px', padding:'8px 10px', borderRadius:8, background:'rgba(220,38,38,0.18)',
+                          color:'#FCA5A5', fontSize:10.5, lineHeight:1.5 }}>
+              Could not load your access: {essMenuError}
+            </div>
           )}
           {/* Reads the signed-in user's own grant, so it is hidden while viewing
               somebody else's portal — otherwise the admin's door shows up in an
