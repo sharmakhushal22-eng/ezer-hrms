@@ -37,6 +37,7 @@ import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
+import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { isHigh, def as notifDef } from '@/lib/notifications/catalogue'
 import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 
@@ -1077,21 +1078,21 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
   // move: the MD case is not special-cased, it just has an empty chain and no peers.
   const CardRow = ({ id, name, sub, right }: { id: string; name: string | null; sub: string | null; right?: string }) => (
     <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: '1px solid #F3F0FF' }}>
-      <div style={{ width: 32, height: 32, borderRadius: 99, background: '#EEEDFE', color: '#7C3AED', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <div style={{ width: 32, height: 32, borderRadius: 99, background: C.brandTint, color: C.brand, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {(name || '?').split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase()}
       </div>
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || '—'}</div>
-        <div style={{ fontSize: 11, color: '#6B7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '—'}</div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || '—'}</div>
+        <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '—'}</div>
       </div>
-      {right && <span style={{ fontSize: 10.5, color: '#7C3AED', fontWeight: 700, background: '#EEEDFE', borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{right}</span>}
+      {right && <span style={{ fontSize: 10.5, color: C.brand, fontWeight: 700, background: C.brandTint, borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{right}</span>}
     </div>
   )
 
   const Section = ({ title, icon, empty, children }: { title: string; icon: string; empty: string; children: React.ReactNode }) => (
-    <div style={{ background: '#fff', borderRadius: 10, border: '1px solid rgba(124,58,237,0.12)', padding: '14px 16px', marginBottom: 10, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>{icon} {title}</div>
-      {loading || chainLoading ? <div style={{ fontSize: 12, color: '#9CA3AF', padding: '6px 0' }}>Loading…</div> : children}
+    <div style={{ background: C.surface, borderRadius: 10, border: `1px solid ${C.brandEdge}`, padding: '14px 16px', marginBottom: 10, boxShadow: E.flat }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: C.brand, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>{icon} {title}</div>
+      {loading || chainLoading ? <div style={{ fontSize: 12, color: C.faint, padding: '6px 0' }}>Loading…</div> : children}
     </div>
   )
 
@@ -1104,7 +1105,7 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
       )}
       <Section title="Reporting line above you" icon="🧭" empty="Nobody above you — you are at the top of your chain.">
         {managers.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody above you — you are at the top of your chain.</div>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody above you — you are at the top of your chain.</div>
         ) : managers.map(m => (
           <CardRow key={m.relationship_type} id={m.relationship_type}
             name={m.manager?.full_name ?? null}
@@ -1114,7 +1115,7 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
 
       <Section title="Your team" icon="👥" empty="Nobody reports to you yet.">
         {reports.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody reports to you directly.</div>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody reports to you directly.</div>
         ) : reports.map(r => (
           <CardRow key={r.id} id={r.id} name={r.full_name} sub={[r.designation, r.department].filter(Boolean).join(' · ')} />
         ))}
@@ -1123,7 +1124,7 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
       <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
         <Section title={`Your team-mates${peers.length ? ' (' + peers.length + ')' : ''}`} icon="🤝" empty="Nobody else shares your reporting manager.">
           {peers.filter(p => !p.isSelf).length === 0 ? (
-            <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody else shares your reporting manager — or you have no manager on record.</div>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody else shares your reporting manager — or you have no manager on record.</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: '0 16px' }}>
               {peers.filter(p => !p.isSelf).map(p => (
@@ -1593,7 +1594,7 @@ function StatTile({ label, value, bg, fg, bar, wide }: {
 }) {
   const empty = value === '0' || value === '0h 0m'
   return (
-    <div className="ezer-tile" style={{ background: empty ? '#FAFAFA' : bg, borderRadius: 10, padding: '10px 13px',
+    <div className="ezer-tile" style={{ background: empty ? C.sunken : bg, borderRadius: 10, padding: '10px 13px',
                   border: `1px solid ${empty ? C.line : bg}`, position: 'relative',
                   overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
@@ -3308,7 +3309,7 @@ function AdminEntry({ isMobile }: { isMobile?: boolean }) {
   if (isMobile) {
     return (
       <button onClick={() => { window.location.href = '/dashboard' }}
-        style={{ gridColumn: '1 / -1', padding: '12px 10px', borderRadius: 9, border: '1px solid #7C3AED', background: '#7C3AED', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, color: '#fff', fontWeight: 600 }}>
+        style={{ gridColumn: '1 / -1', padding: '12px 10px', borderRadius: 9, border: `1px solid ${C.brand}`, background: C.brand, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, color: C.onAccent, fontWeight: 600 }}>
         <span style={{ fontSize: 16 }}>🛠️</span>
         <span style={{ flex: 1, minWidth: 0 }}>Admin</span>
         <span style={{ fontSize: 10, opacity: .75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{roleLine}</span>
@@ -3319,7 +3320,7 @@ function AdminEntry({ isMobile }: { isMobile?: boolean }) {
     <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
       <button onClick={() => { window.location.href = '/dashboard' }}
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', color: '#fff', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', background: hover ? 'rgba(124,58,237,0.45)' : 'rgba(124,58,237,0.28)', border: 'none', borderLeft: '3px solid #7C3AED' }}>
+        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', color: C.onAccent, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', background: hover ? 'rgba(124,58,237,0.45)' : 'rgba(124,58,237,0.28)', border: 'none', borderLeft: `3px solid ${C.brand}` }}>
         <span>🛠️</span>
         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Admin</span>
         <span style={{ marginLeft: 'auto', fontSize: 14, opacity: .7 }}>→</span>
@@ -3540,6 +3541,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
           <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9 }}>
+            {/* Light / dark / system. Three states rather than two, because
+                "follow my system" is a real preference and a two-way switch
+                silently overrides it. The dashboard has had this control all
+                along; ESS never rendered it, so an employee who never opens
+                the dashboard had no way to choose. On mobile it collapses to
+                one cycling button — three segments plus the bell, avatar and
+                name do not fit a phone header. */}
+            <ThemeToggle compact={isMobile} />
             <span data-ez-bell><NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} /></span>
             <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
             {!isMobile && (
