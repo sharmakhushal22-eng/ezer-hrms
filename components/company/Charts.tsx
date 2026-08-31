@@ -159,9 +159,10 @@ export function Field({ label, value, mono }: { label: string; value: React.Reac
     // shade you have to compare against its neighbour.
     <div>
       <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase',
-                    letterSpacing: '.06em', fontWeight: W.bold, marginBottom: 3 }}>{label}</div>
+                    letterSpacing: '.08em', fontWeight: W.bold, lineHeight: 1.3,
+                    marginBottom: 4 }}>{label}</div>
       <div style={{
-        fontSize: 14, color: empty ? C.faint : C.ink, fontWeight: empty ? 400 : 500,
+        fontSize: 15, color: empty ? C.faint : C.ink, fontWeight: empty ? 400 : 600,
         lineHeight: 1.4,
         fontVariantNumeric: mono ? 'tabular-nums' : undefined,
         fontFamily: mono ? 'ui-monospace, monospace' : undefined,

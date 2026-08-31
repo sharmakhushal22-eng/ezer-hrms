@@ -11,9 +11,11 @@
 //
 //   1. ELEVATION. Cards get two-layer shadows — a tight contact shadow plus a
 //      soft cast one. One blur reads as a glow; two read as height.
-//   2. HIERARCHY. Values are 14px ink, labels are 10px but COLOURED, and
-//      section headings get a weight and an accent rule. Three distinct
-//      levels instead of three shades of grey.
+//   2. HIERARCHY, IN THREE KINDS. A heading is 15px/800 SENTENCE CASE with a
+//      coloured rule; a label is 10px/700 UPPERCASE muted; a value is 15px/600
+//      full ink. Previously a heading and a label were both bold uppercase two
+//      pixels apart, so only shade separated them — which is why a heading did
+//      not read as a heading.
 //   3. COLOUR PER SECTION. Each of the twelve tabs owns a hue, carried into
 //      its heading rule and its active pill, so "where am I" is answered by
 //      colour before it is answered by reading.
@@ -90,12 +92,14 @@ export const card = (accent?: string): React.CSSProperties => ({
   marginBottom: 12,
 })
 
-/** Section heading — a real one. Was 11px uppercase muted, which is the same
- *  visual weight as the body text beneath it. */
+/** Deliberately NOT uppercase. Field labels are uppercase, and a heading that
+ *  is also bold uppercase two pixels larger is the same KIND of thing — only
+ *  the shade separates them, which is why headings did not read as headings.
+ *  Sentence case at 15/800 with a coloured rule is a different level. */
 export const heading = (accent: string): React.CSSProperties => ({
   display: 'flex', alignItems: 'center', gap: 9,
-  fontSize: 12, fontWeight: W.bold, color: C.ink,
-  letterSpacing: '.06em', textTransform: 'uppercase',
+  fontSize: 15, fontWeight: W.bold, color: C.ink,
+  letterSpacing: '-.01em',
   marginBottom: 12,
 })
 
@@ -105,17 +109,17 @@ export const rule = (accent: string): React.CSSProperties => ({
   background: `linear-gradient(90deg, ${accent}, ${accent}55)`,
 })
 
-/** Field label. Small, but coloured rather than grey — at 10px, colour is the
- *  only thing that separates a label from the value under it. */
+/** A TAG. Small, uppercase, wide-tracked, muted — it names the thing below it
+ *  and then gets out of the way. */
 export const label: React.CSSProperties = {
   fontSize: 10, fontWeight: W.bold, color: C.muted,
-  textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3,
+  textTransform: 'uppercase', letterSpacing: '.08em', lineHeight: 1.3, marginBottom: 4,
 }
 
-/** Field value. 14px, ink, medium — was 13px with no weight, which is why it
- *  did not separate from its own label. */
+/** THE CONTENT. The largest text in a field group and the only one in full
+ *  ink. 15/600 against a 10/700 uppercase label is a difference in kind. */
 export const value: React.CSSProperties = {
-  fontSize: 14, fontWeight: W.medium, color: C.ink, lineHeight: 1.4,
+  fontSize: 15, fontWeight: W.semi, color: C.ink, lineHeight: 1.4,
 }
 
 /** A monogram tile for a company code. Gives every card a coloured anchor at

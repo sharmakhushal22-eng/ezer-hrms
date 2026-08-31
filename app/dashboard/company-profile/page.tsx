@@ -28,12 +28,23 @@ const C = {
   card:   { background:TK.surface, borderRadius:14, border: `1px solid ${TK.line}`,
             boxShadow:'0 1px 2px rgba(15,23,42,.06), 0 8px 24px -8px rgba(15,23,42,.14)',
             padding:'16px 18px', marginBottom:12 } as React.CSSProperties,
-  lbl:    { fontSize:10, fontWeight:700, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.06em' } as React.CSSProperties,
-  val:    { fontSize:14, fontWeight:500, color:TK.ink, marginTop:3, lineHeight:1.4 } as React.CSSProperties,
+  // A TAG: small, uppercase, wide-tracked, muted. Its job is to name the
+  // thing below it and then get out of the way.
+  lbl:    { fontSize:10, fontWeight:700, color:TK.muted, textTransform:'uppercase' as const,
+            letterSpacing:'.08em', lineHeight:1.3 } as React.CSSProperties,
+  // THE CONTENT: the largest text in a field group, and the only one in full
+  // ink. 15/600 against a 10/700 uppercase label is a difference in KIND, not
+  // in shade — which is what was missing.
+  val:    { fontSize:15, fontWeight:600, color:TK.ink, marginTop:4, lineHeight:1.4 } as React.CSSProperties,
   input:  { padding:'6px 9px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:10, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
   pri:    { padding:'8px 15px', borderRadius:10, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
   out:    { padding:'6px 12px', borderRadius:10, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
-  sec:    { fontSize:12, fontWeight:700, color:TK.ink, textTransform:'uppercase' as const, letterSpacing:'.06em', marginBottom:10 } as React.CSSProperties,
+  // A HEADING. Deliberately NOT uppercase: the field labels are uppercase, and
+  // when a heading and a label are both bold uppercase 2px apart, the only
+  // thing separating them is shade — which is why headings did not read as
+  // headings. Sentence case at 15/800 is unmistakably a different level.
+  sec:    { fontSize:15, fontWeight:800, color:TK.ink, letterSpacing:'-.01em',
+            marginBottom:12, marginTop:4 } as React.CSSProperties,
 }
 const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF: TK.info, FACTORY:TK.critical }
 const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
@@ -71,13 +82,23 @@ function EditField({ label, value, type, onSave, fmtFn }: {
       {!editing ? (
         <div style={C.val}>
           {fmtFn ? fmtFn(value) : (value === null || value === undefined || value === '' ? '—' : String(value))}
-          <span onClick={() => { setV(String(value ?? '')); setEditing(true) }} title="edit" style={{ cursor:'pointer', color:TK.faint, marginLeft:6, fontSize:12 }}></span>
+          {/* Was an empty span — an edit affordance with nothing in it, so nothing
+              on the row said it could be changed. */}
+          <span onClick={() => { setV(String(value ?? '')); setEditing(true) }}
+            title="Edit" role="button" aria-label={`Edit ${label}`}
+            style={{ cursor:'pointer', color:TK.faint, marginLeft:7, display:'inline-flex',
+                     verticalAlign:'middle' }}>
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                 strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M9.4 1.9a1.3 1.3 0 0 1 1.9 1.9L4.6 10.5l-2.5.6.6-2.5 6.7-6.7Z" />
+            </svg>
+          </span>
         </div>
       ) : (
         <div style={{ display:'flex', gap:5, marginTop:3, alignItems:'center' }}>
           <input type={type || 'text'} value={v} onChange={e => setV(e.target.value)} style={{ ...C.input, width:type==='number'?80:160 }} autoFocus />
           <button disabled={busy} onClick={async () => { setBusy(true); await onSave(v); setBusy(false); setEditing(false) }} style={{ ...C.pri, padding:'5px 10px' }}>{busy?'…':'Save'}</button>
-          <button onClick={() => setEditing(false)} style={{ ...C.out, padding:'5px 9px' }}></button>
+          <button onClick={() => setEditing(false)} title="Cancel" style={{ ...C.out, padding:'5px 11px' }}>Cancel</button>
         </div>
       )}
     </div>
@@ -99,7 +120,13 @@ function SearchSelect({ value, options, placeholder, onChange, disabled }: {
       <div onClick={() => { if (!disabled) { setOpen(o => !o); setQ('') } }}
         style={{ ...C.input, width:'100%', cursor: disabled ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:6, background: disabled ? TK.sunken : TK.sunken, color: value ? TK.ink : TK.faint }}>
         <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value || placeholder}</span>
-        <span style={{ color:TK.faint, fontSize:11 }}></span>
+        {/* Was empty: a select with no caret looks like a text box. */}
+        <span aria-hidden style={{ color:TK.faint, display:'flex', flexShrink:0 }}>
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor"
+               strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2.5 4.5 6 8l3.5-3.5" />
+          </svg>
+        </span>
       </div>
       {open && !disabled && (
         <>
@@ -147,7 +174,13 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px 12px', marginBottom:8 }}>
         <div><div style={C.lbl}>State</div><div style={C.val}>{state || '—'}</div></div>
         <div><div style={C.lbl}>District</div><div style={C.val}>{district || '—'}
-          <span onClick={() => { setSt(String(state ?? '')); setDi(String(district ?? '')); setEditing(true) }} title="edit" style={{ cursor:'pointer', color:TK.faint, marginLeft:6, fontSize:12 }}></span></div></div>
+          <span onClick={() => { setSt(String(state ?? '')); setDi(String(district ?? '')); setEditing(true) }} title="Edit" role="button" aria-label="Edit state and district"
+            style={{ cursor:'pointer', color:TK.faint, marginLeft:7, display:'inline-flex', verticalAlign:'middle' }}>
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                 strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M9.4 1.9a1.3 1.3 0 0 1 1.9 1.9L4.6 10.5l-2.5.6.6-2.5 6.7-6.7Z" />
+            </svg>
+          </span></div></div>
       </div>
     )
   }
@@ -164,7 +197,7 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
           onChange={setDi} disabled={!st} />
       </div>
       <button disabled={busy} onClick={save} style={{ ...C.pri, padding:'7px 12px' }}>{busy ? '…' : 'Save'}</button>
-      <button onClick={() => setEditing(false)} style={{ ...C.out, padding:'7px 10px' }}></button>
+      <button onClick={() => setEditing(false)} title="Cancel" style={{ ...C.out, padding:'7px 12px' }}>Cancel</button>
     </div>
   )
 }
