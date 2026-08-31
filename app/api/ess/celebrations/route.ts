@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
   : kind === 'ANNIVERSARY' ? `🌟 ${senderName} congratulated you on your work anniversary`
   :                          `👏 ${senderName} sent you kudos`
 
-  const sentCount = await notify({
+  const res = await notify({
     subjectId: me,
     toEmployeeId: to,
     code: kind === 'KUDOS' ? 'KUDOS_RECEIVED' : 'WISH_RECEIVED',
@@ -141,5 +141,17 @@ export async function POST(req: NextRequest) {
     body: message || undefined,
   })
 
-  return NextResponse.json({ ok: true, notified: sentCount, to: recipient.full_name })
+  // 128 of 398 active employees have no ESS login. The wish is stored either
+  // way, but saying "sent!" for something the recipient can never open is a
+  // lie the sender has no way to detect.
+  const blind = res.undeliverable.length > 0
+  return NextResponse.json({
+    ok: true,
+    notified: res.sent,
+    to: recipient.full_name,
+    deliverable: !blind,
+    warning: blind
+      ? `${recipient.full_name} has no active ESS login yet, so this is saved but cannot be opened.`
+      : undefined,
+  })
 }

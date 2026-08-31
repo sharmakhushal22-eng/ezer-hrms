@@ -113,7 +113,7 @@ export default function Dashboard() {
     setLoading(true)
     const today = new Date(); today.setHours(0,0,0,0)
     const [empR, compR, candR, mrfR, audR, deptR, locR] = await Promise.all([
-      supabase.from('employees').select('id, full_name, first_name, employment_status, blacklisted, date_of_birth, group_doj, last_working_date, company_id, location_id, companies!employees_company_id_fkey(company_name), locations!location_id(location_name)').neq('is_test', true),
+      supabase.from('employees').select('id, full_name, emp_code, first_name, employment_status, blacklisted, date_of_birth, group_doj, last_working_date, company_id, location_id, companies!employees_company_id_fkey(company_name), locations!location_id(location_name)').neq('is_test', true),
       supabase.from('companies').select('id, company_name'),
       supabase.from('candidates').select('id, full_name, stage, onboarding_date, blacklisted, created_at, designation, mrf_id, offer_accepted'),
       supabase.from('manpower_requisitions').select('id, status, no_of_openings, openings, designation, position, department_id, location_id'),
@@ -197,11 +197,11 @@ export default function Dashboard() {
     const celeb: any[] = []
     for (const e of activeEmps) {
       const bd = daysUntilAnnual(e.date_of_birth)
-      if (bd !== null && bd <= 7) celeb.push({ id: e.id, name: e.full_name, type:'birthday', days: bd, company: e.companies?.company_name || '' })
+      if (bd !== null && bd <= 7) celeb.push({ id: e.id, name: e.full_name, code: e.emp_code, type:'birthday', days: bd, company: e.companies?.company_name || '' })
       const an = daysUntilAnnual(e.group_doj)
       if (an !== null && an <= 7 && e.group_doj) {
         const yrs = Math.round((Date.now() - new Date(e.group_doj).getTime())/(365.25*24*3600*1000))
-        if (yrs >= 1) celeb.push({ id: e.id, name: e.full_name, type:'anniversary', days: an, years: yrs, company: e.companies?.company_name || '' })
+        if (yrs >= 1) celeb.push({ id: e.id, name: e.full_name, code: e.emp_code, type:'anniversary', days: an, years: yrs, company: e.companies?.company_name || '' })
       }
     }
     celeb.sort((a,b) => a.days - b.days)
@@ -222,18 +222,28 @@ export default function Dashboard() {
     if (!c?.id || wished.includes(c.id)) return
     setWishing(c.id); setWishErr('')
     const isBday = c.type === 'birthday'
-    const { error } = await supabase.from('ess_notifications').insert({
-      employee_id: c.id,
-      category: isBday ? 'BIRTHDAY' : 'ANNIVERSARY',
-      title: isBday ? 'Happy Birthday!' : `🌟 Happy Work Anniversary — ${c.years} year${c.years > 1 ? 's' : ''}!`,
-      body: isBday
-        ? `Wishing you a very happy birthday, ${c.name}! Have a wonderful year ahead. — Team HR`
-        : `Congratulations on completing ${c.years} year${c.years > 1 ? 's' : ''} with us, ${c.name}. Thank you for everything you do! — Team HR`,
-      is_read: false,
-    })
-    setWishing(null)
-    if (error) { setWishErr(`Could not send to ${c.name}: ${error.message}`); return }
-    setWished(p => [...p, c.id])
+    // Goes through the dispatcher rather than inserting here. A direct insert
+    // worked, but it was a second writer with no catalogue code and — the part
+    // that mattered — no way to know the recipient has no ESS login. 128 of
+    // 398 active employees do not, and this button used to show a tick for a
+    // message they could never open.
+    try {
+      const { data: sess } = await supabase.auth.getSession()
+      const token = sess?.session?.access_token
+      const res = await fetch('/api/notifications/celebrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ employee_id: c.id, kind: isBday ? 'BIRTHDAY' : 'ANNIVERSARY', years: c.years }),
+      })
+      const j = await res.json().catch(() => ({}))
+      setWishing(null)
+      if (!res.ok) { setWishErr(`Could not send to ${c.name}: ${j?.error || res.status}`); return }
+      if (j.warning) setWishErr(j.warning)
+      setWished(p => [...p, c.id])
+    } catch (e: any) {
+      setWishing(null)
+      setWishErr(`Could not send to ${c.name}: ${e?.message || e}`)
+    }
   }
 
   // A skeleton shaped like the page it replaces, so the layout does not jump
@@ -447,7 +457,14 @@ export default function Dashboard() {
             }}>
               <span style={{ fontSize:17, lineHeight:1 }}>{c.type === 'birthday' ? '' : ''}</span>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:F.small, fontWeight:W.semi, color:C.ink }}>{c.name}</div>
+                <div style={{ fontSize:F.small, fontWeight:W.semi, color:C.ink }}>
+                  {c.name}
+                  {/* Names are not unique here — two active employees are both
+                      "Sunita Kapoor". Without the code an HR user cannot tell
+                      which one they are wishing, and the wish lands on a
+                      colleague who then sees a birthday message on the wrong day. */}
+                  {c.code ? <span style={{ fontWeight:W.regular, color:C.faint, fontFamily:'monospace', fontSize:F.micro }}> · {c.code}</span> : null}
+                </div>
                 <div style={{ fontSize:F.micro, color:C.muted }}>
                   {c.type === 'birthday' ? 'Happy Birthday!' : `${c.years} years with us`}
                   {c.company ? ` · ${c.company}` : ''}

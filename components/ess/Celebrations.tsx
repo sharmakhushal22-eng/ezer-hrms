@@ -13,6 +13,22 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { C, R, W } from '@/lib/ui'
+import { essAuthHeaders } from '@/lib/ess-session-client'
+import { supabase } from '@/lib/supabase'
+
+/**
+ * Both endpoints sit behind requireDashboardUser, which reads a Bearer token.
+ * An ESS employee carries the ESS session; an admin previewing somebody's
+ * portal carries a Supabase session instead, so fall back to that — otherwise
+ * every call 401s and the strip silently does nothing.
+ */
+async function authHeaders(): Promise<Record<string, string>> {
+  const h = essAuthHeaders()
+  if (h.Authorization) return h
+  const { data } = await supabase.auth.getSession()
+  const t = data?.session?.access_token
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
 
 interface Celebrant {
   id: string; emp_code: string | null; full_name: string
@@ -35,7 +51,7 @@ export default function Celebrations({ employeeId, onSent }: { employeeId: strin
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch(`/api/ess/celebrations?employee_id=${employeeId}`)
+      const r = await fetch(`/api/ess/celebrations?employee_id=${employeeId}`, { headers: await authHeaders() })
       if (!r.ok) return setData(null)
       setData(await r.json())
     } catch { setData(null) }
@@ -47,12 +63,17 @@ export default function Celebrations({ employeeId, onSent }: { employeeId: strin
     setBusy(c.id)
     try {
       const r = await fetch('/api/ess/celebrations', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
         body: JSON.stringify({ to_employee_id: c.id, kind }),
       })
       const j = await r.json().catch(() => ({}))
       if (r.ok) {
-        setNote(j.duplicate ? `Already wished ${c.full_name.split(' ')[0]} today` : `Wish sent to ${c.full_name.split(' ')[0]}`)
+        // A wish to somebody with no ESS login is stored but unreadable. Say so
+        // rather than showing the same tick as a delivered one.
+        setNote(j.warning ? j.warning
+          : j.duplicate ? `Already wished ${c.full_name.split(' ')[0]} today`
+          : `Wish sent to ${c.full_name.split(' ')[0]}`)
         await load(); onSent?.()
       } else {
         setNote(j.error || 'Could not send that wish')
@@ -81,7 +102,9 @@ export default function Celebrations({ employeeId, onSent }: { employeeId: strin
           {kind === 'ANNIVERSARY' && c.years ? <span style={{ color:C.muted, fontWeight:500 }}> · {c.years} yr{c.years > 1 ? 's' : ''}</span> : null}
         </div>
         <div style={{ fontSize:11, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-          {[c.designation, c.dept_name].filter(Boolean).join(' · ') || '—'}
+          {/* Code included because names repeat — two active employees share
+              the name "Sunita Kapoor". */}
+          {[c.emp_code, c.designation, c.dept_name].filter(Boolean).join(' · ') || '—'}
         </div>
       </div>
       <button

@@ -124,15 +124,28 @@ async function byRole(roleCodes: string[], companyId: string | null): Promise<st
   return (emps ?? []).map(e => e.id)
 }
 
+export interface NotifyResult {
+  /** Rows written. */
+  sent: number
+  /** Recipients with no active ESS account — the row exists, but they cannot
+   *  log in to read it. 128 of 398 active employees are in this position, so
+   *  this is common, not exotic. Callers should surface it rather than
+   *  reporting plain success: telling somebody "wished!" for a message that
+   *  can never be seen is worse than telling them nothing. */
+  undeliverable: { employee_id: string; full_name: string }[]
+}
+
 /**
- * Send one notification. Returns how many people received it — 0 is a normal
- * outcome (nobody holds the role, no HOD is mapped) and never an exception.
+ * Send one notification. Returns how many rows were written and who among the
+ * recipients cannot actually read them. 0 sent is a normal outcome (nobody
+ * holds the role, no HOD is mapped) and never an exception.
  */
-export async function notify(opts: NotifyOptions): Promise<number> {
+export async function notify(opts: NotifyOptions): Promise<NotifyResult> {
+  const empty: NotifyResult = { sent: 0, undeliverable: [] }
   const d = def(opts.code)
   if (!d) {
     console.warn(`[notify] unknown code ${opts.code} — not sent`)
-    return 0
+    return empty
   }
 
   try {
@@ -144,7 +157,20 @@ export async function notify(opts: NotifyOptions): Promise<number> {
     // request should not put a row in your bell.
     const recipients = Array.from(new Set(to.filter(Boolean)))
       .filter(id => d.audience === 'SELF' || d.audience === 'PEER' || id !== opts.subjectId)
-    if (!recipients.length) return 0
+    if (!recipients.length) return empty
+
+    // Who among them can actually open the portal. The row is still written
+    // for everyone — an account may be created later and the history should
+    // survive — but the caller is told who cannot see it.
+    const { data: accts } = await sb.from('ess_accounts')
+      .select('employee_id').in('employee_id', recipients).eq('status', 'ACTIVE')
+    const canLogIn = new Set((accts ?? []).map(a => a.employee_id))
+    const blindIds = recipients.filter(id => !canLogIn.has(id))
+    let undeliverable: NotifyResult['undeliverable'] = []
+    if (blindIds.length) {
+      const { data: names } = await sb.from('employees').select('id, full_name').in('id', blindIds)
+      undeliverable = (names ?? []).map(n => ({ employee_id: n.id, full_name: n.full_name }))
+    }
 
     const rows: Row[] = recipients.map(employee_id => ({
       employee_id,
@@ -157,19 +183,26 @@ export async function notify(opts: NotifyOptions): Promise<number> {
     }))
 
     const { error } = await sb.from('ess_notifications').insert(rows)
-    if (error) { console.warn(`[notify] ${opts.code} insert failed: ${error.message}`); return 0 }
-    return rows.length
+    if (error) { console.warn(`[notify] ${opts.code} insert failed: ${error.message}`); return empty }
+    if (undeliverable.length) {
+      console.warn(`[notify] ${opts.code}: ${undeliverable.length} recipient(s) have no active ESS account`)
+    }
+    return { sent: rows.length, undeliverable }
   } catch (e) {
     // Never let a notification take down the action that triggered it.
     console.warn(`[notify] ${opts.code} threw:`, e)
-    return 0
+    return empty
   }
 }
 
 /** Fan one event out to several audiences — build note 3: ROLE_CHANGED and
  *  HRHEAD_ROLE_GOVERNANCE are the same change, two recipients, one write each. */
-export async function notifyMany(list: NotifyOptions[]): Promise<number> {
-  let n = 0
-  for (const o of list) n += await notify(o)
-  return n
+export async function notifyMany(list: NotifyOptions[]): Promise<NotifyResult> {
+  const out: NotifyResult = { sent: 0, undeliverable: [] }
+  for (const o of list) {
+    const r = await notify(o)
+    out.sent += r.sent
+    out.undeliverable.push(...r.undeliverable)
+  }
+  return out
 }
