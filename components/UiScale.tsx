@@ -69,15 +69,54 @@ export default function UiScale() {
 
   if (!enabled) return null
 
-  const btn: React.CSSProperties = { width: 26, height: 26, borderRadius: '50%', border: 'none', background: TK.brandTint, color: TK.brandDeep, fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+  // The steppers carry a filled brand tint rather than sitting bare on the
+  // pill: they are the two things you press, and on a control that floats over
+  // whatever content happens to be underneath, a borderless glyph on a plain
+  // surface is the first thing to disappear. brandDeep on brandTint measures
+  // 6.16:1 in light and 9.02:1 in dark.
+  const btn: React.CSSProperties = {
+    width: 26, height: 26, borderRadius: '50%', border: 'none',
+    background: TK.brandTint, color: TK.brandDeep,
+    fontSize: 17, fontWeight: 700, cursor: 'pointer', lineHeight: 1,
+    fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background .16s ease, transform .16s cubic-bezier(.2,.8,.2,1)',
+  }
   return (
-    <div title="Adjust UI size — click % for auto-fit" style={{ display: 'flex', alignItems: 'center', gap: 4, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 99, padding: '4px 6px', boxShadow: '0 4px 14px rgba(37,99,235,.18)', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
-      <button title="Smaller" onClick={() => nudge(-0.25)} style={btn}>−</button>
+    <div title="Adjust UI size — click % for auto-fit"
+      className="ez-zoom"
+      style={{
+        display: 'flex', alignItems: 'center', gap: 4,
+        background: TK.surface,
+        // Was TK.brandEdge — 1.22:1 on white, an edge nobody can see. This
+        // control floats over arbitrary page content, so its own silhouette
+        // has to hold on its own.
+        border: `1px solid ${TK.lineStrong}`,
+        borderRadius: 99, padding: '4px 6px',
+        boxShadow: '0 6px 18px rgba(15,23,42,.18), 0 1px 3px rgba(15,23,42,.12)',
+        fontFamily: '"DM Sans","Segoe UI",sans-serif',
+      }}>
+      <style>{`
+        .ez-zoom button { transition: background .16s ease, transform .16s cubic-bezier(.2,.8,.2,1); }
+        .ez-zoom button:hover { transform: translateY(-1px); }
+        .ez-zoom button:active { transform: translateY(0) scale(.92); }
+        @media (prefers-reduced-motion: reduce) {
+          .ez-zoom button, .ez-zoom button:hover, .ez-zoom button:active { transition: none; transform: none; }
+        }
+      `}</style>
+      <button title="Smaller" aria-label="Decrease interface size" onClick={() => nudge(-0.25)} style={btn}>−</button>
       <button title={manual ? 'Click to auto-fit to screen' : 'Auto-fit (on)'} onClick={resetAuto}
-        style={{ minWidth: 54, textAlign: 'center', fontSize: 11, fontWeight: 700, color: manual ? TK.brandDeep : TK.positive, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
+        aria-label={`Interface size ${Math.round(scale * 100)} percent${manual ? '' : ', auto-fit'}. Click to auto-fit.`}
+        style={{
+          minWidth: 56, textAlign: 'center', fontSize: 11, fontWeight: 700,
+          // TK.ink, not brandDeep: this is a readout first and a button second,
+          // and it has to stay legible at 11px in both themes.
+          color: manual ? TK.ink : TK.positive,
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontFamily: 'inherit', fontVariantNumeric: 'tabular-nums',
+        }}>
         {Math.round(scale * 100)}%{manual ? '' : ' ·auto'}
       </button>
-      <button title="Bigger" onClick={() => nudge(0.25)} style={btn}>+</button>
+      <button title="Bigger" aria-label="Increase interface size" onClick={() => nudge(0.25)} style={btn}>+</button>
     </div>
   )
 }
