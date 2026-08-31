@@ -38,7 +38,7 @@ import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
-import { atLeast } from '@/lib/rms/modules'
+import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
@@ -3488,13 +3488,17 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   const { menu: essMenu } = useEssMenu(emp?.id)
   const sections = SECTIONS.filter(s => s.k === 'company' ? essMenu.can.company : s.k === 'reports' ? essMenu.can.reports : true)
 
-  // The admin modules this person actually holds. Deliberately NOT canSee(): that
+  // The admin modules THIS EMPLOYEE holds — from /api/ess/menu, which resolves the
+  // grant for the portal being rendered.
+  //
+  // Two traps this avoids. useGrant() answers for whoever is signed in, so an admin
+  // opening somebody's portal from Access Control saw their OWN modules inside the
+  // employee's sidebar — a payroll manager's portal showed Recruitment. And canSee()
   // returns true for everything while rms_config.enforce_module_access is off, which
-  // is right for the dashboard's roll-out but wrong here — an employee's own portal
-  // must never show them a module they were not granted.
-  const { grant } = useGrant()
+  // is right for the dashboard's roll-out and wrong here: a portal must never offer
+  // a module its owner was not granted.
   const adminGroups = ADMIN_NAV_GROUPS
-    .map(g => ({ group: g.group, items: g.items.filter(i => grant.isSuperAdmin || (!!i.module && atLeast(grant.modules[i.module], 'VIEW'))) }))
+    .map(g => ({ group: g.group, items: g.items.filter(i => essMenu.super_admin || (!!i.module && atLeast(essMenu.modules[i.module] as AccessLevel, 'VIEW'))) }))
     .filter(g => g.items.length > 0)
 
   const meta = viewMeta(view)
@@ -3562,7 +3566,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
               ))}
             </>
           )}
-          <AdminEntry />
+          {/* Reads the signed-in user's own grant, so it is hidden while viewing
+              somebody else's portal — otherwise the admin's door shows up in an
+              employee's sidebar. */}
+          {!adminMode && <AdminEntry />}
         </div>
       )}
 
@@ -3647,7 +3654,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
                   <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
                 </button>
               ))}
-              <AdminEntry isMobile />
+              {!adminMode && <AdminEntry isMobile />}
             </div>
             {adminGroups.length > 0 && (
               <>

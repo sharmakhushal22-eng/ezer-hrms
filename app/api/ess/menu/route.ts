@@ -16,6 +16,12 @@ export async function GET(req: NextRequest) {
     roles: ctx.grant.roles.map(x => ({ code: x.role_code, name: x.role_name, scope: x.scope })),
     functional_scope: ctx.menu.functional_scope,
     approval_types: ctx.menu.approval_types,
+    // The modules THIS employee holds — module name → NONE|VIEW|EDIT|FULL. The ESS
+    // sidebar builds "What you manage" from this rather than from the browser's own
+    // useGrant(), which answers for whoever is signed in. Those are the same person
+    // until an admin opens somebody else's portal from Access Control, and then they
+    // are not: the admin's modules would render inside the employee's sidebar.
+    modules: ctx.grant.modules,
     can: { approvals: ctx.canApprovals, company: ctx.canCompany, reports: ctx.canReports },
     super_admin: ctx.grant.isSuperAdmin,
     view_as: ctx.caller.viewAs,
