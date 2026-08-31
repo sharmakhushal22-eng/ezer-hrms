@@ -17,7 +17,7 @@
 
 import { useMemo, useState } from 'react'
 import { C, F, W, R } from '@/lib/ui'
-import { BarList, Donut, Capacity, Field } from './Charts'
+import { BarList, Donut, Capacity, Field, StatStrip, CodeChip } from './Charts'
 import { GenderSplit, GenderInline } from './GenderSplit'
 import { Compliance } from './Compliance'
 import { ACCENT, CSS, card, heading, rule, label as lblS, value as valS, stat, statValue, statLabel } from './ui'
@@ -187,6 +187,21 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {/* ── 1. BASIC ── */}
       {tab === 'basic' && (
         <div key={tab} className="cp-in" style={block()}>
+          <StatStrip isMobile={isMobile} items={[
+            { label: 'Years trading', accent: ACC,
+              value: co.date_of_inc ? Math.max(0, new Date().getFullYear() - new Date(co.date_of_inc).getFullYear()) : '—',
+              hint: co.date_of_inc ? `since ${new Date(co.date_of_inc).getFullYear()}` : 'no date on record' },
+            { label: 'Sites', accent: ACCENT.location, value: d.branches.length,
+              hint: `${new Set(d.branches.map(b => b.city).filter(Boolean)).size} cities` },
+            { label: 'People', accent: ACCENT.hr, value: headTotal,
+              hint: `${d.departments.length} departments` },
+            { label: 'Profile filled', accent: ACCENT.org,
+              value: `${Math.round((Object.values(complete).reduce((a,c)=>a+c.done,0) /
+                       Math.max(1, Object.values(complete).reduce((a,c)=>a+c.total,0))) * 100)}%`,
+              fill: Object.values(complete).reduce((a,c)=>a+c.done,0) /
+                    Math.max(1, Object.values(complete).reduce((a,c)=>a+c.total,0)),
+              hint: 'across all sections' },
+          ]} />
           <Head>Company identity</Head>
           <div style={grid(cols)}>
             <Field label="Legal entity name" value={co.company_name} />
@@ -197,8 +212,8 @@ export function CompanySections({ d, isMobile, saveReg }: {
             <Field label="Established" value={co.date_of_inc ? new Date(co.date_of_inc + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : null} />
             <Field label="Company type" value={co.company_type} />
             <Field label="Industry sector" value={co.industry} />
-            <Field label="CIN" value={co.cin} mono />
-            <Field label="DUNS number" value={co.duns_number} mono />
+            <Field label="CIN" value={co.cin ? <CodeChip value={co.cin} accent={ACC} /> : null} />
+            <Field label="DUNS number" value={co.duns_number ? <CodeChip value={co.duns_number} accent={ACC} /> : null} />
             <Field label="Website" value={co.website_url
               ? <a href={co.website_url} target="_blank" rel="noreferrer" style={{ color: C.brand }}>{co.website_url}</a>
               : null} />
@@ -218,6 +233,13 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {tab === 'compliance' && (
         <div key={tab} className="cp-in">
           <div style={block()}>
+            <StatStrip isMobile={isMobile} items={[
+              { label: 'Valid',    accent: '#059669', value: regHealthSlices[0].value },
+              { label: 'Expiring', accent: '#D97706', value: regHealthSlices[1].value, hint: 'within 30 days' },
+              { label: 'Expired',  accent: '#DC2626', value: regHealthSlices[2].value },
+              { label: 'Missing',  accent: '#64748B', value: regHealthSlices[3].value,
+                fill: 1 - regHealthSlices[3].value / REG_TYPES.length, hint: `of ${REG_TYPES.length} expected` },
+            ]} />
             <Head>Certificate health</Head>
             <Donut slices={regHealthSlices} centre={`${regHealthSlices[0].value}/${REG_TYPES.length}`} />
           </div>
@@ -228,6 +250,17 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {/* ── 3. LOCATION ── */}
       {tab === 'location' && (
         <div key={tab} className="cp-in" style={block()}>
+          <StatStrip isMobile={isMobile} items={[
+            { label: 'Total sites', accent: ACC, value: d.branches.length },
+            { label: 'Cities', accent: ACCENT.finance,
+              value: new Set(d.branches.map(b => b.city).filter(Boolean)).size },
+            { label: 'States', accent: ACCENT.org,
+              value: new Set(d.branches.map(b => b.state).filter(Boolean)).size },
+            { label: 'Geo-tagged', accent: ACCENT.compliance,
+              value: `${d.branches.filter(b => b.latitude != null).length}/${d.branches.length}`,
+              fill: d.branches.length ? d.branches.filter(b => b.latitude != null).length / d.branches.length : 0,
+              hint: 'have coordinates' },
+          ]} />
           <Head>Addresses</Head>
           <div style={grid(isMobile ? 1 : 2)}>
             <Field label="Registered office" value={co.reg_office} />
@@ -286,6 +319,13 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {/* ── 5. BANKING ── */}
       {tab === 'finance' && (
         <div key={tab} className="cp-in" style={block()}>
+          <StatStrip isMobile={isMobile} items={[
+            { label: 'Bank accounts', accent: ACC, value: d.banks.length,
+              hint: d.banks.length ? `${d.banks.filter(b => b.is_primary).length} primary` : 'none on record' },
+            { label: 'Currency', accent: ACCENT.org, value: co.currency ?? 'INR' },
+            { label: 'FY starts', accent: ACCENT.payroll,
+              value: co.fy_start_month ? MONTH[co.fy_start_month].slice(0,3) : '—' },
+          ]} />
           <Head>Financial</Head>
           <div style={grid(cols)}>
             <Field label="Currency" value={co.currency ?? 'INR'} />
@@ -319,6 +359,15 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {tab === 'org' && (
         <div key={tab} className="cp-in">
           <div style={block()}>
+            <StatStrip isMobile={isMobile} items={[
+              { label: 'Departments', accent: ACC, value: d.departments.length },
+              { label: 'Sites', accent: ACCENT.location, value: d.branches.length },
+              { label: 'Cost centres', accent: ACCENT.finance,
+                value: new Set(d.departments.map(x => x.cost_center).filter(Boolean)).size },
+              { label: 'Avg dept size', accent: ACCENT.hr,
+                value: d.departments.length ? Math.round(headTotal / d.departments.length) : '—',
+                hint: 'people per department' },
+            ]} />
             <Head>Organisation</Head>
             <div style={grid(cols)}>
               <Field label="Structure type" value={co.structure_type} />
@@ -347,14 +396,23 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {/* ── 7. PAYROLL ── */}
       {tab === 'payroll' && (
         <div key={tab} className="cp-in" style={block()}>
+          <StatStrip isMobile={isMobile} items={[
+            { label: 'Frequency', accent: ACC, value: co.payroll_frequency?.replace('_','-').toLowerCase() ?? '—' },
+            { label: 'Paid on', accent: ACCENT.finance, value: ord(co.salary_disbursement_day) ?? '—' },
+            { label: 'Currency', accent: ACCENT.org, value: co.currency ?? 'INR' },
+            { label: 'Registrations', accent: ACCENT.statutory,
+              value: `${[co.epf_code, co.esic_code, co.wc_policy_number].filter(Boolean).length}/3`,
+              fill: [co.epf_code, co.esic_code, co.wc_policy_number].filter(Boolean).length / 3,
+              hint: 'EPF · ESIC · WC' },
+          ]} />
           <Head>Payroll configuration</Head>
           <div style={grid(cols)}>
             <Field label="Frequency" value={co.payroll_frequency?.replace('_', '-').toLowerCase()} />
             <Field label="Cycle starts" value={ord(co.payroll_cycle_start_day)} />
             <Field label="Salary disbursed" value={ord(co.salary_disbursement_day)} />
             <Field label="Pay currency" value={co.currency ?? 'INR'} />
-            <Field label="EPF registration" value={co.epf_code} mono />
-            <Field label="ESIC registration" value={co.esic_code} mono />
+            <Field label="EPF registration" value={co.epf_code ? <CodeChip value={co.epf_code} accent={ACC} /> : null} />
+            <Field label="ESIC registration" value={co.esic_code ? <CodeChip value={co.esic_code} accent={ACC} /> : null} />
             <Field label="Workmen's compensation" value={co.wc_policy_number} mono />
             <Field label="PT registration" value={
               d.regs.find(r => r.reg_type === 'PT' && !r.location_id)?.reg_number} mono />
@@ -365,6 +423,28 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {/* ── 8. STATUTORY ── */}
       {tab === 'statutory' && (
         <div key={tab} className="cp-in" style={block()}>
+          {(() => {
+            const declared = [co.pf_status, co.esic_status, co.maternity_compliant, co.dpdp_compliant]
+              .filter(v => v !== null && v !== undefined).length
+            const licensed = d.branches.filter(b => {
+              const t = (b.location_type || '').toLowerCase().includes('factory') ? 'FACTORY' : 'SE'
+              return d.regs.some(r => r.location_id === b.id && r.reg_type === t && r.reg_number)
+            }).length
+            return (
+              <StatStrip isMobile={isMobile} items={[
+                { label: 'Status declared', accent: ACC, value: `${declared}/4`, fill: declared / 4,
+                  hint: 'PF · ESIC · Maternity · DPDP' },
+                { label: 'Sites licensed', accent: ACCENT.location,
+                  value: `${licensed}/${d.branches.length}`,
+                  fill: d.branches.length ? licensed / d.branches.length : 0 },
+                { label: 'Factories', accent: ACCENT.org,
+                  value: d.branches.filter(b => (b.location_type||'').toLowerCase().includes('factory')).length },
+                { label: 'Other sites', accent: ACCENT.finance,
+                  value: d.branches.filter(b => !(b.location_type||'').toLowerCase().includes('factory')).length,
+                  hint: 'need S&E' },
+              ]} />
+            )
+          })()}
           <Head>Statutory status</Head>
           <div style={grid(cols)}>
             <Field label="Provident Fund" value={co.pf_status?.replace('_', ' ').toLowerCase()} />
@@ -409,6 +489,27 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {tab === 'hr' && (
         <div key={tab} className="cp-in">
           <div style={block()}>
+            {(() => {
+              const g = d.head?.company
+              const fPct = g && g.total ? Math.round((g.female / g.total) * 100) : null
+              const attr = headTotal + d.leavers12m > 0
+                ? (d.leavers12m / (headTotal + d.leavers12m)) * 100 : null
+              return (
+                <StatStrip isMobile={isMobile} items={[
+                  { label: 'Headcount', accent: ACC, value: headTotal,
+                    hint: co.approved_strength ? `of ${co.approved_strength} sanctioned` : 'no cap set',
+                    fill: co.approved_strength ? headTotal / co.approved_strength : undefined },
+                  { label: 'Women', accent: '#DB2777', value: g?.female ?? 0,
+                    hint: fPct != null ? `${fPct}% of headcount` : undefined,
+                    fill: fPct != null ? fPct / 100 : undefined },
+                  { label: 'Men', accent: '#2563EB', value: g?.male ?? 0,
+                    hint: g && g.total ? `${Math.round((g.male / g.total) * 100)}% of headcount` : undefined },
+                  { label: 'Attrition', accent: attr != null && attr > 15 ? '#DC2626' : ACCENT.org,
+                    value: attr != null ? `${attr.toFixed(1)}%` : '—',
+                    hint: `${d.leavers12m} left in 12 months` },
+                ]} />
+              )
+            })()}
             <Head>Headcount</Head>
             <div style={{ display: 'flex', gap: 26, flexWrap: 'wrap', alignItems: 'center' }}>
               <GenderSplit counts={d.head?.company ?? { male:0, female:0, other:0, unknown:0, total:0 }} size={86} />
@@ -448,6 +549,15 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {/* ── 10. BRAND ── */}
       {tab === 'brand' && (
         <div key={tab} className="cp-in" style={block()}>
+          <StatStrip isMobile={isMobile} items={[
+            { label: 'Core values', accent: ACC, value: co.core_values?.length ?? 0 },
+            { label: 'Statements', accent: ACCENT.compliance,
+              value: `${[co.vision_statement, co.mission_statement, co.tagline].filter(Boolean).length}/3`,
+              fill: [co.vision_statement, co.mission_statement, co.tagline].filter(Boolean).length / 3,
+              hint: 'vision · mission · tagline' },
+            { label: 'Social links', accent: ACCENT.location,
+              value: [co.linkedin_url, co.twitter_url, co.facebook_url].filter(Boolean).length },
+          ]} />
           <Head>Brand &amp; culture</Head>
           <div style={{ display: 'grid', gap: 14 }}>
             <Field label="Tagline" value={co.tagline} />
@@ -501,6 +611,20 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {tab === 'documents' && (
         <div key={tab} className="cp-in">
           <div style={block()}>
+            {(() => {
+              const onFile = DOC_TYPES.filter(t => d.policy?.docs.some(x => x.doc_type === t.code && x.is_current)).length
+              return (
+                <StatStrip isMobile={isMobile} items={[
+                  { label: 'On file', accent: ACC, value: `${onFile}/${DOC_TYPES.length}`,
+                    fill: onFile / DOC_TYPES.length },
+                  { label: 'Missing', accent: onFile === DOC_TYPES.length ? ACCENT.finance : '#DC2626',
+                    value: DOC_TYPES.length - onFile },
+                  { label: 'Directors', accent: ACCENT.compliance, value: d.policy?.directors.length ?? 0 },
+                  { label: 'Signatories', accent: ACCENT.org,
+                    value: (d.policy?.directors ?? []).filter(x => x.is_signatory).length },
+                ]} />
+              )
+            })()}
             <Head>Document repository</Head>
             <div style={{ display: 'grid', gap: 8 }}>
               {DOC_TYPES.map(t => {
@@ -585,6 +709,22 @@ export function CompanySections({ d, isMobile, saveReg }: {
       {tab === 'policy' && (
         <div key={tab} className="cp-in">
           <div style={block()}>
+            {(() => {
+              const offs = new Set((d.policy?.weeklyOff ?? []).filter(w => w.mode === 'EVERY').map(w => w.weekday)).size
+              const sh = d.policy?.shifts?.[0]
+              const hrs = sh ? shiftHours(sh) : null
+              return (
+                <StatStrip isMobile={isMobile} items={[
+                  { label: 'Working days', accent: ACC, value: d.policy?.weeklyOff.length ? 7 - offs : '—',
+                    hint: 'per week' },
+                  { label: 'Shift hours', accent: ACCENT.payroll, value: hrs != null ? `${hrs}h` : '—',
+                    hint: sh ? `${(sh.in_time||'').slice(0,5)}–${(sh.out_time||'').slice(0,5)}` : undefined },
+                  { label: 'Shifts', accent: ACCENT.org, value: d.policy?.shifts.length ?? 0 },
+                  { label: 'Leave types', accent: ACCENT.hr, value: d.policy?.leaveTypes.length ?? 0,
+                    hint: `${(d.policy?.leaveTypes ?? []).filter(l => l.encashment_after != null).length} encashable` },
+                ]} />
+              )
+            })()}
             <Head>Working days &amp; hours</Head>
             <div style={grid(isMobile ? 1 : 2)}>
               <Field label="Weekly off" value={

@@ -176,3 +176,74 @@ export function Field({ label, value, mono }: { label: string; value: React.Reac
     </div>
   )
 }
+
+// ── Summary strip ───────────────────────────────────────────────────────────
+// A row of stat tiles at the head of a section. The sections were walls of
+// label/value pairs in one grey at one weight — every token in them passes AA,
+// so the dullness was never contrast. It was that nothing was EMPHASISED: no
+// figure was larger than any other, and there was nothing to look at before
+// reading. These tiles give each sub-section a headline before its detail.
+
+export interface StatItem {
+  label: string
+  value: React.ReactNode
+  hint?: string
+  accent: string
+  /** 0..1 — draws a progress rail under the number. Omit for a plain figure. */
+  fill?: number
+}
+
+export function StatStrip({ items, isMobile }: { items: StatItem[]; isMobile?: boolean }) {
+  if (!items.length) return null
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: isMobile ? '1fr 1fr' : `repeat(${Math.min(items.length, 4)}, minmax(0,1fr))`,
+      gap: 10, marginBottom: 16,
+    }}>
+      {items.map(s => (
+        <div key={s.label} style={{
+          padding: '11px 13px', borderRadius: 12,
+          // A wash of the accent rather than a flat tint, plus a hairline of
+          // the same hue: enough to separate the tile from the card without
+          // becoming a second card competing with it.
+          background: `linear-gradient(158deg, ${s.accent}16, ${s.accent}07)`,
+          border: `1px solid ${s.accent}30`,
+          boxShadow: `inset 0 1px 0 ${s.accent}18`,
+        }}>
+          <div style={{
+            fontSize: 22, fontWeight: W.bold, color: C.ink, lineHeight: 1.05,
+            fontVariantNumeric: 'tabular-nums', letterSpacing: '-.02em',
+          }}>{s.value}</div>
+          <div style={{
+            fontSize: 10, fontWeight: W.bold, color: s.accent,
+            textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 4,
+          }}>{s.label}</div>
+          {s.hint && (
+            <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2 }}>{s.hint}</div>
+          )}
+          {s.fill != null && (
+            <div style={{ height: 4, background: `${s.accent}22`, borderRadius: R.pill,
+                          marginTop: 8, overflow: 'hidden' }}>
+              <div style={{ width: `${Math.max(0, Math.min(1, s.fill)) * 100}%`, height: '100%',
+                            background: s.accent, borderRadius: R.pill }} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/** A value that should carry weight — a code, an identifier. Rendered as a
+ *  tinted mono chip so it reads as data rather than as more prose. */
+export function CodeChip({ value, accent }: { value: React.ReactNode; accent: string }) {
+  return (
+    <span style={{
+      display: 'inline-block', padding: '2px 9px', borderRadius: R.sm,
+      background: `${accent}14`, border: `1px solid ${accent}2E`, color: C.ink,
+      fontFamily: 'ui-monospace, monospace', fontSize: 12.5, fontWeight: W.semi,
+      letterSpacing: '.02em',
+    }}>{value}</span>
+  )
+}
