@@ -4,9 +4,11 @@
 // Inline edit on any field → auto-writes company_master_audit. Schema: lib/supabase-admin + migration 027.
 import { useState, useEffect, useCallback } from 'react'
 import {
-  loadHierarchy, updateEntity, loadAudit, confirmPayment,
+  loadHierarchy, updateEntity, loadAudit, confirmPayment, loadHeadcount,
   type GroupTree, type Company, type Branch, type Registration, type AuditRow,
+  type CompanyHeadcount,
 } from '@/lib/supabase-company-profile'
+import { GenderSplit, GenderInline } from '@/components/company/GenderSplit'
 import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -160,10 +162,12 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
 }
 
 // ── Company card (one company in the group) ─────────────────────────
-function CompanyCard({ co, isMobile, save, openPay }: {
+function CompanyCard({ co, isMobile, save, openPay, group, head }: {
   co: Company; isMobile: boolean
   save: (entity: any, id: string, field: string, val: string, company_id: string) => Promise<void>
   openPay: (co: Company) => void
+  group: string
+  head?: CompanyHeadcount
 }) {
   const [open, setOpen] = useState(false)
   const regsByType: Record<string, Registration[]> = {}
@@ -186,6 +190,56 @@ function CompanyCard({ co, isMobile, save, openPay }: {
 
       {open && (
         <div style={{ padding:'14px 16px' }}>
+          {/* Group / Company / Branch / Location. All four already existed in
+              the data — groups.group_name, companies, and the locations table
+              with its location_type — but nothing on this screen said where a
+              company sat in the hierarchy or how many places it operates from. */}
+          <div style={C.sec}>Where this sits</div>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)',
+                        gap:'12px 16px', marginBottom:18 }}>
+            <div><div style={C.lbl}>Group</div><div style={C.val}>{group}</div></div>
+            <div><div style={C.lbl}>Company</div><div style={C.val}>{co.company_name}<span style={{ color:TK.faint, fontWeight:400 }}> · {co.company_code}</span></div></div>
+            <div>
+              <div style={C.lbl}>Branches</div>
+              <div style={C.val}>
+                {co.branches.length}
+                <span style={{ color:TK.faint, fontWeight:400, fontSize:11 }}>
+                  {(() => {
+                    const byType: Record<string, number> = {}
+                    for (const b of co.branches) byType[b.location_type || '—'] = (byType[b.location_type || '—'] || 0) + 1
+                    const parts = Object.entries(byType).map(([t, n]) => `${n} ${t}`)
+                    return parts.length ? ' · ' + parts.join(', ') : ''
+                  })()}
+                </span>
+              </div>
+            </div>
+            <div>
+              <div style={C.lbl}>Locations</div>
+              <div style={C.val}>
+                {(() => {
+                  const cities = Array.from(new Set(co.branches.map(b => b.city).filter(Boolean)))
+                  return cities.length ? cities.join(', ') : '—'
+                })()}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Gender split for the company, then per branch below. */}
+          <div style={C.sec}>Headcount by gender</div>
+          <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:24,
+                        border:`1px solid ${TK.line}`, borderRadius:10, padding:'14px 16px', marginBottom:18 }}>
+            <GenderSplit counts={head?.company ?? { male:0, female:0, other:0, unknown:0, total:0 }} size={86} />
+            {head && head.unassigned.total > 0 && (
+              // Called out rather than hidden: these people are in the company
+              // total but in none of the branch rows, so the two would not add
+              // up and it would look like an arithmetic bug.
+              <div style={{ fontSize:11, color:TK.muted, maxWidth:230, lineHeight:1.5 }}>
+                <strong style={{ color:TK.warning }}>{head.unassigned.total}</strong> employee{head.unassigned.total > 1 ? 's have' : ' has'} no
+                location set, so they appear in this total but in no branch below.
+              </div>
+            )}
+          </div>
+
           <div style={C.sec}>Company details</div>
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:'12px 16px', marginBottom:18 }}>
             <EditField label="Employer / Director" value={co.short_name} onSave={v => save('COMPANY', co.id, 'short_name', v, co.id)} />
@@ -211,6 +265,11 @@ function CompanyCard({ co, isMobile, save, openPay }: {
                 <StateDistrictEditor state={b.state} district={b.district}
                   onSaveState={v => save('LOCATION', b.id, 'state', v, co.id)}
                   onSaveDistrict={v => save('LOCATION', b.id, 'district', v, co.id)} />
+                <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
+                              padding:'7px 0 9px', marginBottom:2, borderTop:`1px solid ${TK.line}` }}>
+                  <span style={{ ...C.lbl, marginBottom:0 }}>Headcount</span>
+                  <GenderInline counts={head?.byLocation[b.id] ?? { male:0, female:0, other:0, unknown:0, total:0 }} />
+                </div>
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
                   <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '—'}</div></div>
                   <EditField label="Max employees" value={b.max_employees} type="number" onSave={v => save('LOCATION', b.id, 'max_employees', v, co.id)} />
@@ -308,6 +367,7 @@ export default function CompanyProfilePage() {
   const [isMobile, setIsMobile] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [pay, setPay] = useState<Company | null>(null)
+  const [head, setHead] = useState<Record<string, CompanyHeadcount>>({})
 
   const notify = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
 
@@ -320,8 +380,11 @@ export default function CompanyProfilePage() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [g, a] = await Promise.all([loadHierarchy(), loadAudit(undefined, 40)])
-      setGroups(g); setAudit(a)
+      // Headcount is fetched alongside, not after: it is one query over
+      // employees and there is no reason to make the screen wait a round trip
+      // for it.
+      const [g, a, h] = await Promise.all([loadHierarchy(), loadAudit(undefined, 40), loadHeadcount()])
+      setGroups(g); setAudit(a); setHead(h)
     } catch (e: any) {
       notify('Load failed: ' + (e?.message || 'check tables'), 'error')
     }
@@ -366,7 +429,8 @@ export default function CompanyProfilePage() {
               <div key={g.id} style={{ marginBottom:18 }}>
                 <GroupHeader g={g} card={C.card} />
                 {g.companies.map(co => (
-                  <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay} />
+                  <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay}
+                    group={g.group_name} head={head[co.id]} />
                 ))}
               </div>
             ))}

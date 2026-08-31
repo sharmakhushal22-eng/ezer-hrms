@@ -157,3 +157,55 @@ export async function confirmPayment(input: {
   }, { company_id: input.company_id, changedBy: input.confirmedBy || 'Super Admin' })
   return { ok: true }
 }
+
+// ── Gender headcount ────────────────────────────────────────────────────────
+// Counted from employees, per company and per location, in ONE query rather
+// than one per branch: there are 10 locations today and there is no reason for
+// this screen to make 11 round trips to answer a question about 398 rows.
+//
+// Leavers are excluded (date_of_leaving IS NULL), so this is a live headcount
+// and not a historical one — the same rule the rest of the app counts by.
+
+export interface GenderCount { male: number; female: number; other: number; unknown: number; total: number }
+export interface HeadcountRow extends GenderCount { location_id: string | null }
+export interface CompanyHeadcount {
+  company: GenderCount
+  byLocation: Record<string, GenderCount>
+  /** Employees with no location_id — real people who would otherwise vanish
+   *  from a branch-wise total that only adds up the branches. */
+  unassigned: GenderCount
+}
+
+const zero = (): GenderCount => ({ male: 0, female: 0, other: 0, unknown: 0, total: 0 })
+
+/** Gender is free text in this schema ('Male', 'Female', blanks). Normalise on
+ *  read rather than trusting the column, and keep anything unrecognised in its
+ *  own bucket instead of silently folding it into one of the two. */
+function bump(g: GenderCount, raw: string | null) {
+  const v = (raw || '').trim().toLowerCase()
+  if (v === 'male' || v === 'm') g.male++
+  else if (v === 'female' || v === 'f') g.female++
+  else if (v) g.other++
+  else g.unknown++
+  g.total++
+}
+
+export async function loadHeadcount(): Promise<Record<string, CompanyHeadcount>> {
+  const { data, error } = await supabase
+    .from('employees')
+    .select('company_id, location_id, gender')
+    .is('date_of_leaving', null)
+  if (error) throw error
+
+  const out: Record<string, CompanyHeadcount> = {}
+  for (const e of data ?? []) {
+    const cid = (e as any).company_id as string | null
+    if (!cid) continue
+    const co = (out[cid] ||= { company: zero(), byLocation: {}, unassigned: zero() })
+    bump(co.company, (e as any).gender)
+    const lid = (e as any).location_id as string | null
+    if (lid) bump((co.byLocation[lid] ||= zero()), (e as any).gender)
+    else bump(co.unassigned, (e as any).gender)
+  }
+  return out
+}
