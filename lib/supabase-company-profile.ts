@@ -33,6 +33,25 @@ export interface Company {
   company_type: string | null; industry: string | null; pan: string | null; tan: string | null; cin: string | null
   date_of_inc: string | null; reg_office: string | null; corp_office: string | null
   letterhead_header: string | null; letterhead_footer: string | null; status: string
+  gstin?: string | null; epf_code?: string | null; esic_code?: string | null; logo_url?: string | null
+  // ── Added by 077. Optional on purpose: until that migration runs these
+  // columns do not exist, select('*') does not return them, and every reader
+  // here must treat them as absent rather than as empty. The screen degrades
+  // to "Not recorded" instead of breaking.
+  duns_number?: string | null; website_url?: string | null; timezone?: string | null
+  currency?: string | null; fy_start_month?: number | null
+  structure_type?: string | null; approved_strength?: number | null
+  payroll_frequency?: string | null; payroll_cycle_start_day?: number | null
+  salary_disbursement_day?: number | null; wc_policy_number?: string | null
+  pf_status?: string | null; esic_status?: string | null
+  maternity_compliant?: boolean | null; dpdp_compliant?: boolean | null
+  default_employment_type?: string | null; probation_days?: number | null
+  notice_period_days?: number | null; max_leave_carryforward?: number | null
+  leave_year_start_month?: number | null
+  vision_statement?: string | null; mission_statement?: string | null
+  core_values?: string[] | null; tagline?: string | null
+  brand_primary?: string | null; brand_secondary?: string | null; brand_font?: string | null
+  linkedin_url?: string | null; twitter_url?: string | null; facebook_url?: string | null
   // assembled + computed
   branches: Branch[]; registrations: Registration[]; bank: BankAccount[]; license: License | null
   account_status: 'ACTIVE' | 'GRACE' | 'SUSPENDED'; days_to_due: number | null
@@ -231,6 +250,13 @@ export const REG_TYPES = [
   { code: 'LWF',     label: 'LWF Registration',        scope: 'STATE'   as const, legacy: null         },
   { code: 'SE',      label: 'Shops & Establishment',   scope: 'BRANCH'  as const, legacy: null         },
   { code: 'FACTORY', label: 'Factory Licence',         scope: 'BRANCH'  as const, legacy: null         },
+  { code: 'LABOUR',  label: 'Labour Licence',          scope: 'STATE'   as const, legacy: null         },
+  { code: 'BUSINESS_LICENCE', label: 'Business Licence', scope: 'STATE' as const, legacy: null         },
+  { code: 'WC',      label: "Workmen's Compensation",  scope: 'COMPANY' as const, legacy: null         },
+  { code: 'FSSAI',   label: 'FSSAI Registration',      scope: 'COMPANY' as const, legacy: null         },
+  { code: 'UDYAM',   label: 'Udyam (MSME)',            scope: 'COMPANY' as const, legacy: null         },
+  { code: 'DPIIT',   label: 'DPIIT Startup Recognition', scope: 'COMPANY' as const, legacy: null       },
+  { code: 'ISO',     label: 'ISO Certification',       scope: 'COMPANY' as const, legacy: null         },
 ] as const
 
 export type RegScope = (typeof REG_TYPES)[number]['scope']
@@ -286,4 +312,55 @@ export async function upsertRegistration(input: {
     })),
   )
   return { ok: true, created: true }
+}
+
+// ── Extra facts the profile sections need ───────────────────────────────────
+// Departments, headcount per department, employment-type mix and 12-month
+// leavers. Two queries for the whole set rather than one per company: three
+// companies today, and a per-company loop is how a screen becomes slow the
+// moment a fourth is added.
+
+export interface CompanyFacts {
+  departments: { id: string; dept_name: string; cost_center: string | null }[]
+  deptHeadcount: Record<string, number>
+  employmentMix: Record<string, number>
+  leavers12m: number
+}
+
+export async function loadCompanyFacts(): Promise<Record<string, CompanyFacts>> {
+  const cutoff = new Date(); cutoff.setFullYear(cutoff.getFullYear() - 1)
+  const iso = cutoff.toISOString().slice(0, 10)
+
+  const [deptRes, empRes, leftRes] = await Promise.all([
+    supabase.from('departments').select('id, company_id, dept_name, cost_center').eq('status', 'Active'),
+    supabase.from('employees').select('company_id, department_id, employment_type').is('date_of_leaving', null),
+    // Leavers in the last twelve months, for attrition. Counted from
+    // date_of_leaving rather than employment_status, because the status column
+    // is free text and a date is unambiguous.
+    supabase.from('employees').select('company_id, date_of_leaving').not('date_of_leaving', 'is', null).gte('date_of_leaving', iso),
+  ])
+  if (deptRes.error) throw deptRes.error
+  if (empRes.error) throw empRes.error
+
+  const out: Record<string, CompanyFacts> = {}
+  const get = (cid: string) => (out[cid] ||= { departments: [], deptHeadcount: {}, employmentMix: {}, leavers12m: 0 })
+
+  for (const d of deptRes.data ?? []) {
+    const cid = (d as any).company_id as string | null
+    if (cid) get(cid).departments.push({ id: d.id, dept_name: (d as any).dept_name, cost_center: (d as any).cost_center })
+  }
+  for (const e of empRes.data ?? []) {
+    const cid = (e as any).company_id as string | null
+    if (!cid) continue
+    const f = get(cid)
+    const did = (e as any).department_id as string | null
+    if (did) f.deptHeadcount[did] = (f.deptHeadcount[did] ?? 0) + 1
+    const t = ((e as any).employment_type as string | null)?.trim() || 'Not recorded'
+    f.employmentMix[t] = (f.employmentMix[t] ?? 0) + 1
+  }
+  for (const l of leftRes.data ?? []) {
+    const cid = (l as any).company_id as string | null
+    if (cid) get(cid).leavers12m++
+  }
+  return out
 }

@@ -5,11 +5,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   loadHierarchy, updateEntity, loadAudit, confirmPayment, loadHeadcount, upsertRegistration,
+  loadCompanyFacts, type CompanyFacts,
   type GroupTree, type Company, type Branch, type Registration, type AuditRow,
   type CompanyHeadcount,
 } from '@/lib/supabase-company-profile'
 import { GenderSplit, GenderInline } from '@/components/company/GenderSplit'
 import { Compliance, BranchCertificate } from '@/components/company/Compliance'
+import { CompanySections } from '@/components/company/Sections'
 import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -163,12 +165,13 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
 }
 
 // ── Company card (one company in the group) ─────────────────────────
-function CompanyCard({ co, isMobile, save, openPay, group, head, saveReg }: {
+function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg }: {
   co: Company; isMobile: boolean
   save: (entity: any, id: string, field: string, val: string, company_id: string) => Promise<void>
   openPay: (co: Company) => void
   group: string
   head?: CompanyHeadcount
+  facts?: CompanyFacts
   saveReg: (company_id: string, reg_type: string, patch: Record<string, string | null>, location_id?: string | null) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
@@ -192,6 +195,21 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, saveReg }: {
 
       {open && (
         <div style={{ padding:'14px 16px' }}>
+          {/* The ten-section profile. Everything below it — the editable
+              company fields, branches and bank — is the existing edit surface
+              and is deliberately kept: the sections READ the profile, that
+              part WRITES it. */}
+          <CompanySections isMobile={isMobile}
+            saveReg={(t, patch, loc) => saveReg(co.id, t, patch, loc)}
+            d={{
+              co, group, branches: co.branches, regs: co.registrations, banks: co.bank,
+              head,
+              departments: facts?.departments ?? [],
+              deptHeadcount: facts?.deptHeadcount ?? {},
+              employmentMix: facts?.employmentMix ?? {},
+              leavers12m: facts?.leavers12m ?? 0,
+            }} />
+
           {/* Group / Company / Branch / Location. All four already existed in
               the data — groups.group_name, companies, and the locations table
               with its location_type — but nothing on this screen said where a
@@ -395,6 +413,7 @@ export default function CompanyProfilePage() {
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [pay, setPay] = useState<Company | null>(null)
   const [head, setHead] = useState<Record<string, CompanyHeadcount>>({})
+  const [facts, setFacts] = useState<Record<string, CompanyFacts>>({})
 
   const notify = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
 
@@ -410,8 +429,10 @@ export default function CompanyProfilePage() {
       // Headcount is fetched alongside, not after: it is one query over
       // employees and there is no reason to make the screen wait a round trip
       // for it.
-      const [g, a, h] = await Promise.all([loadHierarchy(), loadAudit(undefined, 40), loadHeadcount()])
-      setGroups(g); setAudit(a); setHead(h)
+      const [g, a, h, f] = await Promise.all([
+        loadHierarchy(), loadAudit(undefined, 40), loadHeadcount(), loadCompanyFacts(),
+      ])
+      setGroups(g); setAudit(a); setHead(h); setFacts(f)
     } catch (e: any) {
       notify('Load failed: ' + (e?.message || 'check tables'), 'error')
     }
@@ -465,7 +486,7 @@ export default function CompanyProfilePage() {
                 <GroupHeader g={g} card={C.card} />
                 {g.companies.map(co => (
                   <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay}
-                    group={g.group_name} head={head[co.id]} saveReg={saveReg} />
+                    group={g.group_name} head={head[co.id]} facts={facts[co.id]} saveReg={saveReg} />
                 ))}
               </div>
             ))}
