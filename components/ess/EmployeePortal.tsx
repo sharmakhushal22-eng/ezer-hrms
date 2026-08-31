@@ -38,7 +38,7 @@ import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
-import { isHigh, def as notifDef } from '@/lib/notifications/catalogue'
+
 import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
@@ -1264,35 +1264,80 @@ function Directory({ isMobile }: { isMobile: boolean }) {
 // NOTIFICATIONS (B11)
 // ════════════════════════════════════════════════════════════════
 
-/** The stored value is a catalogue code (it lives in `category` until 075 adds
- *  a real column). Show the human label where there is one, and fall back to
- *  the raw code rather than hiding an unrecognised notification. */
-function labelFor(code: string | null): string {
-  if (!code) return ''
-  return notifDef(code)?.label ?? code
-}
 function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () => void }) {
-  const [rows, setRows] = useState<EssNotification[]>([])
-  const load = useCallback(() => loadNotifications(emp.id).then(r => { setRows(r); onChange?.() }), [emp.id, onChange])
+  const [personal, setPersonal] = useState<any[]>([])
+  const [role, setRole] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Reads through /api/ess/notifications rather than the table directly. That
+  // route syncs first, so work already sitting in a queue shows up on the first
+  // open instead of only after the next event fires.
+  const load = useCallback(async () => {
+    try {
+      const h = essAuthHeaders()
+      let headers: Record<string, string> = h
+      if (!h.Authorization) {
+        const { data } = await supabase.auth.getSession()
+        const t = data?.session?.access_token
+        headers = t ? { Authorization: `Bearer ${t}` } : {}
+      }
+      const r = await fetch(`/api/ess/notifications?employee_id=${emp.id}`, { headers })
+      if (!r.ok) { setPersonal([]); setRole([]); return }
+      const j = await r.json()
+      setPersonal(j.personal || []); setRole(j.role || [])
+    } catch { setPersonal([]); setRole([]) }
+    finally { setLoading(false); onChange?.() }
+  }, [emp.id, onChange])
+
   useEffect(() => { load() }, [load])
+
+  const act = async (body: any) => {
+    const h = essAuthHeaders()
+    let headers: Record<string, string> = { 'Content-Type': 'application/json', ...h }
+    if (!h.Authorization) {
+      const { data } = await supabase.auth.getSession()
+      const t = data?.session?.access_token
+      if (t) headers.Authorization = `Bearer ${t}`
+    }
+    await fetch('/api/ess/notifications', { method: 'POST', headers, body: JSON.stringify(body) })
+    load()
+  }
+
+  const Row = (n: any) => (
+    <div key={n.id} onClick={() => { if (!n.is_read) act({ action: 'read', id: n.id }) }}
+      style={{ padding:'9px 0 9px 10px', borderBottom:`1px solid ${C.brandEdge}`,
+        cursor: n.is_read ? 'default' : 'pointer', opacity: n.is_read ? .6 : 1,
+        // The catalogue's "In-app + Email" tier is time-sensitive, financial or
+        // a rejection. A stripe reads at a glance; a second channel does not
+        // help somebody already looking at the list.
+        borderLeft: n.high ? `3px solid ${C.critical}` : '3px solid transparent' }}>
+      <div style={{ fontSize:13, fontWeight:600 }}>{!n.is_read && <span style={{ color:C.brand }}>● </span>}{n.title}</div>
+      {n.body && <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{n.body}</div>}
+      <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{n.label || ''} · {fmtDT(n.created_at)}</div>
+    </div>
+  )
+
+  const total = personal.length + role.length
+  const Head = ({ children }: { children: React.ReactNode }) => (
+    <div style={{ fontSize:10, fontWeight:700, color:C.faint, letterSpacing:.4,
+      textTransform:'uppercase', margin:'10px 0 2px' }}>{children}</div>
+  )
+
   return (
     <div style={{ ...T.card, marginBottom:0, border:'none', boxShadow:'none' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
         <div style={T.section}>Notifications</div>
-        <button onClick={async () => { await markAllNotifications(emp.id); load() }} style={T.btnO}>Mark all read</button>
+        <button onClick={() => act({ action: 'read_all' })} style={T.btnO}>Mark all read</button>
       </div>
-      {rows.length === 0 && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>You're all caught up. 🎉</div>}
-      {rows.map(n => (
-        <div key={n.id} onClick={async () => { if (!n.is_read) { await markNotification(n.id); load() } }} style={{ padding:'9px 0 9px 10px', borderBottom: `1px solid ${C.brandEdge}`, cursor: n.is_read ? 'default' : 'pointer', opacity: n.is_read ? .6 : 1,
-          // The catalogue's "In-app + Email" tier is time-sensitive, financial
-          // or a rejection. A left stripe reads at a glance; a second channel
-          // does not help someone already looking at the list.
-          borderLeft: isHigh(n.category || '') ? `3px solid ${C.critical}` : '3px solid transparent' }}>
-          <div style={{ fontSize:13, fontWeight:600 }}>{!n.is_read && <span style={{ color:C.brand }}>● </span>}{n.title}</div>
-          {n.body && <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{n.body}</div>}
-          <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{labelFor(n.category) || ''} · {fmtDT(n.created_at)}</div>
-        </div>
-      ))}
+
+      {loading && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>Loading…</div>}
+      {!loading && total === 0 && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>You&apos;re all caught up. 🎉</div>}
+
+      {/* Two groups, because "your leave was approved" and "three people are
+          waiting on you" are different kinds of message. A flat list buries
+          the second under the first. */}
+      {role.length > 0 && <><Head>For you to action</Head>{role.map(Row)}</>}
+      {personal.length > 0 && <><Head>About you</Head>{personal.map(Row)}</>}
     </div>
   )
 }
@@ -3459,8 +3504,26 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   // Unread count for the bell. Refreshed on mount and whenever the open panel
   // marks something read, so the badge never disagrees with the list behind it.
+  // Goes through the API, not the table, so opening the portal SYNCS: work
+  // already sitting in a queue produces its notification now rather than
+  // waiting for the next event. Reading the table directly would leave the
+  // badge on 0 until somebody happened to open the panel.
   const refreshUnread = useCallback(() => {
-    loadNotifications(employeeId).then(r => setUnread(r.filter(n => !n.is_read).length)).catch(() => {})
+    (async () => {
+      try {
+        const h = essAuthHeaders()
+        let headers: Record<string, string> = h
+        if (!h.Authorization) {
+          const { data } = await supabase.auth.getSession()
+          const t = data?.session?.access_token
+          headers = t ? { Authorization: `Bearer ${t}` } : {}
+        }
+        const r = await fetch(`/api/ess/notifications?employee_id=${employeeId}`, { headers })
+        if (!r.ok) return
+        const j = await r.json()
+        setUnread(Number(j.unread) || 0)
+      } catch { /* the badge is not worth an error state */ }
+    })()
   }, [employeeId])
   useEffect(() => { refreshUnread() }, [refreshUnread])
 
