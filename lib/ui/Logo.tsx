@@ -60,12 +60,17 @@ export function LogoStyles() {
       .ez-logo:hover .ez-logo__emblem { transform: translateY(-1px) scale(1.03); }
 
       .ez-logo__word { position:relative; overflow:hidden; }
+      /* The sheen used to run once on mount. Rendered, that puts a pale band
+         directly over the wordmark for the first 1.5s of every page load —
+         "EZER" reads as a grey smear until it finishes. A flourish that
+         obscures the brand for the first impression is not worth having, so it
+         is hover-only now: the same detail, at a moment nobody is trying to
+         read the logo. */
       .ez-logo__sheen {
-        position:absolute; inset:0; pointer-events:none;
+        position:absolute; inset:0; pointer-events:none; opacity:0;
         background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.55) 50%, transparent 65%);
-        animation: ez-logo-sheen 1.5s ease-out .35s 1 both;
       }
-      .ez-logo:hover .ez-logo__sheen { animation: ez-logo-sheen 1.1s ease-out 1; }
+      .ez-logo:hover .ez-logo__sheen { opacity:1; animation: ez-logo-sheen 1.1s ease-out 1; }
 
       @media (prefers-reduced-motion: reduce) {
         .ez-logo__ring, .ez-logo__person, .ez-logo__sheen { animation: none !important; }
