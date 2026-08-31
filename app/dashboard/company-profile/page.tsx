@@ -10,7 +10,7 @@ import {
   type CompanyHeadcount,
 } from '@/lib/supabase-company-profile'
 import { GenderSplit, GenderInline } from '@/components/company/GenderSplit'
-import { Compliance, BranchCertificate } from '@/components/company/Compliance'
+import { BranchCertificate } from '@/components/company/Compliance'
 import { CompanySections } from '@/components/company/Sections'
 import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
@@ -335,10 +335,6 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg 
             ))}
             {co.branches.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No branches.</div>}
           </div>
-
-          <div style={C.sec}>Statutory registrations &amp; certificates</div>
-          <Compliance co={co} regs={co.registrations} isMobile={isMobile}
-            onSave={(t, patch, loc) => saveReg(co.id, t, patch, loc)} />
 
           {co.bank.length > 0 && (
             <>
