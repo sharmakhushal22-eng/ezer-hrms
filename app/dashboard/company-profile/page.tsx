@@ -13,6 +13,7 @@ import { GenderSplit, GenderInline } from '@/components/company/GenderSplit'
 import { BranchCertificate } from '@/components/company/Compliance'
 import { CompanySections } from '@/components/company/Sections'
 import { CSS as CP_CSS, ACCENT, monogram, stat, statValue, statLabel } from '@/components/company/ui'
+import { fetchEditRight, updateRow, type EditRight } from '@/lib/company/client'
 import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -484,6 +485,8 @@ export default function CompanyProfilePage() {
   const [head, setHead] = useState<Record<string, CompanyHeadcount>>({})
   const [facts, setFacts] = useState<Record<string, CompanyFacts>>({})
   const [policy, setPolicy] = useState<Record<string, PolicyBundle>>({})
+  const [right, setRight] = useState<EditRight>({ canEdit: false, reason: 'Checking…', actor: '' })
+  const [editing, setEditing] = useState(false)
 
   const notify = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
 
@@ -510,11 +513,22 @@ export default function CompanyProfilePage() {
   }, [])
   useEffect(() => { reload() }, [reload])
 
+  // Asked, not assumed. The client does not know the role model, and a button
+  // rendered on a guess is a button that 403s when pressed.
+  useEffect(() => { fetchEditRight().then(setRight) }, [])
+
   async function save(entity: any, id: string, field: string, val: string, company_id: string) {
+    // Goes through /api/company/profile, not straight to Supabase. The old
+    // path wrote with the browser's anon key, which meant the edit was
+    // authorised by "can load the page" — the button was the only gate, and a
+    // button is not a gate.
     const patch: Record<string, any> = { [field]: field === 'max_employees' ? (val === '' ? null : Number(val)) : val }
-    const r = await updateEntity(entity, id, patch, { company_id, changedBy: 'Admin' })
-    if ((r as any).error) { notify('Save failed: ' + (r as any).error.message, 'error'); return }
-    notify('Saved & logged.'); reload()
+    try {
+      await updateRow(entity, id, patch)
+      notify('Saved & logged.'); reload()
+    } catch (e: any) {
+      notify('Save failed: ' + (e?.message || 'unknown'), 'error')
+    }
   }
 
   async function saveReg(company_id: string, reg_type: string,
@@ -544,9 +558,71 @@ export default function CompanyProfilePage() {
           section does. */}
       <style>{CP_CSS}</style>
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
-        <div className="ez-page-head">
-        <div style={{ fontSize:22, fontWeight:800, letterSpacing:'-.02em', marginBottom:2 }}>Company Profile</div>
-        <div style={{ fontSize:12, color:TK.muted }}>Group, companies, branches, statutory registrations, bank &amp; license — view, edit, and audit. Every change is logged.</div>
+        <div className="ez-page-head" style={{ display:'flex', alignItems:'flex-start', gap:16, flexWrap:'wrap' }}>
+          <div style={{ flex:1, minWidth:240 }}>
+            <div style={{ fontSize:22, fontWeight:800, letterSpacing:'-.02em', marginBottom:2 }}>Company Profile</div>
+            <div style={{ fontSize:12, color:TK.muted }}>
+              The master record for every entity. Statutory, payroll and location data entered here
+              flows into payroll runs, payslips, Form 16 and compliance reports.
+            </div>
+          </div>
+
+          {/* ── Edit ──────────────────────────────────────────────────────
+              Shown only to somebody the SERVER says may edit. That answer is
+              also what the API enforces, so the button and the permission
+              cannot disagree — and hiding it is a courtesy, not the control. */}
+          <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+            {right.canEdit ? (
+              <>
+                {editing && (
+                  <span style={{ fontSize:11, color:TK.warning, fontWeight:600,
+                                 display:'inline-flex', alignItems:'center', gap:6 }}>
+                    <span style={{ width:7, height:7, borderRadius:'50%', background:TK.warning,
+                                   boxShadow:`0 0 0 3px ${TK.warningTint}` }} />
+                    Editing — every change is logged
+                  </span>
+                )}
+                <button onClick={() => setEditing(e => !e)} className="cp-tab" style={{
+                  display:'inline-flex', alignItems:'center', gap:8,
+                  padding:'9px 16px', borderRadius:10, border:'none', cursor:'pointer',
+                  fontFamily:'inherit', fontSize:13, fontWeight:700, color:'#FFFFFF',
+                  background: editing
+                    ? `linear-gradient(145deg, ${TK.positive}, ${TK.positive}CC)`
+                    : `linear-gradient(145deg, ${TK.brand}, ${TK.brandDeep})`,
+                  boxShadow: `inset 0 1px 0 rgba(255,255,255,.25), 0 6px 16px -4px ${editing ? TK.positive : TK.brand}70`,
+                }}>
+                  {editing ? (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                         strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M2.5 7.5 5.5 10.5 11.5 3.5" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                         strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      <path d="M9.4 1.9a1.3 1.3 0 0 1 1.9 1.9L4.6 10.5l-2.5.6.6-2.5 6.7-6.7Z" />
+                    </svg>
+                  )}
+                  {editing ? 'Done editing' : 'Edit profile'}
+                </button>
+              </>
+            ) : (
+              // A disabled button with no explanation is a dead end. Say who
+              // may edit and who the server thinks you are.
+              <span title={right.reason} style={{
+                display:'inline-flex', alignItems:'center', gap:7, maxWidth:340,
+                padding:'8px 13px', borderRadius:10,
+                background:TK.sunken, border:`1px solid ${TK.line}`,
+                fontSize:11.5, color:TK.muted, lineHeight:1.4,
+              }}>
+                <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                     strokeWidth="1.6" strokeLinecap="round" aria-hidden style={{ flexShrink:0 }}>
+                  <rect x="2.8" y="6" width="8.4" height="6" rx="1.4" />
+                  <path d="M4.8 6V4.3a2.2 2.2 0 0 1 4.4 0V6" />
+                </svg>
+                <span>{right.reason}</span>
+              </span>
+            )}
+          </div>
         </div>
 
         {loading ? (
