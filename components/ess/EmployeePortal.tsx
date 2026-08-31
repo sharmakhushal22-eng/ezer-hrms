@@ -36,6 +36,8 @@ import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
 import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
+import Celebrations from '@/components/ess/Celebrations'
+import { isHigh, def as notifDef } from '@/lib/notifications/catalogue'
 import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
@@ -406,6 +408,11 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
       {/* Role-wise KPIs and "pending on you" — the same card for an employee, an RM
           and an HR Head; only the data behind it differs (/api/ess/home). */}
       <PendingOnYou employeeId={emp.id} go={go} notify={notify} />
+
+      {/* Today's birthdays and work anniversaries, with a Wish button. Renders
+          nothing when nobody is celebrating — an empty card every day is worse
+          than no card. This is where a peer-to-peer notification is created. */}
+      <Celebrations employeeId={emp.id} />
 
       {/* where the employee's travel claims currently sit */}
       <TravelClaimStatus emp={emp} go={go} />
@@ -1255,6 +1262,14 @@ function Directory({ isMobile }: { isMobile: boolean }) {
 // ════════════════════════════════════════════════════════════════
 // NOTIFICATIONS (B11)
 // ════════════════════════════════════════════════════════════════
+
+/** The stored value is a catalogue code (it lives in `category` until 075 adds
+ *  a real column). Show the human label where there is one, and fall back to
+ *  the raw code rather than hiding an unrecognised notification. */
+function labelFor(code: string | null): string {
+  if (!code) return ''
+  return notifDef(code)?.label ?? code
+}
 function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () => void }) {
   const [rows, setRows] = useState<EssNotification[]>([])
   const load = useCallback(() => loadNotifications(emp.id).then(r => { setRows(r); onChange?.() }), [emp.id, onChange])
@@ -1267,10 +1282,14 @@ function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () =
       </div>
       {rows.length === 0 && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>You're all caught up. 🎉</div>}
       {rows.map(n => (
-        <div key={n.id} onClick={async () => { if (!n.is_read) { await markNotification(n.id); load() } }} style={{ padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}`, cursor: n.is_read ? 'default' : 'pointer', opacity: n.is_read ? .6 : 1 }}>
+        <div key={n.id} onClick={async () => { if (!n.is_read) { await markNotification(n.id); load() } }} style={{ padding:'9px 0 9px 10px', borderBottom: `1px solid ${C.brandEdge}`, cursor: n.is_read ? 'default' : 'pointer', opacity: n.is_read ? .6 : 1,
+          // The catalogue's "In-app + Email" tier is time-sensitive, financial
+          // or a rejection. A left stripe reads at a glance; a second channel
+          // does not help someone already looking at the list.
+          borderLeft: isHigh(n.category || '') ? `3px solid ${C.critical}` : '3px solid transparent' }}>
           <div style={{ fontSize:13, fontWeight:600 }}>{!n.is_read && <span style={{ color:C.brand }}>● </span>}{n.title}</div>
           {n.body && <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{n.body}</div>}
-          <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{n.category || ''} · {fmtDT(n.created_at)}</div>
+          <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{labelFor(n.category) || ''} · {fmtDT(n.created_at)}</div>
         </div>
       ))}
     </div>
