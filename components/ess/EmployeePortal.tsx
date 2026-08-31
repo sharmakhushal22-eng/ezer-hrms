@@ -37,6 +37,9 @@ import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
+import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
+import { atLeast } from '@/lib/rms/modules'
+import { AdminModuleHost } from '@/components/ess/AdminModules'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -3343,6 +3346,34 @@ function MyReportingLine({ employeeId, fallbackL1, notify }: {
   )
 }
 
+/** One granted admin module in the ESS rail. Same shape as SectionButton so the two
+ *  halves of the sidebar read as one list, with a rule and a caption between them. */
+function AdminRailItem({ item, active, onClick }: { item: NavEntry; active: boolean; onClick: () => void }) {
+  const [hover, setHover] = useState(false)
+  const bg = active ? 'rgba(37,99,235,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
+  return (
+    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'9px 18px',
+               color: active ? C.onDark : C.onDarkMuted, cursor:'pointer', fontSize:12.5, fontWeight:600,
+               fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.onDark : 'transparent'}` }}>
+      <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.label}</span>
+    </button>
+  )
+}
+
+function AdminRailGroup({ group, items, activeKey, onPick }: {
+  group: string; items: NavEntry[]; activeKey: string | null; onPick: (k: string) => void
+}) {
+  if (!items.length) return null
+  return (
+    <>
+      <div style={{ fontSize:9.5, fontWeight:800, letterSpacing:'.1em', textTransform:'uppercase',
+                    color:'rgba(255,255,255,0.38)', padding:'14px 18px 5px', whiteSpace:'nowrap' }}>{group}</div>
+      {items.map(i => <AdminRailItem key={i.key} item={i} active={activeKey === i.key} onClick={() => onPick(i.key)} />)}
+    </>
+  )
+}
+
 function TabHeader({ s }: { s: NavSection }) {
   const [label, bg, fg] = BADGE[s.status]
   // Same header band as the 32 dashboard routes. This sat directly on the
@@ -3440,7 +3471,13 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   }, [employeeId])
   useEffect(() => { refreshUnread() }, [refreshUnread])
 
-  const go = (k: string) => { setView(k); setBellOpen(false); setMoreOpen(false) }
+  // Which admin module is open in the ESS content area, or null for ESS's own tabs.
+  // Everything an HR / payroll person administers is reachable here, so they never
+  // have to cross into /dashboard — the Admin button stays as the door for those
+  // who prefer the old shell.
+  const [adminKey, setAdminKey] = useState<string | null>(null)
+  const go = (k: string) => { setAdminKey(null); setView(k); setBellOpen(false); setMoreOpen(false) }
+  const goAdmin = (k: string) => { setAdminKey(k); setBellOpen(false); setMoreOpen(false); window.scrollTo({ top: 0 }) }
   // Clicking a section lands on its first item — the section itself is never a
   // destination, so there is no empty "section landing page" to design or maintain.
   const goSection = (s: NavSection) => go(s.items.some(i => i.k === view) ? view : s.items[0].k)
@@ -3450,6 +3487,15 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   // so; Approvals only for a login that can approve. Nothing here names a role.
   const { menu: essMenu } = useEssMenu(emp?.id)
   const sections = SECTIONS.filter(s => s.k === 'company' ? essMenu.can.company : s.k === 'reports' ? essMenu.can.reports : true)
+
+  // The admin modules this person actually holds. Deliberately NOT canSee(): that
+  // returns true for everything while rms_config.enforce_module_access is off, which
+  // is right for the dashboard's roll-out but wrong here — an employee's own portal
+  // must never show them a module they were not granted.
+  const { grant } = useGrant()
+  const adminGroups = ADMIN_NAV_GROUPS
+    .map(g => ({ group: g.group, items: g.items.filter(i => grant.isSuperAdmin || (!!i.module && atLeast(grant.modules[i.module], 'VIEW'))) }))
+    .filter(g => g.items.length > 0)
 
   const meta = viewMeta(view)
   const section = SECTIONS.find(s => s.k === meta.section)!
@@ -3504,8 +3550,18 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         <div style={{ width:220, background: C.dark, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
           <div style={{ padding:'0 18px 16px', color:C.onDark, fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
           {sections.map(s => (
-            <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
+            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
           ))}
+          {adminGroups.length > 0 && (
+            <>
+              <div style={{ height:1, background:'rgba(255,255,255,0.12)', margin:'14px 12px 2px' }} />
+              <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase',
+                            color:'rgba(255,255,255,0.3)', padding:'6px 18px 0' }}>What you manage</div>
+              {adminGroups.map(g => (
+                <AdminRailGroup key={g.group} group={g.group} items={g.items} activeKey={adminKey} onPick={goAdmin} />
+              ))}
+            </>
+          )}
           <AdminEntry />
         </div>
       )}
@@ -3516,8 +3572,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           {/* The tab's own name and badge live in TabHeader below, so this bar carries
               only what that header can't: the sub-tab you're on, and who you are. */}
           <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-            {isMobile ? 'EZER ESS' : (sectionItems.length > 1 ? meta.label : '')}
+            {adminKey ? NAV_ENTRY_BY_KEY[adminKey]?.label : isMobile ? 'EZER ESS' : (sectionItems.length > 1 ? meta.label : '')}
           </div>
+          {adminKey && (
+            <button onClick={() => go('home')} style={{ ...T.btnO, whiteSpace:'nowrap' }}>← My portal</button>
+          )}
           {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
           <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9 }}>
@@ -3533,11 +3592,18 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           {onExit && <button onClick={onExit} style={{ ...T.btnO, whiteSpace:'nowrap' }}>{adminMode ? 'Exit Admin' : 'Close'}</button>}
         </div>
 
-        <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
-          <TabHeader s={section} />
-          <SubTabs items={sectionItems} view={view} go={go} />
-          {renderView()}
-        </div>
+        {adminKey ? (
+          // The dashboard page renders exactly as it does at /dashboard/<module> —
+          // same component, no wrapper of ours around it, because those pages bring
+          // their own <Page> padding and expect the full width.
+          <AdminModuleHost moduleKey={adminKey} />
+        ) : (
+          <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
+            <TabHeader s={section} />
+            <SubTabs items={sectionItems} view={view} go={go} />
+            {renderView()}
+          </div>
+        )}
       </div>
 
       {/* Notification panel — anchored to the bell, not a sidebar entry */}
@@ -3583,6 +3649,26 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
               ))}
               <AdminEntry isMobile />
             </div>
+            {adminGroups.length > 0 && (
+              <>
+                <div style={{ fontSize:13, fontWeight:700, margin:'16px 0 10px' }}>What you manage</div>
+                {adminGroups.map(g => (
+                  <div key={g.group} style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.faint, marginBottom:6 }}>{g.group}</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                      {g.items.map(i => (
+                        <button key={i.key} onClick={() => goAdmin(i.key)}
+                          style={{ padding:'12px 10px', borderRadius:10, border:`1px solid ${adminKey === i.key ? C.brand : C.brandTint}`,
+                                   background: adminKey === i.key ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit',
+                                   fontSize:12, textAlign:'left', color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          {i.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
       )}

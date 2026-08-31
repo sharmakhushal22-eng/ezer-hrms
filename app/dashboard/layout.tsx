@@ -23,6 +23,7 @@ import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useGrant } from '@/lib/rms/client';
 import { moduleForPath, type Module } from '@/lib/rms/modules';
+import { NAV_GROUPS } from '@/lib/rms/nav';
 import { canSee, hasAdminAccess, type Grant } from '@/lib/rms/resolve';
 import { C, F, W, S, R, E, M, UIKeyframes } from '@/lib/ui';
 import { ThemeToggle } from '@/lib/ui/ThemeToggle';
@@ -39,51 +40,28 @@ import {
 interface NavItem { label: string; href: string; Icon: (p: IconProps) => React.ReactElement; module: Module | null }
 interface NavGroup { group: string; items: NavItem[] }
 
+// The labels, hrefs and modules now live in lib/rms/nav.ts, because the ESS sidebar
+// renders the same entries for whoever holds them — an HR or payroll person works
+// entirely inside ESS and never opens this shell. Only the icons stay here: the two
+// shells draw at different sizes, and ESS should not pull this icon set for an
+// employee who holds no modules at all.
+const ICON: Record<string, (p: IconProps) => React.ReactElement> = {
+  home: IconHome,
+  recruitment: IconRecruitment, onboarding: IconOnboarding, pms: IconPerformance,
+  employees: IconEmployees, 'org-chart': IconOrgChart, 'bulk-upload': IconUpload, transfer: IconTransfer,
+  attendance: IconCalendar, 'attendance-reports': IconClock, 'leave-upload': IconLeave,
+  payroll: IconPayroll, finance: IconFinance, 'flexi-claims': IconCard, 'travel-claims': IconTravel, loans: IconLoans,
+  compliance: IconCompliance, letters: IconLetters, policies: IconPolicies, reports: IconReports,
+  ess: IconMobile, admin: IconAdmin, 'flexi-policy': IconSliders, 'company-profile': IconBuilding, 'db-export': IconDatabase,
+  ai: IconAi, support: IconSupport,
+}
+
 // Every href here is identical to the previous flat list. Nothing moved except
 // Org Chart, which did not exist when this grouping was first drawn.
-const NAV: NavGroup[] = [
-  { group: '', items: [
-    { label: 'Home', href: '/dashboard', Icon: IconHome, module: null },
-  ]},
-  { group: 'People', items: [
-    { label: 'Recruitment',   href: '/dashboard/recruitment', Icon: IconRecruitment, module: 'Recruitment' },
-    { label: 'Onboarding',    href: '/dashboard/onboarding',  Icon: IconOnboarding,  module: 'Onboarding' },
-    { label: 'Performance',   href: '/dashboard/pms',         Icon: IconPerformance, module: 'Performance' },
-    { label: 'Employees',     href: '/dashboard/employees',   Icon: IconEmployees,   module: 'Employees' },
-    { label: 'Org Chart',     href: '/dashboard/org-chart',   Icon: IconOrgChart,    module: 'Employees' },
-    { label: 'Bulk Uploader', href: '/dashboard/bulk-upload', Icon: IconUpload,      module: 'Bulk Upload' },
-    { label: 'Transfer',      href: '/dashboard/transfer',    Icon: IconTransfer,    module: 'Transfer' },
-  ]},
-  { group: 'Time & Attendance', items: [
-    { label: 'Attendance & Leave',     href: '/dashboard/attendance',         Icon: IconCalendar, module: 'Attendance' },
-    { label: 'Attendance Reports',     href: '/dashboard/attendance-reports', Icon: IconClock,    module: 'Attendance Reports' },
-    { label: 'Leave & Holiday Config', href: '/dashboard/leave-upload',       Icon: IconLeave,    module: 'Leave Config' },
-  ]},
-  { group: 'Money', items: [
-    { label: 'Payroll',            href: '/dashboard/payroll',       Icon: IconPayroll, module: 'Payroll' },
-    { label: 'Finance Department', href: '/dashboard/finance',       Icon: IconFinance, module: 'Finance' },
-    { label: 'Flexi Claims',       href: '/dashboard/flexi-claims',  Icon: IconCard,    module: 'Flexi Claims' },
-    { label: 'Travel Claims',      href: '/dashboard/travel-claims', Icon: IconTravel,  module: 'Travel Claims' },
-    { label: 'Loans',              href: '/dashboard/loans',         Icon: IconLoans,   module: 'Loans' },
-  ]},
-  { group: 'Compliance & Docs', items: [
-    { label: 'Compliance',       href: '/dashboard/compliance', Icon: IconCompliance, module: 'Compliance' },
-    { label: 'HR Letters',       href: '/dashboard/letters',    Icon: IconLetters,    module: 'HR Letters' },
-    { label: 'Company Policies', href: '/dashboard/policies',   Icon: IconPolicies,   module: 'Policies' },
-    { label: 'Reports',          href: '/dashboard/reports',    Icon: IconReports,    module: 'Reports' },
-  ]},
-  { group: 'Setup', items: [
-    { label: 'ESS & Role Management', href: '/dashboard/ess',             Icon: IconMobile,   module: 'ESS & Roles' },
-    { label: 'Admin Setup',           href: '/dashboard/admin',           Icon: IconAdmin,    module: 'Admin Setup' },
-    { label: 'Flexi Policy',          href: '/dashboard/flexi-policy',    Icon: IconSliders,  module: 'Flexi Claims' },
-    { label: 'Company Profile',       href: '/dashboard/company-profile', Icon: IconBuilding, module: 'Company Profile' },
-    { label: 'Database Export',       href: '/dashboard/db-export',       Icon: IconDatabase, module: 'Database Export' },
-  ]},
-  { group: 'Help', items: [
-    { label: 'Ezer AI', href: '/dashboard/ai',      Icon: IconAi,      module: 'Ezer AI' },
-    { label: 'Support', href: '/dashboard/support', Icon: IconSupport, module: 'Support' },
-  ]},
-];
+const NAV: NavGroup[] = NAV_GROUPS.map(g => ({
+  group: g.group,
+  items: g.items.map(i => ({ label: i.label, href: i.href, module: i.module, Icon: ICON[i.key] })),
+}));
 
 const OPEN_W = 244;
 const SHUT_W = 60;

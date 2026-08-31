@@ -39,6 +39,33 @@ export default function LoginPage() {
     setLoading(true)
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError(error.message); setLoading(false); return }
+
+    // Everyone lands in ESS, not the admin dashboard — including HR and payroll, who
+    // now see the modules they hold inside their own portal. The dashboard is still
+    // there behind the Admin button in the ESS sidebar.
+    //
+    // The one exception is a legacy dashboard login with no employee record behind it:
+    // ESS needs an employee_id to render anything, so that account still goes to
+    // /dashboard rather than to a portal that cannot load.
+    const addr = email.trim().toLowerCase()
+    const { data: emp } = await supabase
+      .from('employees')
+      .select('id, full_name, office_email, personal_email')
+      .or(`office_email.ilike.${addr},personal_email.ilike.${addr}`)
+      .limit(1)
+      .maybeSingle()
+
+    if (emp?.id) {
+      // No token: EmployeePortal falls back to the Supabase session for API calls
+      // (see essAuthHeaders / authToken), which this login has just established.
+      try {
+        localStorage.setItem('ezer_ess_session', JSON.stringify({
+          employee_id: emp.id, name: emp.full_name, email: addr, token: null,
+        }))
+      } catch { /* private mode — the portal will ask them to sign in again */ }
+      window.location.href = '/ess-portal'
+      return
+    }
     window.location.href = '/dashboard'
   }
 
