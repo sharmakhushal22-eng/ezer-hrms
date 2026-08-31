@@ -4,11 +4,12 @@
 // Inline edit on any field → auto-writes company_master_audit. Schema: lib/supabase-admin + migration 027.
 import { useState, useEffect, useCallback } from 'react'
 import {
-  loadHierarchy, updateEntity, loadAudit, confirmPayment, loadHeadcount,
+  loadHierarchy, updateEntity, loadAudit, confirmPayment, loadHeadcount, upsertRegistration,
   type GroupTree, type Company, type Branch, type Registration, type AuditRow,
   type CompanyHeadcount,
 } from '@/lib/supabase-company-profile'
 import { GenderSplit, GenderInline } from '@/components/company/GenderSplit'
+import { Compliance, BranchCertificate } from '@/components/company/Compliance'
 import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -162,12 +163,13 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
 }
 
 // ── Company card (one company in the group) ─────────────────────────
-function CompanyCard({ co, isMobile, save, openPay, group, head }: {
+function CompanyCard({ co, isMobile, save, openPay, group, head, saveReg }: {
   co: Company; isMobile: boolean
   save: (entity: any, id: string, field: string, val: string, company_id: string) => Promise<void>
   openPay: (co: Company) => void
   group: string
   head?: CompanyHeadcount
+  saveReg: (company_id: string, reg_type: string, patch: Record<string, string | null>, location_id?: string | null) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
   const regsByType: Record<string, Registration[]> = {}
@@ -224,6 +226,41 @@ function CompanyCard({ co, isMobile, save, openPay, group, head }: {
             </div>
           </div>
 
+          {/* Offices and establishments. reg_office was already shown further
+              down among the company details; corp_office was in the schema and
+              displayed nowhere. Factories are counted from locations rather
+              than typed in again. */}
+          <div style={C.sec}>Offices &amp; establishments</div>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                        gap:'12px 16px', marginBottom:18 }}>
+            <div style={{ gridColumn: isMobile ? 'auto' : '1 / -1' }}>
+              <EditField label="Registered office" value={co.reg_office}
+                onSave={v => save('COMPANY', co.id, 'reg_office', v, co.id)} />
+            </div>
+            <div style={{ gridColumn: isMobile ? 'auto' : '1 / -1' }}>
+              <EditField label="Corporate office" value={co.corp_office}
+                onSave={v => save('COMPANY', co.id, 'corp_office', v, co.id)} />
+            </div>
+            <div>
+              <div style={C.lbl}>Plants / Factories</div>
+              <div style={C.val}>
+                {(() => {
+                  const f = co.branches.filter(b => (b.location_type||'').toLowerCase().includes('factory'))
+                  return f.length ? `${f.length} · ${f.map(b => b.location_name).join(', ')}` : 'None'
+                })()}
+              </div>
+            </div>
+            <div>
+              <div style={C.lbl}>Shops &amp; Establishment sites</div>
+              <div style={C.val}>
+                {(() => {
+                  const se = co.branches.filter(b => !(b.location_type||'').toLowerCase().includes('factory'))
+                  return se.length ? `${se.length} · ${se.map(b => b.location_type).filter((v,i,a)=>a.indexOf(v)===i).join(', ')}` : 'None'
+                })()}
+              </div>
+            </div>
+          </div>
+
           {/* 2. Gender split for the company, then per branch below. */}
           <div style={C.sec}>Headcount by gender</div>
           <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:24,
@@ -270,6 +307,8 @@ function CompanyCard({ co, isMobile, save, openPay, group, head }: {
                   <span style={{ ...C.lbl, marginBottom:0 }}>Headcount</span>
                   <GenderInline counts={head?.byLocation[b.id] ?? { male:0, female:0, other:0, unknown:0, total:0 }} />
                 </div>
+                <BranchCertificate branch={b} regs={co.registrations}
+                  onSave={(t, patch, loc) => saveReg(co.id, t, patch, loc)} />
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
                   <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '—'}</div></div>
                   <EditField label="Max employees" value={b.max_employees} type="number" onSave={v => save('LOCATION', b.id, 'max_employees', v, co.id)} />
@@ -279,21 +318,9 @@ function CompanyCard({ co, isMobile, save, openPay, group, head }: {
             {co.branches.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No branches.</div>}
           </div>
 
-          <div style={C.sec}>Statutory registrations</div>
-          <div style={{ overflowX:'auto', marginBottom:18 }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-              <tbody>
-                {co.registrations.map((r: Registration) => (
-                  <tr key={r.id} style={{ borderBottom: `1px solid ${TK.line}` }}>
-                    <td style={{ padding:'7px 8px', width:60 }}><span style={{ fontSize:10, fontWeight:700, color:REG_COLOR[r.reg_type] || TK.inkSoft }}>{r.reg_type}</span></td>
-                    <td style={{ padding:'7px 8px' }}><EditField label="" value={r.reg_number} onSave={v => save('REGISTRATION', r.id, 'reg_number', v, co.id)} /></td>
-                    <td style={{ padding:'7px 8px', color:TK.muted }}>{[r.state, r.district].filter(Boolean).join(' · ') || '—'}</td>
-                  </tr>
-                ))}
-                {co.registrations.length === 0 && <tr><td style={{ padding:10, color:TK.faint }}>No registrations.</td></tr>}
-              </tbody>
-            </table>
-          </div>
+          <div style={C.sec}>Statutory registrations &amp; certificates</div>
+          <Compliance co={co} regs={co.registrations} isMobile={isMobile}
+            onSave={(t, patch, loc) => saveReg(co.id, t, patch, loc)} />
 
           {co.bank.length > 0 && (
             <>
@@ -399,6 +426,14 @@ export default function CompanyProfilePage() {
     notify('Saved & logged.'); reload()
   }
 
+  async function saveReg(company_id: string, reg_type: string,
+                         patch: Record<string, string | null>, location_id?: string | null) {
+    const r = await upsertRegistration({ company_id, reg_type, location_id: location_id ?? null,
+                                         patch, changedBy: 'Admin' })
+    if ((r as any).error) { notify('Save failed: ' + (r as any).error.message, 'error'); return }
+    notify((r as any).created ? 'Registration added & logged.' : 'Saved & logged.'); reload()
+  }
+
   async function doConfirm(period: string, amount: string, from: string, till: string) {
     if (!pay?.license) return
     const r = await confirmPayment({
@@ -430,7 +465,7 @@ export default function CompanyProfilePage() {
                 <GroupHeader g={g} card={C.card} />
                 {g.companies.map(co => (
                   <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay}
-                    group={g.group_name} head={head[co.id]} />
+                    group={g.group_name} head={head[co.id]} saveReg={saveReg} />
                 ))}
               </div>
             ))}

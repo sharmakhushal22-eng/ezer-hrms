@@ -209,3 +209,81 @@ export async function loadHeadcount(): Promise<Record<string, CompanyHeadcount>>
   }
   return out
 }
+
+// ── Statutory registrations ─────────────────────────────────────────────────
+// The registrations table has the right shape for all of these — reg_type,
+// reg_number, state, valid_from, valid_till, and an optional location_id so a
+// certificate can belong to one branch rather than the whole company. It was
+// simply empty, which is why none of it appeared anywhere.
+//
+// companies also carries gstin / epf_code / esic_code as single columns. Those
+// predate this table and cannot express validity or a per-branch certificate,
+// so registrations is the source of truth and the company columns are read as
+// a fallback for a number somebody entered before this screen existed.
+
+/** The registrations a company is expected to hold. Order is the order they
+ *  are displayed in — statutory first, then establishment licences. */
+export const REG_TYPES = [
+  { code: 'GST',     label: 'GST No',                  scope: 'COMPANY' as const, legacy: 'gstin'      },
+  { code: 'EPF',     label: 'EPF Code',                scope: 'COMPANY' as const, legacy: 'epf_code'   },
+  { code: 'ESIC',    label: 'ESIC Code',               scope: 'COMPANY' as const, legacy: 'esic_code'  },
+  { code: 'PT',      label: 'PT Registration',         scope: 'STATE'   as const, legacy: null         },
+  { code: 'LWF',     label: 'LWF Registration',        scope: 'STATE'   as const, legacy: null         },
+  { code: 'SE',      label: 'Shops & Establishment',   scope: 'BRANCH'  as const, legacy: null         },
+  { code: 'FACTORY', label: 'Factory Licence',         scope: 'BRANCH'  as const, legacy: null         },
+] as const
+
+export type RegScope = (typeof REG_TYPES)[number]['scope']
+
+/** Valid / expiring / expired / absent, from valid_till. Thirty days is the
+ *  warning window — enough notice to start a renewal that needs a government
+ *  office, which is the point of showing it at all. */
+export type RegHealth = 'MISSING' | 'NO_EXPIRY' | 'VALID' | 'EXPIRING' | 'EXPIRED'
+export function regHealth(r: Registration | undefined): { state: RegHealth; days: number | null } {
+  if (!r || !r.reg_number) return { state: 'MISSING', days: null }
+  if (!r.valid_till) return { state: 'NO_EXPIRY', days: null }
+  const till = new Date(r.valid_till + 'T00:00:00').getTime()
+  const days = Math.ceil((till - Date.now()) / 86_400_000)
+  if (days < 0) return { state: 'EXPIRED', days }
+  if (days <= 30) return { state: 'EXPIRING', days }
+  return { state: 'VALID', days }
+}
+
+/**
+ * Create or update one registration.
+ *
+ * Keyed on (company, type, location) rather than on an id, because the caller
+ * is a form for "the company's GST number", not for a row it already has —
+ * and the row very often does not exist yet. Insert and update both log to the
+ * same audit trail as every other edit on this screen.
+ */
+export async function upsertRegistration(input: {
+  company_id: string
+  reg_type: string
+  location_id?: string | null
+  patch: Partial<Pick<Registration, 'reg_number' | 'state' | 'district' | 'dept_address' | 'valid_from' | 'valid_till'>>
+  changedBy?: string
+}) {
+  const { company_id, reg_type, location_id = null, patch } = input
+  let sel = supabase.from('registrations').select('*')
+    .eq('company_id', company_id).eq('reg_type', reg_type)
+  sel = location_id ? sel.eq('location_id', location_id) : sel.is('location_id', null)
+  const { data: existing } = await sel.maybeSingle()
+
+  if (existing) {
+    return updateEntity('REGISTRATION', existing.id, patch,
+      { company_id, changedBy: input.changedBy })
+  }
+
+  const row = { company_id, reg_type, location_id, status: 'Active', ...patch }
+  const { data, error } = await supabase.from('registrations').insert(row).select('id').maybeSingle()
+  if (error) return { error }
+  await supabase.from('company_master_audit').insert(
+    Object.entries(patch).filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => ({
+      entity_type: 'REGISTRATION', entity_id: data?.id ?? null, company_id,
+      action: 'CREATE', field: k, old_value: null, new_value: String(v),
+      changed_by: input.changedBy || 'Admin',
+    })),
+  )
+  return { ok: true, created: true }
+}
