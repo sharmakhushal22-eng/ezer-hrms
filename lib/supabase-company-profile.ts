@@ -52,6 +52,8 @@ export interface Company {
   core_values?: string[] | null; tagline?: string | null
   brand_primary?: string | null; brand_secondary?: string | null; brand_font?: string | null
   linkedin_url?: string | null; twitter_url?: string | null; facebook_url?: string | null
+  // 078
+  attendance_modes?: string[] | null
   // assembled + computed
   branches: Branch[]; registrations: Registration[]; bank: BankAccount[]; license: License | null
   account_status: 'ACTIVE' | 'GRACE' | 'SUSPENDED'; days_to_due: number | null
@@ -362,5 +364,99 @@ export async function loadCompanyFacts(): Promise<Record<string, CompanyFacts>> 
     const cid = (l as any).company_id as string | null
     if (cid) get(cid).leavers12m++
   }
+  return out
+}
+
+// ── Sections 11 & 12 ────────────────────────────────────────────────────────
+// Policy definitions are mostly READ from tables that already exist —
+// shift_master, weekly_off_config and leave_types — rather than being a new
+// copy of the same facts. Documents and directors are genuinely new (078).
+
+export interface CompanyDoc {
+  id: string; company_id: string; doc_type: string; title: string; description: string | null
+  bucket: string; file_path: string | null; file_name: string | null
+  version: string | null; is_current: boolean
+  valid_from: string | null; valid_till: string | null; status: string
+}
+export interface Director {
+  id: string; company_id: string; employee_id: string | null; person_name: string
+  designation: string | null; din: string | null
+  is_board_member: boolean; is_signatory: boolean
+  email: string | null; phone: string | null
+  appointed_on: string | null; resigned_on: string | null
+}
+export interface Shift {
+  id: string; shift_code: string; shift_type: string | null; company_id: string | null
+  in_time: string | null; out_time: string | null; lunch_duration_mins: number | null
+  overtime_applicable: boolean | null; is_active: boolean | null
+}
+export interface WeeklyOff {
+  id: string; company_id: string | null; weekday: number; mode: string | null
+  nth_occurrences: number[] | null
+}
+export interface LeaveType {
+  id: string; name: string; short_name: string | null; application_mode: string | null
+  encashment_after: number | null; laps: boolean | null
+}
+
+/** The document types the profile always shows a slot for, present or not.
+ *  Same rule as the statutory register: a repository that lists only what has
+ *  been uploaded cannot tell you the handbook is missing. */
+export const DOC_TYPES = [
+  { code: 'HANDBOOK',        label: 'Company Handbook' },
+  { code: 'CODE_OF_CONDUCT', label: 'Code of Conduct' },
+  { code: 'REG_CERTIFICATE', label: 'Registration Certificate' },
+  { code: 'MOA',             label: 'Memorandum of Association' },
+  { code: 'AOA',             label: 'Articles of Association' },
+] as const
+
+export interface PolicyBundle {
+  docs: CompanyDoc[]
+  directors: Director[]
+  shifts: Shift[]
+  weeklyOff: WeeklyOff[]
+  leaveTypes: LeaveType[]
+}
+
+/** Working hours, derived from a shift rather than stored a second time.
+ *  Returns null when either end is missing — a half-known shift should read as
+ *  unknown, not as a plausible wrong number. */
+export function shiftHours(s: Shift): number | null {
+  if (!s.in_time || !s.out_time) return null
+  const mins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0) }
+  let span = mins(s.out_time) - mins(s.in_time)
+  if (span <= 0) span += 24 * 60          // a night shift crosses midnight
+  return Math.round(((span - (s.lunch_duration_mins ?? 0)) / 60) * 10) / 10
+}
+
+export async function loadPolicyBundle(): Promise<Record<string, PolicyBundle>> {
+  // Tables added by 078 may not exist yet. Each is fetched independently and a
+  // failure degrades that one list to empty rather than emptying the section.
+  const safe = async <T,>(p: PromiseLike<{ data: T[] | null; error: any }>): Promise<T[]> => {
+    try { const { data, error } = await p; return error ? [] : (data ?? []) } catch { return [] }
+  }
+
+  const [docs, dirs, shifts, wo, lt, cos] = await Promise.all([
+    safe<CompanyDoc>(supabase.from('company_documents').select('*').eq('status', 'Active') as any),
+    safe<Director>(supabase.from('company_directors').select('*').is('resigned_on', null) as any),
+    safe<Shift>(supabase.from('shift_master').select('*').eq('is_active', true) as any),
+    safe<WeeklyOff>(supabase.from('weekly_off_config').select('*') as any),
+    safe<LeaveType>(supabase.from('leave_types').select('id,name,short_name,application_mode,encashment_after,laps') as any),
+    safe<{ id: string }>(supabase.from('companies').select('id').eq('status', 'Active') as any),
+  ])
+
+  const out: Record<string, PolicyBundle> = {}
+  for (const c of cos) out[c.id] = { docs: [], directors: [], shifts: [], weeklyOff: [], leaveTypes: lt }
+
+  const push = <T extends { company_id?: string | null }>(rows: T[], key: keyof PolicyBundle) => {
+    for (const r of rows) {
+      // A row with no company_id applies to every company — weekly_off_config
+      // and shift_master both use null to mean "group-wide default", and
+      // dropping those would show a company with no working days at all.
+      const ids = r.company_id ? [r.company_id] : Object.keys(out)
+      for (const id of ids) if (out[id]) (out[id][key] as unknown[]).push(r)
+    }
+  }
+  push(docs, 'docs'); push(dirs, 'directors'); push(shifts, 'shifts'); push(wo, 'weeklyOff')
   return out
 }
