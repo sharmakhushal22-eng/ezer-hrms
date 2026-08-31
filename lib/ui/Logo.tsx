@@ -24,8 +24,6 @@
 
 import * as React from 'react';
 
-let uid = 0;
-
 // ── Lockup metrics ─────────────────────────────────────────────────────────
 // The emblem spans from the TOP OF THE E in EZER to the BOTTOM OF THE H in
 // HRMS. Both of those are glyph edges, not box edges, so the two constants
@@ -223,7 +221,18 @@ export function Logo({
   title?: string;
   tagline?: boolean;
 }) {
-  const id = React.useMemo(() => `ezl${++uid}`, []);
+  // The gradients need ids unique per instance, and the SAME id on the server
+  // and the client. A module-level counter gave neither: the server module
+  // keeps its counter across requests, so it emitted ezl17/ezl18 while a fresh
+  // client started at ezl1/ezl3, and every gradient reference mismatched on
+  // hydration. useId is generated from the component's position in the tree,
+  // so both sides agree.
+  //
+  // Stripped of punctuation because useId returns ':r0:' — legal in an id, but
+  // it also lands in url(#...) and in querySelector-shaped code later, where a
+  // colon is a pseudo-selector.
+  const rid = React.useId();
+  const id = React.useMemo(() => 'ezl' + rid.replace(/[^a-zA-Z0-9]/g, ''), [rid]);
   const cls = `ez-logo${onDark ? ' ez-logo--ondark' : ''}`;
 
   if (variant === 'mark') {
