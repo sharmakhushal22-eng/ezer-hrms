@@ -110,6 +110,13 @@
      on a white rail a filled block is heavier than one item deserves. */
   --ez-rail:             #FFFFFF;
   --ez-rail-text:        #111827;
+  /* Module names in the rail. railMuted (#4B5563 / #9CA3AF) is the ink for
+     secondary text, and reading it as "nav label" left twenty-seven module
+     names looking like captions next to their own coloured icons. These are
+     the primary thing on the rail and now carry a primary ink: 14.7:1 in
+     light, 14.0:1 in dark. railText stays one step darker still, so the
+     selected row keeps somewhere to go. */
+  --ez-rail-item:        #1F2937;
   --ez-rail-muted:       #4B5563;
   --ez-rail-faint:       #626D80;
   --ez-rail-line:        #E5E7EB;
@@ -247,6 +254,7 @@
        separation comes from that difference rather than from a border. */
     --ez-rail:             #171B21;
     --ez-rail-text:        #F3F4F6;
+    --ez-rail-item:        #E5E7EB;
     --ez-rail-muted:       #9CA3AF;
     --ez-rail-faint:       #828C9B;
     --ez-rail-line:        #262C35;
@@ -355,6 +363,7 @@
 
   --ez-rail:             #171B21;
   --ez-rail-text:        #F3F4F6;
+  --ez-rail-item:        #E5E7EB;
   --ez-rail-muted:       #9CA3AF;
   --ez-rail-faint:       #828C9B;
   --ez-rail-line:        #262C35;

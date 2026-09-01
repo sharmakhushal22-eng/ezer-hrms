@@ -91,6 +91,8 @@ export const C = {
   /** The navigation rail. White in light, one step above canvas in dark. */
   rail: 'var(--ez-rail)',
   railText: 'var(--ez-rail-text)',
+  /** Module names in the rail — the primary thing on it, so a primary ink. */
+  railItem: 'var(--ez-rail-item)',
   railMuted: 'var(--ez-rail-muted)',
   railFaint: 'var(--ez-rail-faint)',
   railLine: 'var(--ez-rail-line)',

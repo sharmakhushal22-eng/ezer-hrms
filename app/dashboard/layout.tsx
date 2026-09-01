@@ -206,7 +206,7 @@ function RailItem({ item, open, active }: { item: NavItem; open: boolean; active
         // custom property below — an inline background would win the cascade
         // and the dark-theme rules could never lift it. Only geometry and the
         // hue itself are inline here.
-        color: active ? C.railText : C.railMuted,
+        color: active ? C.railText : C.railItem,
         position: 'relative',
         // Set as a custom property so the hover and active rules in
         // ez-nav CSS can reach the hue without a style tag per row.
@@ -235,7 +235,18 @@ function RailItem({ item, open, active }: { item: NavItem; open: boolean; active
 
         {open && (
           <span style={{
-            fontSize: F.small, fontWeight: active ? W.bold : W.medium,
+            // 13.5/600, not 13/500. The module name is the thing being read on
+            // this rail, and at medium weight in a secondary grey it was losing
+            // to its own icon tile — the colour arrived first and the word came
+            // second. Measured against the 172px of label width the rail has:
+            // 13.5/600 renders the longest name, "ESS & Role Management", at
+            // 160px. 14/600 comes to 166px, which fits but leaves 6px, and that
+            // is not enough margin for a face whose metrics differ from the one
+            // measured. Selected rows go to 700 and one ink darker.
+            fontSize: 13.5,
+            fontWeight: active ? W.bold : W.semi,
+            letterSpacing: '-.005em',
+            color: active ? C.railText : C.railItem,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{item.label}</span>
         )}
@@ -293,6 +304,11 @@ function GroupBlock({ group, index, children, open }: {
 }
 
 const FONT = '"DM Sans","Segoe UI",sans-serif'
+
+// Geist is already downloaded, self-hosted and variable-fonted by next/font in
+// app/layout.tsx; --font-geist-sans is the family name it publishes. The stack
+// behind it is what shows if that variable is ever removed.
+const RAIL_FONT = 'var(--font-geist-sans), "Segoe UI", system-ui, -apple-system, sans-serif'
 
 // ── Sub-components live outside the parent. Declared inside, they re-mount on every
 //    render and any input in a child loses focus after one keystroke. ──
@@ -607,6 +623,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       `}</style>
 
       <nav aria-label="Main" className="ez-scroll" style={{
+        // The rail asked for "DM Sans" — as 71 files in this repo do — and DM
+        // Sans is not loaded anywhere, so every one of those declarations fell
+        // through to plain sans-serif. Meanwhile app/layout.tsx already loads
+        // Geist through next/font and exposes it as --font-geist-sans, and
+        // nothing had ever used it. This points the rail at the face that is
+        // actually there: self-hosted, no network request, no CSP exposure.
+        //
+        // Scoped to the nav rather than the whole dashboard on purpose — the
+        // same one-line change would restyle 71 files' worth of screens, and
+        // that is a decision to take deliberately, not a side effect of
+        // fixing the menu.
+        fontFamily: RAIL_FONT,
         width: open ? OPEN_W : SHUT_W,
         transition: `width ${M.slow}`,
         background: C.rail,
