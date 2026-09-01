@@ -184,7 +184,15 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
 
           {blockingCount > 0 && (
             <div style={{ marginTop: 10, padding: '10px 12px', borderRadius: 8, background: '#FFFBEB', border: '1px solid #FDE68A', color: C.amber, fontSize: 12.5 }}>
-              <b>{blockingCount} payslip{blockingCount === 1 ? '' : 's'} will be refused</b> — the stored figures do not tie. They stay out of the download; the rest go through.
+              {/* The reason differs per employee — figures that do not tie, a missing
+                  tax worksheet, a negative net. Naming one cause here would be a guess;
+                  the list below already carries the real one for each. */}
+              <b>{blockingCount} payslip{blockingCount === 1 ? '' : 's'} will be refused.</b>{' '}
+              They stay out of the download and the rest go through — open{' '}
+              <button onClick={() => setShowIssues(true)}
+                style={{ background: 'none', border: 'none', padding: 0, font: 'inherit', color: C.amber, textDecoration: 'underline', cursor: 'pointer' }}>
+                the notes below
+              </button>{' '}to see which, and why.
             </div>
           )}
 

@@ -37,14 +37,17 @@ interface RunCtx {
   snapshots: any[]
   lines: Map<string, any>            // employee_id → payroll_lines row
   configVersion: string | null
+  /** Newest first — what happened to this run, and when. */
+  audit: { action: string; created_at: string }[]
 }
 
 async function loadRun(runId: string): Promise<RunCtx | { error: string; status: number }> {
   const { data: run } = await sb.from('payroll_runs').select('*').eq('id', runId).maybeSingle()
   if (!run) return { error: 'Payroll run not found.', status: 404 }
-  const [{ data: company }, { data: cfg }] = await Promise.all([
+  const [{ data: company }, { data: cfg }, { data: audit }] = await Promise.all([
     sb.from('companies').select('id, company_name, short_name, cin, reg_office, corp_office').eq('id', run.company_id).maybeSingle(),
     sb.from('v_tax_config_version').select('config_version').maybeSingle(),
+    sb.from('payroll_audit_log').select('action, created_at').eq('run_id', runId).order('created_at', { ascending: false }).limit(60),
   ])
   const snapshots: any[] = []
   for (let from = 0; ; from += 1000) {
@@ -60,29 +63,37 @@ async function loadRun(runId: string): Promise<RunCtx | { error: string; status:
     ;(data || []).forEach((l: any) => lines.set(l.employee_id, l))
     if ((data || []).length < 1000) break
   }
-  return { run, company, snapshots, lines, configVersion: cfg?.config_version ?? null }
+  return { run, company, snapshots, lines, configVersion: cfg?.config_version ?? null, audit: (audit || []) as any }
 }
 
-/** C4 — why this run cannot be issued as it stands, or null if it can. */
+/** C4 — why this run cannot be issued as it stands, or null if it can.
+ *
+ *  Staleness is judged from the audit log, not from row timestamps. The first version
+ *  compared each snapshot's synced_at against its line's calculated_at, and reported
+ *  every employee as stale after a perfectly good run: sync_month_tds stamps
+ *  synced_at = now() and runs INSIDE Run Payroll, so those two timestamps land
+ *  milliseconds apart in an order nothing guarantees. Sub-second ordering between two
+ *  writers in the same operation is noise, not evidence.
+ *
+ *  payroll_audit_log records each step with its own timestamp, which is the real
+ *  question: did a sync happen AFTER the last calculation? */
 function staleReason(ctx: RunCtx): string | null {
   if (SETTLED.has(String(ctx.run.status))) return null
   if (!ctx.lines.size) return 'Payroll has not been run for this month yet.'
-  // payroll_lines is UPSERTED, so created_at is the first-ever calculation and never
-  // moves on a re-run. The engine stamps deductions_json.calculated_at on every write;
-  // lines from before that stamp fall back to payroll_runs.updated_at, which the
-  // engine bumps at the end of every calculation.
-  const runCalc = ctx.run.updated_at ? new Date(ctx.run.updated_at) : null
-  let older = 0, olderCfg = 0, noCfg = 0
+
+  const lastCalc = ctx.audit.find(a => a.action === 'PAYROLL_CALCULATED')?.created_at
+  const lastSync = ctx.audit.find(a => String(a.action).startsWith('SYNC_'))?.created_at
+  if (lastCalc && lastSync && new Date(lastSync) > new Date(lastCalc)) {
+    return 'The Month Master was synced after the last payroll calculation — re-run payroll so the payslips match the engine.'
+  }
+
+  let olderCfg = 0, noCfg = 0
   for (const s of ctx.snapshots) {
-    const l = ctx.lines.get(s.employee_id)
-    if (!l) continue
-    const stamp = l.deductions_json?.calculated_at ? new Date(l.deductions_json.calculated_at) : runCalc
-    if (s.synced_at && stamp && stamp < new Date(s.synced_at)) older++
+    if (!ctx.lines.has(s.employee_id)) continue
     if (!s.tds_config_version) noCfg++
     else if (ctx.configVersion && new Date(s.tds_config_version) < new Date(ctx.configVersion)) olderCfg++
   }
   const n = (k: number) => `${k} employee${k === 1 ? '' : 's'}`
-  if (older) return `${n(older)} had their Month Master synced after the last calculation — re-run payroll so the payslip matches the engine.`
   if (noCfg) return `${n(noCfg)} have no TDS engine result stored (the TDS sync did not complete on the last run) — re-run payroll and check that the TDS step succeeds.`
   if (olderCfg) return `${n(olderCfg)} were calculated under an older tax configuration — re-run payroll first.`
   return null
