@@ -151,6 +151,11 @@ check('height animates via grid-template-rows, not max-height',
 check('rows unfold on a hinge with a shared vanishing point',
       'perspective: 640px' in css and 'rotateX(-72deg)' in css)
 check('open staggers, close does not', 'transition-delay: calc(var(--n) * 28ms)' in css)
+check('fold marker rotates between shut and open',
+      '.ez-fold svg{' in css and 'rotate(-90deg)' in css and '.ez-open .ez-fold svg{ transform: rotate(0deg) }' in css)
+check('fold chip is an affordance, not permanent weight',
+      '.ez-fold{' in css and 'background: transparent;' in css
+      and '.ez-group-head:hover .ez-fold,' in css)
 check('collapsed rail cannot fold a section shut (no way to reopen it)',
       'const foldable = Boolean(group) && railOpen;' in head)
 check('a shut section still reports what it hides', 'ez-count' in head and 'items.length' in head)

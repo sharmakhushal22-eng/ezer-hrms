@@ -319,12 +319,12 @@ function GroupBlock({ group, index, items, railOpen, path, expanded, onToggle }:
               </span>
             </span>
           )}
-          {/* A plus that becomes a minus. Two bars rather than a chevron: at
-              11px a rotating chevron reads as a smudge, where a bar
-              disappearing is unambiguous. */}
           <span className="ez-fold" aria-hidden>
-            <span className="ez-fold-h" />
-            <span className="ez-fold-v" />
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"
+                 stroke="currentColor" strokeWidth="1.8"
+                 strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 4.5 6 7.8 9 4.5" />
+            </svg>
           </span>
         </button>
       )}
@@ -683,22 +683,36 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           transition-delay: calc(var(--n) * 28ms);
         }
 
-        /* A plus that loses its vertical bar. Two bars rather than a chevron:
-           at this size a rotating chevron reads as a smudge, where a stroke
-           vanishing is unambiguous even at 9px. */
+        /* A chevron, pointing right when shut and down when open — the
+           disclosure convention, and the one shape people already read
+           without being taught it.
+
+           This was a plus-becoming-a-minus, on the reasoning that a chevron
+           would smudge at this size. Drawn at 12px against the alternatives it
+           plainly does not, and the plus was the least attractive of the five.
+           The two-bar chevrons that fold flat were tried too and both leave a
+           notch where the arms meet in the open state.
+
+           The chip behind it is transparent until the heading is hovered or
+           focused. Six chips sitting there permanently would add weight to
+           every section for an affordance that is only needed when someone is
+           reaching for it. */
         .ez-fold{
-          margin-left:auto; position:relative; width:9px; height:9px; flex-shrink:0;
+          margin-left:auto; flex-shrink:0;
+          display:flex; align-items:center; justify-content:center;
+          width:20px; height:20px; border-radius:7px;
+          color: var(--g-ink); background: transparent;
+          transition: background .2s ease;
+        }
+        .ez-group-head:hover .ez-fold,
+        .ez-group-head:focus-visible .ez-fold{
+          background: color-mix(in srgb, var(--g-ink) 13%, transparent);
+        }
+        .ez-fold svg{
           transform: rotate(-90deg);
-          transition: transform .34s cubic-bezier(.22,1,.36,1);
+          transition: transform .38s cubic-bezier(.22,1,.36,1);
         }
-        .ez-open .ez-fold{ transform: rotate(0deg) }
-        .ez-fold-h, .ez-fold-v{
-          position:absolute; background: var(--g-ink); border-radius:1px;
-          transition: transform .28s cubic-bezier(.22,1,.36,1);
-        }
-        .ez-fold-h{ left:0; right:0; top:4px; height:1.6px }
-        .ez-fold-v{ top:0; bottom:0; left:4px; width:1.6px }
-        .ez-open .ez-fold-v{ transform: scaleY(0) }
+        .ez-open .ez-fold svg{ transform: rotate(0deg) }
 
         /* What a shut section still tells you. Without these, folding a
            section hides both its rows and the fact that you are standing in
@@ -788,7 +802,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           .ez-group-panel{ transition:none }
           .ez-group-items > a{ transition:none; transform:none; opacity:1 }
           .ez-open .ez-group-items > a{ transition-delay:0ms }
-          .ez-fold, .ez-fold-h, .ez-fold-v, .ez-group-name{ transition:none }
+          .ez-fold, .ez-fold svg, .ez-group-name{ transition:none }
           .ez-count-here{ animation:none }
         }
       `}</style>
