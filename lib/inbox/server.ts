@@ -187,9 +187,4 @@ export async function people(ids: string[]) {
   return new Map((data ?? []).map((e: any) => [e.id, e]))
 }
 
-/** True when 080 has not been applied yet. Every route checks this once so
- *  the UI can say "not enabled yet" instead of showing a broken screen. */
-export function notInstalled(err: any): boolean {
-  const m = String(err?.message || err?.code || '')
-  return m.includes('PGRST205') || m.includes('does not exist') || m.includes('42P01')
-}
+export { notInstalled } from './errors'
