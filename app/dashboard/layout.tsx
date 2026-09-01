@@ -105,6 +105,27 @@ const HUE: Record<string, string> = {
   '/dashboard/support':              '#A57403',
 }
 const hueOf = (href: string) => HUE[href] ?? '#2563EB'
+
+// The section headings had one grey between them all, which made six different
+// sections look like one list with words dropped into it. Each now carries its
+// own ink — the centre of that group's item arc, so the heading is visibly the
+// same family as the rows beneath it.
+//
+// Two values per group, not one, because a hue that clears 5.5:1 on white is
+// nowhere near readable on #171B21 and vice versa. 10px uppercase is small
+// text: 4.5:1 is the floor, not a comfortable place to sit, so these were
+// walked until both themes cleared 5.5:1.
+const GROUP_INK: Record<string, { inkL: string; inkD: string }> = {
+  'People':            { inkL: '#562FB1', inkD: '#9E82DE' },
+  'Time & Attendance': { inkL: '#187091', inkD: '#50BBE2' },
+  'Money':             { inkL: '#1F753C', inkD: '#5ED485' },
+  'Compliance & Docs': { inkL: '#B12F82', inkD: '#D86EB1' },
+  'Setup':             { inkL: '#51698A', inkD: '#7E95B4' },
+  'Help':              { inkL: '#9E531A', inkD: '#E28F50' },
+}
+const inkOf = (group: string) =>
+  GROUP_INK[group] ?? { inkL: 'var(--ez-rail-faint)', inkD: 'var(--ez-rail-faint)' }
+
 interface NavGroup { group: string; items: NavItem[] }
 
 // Every href here is identical to the previous flat list. Nothing moved except
@@ -223,19 +244,51 @@ function RailItem({ item, open, active }: { item: NavItem; open: boolean; active
   );
 }
 
-function GroupLabel({ label, open }: { label: string; open: boolean }) {
+/**
+ * A section heading, and the line that separates one section from the next.
+ *
+ * Three devices, each doing something the other two cannot: the RULE above it
+ * says a section ended, the DOT and the ink say which section this is, and the
+ * SPINE down the items (in .ez-group-items) says how far it reaches. One alone
+ * is ambiguous — a rule with no colour could be any boundary, and colour with
+ * no rule was what the rail had before, which read as one long list.
+ */
+function GroupHead({ label, open }: { label: string; open: boolean }) {
   if (!label) return null;
-  // Collapsed, the words would not fit — the grouping survives as a rule, so
-  // the rail keeps its rhythm instead of becoming one undifferentiated column.
+  // Collapsed there is no room for the words, so the rule carries the whole
+  // job — and it is tinted with the section's ink rather than the flat grey it
+  // used to be, so the boundaries stay legible at 60px.
   if (!open) {
-    return <div style={{ height: 1, background: C.railLine, margin: '7px 12px', flexShrink: 0 }} />;
+    return <div className="ez-group-rule-shut" aria-hidden />;
   }
   return (
-    <div style={{
-      fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.1em',
-      textTransform: 'uppercase', color: C.railFaint,
-      padding: '14px 10px 5px', whiteSpace: 'nowrap', flexShrink: 0,
-    }}>{label}</div>
+    <div className="ez-group-head">
+      <span className="ez-group-dot" aria-hidden />
+      <span className="ez-group-name">{label}</span>
+    </div>
+  );
+}
+
+/** One section: its heading, and its items gathered behind a spine. Previously
+ *  this wrapper was `display: contents`, which draws no box — so there was
+ *  nothing for a spine or a background to attach to. */
+function GroupBlock({ group, index, children, open }: {
+  group: string; index: number; open: boolean; children: React.ReactNode;
+}) {
+  const { inkL, inkD } = inkOf(group);
+  return (
+    <div className="ez-group" style={{
+      ['--g-ink-l' as string]: inkL,
+      ['--g-ink-d' as string]: inkD,
+      // Drives the entrance stagger. Sections arrive in reading order rather
+      // than all at once, which is what makes them read as six things.
+      ['--i' as string]: index,
+    }}>
+      <GroupHead label={group} open={open} />
+      <div className={group && open ? 'ez-group-items' : 'ez-group-items ez-group-bare'}>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -445,12 +498,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             color: color-mix(in srgb, var(--nav-hue) 74%, #FFF);
           }
           :root:not([data-ez-theme="light"]) .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
+          :root:not([data-ez-theme="light"]) .ez-group{ --g-ink: var(--g-ink-d) }
         }
         :root[data-ez-theme="dark"] .ez-nav:not(.ez-nav-on) .ez-nav-tile{
             background: color-mix(in srgb, var(--nav-hue) 20%, transparent);
             color: color-mix(in srgb, var(--nav-hue) 74%, #FFF);
           }
         :root[data-ez-theme="dark"] .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
+        :root[data-ez-theme="dark"] .ez-group{ --g-ink: var(--g-ink-d) }
 
         /* The lift proper. Guarded, because relative colour syntax is the one
            thing here a browser might not have — and the color-mix above is a
@@ -466,11 +521,88 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           }
         }
 
+        /* ── Sections ────────────────────────────────────────────────────
+           --g-ink is the section's own ink, swapped per theme further down.
+           Everything in a section reads from it, so one value moves the
+           heading, the dot, the boundary rule and the spine together. */
+        .ez-group{ display:flex; flex-direction:column; flex-shrink:0; --g-ink: var(--g-ink-l) }
+        .ez-group-items{ display:flex; flex-direction:column; gap:1px; position:relative }
+
+        /* The spine. It sits at left:0 BEHIND the rows rather than indenting
+           them — an indent would have cost 10px of label width, and
+           "ESS & Role Management" already runs to the edge. The row tints are
+           translucent, so it shows through them; the active row's own bar
+           covers it, which is the right precedence. */
+        .ez-group-items::before{
+          content:''; position:absolute; left:0; top:3px; bottom:3px; width:2px;
+          border-radius:2px; pointer-events:none;
+          background: linear-gradient(180deg,
+            color-mix(in srgb, var(--g-ink) 62%, transparent),
+            color-mix(in srgb, var(--g-ink) 14%, transparent));
+          transform-origin: top;
+          animation: ez-spine .42s cubic-bezier(.2,.8,.2,1) both;
+          animation-delay: calc(var(--i) * 70ms + 90ms);
+          transition: opacity .2s ease;
+        }
+        .ez-group-bare::before{ display:none }
+
+        /* The boundary. Full width, fading out to the right so it reads as a
+           rule under the section above rather than a box around this one. */
+        .ez-group-head{
+          position:relative; display:flex; align-items:center; gap:8px;
+          padding:15px 8px 6px; white-space:nowrap; flex-shrink:0;
+          animation: ez-sec-in .42s cubic-bezier(.2,.8,.2,1) both;
+          animation-delay: calc(var(--i) * 70ms);
+        }
+        .ez-group-head::before,
+        .ez-group-rule-shut{
+          content:''; display:block; height:1px; border-radius:1px;
+          background: linear-gradient(90deg,
+            color-mix(in srgb, var(--g-ink) 60%, transparent),
+            color-mix(in srgb, var(--g-ink) 8%, transparent) 78%, transparent);
+          transform-origin: left;
+          animation: ez-sec-line .5s cubic-bezier(.2,.8,.2,1) both;
+          animation-delay: calc(var(--i) * 70ms);
+        }
+        .ez-group-head::before{ position:absolute; left:0; right:0; top:0 }
+        .ez-group-rule-shut{ margin:9px 8px 8px; flex-shrink:0 }
+
+        .ez-group-dot{
+          width:6px; height:6px; border-radius:2px; flex-shrink:0;
+          background: var(--g-ink);
+          transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s ease;
+        }
+        .ez-group-name{
+          font-size:${F.micro}px; font-weight:${W.bold}; letter-spacing:.12em;
+          text-transform:uppercase; color: var(--g-ink);
+          overflow:hidden; text-overflow:ellipsis;
+        }
+
+        /* Hovering anywhere in a section shows you its extent. The resting
+           state is not dimmed to make room for this — the ink already clears
+           5.5:1 — so what changes is the spine and the dot, never the text. */
+        .ez-group:hover .ez-group-items::before{ opacity:1 }
+        .ez-group .ez-group-items::before{ opacity:.72 }
+        .ez-group:hover .ez-group-dot{
+          transform: scale(1.4);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-ink) 20%, transparent);
+        }
+
+        @keyframes ez-sec-line{ from{ transform:scaleX(0); opacity:0 } to{ transform:scaleX(1); opacity:1 } }
+        @keyframes ez-sec-in{ from{ opacity:0; transform:translateX(-6px) } to{ opacity:1; transform:none } }
+        @keyframes ez-spine{ from{ transform:scaleY(0) } to{ transform:scaleY(1) } }
+
         .ez-brand:hover .ez-brand-chev{transform:translateX(2px)}
 
         @media (prefers-reduced-motion: reduce){
           .ez-nav, .ez-nav-tile, .ez-nav:hover, .ez-nav:active,
-          .ez-nav:hover .ez-nav-tile{ transition:none; transform:none }
+          .ez-nav:hover .ez-nav-tile,
+          .ez-group:hover .ez-group-dot{ transition:none; transform:none }
+          /* The sections still have to ARRIVE — only the movement goes. */
+          .ez-group-head, .ez-group-head::before,
+          .ez-group-rule-shut, .ez-group-items::before{
+            animation:none; transform:none; opacity:1;
+          }
         }
       `}</style>
 
@@ -519,17 +651,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               a route the sidebar hides here is a route "blocked" catches if
               typed straight into the address bar. A group with nothing left
               in it does not render its own empty divider. */}
-          {NAV.map(g => {
+          {NAV.map((g, i) => {
             const items = g.items.filter(item => canSee(grant, item.module));
             if (!items.length) return null;
             return (
-              <div key={g.group || 'root'} style={{ display: 'contents' }}>
-                <GroupLabel label={g.group} open={open} />
+              <GroupBlock key={g.group || 'root'} group={g.group} index={i} open={open}>
                 {items.map(item => (
                   <RailItem key={item.href} item={item} open={open}
                     active={isActive(path, item.href)} />
                 ))}
-              </div>
+              </GroupBlock>
             );
           })}
         </div>
