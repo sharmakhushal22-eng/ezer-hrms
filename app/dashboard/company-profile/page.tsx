@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   loadHierarchy, updateEntity, loadAudit, confirmPayment, loadHeadcount, upsertRegistration,
-  loadCompanyFacts, type CompanyFacts, loadPolicyBundle, type PolicyBundle,
+  loadCompanyFacts, type CompanyFacts,
   type GroupTree, type Company, type Branch, type Registration, type AuditRow,
   type CompanyHeadcount,
 } from '@/lib/supabase-company-profile'
@@ -205,14 +205,13 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
 }
 
 // ── Company card (one company in the group) ─────────────────────────
-function CompanyCard({ co, isMobile, save, openPay, group, head, facts, policy, saveReg }: {
+function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg }: {
   co: Company; isMobile: boolean
   save: (entity: any, id: string, field: string, val: string, company_id: string) => Promise<void>
   openPay: (co: Company) => void
   group: string
   head?: CompanyHeadcount
   facts?: CompanyFacts
-  policy?: PolicyBundle
   saveReg: (company_id: string, reg_type: string, patch: Record<string, string | null>, location_id?: string | null) => Promise<void>
 }) {
   const [open, setOpen] = useState(false)
@@ -282,7 +281,6 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, policy, 
               deptHeadcount: facts?.deptHeadcount ?? {},
               employmentMix: facts?.employmentMix ?? {},
               leavers12m: facts?.leavers12m ?? 0,
-              policy,
             }} />
 
           {/* Group / Company / Branch / Location. All four already existed in
@@ -485,7 +483,6 @@ export default function CompanyProfilePage() {
   const [pay, setPay] = useState<Company | null>(null)
   const [head, setHead] = useState<Record<string, CompanyHeadcount>>({})
   const [facts, setFacts] = useState<Record<string, CompanyFacts>>({})
-  const [policy, setPolicy] = useState<Record<string, PolicyBundle>>({})
   const [right, setRight] = useState<EditRight>({ canEdit: false, reason: 'Checking…', actor: '' })
   const [editGroup, setEditGroup] = useState<GroupTree | null>(null)
 
@@ -503,10 +500,10 @@ export default function CompanyProfilePage() {
       // Headcount is fetched alongside, not after: it is one query over
       // employees and there is no reason to make the screen wait a round trip
       // for it.
-      const [g, a, h, f, pol] = await Promise.all([
-        loadHierarchy(), loadAudit(undefined, 40), loadHeadcount(), loadCompanyFacts(), loadPolicyBundle(),
+      const [g, a, h, f] = await Promise.all([
+        loadHierarchy(), loadAudit(undefined, 40), loadHeadcount(), loadCompanyFacts(),
       ])
-      setGroups(g); setAudit(a); setHead(h); setFacts(f); setPolicy(pol)
+      setGroups(g); setAudit(a); setHead(h); setFacts(f)
     } catch (e: any) {
       notify('Load failed: ' + (e?.message || 'check tables'), 'error')
     }
@@ -572,7 +569,7 @@ export default function CompanyProfilePage() {
                   canEdit={right.canEdit} onEdit={() => setEditGroup(g)} />
                 {g.companies.map(co => (
                   <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay}
-                    group={g.group_name} head={head[co.id]} facts={facts[co.id]} policy={policy[co.id]} saveReg={saveReg} />
+                    group={g.group_name} head={head[co.id]} facts={facts[co.id]} saveReg={saveReg} />
                 ))}
               </div>
             ))}

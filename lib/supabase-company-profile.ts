@@ -440,6 +440,15 @@ export function shiftHours(s: Shift): number | null {
   return Math.round(((span - (s.lunch_duration_mins ?? 0)) / 60) * 10) / 10
 }
 
+/**
+ * NO CALLERS as of 02-Sep-2026. The Documents and Policies tabs it fed were
+ * removed from the company profile on request; this and the types around it
+ * are kept rather than deleted so putting those tabs back is a UI change
+ * only, the way the InvestmentDeclaration nav entry is kept.
+ *
+ * It reads company_documents and company_directors, which migration 078
+ * creates — so nothing in the app needs 078 any more either.
+ */
 export async function loadPolicyBundle(): Promise<Record<string, PolicyBundle>> {
   // Tables added by 078 may not exist yet. Each is fetched independently and a
   // failure degrades that one list to empty rather than emptying the section.

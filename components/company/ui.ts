@@ -42,8 +42,6 @@ export const ACCENT: Record<string, string> = {
   statutory:  '#BE123C',
   hr:         '#0D9488',
   brand:      '#C026D3',
-  documents:  '#1D4ED8',
-  policy:     '#B45309',
 }
 
 export const CSS = `

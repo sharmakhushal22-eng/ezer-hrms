@@ -22,9 +22,9 @@ import { GenderSplit, GenderInline } from './GenderSplit'
 import { Compliance } from './Compliance'
 import { ACCENT, CSS, card, heading, rule, label as lblS, value as valS, stat, statValue, statLabel } from './ui'
 import {
-  REG_TYPES, regHealth, DOC_TYPES, shiftHours,
+  REG_TYPES, regHealth,
   type Company, type Registration, type Branch, type BankAccount,
-  type CompanyHeadcount, type PolicyBundle,
+  type CompanyHeadcount,
 } from '@/lib/supabase-company-profile'
 
 const WEEKDAY = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']
@@ -43,7 +43,6 @@ export interface SectionData {
   deptHeadcount: Record<string, number>
   employmentMix: Record<string, number>
   leavers12m: number
-  policy?: PolicyBundle
 }
 
 const SECTIONS = [
@@ -57,8 +56,6 @@ const SECTIONS = [
   { id: 'statutory',  label: 'Statutory' },
   { id: 'hr',         label: 'People' },
   { id: 'brand',      label: 'Brand' },
-  { id: 'documents',  label: 'Documents' },
-  { id: 'policy',     label: 'Policies' },
 ] as const
 type SectionId = (typeof SECTIONS)[number]['id']
 
@@ -80,18 +77,6 @@ function completeness(id: SectionId, d: SectionData): { done: number; total: num
     case 'statutory':  return count([co.pf_status, co.esic_status, co.maternity_compliant, co.dpdp_compliant])
     case 'hr':         return count([co.approved_strength, co.default_employment_type, co.probation_days, co.notice_period_days, co.max_leave_carryforward, co.leave_year_start_month])
     case 'brand':      return count([co.vision_statement, co.mission_statement, co.core_values, co.tagline, co.brand_primary, co.linkedin_url])
-    // Documents counts the five standard slots that have a current file, plus
-    // whether anyone is on the board — six things a new company must produce.
-    case 'documents':  return {
-      done: DOC_TYPES.filter(t => d.policy?.docs.some(x => x.doc_type === t.code && x.is_current)).length
-            + ((d.policy?.directors.length ?? 0) > 0 ? 1 : 0),
-      total: DOC_TYPES.length + 1,
-    }
-    case 'policy':     return count([
-      d.policy?.shifts.length || null, d.policy?.weeklyOff.length || null,
-      d.policy?.leaveTypes.length || null, co.attendance_modes?.length || null,
-      co.max_leave_carryforward, co.notice_period_days,
-    ])
   }
 }
 
@@ -607,217 +592,6 @@ export function CompanySections({ d, isMobile, saveReg }: {
         </div>
       )}
 
-      {/* ── 11. DOCUMENTS ── */}
-      {tab === 'documents' && (
-        <div key={tab} className="cp-in">
-          <div style={block()}>
-            {(() => {
-              const onFile = DOC_TYPES.filter(t => d.policy?.docs.some(x => x.doc_type === t.code && x.is_current)).length
-              return (
-                <StatStrip isMobile={isMobile} items={[
-                  { label: 'On file', accent: ACC, value: `${onFile}/${DOC_TYPES.length}`,
-                    fill: onFile / DOC_TYPES.length },
-                  { label: 'Missing', accent: onFile === DOC_TYPES.length ? ACCENT.finance : '#DC2626',
-                    value: DOC_TYPES.length - onFile },
-                  { label: 'Directors', accent: ACCENT.compliance, value: d.policy?.directors.length ?? 0 },
-                  { label: 'Signatories', accent: ACCENT.org,
-                    value: (d.policy?.directors ?? []).filter(x => x.is_signatory).length },
-                ]} />
-              )
-            })()}
-            <Head>Document repository</Head>
-            <div style={{ display: 'grid', gap: 8 }}>
-              {DOC_TYPES.map(t => {
-                const doc = d.policy?.docs.find(x => x.doc_type === t.code && x.is_current)
-                return (
-                  <div key={t.code} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-                    padding: '10px 12px', border: `1px solid ${C.line}`, borderRadius: 10,
-                  }}>
-                    <span aria-hidden style={{
-                      width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: doc ? C.positiveTint : C.sunken, color: doc ? C.positive : C.faint,
-                    }}>
-                      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-                        <path d="M9.5 1.5H4a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 4 14.5h8a1.5 1.5 0 0 0 1.5-1.5V5.5L9.5 1.5Z" strokeLinejoin="round" />
-                        <path d="M9.5 1.5v4h4" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-                    <div style={{ flex: 1, minWidth: 170 }}>
-                      <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink }}>{t.label}</div>
-                      <div style={{ fontSize: F.micro, color: doc ? C.muted : C.faint }}>
-                        {doc
-                          ? [doc.file_name, doc.version && `v${doc.version}`].filter(Boolean).join(' · ')
-                          : 'Not uploaded'}
-                      </div>
-                    </div>
-                    {doc?.valid_till && (
-                      <span style={{ fontSize: F.micro, color: C.muted }}>
-                        valid to {doc.valid_till}
-                      </span>
-                    )}
-                    <span style={{
-                      fontSize: F.micro, fontWeight: W.semi, padding: '2px 9px', borderRadius: R.pill,
-                      background: doc ? C.positiveTint : C.criticalTint,
-                      color: doc ? C.positive : C.critical, whiteSpace: 'nowrap',
-                    }}>{doc ? 'On file' : 'Missing'}</span>
-                  </div>
-                )
-              })}
-            </div>
-            {/* Upload needs both migration 078 AND a storage bucket, and the
-                bucket is not something SQL can create. Saying which is
-                outstanding beats a button that fails. */}
-            <div style={{ marginTop: 12, fontSize: F.micro, color: C.faint, lineHeight: 1.6 }}>
-              Uploads need migration <strong>078</strong> and a private
-              <code style={{ fontFamily: 'ui-monospace, monospace' }}> company-docs </code>
-              storage bucket. Until both exist there is nowhere to put the file.
-            </div>
-          </div>
-
-          <div style={block()}>
-            <Head>Directors &amp; board ({d.policy?.directors.length ?? 0})</Head>
-            <div style={{ display: 'grid', gap: 7 }}>
-              {(d.policy?.directors ?? []).map(dir => (
-                <div key={dir.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-                  padding: '9px 11px', border: `1px solid ${C.line}`, borderRadius: 9,
-                }}>
-                  <span style={{ fontSize: F.small, fontWeight: W.semi, minWidth: 150 }}>{dir.person_name}</span>
-                  <span style={{ fontSize: F.micro, color: C.muted, minWidth: 120 }}>{dir.designation || '—'}</span>
-                  <span style={{ fontSize: F.micro, color: C.muted, fontFamily: 'ui-monospace, monospace' }}>
-                    {dir.din ? `DIN ${dir.din}` : ''}
-                  </span>
-                  <span style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                    {dir.is_board_member && <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: R.pill, background: C.brandTint, color: C.brandDeep, fontWeight: W.semi }}>board</span>}
-                    {dir.is_signatory && <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: R.pill, background: C.warningTint, color: C.warning, fontWeight: W.semi }}>signatory</span>}
-                  </span>
-                </div>
-              ))}
-              {!(d.policy?.directors.length) && (
-                <span style={{ fontSize: F.micro, color: C.faint }}>
-                  No directors recorded. Needs migration 078.
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── 12. POLICIES ── */}
-      {tab === 'policy' && (
-        <div key={tab} className="cp-in">
-          <div style={block()}>
-            {(() => {
-              const offs = new Set((d.policy?.weeklyOff ?? []).filter(w => w.mode === 'EVERY').map(w => w.weekday)).size
-              const sh = d.policy?.shifts?.[0]
-              const hrs = sh ? shiftHours(sh) : null
-              return (
-                <StatStrip isMobile={isMobile} items={[
-                  { label: 'Working days', accent: ACC, value: d.policy?.weeklyOff.length ? 7 - offs : '—',
-                    hint: 'per week' },
-                  { label: 'Shift hours', accent: ACCENT.payroll, value: hrs != null ? `${hrs}h` : '—',
-                    hint: sh ? `${(sh.in_time||'').slice(0,5)}–${(sh.out_time||'').slice(0,5)}` : undefined },
-                  { label: 'Shifts', accent: ACCENT.org, value: d.policy?.shifts.length ?? 0 },
-                  { label: 'Leave types', accent: ACCENT.hr, value: d.policy?.leaveTypes.length ?? 0,
-                    hint: `${(d.policy?.leaveTypes ?? []).filter(l => l.encashment_after != null).length} encashable` },
-                ]} />
-              )
-            })()}
-            <Head>Working days &amp; hours</Head>
-            <div style={grid(isMobile ? 1 : 2)}>
-              <Field label="Weekly off" value={
-                (d.policy?.weeklyOff.length)
-                  ? d.policy.weeklyOff.map(w =>
-                      `${WEEKDAY[w.weekday] ?? w.weekday}${w.mode && w.mode !== 'EVERY' ? ` (${w.mode.toLowerCase()})` : ''}`
-                    ).join(', ')
-                  : null} />
-              <Field label="Working days" value={
-                (d.policy?.weeklyOff.length)
-                  ? `${7 - new Set(d.policy.weeklyOff.filter(w => w.mode === 'EVERY').map(w => w.weekday)).size} per week`
-                  : null} />
-              <Field label="Attendance mode" value={
-                co.attendance_modes?.length
-                  ? co.attendance_modes.map(m => m.toLowerCase()).join(', ')
-                  : null} />
-              <Field label="Notice period" value={co.notice_period_days ? `${co.notice_period_days} days` : null} />
-            </div>
-          </div>
-
-          <div style={block()}>
-            <Head>Shifts ({d.policy?.shifts.length ?? 0})</Head>
-            <div style={{ display: 'grid', gap: 7 }}>
-              {(d.policy?.shifts ?? []).map(sh => {
-                const hrs = shiftHours(sh)
-                return (
-                  <div key={sh.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-                    padding: '9px 11px', border: `1px solid ${C.line}`, borderRadius: 9,
-                  }}>
-                    <span style={{ fontSize: F.small, fontWeight: W.semi, minWidth: 120 }}>{sh.shift_code}</span>
-                    <span style={{ fontSize: 10, padding: '1px 7px', borderRadius: R.pill,
-                                   background: C.sunken, color: C.inkSoft }}>{sh.shift_type || '—'}</span>
-                    <span style={{ fontSize: F.small, color: C.ink, fontVariantNumeric: 'tabular-nums' }}>
-                      {(sh.in_time || '—').slice(0,5)} – {(sh.out_time || '—').slice(0,5)}
-                    </span>
-                    <span style={{ fontSize: F.micro, color: C.muted }}>
-                      {sh.lunch_duration_mins ? `${sh.lunch_duration_mins}m break` : 'no break recorded'}
-                    </span>
-                    {/* Derived, not stored — see shiftHours(). */}
-                    <span style={{ marginLeft: 'auto', fontSize: F.small, fontWeight: W.bold, color: C.brandDeep }}>
-                      {hrs != null ? `${hrs} h` : '—'}
-                    </span>
-                    {sh.overtime_applicable && (
-                      <span style={{ fontSize: 9, padding: '1px 7px', borderRadius: R.pill,
-                                     background: C.warningTint, color: C.warning, fontWeight: W.semi }}>OT</span>
-                    )}
-                  </div>
-                )
-              })}
-              {!(d.policy?.shifts.length) && <span style={{ fontSize: F.micro, color: C.faint }}>No shift recorded.</span>}
-            </div>
-          </div>
-
-          <div style={block()}>
-            <Head>Leave types ({d.policy?.leaveTypes.length ?? 0})</Head>
-            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-              {(d.policy?.leaveTypes ?? []).map(l => (
-                <span key={l.id} title={l.name} style={{
-                  display: 'inline-flex', alignItems: 'center', gap: 6,
-                  fontSize: F.micro, padding: '4px 10px', borderRadius: R.pill,
-                  background: C.sunken, border: `1px solid ${C.line}`, color: C.ink,
-                }}>
-                  <strong style={{ color: C.brandDeep }}>{l.short_name || '—'}</strong>
-                  <span style={{ color: C.muted }}>{l.name}</span>
-                  {l.encashment_after != null && (
-                    <span style={{ color: C.faint }}>· encashable</span>
-                  )}
-                </span>
-              ))}
-              {!(d.policy?.leaveTypes.length) && <span style={{ fontSize: F.micro, color: C.faint }}>No leave types configured.</span>}
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <div style={grid(isMobile ? 1 : 3)}>
-                <Field label="Leave year starts" value={co.leave_year_start_month ? MONTH[co.leave_year_start_month] : null} />
-                <Field label="Max carry-forward" value={co.max_leave_carryforward} mono />
-                <Field label="Probation" value={co.probation_days ? `${co.probation_days} days` : null} />
-              </div>
-            </div>
-          </div>
-
-          <div style={block()}>
-            <Head>Bonus &amp; gratuity</Head>
-            <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>
-              Gratuity eligibility is held per employee
-              (<code style={{ fontFamily: 'ui-monospace, monospace', fontSize: F.micro }}>employees.gratuity_eligible</code>),
-              not as a company-wide rule, and
-              <code style={{ fontFamily: 'ui-monospace, monospace', fontSize: F.micro }}> bonus_config </code>
-              exists but has no rows. There is no company-level bonus policy to show yet.
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
