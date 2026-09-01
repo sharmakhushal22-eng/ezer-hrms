@@ -246,8 +246,13 @@ function daysUntilAnnual(iso?: string | null): number | null {
  * longest one — so every bar is the same violet. Colouring them differently
  * would imply the categories mean something they do not.
  */
-function BarRow({ label, count, max, colour = C.brand }: {
-  label: string; count: number; max: number; colour?: string
+function BarRow({ label, count, max, colour = C.brand, labelW = 150 }: {
+  label: string; count: number; max: number; colour?: string;
+  /** Width of the label column. Fixed per card rather than per row, so the
+   *  bars stay on one baseline and can still be compared by eye — but sized
+   *  to the data, because company names are twice the length of a stage name
+   *  and were all three arriving truncated in a shared 140px. */
+  labelW?: number
 }) {
   // The bar is rendered at zero width for one frame, then given its real
   // width, so the CSS transition has something to travel. Rendering straight
@@ -263,19 +268,30 @@ function BarRow({ label, count, max, colour = C.brand }: {
   return (
     <div style={{ display:'flex', alignItems:'center', gap:S.sm, marginBottom:7 }}>
       <div title={label} style={{
-        width:126, fontSize:F.tiny, color:C.muted, textAlign:'right', flexShrink:0,
+        // Was 12px/regular in muted, sitting next to a 12px/semibold near-black
+        // number. Both cleared AA — the label still read as the faded half of
+        // the row, because next to a bolder, darker neighbour a thin stroke
+        // looks washed out whatever its contrast ratio says. It is the same
+        // ink and one weight below the number now.
+        width:labelW, fontSize:13, fontWeight:W.medium, color:C.ink,
+        textAlign:'right', flexShrink:0,
         whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis',
       }}>{label}</div>
-      <div style={{ flex:1, height:7, background:C.sunken, borderRadius:R.pill, overflow:'hidden' }}>
+      <div style={{ flex:1, height:9, background:C.sunken, borderRadius:R.pill,
+                    overflow:'hidden', boxShadow:'inset 0 1px 2px rgba(15,23,42,.10)' }}>
         <div style={{
-          height:'100%', width:`${pct}%`, background:colour,
+          height:'100%', width:`${pct}%`,
+          // A flat fill reads as a printed strip; the highlight along the top
+          // gives it a surface, which is what makes the row feel solid.
+          background:`linear-gradient(180deg, color-mix(in srgb, ${colour} 78%, #FFF), ${colour})`,
+          boxShadow:'inset 0 1px 0 rgba(255,255,255,.28)',
           borderRadius:R.pill,
           // Eased out over 520ms: long enough to read as growth, short enough
           // that the page has settled before anyone reaches for it.
           transition:'width .52s cubic-bezier(.22,1,.36,1)',
         }} />
       </div>
-      <div style={{ width:32, fontSize:F.tiny, color:C.ink, fontWeight:W.semi, ...numeric }}>{count}</div>
+      <div style={{ width:36, fontSize:13.5, color:C.ink, fontWeight:W.bold, ...numeric }}>{count}</div>
     </div>
   )
 }
@@ -589,7 +605,7 @@ export default function Dashboard() {
           {d.locationRows.length === 0
             ? <div style={{ fontSize:F.small, color:C.faint }}>No employee location data.</div>
             : d.locationRows.map(([name, count]: any) => (
-                <BarRow key={name} label={name} count={count} max={maxLoc} colour={MOD.location.l} />
+                <BarRow key={name} label={name} count={count} max={maxLoc} colour={MOD.location.l} labelW={158} />
               ))}
         </ModCard>
 
@@ -597,7 +613,7 @@ export default function Dashboard() {
           {d.companyRows.length === 0
             ? <div style={{ fontSize:F.small, color:C.faint }}>No employee company data.</div>
             : d.companyRows.map(([name, count]: any) => (
-                <BarRow key={name} label={name} count={count} max={maxCo} colour={MOD.company.l} />
+                <BarRow key={name} label={name} count={count} max={maxCo} colour={MOD.company.l} labelW={214} />
               ))}
         </ModCard>
       </div>
@@ -607,7 +623,7 @@ export default function Dashboard() {
         <ModCard mod="pipeline" title="Recruitment pipeline" k={7}>
           {d.pipeline.map((p: any) => (
             <BarRow key={p.stage} label={p.stage} count={p.count} max={maxStage}
-                    colour={STAGE_COLOR[p.stage] || C.brand} />
+                    colour={STAGE_COLOR[p.stage] || C.brand} labelW={124} />
           ))}
         </ModCard>
 
@@ -627,8 +643,8 @@ export default function Dashboard() {
                   <span className="ez-mod-tile" aria-hidden
                         style={{ width:26, height:26, borderRadius:8 }}><Ico size={14} /></span>
                   <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:F.small, fontWeight:W.medium, color:C.ink, lineHeight:1.45 }}>{a.text}</div>
-                    <div style={{ fontSize:F.micro, color:C.muted, marginTop:2 }}>{a.time}</div>
+                    <div style={{ fontSize:13.5, fontWeight:W.semi, color:C.ink, lineHeight:1.45 }}>{a.text}</div>
+                    <div style={{ fontSize:F.micro, fontWeight:W.medium, color:C.muted, marginTop:2 }}>{a.time}</div>
                   </div>
                 </div>
               )})}
@@ -651,15 +667,15 @@ export default function Dashboard() {
                   promised an emoji the row never drew. */}
               <span style={{ fontSize:17, lineHeight:1 }}>{c.type === 'birthday' ? '\u{1F382}' : '\u{1F389}'}</span>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:F.small, fontWeight:W.semi, color:C.ink }}>
+                <div style={{ fontSize:13.5, fontWeight:W.bold, color:C.ink }}>
                   {c.name}
                   {/* Names are not unique here — two active employees are both
                       "Sunita Kapoor". Without the code an HR user cannot tell
                       which one they are wishing, and the wish lands on a
                       colleague who then sees a birthday message on the wrong day. */}
-                  {c.code ? <span style={{ fontWeight:W.regular, color:C.faint, fontFamily:'monospace', fontSize:F.micro }}> · {c.code}</span> : null}
+                  {c.code ? <span style={{ fontWeight:W.medium, color:C.muted, fontFamily:'ui-monospace, monospace', fontSize:F.micro }}> · {c.code}</span> : null}
                 </div>
-                <div style={{ fontSize:F.micro, color:C.muted }}>
+                <div style={{ fontSize:12, fontWeight:W.medium, color:C.muted }}>
                   {c.type === 'birthday' ? 'Happy Birthday!' : `${c.years} years with us`}
                   {c.company ? ` · ${c.company}` : ''}
                 </div>
@@ -687,8 +703,8 @@ export default function Dashboard() {
             }}>
               <span style={{ fontSize:14, lineHeight:1 }}>{c.type === 'birthday' ? '\u{1F382}' : '\u{1F389}'}</span>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:F.small, fontWeight:W.medium, color:C.ink }}>{c.name}</div>
-                <div style={{ fontSize:F.micro, color:C.faint }}>
+                <div style={{ fontSize:13.5, fontWeight:W.semi, color:C.ink }}>{c.name}</div>
+                <div style={{ fontSize:12, fontWeight:W.medium, color:C.muted }}>
                   {capFirst(c.type === 'anniversary' ? `${c.years}yr anniversary` : 'Birthday')} · in {c.days}d
                 </div>
               </div>
