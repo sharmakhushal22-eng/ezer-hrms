@@ -287,7 +287,13 @@ function ClaimCard({ claim, stage, onAction, busy }: {
     setOpen(true)
     if (lines.length) return
     setLoadingLines(true)
-    const r = await fetch(`/api/travel/claims?claim_id=${claim.id}`).then(x => x.json()).catch(() => ({}))
+    // /api/travel/claims is gated by requireDashboardUser, and this was the one
+    // call in the file that did not send the token — so expanding a claim 401'd
+    // and the .catch below turned that into an empty line list rather than an
+    // error. A silent wrong answer, which is worse than a loud one.
+    const r = await fetch(`/api/travel/claims?claim_id=${claim.id}`,
+                          { headers: await authHeaders() })
+      .then(x => x.json()).catch(() => ({}))
     const ls = (r.lines ?? []) as Line[]
     setLines(ls)
     setFlags((r.flags ?? []) as FlagRow[])
