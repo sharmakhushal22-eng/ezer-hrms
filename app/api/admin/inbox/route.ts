@@ -56,6 +56,19 @@ export async function GET(req: NextRequest) {
   const a = await admin(req)
   if (!a.ok) return a.deny
 
+  // Staffing a desk needs a people search. It runs here, behind the same
+  // admin gate, rather than from the browser through the anon client — the
+  // pattern the company master is still stuck with and that I am not going
+  // to add another instance of.
+  const q = (req.nextUrl.searchParams.get('q') || '').trim()
+  if (q) {
+    const { data } = await sb.from('employees')
+      .select('id, full_name, emp_code, designation')
+      .or(`full_name.ilike.%${q}%,emp_code.ilike.%${q}%`)
+      .limit(20).order('full_name')
+    return NextResponse.json({ people: data ?? [] })
+  }
+
   const { data: pol, error } = await sb.from('inbox_policy').select('*').eq('id', 1).maybeSingle()
   if (error) {
     if (notInstalled(error)) return notReady()

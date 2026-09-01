@@ -6,6 +6,7 @@ import { supabase } from '../../../lib/supabase'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import InboxPolicy from '@/components/admin/InboxPolicy'
 
 // ═══════════════════════════════════════════════
 //  COMPANY SETUP — Types, Constants, Styles
@@ -1362,7 +1363,7 @@ function MasterSetupTab() {
 //  ADMIN PAGE — Main Export (Tabs)
 // ═══════════════════════════════════════════════
 export default function AdminPage() {
-  const [tab, setTab] = useState<'company' | 'master'>('company')
+  const [tab, setTab] = useState<'company' | 'master' | 'inbox'>('company')
   return (
     <div style={{ minHeight: '100vh', background: TK.sunken, fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
       {/* Header — the shared band. Was a flat dark slab, which differentiated
@@ -1371,7 +1372,7 @@ export default function AdminPage() {
         <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: '20px', fontWeight: 700, color: TK.ink, letterSpacing: '-.02em' }}>Admin Setup</div>
-            <div style={{ fontSize: '13px', color: TK.muted, marginTop: '3px' }}>Company Configuration · Master Data · ezerhrms.com</div>
+            <div style={{ fontSize: '13px', color: TK.muted, marginTop: '3px' }}>Company Configuration · Master Data · Inbox · ezerhrms.com</div>
           </div>
           <div style={{ fontSize: '12px', fontWeight: 600, color: TK.faint }}>Sharma Group</div>
         </div>
@@ -1381,6 +1382,7 @@ export default function AdminPage() {
         {[
           { id: 'company', label: 'Company Setup', desc: 'Onboard a new company — 7-step wizard' },
           { id: 'master',  label: 'Master Setup',  desc: 'Manage dropdowns — Add/Edit/Disable' },
+          { id: 'inbox',   label: 'Inbox',         desc: 'Who can message whom · department desks' },
         ].map(t => (
           <button key={t.id} onClick={() => setTab(t.id as any)}
             style={{ padding: '13px 20px', border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left',
@@ -1394,6 +1396,7 @@ export default function AdminPage() {
       <div>
         {tab === 'company' && <CompanySetupTab />}
         {tab === 'master'  && <MasterSetupTab />}
+        {tab === 'inbox'   && <InboxPolicy />}
       </div>
     </div>
   )
