@@ -3346,31 +3346,112 @@ function MyReportingLine({ employeeId, fallbackL1, notify }: {
   )
 }
 
-/** One granted admin module in the ESS rail. Same shape as SectionButton so the two
- *  halves of the sidebar read as one list, with a rule and a caption between them. */
-function AdminRailItem({ item, active, onClick }: { item: NavEntry; active: boolean; onClick: () => void }) {
-  const [hover, setHover] = useState(false)
-  const bg = active ? 'rgba(37,99,235,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
+// ── "What you manage" — the menu band across the top ────────────────────────
+//
+// The modules a person administers are a different kind of thing from their own
+// tabs, and they were competing for the same vertical rail: thirteen personal
+// entries plus up to twenty-five module entries is a scrolling problem, not a
+// menu. Groups become top-level menus here; the sidebar keeps only what belongs
+// to the employee themself.
+//
+// The dropdown is position:fixed, measured off the button, rather than absolute
+// inside the strip — the strip scrolls horizontally when the menus do not fit,
+// and an absolutely positioned panel inside a scroll container gets clipped by it.
+
+/** One group: the trigger, and the panel it opens. */
+function ManageMenu({ group, items, open, activeKey, onToggle, onClose, onPick }: {
+  group: string; items: NavEntry[]; open: boolean; activeKey: string | null
+  onToggle: () => void; onClose: () => void; onPick: (k: string) => void
+}) {
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null)
+  const pop = useDismiss<HTMLDivElement>(open, onClose, `[data-ez-menu="${group}"]`)
+  const holdsActive = !!activeKey && items.some(i => i.key === activeKey)
+
+  // Measured in the click handler, not in an effect: the rect is known at the moment
+  // the button is pressed, and setting state inside an effect costs a second render
+  // pass for a value that never changes while the menu is open.
+  const openAt = () => {
+    const r = btnRef.current?.getBoundingClientRect()
+    if (r) setAt({ left: Math.min(r.left, window.innerWidth - 244), top: r.bottom + 4 })
+    onToggle()
+  }
+
+  useEffect(() => {
+    if (!open) return
+    // Re-measuring on scroll would fight the sticky bar; closing is the honest
+    // response to the page moving under an open menu.
+    window.addEventListener('resize', onClose)
+    window.addEventListener('scroll', onClose, true)
+    return () => { window.removeEventListener('resize', onClose); window.removeEventListener('scroll', onClose, true) }
+  }, [open, onClose])
+
   return (
-    <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'9px 18px',
-               color: active ? C.onDark : C.onDarkMuted, cursor:'pointer', fontSize:12.5, fontWeight:600,
-               fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.onDark : 'transparent'}` }}>
-      <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.label}</span>
-    </button>
+    <>
+      <button ref={btnRef} data-ez-menu={group} onClick={openAt}
+        aria-expanded={open} aria-haspopup="true"
+        style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 11px', borderRadius:R.md,
+                 border:`1px solid ${open || holdsActive ? C.brand : 'transparent'}`,
+                 background: open ? C.brandTint : holdsActive ? C.brandTint : 'transparent',
+                 color: open || holdsActive ? C.brandDeep : C.inkSoft,
+                 fontFamily:'inherit', fontSize:12.5, fontWeight: holdsActive ? 700 : 600,
+                 cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
+        {group}
+        <span aria-hidden style={{ fontSize:9, opacity:.75, transform: open ? 'rotate(180deg)' : 'none', transition:'transform .12s' }}>▼</span>
+      </button>
+      {open && at && (
+        <div ref={pop} role="menu"
+          style={{ position:'fixed', left:at.left, top:at.top, minWidth:224, zIndex:28,
+                   background:C.surface, border:`1px solid ${C.brandEdge}`, borderRadius:R.lg,
+                   boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:6, overflow:'hidden' }}>
+          {items.map(i => {
+            const on = activeKey === i.key
+            return (
+              <button key={i.key} role="menuitem" onClick={() => { onPick(i.key); onClose() }}
+                style={{ display:'flex', alignItems:'center', gap:8, width:'100%', textAlign:'left',
+                         padding:'8px 10px', borderRadius:R.md, border:'none', cursor:'pointer',
+                         fontFamily:'inherit', fontSize:12.5, fontWeight: on ? 700 : 500,
+                         background: on ? C.brandTint : 'transparent', color: on ? C.brandDeep : C.ink }}
+                onMouseEnter={e => { if (!on) e.currentTarget.style.background = C.canvas }}
+                onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent' }}>
+                <span aria-hidden style={{ width:5, height:5, borderRadius:'50%', flexShrink:0,
+                                           background: on ? C.brand : 'transparent' }} />
+                <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{i.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </>
   )
 }
 
-function AdminRailGroup({ group, items, activeKey, onPick }: {
-  group: string; items: NavEntry[]; activeKey: string | null; onPick: (k: string) => void
+/** The strip. Renders nothing for an employee who administers nothing, so their
+ *  top bar is exactly what it was before any of this existed. */
+function ManageBand({ groups, activeKey, onPick }: {
+  groups: { group: string; items: NavEntry[] }[]; activeKey: string | null; onPick: (k: string) => void
 }) {
-  if (!items.length) return null
+  const [openGroup, setOpenGroup] = useState<string | null>(null)
+  const close = useCallback(() => setOpenGroup(null), [])
+  useEffect(() => {
+    if (!openGroup) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openGroup, close])
+  if (!groups.length) return null
   return (
-    <>
-      <div style={{ fontSize:9.5, fontWeight:800, letterSpacing:'.1em', textTransform:'uppercase',
-                    color:'rgba(255,255,255,0.38)', padding:'14px 18px 5px', whiteSpace:'nowrap' }}>{group}</div>
-      {items.map(i => <AdminRailItem key={i.key} item={i} active={activeKey === i.key} onClick={() => onPick(i.key)} />)}
-    </>
+    <nav aria-label="What you manage"
+      className="ez-scroll"
+      style={{ display:'flex', alignItems:'center', gap:3, minWidth:0, flexShrink:1,
+               overflowX:'auto', overflowY:'visible', paddingRight:4 }}>
+      {groups.map(g => (
+        <ManageMenu key={g.group} group={g.group} items={g.items} activeKey={activeKey}
+          open={openGroup === g.group}
+          onToggle={() => setOpenGroup(o => (o === g.group ? null : g.group))}
+          onClose={close} onPick={onPick} />
+      ))}
+    </nav>
   )
 }
 
@@ -3553,23 +3634,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {!isMobile && (
         <div style={{ width:220, background: C.dark, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
           <div style={{ padding:'0 18px 16px', color:C.onDark, fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
-          {/* What you manage comes FIRST for anyone who manages something. It used to
-              sit under thirteen personal tabs, which put it below the fold — a payroll
-              manager opened their portal and saw no sign of Payroll at all. For an
-              employee who holds nothing this block renders nothing and the personal
-              tabs stay at the top, exactly as before. */}
-          {adminGroups.length > 0 && (
-            <>
-              <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase',
-                            color:'rgba(255,255,255,0.3)', padding:'2px 18px 0' }}>What you manage</div>
-              {adminGroups.map(g => (
-                <AdminRailGroup key={g.group} group={g.group} items={g.items} activeKey={adminKey} onPick={goAdmin} />
-              ))}
-              <div style={{ height:1, background:'rgba(255,255,255,0.12)', margin:'14px 12px 2px' }} />
-              <div style={{ fontSize:9.5, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase',
-                            color:'rgba(255,255,255,0.3)', padding:'6px 18px 4px' }}>My portal</div>
-            </>
-          )}
+          {/* Only the employee's own tabs live here now. What they administer moved to
+              the menu band at the top of the page — the two are different kinds of
+              thing, and thirteen personal entries plus up to twenty-five modules in
+              one vertical rail was a scrolling problem rather than a menu. */}
           {sections.map(s => (
             <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
           ))}
@@ -3593,15 +3661,19 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         <div style={{ background:C.surface, borderBottom: `1px solid ${C.brandEdge}`, padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:25 }}>
           {/* The tab's own name and badge live in TabHeader below, so this bar carries
               only what that header can't: the sub-tab you're on, and who you are. */}
-          <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+          <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flexShrink:0 }}>
             {adminKey ? NAV_ENTRY_BY_KEY[adminKey]?.label : isMobile ? 'EZER ESS' : (sectionItems.length > 1 ? meta.label : '')}
           </div>
+          {/* The modules this person administers, as menus. Desktop only: on a phone
+              the bottom bar and the "More" sheet already carry navigation, and a row
+              of dropdowns at 360px is worse than the sheet. */}
+          {!isMobile && <ManageBand groups={adminGroups} activeKey={adminKey} onPick={goAdmin} />}
           {adminKey && (
-            <button onClick={() => go('home')} style={{ ...T.btnO, whiteSpace:'nowrap' }}>← My portal</button>
+            <button onClick={() => go('home')} style={{ ...T.btnO, whiteSpace:'nowrap', flexShrink:0 }}>← My portal</button>
           )}
           {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
-          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9 }}>
+          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9, flexShrink:0 }}>
             <span data-ez-bell><NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} /></span>
             <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
             {!isMobile && (
