@@ -27,6 +27,38 @@ const LABEL: Record<keyof typeof SLICE, string> = {
 }
 /** A wash of each hue for the chip ground. Kept at ~12% so the label stays
  *  legible on it in both themes rather than needing a per-theme pair. */
+/**
+ * The chip LABEL ink, which is not the same thing as the slice colour.
+ *
+ * The label used SLICE[k] directly — one hue, both themes, printed on a 12%
+ * tint of itself. On white that is 4.37:1 for "Male" and 3.84:1 for "Female",
+ * under the 4.5 bar for 11px semibold; on the dark card the same light-mode
+ * hue drops to 3.0:1. "Unknown" was the worst at 2.33:1 and escaped notice
+ * only because no site has an unknown row today.
+ *
+ * Two values per gender, each walked until it clears 4.5:1 against its own
+ * tint on its own theme's card. The slice colours themselves are unchanged —
+ * a donut segment is a graphic and 3:1 is the right bar for it.
+ */
+const INK: Record<keyof typeof SLICE, { l: string; d: string }> = {
+  male:    { l: '#134DCE', d: '#5B8AF0' },
+  female:  { l: '#C02067', d: '#E35996' },
+  other:   { l: '#5813CE', d: '#A273F2' },
+  unknown: { l: '#5A6C87', d: '#8496AE' },
+}
+
+/** Three states, not two: "System" stamps no attribute at all, so a rule
+ *  written only for [data-ez-theme] never applies to most viewers. */
+const GENDER_CSS = `
+.cp-gi{ --gi: var(--gi-l) }
+:root:not([data-ez-theme="light"]) .cp-gi{ --gi: var(--gi-d) }
+@media (prefers-color-scheme: light){
+  :root:not([data-ez-theme="dark"]) .cp-gi{ --gi: var(--gi-l) }
+}
+:root[data-ez-theme="dark"]  .cp-gi{ --gi: var(--gi-d) }
+:root[data-ez-theme="light"] .cp-gi{ --gi: var(--gi-l) }
+`
+
 const TINT: Record<keyof typeof SLICE, string> = {
   male:    'rgba(37,99,235,.12)',
   female:  'rgba(219,39,119,.12)',
@@ -135,13 +167,14 @@ export function GenderInline({ counts }: { counts: GenderCount }) {
   const pct = (n: number) => Math.round((n / counts.total) * 100)
 
   const chip = (k: keyof typeof SLICE) => counts[k] > 0 ? (
-    <span key={k} style={{
+    <span key={k} className="cp-gi" style={{
       display: 'inline-flex', alignItems: 'baseline', gap: 5,
       padding: '3px 10px', borderRadius: R.pill,
       background: TINT[k], border: `1px solid ${SLICE[k]}33`,
       whiteSpace: 'nowrap',
+      ['--gi-l' as string]: INK[k].l, ['--gi-d' as string]: INK[k].d,
     }}>
-      <span style={{ fontSize: F.micro, color: SLICE[k], fontWeight: W.semi }}>{LABEL[k]}</span>
+      <span style={{ fontSize: F.micro, color: 'var(--gi)', fontWeight: W.semi }}>{LABEL[k]}</span>
       <strong style={{ fontSize: F.small, color: C.ink, fontVariantNumeric: 'tabular-nums' }}>
         {counts[k]}
       </strong>
@@ -153,6 +186,7 @@ export function GenderInline({ counts }: { counts: GenderCount }) {
 
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+      <style>{GENDER_CSS}</style>
       {chip('male')}{chip('female')}{chip('other')}{chip('unknown')}
       <span style={{
         display: 'inline-flex', alignItems: 'baseline', gap: 5,
