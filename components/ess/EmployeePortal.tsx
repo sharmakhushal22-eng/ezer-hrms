@@ -40,6 +40,7 @@ import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection,
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
+import EmployeeProfileSections, { PROFILE_TABS } from '@/components/employees/EmployeeProfileView'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -738,7 +739,9 @@ function ProfileHero({ emp, notify }: {
 }
 
 function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const [tab, setTab] = useState<'OVERVIEW' | 'PERSONAL' | 'UPDATE'>('OVERVIEW')
+  const [tab, setTab] = useState<'OVERVIEW' | 'RECORD' | 'UPDATE'>('OVERVIEW')
+  // Sub-tab inside My Record, the same four the Employee Master drawer uses.
+  const [recordTab, setRecordTab] = useState('personal')
   const [field, setField] = useState('Personal Details')
   const [detail, setDetail] = useState('')
   const [busy, setBusy] = useState(false)
@@ -776,7 +779,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
 
   const TABS: [typeof tab, string, string][] = [
     ['OVERVIEW', 'Overview', ''],
-    ['PERSONAL', 'Personal & KYC', ''],
+    ['RECORD', 'My Record', ''],
     ['UPDATE', 'Request a change', ''],
   ]
 
@@ -824,29 +827,25 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
         </div>
       )}
 
-      {tab === 'PERSONAL' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 11 }}>
-          <Panel title="About you" icon="🙋">
-            <Field label="Date of birth" value={fmt(emp.date_of_birth)} icon="🎂" notify={notify} />
-            <Field label="Gender" value={emp.gender} icon="⚧" notify={notify} />
-            <Field label="Blood group" value={emp.blood_group} icon="🩸" notify={notify} />
-            <Field label="Marital status" value={emp.marital_status} icon="💍" notify={notify} />
-          </Panel>
-
-          <Panel title="How to reach you" icon="📇" accent="#EEF2FF">
-            <Field label="Mobile" value={emp.mobile} icon="📱" copyable notify={notify} />
-            <Field label="Personal email" value={emp.personal_email} icon="📧" copyable notify={notify} />
-            <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
-          </Panel>
-
-          <Panel title="Statutory IDs" icon="🔐" accent={P.amberBg}>
-            <Field label="PAN" value={emp.pan_number} icon="🪪" copyable sensitive notify={notify} />
-            <Field label="Aadhaar" value={emp.aadhar_last4 ? `XXXX XXXX ${emp.aadhar_last4}` : null} icon="🆔" notify={notify} />
-            <Field label="UAN" value={emp.uan_number} icon="🏦" copyable sensitive notify={notify} />
-            <div style={{ fontSize: 11, color: P.dim, marginTop: 7, lineHeight: 1.5 }}>
-              Hidden by default. Reveal only when you need to copy one.
-            </div>
-          </Panel>
+      {tab === 'RECORD' && (
+        <div style={{ background: C.surface, border: `1px solid ${C.brandEdge}`, borderRadius: 14, overflow: 'hidden' }}>
+          {/* The Employee Master's own screen, rendered read-only. One record, one
+              way of reading it — the employee sees exactly the fields HR sees. */}
+          <div style={{ display: 'flex', background: C.sunken, borderBottom: `1px solid ${C.brandEdge}`, overflowX: 'auto' }}>
+            {PROFILE_TABS.map(t => (
+              <button key={t.id} onClick={() => setRecordTab(t.id)}
+                style={{ padding: '11px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
+                         fontSize: 12, fontWeight: recordTab === t.id ? 600 : 400, fontFamily: 'inherit',
+                         color: recordTab === t.id ? C.brand : C.muted, whiteSpace: 'nowrap',
+                         borderBottom: recordTab === t.id ? `3px solid ${C.brand}` : '3px solid transparent' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <EmployeeProfileSections emp={emp} profileTab={recordTab} showManagerChain={false} />
+          <div style={{ padding: '12px 20px', fontSize: 11.5, color: C.muted, background: C.sunken }}>
+            Something wrong here? Use <b>Request a change</b> — HR approves edits to your record.
+          </div>
         </div>
       )}
 

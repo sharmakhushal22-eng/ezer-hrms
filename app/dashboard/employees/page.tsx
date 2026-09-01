@@ -5,7 +5,7 @@ import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
-import EmployeeOrgFlow from '@/components/rms/EmployeeOrgFlow'
+import EmployeeProfileSections from '@/components/employees/EmployeeProfileView'
 // This page keeps its own local Badge / Field / Section, so the system's
 // equivalents are aliased where the names would clash.
 import {
@@ -281,44 +281,6 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
   )
 }
 
-// Single info row — view or edit
-function Field({ label, value, editMode, fieldKey, editForm, setEditForm, type, opts }: any) {
-  return (
-    <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
-      <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>{label}</div>
-      {editMode ? (
-        opts ? (
-          <select style={s.sel} value={editForm[fieldKey] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))}>
-            <option value="">— Select —</option>
-            {opts.map((o: string) => <option key={o}>{o}</option>)}
-          </select>
-        ) : (
-          <input type={type || 'text'} style={s.inp} value={editForm[fieldKey] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))} />
-        )
-      ) : (
-        <div style={{ fontSize:'13px', color: value && value !== '—' ? P.text : P.muted }}>{value || '—'}</div>
-      )}
-    </div>
-  )
-}
-
-// Section wrapper
-function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom:'0', padding:'16px 20px', borderBottom:`1px solid ${P.border}` }}>
-      <div style={{ fontSize:'11px', fontWeight:600, color:P.purple, textTransform:'uppercase', letterSpacing:'.7px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px' }}>
-        <span>{icon}</span>{title}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-// Two-column grid
-function Grid2({ children }: { children: React.ReactNode }) {
-  return <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 24px' }}>{children}</div>
-}
-
 // Tab bar
 function TabBar({ tabs, active, onChange }: any) {
   return (
@@ -337,17 +299,6 @@ function TabBar({ tabs, active, onChange }: any) {
     </div>
   )
 }
-
-// Statutory chip
-function StatChip({ label, value }: { label: string; value: boolean }) {
-  return (
-    <div style={{ flex:1, padding:'10px 8px', borderRadius:'10px', background:value?P.greenBg:P.page, border:`1px solid ${value?'#BBF7D0':P.border}`, textAlign:'center' }}>
-      <div style={{ fontSize:'11px', fontWeight:600, color:P.text }}>{label}</div>
-      <div style={{ fontSize:'10px', color:value?P.green:P.muted, marginTop:'4px', fontWeight:500 }}>{value ? 'Yes' : 'No'}</div>
-    </div>
-  )
-}
-
 // ─── Main Component ───────────────────────────────────────────
 export default function EmployeeMaster() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -598,162 +549,13 @@ export default function EmployeeMaster() {
   // ─── Render profile tab content ───────────────────────────────
   const renderTab = (emp: Employee) => {
     const ef = editForm
-    const F = (label: string, key: string, type?: string, opts?: string[]) => (
-      <Field key={key} label={label} value={key === 'date_of_birth' || key.includes('doj') ? fmtDate((emp as any)[key]) : fmt((emp as any)[key])}
-        editMode={editMode} fieldKey={key} editForm={ef} setEditForm={setEditForm} type={type} opts={opts} />
-    )
 
-    if (profileTab === 'personal') return (
-      <div>
-        <Section title="Identity" icon="🪪">
-          <Grid2>
-            {F('Full Name','full_name')} {F('Common Code','common_code')}
-            {F('First Name','first_name')} {F('Last Name','last_name')}
-            {F('Gender','gender','text',['Male','Female','Other'])}
-            {F('Date of Birth','date_of_birth','date')}
-            {F('Blood Group','blood_group','text',['A+','A-','B+','B-','O+','O-','AB+','AB-'])}
-            {F('Marital Status','marital_status','text',['Single','Married','Divorced','Widowed'])}
-            {F('Nationality','nationality')} {F('Religion','religion')}
-            {F('Birth Place','birth_place')}
-          </Grid2>
-        </Section>
-        <Section title="Family" icon="👪">
-          <Grid2>
-            {F("Father's Name",'father_name')} {F("Mother's Name",'mother_name')}
-            {F('Spouse Name','spouse_name')}
-          </Grid2>
-        </Section>
-        <Section title="Contact" icon="📞">
-          <Grid2>
-            {F('Mobile','mobile')} {F('Alternate Mobile','alternate_mobile')}
-            {F('Personal Email','personal_email')} {F('Office Email','office_email')}
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Aadhaar</div>
-              <div style={{fontSize:'13px',color:P.text}}>XXXX-XXXX-{emp.aadhar_last4 || '—'}</div>
-            </div>
-            {F('PAN Number','pan_number')} {F('UAN Number','uan_number')}
-          </Grid2>
-        </Section>
-        <Section title="Residential Address" icon="🏠">
-          <Grid2>
-            {F('Address','res_address1')} {F('City','res_city')}
-            {F('State','res_state')} {F('PIN','res_pin')}
-          </Grid2>
-        </Section>
-        <Section title="Permanent Address" icon="📍">
-          <Grid2>
-            {F('Address','perm_address1')} {F('City','perm_city')}
-            {F('State','perm_state')} {F('PIN','perm_pin')}
-          </Grid2>
-        </Section>
-        <Section title="Emergency Contact" icon="🚨">
-          <Grid2>
-            {F('Name','emergency_name')} {F('Relation','emergency_relation')}
-            {F('Mobile','emergency_mobile')}
-          </Grid2>
-          <Grid2>
-            {F('Alt. Name','emergency2_name')} {F('Alt. Relation','emergency2_relation')}
-            {F('Alt. Mobile','emergency2_mobile')}
-          </Grid2>
-        </Section>
-      </div>
-    )
-
-    if (profileTab === 'employment') return (
-      <div>
-        <Section title="Employment Details" icon="💼">
-          <Grid2>
-            {F('Designation','designation')}
-            {F('Grade','grade')}
-            {F('Employment Type','employment_type','text',['Employee','Intern','NAPS','NATS','Consultant','Contract'])}
-            {F('Employment Status','employment_status','text',['Active','Resigned','Sabbatical','Abscond','Inactive'])}
-            {F('Collar Type','collar_type','text',['White Collar','Blue Collar'])}
-            {F('Function','employee_function')}
-            {F('Category','employee_category')}
-            {F('Notice Period (Days)','notice_period_days','number')}
-            {emp.employment_type === 'Intern' && F('Intern Pay (₹)','intern_pay','number')}
-            {emp.employment_type === 'Consultant' && F('Consultant Pay (₹)','consultant_pay','number')}
-            {emp.employment_type === 'Contract' && F('Contract Pay (₹)','contract_pay','number')}
-          </Grid2>
-        </Section>
-        <Section title="Joining & Confirmation" icon="📅">
-          <Grid2>
-            {F('Group DOJ','group_doj','date')}
-            {F('Company DOJ','company_doj','date')}
-            {F('Confirmation Status','confirmation_status','text',['Probation','Confirmed'])}
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Company</div>
-              <div style={{fontSize:'13px',color:P.text}}>{(emp as any).companies?.company_name || '—'}</div>
-            </div>
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Location / Branch</div>
-              <div style={{fontSize:'13px',color:P.text}}>{(emp as any).locations?.location_name || '—'}</div>
-            </div>
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Department</div>
-              <div style={{fontSize:'13px',color:P.text}}>{(emp as any).departments?.dept_name || '—'}</div>
-            </div>
-          </Grid2>
-        </Section>
-        <Section title="Manager Information" icon="🧭">
-          <EmployeeOrgFlow employeeId={emp.id} companyId={emp.company_id} employeeName={emp.full_name} />
-        </Section>
-        {emp.employment_status === 'Resigned' && (
-          <Section title="Exit Details" icon="🚪">
-            <Grid2>
-              {F('Date of Resignation','date_of_resignation','date')}
-              {F('Last Working Date','last_working_date','date')}
-            </Grid2>
-            <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
-              <div style={{ padding:'6px 12px', borderRadius:'10px', background:emp.rehire_eligible?P.greenBg:P.page, border:`1px solid ${emp.rehire_eligible?'#BBF7D0':P.border}`, fontSize:'11px', color:emp.rehire_eligible?P.green:P.muted }}>{emp.rehire_eligible?'Rehire Eligible':'Not Rehire Eligible'}</div>
-              {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'10px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>Blacklisted</div>}
-            </div>
-          </Section>
-        )}
-      </div>
-    )
-
-    if (profileTab === 'statutory') return (
-      <div>
-        <Section title="Statutory Applicability" icon="⚖️">
-          <div style={{ display:'flex', gap:'8px', marginBottom:'16px' }}>
-            <StatChip label="PF / EPF" value={emp.pf_applicable} />
-            <StatChip label="ESIC" value={emp.esic_applicable} />
-            <StatChip label="Prof. Tax" value={emp.pt_applicable} />
-            <StatChip label="LWF" value={emp.lwf_applicable} />
-          </div>
-          <Grid2>
-            {F('UAN Number','uan_number')}
-            {F('PAN Number','pan_number')}
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Aadhaar</div>
-              <div style={{fontSize:'13px',fontFamily:'monospace',color:P.text}}>XXXX-XXXX-{emp.aadhar_last4||'—'}</div>
-            </div>
-          </Grid2>
-        </Section>
-      </div>
-    )
-
-    if (profileTab === 'bank') return (
-      <Section title="Salary Account" icon="🏦">
-        <div style={{ background:P.greenBg, border:`1px solid #BBF7D0`, borderRadius:'10px', padding:'16px', marginBottom:'12px' }}>
-          <div style={{ fontSize:'12px', fontWeight:600, color:C.positive, marginBottom:'12px' }}>Primary Account</div>
-          <Grid2>
-            {[
-              ['Bank Name', emp.bank_name],
-              ['Account Type', emp.account_type],
-              ['Account No.', emp.bank_account_last4 ? `XXXX XXXX XXXX ${emp.bank_account_last4}` : '—'],
-              ['IFSC Code', emp.ifsc_code],
-            ].map(([l,v]) => (
-              <div key={l} style={{padding:'6px 0',borderBottom:`1px solid #DCFCE7`}}>
-                <div style={{fontSize:'10px',color:C.positive,marginBottom:'3px',fontWeight:500,textTransform:'uppercase',letterSpacing:'.4px'}}>{l}</div>
-                <div style={{fontSize:'13px',color:P.text,fontFamily:l==='Account No.'||l==='IFSC Code'?'monospace':'inherit'}}>{v||'—'}</div>
-              </div>
-            ))}
-          </Grid2>
-        </div>
-      </Section>
-    )
+    // The four record sections live in components/employees/EmployeeProfileView.tsx
+    // so the employee's own ESS Profile renders the identical screen, read-only.
+    if (['personal','employment','statutory','bank'].includes(profileTab)) {
+      return <EmployeeProfileSections emp={emp} profileTab={profileTab}
+               editMode={editMode} editForm={ef} setEditForm={setEditForm} />
+    }
 
     // These tabs delegate to HRActionPanel (existing logic preserved)
     if (['documents','salary','onboarding','actions','history'].includes(profileTab)) {
