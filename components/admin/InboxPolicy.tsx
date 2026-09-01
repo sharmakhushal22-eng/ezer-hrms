@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { C as TK, W, R } from '@/lib/ui'
+import { authHeaders } from '@/lib/auth-headers'
 
 type Reach = 'GROUP' | 'COMPANY' | 'CHAIN_HR' | 'NO_COLD_UP'
 
@@ -71,7 +72,7 @@ export default function InboxPolicy() {
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch('/api/admin/inbox')
+      const r = await fetch('/api/admin/inbox', { headers: await authHeaders() })
       const j = await r.json()
       if (r.status === 403) {
         setState('denied')
@@ -92,7 +93,7 @@ export default function InboxPolicy() {
     setSaving(true); setMsg('')
     try {
       const r = await fetch('/api/admin/inbox', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        method: 'PATCH', headers: await authHeaders(),
         body: JSON.stringify({ policy: pol }),
       })
       const j = await r.json()
@@ -104,7 +105,7 @@ export default function InboxPolicy() {
 
   const setOverride = async (role_id: string, reach_mode: string) => {
     await fetch('/api/admin/inbox', {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH', headers: await authHeaders(),
       body: JSON.stringify({ override: { role_id, reach_mode } }),
     })
     load()
@@ -113,13 +114,13 @@ export default function InboxPolicy() {
   const search = async (text: string) => {
     setQ(text)
     if (text.trim().length < 2) { setFound([]); return }
-    const r = await fetch(`/api/admin/inbox?q=${encodeURIComponent(text)}`)
+    const r = await fetch(`/api/admin/inbox?q=${encodeURIComponent(text)}`, { headers: await authHeaders() })
     const j = await r.json().catch(() => ({ people: [] }))
     setFound(j.people || [])
   }
   const staff = async (desk_code: string, employee_id: string, action: 'add' | 'remove') => {
     await fetch('/api/admin/inbox', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: await authHeaders(),
       body: JSON.stringify({ desk_code, employee_id, action }),
     })
     setQ(''); setFound([]); setStaffing(null); load()

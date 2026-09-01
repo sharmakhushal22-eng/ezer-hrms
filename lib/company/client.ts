@@ -7,18 +7,12 @@
 // page". These helpers cannot bypass the check because they do not hold a
 // service key — the route does.
 
-import { supabase } from '@/lib/supabase'
-import { essAuthHeaders } from '@/lib/ess-session-client'
 
 export interface EditRight { canEdit: boolean; reason: string; actor: string }
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const h = essAuthHeaders()
-  if (h.Authorization) return { 'Content-Type': 'application/json', ...h }
-  const { data } = await supabase.auth.getSession()
-  const t = data?.session?.access_token
-  return { 'Content-Type': 'application/json', ...(t ? { Authorization: `Bearer ${t}` } : {}) }
-}
+// Moved to lib/auth-headers, so the ESS inbox and the admin panel could not
+// each invent their own version. Both did, and both got it wrong.
+import { authHeaders } from '@/lib/auth-headers'
 
 /** Ask the server whether this person may edit. Asked rather than assumed:
  *  the client does not know the role model, and a button shown on a guess is

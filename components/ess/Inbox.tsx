@@ -19,6 +19,7 @@
 // would be a private conversation anyone could read.
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { authHeaders } from '@/lib/auth-headers'
 import {
   C, F, W, S, R, E, eyebrow, IconSearch, IconClose, IconPlus, IconChevron,
 } from '@/lib/ui'
@@ -137,17 +138,18 @@ export default function Inbox({ employeeId, onUnread }: {
     return () => window.removeEventListener('resize', f)
   }, [])
 
-  const headers = useCallback((): Record<string, string> => {
-    try {
-      const t = localStorage.getItem('ess_token')
-      return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' }
-               : { 'Content-Type': 'application/json' }
-    } catch { return { 'Content-Type': 'application/json' } }
-  }, [])
+  /**
+   * The portal's own auth, not a guess at it. This read
+   * localStorage['ess_token'] — a key nothing writes — so every request went
+   * out unauthenticated and the inbox showed "Sign in first". The shared
+   * helper checks the ESS session AND the Supabase one, because an admin
+   * opening somebody's portal has only the latter.
+   */
+  const headers = useCallback(() => authHeaders(), [])
 
   const load = useCallback(async () => {
     try {
-      const r = await fetch(`/api/ess/inbox?employee_id=${employeeId}`, { headers: headers() })
+      const r = await fetch(`/api/ess/inbox?employee_id=${employeeId}`, { headers: await headers() })
       const j = await r.json()
       if (!r.ok) { setState('error'); setReason(j.error || 'Could not open the inbox.'); return }
       if (j.installed === false) { setState('absent'); setReason(j.reason || ''); return }
@@ -169,7 +171,7 @@ export default function Inbox({ employeeId, onUnread }: {
   const openThread = useCallback(async (id: string) => {
     setSel(id); setPane('thread'); setMsgs([]); setErr('')
     try {
-      const r = await fetch(`/api/ess/inbox/messages?id=${id}&employee_id=${employeeId}`, { headers: headers() })
+      const r = await fetch(`/api/ess/inbox/messages?id=${id}&employee_id=${employeeId}`, { headers: await headers() })
       const j = await r.json()
       if (!r.ok) { setErr(j.error || 'Could not open that conversation.'); return }
       setMsgs(j.messages || [])
@@ -188,7 +190,7 @@ export default function Inbox({ employeeId, onUnread }: {
     setSending(true); setErr('')
     try {
       const r = await fetch('/api/ess/inbox/messages', {
-        method: 'POST', headers: headers(),
+        method: 'POST', headers: await headers(),
         body: JSON.stringify({ id: sel, body: text, employee_id: employeeId }),
       })
       const j = await r.json()
@@ -201,18 +203,18 @@ export default function Inbox({ employeeId, onUnread }: {
 
   const openCompose = async () => {
     setComposing(true); setDir(null)
-    const r = await fetch(`/api/ess/inbox/directory?employee_id=${employeeId}`, { headers: headers() })
+    const r = await fetch(`/api/ess/inbox/directory?employee_id=${employeeId}`, { headers: await headers() })
     setDir(await r.json().catch(() => ({ people: [], desks: [] })))
   }
   const searchPeople = async (text: string) => {
     setQ(text)
     const r = await fetch(`/api/ess/inbox/directory?q=${encodeURIComponent(text)}&employee_id=${employeeId}`,
-                          { headers: headers() })
+                          { headers: await headers() })
     setDir(await r.json().catch(() => ({ people: [], desks: [] })))
   }
   const startWith = async (payload: any) => {
     const r = await fetch('/api/ess/inbox', {
-      method: 'POST', headers: headers(),
+      method: 'POST', headers: await headers(),
       body: JSON.stringify({ ...payload, employee_id: employeeId }),
     })
     const j = await r.json()
