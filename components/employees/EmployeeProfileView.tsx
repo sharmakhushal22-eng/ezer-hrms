@@ -16,6 +16,7 @@
 // the master screen. Those are HR's tools for working ON somebody, not a view of them.
 import type React from 'react'
 import EmployeeOrgFlow from '@/components/rms/EmployeeOrgFlow'
+import HRActionPanel from '@/components/employees/HRActionPanel'
 import { C, tone } from '@/lib/ui'
 
 export const P = {
@@ -86,6 +87,45 @@ export const PROFILE_TABS = [
   { id: 'statutory',  label: 'Statutory',  icon: '' },
   { id: 'bank',       label: 'Bank',       icon: '' },
 ]
+
+/** What an employee sees of their own record in ESS.
+ *
+ *  Everything the Employee Master drawer shows EXCEPT "HR Actions". That tab is not
+ *  information about somebody — it is the panel for putting them on a PIP, marking
+ *  them absconding, starting a sabbatical or a transfer. Handing an employee those
+ *  buttons on their own record would be a bug, not a feature. Say the word and it
+ *  goes in; it is one line. */
+export const ESS_RECORD_TABS = [
+  ...PROFILE_TABS,
+  { id: 'documents',  label: 'Documents',  icon: '' },
+  { id: 'salary',     label: 'Salary',     icon: '' },
+  { id: 'onboarding', label: 'Onboarding', icon: '' },
+  { id: 'history',    label: 'History',    icon: '' },
+]
+
+/** The strip the Employee Master drawer carries under the name — the six facts
+ *  somebody checks first. Drawn for a light background here; the master's own
+ *  header keeps its dark one. */
+export function RecordQuickStats({ emp }: { emp: any }) {
+  const rows = [
+    { l: 'Group DOJ',     v: fmtDate(emp.group_doj) },
+    { l: 'Company DOJ',   v: fmtDate(emp.company_doj) },
+    { l: 'Confirmation',  v: fmt(emp.confirmation_status) },
+    { l: 'Department',    v: emp.departments?.dept_name || emp.dept_name || '—' },
+    { l: 'Location',      v: emp.locations?.location_name || emp.location_name || '—' },
+    { l: 'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '—' },
+  ]
+  return (
+    <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', padding: '10px 20px',
+                  background: P.purpleLight, borderBottom: `1px solid ${P.border}` }}>
+      {rows.map(x => (
+        <div key={x.l} style={{ fontSize: 11, color: P.muted }}>
+          {x.l}: <span style={{ color: P.text, fontWeight: 500 }}>{x.v}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 export interface ProfileSectionProps {
   emp: any
@@ -241,6 +281,12 @@ export default function EmployeeProfileSections({
       </Section>
     </div>
   )
+
+  // Documents / Salary / Onboarding / History are the same read-only views the master
+  // drawer delegates to, so an employee sees their own papers, structure and trail.
+  if (['documents', 'salary', 'onboarding', 'history'].includes(profileTab)) {
+    return <HRActionPanel employee={emp} activeTab={profileTab} />
+  }
 
   if (profileTab === 'bank') return (
     <Section title="Salary Account" icon="🏦">

@@ -40,7 +40,7 @@ import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection,
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
-import EmployeeProfileSections, { PROFILE_TABS } from '@/components/employees/EmployeeProfileView'
+import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/components/employees/EmployeeProfileView'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -739,7 +739,7 @@ function ProfileHero({ emp, notify }: {
 }
 
 function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const [tab, setTab] = useState<'OVERVIEW' | 'RECORD' | 'UPDATE'>('OVERVIEW')
+  const [tab, setTab] = useState<'OVERVIEW' | 'RECORD' | 'UPDATE'>('RECORD')
   // Sub-tab inside My Record, the same four the Employee Master drawer uses.
   const [recordTab, setRecordTab] = useState('personal')
   const [field, setField] = useState('Personal Details')
@@ -778,8 +778,8 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
   }
 
   const TABS: [typeof tab, string, string][] = [
-    ['OVERVIEW', 'Overview', ''],
     ['RECORD', 'My Record', ''],
+    ['OVERVIEW', 'At a glance', ''],
     ['UPDATE', 'Request a change', ''],
   ]
 
@@ -829,10 +829,12 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
 
       {tab === 'RECORD' && (
         <div style={{ background: C.surface, border: `1px solid ${C.brandEdge}`, borderRadius: 14, overflow: 'hidden' }}>
-          {/* The Employee Master's own screen, rendered read-only. One record, one
-              way of reading it — the employee sees exactly the fields HR sees. */}
+          {/* The Employee Master drawer, rendered read-only: the same quick-stat strip,
+              the same tabs, the same sections. One record, one way of reading it — an
+              employee sees exactly what HR sees about them. */}
+          <RecordQuickStats emp={emp} />
           <div style={{ display: 'flex', background: C.sunken, borderBottom: `1px solid ${C.brandEdge}`, overflowX: 'auto' }}>
-            {PROFILE_TABS.map(t => (
+            {ESS_RECORD_TABS.map(t => (
               <button key={t.id} onClick={() => setRecordTab(t.id)}
                 style={{ padding: '11px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
                          fontSize: 12, fontWeight: recordTab === t.id ? 600 : 400, fontFamily: 'inherit',
