@@ -11,6 +11,9 @@ rather than trusting the comments in those files:
   · every contrast and separation figure claimed in the code, recomputed
   · both dark states are declared (System stamps no attribute; an explicit
     choice stamps one — a rule written only one way breaks the other)
+  · the fold: a real button that announces its state, a shut panel that is
+    inert, a shut section that still reports what it hides, and a persisted
+    value that cannot take the rail down when it is corrupt
 
 Not covered here, because they need a browser and a running dev server:
 route status, real font metrics, console errors, and the six theme states.
@@ -135,7 +138,31 @@ check('.ez-nav carries a default hue for rows without one', '--nav-hue: ' in css
 check('--ez-rail-item defined in all three theme blocks',
       theme.count('--ez-rail-item') == 3, '%d' % theme.count('--ez-rail-item'))
 
-# ── 5. the rail still fits ────────────────────────────────────────────────
+# ── 5. the fold ───────────────────────────────────────────────────────────
+head = lay[lay.index('function GroupBlock'):lay.index('const FONT =')]
+check('section heading is a real <button>', '<button type="button" className={`ez-group-head' in head)
+check('heading announces its own state', 'aria-expanded={expanded}' in head and 'aria-controls={panelId}' in head)
+check('panel id is SSR-stable (useId, not a counter)', 'useId()' in head and 'rid.replace' in head)
+check('shut panel is inert, so its links leave the tab order',
+      'inert={foldable && !expanded ? true : undefined}' in head)
+check('height animates via grid-template-rows, not max-height',
+      'grid-template-rows:0fr' in css and '.ez-open > .ez-group-panel{ grid-template-rows:1fr }' in css
+      and not re.search(r'max-height\s*:', css))   # the words appear in a comment saying why not
+check('rows unfold on a hinge with a shared vanishing point',
+      'perspective: 640px' in css and 'rotateX(-72deg)' in css)
+check('open staggers, close does not', 'transition-delay: calc(var(--n) * 28ms)' in css)
+check('collapsed rail cannot fold a section shut (no way to reopen it)',
+      'const foldable = Boolean(group) && railOpen;' in head)
+check('a shut section still reports what it hides', 'ez-count' in head and 'items.length' in head)
+check('"you are here" is not colour alone', 'ez-sr' in head and '.ez-sr{' in css)
+check('reduced motion covers the fold too',
+      '.ez-group-panel{ transition:none }' in css and '.ez-count-here{ animation:none }' in css)
+check('section state persisted under its own key', "'ezer_rail_sections'" in lay)
+check('a corrupt persisted value cannot take the rail down',
+      'catch { localStorage.removeItem(' in lay)
+check('default is every section open', 'sections[g] ?? true' in lay)
+
+# ── 6. the rail still fits ────────────────────────────────────────────────
 AVAIL = 244-20-8-26-10-8
 longest = max((l for _,l,_,_,_ in ITEMS), key=len)
 check('label column is 172px wide as assumed', AVAIL == 172, '%dpx' % AVAIL)

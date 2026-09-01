@@ -17,7 +17,7 @@
 // with module: null (Home) is open to anyone who can reach the dashboard at
 // all; anything else is filtered through canSee() before it ever renders.
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
@@ -192,12 +192,17 @@ function isActive(path: string, href: string): boolean {
 
 // Declared at module level, never inside Layout: a component defined inside
 // another is a fresh type on every render, which remounts it and drops focus.
-function RailItem({ item, open, active }: { item: NavItem; open: boolean; active: boolean }) {
+function RailItem({ item, open, active, n }: {
+  item: NavItem; open: boolean; active: boolean;
+  /** Position within its section, so the unfold can deal the rows out in order. */
+  n: number;
+}) {
   const { Icon } = item;
   const hue = hueOf(item.href);
   return (
     <Link href={item.href} title={open ? undefined : item.label}
-      style={{ textDecoration: 'none', width: '100%', flexShrink: 0 }}>
+      style={{ textDecoration: 'none', width: '100%', flexShrink: 0,
+               ['--n' as string]: n }}>
       <div className={`ez-nav${active ? ' ez-nav-on' : ''}`} style={{
         height: 40, borderRadius: R.md, display: 'flex', alignItems: 'center',
         gap: 10, padding: open ? '0 8px' : 0,
@@ -256,48 +261,86 @@ function RailItem({ item, open, active }: { item: NavItem; open: boolean; active
 }
 
 /**
- * A section heading, and the line that separates one section from the next.
+ * A section: its heading, which is also the control that opens and closes it,
+ * and its items.
  *
- * Three devices, each doing something the other two cannot: the RULE above it
- * says a section ended, the DOT and the ink say which section this is, and the
- * SPINE down the items (in .ez-group-items) says how far it reaches. One alone
- * is ambiguous — a rule with no colour could be any boundary, and colour with
- * no rule was what the rail had before, which read as one long list.
+ * The heading keeps the three devices it already had — the RULE above it says
+ * a section ended, the DOT and ink say which section this is, the SPINE says
+ * how far it reaches. What is new is that it now folds.
+ *
+ * WHEN A SECTION IS SHUT it still has to answer "is the page I am on in
+ * there?", or closing a section means losing your place. So a shut section
+ * shows how many rows it is hiding, and — if the current route is one of them
+ * — a rotating ring around its dot. That is the whole reason the fold is safe
+ * to use: nothing is hidden without being accounted for.
  */
-function GroupHead({ label, open }: { label: string; open: boolean }) {
-  if (!label) return null;
-  // Collapsed there is no room for the words, so the rule carries the whole
-  // job — and it is tinted with the section's ink rather than the flat grey it
-  // used to be, so the boundaries stay legible at 60px.
-  if (!open) {
-    return <div className="ez-group-rule-shut" aria-hidden />;
-  }
-  return (
-    <div className="ez-group-head">
-      <span className="ez-group-dot" aria-hidden />
-      <span className="ez-group-name">{label}</span>
-    </div>
-  );
-}
-
-/** One section: its heading, and its items gathered behind a spine. Previously
- *  this wrapper was `display: contents`, which draws no box — so there was
- *  nothing for a spine or a background to attach to. */
-function GroupBlock({ group, index, children, open }: {
-  group: string; index: number; open: boolean; children: React.ReactNode;
+function GroupBlock({ group, index, items, railOpen, path, expanded, onToggle }: {
+  group: string; index: number; items: NavItem[]; railOpen: boolean;
+  path: string; expanded: boolean; onToggle: () => void;
 }) {
   const { inkL, inkD } = inkOf(group);
+  // Stable across server and client. A module-level counter is not, and that
+  // is exactly how the logo produced a hydration mismatch earlier.
+  const rid = useId();
+  const panelId = 'ezsec' + rid.replace(/[^a-zA-Z0-9]/g, '');
+
+  const hasActive = items.some(it => isActive(path, it.href));
+  // Only meaningful once the section is shut — open, the active row is right
+  // there and saying it twice is noise.
+  const here = hasActive && Boolean(group) && railOpen && !expanded;
+  // Collapsed to 60px there is no heading to click, so nothing can be folded
+  // shut — a rail with no labels and no way to reopen a section would be a
+  // trap. The root group has no heading either, so it never folds.
+  const foldable = Boolean(group) && railOpen;
+  const shown = foldable ? expanded : true;
+
   return (
-    <div className="ez-group" style={{
+    <div className={`ez-group${shown ? ' ez-open' : ''}`} style={{
       ['--g-ink-l' as string]: inkL,
       ['--g-ink-d' as string]: inkD,
-      // Drives the entrance stagger. Sections arrive in reading order rather
-      // than all at once, which is what makes them read as six things.
       ['--i' as string]: index,
     }}>
-      <GroupHead label={group} open={open} />
-      <div className={group && open ? 'ez-group-items' : 'ez-group-items ez-group-bare'}>
-        {children}
+      {foldable && (
+        <button type="button" className={`ez-group-head${here ? ' ez-here-head' : ''}`}
+          onClick={onToggle} aria-expanded={expanded} aria-controls={panelId}
+          title={here ? `${group} — you are on a page in here. Click to show it.`
+                      : `${expanded ? 'Hide' : 'Show'} ${group}`}>
+          <span className="ez-dotwrap" aria-hidden>
+            <span className="ez-group-dot" />
+          </span>
+          <span className="ez-group-name">{group}</span>
+          {!expanded && (
+            <span className={`ez-count${here ? ' ez-count-here' : ''}`}>
+              {items.length}
+              {/* The wash and the pill are colour, and colour alone is not a
+                  message. Screen readers get the words. */}
+              <span className="ez-sr">
+                {here ? ' hidden items, including the page you are on' : ' hidden items'}
+              </span>
+            </span>
+          )}
+          {/* A plus that becomes a minus. Two bars rather than a chevron: at
+              11px a rotating chevron reads as a smudge, where a bar
+              disappearing is unambiguous. */}
+          <span className="ez-fold" aria-hidden>
+            <span className="ez-fold-h" />
+            <span className="ez-fold-v" />
+          </span>
+        </button>
+      )}
+      {Boolean(group) && !railOpen && <div className="ez-group-rule-shut" aria-hidden />}
+
+      {/* Height is animated in CSS — see .ez-group-panel for why it is
+          grid-template-rows and not anything else. */}
+      <div id={panelId} className="ez-group-panel" inert={foldable && !expanded ? true : undefined}>
+        <div className="ez-group-panel-inner">
+          <div className={Boolean(group) && railOpen ? 'ez-group-items' : 'ez-group-items ez-group-bare'}>
+            {items.map((item, n) => (
+              <RailItem key={item.href} item={item} open={railOpen} n={n}
+                active={isActive(path, item.href)} />
+            ))}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -382,6 +425,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (!grant.employeeId && !grant.legacy) { window.location.href = '/'; return; }
     if (!hasAdminAccess(grant)) { window.location.href = '/ess-portal'; }
   }, [loading, grant]);
+
+  // Which sections are folded open. Empty means "everything open", which is
+  // both the sensible default and what the rail did before it could fold — so
+  // nobody's first load looks like modules went missing.
+  const [sections, setSections] = useState<Record<string, boolean>>({});
+  const isOpenSection = (g: string) => sections[g] ?? true;
+  const toggleSection = (g: string) => setSections(prev => {
+    const next = { ...prev, [g]: !(prev[g] ?? true) };
+    localStorage.setItem('ezer_rail_sections', JSON.stringify(next));
+    return next;
+  });
+  useEffect(() => {
+    const raw = localStorage.getItem('ezer_rail_sections');
+    if (!raw) return;
+    // A hand-edited or half-written value should not take the sidebar down.
+    try {
+      const v = JSON.parse(raw);
+      if (v && typeof v === 'object') setSections(v as Record<string, boolean>);
+    } catch { localStorage.removeItem('ezer_rail_sections'); }
+  }, []);
 
   // Remember the rail. Read after mount so the server and client first paint
   // agree; a value read during render would hydrate mismatched.
@@ -567,6 +630,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         .ez-group-head{
           position:relative; display:flex; align-items:center; gap:8px;
           padding:15px 8px 6px; white-space:nowrap; flex-shrink:0;
+          /* It is a <button> now: a real one, so it is reachable by keyboard
+             and announces its own state, rather than a div with a click. */
+          width:100%; border:none; background:none; font:inherit;
+          cursor:pointer; text-align:left; -webkit-tap-highlight-color:transparent;
           animation: ez-sec-in .42s cubic-bezier(.2,.8,.2,1) both;
           animation-delay: calc(var(--i) * 70ms);
         }
@@ -582,6 +649,97 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
         .ez-group-head::before{ position:absolute; left:0; right:0; top:0 }
         .ez-group-rule-shut{ margin:9px 8px 8px; flex-shrink:0 }
+
+        /* ── The fold ────────────────────────────────────────────────────
+           Height animates with grid-template-rows 0fr -> 1fr. The rail has
+           sections of three rows and sections of seven; a max-height would
+           either clip the long ones or leave the short ones drifting open
+           against dead space, and measuring heights in JS means a layout read
+           on every toggle. This animates to the content's real height with
+           neither problem. */
+        .ez-group-panel{
+          display:grid; grid-template-rows:0fr;
+          transition: grid-template-rows .34s cubic-bezier(.22,1,.36,1);
+        }
+        .ez-open > .ez-group-panel{ grid-template-rows:1fr }
+        .ez-group-panel-inner{ overflow:hidden; min-height:0 }
+
+        /* The rows do not slide in — they UNFOLD, hinged along their own top
+           edge. It is the one motion that says "this was folded away" rather
+           than "this arrived from somewhere", which is what a disclosure
+           actually did. The perspective is on the list, so the rows share one
+           vanishing point instead of each tilting in its own little world. */
+        .ez-group-items{ perspective: 640px; perspective-origin: top center }
+        .ez-group-items > a{
+          transform-origin: top center;
+          transform: rotateX(-72deg); opacity:0;
+          transition: transform .30s cubic-bezier(.2,.9,.3,1), opacity .2s ease;
+        }
+        .ez-open .ez-group-items > a{
+          transform:none; opacity:1;
+          /* Dealt out in order on the way open. On the way shut every row
+             leaves at once — a staggered close reads as hesitation, and you
+             already know what you clicked. */
+          transition-delay: calc(var(--n) * 28ms);
+        }
+
+        /* A plus that loses its vertical bar. Two bars rather than a chevron:
+           at this size a rotating chevron reads as a smudge, where a stroke
+           vanishing is unambiguous even at 9px. */
+        .ez-fold{
+          margin-left:auto; position:relative; width:9px; height:9px; flex-shrink:0;
+          transform: rotate(-90deg);
+          transition: transform .34s cubic-bezier(.22,1,.36,1);
+        }
+        .ez-open .ez-fold{ transform: rotate(0deg) }
+        .ez-fold-h, .ez-fold-v{
+          position:absolute; background: var(--g-ink); border-radius:1px;
+          transition: transform .28s cubic-bezier(.22,1,.36,1);
+        }
+        .ez-fold-h{ left:0; right:0; top:4px; height:1.6px }
+        .ez-fold-v{ top:0; bottom:0; left:4px; width:1.6px }
+        .ez-open .ez-fold-v{ transform: scaleY(0) }
+
+        /* What a shut section still tells you. Without these, folding a
+           section hides both its rows and the fact that you are standing in
+           one of them. */
+        .ez-count{
+          font-size:9.5px; font-weight:${W.bold}; line-height:1;
+          padding:3px 5px; border-radius:5px; flex-shrink:0;
+          font-variant-numeric: tabular-nums;
+          color: var(--g-ink);
+          background: color-mix(in srgb, var(--g-ink) 14%, transparent);
+        }
+        /* Visually hidden, still announced. Not display:none, which removes it
+           from the accessibility tree along with everything else. */
+        .ez-sr{
+          position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+          overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0;
+        }
+        .ez-dotwrap{ position:relative; display:flex; flex-shrink:0 }
+
+        /* "The page you are on is in here." First attempt was a conic-gradient
+           ring turning around the 6px dot, and at that size it rendered as a
+           lopsided smudge — an indicator you have to squint at is not an
+           indicator. This says it at the scale the rail actually reads at:
+           the whole heading takes a wash of its own ink, and the count flips
+           from a quiet tint to a solid pill. */
+        .ez-here-head{
+          background: color-mix(in srgb, var(--g-ink) 9%, transparent);
+          border-radius:8px;
+        }
+        .ez-count-here{
+          background: var(--g-ink);
+          color: ${C.rail};
+          animation: ez-here-pulse 2.2s ease-out infinite;
+        }
+        /* The pulse rides on box-shadow, which does not affect layout — a
+           scaling badge would nudge the heading text on every beat. */
+        @keyframes ez-here-pulse{
+          0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--g-ink) 55%, transparent) }
+          70%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--g-ink) 0%, transparent) }
+          100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--g-ink) 0%, transparent) }
+        }
 
         .ez-group-dot{
           width:6px; height:6px; border-radius:2px; flex-shrink:0;
@@ -599,10 +757,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            5.5:1 — so what changes is the spine and the dot, never the text. */
         .ez-group:hover .ez-group-items::before{ opacity:1 }
         .ez-group .ez-group-items::before{ opacity:.72 }
-        .ez-group:hover .ez-group-dot{
+        .ez-group-head:hover .ez-group-dot,
+        .ez-group-head:focus-visible .ez-group-dot{
           transform: scale(1.4);
           box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-ink) 20%, transparent);
         }
+        .ez-group-head:hover .ez-group-name{ letter-spacing:.145em }
+        .ez-group-name{ transition: letter-spacing .28s cubic-bezier(.22,1,.36,1) }
+        .ez-group-head:active{ transform: translateY(.5px) }
+        .ez-group-head:focus-visible{ outline:2px solid var(--g-ink); outline-offset:-2px; border-radius:8px }
 
         @keyframes ez-sec-line{ from{ transform:scaleX(0); opacity:0 } to{ transform:scaleX(1); opacity:1 } }
         @keyframes ez-sec-in{ from{ opacity:0; transform:translateX(-6px) } to{ opacity:1; transform:none } }
@@ -619,6 +782,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           .ez-group-rule-shut, .ez-group-items::before{
             animation:none; transform:none; opacity:1;
           }
+          /* The fold still WORKS — it just stops being a performance. The
+             panel snaps, the rows are simply there or not, and the ring that
+             marks your place holds still instead of turning. */
+          .ez-group-panel{ transition:none }
+          .ez-group-items > a{ transition:none; transform:none; opacity:1 }
+          .ez-open .ez-group-items > a{ transition-delay:0ms }
+          .ez-fold, .ez-fold-h, .ez-fold-v, .ez-group-name{ transition:none }
+          .ez-count-here{ animation:none }
         }
       `}</style>
 
@@ -683,12 +854,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             const items = g.items.filter(item => canSee(grant, item.module));
             if (!items.length) return null;
             return (
-              <GroupBlock key={g.group || 'root'} group={g.group} index={i} open={open}>
-                {items.map(item => (
-                  <RailItem key={item.href} item={item} open={open}
-                    active={isActive(path, item.href)} />
-                ))}
-              </GroupBlock>
+              <GroupBlock key={g.group || 'root'} group={g.group} index={i}
+                items={items} railOpen={open} path={path}
+                expanded={isOpenSection(g.group)}
+                onToggle={() => toggleSection(g.group)} />
             );
           })}
         </div>
