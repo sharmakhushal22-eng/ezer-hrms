@@ -3358,52 +3358,40 @@ function MyReportingLine({ employeeId, fallbackL1, notify }: {
 // inside the strip — the strip scrolls horizontally when the menus do not fit,
 // and an absolutely positioned panel inside a scroll container gets clipped by it.
 
-/** One group: the trigger, and the panel it opens. */
-function ManageMenu({ group, items, open, activeKey, onToggle, onClose, onPick }: {
-  group: string; items: NavEntry[]; open: boolean; activeKey: string | null
+/** One group: the trigger, and the panel it opens.
+ *
+ *  The panel is absolutely positioned inside its own relatively-positioned wrapper —
+ *  it is simply under its button, with no coordinates to compute. An earlier version
+ *  measured the button and used position:fixed, which put the panel far from the
+ *  button as soon as anything in the tree established a containing block; anchoring
+ *  it to the trigger removes the whole class of problem. The band wraps rather than
+ *  scrolls so nothing clips the panel either. */
+function ManageMenu({ group, items, open, activeKey, alignRight, onToggle, onClose, onPick }: {
+  group: string; items: NavEntry[]; open: boolean; activeKey: string | null; alignRight: boolean
   onToggle: () => void; onClose: () => void; onPick: (k: string) => void
 }) {
-  const btnRef = useRef<HTMLButtonElement>(null)
-  const [at, setAt] = useState<{ left: number; top: number } | null>(null)
   const pop = useDismiss<HTMLDivElement>(open, onClose, `[data-ez-menu="${group}"]`)
   const holdsActive = !!activeKey && items.some(i => i.key === activeKey)
 
-  // Measured in the click handler, not in an effect: the rect is known at the moment
-  // the button is pressed, and setting state inside an effect costs a second render
-  // pass for a value that never changes while the menu is open.
-  const openAt = () => {
-    const r = btnRef.current?.getBoundingClientRect()
-    if (r) setAt({ left: Math.min(r.left, window.innerWidth - 244), top: r.bottom + 4 })
-    onToggle()
-  }
-
-  useEffect(() => {
-    if (!open) return
-    // Re-measuring on scroll would fight the sticky bar; closing is the honest
-    // response to the page moving under an open menu.
-    window.addEventListener('resize', onClose)
-    window.addEventListener('scroll', onClose, true)
-    return () => { window.removeEventListener('resize', onClose); window.removeEventListener('scroll', onClose, true) }
-  }, [open, onClose])
-
   return (
-    <>
-      <button ref={btnRef} data-ez-menu={group} onClick={openAt}
+    <div style={{ position:'relative', flexShrink:0 }}>
+      <button data-ez-menu={group} onClick={onToggle}
         aria-expanded={open} aria-haspopup="true"
         style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 11px', borderRadius:R.md,
                  border:`1px solid ${open || holdsActive ? C.brand : 'transparent'}`,
-                 background: open ? C.brandTint : holdsActive ? C.brandTint : 'transparent',
+                 background: open || holdsActive ? C.brandTint : 'transparent',
                  color: open || holdsActive ? C.brandDeep : C.inkSoft,
                  fontFamily:'inherit', fontSize:12.5, fontWeight: holdsActive ? 700 : 600,
-                 cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
+                 cursor:'pointer', whiteSpace:'nowrap' }}>
         {group}
         <span aria-hidden style={{ fontSize:9, opacity:.75, transform: open ? 'rotate(180deg)' : 'none', transition:'transform .12s' }}>▼</span>
       </button>
-      {open && at && (
+      {open && (
         <div ref={pop} role="menu"
-          style={{ position:'fixed', left:at.left, top:at.top, minWidth:224, zIndex:28,
+          style={{ position:'absolute', top:'calc(100% + 4px)', ...(alignRight ? { right:0 } : { left:0 }),
+                   minWidth:220, zIndex:40,
                    background:C.surface, border:`1px solid ${C.brandEdge}`, borderRadius:R.lg,
-                   boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:6, overflow:'hidden' }}>
+                   boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:6 }}>
           {items.map(i => {
             const on = activeKey === i.key
             return (
@@ -3416,13 +3404,13 @@ function ManageMenu({ group, items, open, activeKey, onToggle, onClose, onPick }
                 onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent' }}>
                 <span aria-hidden style={{ width:5, height:5, borderRadius:'50%', flexShrink:0,
                                            background: on ? C.brand : 'transparent' }} />
-                <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{i.label}</span>
+                <span style={{ whiteSpace:'nowrap' }}>{i.label}</span>
               </button>
             )
           })}
         </div>
       )}
-    </>
+    </div>
   )
 }
 
@@ -3440,14 +3428,17 @@ function ManageBand({ groups, activeKey, onPick }: {
     return () => window.removeEventListener('keydown', onKey)
   }, [openGroup, close])
   if (!groups.length) return null
+  // Wraps rather than scrolls: a horizontal scrollbar inside a header is awkward to
+  // reach, and an overflow container would clip the dropdowns hanging out of it.
+  // On a narrow window the bar gains a second row, which is the honest trade.
   return (
     <nav aria-label="What you manage"
-      className="ez-scroll"
-      style={{ display:'flex', alignItems:'center', gap:3, minWidth:0, flexShrink:1,
-               overflowX:'auto', overflowY:'visible', paddingRight:4 }}>
-      {groups.map(g => (
+      style={{ display:'flex', alignItems:'center', flexWrap:'wrap', gap:3, minWidth:0, flexShrink:1 }}>
+      {groups.map((g, i) => (
         <ManageMenu key={g.group} group={g.group} items={g.items} activeKey={activeKey}
           open={openGroup === g.group}
+          // The last two open leftward so they do not run off the right edge.
+          alignRight={i >= groups.length - 2 && groups.length > 2}
           onToggle={() => setOpenGroup(o => (o === g.group ? null : g.group))}
           onClose={close} onPick={onPick} />
       ))}
