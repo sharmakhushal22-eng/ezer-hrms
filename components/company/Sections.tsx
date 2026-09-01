@@ -97,9 +97,12 @@ function Head({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function CompanySections({ d, isMobile, saveReg }: {
+export function CompanySections({ d, isMobile, saveReg, canEdit = false, onChanged }: {
   d: SectionData; isMobile: boolean
   saveReg: (reg_type: string, patch: Record<string, string | null>, location_id?: string | null) => Promise<void>
+  /** From the server, not guessed here — the routes re-check anyway. */
+  canEdit?: boolean
+  onChanged?: () => void
 }) {
   const [tab, setTab] = useState<SectionId>('basic')
   const co = d.co
@@ -228,7 +231,8 @@ export function CompanySections({ d, isMobile, saveReg }: {
             <Head>Certificate health</Head>
             <Donut slices={regHealthSlices} centre={`${regHealthSlices[0].value}/${REG_TYPES.length}`} />
           </div>
-          <Compliance co={co} regs={d.regs} isMobile={isMobile} onSave={saveReg} />
+          <Compliance co={co} regs={d.regs} isMobile={isMobile} onSave={saveReg}
+            canEdit={canEdit} onChanged={onChanged} />
         </div>
       )}
 

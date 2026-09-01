@@ -18,6 +18,7 @@
 // and separating them makes you read two places to answer one question.
 
 import { useState } from 'react'
+import { uploadRegDoc, regDocUrl, removeRegDoc, archiveRow, type RegDoc } from '@/lib/company/client'
 import { C, F, W, R } from '@/lib/ui'
 import {
   REG_TYPES, regHealth,
@@ -87,11 +88,25 @@ function Cell({ value, placeholder, type = 'text', onSave }: {
   )
 }
 
-export function Compliance({ co, regs, isMobile, onSave }: {
+const linkBtn: React.CSSProperties = {
+  display: 'inline-flex', alignItems: 'center', border: 'none', background: 'transparent',
+  padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: F.micro,
+  fontWeight: W.semi, color: C.brandDeep, textDecoration: 'underline',
+  textUnderlineOffset: 2,
+}
+
+export function Compliance({ co, regs, isMobile, onSave, canEdit = false, onChanged }: {
   co: Company
   regs: Registration[]
   isMobile: boolean
   onSave: (reg_type: string, patch: Record<string, string | null>, location_id?: string | null) => Promise<void>
+  /** Whether the SERVER said this person may edit. Passed in rather than
+   *  decided here — and every route re-checks, so hiding these controls is a
+   *  courtesy to the reader, not the rule. */
+  canEdit?: boolean
+  /** Reload the profile after a change that this component cannot patch into
+   *  its own props (a removed row, a new certificate). */
+  onChanged?: () => void
 }) {
   // Company-level registrations only — a branch certificate is shown on its
   // own branch card, where the address it belongs to is already on screen.
@@ -101,7 +116,43 @@ export function Compliance({ co, regs, isMobile, onSave }: {
   const [adding, setAdding] = useState(false)
   const [newType, setNewType] = useState('')
   const [newNumber, setNewNumber] = useState('')
+  const [newFile, setNewFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [viewing, setViewing] = useState<RegDoc | null>(null)
+  const [working, setWorking] = useState<string | null>(null)   // registration id
+
+  const view = async (id: string) => {
+    setErr(''); setWorking(id)
+    try { setViewing(await regDocUrl(id)) }
+    catch (e: any) { setErr(e?.message || 'Could not open that document.') }
+    finally { setWorking(null) }
+  }
+  const attach = async (id: string, f: File | null) => {
+    if (!f) return
+    setErr(''); setWorking(id)
+    try { await uploadRegDoc(id, f); onChanged?.() }
+    catch (e: any) { setErr(e?.message || 'Upload failed.') }
+    finally { setWorking(null) }
+  }
+  const detach = async (id: string) => {
+    setErr(''); setWorking(id)
+    try { await removeRegDoc(id); onChanged?.() }
+    catch (e: any) { setErr(e?.message || 'Could not remove that document.') }
+    finally { setWorking(null) }
+  }
+  /** Soft delete through the gated route. A standard registration keeps its
+   *  row on screen afterwards and goes back to reading "Not recorded" — the
+   *  fourteen are always listed, whether a company holds them or not. */
+  const removeReg = async (r: Registration) => {
+    setErr(''); setWorking(r.id)
+    try {
+      if (r.document_path) await removeRegDoc(r.id).catch(() => {})
+      await archiveRow('REGISTRATION', r.id)
+      onChanged?.()
+    } catch (e: any) { setErr(e?.message || 'Could not remove that registration.') }
+    finally { setWorking(null) }
+  }
 
   // Anything already on screen is excluded from the add form. The fourteen
   // standard rows are always rendered whether filled or not, so offering them
@@ -112,22 +163,79 @@ export function Compliance({ co, regs, isMobile, onSave }: {
   const addNow = async () => {
     const code = newType.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_')
     if (!code) return
-    setBusy(true)
-    await onSave(code, { reg_number: newNumber.trim() || null })
-    setBusy(false); setAdding(false); setNewType(''); setNewNumber('')
+    setBusy(true); setErr('')
+    try {
+      await onSave(code, { reg_number: newNumber.trim() || null })
+      // The certificate can only be attached once the row exists and has an
+      // id, so the upload is a second step rather than part of the insert.
+      // Deliberately not silent: if the row saved and the file did not, the
+      // message says exactly that instead of implying both failed.
+      if (newFile) {
+        const made = regs.find(x => x.reg_type === code && !x.location_id)
+        if (made) await uploadRegDoc(made.id, newFile)
+        else setErr('Registration saved. Re-open the section to attach the certificate.')
+      }
+      onChanged?.()
+      setAdding(false); setNewType(''); setNewNumber(''); setNewFile(null)
+    } catch (e: any) {
+      setErr(e?.message || 'Could not add that registration.')
+    } finally { setBusy(false) }
   }
+
+  /** The certificate cell. Three states, and they are genuinely different
+   *  things: no row yet (nothing to attach a file to), a row with no file,
+   *  and a row with one. Saying "—" for all three would hide the reason the
+   *  upload is unavailable. */
+  const DocCell = ({ r }: { r?: Registration }) => {
+    if (!r) return <span style={{ fontSize: F.micro, color: C.faint }}>Save a number first</span>
+    const busyHere = working === r.id
+    if (r.document_path) {
+      return (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => view(r.id)} disabled={busyHere} title={r.document_name || 'View'}
+            style={linkBtn}>{busyHere ? 'Opening…' : 'View'}</button>
+          {canEdit && (
+            <button onClick={() => detach(r.id)} disabled={busyHere} title="Remove this certificate"
+              style={{ ...linkBtn, color: C.critical }}>Remove</button>
+          )}
+        </span>
+      )
+    }
+    if (!canEdit) return <span style={{ fontSize: F.micro, color: C.faint }}>None</span>
+    return (
+      <label style={{ ...linkBtn, cursor: busyHere ? 'wait' : 'pointer' }} title="PDF or Word (.docx), up to 15 MB">
+        {busyHere ? 'Uploading…' : 'Upload'}
+        <input type="file" hidden disabled={busyHere}
+          accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
+          onChange={e => { attach(r.id, e.target.files?.[0] ?? null); e.currentTarget.value = '' }} />
+      </label>
+    )
+  }
+
+  /** Remove the registration itself. Only where there is one to remove. */
+  const KillCell = ({ r }: { r?: Registration }) =>
+    canEdit && r ? (
+      <button onClick={() => removeReg(r)} disabled={working === r.id}
+        title={`Remove ${r.reg_type.replace(/_/g, ' ')} from this company`}
+        aria-label={`Remove ${r.reg_type.replace(/_/g, ' ')}`}
+        style={{
+          width: 24, height: 24, borderRadius: 6, cursor: 'pointer', lineHeight: 1,
+          border: `1px solid ${C.line}`, background: C.surface, color: C.muted,
+          fontFamily: 'inherit', fontSize: 14, padding: 0,
+        }}>×</button>
+    ) : <span />
 
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, overflow: 'hidden', marginBottom: 18 }}>
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '160px 1fr 132px 132px 150px',
+        gridTemplateColumns: isMobile ? '1fr' : '150px 1fr 116px 116px 132px 128px 34px',
         gap: 10, padding: '8px 12px', background: C.sunken,
         fontSize: F.micro, fontWeight: W.bold, color: C.muted,
         letterSpacing: .3, textTransform: 'uppercase',
       }}>
         <span>Registration</span>
-        {!isMobile && <><span>Number</span><span>Valid from</span><span>Valid till</span><span>Status</span></>}
+        {!isMobile && <><span>Number</span><span>Valid from</span><span>Valid till</span><span>Status</span><span>Certificate</span><span /></>}
       </div>
 
       {REG_TYPES.map(t => {
@@ -142,7 +250,7 @@ export function Compliance({ co, regs, isMobile, onSave }: {
         return (
           <div key={t.code} style={{
             display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : '160px 1fr 132px 132px 150px',
+            gridTemplateColumns: isMobile ? '1fr' : '150px 1fr 116px 116px 132px 128px 34px',
             gap: 10, padding: '9px 12px', alignItems: 'center',
             borderTop: `1px solid ${C.line}`,
           }}>
@@ -161,6 +269,8 @@ export function Compliance({ co, regs, isMobile, onSave }: {
             <Cell value={r?.valid_till ?? null} placeholder="—" type="date"
               onSave={v => onSave(t.code, { valid_till: v || null })} />
             <Pill h={h.state} days={h.days} />
+            <DocCell r={r} />
+            <KillCell r={r} />
           </div>
         )
       })}
@@ -173,7 +283,7 @@ export function Compliance({ co, regs, isMobile, onSave }: {
         return (
           <div key={r.id} style={{
             display: 'grid',
-            gridTemplateColumns: isMobile ? '1fr' : '160px 1fr 132px 132px 150px',
+            gridTemplateColumns: isMobile ? '1fr' : '150px 1fr 116px 116px 132px 128px 34px',
             gap: 10, padding: '9px 12px', alignItems: 'center', borderTop: `1px solid ${C.line}`,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
@@ -190,6 +300,8 @@ export function Compliance({ co, regs, isMobile, onSave }: {
             <Cell value={r.valid_till} placeholder="—" type="date"
               onSave={v => onSave(r.reg_type, { valid_till: v || null })} />
             <Pill h={hh.state} days={hh.days} />
+            <DocCell r={r} />
+            <KillCell r={r} />
           </div>
         )
       })}
@@ -198,7 +310,12 @@ export function Compliance({ co, regs, isMobile, onSave }: {
           standard list — a state licence, a sector permit. The existing rows
           are editable in place, so this deliberately does NOT offer them. */}
       <div style={{ borderTop: `1px solid ${C.line}`, padding: '10px 12px', background: C.sunken }}>
-        {!adding ? (
+        {!canEdit ? (
+          <span style={{ fontSize: F.micro, color: C.muted }}>
+            Registrations are maintained by EZER. Ask support to add, change or
+            remove one.
+          </span>
+        ) : !adding ? (
           <button onClick={() => setAdding(true)} style={{
             display: 'inline-flex', alignItems: 'center', gap: 7,
             padding: '6px 13px', borderRadius: R.md, cursor: 'pointer', fontFamily: 'inherit',
@@ -219,6 +336,17 @@ export function Compliance({ co, regs, isMobile, onSave }: {
               style={{ padding: '6px 10px', fontSize: F.small, fontFamily: 'inherit', width: 210,
                        border: `1px solid ${C.brand}`, borderRadius: R.sm,
                        background: C.surface, color: C.ink, outline: 'none' }} />
+            <label style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px',
+              borderRadius: R.sm, border: `1px dashed ${C.lineStrong}`, cursor: 'pointer',
+              fontSize: F.micro, fontWeight: W.semi, color: newFile ? C.ink : C.muted,
+              background: C.surface, maxWidth: 250, overflow: 'hidden', whiteSpace: 'nowrap',
+            }} title="PDF or Word (.docx), up to 15 MB">
+              {newFile ? newFile.name : 'Attach certificate (optional)'}
+              <input type="file" hidden disabled={busy}
+                accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
+                onChange={e => setNewFile(e.target.files?.[0] ?? null)} />
+            </label>
             <input value={newNumber} onChange={e => setNewNumber(e.target.value)}
               placeholder="Number (optional)" disabled={busy}
               onKeyDown={e => { if (e.key === 'Enter') addNow(); if (e.key === 'Escape') setAdding(false) }}
@@ -237,6 +365,12 @@ export function Compliance({ co, regs, isMobile, onSave }: {
           </div>
         )}
       </div>
+      {err && (
+        <div style={{ borderTop: `1px solid ${C.line}`, padding: '8px 12px',
+                      fontSize: F.micro, color: C.critical, background: C.surface }}>{err}</div>
+      )}
+
+      {viewing && <DocViewer doc={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }
@@ -274,6 +408,79 @@ export function BranchCertificate({ branch, regs, onSave }: {
           <Cell value={r?.valid_till ?? null} placeholder="—" type="date"
             onSave={v => onSave(type, { valid_till: v || null }, branch.id)} />
         </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Read-only view of a certificate.
+ *
+ * A PDF renders in an iframe from a signed URL that expires in five minutes.
+ * A .docx does NOT: no browser renders Word natively, and the only way to
+ * preview one inline is to hand the file to a third-party viewer service —
+ * which for a GST or EPF certificate is not a trade worth making. So the
+ * dialog says plainly that it will download instead of pretending to preview.
+ *
+ * "Read only" here means the app never offers an edit path and the URL dies
+ * on its own. It is not a claim that the bytes cannot be saved — anyone who
+ * can see a document can keep a copy of it, and implying otherwise would be
+ * a false promise rather than a control.
+ */
+function DocViewer({ doc, onClose }: { doc: RegDoc; onClose: () => void }) {
+  return (
+    <div onClick={onClose} role="dialog" aria-modal="true" aria-label={doc.name || 'Certificate'}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(8,12,22,.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: C.surface, borderRadius: 14, border: `1px solid ${C.line}`,
+        width: 'min(960px, 100%)', height: doc.inline ? 'min(88vh, 900px)' : 'auto',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 26px 64px -20px rgba(8,12,22,.55)',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px',
+          borderBottom: `1px solid ${C.line}`,
+        }}>
+          <span style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink,
+                         flex: 1, minWidth: 0, overflow: 'hidden',
+                         whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>
+            {doc.name || 'Certificate'}
+          </span>
+          <span style={{ fontSize: 9.5, fontWeight: W.bold, letterSpacing: .4,
+                         textTransform: 'uppercase', padding: '3px 8px', borderRadius: R.pill,
+                         background: C.sunken, color: C.muted }}>Read only</span>
+          <button onClick={onClose} aria-label="Close" style={{
+            border: `1px solid ${C.line}`, background: C.surface, color: C.ink,
+            borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 13, lineHeight: 1, padding: '5px 9px',
+          }}>Close</button>
+        </div>
+
+        {doc.inline ? (
+          <iframe src={doc.url} title={doc.name || 'Certificate'}
+            style={{ flex: 1, border: 'none', width: '100%', background: C.sunken }} />
+        ) : (
+          <div style={{ padding: 20 }}>
+            <div style={{ fontSize: F.small, color: C.ink, marginBottom: 8, fontWeight: W.semi }}>
+              Word documents cannot be shown in the browser
+            </div>
+            <div style={{ fontSize: F.micro, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>
+              Previewing a .docx would mean sending this certificate to an outside
+              viewer service, which is not something the app does with statutory
+              documents. Open it in Word instead — the link below works for five
+              minutes.
+            </div>
+            <a href={doc.url} target="_blank" rel="noopener noreferrer" style={{
+              display: 'inline-flex', alignItems: 'center', padding: '8px 14px',
+              borderRadius: R.md, textDecoration: 'none', fontSize: F.small,
+              fontWeight: W.semi, color: C.onAccent,
+              background: `linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`,
+            }}>Open {doc.name}</a>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -44,3 +44,45 @@ export const createRow = (entity: string, company_id: string | null, row: Record
  *  than `deleteRow` so a caller is not surprised that the row survives. */
 export const archiveRow = (entity: string, id: string) =>
   send('DELETE', { entity, id })
+
+// ── The certificate behind a registration ───────────────────────────────────
+// Its own endpoint rather than the generic row writer, because a file is not
+// a column: it needs multipart in, a signed URL out, and the old bytes
+// cleaned up when it is replaced.
+
+export interface RegDoc { url: string; name: string; mime: string; inline: boolean }
+
+/** Upload or replace. Refused server-side unless the caller holds an EZER
+ *  admin role — the file input is hidden for everyone else, but that is
+ *  cosmetic and the route is the actual rule. */
+export async function uploadRegDoc(registrationId: string, file: File) {
+  const fd = new FormData()
+  fd.append('registration_id', registrationId)
+  fd.append('file', file)
+  // No Content-Type header: the browser must set the multipart boundary
+  // itself, and passing our JSON headers here would break the parse.
+  const h = await authHeaders()
+  delete (h as any)['Content-Type']
+  const r = await fetch('/api/company/registration-doc', { method: 'POST', headers: h, body: fd })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || 'Upload failed.')
+  return j
+}
+
+/** A short-lived signed URL. Fetched at the moment of opening rather than
+ *  held in state, so a link cannot be shared out of the page and still work. */
+export async function regDocUrl(registrationId: string): Promise<RegDoc> {
+  const r = await fetch(`/api/company/registration-doc?id=${registrationId}`,
+                        { headers: await authHeaders() })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || 'Could not open that document.')
+  return j as RegDoc
+}
+
+export async function removeRegDoc(registrationId: string) {
+  const r = await fetch(`/api/company/registration-doc?id=${registrationId}`,
+                        { method: 'DELETE', headers: await authHeaders() })
+  const j = await r.json().catch(() => ({}))
+  if (!r.ok) throw new Error(j.error || 'Could not remove that document.')
+  return j
+}

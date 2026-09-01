@@ -4,7 +4,7 @@
 // Inline edit on any field → auto-writes company_master_audit. Schema: lib/supabase-admin + migration 027.
 import { useState, useEffect, useCallback } from 'react'
 import {
-  loadHierarchy, updateEntity, loadAudit, confirmPayment, loadHeadcount, upsertRegistration,
+  loadHierarchy, updateEntity, loadAudit, confirmPayment, loadHeadcount,
   loadCompanyFacts, type CompanyFacts,
   type GroupTree, type Company, type Branch, type Registration, type AuditRow,
   type CompanyHeadcount,
@@ -13,7 +13,7 @@ import { GenderSplit, GenderInline } from '@/components/company/GenderSplit'
 import { BranchCertificate } from '@/components/company/Compliance'
 import { CompanySections } from '@/components/company/Sections'
 import { GroupEditor } from '@/components/company/GroupEditor'
-import { fetchEditRight, type EditRight } from '@/lib/company/client'
+import { fetchEditRight, updateRow, createRow, type EditRight } from '@/lib/company/client'
 import { CSS as CP_CSS, ACCENT, monogram, stat, statValue, statLabel } from '@/components/company/ui'
 import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
@@ -205,7 +205,7 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
 }
 
 // ── Company card (one company in the group) ─────────────────────────
-function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg }: {
+function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg, canEdit, onChanged }: {
   co: Company; isMobile: boolean
   save: (entity: any, id: string, field: string, val: string, company_id: string) => Promise<void>
   openPay: (co: Company) => void
@@ -213,6 +213,9 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg 
   head?: CompanyHeadcount
   facts?: CompanyFacts
   saveReg: (company_id: string, reg_type: string, patch: Record<string, string | null>, location_id?: string | null) => Promise<void>
+  /** Resolved once by the page from /api/company/profile. */
+  canEdit: boolean
+  onChanged: () => void
 }) {
   const [open, setOpen] = useState(false)
   // A stable hue per company, so the three cards are told apart by colour
@@ -274,6 +277,7 @@ function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg 
               part WRITES it. */}
           <CompanySections isMobile={isMobile}
             saveReg={(t, patch, loc) => saveReg(co.id, t, patch, loc)}
+            canEdit={canEdit} onChanged={onChanged}
             d={{
               co, group, branches: co.branches, regs: co.registrations, banks: co.bank,
               head,
@@ -522,12 +526,30 @@ export default function CompanyProfilePage() {
     notify('Saved & logged.'); reload()
   }
 
+  /**
+   * Registrations are written through the GATED route, not the browser client.
+   *
+   * This used to call upsertRegistration(), which writes with the anon key —
+   * so the rule "only EZER may change the company profile" could not be
+   * enforced at all: anyone able to open the app could PATCH the table
+   * directly. Hiding the controls would have changed nothing. Create versus
+   * update is decided here from rows already on screen, so the API keeps its
+   * two plain verbs instead of growing an upsert.
+   */
   async function saveReg(company_id: string, reg_type: string,
                          patch: Record<string, string | null>, location_id?: string | null) {
-    const r = await upsertRegistration({ company_id, reg_type, location_id: location_id ?? null,
-                                         patch, changedBy: 'Admin' })
-    if ((r as any).error) { notify('Save failed: ' + (r as any).error.message, 'error'); return }
-    notify((r as any).created ? 'Registration added & logged.' : 'Saved & logged.'); reload()
+    const co = groups.flatMap(g => g.companies).find(c => c.id === company_id)
+    const existing = co?.registrations.find(
+      r => r.reg_type === reg_type && (r.location_id ?? null) === (location_id ?? null))
+    try {
+      if (existing) await updateRow('REGISTRATION', existing.id, patch)
+      else await createRow('REGISTRATION', company_id,
+                           { reg_type, location_id: location_id ?? null, ...patch })
+      notify(existing ? 'Saved & logged.' : 'Registration added & logged.')
+      reload()
+    } catch (e: any) {
+      notify('Save failed: ' + (e?.message || 'no permission'), 'error')
+    }
   }
 
   async function doConfirm(period: string, amount: string, from: string, till: string) {
@@ -569,7 +591,8 @@ export default function CompanyProfilePage() {
                   canEdit={right.canEdit} onEdit={() => setEditGroup(g)} />
                 {g.companies.map(co => (
                   <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay}
-                    group={g.group_name} head={head[co.id]} facts={facts[co.id]} saveReg={saveReg} />
+                    group={g.group_name} head={head[co.id]} facts={facts[co.id]} saveReg={saveReg}
+                    canEdit={right.canEdit} onChanged={reload} />
                 ))}
               </div>
             ))}

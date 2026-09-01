@@ -28,6 +28,12 @@ export interface Registration {
   id: string; company_id: string; location_id: string | null; reg_type: string
   reg_number: string; state: string | null; district: string | null; dept_address: string | null
   valid_from: string | null; valid_till: string | null; status: string
+  // The certificate itself (migration 081). Metadata only — the file lives in
+  // the private company-docs bucket and is only ever reached through a
+  // short-lived signed URL minted server-side.
+  document_path?: string | null; document_name?: string | null
+  document_mime?: string | null; document_size?: number | null
+  document_uploaded_at?: string | null; document_uploaded_by?: string | null
 }
 export interface BankAccount {
   id: string; company_id: string; account_type: string; bank_name: string
@@ -295,6 +301,15 @@ export function regHealth(r: Registration | undefined): { state: RegHealth; days
  * is a form for "the company's GST number", not for a row it already has —
  * and the row very often does not exist yet. Insert and update both log to the
  * same audit trail as every other edit on this screen.
+ */
+/**
+ * NO LONGER USED BY THE COMPANY PROFILE as of 02-Sep-2026.
+ *
+ * It writes registrations with the browser's anon key, which is exactly why
+ * "only EZER may change the company profile" could not be enforced while the
+ * page called it. That screen now goes through /api/company/profile, which
+ * checks the caller's role server-side. Kept for any caller that still needs
+ * the find-or-create shape — but a new caller should use the route, not this.
  */
 export async function upsertRegistration(input: {
   company_id: string

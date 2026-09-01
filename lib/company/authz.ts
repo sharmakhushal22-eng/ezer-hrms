@@ -16,7 +16,7 @@
 //
 //   ADMIN_SUPER / SUPER_ADMIN   the EZER side — full access by definition
 //   IMPL_MANAGER                EZER implementation / customer support
-//   ADMIN_COMPANY               the customer's own admin ("owner")
+//   ADMIN_COMPANY               the customer's own admin — REMOVED, see below
 //
 // HR_HEAD and CHRO are deliberately NOT here. They run HR; the company master
 // carries the PAN, the bank account and the statutory registrations, and the
@@ -27,10 +27,20 @@ import type { Grant } from '@/lib/rms/resolve'
 
 /** Roles that may edit the company master. */
 export const COMPANY_EDIT_ROLES = [
-  'ADMIN_SUPER', 'SUPER_ADMIN',   // EZER platform owner
+  'ADMIN_SUPER', 'SUPER_ADMIN',   // EZER platform owner — the master admin
   'IMPL_MANAGER',                 // EZER implementation / customer support
-  'ADMIN_COMPANY',                // the customer's own administrator
 ] as const
+
+// ADMIN_COMPANY WAS HERE AND HAS BEEN REMOVED, on instruction: nobody from
+// the customer's own organisation may change their company profile — they
+// ask EZER. That is a real reduction in what the customer can do, and it is
+// deliberate: the profile carries the PAN, the statutory registrations and
+// now the certificates themselves, and the brief is that only EZER touches
+// them.
+//
+// A company admin keeps every other admin power they had; this list governs
+// the company master alone. They can still READ the whole profile — the
+// restriction is on writing, not on seeing.
 
 export interface EditRight {
   canEdit: boolean

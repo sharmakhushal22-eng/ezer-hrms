@@ -125,5 +125,39 @@ check('every API verb resolves the grant first', not ungated,
       'ungated: %s' % ungated if ungated else '%d verbs' % len(verbs))
 check('deletes are soft', "status: 'Inactive'" in API or "'Inactive'" in API)
 
+# ── who may change the company master ─────────────────────────────────────
+# The brief: nobody from the customer's own organisation. ADMIN_COMPANY was on
+# this list and was removed; if it comes back, a company admin can rewrite
+# their own PAN and statutory numbers again.
+_roles = AUTH[AUTH.index('COMPANY_EDIT_ROLES'):]
+_roles = _roles[:_roles.index('] as const')]
+check("the customer's own admin cannot edit the company master",
+      'ADMIN_COMPANY' not in _roles, 'ADMIN_COMPANY is back on the list' if 'ADMIN_COMPANY' in _roles else '')
+check('EZER support can', 'IMPL_MANAGER' in _roles and 'ADMIN_SUPER' in _roles)
+
+# ── the certificate route ─────────────────────────────────────────────────
+DOC = (ROOT/'app/api/company/registration-doc/route.ts').read_text()
+for verb in ('POST', 'DELETE'):
+    body = DOC.split('export async function %s' % verb)[1].split('export async function')[0]
+    check('%s on a certificate is gated' % verb,
+          'right.canEdit' in body and 'status: 403' in body)
+check('viewing a certificate needs a session but not an edit role',
+      "status: 401" in DOC.split('export async function GET')[1].split('export async function')[0])
+check('only PDF and DOCX are accepted',
+      "'application/pdf'" in DOC and 'wordprocessingml.document' in DOC and 'ALLOWED' in DOC)
+check('the file size limit matches the CHECK in 081',
+      '15 * 1024 * 1024' in DOC and '15728640' in (ROOT/'supabase/migrations/081_registration_documents.sql').read_text())
+check('certificates are served by signed URL, never a public link',
+      'createSignedUrl' in DOC and 'getPublicUrl' not in DOC)
+
+# ── registrations are no longer written from the browser ──────────────────
+# Looks for a CALL and an IMPORT, not the word — the page comments explain
+# why it stopped calling this, and a bare substring match flags that comment.
+check('the profile page does not write registrations with the anon key',
+      'await upsertRegistration(' not in PAGE
+      and not re.search(r'import\s*\{[^}]*upsertRegistration', PAGE))
+check('the anon-writing helper is marked as no longer used here',
+      'NO LONGER USED BY THE COMPANY PROFILE' in DATA)
+
 print('\n  %d passed, %d failed\n' % (len(P), len(F)))
 sys.exit(1 if F else 0)
