@@ -22,12 +22,17 @@ import * as React from 'react';
 import { C as TK } from '@/lib/ui';
 import type { GroupTree } from '@/lib/supabase-company-profile';
 
-export function GroupHeader({ g, card, headcount }: {
+export function GroupHeader({ g, card, headcount, canEdit, onEdit }: {
   g: GroupTree;
   card?: React.CSSProperties;
   /** Total people across every company in the group. The group's own number —
    *  no company card can show it, which is part of why the row earns its size. */
   headcount?: number;
+  /** Whether the SERVER says this person may edit. Passed in rather than
+   *  decided here: this component also renders inside Payroll, and a component
+   *  that resolves its own permissions would resolve them twice, differently. */
+  canEdit?: boolean;
+  onEdit?: () => void;
 }) {
   const branches = g.companies.reduce((s, c) => s + (c.branches?.length || 0), 0);
   const regs     = g.companies.reduce((s, c) => s + (c.registrations?.length || 0), 0);
@@ -137,7 +142,29 @@ export function GroupHeader({ g, card, headcount }: {
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: 10, marginLeft: 'auto',
+      {/* Edit. Rendered only when the server said yes — and the route checks
+          again on every write, because this button is in the browser and can
+          be skipped. */}
+      {canEdit && onEdit && (
+        <button onClick={onEdit} title="Edit group details, branding, and add a company"
+          style={{
+            position: 'relative', display: 'inline-flex', alignItems: 'center', gap: 7,
+            padding: '9px 15px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+            fontSize: 12.5, fontWeight: 700, color: TK.onDark,
+            background: 'rgba(255,255,255,.12)',
+            border: '1px solid rgba(255,255,255,.26)',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,.18)',
+          }}>
+          <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+               strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M9.4 1.9a1.3 1.3 0 0 1 1.9 1.9L4.6 10.5l-2.5.6.6-2.5 6.7-6.7Z" />
+          </svg>
+          Edit group
+        </button>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: 10,
+                    marginLeft: canEdit ? 0 : 'auto',
                     position: 'relative', flexWrap: 'wrap' }}>
         {metrics.map(([n, label]) => (
           <div key={label} style={{

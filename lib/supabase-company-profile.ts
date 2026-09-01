@@ -6,7 +6,18 @@ import { supabase } from '@/lib/supabase'
 const num = (v: any) => (v === null || v === undefined || v === '') ? 0 : Number(v)
 
 // ── Types (mirror the live master schema) ───────────────────────────
-export interface Group { id: string; group_code: string; group_name: string; country: string; status: string }
+export interface Group {
+  id: string; group_code: string; group_name: string; country: string; status: string
+  logo_url?: string | null
+  // ── Added by 079. Optional, so the app compiles and runs before that
+  // migration is applied: select('*') simply does not return them and every
+  // reader treats them as absent.
+  tagline?: string | null; description?: string | null; website_url?: string | null
+  icon_emoji?: string | null
+  holding_pan?: string | null; holding_cin?: string | null; incorporated_on?: string | null
+  head_office?: string | null; contact_email?: string | null; contact_phone?: string | null
+  brand_primary?: string | null; brand_secondary?: string | null
+}
 export interface License {
   id: string; company_id: string; plan_name: string; max_employees: number; max_locations: number
   price_monthly: number; valid_from: string | null; valid_till: string | null; is_active: boolean

@@ -12,6 +12,8 @@ import {
 import { GenderSplit, GenderInline } from '@/components/company/GenderSplit'
 import { BranchCertificate } from '@/components/company/Compliance'
 import { CompanySections } from '@/components/company/Sections'
+import { GroupEditor } from '@/components/company/GroupEditor'
+import { fetchEditRight, type EditRight } from '@/lib/company/client'
 import { CSS as CP_CSS, ACCENT, monogram, stat, statValue, statLabel } from '@/components/company/ui'
 import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
@@ -484,6 +486,8 @@ export default function CompanyProfilePage() {
   const [head, setHead] = useState<Record<string, CompanyHeadcount>>({})
   const [facts, setFacts] = useState<Record<string, CompanyFacts>>({})
   const [policy, setPolicy] = useState<Record<string, PolicyBundle>>({})
+  const [right, setRight] = useState<EditRight>({ canEdit: false, reason: 'Checking…', actor: '' })
+  const [editGroup, setEditGroup] = useState<GroupTree | null>(null)
 
   const notify = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
 
@@ -509,6 +513,10 @@ export default function CompanyProfilePage() {
     setLoading(false)
   }, [])
   useEffect(() => { reload() }, [reload])
+
+  // Asked of the server, not assumed. The client does not hold the role model,
+  // and a button shown on a guess is a button that 403s when pressed.
+  useEffect(() => { fetchEditRight().then(setRight) }, [])
 
   async function save(entity: any, id: string, field: string, val: string, company_id: string) {
     const patch: Record<string, any> = { [field]: field === 'max_employees' ? (val === '' ? null : Number(val)) : val }
@@ -560,7 +568,8 @@ export default function CompanyProfilePage() {
                 <GroupHeader g={g} card={C.card}
                   // Summed across the group's companies — the group's own
                   // number, which no single company card can show.
-                  headcount={g.companies.reduce((n, co) => n + (head[co.id]?.company.total ?? 0), 0)} />
+                  headcount={g.companies.reduce((n, co) => n + (head[co.id]?.company.total ?? 0), 0)}
+                  canEdit={right.canEdit} onEdit={() => setEditGroup(g)} />
                 {g.companies.map(co => (
                   <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay}
                     group={g.group_name} head={head[co.id]} facts={facts[co.id]} policy={policy[co.id]} saveReg={saveReg} />
@@ -586,6 +595,10 @@ export default function CompanyProfilePage() {
       </div>
 
       {pay && <PayModal co={pay} onClose={() => setPay(null)} onConfirm={doConfirm} />}
+      {editGroup && (
+        <GroupEditor g={editGroup} onClose={() => setEditGroup(null)}
+          onSaved={reload} notify={notify} />
+      )}
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   )
