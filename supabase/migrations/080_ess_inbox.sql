@@ -244,21 +244,32 @@ CREATE TRIGGER trg_inbox_touch_conversation
   FOR EACH ROW EXECUTE FUNCTION inbox_touch_conversation();
 
 
--- ── 6. Unread, in one place ──────────────────────────────────────────
--- The bell and the inbox must never disagree about the number, so both
--- read this rather than each counting for themselves.
---
+-- ── 6. Unread, without counting anything twice ───────────────────────
 -- Counts messages newer than my last_read_at, in threads I am still in,
 -- excluding my own messages and muted threads. A NULL last_read_at means
 -- "never opened", so everything in the thread counts.
+--
+-- SYSTEM THREADS ARE EXCLUDED, AND THAT IS THE IMPORTANT PART. The inbox
+-- mirrors ess_notifications into per-department threads so they can be
+-- read in full and kept as history. The bell already counts those same
+-- notifications from ess_notifications. If this function counted them
+-- too, one leave approval would show as two things waiting.
+--
+-- So the split is: the bell counts NOTIFICATIONS, this counts MESSAGES
+-- FROM PEOPLE, and the badge is the sum. The per-thread function below
+-- does include SYSTEM threads, because the folder badge inside the inbox
+-- is a different question — "how much is unread in this folder" — and
+-- there it is the only thing counting.
 CREATE OR REPLACE FUNCTION inbox_unread_count(p_employee UUID)
 RETURNS INTEGER AS $$
   SELECT COALESCE(COUNT(m.id), 0)::INTEGER
     FROM inbox_participants p
+    JOIN inbox_conversations c ON c.id = p.conversation_id
     JOIN inbox_messages m ON m.conversation_id = p.conversation_id
    WHERE p.employee_id = p_employee
      AND p.left_at IS NULL
      AND NOT p.is_muted
+     AND c.kind <> 'SYSTEM'
      AND m.deleted_at IS NULL
      AND (m.sender_employee_id IS DISTINCT FROM p_employee)
      AND (p.last_read_at IS NULL OR m.created_at > p.last_read_at);

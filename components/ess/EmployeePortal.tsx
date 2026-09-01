@@ -27,6 +27,7 @@ import * as HR from '@/lib/employees/hr-actions'
 import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
+import Inbox from './Inbox'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
@@ -3203,6 +3204,7 @@ interface NavSection {
  */
 const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => React.ReactElement> = {
   home: IconHome, profile: IconEmployees, team: IconEmployees, payroll: IconPayroll,
+  inbox: IconBell,
   attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
   wall: IconRecruitment, rnr: IconAi, funzone: IconAi,
 }
@@ -3252,6 +3254,13 @@ const SECTIONS: NavSection[] = [
   { k:'leave', label:'Leave', short:'Leave', icon:'', status:'ready',
     desc:'Apply, track and plan leave',
     items:[{ k:'leave', label:'Leave' }] },
+
+  // Below Leave, as asked. One section rather than a sub-tab of HRIS: it is
+  // opened many times a day, and burying it a level down would make it the
+  // one thing people go back to the bell for.
+  { k:'inbox', label:'Inbox', short:'Inbox', icon:'', status:'ready',
+    desc:'Messages from colleagues and departments, and every notification in full',
+    items:[{ k:'inbox', label:'Inbox' }] },
 
   { k:'hris', label:'HRIS', short:'HRIS', icon:'', status:'partial',
     desc:'Directory, requests, approvals and the exit process',
@@ -3519,10 +3528,24 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           const t = data?.session?.access_token
           headers = t ? { Authorization: `Bearer ${t}` } : {}
         }
-        const r = await fetch(`/api/ess/notifications?employee_id=${employeeId}`, { headers })
-        if (!r.ok) return
-        const j = await r.json()
-        setUnread(Number(j.unread) || 0)
+        // Two sources, added rather than one replacing the other: the bell
+        // counts NOTIFICATIONS, the inbox counts MESSAGES FROM PEOPLE. They
+        // deliberately do not overlap — inbox_unread_count excludes the
+        // notification threads precisely so one leave approval is not counted
+        // twice. A failing inbox call leaves the notification count standing
+        // rather than blanking the badge.
+        const [rn, ri] = await Promise.all([
+          fetch(`/api/ess/notifications?employee_id=${employeeId}`, { headers }),
+          fetch(`/api/ess/inbox?employee_id=${employeeId}`, { headers }).catch(() => null),
+        ])
+        if (!rn.ok) return
+        const j = await rn.json()
+        let total = Number(j.unread) || 0
+        if (ri && ri.ok) {
+          const ji = await ri.json().catch(() => null)
+          if (ji?.installed) total += Number(ji.unread) || 0
+        }
+        setUnread(total)
       } catch { /* the badge is not worth an error state */ }
     })()
   }, [employeeId])
@@ -3552,6 +3575,9 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
       case 'profile':       return <Profile emp={emp} notify={notify} />
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
+      // The inbox reports its own unread straight into the bell's state, so
+      // the badge and the screen can never show two different numbers.
+      case 'inbox':         return <Inbox employeeId={emp.id} onUnread={setUnread} />
       case 'vpf':           return <VpfSection emp={emp} notify={notify} />
       case 'nps':           return <NpsSection emp={emp} notify={notify} />
       case 'loans':         return <LoansSection emp={emp} notify={notify} />
