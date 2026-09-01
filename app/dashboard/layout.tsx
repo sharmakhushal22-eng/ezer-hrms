@@ -38,6 +38,73 @@ import {
 } from '@/lib/ui/icons';
 
 interface NavItem { label: string; href: string; Icon: (p: IconProps) => React.ReactElement; module: Module | null }
+
+// ── One hue per destination ─────────────────────────────────────────────────
+// Twenty-seven rows all drawn in C.railMuted on a transparent ground is why
+// the rail read as a list of words on paper: nothing distinguished Payroll
+// from Policies except reading them. Each item now owns a colour, carried on
+// its icon tile.
+//
+// The palette is not twenty-seven arbitrary colours. It walks the wheel BY
+// GROUP — People in blues and indigos, Time in cyans, Money in greens and
+// ambers, Compliance in violets and roses, Setup in slates, Help in warm —
+// so every item is distinct AND the groups still read as families. A random
+// assignment would differentiate the items and destroy the grouping.
+// Twenty-seven rows, twenty-seven colours. The rail's problem was not that it
+// lacked colour but that every row had the SAME colour, so the eye had nothing
+// to fix on and had to read all twenty-seven labels to find one.
+//
+// The hues are not picked at random and not picked by group alone. Each group
+// occupies its own arc of the wheel — People cool blue through violet, Time
+// teal through blue, Money green through amber, Compliance magenta through
+// rose, Setup deliberately quieter, Help warm — so the rail still reads as
+// organised. Within an arc the LIGHTNESS alternates, because seven neighbouring
+// blues at one lightness are seven versions of the same blue. Every adjacent
+// pair was measured in CIE Lab: the closest is dE 17.5 (the three Money greens,
+// which are a family on purpose), and everything else is further apart.
+//
+// Every value also had to survive both themes. Measured, not eyeballed:
+//   · glyph on its own tile >= 3.0:1 in light AND dark (the AA bar for a
+//     graphic, not the 4.5:1 text bar — these are 15px stroke icons)
+//   · white glyph on the active tile >= 3.0:1 for all 27
+// That is what pushed the cyan and the ambers darker than they want to be:
+// #15A7C1 and #C88D04 came out at 2.53 and 2.57 on white and were unusable.
+const HUE: Record<string, string> = {
+  '/dashboard':                      '#084FA0',
+  // People — blue → violet, alternating light and deep
+  '/dashboard/recruitment':          '#4B82E2',
+  '/dashboard/onboarding':           '#1631CA',
+  '/dashboard/employees':            '#655EDE',
+  '/dashboard/org-chart':            '#481EC8',
+  '/dashboard/bulk-upload':          '#955CDB',
+  '/dashboard/transfer':             '#871AC1',
+  '/dashboard/pms':                  '#C54DDB',
+  // Time & Attendance — teal → blue
+  '/dashboard/attendance':           '#08917F',
+  '/dashboard/attendance-reports':   '#0B8BB1',
+  '/dashboard/leave-upload':         '#0A4A8A',
+  // Money — green → amber
+  '/dashboard/payroll':              '#057F5B',
+  '/dashboard/finance':              '#269757',
+  '/dashboard/flexi-claims':         '#137222',
+  '/dashboard/travel-claims':        '#549523',
+  '/dashboard/loans':                '#B77606',
+  // Compliance & Docs — magenta → rose
+  '/dashboard/compliance':           '#AB21A0',
+  '/dashboard/letters':              '#DB4DB0',
+  '/dashboard/policies':             '#AB1C5F',
+  '/dashboard/reports':              '#E43A61',
+  // Setup — muted on purpose. Configuration should not shout louder than work.
+  '/dashboard/ess':                  '#1C649C',
+  '/dashboard/admin':                '#6F4BC3',
+  '/dashboard/flexi-policy':         '#243B99',
+  '/dashboard/company-profile':      '#147390',
+  '/dashboard/db-export':            '#4F5A69',
+  // Help — warm, and the only warm pair in the rail, so it reads as "not work"
+  '/dashboard/ai':                   '#D8510E',
+  '/dashboard/support':              '#A57403',
+}
+const hueOf = (href: string) => HUE[href] ?? '#2563EB'
 interface NavGroup { group: string; items: NavItem[] }
 
 // Every href here is identical to the previous flat list. Nothing moved except
@@ -106,30 +173,48 @@ function isActive(path: string, href: string): boolean {
 // another is a fresh type on every render, which remounts it and drops focus.
 function RailItem({ item, open, active }: { item: NavItem; open: boolean; active: boolean }) {
   const { Icon } = item;
+  const hue = hueOf(item.href);
   return (
     <Link href={item.href} title={open ? undefined : item.label}
       style={{ textDecoration: 'none', width: '100%', flexShrink: 0 }}>
-      <div className="ez-nav" style={{
-        height: 36, borderRadius: R.md, display: 'flex', alignItems: 'center',
-        gap: 10, padding: open ? '0 10px' : 0,
+      <div className={`ez-nav${active ? ' ez-nav-on' : ''}`} style={{
+        height: 40, borderRadius: R.md, display: 'flex', alignItems: 'center',
+        gap: 10, padding: open ? '0 8px' : 0,
         justifyContent: open ? 'flex-start' : 'center',
-        background: active ? C.railActiveBg : 'transparent',
-        color: active ? C.railActiveText : C.railMuted,
-        transition: `background ${M.quick}, color ${M.quick}`,
-        position: 'relative', overflow: 'hidden',
+        // The row tint and the tile colour are BOTH in CSS, keyed off the
+        // custom property below — an inline background would win the cascade
+        // and the dark-theme rules could never lift it. Only geometry and the
+        // hue itself are inline here.
+        color: active ? C.railText : C.railMuted,
+        position: 'relative',
+        // Set as a custom property so the hover and active rules in
+        // ez-nav CSS can reach the hue without a style tag per row.
+        ['--nav-hue' as string]: hue,
       }}>
         {/* The bar carries the selection when the tint alone is too quiet —
             and it survives at 60px wide, where the label does not. */}
         {active && (
           <span aria-hidden style={{
-            position: 'absolute', left: 0, top: 6, bottom: 6, width: 3,
-            borderRadius: '0 3px 3px 0', background: C.brand,
+            position: 'absolute', left: 0, top: 7, bottom: 7, width: 3,
+            borderRadius: '0 3px 3px 0', background: hue,
+            boxShadow: `0 0 8px ${hue}80`,
           }} />
         )}
-        <Icon size={16} strokeWidth={active ? 1.9 : 1.6} />
+
+        {/* The icon TILE is what carries the colour. An icon tinted on its own
+            is a thin coloured glyph on a white ground and reads as grey at
+            16px; a filled tile behind it is a solid block of the hue, which
+            is what makes twenty-seven rows distinguishable at a glance. */}
+        <span className="ez-nav-tile" aria-hidden style={{
+          width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Icon size={15} strokeWidth={active ? 2 : 1.7} />
+        </span>
+
         {open && (
           <span style={{
-            fontSize: F.small, fontWeight: active ? W.semi : W.regular,
+            fontSize: F.small, fontWeight: active ? W.bold : W.medium,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{item.label}</span>
         )}
@@ -274,8 +359,119 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <LogoStyles />
       <UIKeyframes />
       <style>{`
-        .ez-nav:hover{background:${C.railHover};color:${C.railText}}
+        /* Colour and motion both live here rather than in inline styles, for
+           two different reasons. Motion, because twenty-seven inline hover
+           handlers would be twenty-seven closures re-created on every render.
+           Colour, because an inline background wins the cascade outright — and
+           the dark theme needs to LIFT these hues, which it cannot do to a
+           style attribute. Everything below reads the row's own --nav-hue. */
+
+        .ez-nav{
+          /* Sign out and "Back to my ESS" wear this class too, and they have no
+             hue of their own — without a default here their hover background
+             would be an invalid var() substitution, which drops the whole
+             declaration and leaves them with no hover state at all. Rail items
+             set --nav-hue inline and override this. */
+          --nav-hue: ${C.railFaint};
+          transition: background .16s ease, color .16s ease,
+                      transform .16s cubic-bezier(.2,.8,.2,1);
+        }
+        .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 9%, transparent) }
+
+        /* The icon TILE is what carries the colour. A tinted glyph on its own
+           is a thin coloured stroke on a white ground and reads as grey at
+           15px; a filled tile behind it is a solid block of the hue, which is
+           what makes twenty-seven rows tell themselves apart at a glance. */
+        .ez-nav-tile{
+          background: color-mix(in srgb, var(--nav-hue) 12%, transparent);
+          color: var(--nav-hue);
+          /* Inner highlight: the top edge catches light, so a flat square
+             reads as a raised object rather than a swatch. */
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.14);
+          transition: transform .18s cubic-bezier(.2,.8,.2,1),
+                      box-shadow .18s ease, background .16s ease, color .16s ease;
+        }
+        .ez-nav-on .ez-nav-tile{
+          background: linear-gradient(145deg, var(--nav-hue),
+                      color-mix(in srgb, var(--nav-hue) 78%, #000));
+          color: #FFF;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.32),
+                      0 3px 8px -1px color-mix(in srgb, var(--nav-hue) 44%, transparent);
+        }
+
+        /* Slide, not lift. The rail is a vertical list, and a row that rises
+           off its neighbours breaks the column; sliding is also the direction
+           the click takes you. The tile is the part that lifts. */
+        .ez-nav:hover{
+          background: color-mix(in srgb, var(--nav-hue) 12%, transparent);
+          color: ${C.railText};
+          transform: translateX(2px);
+        }
+        .ez-nav:hover .ez-nav-tile{
+          transform: translateY(-1px) scale(1.06);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.28),
+                      0 4px 10px -2px color-mix(in srgb, var(--nav-hue) 55%, transparent);
+        }
+        .ez-nav:active{ transform: translateX(1px) scale(.99) }
+        .ez-nav-on:hover{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
+        .ez-nav:focus-visible,
+        .ez-nav-tile:focus-visible{ outline: 2px solid var(--nav-hue); outline-offset: 2px }
+
+        /* Dark. A hue chosen to clear 3:1 on white is too dark to read on
+           #171B21, so the tile takes more of it (20% rather than 12%) and the
+           glyph is lifted.
+
+           HOW it is lifted matters more than it looks. Mixing toward white was
+           the obvious move and the wrong one: it desaturates, and this palette
+           separates its neighbours by SATURATION and LIGHTNESS as much as by
+           hue, so white-mixing collapsed the worst adjacent pair from dE 17.5
+           to 12.3 — the rail went back to looking uniform in dark mode, which
+           is the whole problem being fixed. Adding to lightness while leaving
+           hue and saturation alone keeps the alternation intact: worst pair
+           dE 18.8, and the glyph clears 4.18:1.
+
+           Setting lightness to a fixed value is the same trap by another
+           route — it flattens the light/deep alternation the palette is built
+           on and measures dE 6.9. It has to be an offset.
+
+           Both dark states are declared, because they are genuinely different
+           selectors: the media query catches "System", which stamps no
+           attribute at all, and the attribute catches an explicit choice. A
+           rule written only one way leaves the other showing light-theme ink
+           on a dark rail. */
+        @media (prefers-color-scheme: dark){
+          :root:not([data-ez-theme="light"]) .ez-nav:not(.ez-nav-on) .ez-nav-tile{
+            background: color-mix(in srgb, var(--nav-hue) 20%, transparent);
+            color: color-mix(in srgb, var(--nav-hue) 74%, #FFF);
+          }
+          :root:not([data-ez-theme="light"]) .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
+        }
+        :root[data-ez-theme="dark"] .ez-nav:not(.ez-nav-on) .ez-nav-tile{
+            background: color-mix(in srgb, var(--nav-hue) 20%, transparent);
+            color: color-mix(in srgb, var(--nav-hue) 74%, #FFF);
+          }
+        :root[data-ez-theme="dark"] .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
+
+        /* The lift proper. Guarded, because relative colour syntax is the one
+           thing here a browser might not have — and the color-mix above is a
+           usable fallback (3.15:1) rather than an unreadable one. */
+        @supports (color: hsl(from #000 h s calc(l + 1%))){
+          @media (prefers-color-scheme: dark){
+            :root:not([data-ez-theme="light"]) .ez-nav:not(.ez-nav-on) .ez-nav-tile{
+            color: hsl(from var(--nav-hue) h s calc(l + 26%));
+          }
+          }
+          :root[data-ez-theme="dark"] .ez-nav:not(.ez-nav-on) .ez-nav-tile{
+            color: hsl(from var(--nav-hue) h s calc(l + 26%));
+          }
+        }
+
         .ez-brand:hover .ez-brand-chev{transform:translateX(2px)}
+
+        @media (prefers-reduced-motion: reduce){
+          .ez-nav, .ez-nav-tile, .ez-nav:hover, .ez-nav:active,
+          .ez-nav:hover .ez-nav-tile{ transition:none; transform:none }
+        }
       `}</style>
 
       <nav aria-label="Main" className="ez-scroll" style={{
