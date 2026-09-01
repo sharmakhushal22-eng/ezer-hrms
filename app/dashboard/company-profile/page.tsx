@@ -557,7 +557,10 @@ export default function CompanyProfilePage() {
           <>
             {groups.map(g => (
               <div key={g.id} style={{ marginBottom:18 }}>
-                <GroupHeader g={g} card={C.card} />
+                <GroupHeader g={g} card={C.card}
+                  // Summed across the group's companies — the group's own
+                  // number, which no single company card can show.
+                  headcount={g.companies.reduce((n, co) => n + (head[co.id]?.company.total ?? 0), 0)} />
                 {g.companies.map(co => (
                   <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay}
                     group={g.group_name} head={head[co.id]} facts={facts[co.id]} policy={policy[co.id]} saveReg={saveReg} />
