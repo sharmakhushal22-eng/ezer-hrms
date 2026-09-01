@@ -151,6 +151,35 @@ check('height animates via grid-template-rows, not max-height',
 check('rows unfold on a hinge with a shared vanishing point',
       'perspective: 640px' in css and 'rotateX(-72deg)' in css)
 check('open staggers, close does not', 'transition-delay: calc(var(--n) * 28ms)' in css)
+# The glyph figures above are computed against a tile sitting on the bare rail.
+# That is only true while the tile is OPAQUE — a translucent one lets each
+# section's wash through and every one of those numbers moves.
+# Scoped to the TILE rules only. The row's own hover and active tints stay
+# translucent on purpose — they are meant to sit over the section wash.
+# "Opaque" here means either a gradient (already solid) or a colour mixed with
+# the rail rather than with transparent.
+tile_bg = [r.split('background:')[1].split(';')[0]
+           for r in re.findall(r'\.ez-nav-tile\b[^{]*\{[^}]*\}', css)
+           if 'background:' in r and 'nav-hue' in r]
+def opaque(bg):
+    return 'linear-gradient' in bg or 'C.rail' in bg or 'var(--ez-rail)' in bg
+check('every tile background is opaque, so no wash reaches the glyph',
+      len(tile_bg) >= 3 and all(opaque(bg) for bg in tile_bg),
+      '%d rules, %d opaque' % (len(tile_bg), sum(opaque(bg) for bg in tile_bg)))
+
+# Each section's wash, at its strongest, under the ink that sits on it.
+HEAD_A, BODY_A = .03, .10
+bad_wash = []
+for g, (il, idk) in INK.items():
+    hL, hD = over(il, RAIL_L, HEAD_A), over(idk, RAIL_D, HEAD_A)
+    bL, bD = over(il, RAIL_L, BODY_A), over(idk, RAIL_D, BODY_A)
+    if min(cr(il, hL), cr(idk, hD)) < 4.5: bad_wash.append((g, 'heading'))
+    if min(cr(itemL, bL), cr(itemD, bD)) < 4.5: bad_wash.append((g, 'label'))
+check('section wash keeps heading and label above 4.5:1', not bad_wash, str(bad_wash))
+check('wash is shaped, weakest under the heading',
+      'var(--g-ink)  3%, transparent) 0,' in css and 'var(--g-ink) 10%, transparent) 62px' in css)
+check('the sectionless Home row gets no wash', '.ez-group-plain{ background:none' in css)
+
 check('fold marker rotates between shut and open',
       '.ez-fold svg{' in css and 'rotate(-90deg)' in css and '.ez-open .ez-fold svg{ transform: rotate(0deg) }' in css)
 check('fold chip is an affordance, not permanent weight',

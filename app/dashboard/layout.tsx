@@ -295,7 +295,7 @@ function GroupBlock({ group, index, items, railOpen, path, expanded, onToggle }:
   const shown = foldable ? expanded : true;
 
   return (
-    <div className={`ez-group${shown ? ' ez-open' : ''}`} style={{
+    <div className={`ez-group${shown ? ' ez-open' : ''}${group ? '' : ' ez-group-plain'}`} style={{
       ['--g-ink-l' as string]: inkL,
       ['--g-ink-d' as string]: inkD,
       ['--i' as string]: index,
@@ -515,7 +515,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            15px; a filled tile behind it is a solid block of the hue, which is
            what makes twenty-seven rows tell themselves apart at a glance. */
         .ez-nav-tile{
-          background: color-mix(in srgb, var(--nav-hue) 12%, transparent);
+          /* Mixed with the RAIL colour, not with transparent. Every glyph
+             contrast figure on this rail was measured against a tile sitting
+             on the bare rail; once each section has its own wash behind it, a
+             translucent tile lets that wash through and every one of those
+             figures moves — the worst dropped to 2.93:1 at even the lightest
+             wash tried. Opaque, the tile renders identically whatever is
+             behind it, and the measurements hold. */
+          background: color-mix(in srgb, var(--nav-hue) 12%, ${C.rail});
           color: var(--nav-hue);
           /* Inner highlight: the top edge catches light, so a flat square
              reads as a raised object rather than a swatch. */
@@ -573,14 +580,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            on a dark rail. */
         @media (prefers-color-scheme: dark){
           :root:not([data-ez-theme="light"]) .ez-nav:not(.ez-nav-on) .ez-nav-tile{
-            background: color-mix(in srgb, var(--nav-hue) 20%, transparent);
+            background: color-mix(in srgb, var(--nav-hue) 20%, ${C.rail});
             color: color-mix(in srgb, var(--nav-hue) 74%, #FFF);
           }
           :root:not([data-ez-theme="light"]) .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
           :root:not([data-ez-theme="light"]) .ez-group{ --g-ink: var(--g-ink-d) }
         }
         :root[data-ez-theme="dark"] .ez-nav:not(.ez-nav-on) .ez-nav-tile{
-            background: color-mix(in srgb, var(--nav-hue) 20%, transparent);
+            background: color-mix(in srgb, var(--nav-hue) 20%, ${C.rail});
             color: color-mix(in srgb, var(--nav-hue) 74%, #FFF);
           }
         :root[data-ez-theme="dark"] .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
@@ -604,7 +611,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            --g-ink is the section's own ink, swapped per theme further down.
            Everything in a section reads from it, so one value moves the
            heading, the dot, the boundary rule and the spine together. */
-        .ez-group{ display:flex; flex-direction:column; flex-shrink:0; --g-ink: var(--g-ink-l) }
+        /* Each section sits on its own wash, tinted with its own ink, so the
+           six read as six surfaces rather than six labels on one sheet.
+
+           The gradient is SHAPED, not uniform: weakest across the top where
+           the heading sits, fullest through the rows, easing off at the foot.
+           A flat tint strong enough to see would have put the heading ink on a
+           wash of itself — the two are the same hue, so contrast collapses
+           exactly where the label needs it. This way the heading keeps 5.3:1
+           and the rows still sit on something visibly coloured. */
+        .ez-group{
+          display:flex; flex-direction:column; flex-shrink:0;
+          --g-ink: var(--g-ink-l);
+          border-radius: 12px;
+          padding-bottom: 5px;
+          margin-bottom: 5px;
+          background: linear-gradient(180deg,
+            color-mix(in srgb, var(--g-ink)  3%, transparent) 0,
+            color-mix(in srgb, var(--g-ink) 10%, transparent) 62px,
+            color-mix(in srgb, var(--g-ink)  4%, transparent) 100%);
+        }
+        /* Home has no section and no ink of its own; a grey wash under one row
+           would look like a rendering fault rather than a decision. */
+        .ez-group-plain{ background:none; padding-bottom:0; margin-bottom:0 }
         .ez-group-items{ display:flex; flex-direction:column; gap:1px; position:relative }
 
         /* The spine. It sits at left:0 BEHIND the rows rather than indenting
@@ -647,7 +676,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           animation: ez-sec-line .5s cubic-bezier(.2,.8,.2,1) both;
           animation-delay: calc(var(--i) * 70ms);
         }
-        .ez-group-head::before{ position:absolute; left:0; right:0; top:0 }
+        /* Inset, now that it caps a rounded panel rather than crossing a flat
+           sheet — at left:0 it would run straight through the corner radius. */
+        .ez-group-head::before{ position:absolute; left:9px; right:9px; top:0 }
         .ez-group-rule-shut{ margin:9px 8px 8px; flex-shrink:0 }
 
         /* ── The fold ────────────────────────────────────────────────────

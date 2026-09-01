@@ -40,10 +40,10 @@ for i,(g,items) in enumerate(GROUPS):
           G%('2' if on else '1.7'), '700' if on else '600',
           'var(--ez-rail-text)' if on else 'var(--ez-rail-item)', label)
     cls='ez-group-items' if g else 'ez-group-items ez-group-bare'
-    body+=('<div class="ez-group%s" style="--g-ink-l:%s;--g-ink-d:%s;--i:%d">%s'
+    body+=('<div class="ez-group%s%s" style="--g-ink-l:%s;--g-ink-d:%s;--i:%d">%s'
            '<div class="ez-group-panel"%s><div class="ez-group-panel-inner">'
            '<div class="%s">%s</div></div></div></div>')%(
-        '' if shut else ' ez-open', l,d,i,head,' inert' if (shut and g) else '',cls,rows)
+        '' if shut else ' ez-open', '' if g else ' ez-group-plain', l,d,i,head,' inert' if (shut and g) else '',cls,rows)
 shell="""
 body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:var(--ez-canvas)}
 .rail{width:244px;background:var(--ez-rail);border-right:1px solid var(--ez-rail-line);min-height:100vh;padding:12px 10px 16px;display:flex;flex-direction:column;gap:1px}
