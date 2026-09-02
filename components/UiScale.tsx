@@ -69,15 +69,90 @@ export default function UiScale() {
 
   if (!enabled) return null
 
-  const btn: React.CSSProperties = { width: 26, height: 26, borderRadius: '50%', border: 'none', background: TK.brandTint, color: TK.brandDeep, fontSize: 16, fontWeight: 700, cursor: 'pointer', lineHeight: 1, fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center' }
+  // ── Design notes ────────────────────────────────────────────────────────
+  // The previous version was a pill containing two pale circles and a green
+  // "100% ·auto". Three problems, seen once it was actually rendered:
+  //   - pill-within-pill: floating circles inside a rounded container read as
+  //     three disconnected blobs rather than one control;
+  //   - the circles were #EFF6FF on white, so they barely registered at all;
+  //   - the green readout was the loudest thing in the dock and the least
+  //     important, and it clashed with the blue either side of it.
+  //
+  // Now: one pill, three zones, hairline dividers. The dividers are what say
+  // "this is a single control with parts", which is exactly what a stepper is.
+  const zone: React.CSSProperties = {
+    width: 30, height: 34, border: 'none', background: 'transparent',
+    color: TK.inkSoft, cursor: 'pointer', display: 'flex',
+    alignItems: 'center', justifyContent: 'center', padding: 0,
+    fontFamily: 'inherit',
+  }
+  const pct = Math.round(scale * 100)
+
   return (
-    <div title="Adjust UI size — click % for auto-fit" style={{ display: 'flex', alignItems: 'center', gap: 4, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 99, padding: '4px 6px', boxShadow: '0 4px 14px rgba(37,99,235,.18)', fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
-      <button title="Smaller" onClick={() => nudge(-0.25)} style={btn}>−</button>
-      <button title={manual ? 'Click to auto-fit to screen' : 'Auto-fit (on)'} onClick={resetAuto}
-        style={{ minWidth: 54, textAlign: 'center', fontSize: 11, fontWeight: 700, color: manual ? TK.brandDeep : TK.positive, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit' }}>
-        {Math.round(scale * 100)}%{manual ? '' : ' ·auto'}
+    <div className="ez-zoom"
+      title="Interface size — click the value to auto-fit"
+      style={{
+        display: 'flex', alignItems: 'center',
+        height: 36, background: TK.surface,
+        border: `1px solid ${TK.lineStrong}`,
+        borderRadius: 999, overflow: 'hidden',
+        // A hairline ring on top of the border. lineStrong alone is 1.47:1 on a
+        // white surface, so on a light card the pill lost its own edge; the
+        // ring is what keeps the silhouette without darkening the border into
+        // something heavy in dark mode.
+        boxShadow: '0 0 0 1px rgba(15,23,42,.06), 0 8px 20px rgba(15,23,42,.20), 0 2px 5px rgba(15,23,42,.14)',
+        fontFamily: '"DM Sans","Segoe UI",sans-serif',
+      }}>
+      <style>{`
+        .ez-zoom button { transition: background .15s ease, color .15s ease; }
+        .ez-zoom button:hover { background: var(--ez-brand-tint); color: var(--ez-brand-deep); }
+        .ez-zoom button:active { background: var(--ez-brand-edge); }
+        .ez-zoom .ez-zoom-div { width:1px; height:16px; background: var(--ez-line-strong); opacity:.9; flex:none; }
+        @media (prefers-reduced-motion: reduce) { .ez-zoom button { transition: none; } }
+      `}</style>
+
+      <button onClick={() => nudge(-0.25)} style={zone}
+        title="Smaller" aria-label="Decrease interface size">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+          <rect x="1.8" y="5.9" width="10.4" height="2.2" rx="1.1" fill="currentColor" />
+        </svg>
       </button>
-      <button title="Bigger" onClick={() => nudge(0.25)} style={btn}>+</button>
+
+      <span className="ez-zoom-div" aria-hidden />
+
+      <button onClick={resetAuto} style={{
+          ...zone, width: 'auto', padding: '0 10px', gap: 5,
+          // Ink, not green. This is a readout, and it should be quieter than
+          // the two things you actually press.
+          color: TK.ink, fontSize: 12, fontWeight: 700,
+          fontVariantNumeric: 'tabular-nums',
+        }}
+        title={manual ? 'Click to auto-fit to screen' : 'Auto-fit is on'}
+        aria-label={`Interface size ${pct} percent${manual ? '' : ', auto-fit on'}. Click to auto-fit.`}>
+        {/* "·auto" was cramped text doing a badge's job. A dot states the same
+            thing without competing with the number for width. */}
+        {/* Was TK.positive. Rendered, a green speck beside the number reads as
+            a status LED — and green means "success", which auto-fit is not. The
+            brand blue says "the app is handling this" without claiming
+            anything. */}
+        {!manual && (
+          <span aria-hidden style={{
+            width: 5, height: 5, borderRadius: '50%',
+            background: TK.brand, flex: 'none',
+          }} />
+        )}
+        {pct}%
+      </button>
+
+      <span className="ez-zoom-div" aria-hidden />
+
+      <button onClick={() => nudge(0.25)} style={zone}
+        title="Bigger" aria-label="Increase interface size">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden>
+          <rect x="1.8" y="5.9" width="10.4" height="2.2" rx="1.1" fill="currentColor" />
+          <rect x="5.9" y="1.8" width="2.2" height="10.4" rx="1.1" fill="currentColor" />
+        </svg>
+      </button>
     </div>
   )
 }

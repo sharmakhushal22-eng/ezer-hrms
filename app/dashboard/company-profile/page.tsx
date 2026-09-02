@@ -4,9 +4,17 @@
 // Inline edit on any field → auto-writes company_master_audit. Schema: lib/supabase-admin + migration 027.
 import { useState, useEffect, useCallback } from 'react'
 import {
-  loadHierarchy, updateEntity, loadAudit, confirmPayment,
+  loadHierarchy, updateEntity, loadAudit, confirmPayment, loadHeadcount,
+  loadCompanyFacts, type CompanyFacts,
   type GroupTree, type Company, type Branch, type Registration, type AuditRow,
+  type CompanyHeadcount,
 } from '@/lib/supabase-company-profile'
+import { GenderSplit, GenderInline } from '@/components/company/GenderSplit'
+import { BranchCertificate } from '@/components/company/Compliance'
+import { CompanySections } from '@/components/company/Sections'
+import { GroupEditor } from '@/components/company/GroupEditor'
+import { fetchEditRight, updateRow, createRow, type EditRight } from '@/lib/company/client'
+import { CSS as CP_CSS, ACCENT, monogram, stat, statValue, statLabel } from '@/components/company/ui'
 import { INDIAN_STATES, districtsOf } from '@/lib/geo/india-states-districts'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -17,13 +25,28 @@ import { GroupHeader } from '@/components/company/GroupHeader'
 // ── Style constant (employees/admin palette — C) ───────────────────
 const C = {
   page:   { background: TK.sunken, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif' } as React.CSSProperties,
-  card:   { background:TK.surface, borderRadius:10, border: `1px solid ${TK.line}`, padding:'14px 16px', marginBottom:10 } as React.CSSProperties,
-  lbl:    { fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase' as const, letterSpacing:'.04em' } as React.CSSProperties,
-  val:    { fontSize:13, color:TK.ink, marginTop:2 } as React.CSSProperties,
+  // Was a hairline border and no shadow — a rectangle, not a card. Two-layer
+  // shadow: tight contact, soft cast. That is the whole difference.
+  card:   { background:TK.surface, borderRadius:14, border: `1px solid ${TK.line}`,
+            boxShadow:'0 1px 2px rgba(15,23,42,.06), 0 8px 24px -8px rgba(15,23,42,.14)',
+            padding:'16px 18px', marginBottom:12 } as React.CSSProperties,
+  // A TAG: small, uppercase, wide-tracked, muted. Its job is to name the
+  // thing below it and then get out of the way.
+  lbl:    { fontSize:10, fontWeight:700, color:TK.muted, textTransform:'uppercase' as const,
+            letterSpacing:'.08em', lineHeight:1.3 } as React.CSSProperties,
+  // THE CONTENT: the largest text in a field group, and the only one in full
+  // ink. 15/600 against a 10/700 uppercase label is a difference in KIND, not
+  // in shade — which is what was missing.
+  val:    { fontSize:15, fontWeight:600, color:TK.ink, marginTop:4, lineHeight:1.4 } as React.CSSProperties,
   input:  { padding:'6px 9px', background:TK.sunken, border: `1px solid ${TK.line}`, borderRadius:10, color:TK.ink, fontSize:13, outline:'none', fontFamily:'inherit', boxSizing:'border-box' as const } as React.CSSProperties,
   pri:    { padding:'8px 15px', borderRadius:10, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
   out:    { padding:'6px 12px', borderRadius:10, border: `1px solid ${TK.line}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.inkSoft } as React.CSSProperties,
-  sec:    { fontSize:11, fontWeight:600, color:TK.inkSoft, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
+  // A HEADING. Deliberately NOT uppercase: the field labels are uppercase, and
+  // when a heading and a label are both bold uppercase 2px apart, the only
+  // thing separating them is shade — which is why headings did not read as
+  // headings. Sentence case at 15/800 is unmistakably a different level.
+  sec:    { fontSize:15, fontWeight:800, color:TK.ink, letterSpacing:'-.01em',
+            marginBottom:12, marginTop:4 } as React.CSSProperties,
 }
 const REG_COLOR: Record<string, string> = { GST:TK.info, EPF:TK.brand, ESIC:TK.positive, PT:TK.warning, LWF: TK.info, FACTORY:TK.critical }
 const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
@@ -61,13 +84,23 @@ function EditField({ label, value, type, onSave, fmtFn }: {
       {!editing ? (
         <div style={C.val}>
           {fmtFn ? fmtFn(value) : (value === null || value === undefined || value === '' ? '—' : String(value))}
-          <span onClick={() => { setV(String(value ?? '')); setEditing(true) }} title="edit" style={{ cursor:'pointer', color:TK.faint, marginLeft:6, fontSize:12 }}></span>
+          {/* Was an empty span — an edit affordance with nothing in it, so nothing
+              on the row said it could be changed. */}
+          <span onClick={() => { setV(String(value ?? '')); setEditing(true) }}
+            title="Edit" role="button" aria-label={`Edit ${label}`}
+            style={{ cursor:'pointer', color:TK.faint, marginLeft:7, display:'inline-flex',
+                     verticalAlign:'middle' }}>
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                 strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M9.4 1.9a1.3 1.3 0 0 1 1.9 1.9L4.6 10.5l-2.5.6.6-2.5 6.7-6.7Z" />
+            </svg>
+          </span>
         </div>
       ) : (
         <div style={{ display:'flex', gap:5, marginTop:3, alignItems:'center' }}>
           <input type={type || 'text'} value={v} onChange={e => setV(e.target.value)} style={{ ...C.input, width:type==='number'?80:160 }} autoFocus />
           <button disabled={busy} onClick={async () => { setBusy(true); await onSave(v); setBusy(false); setEditing(false) }} style={{ ...C.pri, padding:'5px 10px' }}>{busy?'…':'Save'}</button>
-          <button onClick={() => setEditing(false)} style={{ ...C.out, padding:'5px 9px' }}></button>
+          <button onClick={() => setEditing(false)} title="Cancel" style={{ ...C.out, padding:'5px 11px' }}>Cancel</button>
         </div>
       )}
     </div>
@@ -89,7 +122,13 @@ function SearchSelect({ value, options, placeholder, onChange, disabled }: {
       <div onClick={() => { if (!disabled) { setOpen(o => !o); setQ('') } }}
         style={{ ...C.input, width:'100%', cursor: disabled ? 'not-allowed' : 'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', gap:6, background: disabled ? TK.sunken : TK.sunken, color: value ? TK.ink : TK.faint }}>
         <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value || placeholder}</span>
-        <span style={{ color:TK.faint, fontSize:11 }}></span>
+        {/* Was empty: a select with no caret looks like a text box. */}
+        <span aria-hidden style={{ color:TK.faint, display:'flex', flexShrink:0 }}>
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor"
+               strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M2.5 4.5 6 8l3.5-3.5" />
+          </svg>
+        </span>
       </div>
       {open && !disabled && (
         <>
@@ -137,7 +176,13 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px 12px', marginBottom:8 }}>
         <div><div style={C.lbl}>State</div><div style={C.val}>{state || '—'}</div></div>
         <div><div style={C.lbl}>District</div><div style={C.val}>{district || '—'}
-          <span onClick={() => { setSt(String(state ?? '')); setDi(String(district ?? '')); setEditing(true) }} title="edit" style={{ cursor:'pointer', color:TK.faint, marginLeft:6, fontSize:12 }}></span></div></div>
+          <span onClick={() => { setSt(String(state ?? '')); setDi(String(district ?? '')); setEditing(true) }} title="Edit" role="button" aria-label="Edit state and district"
+            style={{ cursor:'pointer', color:TK.faint, marginLeft:7, display:'inline-flex', verticalAlign:'middle' }}>
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+                 strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M9.4 1.9a1.3 1.3 0 0 1 1.9 1.9L4.6 10.5l-2.5.6.6-2.5 6.7-6.7Z" />
+            </svg>
+          </span></div></div>
       </div>
     )
   }
@@ -154,30 +199,70 @@ function StateDistrictEditor({ state, district, onSaveState, onSaveDistrict }: {
           onChange={setDi} disabled={!st} />
       </div>
       <button disabled={busy} onClick={save} style={{ ...C.pri, padding:'7px 12px' }}>{busy ? '…' : 'Save'}</button>
-      <button onClick={() => setEditing(false)} style={{ ...C.out, padding:'7px 10px' }}></button>
+      <button onClick={() => setEditing(false)} title="Cancel" style={{ ...C.out, padding:'7px 12px' }}>Cancel</button>
     </div>
   )
 }
 
 // ── Company card (one company in the group) ─────────────────────────
-function CompanyCard({ co, isMobile, save, openPay }: {
+function CompanyCard({ co, isMobile, save, openPay, group, head, facts, saveReg, canEdit, onChanged }: {
   co: Company; isMobile: boolean
   save: (entity: any, id: string, field: string, val: string, company_id: string) => Promise<void>
   openPay: (co: Company) => void
+  group: string
+  head?: CompanyHeadcount
+  facts?: CompanyFacts
+  saveReg: (company_id: string, reg_type: string, patch: Record<string, string | null>, location_id?: string | null) => Promise<void>
+  /** Resolved once by the page from /api/company/profile. */
+  canEdit: boolean
+  onChanged: () => void
 }) {
   const [open, setOpen] = useState(false)
+  // A stable hue per company, so the three cards are told apart by colour
+  // before they are told apart by reading. Derived from the code rather than
+  // the index, so it does not change when a company is added above.
+  const PALETTE = ['#2563EB', '#0D9488', '#7C3AED', '#D97706', '#DB2777', '#0891B2']
+  const accent = PALETTE[[...co.company_code].reduce((a, ch) => a + ch.charCodeAt(0), 0) % PALETTE.length]
+  const headTotal = head?.company.total ?? 0
   const regsByType: Record<string, Registration[]> = {}
   for (const r of co.registrations) { (regsByType[r.reg_type] = regsByType[r.reg_type] || []).push(r) }
   const lic = co.license
   const empUsed = '—' // headcount comes from employees module; shown as cap here
 
   return (
-    <div style={{ ...C.card, padding:0, overflow:'hidden' }}>
-      <div onClick={() => setOpen(o => !o)} style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 16px', cursor:'pointer', background:TK.sunken, borderBottom: open ? '1px solid #E2E8F0' : 'none' }}>
-        <span style={{ fontSize:14, color:TK.faint }}>{open ? '' : ''}</span>
-        <span style={{ fontSize:14, fontWeight:600 }}>{co.company_name}</span>
-        {co.company_type && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:TK.brandTint, color:TK.brand, fontWeight:600 }}>{co.company_type}</span>}
-        <span style={{ fontSize:10, color:TK.faint }}>{co.company_code}</span>
+    <div className="cp-card" style={{ ...C.card, padding:0, overflow:'hidden',
+                 borderLeft:`3px solid ${accent}` }}>
+      {/* Was a flat grey strip with an empty chevron span and 14px semibold
+          text — nothing signalled that it opens, and nothing distinguished one
+          company from the next. Now: a tinted band, a coloured monogram, a
+          chevron that actually rotates, and headcount on the closed row so the
+          card says something before you open it. */}
+      <div onClick={() => setOpen(o => !o)} className="cp-head" style={{
+        display:'flex', alignItems:'center', gap:12, padding:'13px 16px', cursor:'pointer',
+        background:`linear-gradient(100deg, ${accent}12, ${accent}05 60%, transparent)`,
+        borderBottom: open ? `1px solid ${TK.line}` : 'none',
+      }}>
+        <span className="cp-chev" data-open={open ? '1' : '0'} aria-hidden
+              style={{ display:'flex', color:accent, flexShrink:0 }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor"
+               strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M5 2.5 10 7l-5 4.5" />
+          </svg>
+        </span>
+        <span style={monogram(accent)}>{co.company_code}</span>
+        <span style={{ display:'flex', flexDirection:'column', minWidth:0 }}>
+          <span style={{ fontSize:15, fontWeight:700, letterSpacing:'-.01em', color:TK.ink,
+                         whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{co.company_name}</span>
+          <span style={{ fontSize:11, color:TK.muted, marginTop:1 }}>
+            {[co.company_type, co.industry].filter(Boolean).join(' · ') || 'No type recorded'}
+          </span>
+        </span>
+        {headTotal > 0 && (
+          <span style={{ ...stat(accent), padding:'5px 11px', marginLeft:6 }}>
+            <span style={{ fontSize:15, fontWeight:800, color:TK.ink, fontVariantNumeric:'tabular-nums' }}>{headTotal}</span>
+            <span style={{ fontSize:10, color:TK.muted, marginLeft:5 }}>people</span>
+          </span>
+        )}
         <span style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:8 }}>
           <button onClick={e => { e.stopPropagation(); setOpen(true) }} style={{ fontSize:11, fontWeight:600, padding:'4px 11px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, background:TK.surface, color:TK.brand, cursor:'pointer' }}>Edit</button>
           <StatusBadge status={co.account_status} days={co.days_to_due} />
@@ -186,6 +271,107 @@ function CompanyCard({ co, isMobile, save, openPay }: {
 
       {open && (
         <div style={{ padding:'14px 16px' }}>
+          {/* The ten-section profile. Everything below it — the editable
+              company fields, branches and bank — is the existing edit surface
+              and is deliberately kept: the sections READ the profile, that
+              part WRITES it. */}
+          <CompanySections isMobile={isMobile}
+            saveReg={(t, patch, loc) => saveReg(co.id, t, patch, loc)}
+            canEdit={canEdit} onChanged={onChanged}
+            d={{
+              co, group, branches: co.branches, regs: co.registrations, banks: co.bank,
+              head,
+              departments: facts?.departments ?? [],
+              deptHeadcount: facts?.deptHeadcount ?? {},
+              employmentMix: facts?.employmentMix ?? {},
+              leavers12m: facts?.leavers12m ?? 0,
+            }} />
+
+          {/* Group / Company / Branch / Location. All four already existed in
+              the data — groups.group_name, companies, and the locations table
+              with its location_type — but nothing on this screen said where a
+              company sat in the hierarchy or how many places it operates from. */}
+          <div style={C.sec}>Where this sits</div>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)',
+                        gap:'12px 16px', marginBottom:18 }}>
+            <div><div style={C.lbl}>Group</div><div style={C.val}>{group}</div></div>
+            <div><div style={C.lbl}>Company</div><div style={C.val}>{co.company_name}<span style={{ color:TK.faint, fontWeight:400 }}> · {co.company_code}</span></div></div>
+            <div>
+              <div style={C.lbl}>Branches</div>
+              <div style={C.val}>
+                {co.branches.length}
+                <span style={{ color:TK.faint, fontWeight:400, fontSize:11 }}>
+                  {(() => {
+                    const byType: Record<string, number> = {}
+                    for (const b of co.branches) byType[b.location_type || '—'] = (byType[b.location_type || '—'] || 0) + 1
+                    const parts = Object.entries(byType).map(([t, n]) => `${n} ${t}`)
+                    return parts.length ? ' · ' + parts.join(', ') : ''
+                  })()}
+                </span>
+              </div>
+            </div>
+            <div>
+              <div style={C.lbl}>Locations</div>
+              <div style={C.val}>
+                {(() => {
+                  const cities = Array.from(new Set(co.branches.map(b => b.city).filter(Boolean)))
+                  return cities.length ? cities.join(', ') : '—'
+                })()}
+              </div>
+            </div>
+          </div>
+
+          {/* Offices and establishments. reg_office was already shown further
+              down among the company details; corp_office was in the schema and
+              displayed nowhere. Factories are counted from locations rather
+              than typed in again. */}
+          <div style={C.sec}>Offices &amp; establishments</div>
+          <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                        gap:'12px 16px', marginBottom:18 }}>
+            <div style={{ gridColumn: isMobile ? 'auto' : '1 / -1' }}>
+              <EditField label="Registered office" value={co.reg_office}
+                onSave={v => save('COMPANY', co.id, 'reg_office', v, co.id)} />
+            </div>
+            <div style={{ gridColumn: isMobile ? 'auto' : '1 / -1' }}>
+              <EditField label="Corporate office" value={co.corp_office}
+                onSave={v => save('COMPANY', co.id, 'corp_office', v, co.id)} />
+            </div>
+            <div>
+              <div style={C.lbl}>Plants / Factories</div>
+              <div style={C.val}>
+                {(() => {
+                  const f = co.branches.filter(b => (b.location_type||'').toLowerCase().includes('factory'))
+                  return f.length ? `${f.length} · ${f.map(b => b.location_name).join(', ')}` : 'None'
+                })()}
+              </div>
+            </div>
+            <div>
+              <div style={C.lbl}>Shops &amp; Establishment sites</div>
+              <div style={C.val}>
+                {(() => {
+                  const se = co.branches.filter(b => !(b.location_type||'').toLowerCase().includes('factory'))
+                  return se.length ? `${se.length} · ${se.map(b => b.location_type).filter((v,i,a)=>a.indexOf(v)===i).join(', ')}` : 'None'
+                })()}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. Gender split for the company, then per branch below. */}
+          <div style={C.sec}>Headcount by gender</div>
+          <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:24,
+                        border:`1px solid ${TK.line}`, borderRadius:10, padding:'14px 16px', marginBottom:18 }}>
+            <GenderSplit counts={head?.company ?? { male:0, female:0, other:0, unknown:0, total:0 }} size={86} />
+            {head && head.unassigned.total > 0 && (
+              // Called out rather than hidden: these people are in the company
+              // total but in none of the branch rows, so the two would not add
+              // up and it would look like an arithmetic bug.
+              <div style={{ fontSize:11, color:TK.muted, maxWidth:230, lineHeight:1.5 }}>
+                <strong style={{ color:TK.warning }}>{head.unassigned.total}</strong> employee{head.unassigned.total > 1 ? 's have' : ' has'} no
+                location set, so they appear in this total but in no branch below.
+              </div>
+            )}
+          </div>
+
           <div style={C.sec}>Company details</div>
           <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:'12px 16px', marginBottom:18 }}>
             <EditField label="Employer / Director" value={co.short_name} onSave={v => save('COMPANY', co.id, 'short_name', v, co.id)} />
@@ -211,6 +397,13 @@ function CompanyCard({ co, isMobile, save, openPay }: {
                 <StateDistrictEditor state={b.state} district={b.district}
                   onSaveState={v => save('LOCATION', b.id, 'state', v, co.id)}
                   onSaveDistrict={v => save('LOCATION', b.id, 'district', v, co.id)} />
+                <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap',
+                              padding:'7px 0 9px', marginBottom:2, borderTop:`1px solid ${TK.line}` }}>
+                  <span style={{ ...C.lbl, marginBottom:0 }}>Headcount</span>
+                  <GenderInline counts={head?.byLocation[b.id] ?? { male:0, female:0, other:0, unknown:0, total:0 }} />
+                </div>
+                <BranchCertificate branch={b} regs={co.registrations}
+                  onSave={(t, patch, loc) => saveReg(co.id, t, patch, loc)} />
                 <div style={{ display:'flex', gap:14, flexWrap:'wrap', alignItems:'flex-end' }}>
                   <div><div style={C.lbl}>GPS</div><div style={{ ...C.val, fontSize:12 }}>{b.latitude != null && b.longitude != null ? <>{b.latitude}, {b.longitude} <a href={`https://www.google.com/maps?q=${b.latitude},${b.longitude}`} target="_blank" rel="noreferrer" style={{ color:TK.brand, fontSize:11 }}>map</a></> : '—'}</div></div>
                   <EditField label="Max employees" value={b.max_employees} type="number" onSave={v => save('LOCATION', b.id, 'max_employees', v, co.id)} />
@@ -218,22 +411,6 @@ function CompanyCard({ co, isMobile, save, openPay }: {
               </div>
             ))}
             {co.branches.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No branches.</div>}
-          </div>
-
-          <div style={C.sec}>Statutory registrations</div>
-          <div style={{ overflowX:'auto', marginBottom:18 }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-              <tbody>
-                {co.registrations.map((r: Registration) => (
-                  <tr key={r.id} style={{ borderBottom: `1px solid ${TK.line}` }}>
-                    <td style={{ padding:'7px 8px', width:60 }}><span style={{ fontSize:10, fontWeight:700, color:REG_COLOR[r.reg_type] || TK.inkSoft }}>{r.reg_type}</span></td>
-                    <td style={{ padding:'7px 8px' }}><EditField label="" value={r.reg_number} onSave={v => save('REGISTRATION', r.id, 'reg_number', v, co.id)} /></td>
-                    <td style={{ padding:'7px 8px', color:TK.muted }}>{[r.state, r.district].filter(Boolean).join(' · ') || '—'}</td>
-                  </tr>
-                ))}
-                {co.registrations.length === 0 && <tr><td style={{ padding:10, color:TK.faint }}>No registrations.</td></tr>}
-              </tbody>
-            </table>
           </div>
 
           {co.bank.length > 0 && (
@@ -308,6 +485,10 @@ export default function CompanyProfilePage() {
   const [isMobile, setIsMobile] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [pay, setPay] = useState<Company | null>(null)
+  const [head, setHead] = useState<Record<string, CompanyHeadcount>>({})
+  const [facts, setFacts] = useState<Record<string, CompanyFacts>>({})
+  const [right, setRight] = useState<EditRight>({ canEdit: false, reason: 'Checking…', actor: '' })
+  const [editGroup, setEditGroup] = useState<GroupTree | null>(null)
 
   const notify = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
 
@@ -320,8 +501,13 @@ export default function CompanyProfilePage() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [g, a] = await Promise.all([loadHierarchy(), loadAudit(undefined, 40)])
-      setGroups(g); setAudit(a)
+      // Headcount is fetched alongside, not after: it is one query over
+      // employees and there is no reason to make the screen wait a round trip
+      // for it.
+      const [g, a, h, f] = await Promise.all([
+        loadHierarchy(), loadAudit(undefined, 40), loadHeadcount(), loadCompanyFacts(),
+      ])
+      setGroups(g); setAudit(a); setHead(h); setFacts(f)
     } catch (e: any) {
       notify('Load failed: ' + (e?.message || 'check tables'), 'error')
     }
@@ -329,11 +515,41 @@ export default function CompanyProfilePage() {
   }, [])
   useEffect(() => { reload() }, [reload])
 
+  // Asked of the server, not assumed. The client does not hold the role model,
+  // and a button shown on a guess is a button that 403s when pressed.
+  useEffect(() => { fetchEditRight().then(setRight) }, [])
+
   async function save(entity: any, id: string, field: string, val: string, company_id: string) {
     const patch: Record<string, any> = { [field]: field === 'max_employees' ? (val === '' ? null : Number(val)) : val }
     const r = await updateEntity(entity, id, patch, { company_id, changedBy: 'Admin' })
     if ((r as any).error) { notify('Save failed: ' + (r as any).error.message, 'error'); return }
     notify('Saved & logged.'); reload()
+  }
+
+  /**
+   * Registrations are written through the GATED route, not the browser client.
+   *
+   * This used to call upsertRegistration(), which writes with the anon key —
+   * so the rule "only EZER may change the company profile" could not be
+   * enforced at all: anyone able to open the app could PATCH the table
+   * directly. Hiding the controls would have changed nothing. Create versus
+   * update is decided here from rows already on screen, so the API keeps its
+   * two plain verbs instead of growing an upsert.
+   */
+  async function saveReg(company_id: string, reg_type: string,
+                         patch: Record<string, string | null>, location_id?: string | null) {
+    const co = groups.flatMap(g => g.companies).find(c => c.id === company_id)
+    const existing = co?.registrations.find(
+      r => r.reg_type === reg_type && (r.location_id ?? null) === (location_id ?? null))
+    try {
+      if (existing) await updateRow('REGISTRATION', existing.id, patch)
+      else await createRow('REGISTRATION', company_id,
+                           { reg_type, location_id: location_id ?? null, ...patch })
+      notify(existing ? 'Saved & logged.' : 'Registration added & logged.')
+      reload()
+    } catch (e: any) {
+      notify('Save failed: ' + (e?.message || 'no permission'), 'error')
+    }
   }
 
   async function doConfirm(period: string, amount: string, from: string, till: string) {
@@ -350,9 +566,13 @@ export default function CompanyProfilePage() {
 
   return (
     <div style={{ ...C.page, padding: isMobile ? '14px 12px' : '20px 24px' }}>
+      {/* Mounted at the page root, not inside a card: the chevron and the
+          card hover are on the CLOSED row, which renders before any
+          section does. */}
+      <style>{CP_CSS}</style>
       <div style={{ maxWidth:1200, margin:'0 auto' }}>
         <div className="ez-page-head">
-        <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Company Profile</div>
+        <div style={{ fontSize:22, fontWeight:800, letterSpacing:'-.02em', marginBottom:2 }}>Company Profile</div>
         <div style={{ fontSize:12, color:TK.muted }}>Group, companies, branches, statutory registrations, bank &amp; license — view, edit, and audit. Every change is logged.</div>
         </div>
 
@@ -364,9 +584,15 @@ export default function CompanyProfilePage() {
           <>
             {groups.map(g => (
               <div key={g.id} style={{ marginBottom:18 }}>
-                <GroupHeader g={g} card={C.card} />
+                <GroupHeader g={g} card={C.card}
+                  // Summed across the group's companies — the group's own
+                  // number, which no single company card can show.
+                  headcount={g.companies.reduce((n, co) => n + (head[co.id]?.company.total ?? 0), 0)}
+                  canEdit={right.canEdit} onEdit={() => setEditGroup(g)} />
                 {g.companies.map(co => (
-                  <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay} />
+                  <CompanyCard key={co.id} co={co} isMobile={isMobile} save={save} openPay={setPay}
+                    group={g.group_name} head={head[co.id]} facts={facts[co.id]} saveReg={saveReg}
+                    canEdit={right.canEdit} onChanged={reload} />
                 ))}
               </div>
             ))}
@@ -389,6 +615,10 @@ export default function CompanyProfilePage() {
       </div>
 
       {pay && <PayModal co={pay} onClose={() => setPay(null)} onConfirm={doConfirm} />}
+      {editGroup && (
+        <GroupEditor g={editGroup} onClose={() => setEditGroup(null)}
+          onSaved={reload} notify={notify} />
+      )}
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   )

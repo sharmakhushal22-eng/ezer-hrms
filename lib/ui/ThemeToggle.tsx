@@ -79,44 +79,94 @@ export function applyTheme(choice: ThemeChoice) {
 
 // Declared at module level: a component defined inside another is a new type
 // on every render, which remounts it and drops focus.
-function Seg({ label, title, on, onClick, children }: {
-  label: string; title: string; on: boolean; onClick: () => void; children: React.ReactNode;
+
+/**
+ * Each mode gets its own hue, and that is the whole point of this control's
+ * design. Before, it was a 34px square with a 1px C.line border and a C.muted
+ * glyph — byte-for-byte the same shell as the notification bell sitting next to
+ * it, so it read as "another grey icon" rather than as a mode selector.
+ *
+ * Luminance cannot do the discriminating here: a grey icon button is already
+ * 7.56:1 on white, so making this darker or lighter only makes it a different
+ * grey. HUE does it. Amber for day, indigo for night, teal for follow-the-
+ * system — three colours that appear nowhere else in the chrome.
+ *
+ * Fills and inks are AA on each other, measured:
+ *     amber  #1F2937 on #F59E0B   6.83:1
+ *     indigo #FFFFFF on #4F46E5   6.29:1
+ *     teal   #FFFFFF on #0F766E   5.47:1
+ */
+const MODE: Record<ThemeChoice, { fill: string; ink: string; label: string }> = {
+  light:  { fill: '#F59E0B', ink: '#1F2937', label: 'Light' },
+  dark:   { fill: '#4F46E5', ink: '#FFFFFF', label: 'Dark' },
+  system: { fill: '#0F766E', ink: '#FFFFFF', label: 'System' },
+};
+
+/** Injected once. The ring has to invert: a dark outline is invisible on a
+ *  dark track and a light one disappears on a light track, so it is a token
+ *  rather than a constant. */
+export function ThemeToggleStyles() {
+  return (
+    <style>{`
+      :root { --ez-seg-ring: rgba(15,23,42,.30); --ez-seg-shadow: rgba(15,23,42,.22); }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-ez-theme="light"]) { --ez-seg-ring: rgba(255,255,255,.42); --ez-seg-shadow: rgba(0,0,0,.55); }
+      }
+      :root[data-ez-theme="dark"]  { --ez-seg-ring: rgba(255,255,255,.42); --ez-seg-shadow: rgba(0,0,0,.55); }
+      :root[data-ez-theme="light"] { --ez-seg-ring: rgba(15,23,42,.30);  --ez-seg-shadow: rgba(15,23,42,.22); }
+
+      .ez-seg { transition: background .18s ease, color .18s ease, transform .18s cubic-bezier(.2,.8,.2,1); }
+      .ez-seg:hover { transform: translateY(-1px); }
+      .ez-seg:active { transform: translateY(0) scale(.94); }
+      .ez-seg-on { box-shadow: 0 0 0 1.5px var(--ez-seg-ring), 0 2px 6px var(--ez-seg-shadow); }
+      @media (prefers-reduced-motion: reduce) {
+        .ez-seg, .ez-seg:hover, .ez-seg:active { transition: none; transform: none; }
+      }
+    `}</style>
+  );
+}
+
+function Seg({ mode, title, on, onClick, children }: {
+  mode: ThemeChoice; title: string; on: boolean; onClick: () => void; children: React.ReactNode;
 }) {
+  const m = MODE[mode];
   return (
     <button onClick={onClick} title={title} aria-label={title} aria-pressed={on}
+      className={`ez-seg${on ? ' ez-seg-on' : ''}`}
       style={{
-        width: 28, height: 26, borderRadius: R.sm, border: 'none', cursor: 'pointer',
+        width: 30, height: 28, borderRadius: R.md, border: 'none', cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: on ? C.surface : 'transparent',
-        color: on ? C.brandDeep : C.faint,
-        boxShadow: on ? '0 1px 2px rgba(0,0,0,.12)' : 'none',
-        transition: `background ${M.quick}, color ${M.quick}, box-shadow ${M.quick}`,
+        background: on ? m.fill : 'transparent',
+        color: on ? m.ink : C.muted,
         fontFamily: 'inherit', fontSize: F.micro, fontWeight: W.semi,
+        position: 'relative',
       }}>
       {children}
-      <span style={{ position:'absolute', width:1, height:1, overflow:'hidden', clip:'rect(0,0,0,0)' }}>{label}</span>
     </button>
   );
 }
 
+// Filled rather than hairline. At 16px a 1.7px stroke is four grey pixels and
+// reads as texture; a solid shape reads as a symbol.
 const Sun = () => (
-  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-       strokeWidth="1.7" strokeLinecap="round" aria-hidden>
-    <circle cx="10" cy="10" r="3.2" />
-    <path d="M10 2.2v1.6M10 16.2v1.6M2.2 10h1.6M16.2 10h1.6M4.5 4.5l1.1 1.1M14.4 14.4l1.1 1.1M15.5 4.5l-1.1 1.1M5.6 14.4l-1.1 1.1" />
+  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <circle cx="10" cy="10" r="4" fill="currentColor" />
+    <g stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+      <path d="M10 1.4v2.1M10 16.5v2.1M1.4 10h2.1M16.5 10h2.1M3.9 3.9l1.5 1.5M14.6 14.6l1.5 1.5M16.1 3.9l-1.5 1.5M5.4 14.6l-1.5 1.5" />
+    </g>
   </svg>
 );
 const Moon = () => (
-  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-       strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <path d="M16.5 11.8A6.8 6.8 0 0 1 8.2 3.5a6.8 6.8 0 1 0 8.3 8.3Z" />
+  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <path d="M16.8 12.2A7.2 7.2 0 0 1 7.8 3.2a7.2 7.2 0 1 0 9 9Z" fill="currentColor" />
   </svg>
 );
+// Half-lit disc: the one glyph that says "whichever the system is" without
+// needing a label. A monitor outline said "display", which is a different idea.
 const Auto = () => (
-  <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor"
-       strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-    <rect x="2.5" y="4" width="15" height="10" rx="1.6" />
-    <path d="M7 17h6" />
+  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden>
+    <circle cx="10" cy="10" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
+    <path d="M10 3a7 7 0 0 1 0 14Z" fill="currentColor" />
   </svg>
 );
 
@@ -134,33 +184,48 @@ export function ThemeToggle({ onDark, compact }: { onDark?: boolean; compact?: b
   const pick = (c: ThemeChoice) => { applyTheme(c); setChoice(c); };
 
   if (compact) {
-    // One button that cycles, for a collapsed rail with no room for three.
+    // One button that cycles, for a collapsed rail or a phone header.
+    //
+    // This is the variant that was indistinguishable: 34x34, R.md, a 1px
+    // C.line border and a C.muted glyph — identical to the notification bell
+    // beside it. It is now filled with the CURRENT mode's colour, so it is the
+    // one control in the bar that carries a hue, and the hue also tells you
+    // which mode you are in without opening anything.
     const next: ThemeChoice = choice === 'light' ? 'dark' : choice === 'dark' ? 'system' : 'light';
-    const label = choice === 'light' ? 'Light' : choice === 'dark' ? 'Dark' : 'System';
+    const m = MODE[choice];
     return (
-      <button onClick={() => pick(next)} title={`Theme: ${label} — switch to ${next}`}
-        aria-label={`Theme: ${label}`}
+      <>
+      <ThemeToggleStyles />
+      <button onClick={() => pick(next)}
+        title={`Theme: ${m.label} — switch to ${MODE[next].label}`}
+        aria-label={`Theme: ${m.label}. Switch to ${MODE[next].label}.`}
+        className="ez-seg ez-seg-on"
         style={{
           width: 34, height: 34, borderRadius: R.md, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: `1px solid ${onDark ? C.onDarkLine : C.line}`,
-          background: 'transparent', color: onDark ? C.onDarkMuted : C.muted,
-          transition: `color ${M.quick}, background ${M.quick}`,
+          border: 'none', background: m.fill, color: m.ink,
         }}>
         {choice === 'dark' ? <Moon /> : choice === 'light' ? <Sun /> : <Auto />}
       </button>
+      </>
     );
   }
 
   return (
-    <div role="group" aria-label="Colour theme" style={{
-      display: 'inline-flex', gap: 2, padding: 2, borderRadius: R.md,
-      background: onDark ? 'rgba(0,0,0,.22)' : C.sunken,
-      border: `1px solid ${onDark ? C.onDarkLine : C.line}`,
-    }}>
-      <Seg label="Light"  title="Light theme"      on={choice === 'light'}  onClick={() => pick('light')}><Sun /></Seg>
-      <Seg label="Dark"   title="Dark theme"       on={choice === 'dark'}   onClick={() => pick('dark')}><Moon /></Seg>
-      <Seg label="System" title="Follow my system" on={choice === 'system'} onClick={() => pick('system')}><Auto /></Seg>
-    </div>
+    <>
+      <ThemeToggleStyles />
+      <div role="group" aria-label="Colour theme" style={{
+        display: 'inline-flex', gap: 3, padding: 3, borderRadius: R.lg,
+        background: onDark ? 'rgba(0,0,0,.28)' : C.sunken,
+        // A stronger edge than the old 1px C.line (1.24:1 on white — chrome
+        // nobody can see). This reads as a container, which is what tells you
+        // the three glyphs are one control rather than three buttons.
+        border: `1px solid ${onDark ? C.onDarkLine : C.lineStrong}`,
+      }}>
+        <Seg mode="light"  title="Light theme"      on={choice === 'light'}  onClick={() => pick('light')}><Sun /></Seg>
+        <Seg mode="dark"   title="Dark theme"       on={choice === 'dark'}   onClick={() => pick('dark')}><Moon /></Seg>
+        <Seg mode="system" title="Follow my system" on={choice === 'system'} onClick={() => pick('system')}><Auto /></Seg>
+      </div>
+    </>
   );
 }

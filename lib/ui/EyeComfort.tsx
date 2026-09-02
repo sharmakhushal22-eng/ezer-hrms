@@ -242,6 +242,11 @@ const HOLD_MS = 1000;
 const HOLD_TOUCH_MS = 4000;
 
 /** Where the slider lands the first time someone switches the filter on. */
+/** Eye comfort's own accent. Deliberately not C.warning: that is amber, and
+ *  the theme toggle's light mode is now amber too. Two warm controls in the
+ *  same chrome need different warms. White on this is 5.18:1. */
+const EYE_ON = '#C2410C';
+
 const DEFAULT_STRENGTH = 30;
 
 const TickIcon = () => (
@@ -420,11 +425,18 @@ export function EyeComfortDock() {
           // as one row rather than two things that happen to be adjacent.
           width: 36, height: 36, borderRadius: 999, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          border: `1px solid ${on ? C.warning : C.brandEdge}`,
-          background: on ? C.warningTint : C.surface,
-          color: on ? C.warning : C.muted,
-          boxShadow: E.floating,
-          transition: `background ${M.quick}, color ${M.quick}, border-color ${M.quick}`,
+          // ON is a solid burnt orange rather than a pale tint. The control
+          // warms the screen, so the colour says what it does — and #C2410C is
+          // far enough from the theme toggle's #F59E0B that the two warm
+          // controls are not mistaken for each other. White on it is 5.18:1;
+          // orange-600 was tried first and failed at 3.56:1.
+          border: `1px solid ${on ? EYE_ON : C.lineStrong}`,
+          background: on ? EYE_ON : C.surface,
+          // OFF was C.muted — 7.56:1. C.inkSoft is 10.31:1 light and 11.73:1
+          // dark, which matters for a control floating over arbitrary content.
+          color: on ? '#FFFFFF' : C.inkSoft,
+          boxShadow: on ? `0 2px 10px ${EYE_ON}59, ${E.floating}` : E.floating,
+          transition: `background ${M.quick}, color ${M.quick}, border-color ${M.quick}, transform ${M.quick}`,
         }}>
         <EyeIcon on={on} />
       </button>

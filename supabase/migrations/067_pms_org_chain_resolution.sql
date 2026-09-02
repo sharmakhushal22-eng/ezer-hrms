@@ -31,7 +31,7 @@
 SELECT COUNT(*) AS dept_count FROM departments WHERE status = 'Active';
 
 -- D2. Employees per department — spot the unassigned ones.
-SELECT COALESCE(d.dept_name AS department_name,'** NO DEPARTMENT **') AS dept,
+SELECT COALESCE(d.dept_name,'** NO DEPARTMENT **') AS dept,
        COUNT(e.id) AS emp_count
 FROM employees e
 LEFT JOIN departments d ON d.id = e.department_id

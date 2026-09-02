@@ -27,6 +27,7 @@ import * as HR from '@/lib/employees/hr-actions'
 import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
+import Inbox from './Inbox'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
@@ -36,6 +37,10 @@ import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
 import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
+import Celebrations from '@/components/ess/Celebrations'
+import { ThemeToggle } from '@/lib/ui/ThemeToggle'
+import { Logo, LogoStyles } from '@/lib/ui/Logo'
+
 import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
@@ -410,6 +415,11 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
       {/* Role-wise KPIs and "pending on you" — the same card for an employee, an RM
           and an HR Head; only the data behind it differs (/api/ess/home). */}
       <PendingOnYou employeeId={emp.id} go={go} notify={notify} />
+
+      {/* Today's birthdays and work anniversaries, with a Wish button. Renders
+          nothing when nobody is celebrating — an empty card every day is worse
+          than no card. This is where a peer-to-peer notification is created. */}
+      <Celebrations employeeId={emp.id} />
 
       {/* where the employee's travel claims currently sit */}
       <TravelClaimStatus emp={emp} go={go} />
@@ -1074,21 +1084,21 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
   // move: the MD case is not special-cased, it just has an empty chain and no peers.
   const CardRow = ({ id, name, sub, right }: { id: string; name: string | null; sub: string | null; right?: string }) => (
     <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: '1px solid #F3F0FF' }}>
-      <div style={{ width: 32, height: 32, borderRadius: 99, background: '#EEEDFE', color: '#7C3AED', fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <div style={{ width: 32, height: 32, borderRadius: 99, background: C.brandTint, color: C.brand, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
         {(name || '?').split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase()}
       </div>
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || '—'}</div>
-        <div style={{ fontSize: 11, color: '#6B7280', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '—'}</div>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || '—'}</div>
+        <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '—'}</div>
       </div>
-      {right && <span style={{ fontSize: 10.5, color: '#7C3AED', fontWeight: 700, background: '#EEEDFE', borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{right}</span>}
+      {right && <span style={{ fontSize: 10.5, color: C.brand, fontWeight: 700, background: C.brandTint, borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{right}</span>}
     </div>
   )
 
   const Section = ({ title, icon, empty, children }: { title: string; icon: string; empty: string; children: React.ReactNode }) => (
-    <div style={{ background: '#fff', borderRadius: 10, border: '1px solid rgba(124,58,237,0.12)', padding: '14px 16px', marginBottom: 10, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: '#7C3AED', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>{icon} {title}</div>
-      {loading || chainLoading ? <div style={{ fontSize: 12, color: '#9CA3AF', padding: '6px 0' }}>Loading…</div> : children}
+    <div style={{ background: C.surface, borderRadius: 10, border: `1px solid ${C.brandEdge}`, padding: '14px 16px', marginBottom: 10, boxShadow: E.flat }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: C.brand, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>{icon} {title}</div>
+      {loading || chainLoading ? <div style={{ fontSize: 12, color: C.faint, padding: '6px 0' }}>Loading…</div> : children}
     </div>
   )
 
@@ -1101,7 +1111,7 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
       )}
       <Section title="Reporting line above you" icon="🧭" empty="Nobody above you — you are at the top of your chain.">
         {managers.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody above you — you are at the top of your chain.</div>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody above you — you are at the top of your chain.</div>
         ) : managers.map(m => (
           <CardRow key={m.relationship_type} id={m.relationship_type}
             name={m.manager?.full_name ?? null}
@@ -1111,7 +1121,7 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
 
       <Section title="Your team" icon="👥" empty="Nobody reports to you yet.">
         {reports.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody reports to you directly.</div>
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody reports to you directly.</div>
         ) : reports.map(r => (
           <CardRow key={r.id} id={r.id} name={r.full_name} sub={[r.designation, r.department].filter(Boolean).join(' · ')} />
         ))}
@@ -1120,7 +1130,7 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
       <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
         <Section title={`Your team-mates${peers.length ? ' (' + peers.length + ')' : ''}`} icon="🤝" empty="Nobody else shares your reporting manager.">
           {peers.filter(p => !p.isSelf).length === 0 ? (
-            <div style={{ fontSize: 12.5, color: '#6B7280', lineHeight: 1.6 }}>Nobody else shares your reporting manager — or you have no manager on record.</div>
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody else shares your reporting manager — or you have no manager on record.</div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: '0 16px' }}>
               {peers.filter(p => !p.isSelf).map(p => (
@@ -1259,24 +1269,81 @@ function Directory({ isMobile }: { isMobile: boolean }) {
 // ════════════════════════════════════════════════════════════════
 // NOTIFICATIONS (B11)
 // ════════════════════════════════════════════════════════════════
+
 function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () => void }) {
-  const [rows, setRows] = useState<EssNotification[]>([])
-  const load = useCallback(() => loadNotifications(emp.id).then(r => { setRows(r); onChange?.() }), [emp.id, onChange])
+  const [personal, setPersonal] = useState<any[]>([])
+  const [role, setRole] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Reads through /api/ess/notifications rather than the table directly. That
+  // route syncs first, so work already sitting in a queue shows up on the first
+  // open instead of only after the next event fires.
+  const load = useCallback(async () => {
+    try {
+      const h = essAuthHeaders()
+      let headers: Record<string, string> = h
+      if (!h.Authorization) {
+        const { data } = await supabase.auth.getSession()
+        const t = data?.session?.access_token
+        headers = t ? { Authorization: `Bearer ${t}` } : {}
+      }
+      const r = await fetch(`/api/ess/notifications?employee_id=${emp.id}`, { headers })
+      if (!r.ok) { setPersonal([]); setRole([]); return }
+      const j = await r.json()
+      setPersonal(j.personal || []); setRole(j.role || [])
+    } catch { setPersonal([]); setRole([]) }
+    finally { setLoading(false); onChange?.() }
+  }, [emp.id, onChange])
+
   useEffect(() => { load() }, [load])
+
+  const act = async (body: any) => {
+    const h = essAuthHeaders()
+    let headers: Record<string, string> = { 'Content-Type': 'application/json', ...h }
+    if (!h.Authorization) {
+      const { data } = await supabase.auth.getSession()
+      const t = data?.session?.access_token
+      if (t) headers.Authorization = `Bearer ${t}`
+    }
+    await fetch('/api/ess/notifications', { method: 'POST', headers, body: JSON.stringify(body) })
+    load()
+  }
+
+  const Row = (n: any) => (
+    <div key={n.id} onClick={() => { if (!n.is_read) act({ action: 'read', id: n.id }) }}
+      style={{ padding:'9px 0 9px 10px', borderBottom:`1px solid ${C.brandEdge}`,
+        cursor: n.is_read ? 'default' : 'pointer', opacity: n.is_read ? .6 : 1,
+        // The catalogue's "In-app + Email" tier is time-sensitive, financial or
+        // a rejection. A stripe reads at a glance; a second channel does not
+        // help somebody already looking at the list.
+        borderLeft: n.high ? `3px solid ${C.critical}` : '3px solid transparent' }}>
+      <div style={{ fontSize:13, fontWeight:600 }}>{!n.is_read && <span style={{ color:C.brand }}>● </span>}{n.title}</div>
+      {n.body && <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{n.body}</div>}
+      <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{n.label || ''} · {fmtDT(n.created_at)}</div>
+    </div>
+  )
+
+  const total = personal.length + role.length
+  const Head = ({ children }: { children: React.ReactNode }) => (
+    <div style={{ fontSize:10, fontWeight:700, color:C.faint, letterSpacing:.4,
+      textTransform:'uppercase', margin:'10px 0 2px' }}>{children}</div>
+  )
+
   return (
     <div style={{ ...T.card, marginBottom:0, border:'none', boxShadow:'none' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
         <div style={T.section}>Notifications</div>
-        <button onClick={async () => { await markAllNotifications(emp.id); load() }} style={T.btnO}>Mark all read</button>
+        <button onClick={() => act({ action: 'read_all' })} style={T.btnO}>Mark all read</button>
       </div>
-      {rows.length === 0 && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>You're all caught up. 🎉</div>}
-      {rows.map(n => (
-        <div key={n.id} onClick={async () => { if (!n.is_read) { await markNotification(n.id); load() } }} style={{ padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}`, cursor: n.is_read ? 'default' : 'pointer', opacity: n.is_read ? .6 : 1 }}>
-          <div style={{ fontSize:13, fontWeight:600 }}>{!n.is_read && <span style={{ color:C.brand }}>● </span>}{n.title}</div>
-          {n.body && <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{n.body}</div>}
-          <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{n.category || ''} · {fmtDT(n.created_at)}</div>
-        </div>
-      ))}
+
+      {loading && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>Loading…</div>}
+      {!loading && total === 0 && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>You&apos;re all caught up. 🎉</div>}
+
+      {/* Two groups, because "your leave was approved" and "three people are
+          waiting on you" are different kinds of message. A flat list buries
+          the second under the first. */}
+      {role.length > 0 && <><Head>For you to action</Head>{role.map(Row)}</>}
+      {personal.length > 0 && <><Head>About you</Head>{personal.map(Row)}</>}
     </div>
   )
 }
@@ -1578,7 +1645,7 @@ function StatTile({ label, value, bg, fg, bar, wide }: {
 }) {
   const empty = value === '0' || value === '0h 0m'
   return (
-    <div className="ezer-tile" style={{ background: empty ? '#FAFAFA' : bg, borderRadius: 10, padding: '10px 13px',
+    <div className="ezer-tile" style={{ background: empty ? C.sunken : bg, borderRadius: 10, padding: '10px 13px',
                   border: `1px solid ${empty ? C.line : bg}`, position: 'relative',
                   overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
@@ -3141,6 +3208,7 @@ interface NavSection {
  */
 const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => React.ReactElement> = {
   home: IconHome, profile: IconEmployees, team: IconEmployees, payroll: IconPayroll,
+  inbox: IconBell,
   attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
   wall: IconRecruitment, rnr: IconAi, funzone: IconAi,
 }
@@ -3190,6 +3258,13 @@ const SECTIONS: NavSection[] = [
   { k:'leave', label:'Leave', short:'Leave', icon:'', status:'ready',
     desc:'Apply, track and plan leave',
     items:[{ k:'leave', label:'Leave' }] },
+
+  // Below Leave, as asked. One section rather than a sub-tab of HRIS: it is
+  // opened many times a day, and burying it a level down would make it the
+  // one thing people go back to the bell for.
+  { k:'inbox', label:'Inbox', short:'Inbox', icon:'', status:'ready',
+    desc:'Messages from colleagues and departments, and every notification in full',
+    items:[{ k:'inbox', label:'Inbox' }] },
 
   { k:'hris', label:'HRIS', short:'HRIS', icon:'', status:'partial',
     desc:'Directory, requests, approvals and the exit process',
@@ -3258,16 +3333,16 @@ const BADGE: Record<Ready, [string, string, string]> = {
 function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean; onClick: () => void }) {
   // The mock's `.tab-link:hover` can't be an inline style, so the hover tint is state.
   const [hover, setHover] = useState(false)
-  const bg = active ? 'rgba(37,99,235,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
+  const bg = active ? C.railActiveBg : hover ? C.railHover : 'transparent'
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        // This rail is dark in BOTH themes, so its text must come from the
-        // theme-independent onDark family. It used C.brand and C.surface,
-        // which flip: in light the ten inactive labels were #2563EB on
-        // #111827 — 3.43:1, below AA — and in dark the ACTIVE label was
-        // C.surface, which is #171B21 there, giving 1.12:1. The selected
-        // item was effectively invisible.
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.onDark : C.onDarkMuted, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.onDark : 'transparent'}` }}>
+        // The rail follows the theme now — white in day, #171B21 in night —
+        // so its text comes from the rail family, which is defined for both.
+        // It must NOT use the onDark family: those are fixed near-white and
+        // would be invisible on a white rail in day mode. That was the
+        // original complaint. The earlier onDark fix was right for a rail
+        // that stayed dark; this replaces the premise, not the reasoning.
+      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.railActiveText : C.railMuted, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.railActiveText : 'transparent'}` }}>
       <EssIcon k={s.k} size={16} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
@@ -3293,7 +3368,7 @@ function AdminEntry({ isMobile }: { isMobile?: boolean }) {
   if (isMobile) {
     return (
       <button onClick={() => { window.location.href = '/dashboard' }}
-        style={{ gridColumn: '1 / -1', padding: '12px 10px', borderRadius: 9, border: '1px solid #7C3AED', background: '#7C3AED', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, color: '#fff', fontWeight: 600 }}>
+        style={{ gridColumn: '1 / -1', padding: '12px 10px', borderRadius: 9, border: `1px solid ${C.brand}`, background: C.brand, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, color: C.onAccent, fontWeight: 600 }}>
         <span style={{ fontSize: 16 }}>🛠️</span>
         <span style={{ flex: 1, minWidth: 0 }}>Admin</span>
         <span style={{ fontSize: 10, opacity: .75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{roleLine}</span>
@@ -3301,15 +3376,19 @@ function AdminEntry({ isMobile }: { isMobile?: boolean }) {
     )
   }
   return (
-    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.railLine}` }}>
       <button onClick={() => { window.location.href = '/dashboard' }}
         onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', color: '#fff', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', background: hover ? 'rgba(124,58,237,0.45)' : 'rgba(124,58,237,0.28)', border: 'none', borderLeft: '3px solid #7C3AED' }}>
+        // A translucent brand wash worked on a permanently dark rail. Over the
+        // day-mode white rail it resolves to pale lavender, and C.onAccent is
+        // white there — white on near-white. A solid fill keeps onAccent
+        // meaning what it says, and matches the mobile variant above.
+        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', color: C.onAccent, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', background: hover ? C.brandDeep : C.brand, border: 'none', borderLeft: `3px solid ${C.brandDeep}` }}>
         <span>🛠️</span>
         <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Admin</span>
         <span style={{ marginLeft: 'auto', fontSize: 14, opacity: .7 }}>→</span>
       </button>
-      <div style={{ padding: '4px 18px 0', fontSize: 10, color: 'rgba(255,255,255,0.42)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLine}</div>
+      <div style={{ padding: '4px 18px 0', fontSize: 10, color: C.railFaint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLine}</div>
     </div>
   )
 }
@@ -3472,7 +3551,7 @@ function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: 
       {items.map(i => {
         const on = i.k === view
         return (
-          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.brand : C.line}`, background: on ? C.brand: C.surface, color: on ? C.surface : C.inkSoft, whiteSpace:'nowrap' }}>
+          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.brand : C.line}`, background: on ? C.brand: C.surface, color: on ? C.onAccent : C.inkSoft, whiteSpace:'nowrap' }}>
             {i.label}{i.phase ? <span style={{ marginLeft:5, fontSize:9, opacity:.7 }}>soon</span> : null}
           </button>
         )
@@ -3539,8 +3618,40 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   // Unread count for the bell. Refreshed on mount and whenever the open panel
   // marks something read, so the badge never disagrees with the list behind it.
+  // Goes through the API, not the table, so opening the portal SYNCS: work
+  // already sitting in a queue produces its notification now rather than
+  // waiting for the next event. Reading the table directly would leave the
+  // badge on 0 until somebody happened to open the panel.
   const refreshUnread = useCallback(() => {
-    loadNotifications(employeeId).then(r => setUnread(r.filter(n => !n.is_read).length)).catch(() => {})
+    (async () => {
+      try {
+        const h = essAuthHeaders()
+        let headers: Record<string, string> = h
+        if (!h.Authorization) {
+          const { data } = await supabase.auth.getSession()
+          const t = data?.session?.access_token
+          headers = t ? { Authorization: `Bearer ${t}` } : {}
+        }
+        // Two sources, added rather than one replacing the other: the bell
+        // counts NOTIFICATIONS, the inbox counts MESSAGES FROM PEOPLE. They
+        // deliberately do not overlap — inbox_unread_count excludes the
+        // notification threads precisely so one leave approval is not counted
+        // twice. A failing inbox call leaves the notification count standing
+        // rather than blanking the badge.
+        const [rn, ri] = await Promise.all([
+          fetch(`/api/ess/notifications?employee_id=${employeeId}`, { headers }),
+          fetch(`/api/ess/inbox?employee_id=${employeeId}`, { headers }).catch(() => null),
+        ])
+        if (!rn.ok) return
+        const j = await rn.json()
+        let total = Number(j.unread) || 0
+        if (ri && ri.ok) {
+          const ji = await ri.json().catch(() => null)
+          if (ji?.installed) total += Number(ji.unread) || 0
+        }
+        setUnread(total)
+      } catch { /* the badge is not worth an error state */ }
+    })()
   }, [employeeId])
   useEffect(() => { refreshUnread() }, [refreshUnread])
 
@@ -3587,6 +3698,9 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
       case 'profile':       return <Profile emp={emp} notify={notify} />
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
+      // The inbox reports its own unread straight into the bell's state, so
+      // the badge and the screen can never show two different numbers.
+      case 'inbox':         return <Inbox employeeId={emp.id} onUnread={setUnread} />
       case 'vpf':           return <VpfSection emp={emp} notify={notify} />
       case 'nps':           return <NpsSection emp={emp} notify={notify} />
       case 'loans':         return <LoansSection emp={emp} notify={notify} />
@@ -3616,6 +3730,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   return (
     <div style={{ minHeight:'100vh', background:C.canvas, fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+      <LogoStyles />
       {/* The shared stylesheet. It was imported here but never rendered, so
           ESS was running without the header band, the tab and press classes,
           the global button baseline, the page-enter animation and the text
@@ -3624,12 +3739,18 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       <UIKeyframes />
       {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
       {!isMobile && (
-        <div style={{ width:220, background: C.dark, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
-          <div style={{ padding:'0 18px 16px', color:C.onDark, fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
+        <div style={{ width:220, background: C.rail, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0, borderRight:`1px solid ${C.railLine}` }}>
           {/* Only the employee's own tabs live here now. What they administer moved to
               the menu band at the top of the page — the two are different kinds of
               thing, and thirteen personal entries plus up to twenty-five modules in
               one vertical rail was a scrolling problem rather than a menu. */}
+          {/* The mark carries the wordmark, so "EZER" is not repeated as text.
+              "ESS" stays, because which of the two products you are in is the
+              one thing the logo does not tell you. */}
+          <div style={{ padding:'0 18px 16px', borderBottom:`1px solid ${C.railLine}`, marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
+            <Logo height={24} />
+            <span style={{ color:C.railMuted, fontWeight:700, fontSize:12, letterSpacing:'.08em' }}>ESS</span>
+          </div>
           {sections.map(s => (
             <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
           ))}
@@ -3666,6 +3787,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
           <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9, flexShrink:0 }}>
+            {/* Light / dark / system. Three states rather than two, because
+                "follow my system" is a real preference and a two-way switch
+                silently overrides it. The dashboard has had this control all
+                along; ESS never rendered it, so an employee who never opens
+                the dashboard had no way to choose. On mobile it collapses to
+                one cycling button — three segments plus the bell, avatar and
+                name do not fit a phone header. */}
+            <ThemeToggle compact={isMobile} />
             <span data-ez-bell><NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} /></span>
             <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
             {!isMobile && (

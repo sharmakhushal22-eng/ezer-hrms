@@ -110,6 +110,21 @@
      on a white rail a filled block is heavier than one item deserves. */
   --ez-rail:             #FFFFFF;
   --ez-rail-text:        #111827;
+  /* Module names in the rail. railMuted (#4B5563 / #9CA3AF) is the ink for
+     secondary text, and reading it as "nav label" left twenty-seven module
+     names looking like captions next to their own coloured icons. These are
+     the primary thing on the rail and carry a primary ink.
+
+     Landed between two rejected extremes rather than picked from a scale.
+     #4B5563 (7.56:1) read as faded. #1F2937 (14.68:1) read as extremely
+     dark — twenty-seven near-black rows is a lot of mass for a column that
+     is meant to be glanced at. #414B5A is 8.83:1: a real step up from the
+     grey it replaced, nowhere near the weight of near-black.
+
+     Dark is deliberately NOT eased to match. #E5E7EB is bright text on a
+     dark ground, which is the opposite complaint, and dark mode carries
+     bright text without the same sense of mass. */
+  --ez-rail-item:        #414B5A;
   --ez-rail-muted:       #4B5563;
   --ez-rail-faint:       #626D80;
   --ez-rail-line:        #E5E7EB;
@@ -247,6 +262,7 @@
        separation comes from that difference rather than from a border. */
     --ez-rail:             #171B21;
     --ez-rail-text:        #F3F4F6;
+    --ez-rail-item:        #E5E7EB;
     --ez-rail-muted:       #9CA3AF;
     --ez-rail-faint:       #828C9B;
     --ez-rail-line:        #262C35;
@@ -355,6 +371,7 @@
 
   --ez-rail:             #171B21;
   --ez-rail-text:        #F3F4F6;
+  --ez-rail-item:        #E5E7EB;
   --ez-rail-muted:       #9CA3AF;
   --ez-rail-faint:       #828C9B;
   --ez-rail-line:        #262C35;

@@ -3,6 +3,7 @@
 // Identifier = email OR employee code. Steps: identifier → login / set-password,
 // plus a forced change-password step when HR issued a temp password (= emp_code).
 import { useState } from 'react'
+import { Logo, LogoStyles } from '@/lib/ui/Logo'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -127,6 +128,7 @@ export default function ESSLoginPage() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', background: P.bg, fontFamily: '"DM Sans","Segoe UI",sans-serif', color: P.navy }}>
+      <LogoStyles />
 
       {/* ── Left brand panel (desktop) ── */}
       <div className="ezer-brand" style={{
@@ -139,17 +141,9 @@ export default function ESSLoginPage() {
         <div style={{ position: 'absolute', bottom: -120, left: -80, width: 340, height: 340, borderRadius: '50%', background: 'radial-gradient(circle, rgba(196,181,253,0.22), transparent 65%)' }} />
 
         <div style={{ position: 'relative' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 14, background: 'rgba(255,255,255,0.14)', border: '1px solid rgba(255,255,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="24" height="24" viewBox="0 0 44 44" fill="none">
-                <rect x="10" y="9" width="6" height="26" rx="2" fill="white" />
-                <rect x="10" y="9" width="20" height="6" rx="2" fill="white" />
-                <rect x="10" y="19" width="15" height="5" rx="2" fill="white" />
-                <rect x="10" y="29" width="20" height="6" rx="2" fill="white" />
-              </svg>
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 800, letterSpacing: '.02em' }}>EZER HRMS</div>
-          </div>
+          {/* This panel is a saturated brand gradient in both themes, so the
+              light-ink variant is forced rather than left to the theme. */}
+          <Logo height={38} onDark tagline />
         </div>
 
         <div style={{ position: 'relative' }}>
@@ -175,10 +169,7 @@ export default function ESSLoginPage() {
         <div style={{ width: '100%', maxWidth: 404 }}>
           {/* Mobile brand header */}
           <div className="ezer-mobile-brand" style={{ display: 'none', alignItems: 'center', gap: 10, justifyContent: 'center', marginBottom: 22 }}>
-            <div style={{ width: 40, height: 40, borderRadius: 11, background: P.purple, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="22" height="22" viewBox="0 0 44 44" fill="none"><rect x="10" y="9" width="6" height="26" rx="2" fill="white" /><rect x="10" y="9" width="20" height="6" rx="2" fill="white" /><rect x="10" y="19" width="15" height="5" rx="2" fill="white" /><rect x="10" y="29" width="20" height="6" rx="2" fill="white" /></svg>
-            </div>
-            <div style={{ fontSize: 18, fontWeight: 800, color: P.navy }}>EZER HRMS</div>
+            <Logo height={34} />
           </div>
 
           <div style={{ background: TK.surface, borderRadius: 20, border: '1px solid var(--ez-line)', boxShadow: '0 12px 40px rgba(37,99,235,0.12)', padding: '34px 32px' }}>
