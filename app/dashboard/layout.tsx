@@ -454,14 +454,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
              icon           5.37    selected ink  8.72 (on the white pill)
         */
         .ez-rail{
-          background: linear-gradient(180deg, #1E40AF 0%, #16307E 100%);
+          background: linear-gradient(180deg, #2A59D6 0%, #1E40AB 100%);
           /* FOUR LEVELS, all blue, so nothing has to blend into anything.
              A dark ground makes this possible: a row can sit ABOVE it and a
              section BELOW it, which a pale ground could never do — there,
              everything had to be lighter than everything else and the levels
              ran out. Steps measured against the rail's lightest stop:
-                 section  1.37 below      row  1.34 above
-                 pill     8.83 above (white — not a step, a different thing) */
+                 light   section 1.43 below   row 1.28 above
+                 dark    section 1.44 below   row 1.43 above
+                 pill    white — not a step but a different kind of thing
+
+             The ground is as light as it can go. A row sits ABOVE it, so
+             lightening the rail lightens the row too, and the row's label
+             is what runs out first: at this ground it measures 4.76, and
+             one more step up puts it under 4.5. */
           --r-row:   linear-gradient(180deg, rgba(61,130,255,.50), rgba(61,130,255,.33));
           --r-row-h: linear-gradient(180deg, rgba(61,130,255,.56), rgba(61,130,255,.38));
           --r-band:  rgba(0,0,0,.26);
@@ -471,8 +477,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
              would still be drawing near-black ink on a deep blue ground. */
           --ez-rail-text:        #F2F6FF;
           --ez-rail-item:        #E8EEFB;
-          --ez-rail-muted:       #C3D4F2;
-          --ez-rail-faint:       #A9C0EC;
+          /* Lifted with the ground. These two carry real text — the 10px
+             subtitle under the brand mark, "Back to my ESS", the sign-out
+             row — and at #C3D4F2 / #A9C0EC they measured 4.01 and 3.27 on
+             the lighter rail. Nothing renders them on a row, so the row
+             checks could never have caught it. */
+          --ez-rail-muted:       #DEE9FC;
+          --ez-rail-faint:       #D8E4FA;
           --ez-rail-line:        rgba(255,255,255,.16);
           --ez-rail-hover:       rgba(255,255,255,.10);
           --ez-rail-active-bg:   rgba(255,255,255,.18);
@@ -480,18 +491,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
         @media (prefers-color-scheme: dark){
           :root:not([data-ez-theme="light"]) .ez-rail{
-            background: linear-gradient(180deg, #193977 0%, #0F2356 100%);
+            background: linear-gradient(180deg, #214A96 0%, #153672 100%);
             --r-row:   linear-gradient(180deg, rgba(61,130,255,.50), rgba(61,130,255,.33));
             --r-row-h: linear-gradient(180deg, rgba(61,130,255,.56), rgba(61,130,255,.38));
-            --r-band:  rgba(0,0,0,.38);
+            --r-band:  rgba(0,0,0,.36);
             --r-edge:  rgba(255,255,255,.16);
           }
         }
         :root[data-ez-theme="dark"] .ez-rail{
-          background: linear-gradient(180deg, #193977 0%, #0F2356 100%);
+          background: linear-gradient(180deg, #214A96 0%, #153672 100%);
           --r-row:   linear-gradient(180deg, rgba(61,130,255,.50), rgba(61,130,255,.33));
           --r-row-h: linear-gradient(180deg, rgba(61,130,255,.56), rgba(61,130,255,.38));
-          --r-band:  rgba(0,0,0,.38);
+          --r-band:  rgba(0,0,0,.36);
           --r-edge:  rgba(255,255,255,.16);
         }
 

@@ -173,6 +173,27 @@ if not missing and len(rail_rules) >= 2:
     check('the pill is white, so it cannot blend into a blue rail',
           'background:#FFFFFF' in cssz.replace('background:#ffffff', 'background:#FFFFFF'))
 
+# ── the inks the rail rebinds for everything that is NOT a row ────────────
+# The brand-mark subtitle, "Back to my ESS" and the sign-out row draw
+# --ez-rail-muted / --ez-rail-faint straight onto the rail, never onto a
+# button. So every row check above can pass while these fail, which is
+# exactly what happened when the ground was lightened: they measured 4.01
+# and 3.27 and nothing here noticed. All of it is small text, so the bar is
+# 4.5 and not the 3:1 graphics bar.
+for gi, (g1, g2) in enumerate(grounds[:2]):
+    th = 'light' if gi == 0 else 'dark'
+    rule = rail_rules[0] if gi == 0 else rail_rules[1]
+    worst = g1 if L(g1) > L(g2) else g2          # lightest stop, worst for light ink
+    for tok in ('--ez-rail-text', '--ez-rail-item', '--ez-rail-muted', '--ez-rail-faint'):
+        m = re.search(re.escape(tok) + r':(#[0-9A-Fa-f]{6})', rule)
+        if not m:
+            # light declares all four; the dark blocks only override what moves
+            if gi == 0: check('%-5s %s is declared' % (th, tok), False)
+            continue
+        r = cr(m.group(1).upper(), worst)
+        check('%-5s %-16s direct on the rail >= 4.5' % (th, tok), r >= 4.5,
+              '%.2f (%s)' % (r, m.group(1)))
+
 # ── 4. the four levels ────────────────────────────────────────────────────
 # "section and button blended with bg." The first inversion answered the
 # light-cards-on-a-light-ground problem by removing ALL surface from a row —
