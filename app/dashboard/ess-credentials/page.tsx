@@ -41,10 +41,17 @@ export default function EssCredentialsPage() {
       .then(({ data }) => { setCompanies(data || []); if (data?.length) setCompanyId(data[0].id) })
   }, [])
   useEffect(() => {
-    if (!companyId) return
+    // '' = All companies. The generate API already reads a missing company_id the
+    // same way, so the counters and the button act on the same set of people.
     ;(async () => {
-      const { count: total } = await supabase.from('employees').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('employment_status', 'Active').neq('is_test', true)
-      const { data: emps } = await supabase.from('employees').select('id').eq('company_id', companyId).eq('employment_status', 'Active').neq('is_test', true)
+      const base = () => {
+        let q = supabase.from('employees').select('id', { count: 'exact' }).eq('employment_status', 'Active').neq('is_test', true)
+        return companyId ? q.eq('company_id', companyId) : q
+      }
+      const { count: total } = await base().limit(0)
+      const { data: emps } = await (companyId
+        ? supabase.from('employees').select('id').eq('company_id', companyId).eq('employment_status', 'Active').neq('is_test', true)
+        : supabase.from('employees').select('id').eq('employment_status', 'Active').neq('is_test', true))
       const ids = (emps || []).map((e: any) => e.id)
       let withPw = 0
       if (ids.length) { const { count } = await supabase.from('ess_accounts').select('id', { count: 'exact', head: true }).in('employee_id', ids).not('password_hash', 'is', null); withPw = count || 0 }
@@ -54,7 +61,7 @@ export default function EssCredentialsPage() {
 
   async function generate(mode: 'all' | 'selected') {
     setError(''); setBusy(true); setRows([]); setSummary(null)
-    let body: any = { reset, performedBy: 'HR', company_id: companyId }
+    let body: any = { reset, performedBy: 'HR', ...(companyId ? { company_id: companyId } : {}) }
     if (mode === 'all') body.all = true
     else {
       const codes = empCodes.split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
@@ -96,7 +103,7 @@ export default function EssCredentialsPage() {
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
           <div>
             <label style={{ fontSize: 11, color: C.purpleDark, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Company</label>
-            <select style={{ ...inp, minWidth: 240 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
+            <select style={{ ...inp, minWidth: 240 }} value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
           </div>
           <div style={{ fontSize: 12, color: C.muted }}>
             <div><b style={{ color: C.navy }}>{counts.total}</b> active employees</div>
@@ -108,7 +115,7 @@ export default function EssCredentialsPage() {
         </div>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <button style={{ ...pri, opacity: busy ? .6 : 1 }} disabled={busy || !companyId} onClick={() => generate('all')}>{busy ? 'Generating…' : `⚡ Generate for all active employees`}</button>
+          <button style={{ ...pri, opacity: busy ? .6 : 1 }} disabled={busy} onClick={() => generate('all')}>{busy ? 'Generating…' : companyId ? `⚡ Generate for all active employees` : `⚡ Generate for all active employees (every company)`}</button>
           <span style={{ color: C.muted, fontSize: 12 }}>or</span>
           <div style={{ flex: 1, minWidth: 260 }}>
             <input style={{ ...inp, width: '100%', fontFamily: 'monospace' }} placeholder="Specific codes: SRS0001, SSM0002, …" value={empCodes} onChange={e => setEmpCodes(e.target.value)} />

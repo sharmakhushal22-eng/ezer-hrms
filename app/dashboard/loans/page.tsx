@@ -48,7 +48,10 @@ function PendingApprovals({ companyId, empMap, typeMap, notify }: { companyId: s
   const [levels, setLevels] = useState<Record<string, any>>({}) // request_id -> current pending level row
   const [busy, setBusy] = useState<string | null>(null)
   const load = useCallback(async () => {
-    const { data } = await supabase.from('loan_requests').select('*').eq('company_id', companyId).eq('status', 'IN_APPROVAL').order('created_at', { ascending: false })
+    // '' = All companies — the request list simply loses its company clause.
+    let q = supabase.from('loan_requests').select('*').eq('status', 'IN_APPROVAL').order('created_at', { ascending: false })
+    if (companyId) q = q.eq('company_id', companyId)
+    const { data } = await q
     const reqs = data || []
     setRows(reqs)
     // One query, not one per request. This was an await inside a for loop, so
@@ -272,7 +275,9 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
 function LoanTypes({ companyId }: { companyId: string }) {
   const [rows, setRows] = useState<any[]>([])
   useEffect(() => {
-    supabase.from('loan_types').select('*').eq('company_id', companyId).then(({ data }) => setRows(data || []))
+    let q = supabase.from('loan_types').select('*')
+    if (companyId) q = q.eq('company_id', companyId)
+    q.then(({ data }) => setRows(data || []))
   }, [companyId])
   return (
     <div style={S.card}>
@@ -306,9 +311,13 @@ export default function LoansPage() {
     })
   }, [])
   useEffect(() => {
-    if (!companyId) return
-    supabase.from('employees').select('id, emp_code, full_name').eq('company_id', companyId).then(({ data }) => setEmps(data || []))
-    supabase.from('loan_types').select('id, name').eq('company_id', companyId).then(({ data }) => setTypes(data || []))
+    // '' = All companies. Every panel below scopes through empIds / these queries,
+    // so this one effect is the whole of "group mode" for this page.
+    let eq = supabase.from('employees').select('id, emp_code, full_name')
+    let tq = supabase.from('loan_types').select('id, name')
+    if (companyId) { eq = eq.eq('company_id', companyId); tq = tq.eq('company_id', companyId) }
+    eq.then(({ data }) => setEmps(data || []))
+    tq.then(({ data }) => setTypes(data || []))
   }, [companyId])
 
   const empMap: Record<string, string> = {}
@@ -328,21 +337,17 @@ export default function LoansPage() {
           <div>
             <label style={S.label}>Company</label>
             <select style={{ ...S.input, minWidth:220 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-              {companies.length === 0 && <option value="">No companies</option>}
+              <option value="">All companies</option>
               {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
             </select>
           </div>
         </div>
 
-        {!companyId ? <div style={S.card}><div style={{ color:C.muted }}>Select a company to continue.</div></div> : (
-          <>
-            <PendingApprovals companyId={companyId} empMap={empMap} typeMap={typeMap} notify={notify} />
-            <AgreementsReview companyEmpIds={empIds} empMap={empMap} notify={notify} />
-            <ReadyToDisburse companyEmpIds={empIds} empMap={empMap} notify={notify} />
-            <ActiveLoans companyEmpIds={empIds} empMap={empMap} />
-            <LoanTypes companyId={companyId} />
-          </>
-        )}
+        <PendingApprovals companyId={companyId} empMap={empMap} typeMap={typeMap} notify={notify} />
+        <AgreementsReview companyEmpIds={empIds} empMap={empMap} notify={notify} />
+        <ReadyToDisburse companyEmpIds={empIds} empMap={empMap} notify={notify} />
+        <ActiveLoans companyEmpIds={empIds} empMap={empMap} />
+        <LoanTypes companyId={companyId} />
       </div>
 
       {toast && (

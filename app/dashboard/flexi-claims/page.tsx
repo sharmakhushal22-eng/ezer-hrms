@@ -70,10 +70,10 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
   const [fMonth, setFMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`)
 
   const load = useCallback(async () => {
-    if (!companyId) { setClaims([]); setLoading(false); return }
     setLoading(true)
     const [y, m] = fMonth.split('-')
-    const res = await fetch(`/api/flexi/claims?company_id=${companyId}&month=${Number(m)}&year=${y}`).then(r => r.json())
+    // '' = All companies → the API's explicit ALL token.
+    const res = await fetch(`/api/flexi/claims?company_id=${companyId || 'ALL'}&month=${Number(m)}&year=${y}`).then(r => r.json())
     setClaims(res.claims || []); setLoading(false); setSelected(new Set())
   }, [companyId, fMonth])
   useEffect(() => { load() }, [load])
@@ -479,7 +479,7 @@ export default function FlexiClaimsAdmin() {
         <div>
           <label style={S.label}>Company</label>
           <select style={{ ...S.inp, minWidth: 220 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-            {companies.length === 0 && <option value="">No companies</option>}
+            <option value="">All companies</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
         </div>
@@ -491,11 +491,10 @@ export default function FlexiClaimsAdmin() {
         ))}
       </div>
 
-      {!companyId ? <div style={S.card}><div style={{ color: C.muted }}>Select a company.</div></div> : (
-        tab === 'approvals' ? <ApprovalsTab companyId={companyId} notify={notify} />
+      {tab === 'approvals' ? <ApprovalsTab companyId={companyId} notify={notify} />
+        : !companyId ? <div style={S.card}><div style={{ color: C.muted }}>The submission window and limits are set per company — pick one above.</div></div>
           : tab === 'window' ? <WindowTab companyId={companyId} notify={notify} />
-            : <LimitsTab companyId={companyId} notify={notify} />
-      )}
+            : <LimitsTab companyId={companyId} notify={notify} />}
 
       {toast && <Toast msg={toast} onClose={() => setToast('')} />}
     </div>

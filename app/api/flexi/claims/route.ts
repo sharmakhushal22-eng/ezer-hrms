@@ -154,7 +154,10 @@ export async function GET(req: NextRequest) {
   if (compId) {
     let q = supa.from('flexi_claims')
       .select('*, employees(emp_code, full_name, department_id, location_id, company_id, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)), flexi_claim_files(id, file_name, file_type, file_url)')
-      .eq('company_id', compId)
+    // 'ALL' = the whole group. Deliberately an explicit token rather than an absent
+    // parameter, so a caller that forgot the id still gets the 400 below instead of
+    // silently receiving every company's bills.
+    if (compId !== 'ALL') q = q.eq('company_id', compId)
     if (status) q = q.eq('status', status)
     if (month && year) {
       const m = Number(month)
