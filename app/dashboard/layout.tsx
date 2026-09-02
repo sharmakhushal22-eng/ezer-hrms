@@ -462,10 +462,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
              ran out. Steps measured against the rail's lightest stop:
                  section  1.37 below      row  1.34 above
                  pill     8.83 above (white — not a step, a different thing) */
-          --r-row:   rgba(255,255,255,.12);
-          --r-row-h: rgba(255,255,255,.20);
+          --r-row:   linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.13));
+          --r-row-h: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,.16));
           --r-band:  rgba(0,0,0,.26);
-          --r-edge:  rgba(255,255,255,.14);
+          --r-edge:  rgba(255,255,255,.18);
           /* Everything inside the rail inherits these — the brand mark, the
              footer, the sign-out row. Without redefining them here, those
              would still be drawing near-black ink on a deep blue ground. */
@@ -481,18 +481,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         @media (prefers-color-scheme: dark){
           :root:not([data-ez-theme="light"]) .ez-rail{
             background: linear-gradient(180deg, #193977 0%, #0F2356 100%);
-            --r-row:   rgba(255,255,255,.12);
-            --r-row-h: rgba(255,255,255,.20);
+            --r-row:   linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.13));
+            --r-row-h: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,.16));
             --r-band:  rgba(0,0,0,.38);
-            --r-edge:  rgba(255,255,255,.11);
+            --r-edge:  rgba(255,255,255,.16);
           }
         }
         :root[data-ez-theme="dark"] .ez-rail{
           background: linear-gradient(180deg, #193977 0%, #0F2356 100%);
-          --r-row:   rgba(255,255,255,.12);
-          --r-row-h: rgba(255,255,255,.20);
+          --r-row:   linear-gradient(180deg, rgba(255,255,255,.24), rgba(255,255,255,.13));
+          --r-row-h: linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,.16));
           --r-band:  rgba(0,0,0,.38);
-          --r-edge:  rgba(255,255,255,.11);
+          --r-edge:  rgba(255,255,255,.16);
         }
 
         /* ── A row sits ABOVE the rail; a section sits BELOW it ────────
@@ -503,14 +503,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            pill goes fully white on top. Four levels, one hue. */
         .ez-nav{
           position:relative; border-radius:9px;
-          color:#E8EEFB;
-          /* Raised off the rail so a row reads as a button at rest. The
-             previous pass removed this entirely and rows became bare text on
-             the ground — which is the blending being fixed here. */
+          color:#F4F8FF;
+          /* SHADED, not merely tinted. A flat wash of white at one alpha is
+             what read as dull: it lifts a row off the rail arithmetically
+             while giving the eye nothing to call a surface. What makes a
+             button look like a button is the light on it, so the fill runs
+             top-to-bottom, the top edge catches a specular, and the bottom
+             sits on a contact shadow.
+
+             The alpha ceiling is set by the ink, not by taste: past ~.24 at
+             the top stop the label drops under 4.5:1 and the row gets
+             legible-dull instead of pretty. So the depth is bought with
+             shading and shadow, which cost no contrast at all. */
           background: var(--r-row);
           border:1px solid var(--r-edge);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
-          transition: color .18s ease, background .18s ease, border-color .18s ease;
+          border-top-color: rgba(255,255,255,.34);
+          border-bottom-color: rgba(0,0,0,.20);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.26),      /* specular along the top */
+            0 1px 2px rgba(4,12,42,.30),              /* contact with the rail */
+            0 3px 7px -3px rgba(4,12,42,.34);         /* the lift itself */
+          transition: color .18s ease, background .18s ease,
+                      border-color .18s ease, box-shadow .18s ease,
+                      transform .10s ease;
           isolation:isolate;
         }
         /* The fill is a pseudo-element so it can wipe independently of the
@@ -522,14 +537,39 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           transition: transform .22s cubic-bezier(.2,.8,.2,1);
           z-index:-1;
         }
-        .ez-nav:hover{ color:#FFFFFF; border-color: rgba(255,255,255,.30) }
+        /* Hover carries most of its signal in the EDGE and the shadow rather
+           than in fill brightness. Pushing the fill far enough to read on
+           luminance alone takes the top stop to .32, where a white label
+           measures 4.28 — under the bar. A brighter rim and a taller lift
+           cost nothing and read as "raised further". */
+        .ez-nav:hover{
+          color:#FFFFFF;
+          border-color: rgba(255,255,255,.42);
+          border-top-color: rgba(255,255,255,.55);
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.34),
+            0 2px 4px rgba(4,12,42,.32),
+            0 6px 14px -5px rgba(4,12,42,.42);
+        }
         .ez-nav:hover::before{ transform: scaleX(1) }
+        /* Pressed: the row travels the 1px it was lifted and its shadow
+           collapses, so the click lands on the rail instead of hovering
+           above it. A button that does not move under the pointer is the
+           other half of looking dull. */
+        .ez-nav:active{
+          transform: translateY(1px);
+          box-shadow:
+            inset 0 1px 2px rgba(4,12,42,.30),
+            0 0 0 rgba(4,12,42,0);
+        }
         .ez-nav:active::before{ background: rgba(255,255,255,.16) }
         .ez-nav:focus-visible{ outline:2px solid #FFFFFF; outline-offset:-2px }
 
         /* ── Selected: a white pill ────────────────────────────────────
            Wipes in from the left rather than popping. */
-        .ez-nav-on{ color:#1B3A9E }
+        .ez-nav-on{ color:#1B3A9E; border-color: rgba(255,255,255,.55);
+                    box-shadow: 0 1px 2px rgba(4,12,42,.26),
+                                0 6px 16px -6px rgba(6,17,58,.45) }
         .ez-nav-on::before{
           background:#FFFFFF;
           transform: scaleX(1);
@@ -551,15 +591,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            the glyph alone reads. */
         .ez-nav-tile{
           background:transparent; box-shadow:none;
-          color:#B7CCF2;
+          /* Was #B7CCF2 — dimmer than the label beside it, which made the
+             row look switched off rather than merely unselected. It cleared
+             the 3:1 graphics bar and still looked dull, which is the whole
+             gap between passing and good. */
+          color:#DCE8FF;
           transition: color .18s ease, transform .18s cubic-bezier(.2,.8,.2,1);
         }
         .ez-nav:hover .ez-nav-tile{ color:#FFFFFF }
         .ez-nav-on .ez-nav-tile{ color:#1B3A9E }
 
-        /* ── Sections: a label, and space ──────────────────────────────
-           No band, no rule box. On a deep ground a quiet label reads as
-           secondary without needing a container drawn around it. */
+        /* ── Sections: a band pressed INTO the rail ────────────────────
+           The opposite move to a row. Rows come toward the reader, sections
+           sink away, and the rail sits between them. */
         .ez-group{ display:flex; flex-direction:column; flex-shrink:0 }
         .ez-group-items{ display:flex; flex-direction:column; gap:2px; position:relative;
                          perspective:none }

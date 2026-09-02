@@ -95,14 +95,63 @@ INKS = {
 missing = [k for k, v in INKS.items() if not v]
 check('every rail ink is declared in the stylesheet', not missing, str(missing))
 
-if not missing:
+def over(alpha, fg, ground):
+    """fg at `alpha` composited onto a #rrggbb ground -> #rrggbb."""
+    g = rgb(ground)
+    return '#%02X%02X%02X' % tuple(round(fg[i]*alpha + g[i]*(1-alpha)) for i in range(3))
+
+def alphas_of(rule, name):
+    """Every alpha declared for a level. A level may be a flat rgba() or a
+       gradient of several, so this returns them all and the caller picks the
+       stop that is worst for what it is measuring."""
+    m = re.search(re.escape(name) + r':([^;]*);', rule)
+    return [float(a) for a in re.findall(r'rgba\(\d+,\d+,\d+,([\d.]+)\)', m.group(1))] if m else []
+
+def mid_of(g1, g2):
+    return '#%02X%02X%02X' % tuple(round((rgb(g1)[i] + rgb(g2)[i]) / 2) for i in range(3))
+
+rail_rules = re.findall(r'\.ez-rail\{[^}]*\}', cssz)
+
+if not missing and len(rail_rules) >= 2:
     for gi, (g1, g2) in enumerate(grounds[:2]):
         th = 'light' if gi == 0 else 'dark'
-        worst = g1 if L(g1) > L(g2) else g2      # lightest stop = worst for light ink
-        for name in ('item label', 'icon', 'section label'):
+        rule = rail_rules[0] if gi == 0 else rail_rules[1]
+        # A LABEL DOES NOT SIT ON THE RAIL. It sits on the row, which is
+        # lighter than the rail — so measuring against the rail flatters
+        # every ink figure and would pass a label that is illegible on the
+        # button it is actually printed on. Worst case is the row's TOP
+        # stop, the lightest thing under any of this text.
+        a_row = alphas_of(rule, '--r-row')
+        a_bnd = alphas_of(rule, '--r-band')
+        if not a_row or not a_bnd:
+            check('%-5s row and band alphas parse' % th, False, str((a_row, a_bnd)))
+            continue
+        m       = mid_of(g1, g2)
+        row_top = over(max(a_row), (255, 255, 255), m)   # lightest row pixel
+        band    = over(min(a_bnd), (0, 0, 0), m)         # lightest band pixel
+        for name, ground, where in (('item label', row_top, 'the row'),
+                                    ('icon',       row_top, 'the row'),
+                                    ('section label', band, 'the band')):
             bar = 3.0 if name == 'icon' else 4.5
-            r = cr(INKS[name], worst)
-            check('%-5s %s on the rail >= %.1f' % (th, name, bar), r >= bar, '%.2f' % r)
+            r = cr(INKS[name], ground)
+            check('%-5s %-13s on %-9s >= %.1f' % (th, name, where, bar), r >= bar, '%.2f' % r)
+        # The icon passed its 3:1 graphics bar at 3.27 while still looking
+        # switched off, because a floor says legible and says nothing about
+        # dull. What actually broke was the RELATIONSHIP: an icon markedly
+        # dimmer than the label beside it reads as a disabled row. Held to
+        # within a stop of the label rather than to an absolute number.
+        r_lab, r_ico = cr(INKS['item label'], row_top), cr(INKS['icon'], row_top)
+        check('%-5s the icon is not dimmer than its own label' % th,
+              r_ico >= r_lab * 0.75, 'icon %.2f vs label %.2f' % (r_ico, r_lab))
+
+        # Hover swaps the label to white and brightens the fill underneath
+        # it at the same time — the one place where making a row livelier
+        # can quietly cost legibility.
+        a_hov = alphas_of(rule, '--r-row-h')
+        if a_hov:
+            hov = over(max(a_hov), (255, 255, 255), m)
+            r = cr('#FFFFFF', hov)
+            check('%-5s white label on a HOVERED row >= 4.5' % th, r >= 4.5, '%.2f' % r)
     # the selected row is a WHITE pill; its ink sits on white, not on the rail
     r = cr(INKS['selected ink'], '#FFFFFF')
     check('selected ink on the white pill >= 4.5', r >= 4.5, '%.2f' % r)
@@ -130,20 +179,11 @@ if not missing:
 nav_rule  = re.search(r'\.ez-nav\{[^}]*\}', cssz)
 head_rule = re.search(r'\.ez-group-head\{[^}]*\}', cssz)
 
-def over(alpha, fg, ground):
-    """fg at `alpha` composited onto a #rrggbb ground -> #rrggbb."""
-    g = rgb(ground)
-    return '#%02X%02X%02X' % tuple(round(fg[i]*alpha + g[i]*(1-alpha)) for i in range(3))
-
-def alpha_of(rule, name):
-    m = re.search(re.escape(name) + r':rgba\(\d+,\d+,\d+,([\d.]+)\)', rule)
-    return float(m.group(1)) if m else None
-
 # The light values live on .ez-rail; the dark ones on the two overrides. Both
 # dark spellings must exist — data-ez-theme="dark" AND the unstamped default
 # under prefers-color-scheme, or one of the three theme states is left wrong.
-rail_light = re.search(r'\.ez-rail\{[^}]*\}', cssz)
-rail_dark  = re.findall(r'\.ez-rail\{[^}]*\}', cssz)
+rail_light = rail_rules[0] if rail_rules else None
+rail_dark  = rail_rules
 check('the dark rail is written for BOTH dark states, not just the stamped one',
       cssz.count('--r-band:rgba(0,0,0,') >= 3,
       '%d declarations' % cssz.count('--r-band:rgba(0,0,0,'))
@@ -153,9 +193,13 @@ if rail_light and len(rail_dark) >= 2 and len(grounds) >= 2:
     for gi, (g1, g2) in enumerate(grounds[:2]):
         th   = 'light' if gi == 0 else 'dark'
         rule = rail_dark[0] if gi == 0 else rail_dark[1]
-        a_row  = alpha_of(rule, '--r-row')
-        a_hov  = alpha_of(rule, '--r-row-h')
-        a_band = alpha_of(rule, '--r-band')
+        # Worst case for "does the row clear the rail" is its DARKEST stop;
+        # for "does the band sink below it", the band's lightest.
+        _row, _hov, _bnd = (alphas_of(rule, '--r-row'), alphas_of(rule, '--r-row-h'),
+                            alphas_of(rule, '--r-band'))
+        a_row  = min(_row) if _row else None
+        a_hov  = min(_hov) if _hov else None
+        a_band = min(_bnd) if _bnd else None
         if None in (a_row, a_hov, a_band):
             check('%-5s rail declares all four levels' % th, False, str((a_row, a_hov, a_band)))
             LEVELS_OK = False
@@ -163,7 +207,7 @@ if rail_light and len(rail_dark) >= 2 and len(grounds) >= 2:
         # Measured where the rows actually sit, not at the gradient's extreme:
         # a step taken at the darkest stop overstated separation by 0.2 last
         # time and the middle of the rail is where the eye judges it.
-        mid = '#%02X%02X%02X' % tuple(round((rgb(g1)[i] + rgb(g2)[i]) / 2) for i in range(3))
+        mid = mid_of(g1, g2)
         row  = over(a_row,  (255, 255, 255), mid)
         band = over(a_band, (0, 0, 0),       mid)
         for label, val, floor in (
@@ -192,8 +236,43 @@ check('a section draws the band level and is recessed into the rail',
 # The old failure mode, kept nailed shut: the lift must be WHITE-over-blue,
 # never an opaque pale fill. An opaque row is a card again, and a card is
 # what put light chrome on a light ground in the first place.
+# ── the row has to look like a BUTTON, not a tinted strip ────────────────
+# "buttons inside section and home button without selection look very dull."
+# A flat wash at one alpha separates from the rail on paper and still reads
+# as nothing, because a surface is recognised by the light falling across it
+# rather than by its mean brightness. These four are what supply that, and
+# none of them costs a point of contrast — which matters, because the fill
+# itself is capped by the label: past ~.24 at the top stop the ink drops
+# under 4.5:1, so brightness is the one lever NOT available here.
+_nav = nav_rule.group(0) if nav_rule else ''
+check('the row is shaded top-to-bottom, not a flat wash',
+      bool(rail_light) and 'linear-gradient(180deg' in re.search(r'--r-row:[^;]*;', rail_light).group(0)
+      and len(alphas_of(rail_light, '--r-row')) >= 2)
+check('the top edge catches a specular highlight',
+      'box-shadow:inset0 1px0rgba(255,255,255,'.replace(' ', '') in _nav
+      or re.search(r'inset0 1px0rgba\(255,255,255,\.(1[5-9]|[2-9]\d)\)'.replace(' ', ''), _nav) is not None)
+check('the row casts a contact shadow onto the rail',
+      re.search(r'0 1px2pxrgba\('.replace(' ', ''), _nav) is not None
+      and re.search(r'0 3px7px-3pxrgba\('.replace(' ', ''), _nav) is not None)
+check('lit from above: bright top border, dark bottom border',
+      'border-top-color:rgba(255,255,255,' in _nav
+      and 'border-bottom-color:rgba(0,0,0,' in _nav)
+# A button that does not move under the pointer is the other half of dull.
+_act = re.search(r'\.ez-nav:active\{[^}]*\}', cssz)
+check('the row presses in when clicked',
+      bool(_act) and 'transform:translateY(1px)' in _act.group(0)
+      and 'box-shadow:inset' in _act.group(0))
+# Hover must not buy its visibility from the fill alone — that is what pushed
+# the top stop to .32 and put the white label at 4.28.
+_hov = re.search(r'\.ez-nav:hover\{[^}]*\}', cssz)
+check('hover brightens the rim and the lift, not just the fill',
+      bool(_hov) and 'border-top-color:' in _hov.group(0) and 'box-shadow:' in _hov.group(0))
+
 check('the row level is translucent white, not an opaque pale fill',
-      bool(rail_light) and '--r-row:rgba(255,255,255,' in rail_light.group(0))
+      bool(rail_light)
+      and re.search(r'--r-row:[^;]*;', rail_light)
+      and not re.search(r'--r-row:[^;]*#[0-9A-Fa-f]{3,6}', rail_light)
+      and 'rgba(255,255,255,' in re.search(r'--r-row:[^;]*;', rail_light).group(0))
 check('the selected pill wipes in rather than popping',
       'ezWipe' in cssz and 'transform-origin:leftcenter' in cssz
       and 'ezPop' not in cssz)
