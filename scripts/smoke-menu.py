@@ -110,6 +110,24 @@ def alphas_of(rule, name):
 def mid_of(g1, g2):
     return '#%02X%02X%02X' % tuple(round((rgb(g1)[i] + rgb(g2)[i]) / 2) for i in range(3))
 
+def tint_of(rule, name, fallback=(255, 255, 255)):
+    """The colour a level is painted in. Not assumable: the row lift was
+       white for several revisions and is now a blue, and every figure in
+       this file is wrong if it composites the wrong one."""
+    m = re.search(re.escape(name) + r':[^;]*?rgba\((\d+),(\d+),(\d+),', rule)
+    return tuple(int(x) for x in m.groups()) if m else fallback
+
+def level(rule, name, ground, stop='light'):
+    """A level's painted colour on `ground`. stop='light' takes the alpha
+       that lands lightest, 'dark' the one that lands darkest — the caller
+       picks whichever is the worst case for what it is measuring."""
+    a = alphas_of(rule, name)
+    if not a: return None
+    t = tint_of(rule, name)
+    lift = sum(t) > 382                      # a light tint lightens, black darkens
+    pick = max(a) if (stop == 'light') == lift else min(a)
+    return over(pick, t, ground)
+
 rail_rules = re.findall(r'\.ez-rail\{[^}]*\}', cssz)
 
 if not missing and len(rail_rules) >= 2:
@@ -121,14 +139,12 @@ if not missing and len(rail_rules) >= 2:
         # every ink figure and would pass a label that is illegible on the
         # button it is actually printed on. Worst case is the row's TOP
         # stop, the lightest thing under any of this text.
-        a_row = alphas_of(rule, '--r-row')
-        a_bnd = alphas_of(rule, '--r-band')
-        if not a_row or not a_bnd:
-            check('%-5s row and band alphas parse' % th, False, str((a_row, a_bnd)))
-            continue
         m       = mid_of(g1, g2)
-        row_top = over(max(a_row), (255, 255, 255), m)   # lightest row pixel
-        band    = over(min(a_bnd), (0, 0, 0), m)         # lightest band pixel
+        row_top = level(rule, '--r-row',  m, 'light')    # lightest row pixel
+        band    = level(rule, '--r-band', m, 'light')    # lightest band pixel
+        if not row_top or not band:
+            check('%-5s row and band levels parse' % th, False)
+            continue
         for name, ground, where in (('item label', row_top, 'the row'),
                                     ('icon',       row_top, 'the row'),
                                     ('section label', band, 'the band')):
@@ -147,9 +163,8 @@ if not missing and len(rail_rules) >= 2:
         # Hover swaps the label to white and brightens the fill underneath
         # it at the same time — the one place where making a row livelier
         # can quietly cost legibility.
-        a_hov = alphas_of(rule, '--r-row-h')
-        if a_hov:
-            hov = over(max(a_hov), (255, 255, 255), m)
+        hov = level(rule, '--r-row-h', m, 'light')
+        if hov:
             r = cr('#FFFFFF', hov)
             check('%-5s white label on a HOVERED row >= 4.5' % th, r >= 4.5, '%.2f' % r)
     # the selected row is a WHITE pill; its ink sits on white, not on the rail
@@ -207,14 +222,15 @@ if rail_light and len(rail_dark) >= 2 and len(grounds) >= 2:
         # Measured where the rows actually sit, not at the gradient's extreme:
         # a step taken at the darkest stop overstated separation by 0.2 last
         # time and the middle of the rail is where the eye judges it.
-        mid = mid_of(g1, g2)
-        row  = over(a_row,  (255, 255, 255), mid)
-        band = over(a_band, (0, 0, 0),       mid)
+        mid  = mid_of(g1, g2)
+        row  = level(rule, '--r-row',  mid, 'dark')   # darkest row pixel
+        band = level(rule, '--r-band', mid, 'light')  # lightest band pixel
         for label, val, floor in (
             ('row sits above the rail',      cr(row,  mid),  1.15),
             ('band sits below the rail',     cr(band, mid),  1.15),
             ('row and band are told apart',  cr(row,  band), 1.30),
-            ('the pill outranks a row',      cr('#FFFFFF', row), 2.00),
+            ('the pill outranks a row',
+             cr('#FFFFFF', level(rule, '--r-row', mid, 'light')), 2.00),
         ):
             ok = val >= floor
             LEVELS_OK &= ok
@@ -268,11 +284,40 @@ _hov = re.search(r'\.ez-nav:hover\{[^}]*\}', cssz)
 check('hover brightens the rim and the lift, not just the fill',
       bool(_hov) and 'border-top-color:' in _hov.group(0) and 'box-shadow:' in _hov.group(0))
 
-check('the row level is translucent white, not an opaque pale fill',
+# THE ROW MUST KEEP THE RAIL'S COLOUR, NOT WASH IT OUT.
+# The lift used to be white, and white over a saturated ground does not
+# lighten it — it greys it. At .24 the row held 53% of the rail's
+# saturation, and that desaturation, not the brightness, is what read as a
+# dull muddy colour. Every contrast figure in this file passed the whole
+# time; none of them can see chroma, which is why this check exists.
+def sat(h):
+    r, g, b = [v / 255 for v in rgb(h)]
+    hi, lo = max(r, g, b), min(r, g, b)
+    if hi == lo: return 0.0
+    l = (hi + lo) / 2
+    return (hi - lo) / (2 - hi - lo) if l > .5 else (hi - lo) / (hi + lo)
+
+if rail_rules and len(grounds) >= 2:
+    for gi, (g1, g2) in enumerate(grounds[:2]):
+        th   = 'light' if gi == 0 else 'dark'
+        rule = rail_rules[0] if gi == 0 else rail_rules[1]
+        ground = mid_of(g1, g2)
+        row = level(rule, '--r-row', ground, 'light')
+        if not row:
+            check('%-5s the row tint parses' % th, False)
+            continue
+        keep = sat(row) / sat(ground) if sat(ground) else 0
+        check('%-5s the row keeps the rail\'s colour (>= 75%% saturation)' % th,
+              keep >= .75, '%d%% (%s on %s)' % (round(keep * 100), row, ground))
+
+# Translucent, so the row composites over the gradient instead of flattening
+# it — and never an opaque fill, which is the light-card-on-a-light-ground
+# problem this whole design exists to avoid.
+check('the row level is translucent, not an opaque fill',
       bool(rail_light)
       and re.search(r'--r-row:[^;]*;', rail_light)
       and not re.search(r'--r-row:[^;]*#[0-9A-Fa-f]{3,6}', rail_light)
-      and 'rgba(255,255,255,' in re.search(r'--r-row:[^;]*;', rail_light).group(0))
+      and all(x < 1 for x in alphas_of(rail_light, '--r-row')))
 check('the selected pill wipes in rather than popping',
       'ezWipe' in cssz and 'transform-origin:leftcenter' in cssz
       and 'ezPop' not in cssz)
