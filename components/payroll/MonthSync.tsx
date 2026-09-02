@@ -4,6 +4,7 @@
 // bank / CTC / salary + days_in_month) via sync_payroll_month — WITHOUT touching the
 // attendance columns. Useful after CTC revisions / master edits once a month already exists.
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 import { loadRuns, loadRunsForPeriod, prevPeriod, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { loadMonthDiff, buildChangeSheets, type MonthDiff } from '@/lib/payroll/monthDiff'
@@ -218,11 +219,11 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
 // Pressing a category's Sync opens this: the month's employees, one checkbox each,
 // with the count of what is about to be written shown on the button itself.
 //
-// It replaces the old always-on filter bar. That bar narrowed every category at once
-// and stayed narrowed, so the answer to "who does this button touch?" lived somewhere
-// other than the button — and a filter left on from an hour ago silently shrank the
-// next sync. Choosing at the moment of pressing is the only time the question is
-// actually being asked.
+// Rendered through a PORTAL onto document.body, not in place. The payroll page sits
+// under transform-animated wrappers (PageTransition, the sidebar's motion CSS), and a
+// transformed ancestor becomes the containing block for position:fixed — so drawn in
+// place, this overlay anchored itself to the page instead of the viewport and ran off
+// the screen. On body there is no transformed ancestor to catch it.
 //
 // Everyone starts ticked, because syncing the whole month is the normal case and
 // hand-picking 300 boxes to get there is not a choice anyone would make. Untick the
@@ -241,6 +242,22 @@ function EmployeePicker({ cat, pool, busy, onCancel, onConfirm }: {
   const [location, setLocation] = useState('')
   const [search, setSearch] = useState('')
   const [sel, setSel] = useState<Set<string>>(() => new Set(pool.map(e => e.code)))
+  // Portals need the DOM; render nothing during SSR/first paint.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
+  // The page behind must not scroll while the dialog is up — half the "broken UI"
+  // reading was the list and the page scrolling as one.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
 
   const companies = Array.from(new Set(pool.map(e => e.company).filter(Boolean))).sort()
   const locations = Array.from(new Set(pool.map(e => e.location).filter(Boolean))).sort()
@@ -273,108 +290,139 @@ function EmployeePicker({ cat, pool, busy, onCancel, onConfirm }: {
 
   const chosen = pool.filter(e => sel.has(e.code)).map(e => e.code)
   // Everyone ticked means "the whole month", which is what p_codes NULL already says
-  // to every sync function. Sending 300 codes instead would be the same query with a
-  // needless array, and would stop the server treating it as an unfiltered run.
+  // to every sync function.
   const codesForRpc = chosen.length === pool.length ? null : chosen
 
   const inp: React.CSSProperties = {
-    padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12,
-    background: TK.surface, color: C.navy, fontFamily: font, outline: 'none',
+    padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12.5,
+    background: TK.sunken, color: C.navy, fontFamily: font, outline: 'none', boxSizing: 'border-box',
   }
+  const initials = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
 
-  return (
+  if (!mounted) return null
+  return createPortal(
     <div onClick={onCancel} style={{
-      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 200,
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.52)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+      backdropFilter: 'blur(2px)', fontFamily: font,
     }}>
-      <div onClick={e => e.stopPropagation()} style={{
-        background: TK.surface, borderRadius: 16, width: 'min(720px, 100%)', maxHeight: '86vh',
-        display: 'flex', flexDirection: 'column', boxShadow: '0 18px 50px rgba(15,23,42,0.28)',
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{
+        background: TK.surface, borderRadius: 18, width: 'min(680px, 100%)',
+        height: 'min(640px, calc(100vh - 48px))',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 24px 64px rgba(15,23,42,0.32), 0 4px 16px rgba(15,23,42,0.14)',
       }}>
-        <div style={{ padding: '16px 18px 12px', borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 18 }}>{cat.icon}</span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>Sync {cat.label}</div>
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-                Choose whose {cat.label.toLowerCase()} should be refreshed from HRMS into this month.
-              </div>
+
+        {/* ── header ── */}
+        <div style={{ padding: '16px 20px 14px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{cat.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: C.navy }}>Sync {cat.label}</div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 1 }}>Choose whose {cat.label.toLowerCase()} to refresh from HRMS into this month.</div>
             </div>
-            <button onClick={onCancel} style={{ border: 'none', background: 'none', fontSize: 20, color: C.muted, cursor: 'pointer', lineHeight: 1 }}>×</button>
+            <button onClick={onCancel} aria-label="Close" style={{
+              width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface,
+              color: C.muted, fontSize: 15, cursor: 'pointer', lineHeight: 1, flexShrink: 0,
+            }}>✕</button>
           </div>
 
-          <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', marginTop: 12 }}>
+          <div style={{ display: 'flex', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
             {companies.length > 1 && (
-              <div>
-                <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Company</label>
-                <select style={{ ...inp, minWidth: 160 }} value={company} onChange={e => setCompany(e.target.value)}>
-                  <option value="">All companies</option>
-                  {companies.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
+              <select style={{ ...inp, flex: '0 1 170px' }} value={company} onChange={e => setCompany(e.target.value)}>
+                <option value="">All companies</option>
+                {companies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             )}
-            <div>
-              <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Location</label>
-              <select style={{ ...inp, minWidth: 140 }} value={location} onChange={e => setLocation(e.target.value)}>
+            {locations.length > 1 && (
+              <select style={{ ...inp, flex: '0 1 150px' }} value={location} onChange={e => setLocation(e.target.value)}>
                 <option value="">All locations</option>
                 {locations.map(l => <option key={l} value={l}>{l}</option>)}
               </select>
-            </div>
-            <div style={{ flex: 1, minWidth: 200 }}>
-              <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Search — paste a list of emp codes too</label>
-              <input style={{ ...inp, width: '100%' }} value={search} onChange={e => setSearch(e.target.value)}
-                placeholder="SRS0003, SRS0011   or   umesh" />
-            </div>
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, fontSize: 11, flexWrap: 'wrap' }}>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 700, color: C.purpleD }}>
-              <input type="checkbox" checked={allVisibleOn} onChange={e => setMany(visibleCodes, e.target.checked)}
-                style={{ accentColor: C.purple, cursor: 'pointer' }} />
-              Select all {visible.length === pool.length ? '' : `${visible.length} shown`}
-            </label>
-            <button onClick={() => setSel(new Set())} style={{ border: 'none', background: 'none', color: TK.critical, fontSize: 11, fontWeight: 700, fontFamily: font, cursor: 'pointer', padding: 0 }}>Clear all</button>
-            <div style={{ flex: 1 }} />
-            <span style={{ color: C.muted }}>{visible.length} shown of {pool.length}</span>
+            )}
+            <input style={{ ...inp, flex: '1 1 180px', minWidth: 150 }} value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="🔍  Name, emp code — or paste a list" />
           </div>
         </div>
 
-        <div style={{ overflowY: 'auto', flex: 1, padding: '4px 8px' }}>
-          {visible.length === 0 && (
-            <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: C.muted }}>Nobody matches this search.</div>
-          )}
-          {visible.map(e => (
-            <label key={e.code} style={{
-              display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 8,
-              cursor: 'pointer', background: sel.has(e.code) ? C.purpleBg : 'transparent',
-            }}>
-              <input type="checkbox" checked={sel.has(e.code)} onChange={() => toggle(e.code)}
-                style={{ accentColor: C.purple, cursor: 'pointer' }} />
-              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, color: C.purpleD, minWidth: 82 }}>{e.code}</span>
-              <span style={{ fontSize: 12, color: C.navy, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
-              <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>{e.location}</span>
-            </label>
-          ))}
+        {/* ── select-all bar ── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px',
+          background: TK.sunken, borderBottom: `1px solid ${C.border}`, fontSize: 12, flexShrink: 0,
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontWeight: 700, color: C.purpleD, userSelect: 'none' }}>
+            <input type="checkbox" checked={allVisibleOn} onChange={e => setMany(visibleCodes, e.target.checked)}
+              style={{ width: 15, height: 15, accentColor: C.purple, cursor: 'pointer' }} />
+            {allVisibleOn ? 'Unselect' : 'Select'} {visible.length === pool.length ? 'all' : `these ${visible.length}`}
+          </label>
+          <button onClick={() => setSel(new Set())}
+            style={{ border: 'none', background: 'none', color: TK.critical, fontSize: 11.5, fontWeight: 700, fontFamily: font, cursor: 'pointer', padding: 0 }}>
+            Clear all
+          </button>
+          <span style={{ marginLeft: 'auto', color: C.muted }}>
+            {visible.length === pool.length ? `${pool.length} employees` : `${visible.length} of ${pool.length} shown`}
+          </span>
         </div>
 
-        <div style={{ padding: '12px 18px', borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ flex: 1, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+        {/* ── list — the ONLY thing that scrolls ── */}
+        <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '6px 10px' }}>
+          {visible.length === 0 ? (
+            <div style={{ padding: '48px 20px', textAlign: 'center', color: C.muted, fontSize: 12.5 }}>
+              <div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>
+              Nobody matches this search.
+            </div>
+          ) : visible.map(e => {
+            const on = sel.has(e.code)
+            return (
+              <label key={e.code} style={{
+                display: 'flex', alignItems: 'center', gap: 11, padding: '7px 10px', borderRadius: 10,
+                cursor: 'pointer', background: on ? C.purpleBg : 'transparent', marginBottom: 1, userSelect: 'none',
+              }}>
+                <input type="checkbox" checked={on} onChange={() => toggle(e.code)}
+                  style={{ width: 15, height: 15, accentColor: C.purple, cursor: 'pointer', flexShrink: 0 }} />
+                <span style={{
+                  width: 28, height: 28, borderRadius: '50%', background: on ? C.purple : TK.sunken,
+                  color: on ? TK.onAccent : C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 700, flexShrink: 0,
+                }}>{initials(e.name)}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name || '—'}</span>
+                  <span style={{ display: 'block', fontSize: 10.5, color: C.muted, fontFamily: 'ui-monospace, monospace' }}>{e.code}</span>
+                </span>
+                {e.location && <span style={{ fontSize: 10.5, color: C.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>{e.location}</span>}
+                {e.company && <span style={{ fontSize: 10, fontWeight: 600, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '2px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>{e.company}</span>}
+              </label>
+            )
+          })}
+        </div>
+
+        {/* ── footer ── */}
+        <div style={{
+          padding: '13px 20px', borderTop: `1px solid ${C.border}`, background: TK.surface,
+          display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+        }}>
+          <div style={{ flex: 1, fontSize: 11.5, color: C.muted, lineHeight: 1.5, minWidth: 0 }}>
             {chosen.length === 0
-              ? <b style={{ color: TK.critical }}>Nobody selected — there is nothing to sync.</b>
-              : <>Writing <b style={{ color: C.navy }}>{chosen.length}</b> of {pool.length} employees. Only <b>{cat.label}</b> columns change; every other category stays as frozen.</>}
+              ? <b style={{ color: TK.critical }}>Nobody selected — nothing to sync.</b>
+              : <>Writing <b style={{ color: C.navy }}>{chosen.length}</b> of {pool.length}. Only <b>{cat.label}</b> changes; the rest stays frozen.</>}
           </div>
-          <button onClick={onCancel} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onCancel} style={{
+            padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface,
+            color: C.navy, fontWeight: 600, fontSize: 12.5, fontFamily: font, cursor: 'pointer', flexShrink: 0,
+          }}>Cancel</button>
           <button onClick={() => onConfirm(codesForRpc)} disabled={busy || chosen.length === 0}
             style={{
-              padding: '8px 18px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 12, fontFamily: font,
+              padding: '9px 20px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 12.5, fontFamily: font,
               background: busy || chosen.length === 0 ? TK.brandTint : C.purple, color: TK.onAccent,
-              cursor: busy || chosen.length === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+              cursor: busy || chosen.length === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+              boxShadow: busy || chosen.length === 0 ? 'none' : '0 3px 10px rgba(37,99,235,0.25)',
             }}>
             {busy ? 'Syncing…' : `Sync ${chosen.length} employee${chosen.length === 1 ? '' : 's'}`}
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
