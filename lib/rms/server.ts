@@ -251,11 +251,15 @@ export interface OrgTreeNode {
 /** The whole company as one flat, parent-linked list — the org chart lays
  *  this out client-side rather than asking the database once per node. */
 export async function orgTreeFor(companyId: string): Promise<OrgTreeNode[]> {
-  const { data, error } = await sb
+  // 'ALL' = every company in one list. The chart page already builds a FOREST —
+  // one root per top of chain — so three companies simply render as three trees
+  // side by side, exactly as one company with two roots always has.
+  let q = sb
     .from('v_org_tree')
     .select('id, company_id, emp_code, full_name, designation, department, grade, l1_manager_id, depth, direct_reports, is_hod')
-    .eq('company_id', companyId)
     .order('depth')
+  if (companyId !== 'ALL') q = q.eq('company_id', companyId)
+  const { data, error } = await q
   if (error) return []
   return (data || []).map((r: any) => ({
     id: r.id, companyId: r.company_id, empCode: r.emp_code, fullName: r.full_name,

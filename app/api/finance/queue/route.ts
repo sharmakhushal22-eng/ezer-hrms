@@ -34,7 +34,10 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'company_id is required' }, { status: 400 });
     }
 
-    let q = sb.from('finance_work_items').select('*').eq('company_id', companyId);
+    // 'ALL' = the whole group. An explicit token rather than an absent parameter, so
+    // a caller that forgot the id still gets the 400 above.
+    let q = sb.from('finance_work_items').select('*');
+    if (companyId !== 'ALL') q = q.eq('company_id', companyId);
     const mod = p.get('module');
     const status = p.get('status') ?? 'PENDING';
     if (mod) q = q.eq('module_code', mod);

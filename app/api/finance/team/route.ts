@@ -21,10 +21,18 @@ export async function GET(req: NextRequest) {
     const companyId = req.nextUrl.searchParams.get('company_id');
     if (!companyId) return NextResponse.json({ error: 'company_id is required' }, { status: 400 });
 
-    const { data: team, error } = await sb
-      .from('finance_team').select('*').eq('company_id', companyId)
-      .order('role').order('created_at');
+    let tq = sb.from('finance_team').select('*').order('role').order('created_at');
+    // 'ALL' = every company's team in one list. The PATCH authority check already
+    // looks a member up by employee_id alone, so the acting-as list can span
+    // companies without changing what anyone is allowed to do.
+    if (companyId !== 'ALL') tq = tq.eq('company_id', companyId);
+    const { data: teamRaw, error } = await tq;
     if (error) throw error;
+    // One row per person on ALL — the same head of finance on three companies is
+    // one person in the acting-as dropdown, not three entries.
+    const team = companyId === 'ALL'
+      ? Array.from(new Map((teamRaw ?? []).map((t) => [t.employee_id, t])).values())
+      : teamRaw;
 
     const ids = (team ?? []).map((t) => t.employee_id);
     const { data: emps } = ids.length

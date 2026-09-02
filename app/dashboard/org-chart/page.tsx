@@ -259,10 +259,10 @@ export default function OrgChartPage() {
   }, [])
 
   const load = useCallback(async () => {
-    if (!companyId) return
     setLoading(true)
     const token = await authToken()
-    const res = await fetch(`/api/rms/orgchart?company_id=${companyId}`, {
+    // '' = All companies → the API's explicit ALL token; the forest gets one tree per company.
+    const res = await fetch(`/api/rms/orgchart?company_id=${companyId || 'ALL'}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}, cache: 'no-store',
     }).then(r => r.json()).catch(() => ({ tree: [] }))
     const tree: OrgTreeNode[] = res.tree || []
@@ -315,7 +315,7 @@ export default function OrgChartPage() {
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
       const { default: html2canvas } = await import('html2canvas')
       const canvas = await html2canvas(wrap, { backgroundColor: P.page, scale: 2, useCORS: true })
-      const companyName = companies.find(c => c.id === companyId)?.company_name || 'company'
+      const companyName = companies.find(c => c.id === companyId)?.company_name || 'All_companies'
       const safeName = companyName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
       const link = document.createElement('a')
       link.download = `org-chart-${safeName}.jpg`
@@ -328,7 +328,9 @@ export default function OrgChartPage() {
   }, [companies, companyId, downloading])
 
   useEffect(() => {
-    if (!showDiag || !companyId) return
+    if (!showDiag) return
+    // On All companies the params go up empty, which both diagnostic RPCs already
+    // read as "no company filter" — so the panels cover the whole group.
     setDiagLoading(true)
     authToken().then(token => Promise.all([
       fetch(`/api/rms/orgchart?view=orphans&company_id=${companyId}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }).then(r => r.json()),
@@ -381,6 +383,7 @@ export default function OrgChartPage() {
       <div style={{ background: P.card, border: `1px solid ${P.border}`, borderRadius: 12, padding: '10px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 1px 4px rgba(124,58,237,0.05)' }}>
         <select value={companyId} onChange={e => setCompanyId(e.target.value)}
           style={{ padding: '7px 10px', borderRadius: 7, border: `1px solid ${P.border}`, fontSize: 12, background: '#FAFAFE', color: P.text, fontFamily: font }}>
+          <option value="">All companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
         </select>
 
