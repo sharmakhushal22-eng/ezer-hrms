@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- 076_hr_executive_role.sql — the HR bench gets its own role, and gets assigned.
+-- 083_hr_executive_role.sql — the HR bench gets its own role, and gets assigned.
 --
 -- THE PROBLEM
 -- 075 wrote the module grid, but only NINE of 398 employees hold any role at all

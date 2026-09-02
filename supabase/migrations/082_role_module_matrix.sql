@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════════════
--- 075_role_module_matrix.sql — which modules each role opens.
+-- 082_role_module_matrix.sql — which modules each role opens.
 --
 -- The ESS sidebar now shows an employee the admin modules their roles grant, so
 -- an HR or payroll person works entirely inside their own portal. That makes
