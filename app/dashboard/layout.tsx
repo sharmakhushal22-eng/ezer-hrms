@@ -450,11 +450,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            fades, not a movement.
 
            Measured at the rail's lightest point, which is the worst case:
-             item label     7.50    section label 4.75
+             item label     5.58 (on a raised row)   section 7.95 (recessed)
              icon           5.37    selected ink  8.72 (on the white pill)
         */
         .ez-rail{
           background: linear-gradient(180deg, #1E40AF 0%, #16307E 100%);
+          /* FOUR LEVELS, all blue, so nothing has to blend into anything.
+             A dark ground makes this possible: a row can sit ABOVE it and a
+             section BELOW it, which a pale ground could never do — there,
+             everything had to be lighter than everything else and the levels
+             ran out. Steps measured against the rail's lightest stop:
+                 section  1.37 below      row  1.34 above
+                 pill     8.83 above (white — not a step, a different thing) */
+          --r-row:   rgba(255,255,255,.12);
+          --r-row-h: rgba(255,255,255,.20);
+          --r-band:  rgba(0,0,0,.26);
+          --r-edge:  rgba(255,255,255,.14);
           /* Everything inside the rail inherits these — the brand mark, the
              footer, the sign-out row. Without redefining them here, those
              would still be drawing near-black ink on a deep blue ground. */
@@ -469,33 +480,49 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
         @media (prefers-color-scheme: dark){
           :root:not([data-ez-theme="light"]) .ez-rail{
-            background: linear-gradient(180deg, #122A63 0%, #0A1740 100%);
+            background: linear-gradient(180deg, #193977 0%, #0F2356 100%);
+            --r-row:   rgba(255,255,255,.12);
+            --r-row-h: rgba(255,255,255,.20);
+            --r-band:  rgba(0,0,0,.38);
+            --r-edge:  rgba(255,255,255,.11);
           }
         }
         :root[data-ez-theme="dark"] .ez-rail{
-          background: linear-gradient(180deg, #122A63 0%, #0A1740 100%);
+          background: linear-gradient(180deg, #193977 0%, #0F2356 100%);
+          --r-row:   rgba(255,255,255,.12);
+          --r-row-h: rgba(255,255,255,.20);
+          --r-band:  rgba(0,0,0,.38);
+          --r-edge:  rgba(255,255,255,.11);
         }
 
-        /* ── A row is text on the rail, not a card ─────────────────────
-           No border, no background, no shadow at rest. The only thing that
-           ever fills is the selected pill. */
+        /* ── A row sits ABOVE the rail; a section sits BELOW it ────────
+           Bare text on the rail was as flat as a card the colour of its own
+           ground — the same blending complaint, from the other direction.
+           A dark ground is what fixes it: white at 12% lifts a row off the
+           rail, black at 26/38% presses a section into it, and the selected
+           pill goes fully white on top. Four levels, one hue. */
         .ez-nav{
           position:relative; border-radius:9px;
-          color:#DCE6F9;
-          background:transparent; border:none; box-shadow:none;
-          transition: color .18s ease;
+          color:#E8EEFB;
+          /* Raised off the rail so a row reads as a button at rest. The
+             previous pass removed this entirely and rows became bare text on
+             the ground — which is the blending being fixed here. */
+          background: var(--r-row);
+          border:1px solid var(--r-edge);
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.07);
+          transition: color .18s ease, background .18s ease, border-color .18s ease;
           isolation:isolate;
         }
         /* The fill is a pseudo-element so it can wipe independently of the
            text, which stays put. */
         .ez-nav::before{
           content:''; position:absolute; inset:0; border-radius:inherit;
-          background: rgba(255,255,255,.10);
+          background: var(--r-row-h);
           transform: scaleX(0); transform-origin: left center;
           transition: transform .22s cubic-bezier(.2,.8,.2,1);
           z-index:-1;
         }
-        .ez-nav:hover{ color:#FFFFFF }
+        .ez-nav:hover{ color:#FFFFFF; border-color: rgba(255,255,255,.30) }
         .ez-nav:hover::before{ transform: scaleX(1) }
         .ez-nav:active::before{ background: rgba(255,255,255,.16) }
         .ez-nav:focus-visible{ outline:2px solid #FFFFFF; outline-offset:-2px }
@@ -550,22 +577,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         .ez-group-head{
           position:relative; display:flex; align-items:center; gap:8px;
           padding:7px 10px 6px; margin:16px 0 4px; white-space:nowrap; flex-shrink:0;
-          width:100%; border:none; background:transparent; font:inherit;
+          width:100%; border:none; font:inherit;
+          /* Recessed BELOW the rail — the opposite direction from the rows,
+             so a section can never be mistaken for one. */
+          background: var(--r-band);
+          box-shadow: inset 0 1px 2px rgba(0,0,0,.22);
           cursor:pointer; text-align:left; border-radius:8px;
           -webkit-tap-highlight-color:transparent;
           transition: background .18s ease;
         }
-        .ez-group-head:hover{ background: rgba(255,255,255,.08) }
+        .ez-group-head:hover{ background: rgba(0,0,0,.34) }
         .ez-group-head:focus-visible{ outline:2px solid #FFFFFF; outline-offset:-2px }
         /* A hairline ABOVE the label, stopping short of the label itself —
            it separates the groups without boxing them. */
         .ez-group-head::before{
           content:''; position:absolute; left:10px; right:10px; top:-8px; height:1px;
-          background: rgba(255,255,255,.14);
+          background: var(--r-edge);
         }
         .ez-group-name{
           font-size:${F.micro}px; font-weight:${W.bold}; letter-spacing:.14em;
-          text-transform:uppercase; color:#A9C0EC;
+          text-transform:uppercase; color:#C3D4F2;
           overflow:hidden; text-overflow:ellipsis; transition:color .18s ease;
         }
         .ez-group-head:hover .ez-group-name{ color:#FFFFFF }

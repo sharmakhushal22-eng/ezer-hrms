@@ -109,17 +109,91 @@ if not missing:
     check('the pill is white, so it cannot blend into a blue rail',
           'background:#FFFFFF' in cssz.replace('background:#ffffff', 'background:#FFFFFF'))
 
-# ── 4. the inverted design's own premises ─────────────────────────────────
-# A row is text on the rail, NOT a card. Every previous complaint — button vs
-# background, selected vs background, section vs background — came from
-# drawing light cards on a light ground. If card chrome returns to .ez-nav,
-# that whole class of problem returns with it.
-nav_rule = re.search(r'\.ez-nav\{[^}]*\}', cssz)
-check('a resting row has no card chrome',
-      bool(nav_rule)
-      and 'border:none' in nav_rule.group(0)
-      and 'background:transparent' in nav_rule.group(0)
-      and 'box-shadow:none' in nav_rule.group(0))
+# ── 4. the four levels ────────────────────────────────────────────────────
+# "section and button blended with bg." The first inversion answered the
+# light-cards-on-a-light-ground problem by removing ALL surface from a row —
+# which traded one blending complaint for another, because bare text on the
+# rail is exactly as flat as a card the same colour as its ground.
+#
+# The dark ground is what makes the real fix possible: a row can sit ABOVE
+# it and a section BELOW it, which no pale ground could ever do. So the rule
+# is not "no chrome" and not "chrome" — it is that FOUR levels stay ordered:
+#
+#       selected pill   white, opaque      ← brightest
+#       row             white over rail
+#       rail            the gradient
+#       section band    black over rail    ← darkest
+#
+# Asserted by compositing the alphas onto the real gradient stops, because
+# the failure this catches is numeric. Every previous regression here passed
+# a spelling check and still looked wrong.
+nav_rule  = re.search(r'\.ez-nav\{[^}]*\}', cssz)
+head_rule = re.search(r'\.ez-group-head\{[^}]*\}', cssz)
+
+def over(alpha, fg, ground):
+    """fg at `alpha` composited onto a #rrggbb ground -> #rrggbb."""
+    g = rgb(ground)
+    return '#%02X%02X%02X' % tuple(round(fg[i]*alpha + g[i]*(1-alpha)) for i in range(3))
+
+def alpha_of(rule, name):
+    m = re.search(re.escape(name) + r':rgba\(\d+,\d+,\d+,([\d.]+)\)', rule)
+    return float(m.group(1)) if m else None
+
+# The light values live on .ez-rail; the dark ones on the two overrides. Both
+# dark spellings must exist — data-ez-theme="dark" AND the unstamped default
+# under prefers-color-scheme, or one of the three theme states is left wrong.
+rail_light = re.search(r'\.ez-rail\{[^}]*\}', cssz)
+rail_dark  = re.findall(r'\.ez-rail\{[^}]*\}', cssz)
+check('the dark rail is written for BOTH dark states, not just the stamped one',
+      cssz.count('--r-band:rgba(0,0,0,') >= 3,
+      '%d declarations' % cssz.count('--r-band:rgba(0,0,0,'))
+
+LEVELS_OK = True
+if rail_light and len(rail_dark) >= 2 and len(grounds) >= 2:
+    for gi, (g1, g2) in enumerate(grounds[:2]):
+        th   = 'light' if gi == 0 else 'dark'
+        rule = rail_dark[0] if gi == 0 else rail_dark[1]
+        a_row  = alpha_of(rule, '--r-row')
+        a_hov  = alpha_of(rule, '--r-row-h')
+        a_band = alpha_of(rule, '--r-band')
+        if None in (a_row, a_hov, a_band):
+            check('%-5s rail declares all four levels' % th, False, str((a_row, a_hov, a_band)))
+            LEVELS_OK = False
+            continue
+        # Measured where the rows actually sit, not at the gradient's extreme:
+        # a step taken at the darkest stop overstated separation by 0.2 last
+        # time and the middle of the rail is where the eye judges it.
+        mid = '#%02X%02X%02X' % tuple(round((rgb(g1)[i] + rgb(g2)[i]) / 2) for i in range(3))
+        row  = over(a_row,  (255, 255, 255), mid)
+        band = over(a_band, (0, 0, 0),       mid)
+        for label, val, floor in (
+            ('row sits above the rail',      cr(row,  mid),  1.15),
+            ('band sits below the rail',     cr(band, mid),  1.15),
+            ('row and band are told apart',  cr(row,  band), 1.30),
+            ('the pill outranks a row',      cr('#FFFFFF', row), 2.00),
+        ):
+            ok = val >= floor
+            LEVELS_OK &= ok
+            check('%-5s %-30s >= %.2f' % (th, label, floor), ok, '%.2f' % val)
+        check('%-5s hover lifts a row further than rest' % th, a_hov > a_row,
+              '%.2f -> %.2f' % (a_row, a_hov))
+else:
+    check('the rail declares its levels', False)
+    LEVELS_OK = False
+
+# The levels have to be WIRED, not merely declared. A token nobody consumes
+# is the same blended rail with extra CSS in it.
+check('a row draws the row level and its edge',
+      bool(nav_rule) and 'background:var(--r-row)' in nav_rule.group(0)
+      and 'var(--r-edge)' in nav_rule.group(0))
+check('a section draws the band level and is recessed into the rail',
+      bool(head_rule) and 'background:var(--r-band)' in head_rule.group(0)
+      and 'box-shadow:inset' in head_rule.group(0))
+# The old failure mode, kept nailed shut: the lift must be WHITE-over-blue,
+# never an opaque pale fill. An opaque row is a card again, and a card is
+# what put light chrome on a light ground in the first place.
+check('the row level is translucent white, not an opaque pale fill',
+      bool(rail_light) and '--r-row:rgba(255,255,255,' in rail_light.group(0))
 check('the selected pill wipes in rather than popping',
       'ezWipe' in cssz and 'transform-origin:leftcenter' in cssz
       and 'ezPop' not in cssz)
