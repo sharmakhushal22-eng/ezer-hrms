@@ -156,6 +156,23 @@ check('reduced motion also stops the pop',
 check('--ez-rail-item defined in all three theme blocks',
       theme.count('--ez-rail-item') == 3, '%d' % theme.count('--ez-rail-item'))
 
+# ── 4b. nothing inline may overrule the stylesheet ────────────────────────
+# An inline style beats a stylesheet. The label used to set its own colour,
+# so the selected row got --ez-rail-text (NEAR-BLACK in light) printed on the
+# deep blue fill, while every rule and every contrast figure said white. The
+# CSS was right and never applied.
+#
+# Checked as source, not as pixels, because a harness that renders the markup
+# without the component's inline styles shows the CSS winning — which is
+# exactly how this was missed.
+row = lay[lay.index('function RailItem'):lay.index('function GroupBlock')]
+row_code = '\n'.join(l for l in row.splitlines() if not l.strip().startswith('//'))
+check('the row sets no colour inline — it inherits from the button',
+      not re.search(r'\bcolor:\s*(?!\'inherit\')', row_code),
+      re.search(r'.{0,40}\bcolor:.{0,30}', row_code).group(0) if re.search(r'\bcolor:', row_code) else '')
+check('the row sets no background inline either',
+      not re.search(r'\bbackground(Color)?:', row_code))
+
 # ── 5. the fold ───────────────────────────────────────────────────────────
 head = lay[lay.index('function GroupBlock'):lay.index('const FONT =')]
 check('section heading is a real <button>', '<button type="button" className={`ez-group-head' in head)

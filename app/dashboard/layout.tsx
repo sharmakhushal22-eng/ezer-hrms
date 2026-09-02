@@ -186,7 +186,15 @@ function RailItem({ item, open, active, n }: {
             fontSize: 13.5,
             fontWeight: active ? W.bold : W.semi,
             letterSpacing: '-.005em',
-            color: active ? C.railText : C.railItem,
+            // NO COLOUR HERE — it inherits from the button.
+            //
+            // This used to set `active ? C.railText : C.railItem` inline, and
+            // an inline colour beats the stylesheet. So the selected row got
+            // --ez-rail-text, which is NEAR-BLACK in light mode, printed bold
+            // on the deep blue fill. That is the heavy black-on-blue that kept
+            // coming back: the CSS said white, the inline style overruled it,
+            // and every contrast figure I measured was of the rule that never
+            // applied.
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{item.label}</span>
         )}
