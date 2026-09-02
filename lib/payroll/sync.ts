@@ -26,6 +26,20 @@ export interface SyncCategory {
   countKey?: 'eligible' | 'with_statutory' | 'with_bank' | 'with_salary' | 'with_flexi' | 'with_reject' | 'with_loan' | 'with_decl' | 'with_earnings'
   /** snapshot columns this category owns — the Excel export for the category */
   columns?: string[]
+  /**
+   * False = no Sync button on the Data Sync screen; the row keeps only its Download.
+   *
+   * These are the categories Run Payroll computes itself, in order, every time it runs
+   * (see components/payroll/RunCycle.tsx): earned salary, then EPF/EPS/EDLI, ESIC,
+   * professional tax and LWF off the back of it. Offering them as buttons here invited
+   * a hand-sync that the next Run Payroll would overwrite anyway, and a hand-sync run
+   * out of order — ESIC before earnings, say — reads earned columns that are not there
+   * yet and writes a wrong number that looks like a right one.
+   *
+   * The Download stays, because that is where the EPF, ESIC, PT and LWF registers come
+   * from and those are filed monthly.
+   */
+  syncable?: boolean
 }
 
 // The four Ready categories are the ones with a live source table AND columns frozen
@@ -97,7 +111,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // HRMS; this one multiplies what those already froze — structure × paid_days — and
     // adds whatever the Bulk Uploader posted. So it runs LAST, and running it again
     // after an attendance correction is the normal way to refresh the month's numbers.
-    key: 'earnings', label: 'Earned salary', icon: '🧮', status: 'ready',
+    key: 'earnings', label: 'Earned salary', icon: '🧮', status: 'ready', syncable: false,
     note: 'Earned amount for the month = frozen structure × paid days, plus Incentive / Variable / Bonus / Buyout and the Parking · Insurance · Canteen deductions from the Bulk Uploader. Employees whose attendance has not arrived keep a blank earned amount — not zero, or somebody would process salary on it.',
     rpc: 'sync_month_earnings', countKey: 'with_earnings',
     columns: [
@@ -117,7 +131,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // Runs after Earned salary and reads its output, so it is second-last in the
     // chain: EPF wages are Earn_Gross − Earn_HRA, which do not exist until the
     // earned columns have been written.
-    key: 'epf', label: 'EPF · EPS · EDLI · Admin', icon: '🏛️', status: 'ready',
+    key: 'epf', label: 'EPF · EPS · EDLI · Admin', icon: '🏛️', status: 'ready', syncable: false,
     note: 'Code of Wages 50% basic floor, then EPF wages (Earn Gross − Earn HRA), the ceiling from each employee’s own pf_gross_limit, EPS capped at ₹1,250, EDLI at ₹75, and admin charges with the establishment’s ₹500 minimum. Every rate comes from epf_config and wage_rules_config — nothing is hardcoded.',
     rpc: 'sync_month_epf', countKey: 'with_earnings',
     columns: [
@@ -135,7 +149,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
   },
   {
     // Reads the earned columns like EPF does, so it runs in the same pass, after them.
-    key: 'esic', label: 'ESIC', icon: '🩺', status: 'ready',
+    key: 'esic', label: 'ESIC', icon: '🩺', status: 'ready', syncable: false,
     note: 'Employee 0.75% and employer 3.25%, rounded up to the next rupee as ESIC requires. ESIC Wages = MAX(earned basic, 50% of earned gross) is always shown; whether the ₹21,000 ceiling is tested on that or on plain gross is set by esic_config.esic_threshold_basis — on this data the two differ by 135 employees, so the row records which basis judged it. The ceiling is tested on the full-month rate rather than the month’s earnings, so leave cannot push somebody in and out; and once covered at any point in a contribution period (Apr–Sep, Oct–Mar) an employee stays covered for the rest of it.',
     rpc: 'sync_month_esic', countKey: 'with_earnings',
     columns: [
@@ -149,7 +163,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'pt', label: 'Professional Tax', icon: '⚖️', status: 'ready',
+    key: 'pt', label: 'Professional Tax', icon: '⚖️', status: 'ready', syncable: false,
     note: 'Each employee’s PT from pt_config — their state, that month’s column, their gross. A month column per month because PT is not flat across the year: Maharashtra charges ₹300 in February, Tamil Nadu bills twice a year and nothing in the other ten months. PT is a fixed monthly amount, so leave never reduces it. States that levy no PT at all carry an explicit ₹0 row, which is why pt_rate_found matters — a zero and an unconfigured state are different answers.',
     rpc: 'sync_month_pt', countKey: 'eligible',
     columns: [
@@ -158,7 +172,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'lwf', label: 'Labour Welfare Fund', icon: '🏛️', status: 'ready',
+    key: 'lwf', label: 'Labour Welfare Fund', icon: '🏛️', status: 'ready', syncable: false,
     note: 'Each employee’s LWF from lwf_config — read off their lwf_state, NOT their PT state: the two differ for 300 of 302 employees here. Most states deduct only in June and December, some only in December, so a ₹0 in April is normal rather than missing. Where the state allows it, someone who left mid-period is exempt. LWF is a flat monthly amount — gross and paid days never affect it.',
     rpc: 'sync_month_lwf', countKey: 'eligible',
     columns: [

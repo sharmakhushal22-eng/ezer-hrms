@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { PDFDocument } from 'pdf-lib'
 import { authToken } from '@/lib/rms/client'
 import { zipStore } from '@/lib/zip-store'
+import { wrapPayslipHtml } from '@/lib/payroll/payslip-html'
 import { combinedFileName, monthLabel } from '@/lib/payroll/payslip'
 import { C as TK } from '@/lib/ui'
 
@@ -104,11 +105,12 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
   const busy = busyOutside || loading || !!progress
   const canGenerate = !!pre && eligible > 0 && !(stale && stale.length) && !busy
 
-  async function generate(mode: 'combined' | 'zip') {
+  async function generate(mode: 'combined' | 'zip' | 'html') {
     if (!pre) return
     setErr('')
     if (ready) { URL.revokeObjectURL(ready.url); setReady(null) }
-    const files: { file: string; bytes: Uint8Array }[] = []
+    // For HTML the server sends markup, not base64 — `bytes` stays empty on that path.
+    const files: { file: string; bytes: Uint8Array; html?: string }[] = []
     const refused: { code: string; reasons: string[] }[] = []
     const totalCodes = eligible
     let done = 0
@@ -116,8 +118,15 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
     try {
       for (const p of pre) {
         for (const codes of chunk(p.eligible.map(e => e.code), p.batch)) {
-          const out = await api('/api/payroll/payslips', { method: 'POST', body: JSON.stringify({ run_id: p.run.id, codes }) })
-          out.files.forEach((f: any) => files.push({ file: f.file, bytes: b64ToBytes(f.pdf) }))
+          const out = await api('/api/payroll/payslips', {
+            method: 'POST',
+            body: JSON.stringify({ run_id: p.run.id, codes, ...(mode === 'html' ? { format: 'html' } : {}) }),
+          })
+          out.files.forEach((f: any) => files.push({
+            file: f.file,
+            bytes: f.pdf ? b64ToBytes(f.pdf) : new Uint8Array(0),
+            html: f.html,
+          }))
           refused.push(...(out.refused || []))
           done += codes.length
           setProgress({ done, total: totalCodes, phase: 'Generating' })
@@ -137,6 +146,16 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
         const merged = await doc.save()
         const name = pre.length > 1 ? `${stem}_Payslips.pdf` : combinedFileName(stem, first.run.fy, first.run.month)
         setReady({ name, url: saveBlob(name, merged, 'application/pdf'), count: files.length, size: merged.length })
+      } else if (mode === 'html') {
+        // One document, every payslip inside it, page-breaking between them — the HTML
+        // counterpart of "one PDF, all employees". A ZIP of HTML files would need
+        // unzipping before anything could be read, which loses the one thing HTML has
+        // over PDF here: it opens in the browser the moment it lands.
+        setProgress({ done, total: totalCodes, phase: 'Building HTML' })
+        const doc = wrapPayslipHtml(files.map(f => f.html || ''), `${stem} — Payslips ${monthLabel(first.run.fy, first.run.month)}`)
+        const name = `${stem}_${monthLabel(first.run.fy, first.run.month).replace(' ', '')}_Payslips.html`
+        const blob = new Blob([doc], { type: 'text/html;charset=utf-8' })
+        setReady({ name, url: saveBlob(name, blob, 'text/html'), count: files.length, size: blob.size })
       } else {
         setProgress({ done, total: totalCodes, phase: 'Zipping' })
         const zip = zipStore(files.map(f => ({ name: f.file, data: f.bytes })))
@@ -203,6 +222,12 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
             </button>
             <button onClick={() => generate('zip')} disabled={!canGenerate} style={outlineBtn(!canGenerate)}>
               🗜 ZIP — one PDF per employee
+            </button>
+            {/* Same figures, different renderer — see lib/payroll/payslip-html.ts. HTML
+                opens in a browser without a PDF reader, reflows on a phone, and can be
+                pasted into an email body, which a PDF cannot. */}
+            <button onClick={() => generate('html')} disabled={!canGenerate} style={outlineBtn(!canGenerate)}>
+              🌐 HTML — all employees, one file
             </button>
             {progress && <span style={{ fontSize: 12, color: C.muted }}>{progress.phase} {progress.done}/{progress.total}…</span>}
             <span style={{ fontSize: 11.5, color: C.muted }}>Generated in batches of {pre[0].batch}. Every download is recorded in the payroll audit log.</span>

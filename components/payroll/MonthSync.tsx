@@ -183,10 +183,21 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
           <span style={{ fontSize: 12, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>
             {count == null ? '—' : count}
           </span>
-          <button onClick={onSync} disabled={busy || disabled}
-            style={{ padding: '7px 15px', borderRadius: 10, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-            {busy ? 'Syncing…' : 'Sync'}
-          </button>
+          {/* Run Payroll owns these five and recomputes them every run, in an order that
+              matters. A Sync button here could only produce a figure the next run
+              overwrites — or, pressed out of order, a wrong one. The Download stays:
+              this is where the EPF, ESIC, PT and LWF registers come from. */}
+          {cat.syncable === false ? (
+            <span title="Run Payroll computes this every time it runs — it is not synced by hand"
+              style={{ fontSize: 11, fontWeight: 700, color: C.muted, background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>
+              Run Payroll
+            </span>
+          ) : (
+            <button onClick={onSync} disabled={busy || disabled}
+              style={{ padding: '7px 15px', borderRadius: 10, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+              {busy ? 'Syncing…' : 'Sync'}
+            </button>
+          )}
           <button onClick={onDownload} disabled={disabled} title={`Download ${cat.label} as frozen in this month`}
             style={{ padding: '7px 10px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontSize: 12, fontFamily: font, cursor: disabled ? 'not-allowed' : 'pointer' }}></button>
         </>
@@ -203,63 +214,170 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
 }
 
 
-// ── Sync filter ────────────────────────────────────────────────────────────
-// There are 300 employees, but HR rarely wants to sync the whole month. Narrow by
-// company, location, emp code or name — whichever Sync is then pressed pulls in data
-// for ONLY those employees. Opening the filter also narrows the counters, so the badge
-// shows exactly what the button will do.
-// Defined OUTSIDE the parent — otherwise every keystroke remounts it and the search
-// box loses focus.
-function FilterBar({ pool, company, location, search, onCompany, onLocation, onSearch, onClear, matched }: {
+// ── Employee picker ────────────────────────────────────────────────────────
+// Pressing a category's Sync opens this: the month's employees, one checkbox each,
+// with the count of what is about to be written shown on the button itself.
+//
+// It replaces the old always-on filter bar. That bar narrowed every category at once
+// and stayed narrowed, so the answer to "who does this button touch?" lived somewhere
+// other than the button — and a filter left on from an hour ago silently shrank the
+// next sync. Choosing at the moment of pressing is the only time the question is
+// actually being asked.
+//
+// Everyone starts ticked, because syncing the whole month is the normal case and
+// hand-picking 300 boxes to get there is not a choice anyone would make. Untick the
+// few you want to leave alone.
+//
+// Defined OUTSIDE the parent — a modal remounted on every keystroke loses the search
+// box's focus after one character.
+function EmployeePicker({ cat, pool, busy, onCancel, onConfirm }: {
+  cat: SyncCategory
   pool: SyncEmployee[]
-  company: string; location: string; search: string
-  onCompany: (v: string) => void; onLocation: (v: string) => void; onSearch: (v: string) => void
-  onClear: () => void
-  matched: string[] | null
+  busy: boolean
+  onCancel: () => void
+  onConfirm: (codes: string[] | null) => void
 }) {
+  const [company, setCompany] = useState('')
+  const [location, setLocation] = useState('')
+  const [search, setSearch] = useState('')
+  const [sel, setSel] = useState<Set<string>>(() => new Set(pool.map(e => e.code)))
+
   const companies = Array.from(new Set(pool.map(e => e.company).filter(Boolean))).sort()
   const locations = Array.from(new Set(pool.map(e => e.location).filter(Boolean))).sort()
+
+  // The search box takes a pasted list as readily as a single name — HR arrives with
+  // emp codes in a column from Excel far more often than they arrive with one name.
+  const tokens = search.split(/[,\n;\t]+/).map(t => t.trim()).filter(Boolean)
+  const visible = pool.filter(e => {
+    if (company && e.company !== company) return false
+    if (location && e.location !== location) return false
+    if (!tokens.length) return true
+    return tokens.some(t => {
+      const q = t.toLowerCase()
+      return e.code.toLowerCase() === q || e.code.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)
+    })
+  })
+  const visibleCodes = visible.map(e => e.code)
+  const allVisibleOn = visibleCodes.length > 0 && visibleCodes.every(c => sel.has(c))
+
+  const toggle = (code: string) => setSel(prev => {
+    const next = new Set(prev)
+    if (next.has(code)) next.delete(code); else next.add(code)
+    return next
+  })
+  const setMany = (codes: string[], on: boolean) => setSel(prev => {
+    const next = new Set(prev)
+    codes.forEach(c => (on ? next.add(c) : next.delete(c)))
+    return next
+  })
+
+  const chosen = pool.filter(e => sel.has(e.code)).map(e => e.code)
+  // Everyone ticked means "the whole month", which is what p_codes NULL already says
+  // to every sync function. Sending 300 codes instead would be the same query with a
+  // needless array, and would stop the server treating it as an unfiltered run.
+  const codesForRpc = chosen.length === pool.length ? null : chosen
+
   const inp: React.CSSProperties = {
     padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12,
     background: TK.surface, color: C.navy, fontFamily: font, outline: 'none',
   }
-  const on = matched !== null
+
   return (
-    <div style={{ background: on ? C.purpleBg : C.gray, border: `1px solid ${on ? TK.brandEdge : C.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
-        {companies.length > 1 && (
-          <div>
-            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Company</label>
-            <select style={{ ...inp, minWidth: 170 }} value={company} onChange={e => onCompany(e.target.value)}>
-              <option value="">All companies</option>
-              {companies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+    <div onClick={onCancel} style={{
+      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.45)', zIndex: 200,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background: TK.surface, borderRadius: 16, width: 'min(720px, 100%)', maxHeight: '86vh',
+        display: 'flex', flexDirection: 'column', boxShadow: '0 18px 50px rgba(15,23,42,0.28)',
+      }}>
+        <div style={{ padding: '16px 18px 12px', borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>{cat.icon}</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>Sync {cat.label}</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+                Choose whose {cat.label.toLowerCase()} should be refreshed from HRMS into this month.
+              </div>
+            </div>
+            <button onClick={onCancel} style={{ border: 'none', background: 'none', fontSize: 20, color: C.muted, cursor: 'pointer', lineHeight: 1 }}>×</button>
           </div>
-        )}
-        <div>
-          <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Location</label>
-          <select style={{ ...inp, minWidth: 150 }} value={location} onChange={e => onLocation(e.target.value)}>
-            <option value="">All locations</option>
-            {locations.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
+
+          <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap', marginTop: 12 }}>
+            {companies.length > 1 && (
+              <div>
+                <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Company</label>
+                <select style={{ ...inp, minWidth: 160 }} value={company} onChange={e => setCompany(e.target.value)}>
+                  <option value="">All companies</option>
+                  {companies.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )}
+            <div>
+              <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Location</label>
+              <select style={{ ...inp, minWidth: 140 }} value={location} onChange={e => setLocation(e.target.value)}>
+                <option value="">All locations</option>
+                {locations.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Search — paste a list of emp codes too</label>
+              <input style={{ ...inp, width: '100%' }} value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="SRS0003, SRS0011   or   umesh" />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, fontSize: 11, flexWrap: 'wrap' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: 700, color: C.purpleD }}>
+              <input type="checkbox" checked={allVisibleOn} onChange={e => setMany(visibleCodes, e.target.checked)}
+                style={{ accentColor: C.purple, cursor: 'pointer' }} />
+              Select all {visible.length === pool.length ? '' : `${visible.length} shown`}
+            </label>
+            <button onClick={() => setSel(new Set())} style={{ border: 'none', background: 'none', color: TK.critical, fontSize: 11, fontWeight: 700, fontFamily: font, cursor: 'pointer', padding: 0 }}>Clear all</button>
+            <div style={{ flex: 1 }} />
+            <span style={{ color: C.muted }}>{visible.length} shown of {pool.length}</span>
+          </div>
         </div>
-        <div style={{ flex: 1, minWidth: 230 }}>
-          <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Emp code / name — paste a list too</label>
-          <input style={{ ...inp, width: '100%' }} value={search} onChange={e => onSearch(e.target.value)}
-            placeholder="OXYZO680, OXYZO741, OXYZO1013   ya   umesh" />
+
+        <div style={{ overflowY: 'auto', flex: 1, padding: '4px 8px' }}>
+          {visible.length === 0 && (
+            <div style={{ padding: 24, textAlign: 'center', fontSize: 12, color: C.muted }}>Nobody matches this search.</div>
+          )}
+          {visible.map(e => (
+            <label key={e.code} style={{
+              display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 8,
+              cursor: 'pointer', background: sel.has(e.code) ? C.purpleBg : 'transparent',
+            }}>
+              <input type="checkbox" checked={sel.has(e.code)} onChange={() => toggle(e.code)}
+                style={{ accentColor: C.purple, cursor: 'pointer' }} />
+              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: 11, color: C.purpleD, minWidth: 82 }}>{e.code}</span>
+              <span style={{ fontSize: 12, color: C.navy, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name}</span>
+              <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>{e.location}</span>
+            </label>
+          ))}
         </div>
-        {on && <button onClick={onClear} style={{ padding: '7px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: TK.critical, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: 'pointer' }}>Clear</button>}
-      </div>
-      <div style={{ fontSize: 11, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
-        {!on ? <>No filter — Sync will run on the <b>whole month</b> ({pool.length} employees).</>
-          : matched.length === 0
-            ? <b style={{ color: TK.critical }}>This filter matches no employees — Sync is disabled.</b>
-            : <>Filter on — <b>{matched.length}</b> of {pool.length} employees. Any Sync you press now runs on <b>these only</b>, and the counters below refer to them too.</>}
+
+        <div style={{ padding: '12px 18px', borderTop: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{ flex: 1, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+            {chosen.length === 0
+              ? <b style={{ color: TK.critical }}>Nobody selected — there is nothing to sync.</b>
+              : <>Writing <b style={{ color: C.navy }}>{chosen.length}</b> of {pool.length} employees. Only <b>{cat.label}</b> columns change; every other category stays as frozen.</>}
+          </div>
+          <button onClick={onCancel} style={{ padding: '8px 14px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: 'pointer' }}>Cancel</button>
+          <button onClick={() => onConfirm(codesForRpc)} disabled={busy || chosen.length === 0}
+            style={{
+              padding: '8px 18px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 12, fontFamily: font,
+              background: busy || chosen.length === 0 ? TK.brandTint : C.purple, color: TK.onAccent,
+              cursor: busy || chosen.length === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap',
+            }}>
+            {busy ? 'Syncing…' : `Sync ${chosen.length} employee${chosen.length === 1 ? '' : 's'}`}
+          </button>
+        </div>
       </div>
     </div>
   )
 }
+
 
 export default function MonthSync({ companyId, fy }: { companyId: string; fy: string }) {
   const [runs, setRuns] = useState<PayrollRun[]>([])
@@ -269,9 +387,9 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   const [migrationDetail, setMigrationDetail] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState('')
   const [pool, setPool] = useState<SyncEmployee[]>([])
-  const [fCompany, setFCompany] = useState('')
-  const [fLocation, setFLocation] = useState('')
-  const [fSearch, setFSearch] = useState('')
+  // Which category's employee picker is open. Selection is per-press and is thrown away
+  // afterwards, so no sync can inherit a choice made for a different one.
+  const [pickerCat, setPickerCat] = useState<SyncCategory | null>(null)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
 
@@ -288,32 +406,16 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   const runIds = monthRuns.map(r => r.id)
   const sel = monthRuns[0] || null
 
-  // Emp codes the filter resolves to — null when no filter is set at all, which the
-  // RPCs read as "the whole month" (p_codes NULL) exactly as before.
-  const matched: string[] | null = (() => {
-    const tokens = fSearch.split(/[,\n;]+/).map(t => t.trim()).filter(Boolean)
-    if (!fCompany && !fLocation && !tokens.length) return null
-    const hit = (e: SyncEmployee) => {
-      if (fCompany && e.company !== fCompany) return false
-      if (fLocation && e.location !== fLocation) return false
-      if (!tokens.length) return true
-      // A pasted list matches emp codes exactly; a single word also matches names.
-      return tokens.some(t => {
-        const q = t.toLowerCase()
-        return e.code.toLowerCase() === q || e.code.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)
-      })
-    }
-    return pool.filter(hit).map(e => e.code)
-  })()
-  const filterKey = matched === null ? '' : matched.join(',')
-
   const refresh = useCallback(async () => {
     if (!runIds.length) { setStatus(null); setNeedsMigration(false); setMigrationDetail(null); return }
     try {
-      const { status: s, missing, detail } = await loadSyncStatus(runIds, matched)
+      // Whole month, always. The badge answers "how many are in this month", and the
+      // picker answers "how many am I about to write" — two different questions, and
+      // making one counter try to say both is what made the old filter confusing.
+      const { status: s, missing, detail } = await loadSyncStatus(runIds, null)
       setStatus(missing ? null : s); setNeedsMigration(missing); setMigrationDetail(detail)
     } catch (e: any) { setErr(e.message || String(e)) }
-  }, [runIds.join(','), filterKey])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runIds.join(',')])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { refresh() }, [refresh])
 
   useEffect(() => {
@@ -322,15 +424,15 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
       .then(setPool).catch(e => setErr(e.message || String(e)))
   }, [runIds.join(',')])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function syncCategory(cat: SyncCategory) {
+  async function syncCategory(cat: SyncCategory, codes: string[] | null) {
     if (!runIds.length) return
     setBusyKey(cat.key); setMsg(''); setErr('')
-    const { error, count } = await runCategorySync(cat, runIds, matched)
-    setBusyKey('')
+    const { error, count } = await runCategorySync(cat, runIds, codes)
+    setBusyKey(''); setPickerCat(null)
     if (error) { setErr(error); return }
     setMsg(`${cat.label} synced — ${count} employee${count === 1 ? '' : 's'} refreshed from HRMS`
-      + (matched ? ` (from the ${matched.length} inside the filter)` : '')
-      + '. Every other category is untouched.')
+      + (codes ? ` (the ${codes.length} you selected)` : ' (the whole month)')
+      + `, into ${label}. Every other category is untouched.`)
     refresh()
   }
 
@@ -347,7 +449,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   async function download(cat: SyncCategory) {
     setErr('')
     try {
-      const rows = await loadCategoryRows(cat, monthRuns.map(r => ({ id: r.id, company_name: r.company_name })), matched)
+      const rows = await loadCategoryRows(cat, monthRuns.map(r => ({ id: r.id, company_name: r.company_name })), null)
       if (!rows.length) { setErr(`No ${cat.label} rows for this month yet.`); return }
       const header: string[] = []
       rows.forEach(r => Object.keys(r).forEach(k => { if (!header.includes(k)) header.push(k) }))
@@ -368,9 +470,10 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   // to overwrite anyway. Run Payroll calls sync_month_tds() itself, last, and the figure
   // shows up on the downloaded sheet from there.
   const DATA_SYNC_CATEGORIES = SYNC_CATEGORIES.filter(c => c.key !== 'tds')
-  const readyCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready').length
+  const readyCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready' && c.syncable !== false).length
+  const runOwnedCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready' && c.syncable === false).length
   const globalCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'global').length
-  const plannedCount = DATA_SYNC_CATEGORIES.length - readyCount - globalCount
+  const plannedCount = DATA_SYNC_CATEGORIES.length - readyCount - runOwnedCount - globalCount
   const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const monthOpts = Array.from(new Map(runs.map(r => [r.month, r])).values()).sort((a, b) => (a.month || 0) - (b.month || 0))
 
@@ -386,6 +489,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         </div>
         <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', paddingTop: 4 }}>
           <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: C.green, marginRight: 5 }} />{readyCount} ready
+          {runOwnedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.line, margin: '0 5px 0 12px' }} />{runOwnedCount} run by payroll</>}
           <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.positiveTint, margin: '0 5px 0 12px' }} />{globalCount} whole-year
           {plannedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.line, margin: '0 5px 0 12px' }} />{plannedCount} planned</>}
         </div>
@@ -425,17 +529,12 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
           </div>
         )}
 
-        <FilterBar pool={pool} company={fCompany} location={fLocation} search={fSearch}
-          onCompany={setFCompany} onLocation={setFLocation} onSearch={setFSearch}
-          onClear={() => { setFCompany(''); setFLocation(''); setFSearch('') }}
-          matched={matched} />
-
         {DATA_SYNC_CATEGORIES.map(cat => (
           <CategoryRow key={cat.key} cat={cat}
             count={status && cat.countKey ? status[cat.countKey] : null}
             busy={busyKey === cat.key}
-            disabled={!runIds.length || needsMigration || !!status?.is_locked || (matched !== null && matched.length === 0) || (!!busyKey && busyKey !== cat.key)}
-            onSync={() => syncCategory(cat)}
+            disabled={!runIds.length || needsMigration || !!status?.is_locked || (!!busyKey && busyKey !== cat.key)}
+            onSync={() => setPickerCat(cat)}
             onDownload={() => download(cat)}
             extra={cat.key === 'employee' && status && (status.new_joiners > 0 || status.leavers > 0) ? (
               <div style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -453,6 +552,17 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
         {err && <div style={{ fontSize: 12, color: TK.critical, background: TK.criticalTint, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
       </div>
+
+      {pickerCat && pool.length > 0 && (
+        <EmployeePicker
+          key={pickerCat.key}
+          cat={pickerCat}
+          pool={pool}
+          busy={busyKey === pickerCat.key}
+          onCancel={() => setPickerCat(null)}
+          onConfirm={codes => syncCategory(pickerCat, codes)}
+        />
+      )}
 
       <ChangeTable companyId={companyId} run={sel} />
     </div>

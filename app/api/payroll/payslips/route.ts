@@ -18,6 +18,7 @@ import { requireModule } from '@/lib/api-auth'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { assemblePayslip, payslipFileName, type PayslipData } from '@/lib/payroll/payslip'
 import { renderPayslipPdf } from '@/lib/payroll/payslip-pdf'
+import { renderPayslipHtml } from '@/lib/payroll/payslip-html'
 import { computeReadiness } from '@/lib/payroll/readiness'
 
 export const runtime = 'nodejs'
@@ -214,6 +215,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}))
   const runId = String(body.run_id || '')
   const codes: string[] = Array.isArray(body.codes) ? body.codes.map(String) : []
+  // 'pdf' (default) or 'html'. Same assembled data either way — only the renderer
+  // differs, so the two formats cannot disagree about a figure.
+  const format: 'pdf' | 'html' = body.format === 'html' ? 'html' : 'pdf'
   if (!runId || !codes.length) return NextResponse.json({ error: 'run_id and codes are required' }, { status: 400 })
   if (codes.length > PAYSLIP_BATCH) return NextResponse.json({ error: `At most ${PAYSLIP_BATCH} employees per request.` }, { status: 400 })
 
@@ -223,7 +227,7 @@ export async function POST(req: NextRequest) {
   if (stale && !body.force_settled) return NextResponse.json({ error: stale }, { status: 409 })
 
   const want = new Set(codes)
-  const files: { code: string; name: string; file: string; pdf: string }[] = []
+  const files: { code: string; name: string; file: string; pdf?: string; html?: string }[] = []
   const refused: { code: string; reasons: string[] }[] = []
   const targets = ctx.snapshots.filter(s => want.has(String(s.employee_code)))
   const aux = await loadAux(ctx, targets.map(s => s.employee_id))
@@ -232,14 +236,19 @@ export async function POST(req: NextRequest) {
     const p = assembleFor(ctx, aux, s)
     const blocking = p.issues.filter(i => i.blocking)
     if (blocking.length) { refused.push({ code: s.employee_code, reasons: blocking.map(i => i.text) }); continue }
-    const bytes = await renderPayslipPdf(p)
-    files.push({ code: s.employee_code, name: s.full_name, file: payslipFileName(s.employee_code, ctx.run.fy, ctx.run.month), pdf: Buffer.from(bytes).toString('base64') })
+    const file = payslipFileName(s.employee_code, ctx.run.fy, ctx.run.month)
+    if (format === 'html') {
+      files.push({ code: s.employee_code, name: s.full_name, file: file.replace(/\.pdf$/i, '.html'), html: renderPayslipHtml(p) })
+    } else {
+      const bytes = await renderPayslipPdf(p)
+      files.push({ code: s.employee_code, name: s.full_name, file, pdf: Buffer.from(bytes).toString('base64') })
+    }
   }
 
   // Who took whose payslips, when — the audit row the answers ask for (A2).
   await sb.from('payroll_audit_log').insert({
     run_id: ctx.run.id, company_id: ctx.run.company_id, action: 'PAYSLIPS_GENERATED',
-    detail: { codes: files.map(f => f.code), count: files.length, refused: refused.map(r => r.code), by_employee_id: auth.user.employeeId, kind: auth.user.kind },
+    detail: { codes: files.map(f => f.code), count: files.length, format, refused: refused.map(r => r.code), by_employee_id: auth.user.employeeId, kind: auth.user.kind },
     performed_by: auth.user.email || auth.user.employeeId || 'HR',
   })
 
