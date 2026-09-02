@@ -422,112 +422,149 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <LogoStyles />
       <UIKeyframes />
       <style>{`
-        /* ── Every row is a button ──────────────────────────────────────
-           A surface, a hairline and a shadow, so an unselected item still
-           reads as something you press. Tinted with the product's blue at
-           4% rather than left flat white — enough to belong to the rail,
-           not enough to compete with the selected one. */
+        /* ══ THE RAIL'S OWN PALETTE ════════════════════════════════════
+           Scoped to .ez-rail, not the global tokens: the rail now sits on
+           a blue ground and everything on it has to be measured against
+           THAT, not against the app's white surface. Changing --ez-brand
+           to suit the rail would have moved every button in the product.
+
+           One decision drives the rest. The selected button uses the SAME
+           deep blue in both themes, so its label is white in both. Before
+           this it used --ez-brand, which flips to a LIGHT blue in dark —
+           and a light blue can only carry near-black text. That is where
+           the heavy black-on-blue came from; it measured fine and looked
+           wrong. A deep blue carries white in both themes and the problem
+           disappears rather than being tuned.
+
+           Measured at the WORST point of each gradient, not the average:
+             resting label   10.1 light · 12.7 dark
+             hover label     10.3 light · 10.9 dark
+             icon on tile     5.6 light ·  6.4 dark
+             section heading  5.3 light ·  7.1 dark
+             selected label   5.2 (white on the LIGHTER end of the fill,
+                              which is the worst point, not the average)
+        */
+        .ez-rail{
+          --r-g1:#F7FAFF; --r-g2:#E8F0FE;      /* the ground */
+          --r-btn:rgba(255,255,255,.78);        /* a resting button */
+          --r-btn-hov:rgba(255,255,255,.95);
+          --r-edge:rgba(37,99,235,.16);
+          --r-edge-hov:rgba(37,99,235,.38);
+          --r-label:#334155;
+          --r-head:#566376;
+          --r-icon:#1D4ED8;
+          --r-tile:rgba(37,99,235,.11);
+          --r-inset:rgba(255,255,255,.85);
+          --r-shadow:rgba(30,58,138,.10);
+          --r-glow:rgba(37,99,235,.42);
+        }
+        /* Dark, in all three states: the media query catches "System",
+           which stamps no attribute, and the attribute catches an explicit
+           choice. A rule written one way leaves the other wrong. */
+        @media (prefers-color-scheme: dark){
+          :root:not([data-ez-theme="light"]) .ez-rail{
+            --r-g1:#0E1526; --r-g2:#080D18;
+            --r-btn:rgba(255,255,255,.06);
+            --r-btn-hov:rgba(255,255,255,.11);
+            --r-edge:rgba(255,255,255,.09);
+            --r-edge-hov:rgba(147,197,253,.42);
+            --r-label:#E2E8F0;
+            --r-head:#94A3B8;
+            --r-icon:#93C5FD;
+            --r-tile:rgba(147,197,253,.14);
+            --r-inset:rgba(255,255,255,.07);
+            --r-shadow:rgba(0,0,0,.45);
+            --r-glow:rgba(59,130,246,.50);
+          }
+        }
+        :root[data-ez-theme="dark"] .ez-rail{
+          --r-g1:#0E1526; --r-g2:#080D18;
+          --r-btn:rgba(255,255,255,.06);
+          --r-btn-hov:rgba(255,255,255,.11);
+          --r-edge:rgba(255,255,255,.09);
+          --r-edge-hov:rgba(147,197,253,.42);
+          --r-label:#E2E8F0;
+          --r-head:#94A3B8;
+          --r-icon:#93C5FD;
+          --r-tile:rgba(147,197,253,.14);
+          --r-inset:rgba(255,255,255,.07);
+          --r-shadow:rgba(0,0,0,.45);
+          --r-glow:rgba(59,130,246,.50);
+        }
+
+        /* The ground. A long, quiet gradient — it should read as one
+           surface with depth, not as two colours meeting. */
+        .ez-rail{ background: linear-gradient(180deg, var(--r-g1), var(--r-g2)) }
+
+        /* ── A row is a button ──────────────────────────────────────── */
         .ez-nav{
-          border-radius: 11px;
-          border: 1px solid ${C.line};
-          background:
-            linear-gradient(180deg,
-              color-mix(in srgb, ${C.brand} 5%, ${C.surface}),
-              color-mix(in srgb, ${C.brand} 1%, ${C.surface}));
-          box-shadow:
-            inset 0 1px 0 rgba(255,255,255,.55),
-            0 1px 1.5px rgba(15,23,42,.05);
-          color: ${C.railItem};
-          transition:
-            transform .18s cubic-bezier(.2,.8,.2,1),
-            box-shadow .18s ease, background .18s ease, border-color .18s ease;
+          border-radius:11px;
+          border:1px solid var(--r-edge);
+          background: var(--r-btn);
+          box-shadow: inset 0 1px 0 var(--r-inset), 0 1px 2px var(--r-shadow);
+          color: var(--r-label);
+          transition: transform .18s cubic-bezier(.2,.8,.2,1),
+                      box-shadow .18s ease, background .18s ease, border-color .18s ease;
         }
         .ez-nav:hover{
           transform: translateY(-1px);
-          border-color: ${C.brandEdge};
-          background: linear-gradient(180deg,
-            color-mix(in srgb, ${C.brand} 12%, ${C.surface}),
-            color-mix(in srgb, ${C.brand} 5%, ${C.surface}));
-          box-shadow:
-            inset 0 1px 0 rgba(255,255,255,.6),
-            0 3px 8px -2px rgba(37,99,235,.28);
+          background: var(--r-btn-hov);
+          border-color: var(--r-edge-hov);
+          box-shadow: inset 0 1px 0 var(--r-inset), 0 4px 10px -3px var(--r-shadow);
         }
-        /* Pressed goes DOWN. A button that only ever rises never feels
-           clicked. */
-        .ez-nav:active{ transform: translateY(0) scale(.985); box-shadow: inset 0 1px 3px rgba(15,23,42,.14) }
-        .ez-nav:focus-visible{ outline: 2px solid ${C.brand}; outline-offset: 2px }
+        .ez-nav:active{ transform: translateY(0) scale(.985); box-shadow: inset 0 1px 3px var(--r-shadow) }
+        .ez-nav:focus-visible{ outline:2px solid #2563EB; outline-offset:2px }
 
-        /* ── The selected one pops ──────────────────────────────────────
-           Lifted 2px, scaled 2%, filled with the brand gradient, and
-           carrying a coloured cast shadow so it sits ABOVE the rail rather
-           than on it. The inner highlight along the top edge is what makes
-           it read as a physical key rather than a blue rectangle. */
+        /* ── The selected one ───────────────────────────────────────────
+           Deep blue, white label, in BOTH themes. Lifted and glowing, so
+           it reads as raised rather than merely filled. */
         .ez-nav-on, .ez-nav-on:hover{
-          background: linear-gradient(180deg, ${C.brand}, ${C.brandDeep});
-          border-color: ${C.brandDeep};
-          color: ${C.onAccent};
+          background: linear-gradient(180deg,#2563EB,#1B45C4);
+          border-color:#1E40AF;
+          color:#FFFFFF;
           transform: translateY(-2px) scale(1.02);
           box-shadow:
-            inset 0 1px 0 rgba(255,255,255,.38),
-            0 2px 4px rgba(15,23,42,.10),
-            0 10px 22px -8px color-mix(in srgb, ${C.brand} 75%, transparent);
+            inset 0 1px 0 rgba(255,255,255,.28),
+            0 2px 5px rgba(15,23,42,.18),
+            0 10px 22px -8px var(--r-glow);
           animation: ezPop .34s cubic-bezier(.34,1.56,.64,1) both;
         }
         .ez-nav-on:active{ transform: translateY(-1px) scale(1.005) }
-        /* Overshoot, then settle — the "pop". A plain ease would just be a
-           row changing colour. */
         @keyframes ezPop{
           0%   { transform: translateY(-2px) scale(.96) }
           55%  { transform: translateY(-3px) scale(1.045) }
           100% { transform: translateY(-2px) scale(1.02) }
         }
+        .ez-nav-on .ez-nav-bar{ background:rgba(255,255,255,.92); box-shadow:0 0 8px rgba(255,255,255,.5) }
 
-        /* The bar that survives at 60px, where the label does not. */
-        .ez-nav-on .ez-nav-bar{
-          background: ${C.onAccent};
-          box-shadow: 0 0 8px rgba(255,255,255,.45);
-        }
-
-        /* ── The icon tile ──────────────────────────────────────────────
-           Opaque against the button so the row's own tint cannot bleed
-           through and move its contrast. */
+        /* ── The icon tile ─────────────────────────────────────────── */
         .ez-nav-tile{
-          background: color-mix(in srgb, ${C.brand} 14%, ${C.surface});
-          color: ${C.brand};
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.35);
+          background: var(--r-tile);
+          color: var(--r-icon);
+          box-shadow: inset 0 1px 0 var(--r-inset);
           transition: transform .18s cubic-bezier(.2,.8,.2,1), background .18s ease, color .18s ease;
         }
         .ez-nav:hover .ez-nav-tile{ transform: translateY(-1px) scale(1.05) }
         .ez-nav-on .ez-nav-tile{
-          background: rgba(255,255,255,.22);
-          color: ${C.onAccent};
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.42);
+          background: rgba(255,255,255,.20);
+          color:#FFFFFF;
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.30);
         }
 
-        /* ── Sections ───────────────────────────────────────────────────
-           Neutral now. The heading is a label and a rule; it no longer
-           carries a colour of its own, because the rail has one colour. */
+        /* ── Sections ──────────────────────────────────────────────── */
         .ez-group{ display:flex; flex-direction:column; flex-shrink:0 }
-        .ez-group-items{ display:flex; flex-direction:column; gap:5px; position:relative }
-        .ez-group-panel{
-          display:grid; grid-template-rows:0fr;
-          transition: grid-template-rows .34s cubic-bezier(.22,1,.36,1);
-        }
+        .ez-group-items{ display:flex; flex-direction:column; gap:5px; position:relative;
+                         perspective:640px; perspective-origin:top center }
+        .ez-group-panel{ display:grid; grid-template-rows:0fr;
+                         transition: grid-template-rows .34s cubic-bezier(.22,1,.36,1) }
         .ez-open > .ez-group-panel{ grid-template-rows:1fr }
         .ez-group-panel-inner{ overflow:hidden; min-height:0 }
-
-        /* Rows unfold on a hinge from their own top edge — the motion that
-           says "this was folded away" rather than "this arrived". */
-        .ez-group-items{ perspective: 640px; perspective-origin: top center }
         .ez-group-items > a{
-          transform-origin: top center;
-          transform: rotateX(-72deg); opacity:0;
+          transform-origin: top center; transform: rotateX(-72deg); opacity:0;
           transition: transform .30s cubic-bezier(.2,.9,.3,1), opacity .2s ease;
         }
-        .ez-open .ez-group-items > a{
-          transform:none; opacity:1;
-          transition-delay: calc(var(--n) * 26ms);
-        }
+        .ez-open .ez-group-items > a{ transform:none; opacity:1;
+                                      transition-delay: calc(var(--n) * 26ms) }
 
         .ez-group-head{
           position:relative; display:flex; align-items:center; gap:8px;
@@ -535,111 +572,52 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           width:100%; border:none; background:none; font:inherit;
           cursor:pointer; text-align:left; -webkit-tap-highlight-color:transparent;
         }
-        .ez-group-head::before,
-        .ez-group-rule-shut{
+        .ez-group-head::before, .ez-group-rule-shut{
           content:''; display:block; height:1px; border-radius:1px;
-          background: linear-gradient(90deg, ${C.line}, transparent 82%);
+          background: linear-gradient(90deg, var(--r-edge-hov), transparent 78%);
         }
         .ez-group-head::before{ position:absolute; left:6px; right:6px; top:0 }
         .ez-group-rule-shut{ margin:9px 8px 8px; flex-shrink:0 }
-
         .ez-group-name{
           font-size:${F.micro}px; font-weight:${W.bold}; letter-spacing:.12em;
-          text-transform:uppercase; color:${C.railFaint};
-          overflow:hidden; text-overflow:ellipsis;
-          transition: color .2s ease;
+          text-transform:uppercase; color:var(--r-head);
+          overflow:hidden; text-overflow:ellipsis; transition:color .2s ease;
         }
-        .ez-group-head:hover .ez-group-name{ color:${C.brand} }
-        .ez-group-head:focus-visible{ outline:2px solid ${C.brand}; outline-offset:-2px; border-radius:8px }
+        .ez-group-head:hover .ez-group-name{ color:var(--r-icon) }
+        .ez-group-head:focus-visible{ outline:2px solid #2563EB; outline-offset:-2px; border-radius:8px }
 
         .ez-count{
-          font-size:9.5px; font-weight:${W.bold}; line-height:1;
-          padding:3px 5px; border-radius:5px; flex-shrink:0;
-          font-variant-numeric: tabular-nums;
-          color:${C.brandDeep}; background:${C.brandTint};
+          font-size:9.5px; font-weight:${W.bold}; line-height:1; padding:3px 5px;
+          border-radius:5px; flex-shrink:0; font-variant-numeric:tabular-nums;
+          color:var(--r-icon); background:var(--r-tile);
         }
-        /* "The page you are on is inside this shut section." */
-        .ez-here-head{ background: ${C.brandTint}; border-radius:8px }
+        .ez-here-head{ background:var(--r-tile); border-radius:8px }
         .ez-count-here{
-          background:${C.brand}; color:${C.onAccent};
+          background:#2563EB; color:#FFFFFF;
           animation: ez-here-pulse 2.2s ease-out infinite;
         }
         @keyframes ez-here-pulse{
-          0%   { box-shadow: 0 0 0 0 color-mix(in srgb, ${C.brand} 55%, transparent) }
-          70%  { box-shadow: 0 0 0 6px transparent }
-          100% { box-shadow: 0 0 0 0 transparent }
+          0%{ box-shadow:0 0 0 0 var(--r-glow) }
+          70%{ box-shadow:0 0 0 6px transparent }
+          100%{ box-shadow:0 0 0 0 transparent }
         }
 
-        /* A chevron: right when shut, down when open. */
         .ez-fold{
-          margin-left:auto; flex-shrink:0;
-          display:flex; align-items:center; justify-content:center;
-          width:20px; height:20px; border-radius:7px;
-          color:${C.railFaint}; background:transparent;
+          margin-left:auto; flex-shrink:0; display:flex; align-items:center;
+          justify-content:center; width:20px; height:20px; border-radius:7px;
+          color:var(--r-head); background:transparent;
           transition: background .2s ease, color .2s ease;
         }
         .ez-group-head:hover .ez-fold,
-        .ez-group-head:focus-visible .ez-fold{ background:${C.brandTint}; color:${C.brand} }
-        .ez-fold svg{
-          transform: rotate(-90deg);
-          transition: transform .38s cubic-bezier(.22,1,.36,1);
-        }
-        .ez-open .ez-fold svg{ transform: rotate(0deg) }
+        .ez-group-head:focus-visible .ez-fold{ background:var(--r-tile); color:var(--r-icon) }
+        .ez-fold svg{ transform:rotate(-90deg);
+                      transition: transform .38s cubic-bezier(.22,1,.36,1) }
+        .ez-open .ez-fold svg{ transform:rotate(0deg) }
 
-        .ez-sr{
-          position:absolute; width:1px; height:1px; padding:0; margin:-1px;
-          overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0;
-        }
+        .ez-sr{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+                overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0 }
         .ez-dotwrap{ display:none }
-
-        .ez-brand:hover .ez-brand-chev{transform:translateX(2px)}
-
-        /* Dark. The tokens already flip — brand becomes a LIGHT blue and
-           on-accent becomes near-black — so the selected button needs nothing
-           here. What DOES need correcting is the resting surface, and the
-           :not(.ez-nav-on) is load-bearing: these selectors are more specific
-           than .ez-nav-on, so without it the dark override silently won and
-           the selected button lost its blue fill entirely. */
-        @media (prefers-color-scheme: dark){
-          :root:not([data-ez-theme="light"]) .ez-nav:not(.ez-nav-on){
-            /* In dark, --ez-surface and --ez-rail are THE SAME COLOUR, so a
-               button built on the surface token had no surface at all — only
-               its border showed, and the rail read as a list of outlines.
-               Built on the lifted hover token instead, so a button sits above
-               the rail the way it does in light. */
-            background: linear-gradient(180deg,
-              color-mix(in srgb, ${C.brand} 10%, ${C.railHover}),
-              color-mix(in srgb, ${C.brand} 4%, ${C.railHover}));
-            border-color: ${C.railLine};
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 1px 2px rgba(0,0,0,.4);
-          }
-          :root:not([data-ez-theme="light"]) .ez-nav:not(.ez-nav-on):hover{
-            background: linear-gradient(180deg,
-              color-mix(in srgb, ${C.brand} 20%, ${C.railHover}),
-              color-mix(in srgb, ${C.brand} 10%, ${C.railHover}));
-            border-color: ${C.brandEdge};
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 4px 10px -3px rgba(96,165,250,.35);
-          }
-        }
-        :root[data-ez-theme="dark"] .ez-nav:not(.ez-nav-on){
-            /* In dark, --ez-surface and --ez-rail are THE SAME COLOUR, so a
-               button built on the surface token had no surface at all — only
-               its border showed, and the rail read as a list of outlines.
-               Built on the lifted hover token instead, so a button sits above
-               the rail the way it does in light. */
-            background: linear-gradient(180deg,
-              color-mix(in srgb, ${C.brand} 10%, ${C.railHover}),
-              color-mix(in srgb, ${C.brand} 4%, ${C.railHover}));
-            border-color: ${C.railLine};
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 1px 2px rgba(0,0,0,.4);
-          }
-        :root[data-ez-theme="dark"] .ez-nav:not(.ez-nav-on):hover{
-            background: linear-gradient(180deg,
-              color-mix(in srgb, ${C.brand} 20%, ${C.railHover}),
-              color-mix(in srgb, ${C.brand} 10%, ${C.railHover}));
-            border-color: ${C.brandEdge};
-            box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 4px 10px -3px rgba(96,165,250,.35);
-          }
+        .ez-brand:hover .ez-brand-chev{ transform:translateX(2px) }
 
         @media (prefers-reduced-motion: reduce){
           .ez-nav, .ez-nav-tile, .ez-group-panel, .ez-group-items > a,
@@ -651,7 +629,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
       `}</style>
 
-      <nav aria-label="Main" className="ez-scroll" style={{
+      <nav aria-label="Main" className="ez-rail ez-scroll" style={{
         // The rail asked for "DM Sans" — as 71 files in this repo do — and DM
         // Sans is not loaded anywhere, so every one of those declarations fell
         // through to plain sans-serif. Meanwhile app/layout.tsx already loads
@@ -666,7 +644,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         fontFamily: RAIL_FONT,
         width: open ? OPEN_W : SHUT_W,
         transition: `width ${M.slow}`,
-        background: C.rail,
+        // The ground is the gradient in .ez-rail; a flat background here
+        // would sit on top of it and win.
         display: 'flex', flexDirection: 'column',
         padding: open ? '12px 10px' : '12px 8px',
         flexShrink: 0, overflow: 'hidden',

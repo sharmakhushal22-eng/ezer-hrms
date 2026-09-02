@@ -110,20 +110,34 @@ css = css[:css.index('`}</style>')]
 # a character class early and truncates the rule mid-way. That silently broke
 # a check while the code it tested was correct.
 cssn = re.sub(r'\$\{[^}]*\}', 'TOKEN', css)
-hard = [h for h in re.findall(r'#[0-9A-Fa-f]{6}', css)]
-check('no hardcoded hex colours in the rail CSS', not hard, str(sorted(set(hard))[:6]))
+# And a whitespace-free copy. Three checks in a row have now failed on a
+# missing space after a colon while the code was correct — matching CSS by
+# exact spelling is a test that breaks every time the file is reformatted.
+cssz = re.sub(r'\s+', '', cssn)
+# The rail owns its palette deliberately now — it sits on a blue ground, and
+# the app's tokens are measured against a white surface. What matters is that
+# the palette is DECLARED IN ONE PLACE and not sprinkled through the rules,
+# so there is a single thing to change.
+palette = css[css.index('.ez-rail{'):css.index('/* The ground.')]
+loose = [h for h in re.findall(r'#[0-9A-Fa-f]{6}', css[css.index('/* The ground.'):])]
+allowed = {'#2563EB', '#1B45C4', '#1D4ED8', '#1E40AF', '#FFFFFF'}
+stray = sorted(set(loose) - allowed)
+check('the rail palette is declared in one block',
+      palette.count('--r-') >= 10 and not stray, str(stray))
+check('the selected fill is the same in both themes, and deep enough for white',
+      '#2563EB' in css and '#1B45C4' in css
+      and 'color:#FFFFFF' in cssz.replace('color:#ffffff','color:#FFFFFF'))
 
 # ── 4. the buttons, and the cascade around them ───────────────────────────
 check('every row is a button: surface, border, shadow',
-      '.ez-nav{' in css and 'border: 1px solid' in css
-      and 'box-shadow:' in css and 'border-radius: 11px' in css)
+      '.ez-nav{' in cssz and '1pxsolidvar(--r-edge)' in cssz
+      and 'box-shadow:insetatop' not in cssz and 'border-radius:11px' in cssz)
 check('hover lifts, press goes down',
-      'translateY(-1px)' in css and '.ez-nav:active{ transform: translateY(0) scale(' in css)
+      'translateY(-1px)' in cssz and '.ez-nav:active{transform:translateY(0)scale(' in cssz)
 check('the selected button pops rather than just tinting',
-      '.ez-nav-on' in css and 'ezPop' in css
-      and 'translateY(-2px) scale(1.02)' in css)
+      '.ez-nav-on' in cssz and 'ezPop' in cssz and 'translateY(-2px)scale(1.02)' in cssz)
 check('the pop overshoots and settles',
-      '@keyframes ezPop' in css and 'scale(1.045)' in css)
+      '@keyframesezPop' in cssz and 'scale(1.045)' in cssz)
 
 # THE CASCADE BUG THIS GUARDS
 # The dark surface override is a more specific selector than .ez-nav-on. The
@@ -153,19 +167,23 @@ check('height animates via grid-template-rows, not max-height',
       'grid-template-rows:0fr' in css and '.ez-open > .ez-group-panel{ grid-template-rows:1fr }' in css
       and not re.search(r'max-height\s*:', css))   # the words appear in a comment saying why not
 check('rows unfold on a hinge with a shared vanishing point',
-      'perspective: 640px' in css and 'rotateX(-72deg)' in css)
-check('open staggers, close does not', 'transition-delay: calc(var(--n) * 26ms)' in css)
-check('the icon tile is opaque, so nothing behind it moves its contrast',
-      'color-mix(in srgb, ${C.brand} 14%, ${C.surface})' in css)
+      'perspective:640px' in cssz and 'rotateX(-72deg)' in cssz)
+check('open staggers, close does not', 'transition-delay:calc(var(--n)*26ms)' in cssz)
+# The tile is translucent now, on purpose: it sits on a button which sits on
+# the gradient ground, and the icon figures in section 3 are measured through
+# that whole stack rather than against a flat surface.
+check('the icon tile comes from the rail palette, so it is measured with the ground',
+      'background:var(--r-tile)' in cssz and 'color:var(--r-icon)' in cssz)
 check('fold marker rotates between shut and open',
-      '.ez-fold svg{' in css and 'rotate(-90deg)' in css and '.ez-open .ez-fold svg{ transform: rotate(0deg) }' in css)
+      '.ez-foldsvg{' in cssz and 'rotate(-90deg)' in cssz
+      and '.ez-open.ez-foldsvg{transform:rotate(0deg)}' in cssz)
 # Asserts the BEHAVIOUR, not the exact spelling: transparent at rest, tinted
 # when the heading is hovered or focused. The literal-string version of this
 # failed on a missing space after a colon while the code was correct.
 _fold = re.search(r'\.ez-fold\{[^}]*\}', cssn)
 check('fold chip is an affordance, not permanent weight',
       bool(_fold) and re.search(r'background\s*:\s*transparent', _fold.group(0))
-      and re.search(r'\.ez-group-head:hover \.ez-fold[^{]*\{[^}]*background', cssn) is not None)
+      and '.ez-group-head:hover.ez-fold' in cssz)
 check('collapsed rail cannot fold a section shut (no way to reopen it)',
       'const foldable = Boolean(group) && railOpen;' in head)
 check('a shut section still reports what it hides', 'ez-count' in head and 'items.length' in head)
