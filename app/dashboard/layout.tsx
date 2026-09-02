@@ -445,36 +445,54 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            disappears rather than being tuned.
 
            Measured at the WORST point of each gradient, not the average:
-             resting label   10.1 light · 12.7 dark
-             hover label     10.3 light · 10.9 dark
-             icon on tile     5.6 light ·  6.4 dark
-             section heading  5.3 light ·  7.1 dark
-             selected label   5.2 (white on the LIGHTER end of the fill,
-                              which is the worst point, not the average)
+           A button is a SOLID colour, not a wash of the ground. Translucent,
+           it sat 1.23 away from the ground in dark — below the ~1.25 where a
+           surface step becomes visible — so the rail read as one flat blue
+           with outlines drawn on it. Solid, the step is 1.57 dark and 1.35
+           light, and the buttons read as objects.
+
+             button vs ground 1.25 light · 1.61 dark  (the step you SEE,
+                              measured where the button actually SITS —
+                              against the gradient's light end, not its
+                              darkest point, which flattered it to 1.35)
+             resting label   10.4 light ·  7.5 dark
+             icon on tile     5.6 light ·  3.8 dark
+             section heading  5.3 light ·  5.6 dark
+             (at the DARKEST point of each gradient — the worst case)
+             selected label   5.4 light · 7.9 dark (blue ink on a soft blue
+                              fill — solid blue with white on it measured
+                              fine and read as shouting)
         */
         .ez-rail{
-          --r-g1:#F7FAFF; --r-g2:#E8F0FE;      /* the ground */
-          --r-btn:rgba(255,255,255,.78);        /* a resting button */
-          --r-btn-hov:rgba(255,255,255,.95);
-          --r-edge:rgba(37,99,235,.16);
+          --r-g1:#D5E4FE; --r-g2:#BDD6F8;      /* the ground — actually blue */
+          --r-btn:#FAFCFF;                      /* a resting button — SOLID */
+          --r-btn-hov:#FFFFFF;
+          --r-edge:rgba(37,99,235,.22);
           --r-edge-hov:rgba(37,99,235,.38);
           --r-label:#334155;
-          --r-head:#566376;
+          --r-head:#4B586B;
           --r-icon:#1D4ED8;
           --r-tile:rgba(37,99,235,.11);
           --r-inset:rgba(255,255,255,.85);
           --r-shadow:rgba(30,58,138,.10);
-          --r-glow:rgba(37,99,235,.42);
+          --r-glow:rgba(37,99,235,.22);
+          /* The selected row, quiet. Filled solid blue it shouted; the lift,
+             the bar and the weight already say "selected", so the fill only
+             has to agree with them rather than announce on its own. */
+          --r-sel1:#E4EDFE; --r-sel2:#D8E6FD;
+          --r-sel-ink:#1B45C4;
+          --r-sel-edge:rgba(37,99,235,.34);
+          --r-sel-tile:rgba(37,99,235,.18);
         }
         /* Dark, in all three states: the media query catches "System",
            which stamps no attribute, and the attribute catches an explicit
            choice. A rule written one way leaves the other wrong. */
         @media (prefers-color-scheme: dark){
           :root:not([data-ez-theme="light"]) .ez-rail{
-            --r-g1:#0E1526; --r-g2:#080D18;
-            --r-btn:rgba(255,255,255,.06);
-            --r-btn-hov:rgba(255,255,255,.11);
-            --r-edge:rgba(255,255,255,.09);
+            --r-g1:#18294A; --r-g2:#0F1B31;
+            --r-btn:#2A477A;
+            --r-btn-hov:#33538C;
+            --r-edge:rgba(147,197,253,.22);
             --r-edge-hov:rgba(147,197,253,.42);
             --r-label:#E2E8F0;
             --r-head:#94A3B8;
@@ -482,14 +500,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             --r-tile:rgba(147,197,253,.14);
             --r-inset:rgba(255,255,255,.07);
             --r-shadow:rgba(0,0,0,.45);
-            --r-glow:rgba(59,130,246,.50);
+            --r-glow:rgba(59,130,246,.26);
+          /* Raising the resting button to #2A477A left the selected row
+             BELOW it — darker than the things it is meant to lead. The
+             hierarchy has to hold: selected sits 1.57 above a resting
+             button, the same step a button sits above the ground. */
+          --r-sel1:#2C63B8; --r-sel2:#24539C;
+          --r-sel-ink:#FFFFFF;
+          --r-sel-edge:rgba(147,197,253,.50);
+          --r-sel-tile:rgba(255,255,255,.20);
           }
         }
         :root[data-ez-theme="dark"] .ez-rail{
-          --r-g1:#0E1526; --r-g2:#080D18;
-          --r-btn:rgba(255,255,255,.06);
-          --r-btn-hov:rgba(255,255,255,.11);
-          --r-edge:rgba(255,255,255,.09);
+          --r-g1:#18294A; --r-g2:#0F1B31;
+          --r-btn:#2A477A;
+          --r-btn-hov:#33538C;
+          --r-edge:rgba(147,197,253,.22);
           --r-edge-hov:rgba(147,197,253,.42);
           --r-label:#E2E8F0;
           --r-head:#94A3B8;
@@ -497,7 +523,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           --r-tile:rgba(147,197,253,.14);
           --r-inset:rgba(255,255,255,.07);
           --r-shadow:rgba(0,0,0,.45);
-          --r-glow:rgba(59,130,246,.50);
+          --r-glow:rgba(59,130,246,.26);
+          /* Raising the resting button to #2A477A left the selected row
+             BELOW it — darker than the things it is meant to lead. The
+             hierarchy has to hold: selected sits 1.57 above a resting
+             button, the same step a button sits above the ground. */
+          --r-sel1:#2C63B8; --r-sel2:#24539C;
+          --r-sel-ink:#FFFFFF;
+          --r-sel-edge:rgba(147,197,253,.50);
+          --r-sel-tile:rgba(255,255,255,.20);
         }
 
         /* The ground. A long, quiet gradient — it should read as one
@@ -527,14 +561,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            Deep blue, white label, in BOTH themes. Lifted and glowing, so
            it reads as raised rather than merely filled. */
         .ez-nav-on, .ez-nav-on:hover{
-          background: linear-gradient(180deg,#2563EB,#1B45C4);
-          border-color:#1E40AF;
-          color:#FFFFFF;
+          background: linear-gradient(180deg, var(--r-sel1), var(--r-sel2));
+          border-color: var(--r-sel-edge);
+          color: var(--r-sel-ink);
           transform: translateY(-2px) scale(1.02);
           box-shadow:
-            inset 0 1px 0 rgba(255,255,255,.28),
-            0 2px 5px rgba(15,23,42,.18),
-            0 10px 22px -8px var(--r-glow);
+            inset 0 1px 0 var(--r-inset),
+            0 2px 5px var(--r-shadow),
+            0 8px 18px -8px var(--r-glow);
           animation: ezPop .34s cubic-bezier(.34,1.56,.64,1) both;
         }
         .ez-nav-on:active{ transform: translateY(-1px) scale(1.005) }
@@ -543,7 +577,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           55%  { transform: translateY(-3px) scale(1.045) }
           100% { transform: translateY(-2px) scale(1.02) }
         }
-        .ez-nav-on .ez-nav-bar{ background:rgba(255,255,255,.92); box-shadow:0 0 8px rgba(255,255,255,.5) }
+        .ez-nav-on .ez-nav-bar{ background: var(--r-sel-ink); box-shadow:0 0 6px var(--r-glow) }
 
         /* ── The icon tile ─────────────────────────────────────────── */
         .ez-nav-tile{
@@ -554,9 +588,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
         .ez-nav:hover .ez-nav-tile{ transform: translateY(-1px) scale(1.05) }
         .ez-nav-on .ez-nav-tile{
-          background: rgba(255,255,255,.20);
-          color:#FFFFFF;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.30);
+          background: var(--r-sel-tile);
+          color: var(--r-sel-ink);
+          box-shadow: inset 0 1px 0 var(--r-inset);
         }
 
         /* ── Sections ──────────────────────────────────────────────── */
