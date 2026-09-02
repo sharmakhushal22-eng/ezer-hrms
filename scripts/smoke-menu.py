@@ -69,105 +69,78 @@ def lin(c): c/=255; return c/12.92 if c<=.04045 else ((c+.055)/1.055)**2.4
 def L(x): r,g,b=rgb(x); return .2126*lin(r)+.7152*lin(g)+.0722*lin(b)
 def cr(a,b):
     l1,l2=sorted([L(a),L(b)],reverse=True); return (l1+.05)/(l2+.05)
-def over(f,b,a):
-    F,B=rgb(f),rgb(b); return '#%02X%02X%02X'%tuple(round(F[i]*a+B[i]*(1-a)) for i in range(3))
 
-def tok(name, block):
-    m = re.search(re.escape(name)+r':\s*(#[0-9A-Fa-f]{6})', block)
-    return m.group(1) if m else None
-light_blk = theme[:theme.index('@media (prefers-color-scheme: dark)')]
-dark_blk  = theme[theme.index(':root[data-ez-theme="dark"]'):]
-
-THEMES = {}
-for nm, blk in (('light', light_blk), ('dark', dark_blk)):
-    THEMES[nm] = {k: tok('--ez-'+k, blk) for k in
-                  ('brand','brand-deep','brand-tint','surface','rail','rail-item',
-                   'rail-faint','rail-hover','on-accent')}
-
-for nm, t in THEMES.items():
-    # a resting button: brand washed into the surface it sits on
-    base = t['rail-hover'] if nm == 'dark' else t['surface']
-    btn  = over(t['brand'], base, .10 if nm == 'dark' else .05)
-    check('%-5s resting label on its button >= 4.5' % nm,
-          cr(t['rail-item'], btn) >= 4.5, '%.2f' % cr(t['rail-item'], btn))
-    tile = over(t['brand'], btn, .14)
-    check('%-5s icon on its tile >= 3.0' % nm,
-          cr(t['brand'], tile) >= 3.0, '%.2f' % cr(t['brand'], tile))
-    # the selected button is a gradient — BOTH ends have to carry the label
-    for end in ('brand', 'brand-deep'):
-        r = cr(t['on-accent'], t[end])
-        check('%-5s selected label on the %s end >= 4.5' % (nm, end),
-              r >= 4.5, '%.2f' % r)
-    check('%-5s section heading >= 4.5' % nm,
-          cr(t['rail-faint'], t['rail']) >= 4.5, '%.2f' % cr(t['rail-faint'], t['rail']))
-
-# Every colour in the rail comes from a token, so it follows the product's
-# blue instead of keeping a private copy that drifts.
 css = lay[lay.index('<style>{`', lay.index('const NAV: NavGroup[]')):]
 css = css[:css.index('`}</style>')]
-# A normalised copy for any regex that walks a rule with [^}]*. The CSS is a
-# template literal, so ${C.railFaint} contains a CLOSING BRACE — it ends such
-# a character class early and truncates the rule mid-way. That silently broke
-# a check while the code it tested was correct.
 cssn = re.sub(r'\$\{[^}]*\}', 'TOKEN', css)
-# And a whitespace-free copy. Three checks in a row have now failed on a
-# missing space after a colon while the code was correct — matching CSS by
-# exact spelling is a test that breaks every time the file is reformatted.
 cssz = re.sub(r'\s+', '', cssn)
-# The rail owns its palette deliberately now — it sits on a blue ground, and
-# the app's tokens are measured against a white surface. What matters is that
-# the palette is DECLARED IN ONE PLACE and not sprinkled through the rules,
-# so there is a single thing to change.
-palette = css[css.index('.ez-rail{'):css.index('/* The ground.')]
-loose = [h for h in re.findall(r'#[0-9A-Fa-f]{6}', css[css.index('/* The ground.'):])]
-allowed = {'#2563EB', '#1B45C4', '#1D4ED8', '#1E40AF', '#FFFFFF'}
-stray = sorted(set(loose) - allowed)
-check('the rail palette is declared in one block',
-      palette.count('--r-') >= 10 and not stray, str(stray))
-# The selected fill is NOT the same in both themes, and should not be: it has
-# to sit clearly APART from the ground, and on a pale ground that means darker
-# while on a navy ground it means lighter. What must hold in both is the
-# separation and the label — asserted from the palette blocks themselves.
-def _pal(block):
-    return dict(re.findall(r'--r-(g1|g2|sel1|sel2|btn):\s*(#[0-9A-Fa-f]{6})', block))
-blocks = re.findall(r'\.ez-rail\{(.*?)\n *\}', css, re.S)
-sel_ok, sel_bad = 0, []
-for blk in blocks:
-    pal = _pal(blk)
-    if not {'g1', 'sel1'} <= set(pal): continue
-    sep  = cr(pal['sel1'], pal['g1'])
-    label = cr('#FFFFFF', pal['sel1'])
-    if sep >= 1.3 and label >= 4.5: sel_ok += 1
-    else: sel_bad.append((pal['sel1'], round(sep, 2), round(label, 2)))
-check('the selected fill separates from the ground and carries white, per theme',
-      sel_ok >= 2 and not sel_bad,
-      str(sel_bad) if sel_bad else '%d palettes checked' % sel_ok)
 
-# ── 4. the buttons, and the cascade around them ───────────────────────────
-check('every row is a button: surface, border, shadow',
-      '.ez-nav{' in cssz and '1pxsolidvar(--r-edge)' in cssz
-      and 'box-shadow:insetatop' not in cssz and 'border-radius:11px' in cssz)
-check('hover lifts, press goes down',
-      'translateY(-1px)' in cssz and '.ez-nav:active{transform:translateY(0)scale(' in cssz)
-check('the selected button pops rather than just tinting',
-      '.ez-nav-on' in cssz and 'ezPop' in cssz and 'translateY(-2px)scale(1.02)' in cssz)
-check('the pop overshoots and settles',
-      '@keyframesezPop' in cssz and 'scale(1.045)' in cssz)
+# The rail is a deep blue ground with light text ON it — figure and ground
+# inverted from the card design that preceded it. Every ink is checked
+# against the ground's LIGHTEST stop, which is the worst case.
+grounds = re.findall(r'linear-gradient\(180deg,\s*(#[0-9A-Fa-f]{6})[^)]*?(#[0-9A-Fa-f]{6})\s*100%\)', css)
+check('the rail has a deep blue gradient ground', len(grounds) >= 2,
+      '%d gradients (light + dark)' % len(grounds))
 
-# THE CASCADE BUG THIS GUARDS
-# The dark surface override is a more specific selector than .ez-nav-on. The
-# first version omitted :not(.ez-nav-on), so in dark mode it silently won and
-# the selected button lost its blue fill entirely — it rendered as an ordinary
-# grey row, with no error anywhere.
-dark_sel = re.findall(r':root(?:\[data-ez-theme="dark"\]|:not\(\[data-ez-theme="light"\]\)) \.ez-nav[^{]*\{', cssn)
-check('the dark override never outranks the selected button',
-      all('.ez-nav-on' in sel for sel in dark_sel),
-      str([x.strip() for x in dark_sel if '.ez-nav-on' not in x]))
-check('dark is declared for BOTH system and explicit',
-      ':root:not([data-ez-theme="light"])' in css and ':root[data-ez-theme="dark"]' in css)
-check('prefers-reduced-motion honoured', '@media (prefers-reduced-motion: reduce)' in css)
-check('reduced motion also stops the pop',
-      re.search(r'prefers-reduced-motion[\s\S]*?\.ez-nav-on[^}]*animation:\s*none', css) is not None)
+def ink(pattern, default=None):
+    m = re.search(pattern, cssz)
+    return m.group(1).upper() if m else default
+
+INKS = {
+    'item label':    ink(r'\.ez-nav\{[^}]*?color:(#[0-9A-Fa-f]{6})'),
+    'icon':          ink(r'\.ez-nav-tile\{[^}]*?color:(#[0-9A-Fa-f]{6})'),
+    'section label': ink(r'\.ez-group-name\{[^}]*?color:(#[0-9A-Fa-f]{6})'),
+    'selected ink':  ink(r'\.ez-nav-on\{color:(#[0-9A-Fa-f]{6})'),
+}
+missing = [k for k, v in INKS.items() if not v]
+check('every rail ink is declared in the stylesheet', not missing, str(missing))
+
+if not missing:
+    for gi, (g1, g2) in enumerate(grounds[:2]):
+        th = 'light' if gi == 0 else 'dark'
+        worst = g1 if L(g1) > L(g2) else g2      # lightest stop = worst for light ink
+        for name in ('item label', 'icon', 'section label'):
+            bar = 3.0 if name == 'icon' else 4.5
+            r = cr(INKS[name], worst)
+            check('%-5s %s on the rail >= %.1f' % (th, name, bar), r >= bar, '%.2f' % r)
+    # the selected row is a WHITE pill; its ink sits on white, not on the rail
+    r = cr(INKS['selected ink'], '#FFFFFF')
+    check('selected ink on the white pill >= 4.5', r >= 4.5, '%.2f' % r)
+    check('the pill is white, so it cannot blend into a blue rail',
+          'background:#FFFFFF' in cssz.replace('background:#ffffff', 'background:#FFFFFF'))
+
+# ── 4. the inverted design's own premises ─────────────────────────────────
+# A row is text on the rail, NOT a card. Every previous complaint — button vs
+# background, selected vs background, section vs background — came from
+# drawing light cards on a light ground. If card chrome returns to .ez-nav,
+# that whole class of problem returns with it.
+nav_rule = re.search(r'\.ez-nav\{[^}]*\}', cssz)
+check('a resting row has no card chrome',
+      bool(nav_rule)
+      and 'border:none' in nav_rule.group(0)
+      and 'background:transparent' in nav_rule.group(0)
+      and 'box-shadow:none' in nav_rule.group(0))
+check('the selected pill wipes in rather than popping',
+      'ezWipe' in cssz and 'transform-origin:leftcenter' in cssz
+      and 'ezPop' not in cssz)
+check('hover fills without moving the row',
+      '.ez-nav:hover::before{transform:scaleX(1)}' in cssz
+      and 'translateY' not in nav_rule.group(0))
+
+# The rail redefines the rail INK tokens for everything inside it. Without
+# this the brand mark, the footer and the sign-out row keep drawing
+# --ez-rail-text, which is near-black, onto a deep blue ground.
+rail_rule = re.search(r'\.ez-rail\{[^}]*\}', cssz)
+check('the rail rebinds its ink tokens for descendants',
+      bool(rail_rule) and '--ez-rail-text:' in rail_rule.group(0)
+      and '--ez-rail-muted:' in rail_rule.group(0)
+      and '--ez-rail-faint:' in rail_rule.group(0))
+check('the deep ground is declared for BOTH dark states',
+      cssz.count(':root:not([data-ez-theme="light"]).ez-rail{') >= 1
+      and cssz.count(':root[data-ez-theme="dark"].ez-rail{') >= 1)
+check('prefers-reduced-motion honoured', '@media(prefers-reduced-motion:reduce)' in cssz)
+check('reduced motion stops the wipe',
+      re.search(r'prefers-reduced-motion[\s\S]*?\.ez-nav-on::before\{animation:none', cssz) is not None)
 check('--ez-rail-item defined in all three theme blocks',
       theme.count('--ez-rail-item') == 3, '%d' % theme.count('--ez-rail-item'))
 
@@ -182,6 +155,14 @@ check('--ez-rail-item defined in all three theme blocks',
 # exactly how this was missed.
 row = lay[lay.index('function RailItem'):lay.index('function GroupBlock')]
 row_code = '\n'.join(l for l in row.splitlines() if not l.strip().startswith('//'))
+# Sections have no band any more: on a deep ground a quiet label reads as
+# secondary without a container drawn around it. What must hold is that the
+# label is separated by something — a hairline — and stays legible (checked
+# above, against the ground's lightest stop).
+check('sections are separated by a rule, not a box',
+      '.ez-group-head::before{' in cssz and 'height:1px' in cssz
+      and 'background:rgba(255,255,255' in cssz)
+
 check('the row sets no colour inline — it inherits from the button',
       not re.search(r'\bcolor:\s*(?!\'inherit\')', row_code),
       re.search(r'.{0,40}\bcolor:.{0,30}', row_code).group(0) if re.search(r'\bcolor:', row_code) else '')
@@ -198,14 +179,18 @@ check('shut panel is inert, so its links leave the tab order',
 check('height animates via grid-template-rows, not max-height',
       'grid-template-rows:0fr' in css and '.ez-open > .ez-group-panel{ grid-template-rows:1fr }' in css
       and not re.search(r'max-height\s*:', css))   # the words appear in a comment saying why not
-check('rows unfold on a hinge with a shared vanishing point',
-      'perspective:640px' in cssz and 'rotateX(-72deg)' in cssz)
-check('open staggers, close does not', 'transition-delay:calc(var(--n)*26ms)' in cssz)
+# The 3D hinge was more motion than a list of links needs; rows fade up.
+check('rows arrive with a fade, not a 3D hinge',
+      'rotateX' not in cssz and 'opacity:0' in cssz and 'translateY(-4px)' in cssz)
+check('open staggers, close does not', 'transition-delay:calc(var(--n)*18ms)' in cssz)
 # The tile is translucent now, on purpose: it sits on a button which sits on
 # the gradient ground, and the icon figures in section 3 are measured through
 # that whole stack rather than against a flat surface.
-check('the icon tile comes from the rail palette, so it is measured with the ground',
-      'background:var(--r-tile)' in cssz and 'color:var(--r-icon)' in cssz)
+# No tile behind the icon: a tile was card chrome by another name, and on a
+# deep ground the glyph alone carries.
+_tile = cssz[cssz.index('.ez-nav-tile{'):] if '.ez-nav-tile{' in cssz else ''
+_tile = _tile[:_tile.index('}') + 1] if '}' in _tile else ''
+check('the icon has no tile behind it', 'background:transparent' in _tile)
 check('fold marker rotates between shut and open',
       '.ez-foldsvg{' in cssz and 'rotate(-90deg)' in cssz
       and '.ez-open.ez-foldsvg{transform:rotate(0deg)}' in cssz)

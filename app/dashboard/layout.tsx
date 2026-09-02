@@ -430,236 +430,173 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <LogoStyles />
       <UIKeyframes />
       <style>{`
-        /* ══ THE RAIL'S OWN PALETTE ════════════════════════════════════
-           Scoped to .ez-rail, not the global tokens: the rail now sits on
-           a blue ground and everything on it has to be measured against
-           THAT, not against the app's white surface. Changing --ez-brand
-           to suit the rail would have moved every button in the product.
+        /* ══ THE RAIL IS THE BLUE ══════════════════════════════════════
+           Previous passes all had the same shape: a pale ground with
+           card-like buttons drawn on it, and every complaint — "button and
+           bg are similar", "selected blends in", "section blends in" — was
+           the same problem, because separating a light thing from a light
+           thing can only ever be a matter of degree.
 
-           One decision drives the rest. The selected button uses the SAME
-           deep blue in both themes, so its label is white in both. Before
-           this it used --ez-brand, which flips to a LIGHT blue in dark —
-           and a light blue can only carry near-black text. That is where
-           the heavy black-on-blue came from; it measured fine and looked
-           wrong. A deep blue carries white in both themes and the problem
-           disappears rather than being tuned.
+           So the figure and ground are swapped. The rail is deep blue; the
+           items are light text ON it with no card chrome at all; and the
+           selected row is a WHITE pill. Nothing has to be tuned into
+           visibility — white on deep blue is 8.7:1 by construction, and the
+           section labels can be quiet without disappearing because the
+           ground is dark enough to carry a quiet colour.
 
-           Measured at the WORST point of each gradient, not the average:
-           A button is a SOLID colour, not a wash of the ground. Translucent,
-           it sat 1.23 away from the ground in dark — below the ~1.25 where a
-           surface step becomes visible — so the rail read as one flat blue
-           with outlines drawn on it. Solid, the step is 1.57 dark and 1.35
-           light, and the buttons read as objects.
+           Motion changed with it. No lift, no scale, no bounce: the selected
+           pill WIPES IN from the left edge, which is the direction reading
+           goes and the direction the content sits. Hover is a wash that
+           fades, not a movement.
 
-             button vs ground   1.27 light · 1.61 dark
-             selected vs ground  4.07 light · 2.46 dark
-             selected vs button  5.09 light · 1.57 dark
-             (the steps you SEE, measured where each element actually
-              SITS on the gradient, not at its most flattering point)
-             resting label   10.4 light ·  7.5 dark
-             icon on tile     5.6 light ·  3.8 dark
-             section heading  5.3 light ·  5.6 dark
-             (at the DARKEST point of each gradient — the worst case)
-             selected label   5.4 light · 7.9 dark (blue ink on a soft blue
-                              fill — solid blue with white on it measured
-                              fine and read as shouting)
+           Measured at the rail's lightest point, which is the worst case:
+             item label     7.50    section label 4.75
+             icon           5.37    selected ink  8.72 (on the white pill)
         */
         .ez-rail{
-          --r-g1:#D5E4FE; --r-g2:#BDD6F8;      /* the ground — actually blue */
-          --r-btn:#FAFCFF;                      /* a resting button — SOLID */
-          --r-btn-hov:#FFFFFF;
-          --r-edge:rgba(37,99,235,.22);
-          --r-edge-hov:rgba(37,99,235,.38);
-          --r-label:#334155;
-          --r-head:#4B586B;
-          --r-icon:#1D4ED8;
-          --r-tile:rgba(37,99,235,.11);
-          --r-inset:rgba(255,255,255,.85);
-          --r-shadow:rgba(30,58,138,.10);
-          --r-glow:rgba(37,99,235,.22);
-          /* The selected row is DARKER than everything around it.
-             The soft-blue version measured 1.02 against the ground — the
-             same colour, once the ground itself turned blue — so it read as
-             a gap in the rail rather than the active row. Going darker
-             separates it from the ground (4.07) AND from the white buttons
-             (5.09) in one move, without returning to the vivid blue that
-             read as shouting. */
-          --r-sel1:#4272C4; --r-sel2:#3562B0;
-          --r-sel-ink:#FFFFFF;
-          --r-sel-edge:rgba(29,78,216,.55);
-          --r-sel-tile:rgba(255,255,255,.22);
+          background: linear-gradient(180deg, #1E40AF 0%, #16307E 100%);
+          /* Everything inside the rail inherits these — the brand mark, the
+             footer, the sign-out row. Without redefining them here, those
+             would still be drawing near-black ink on a deep blue ground. */
+          --ez-rail-text:        #F2F6FF;
+          --ez-rail-item:        #E8EEFB;
+          --ez-rail-muted:       #C3D4F2;
+          --ez-rail-faint:       #A9C0EC;
+          --ez-rail-line:        rgba(255,255,255,.16);
+          --ez-rail-hover:       rgba(255,255,255,.10);
+          --ez-rail-active-bg:   rgba(255,255,255,.18);
+          --ez-rail-active-text: #FFFFFF;
         }
-        /* Dark, in all three states: the media query catches "System",
-           which stamps no attribute, and the attribute catches an explicit
-           choice. A rule written one way leaves the other wrong. */
         @media (prefers-color-scheme: dark){
           :root:not([data-ez-theme="light"]) .ez-rail{
-            --r-g1:#18294A; --r-g2:#0F1B31;
-            --r-btn:#2A477A;
-            --r-btn-hov:#33538C;
-            --r-edge:rgba(147,197,253,.22);
-            --r-edge-hov:rgba(147,197,253,.42);
-            --r-label:#E2E8F0;
-            --r-head:#94A3B8;
-            --r-icon:#93C5FD;
-            --r-tile:rgba(147,197,253,.14);
-            --r-inset:rgba(255,255,255,.07);
-            --r-shadow:rgba(0,0,0,.45);
-            --r-glow:rgba(59,130,246,.26);
-          /* Raising the resting button to #2A477A left the selected row
-             BELOW it — darker than the things it is meant to lead. The
-             hierarchy has to hold: selected sits 1.57 above a resting
-             button, the same step a button sits above the ground. */
-          --r-sel1:#2C63B8; --r-sel2:#24539C;
-          --r-sel-ink:#FFFFFF;
-          --r-sel-edge:rgba(147,197,253,.50);
-          --r-sel-tile:rgba(255,255,255,.20);
+            background: linear-gradient(180deg, #122A63 0%, #0A1740 100%);
           }
         }
         :root[data-ez-theme="dark"] .ez-rail{
-          --r-g1:#18294A; --r-g2:#0F1B31;
-          --r-btn:#2A477A;
-          --r-btn-hov:#33538C;
-          --r-edge:rgba(147,197,253,.22);
-          --r-edge-hov:rgba(147,197,253,.42);
-          --r-label:#E2E8F0;
-          --r-head:#94A3B8;
-          --r-icon:#93C5FD;
-          --r-tile:rgba(147,197,253,.14);
-          --r-inset:rgba(255,255,255,.07);
-          --r-shadow:rgba(0,0,0,.45);
-          --r-glow:rgba(59,130,246,.26);
-          /* Raising the resting button to #2A477A left the selected row
-             BELOW it — darker than the things it is meant to lead. The
-             hierarchy has to hold: selected sits 1.57 above a resting
-             button, the same step a button sits above the ground. */
-          --r-sel1:#2C63B8; --r-sel2:#24539C;
-          --r-sel-ink:#FFFFFF;
-          --r-sel-edge:rgba(147,197,253,.50);
-          --r-sel-tile:rgba(255,255,255,.20);
+          background: linear-gradient(180deg, #122A63 0%, #0A1740 100%);
         }
 
-        /* The ground. A long, quiet gradient — it should read as one
-           surface with depth, not as two colours meeting. */
-        .ez-rail{ background: linear-gradient(180deg, var(--r-g1), var(--r-g2)) }
-
-        /* ── A row is a button ──────────────────────────────────────── */
+        /* ── A row is text on the rail, not a card ─────────────────────
+           No border, no background, no shadow at rest. The only thing that
+           ever fills is the selected pill. */
         .ez-nav{
-          border-radius:11px;
-          border:1px solid var(--r-edge);
-          background: var(--r-btn);
-          box-shadow: inset 0 1px 0 var(--r-inset), 0 1px 2px var(--r-shadow);
-          color: var(--r-label);
-          transition: transform .18s cubic-bezier(.2,.8,.2,1),
-                      box-shadow .18s ease, background .18s ease, border-color .18s ease;
+          position:relative; border-radius:9px;
+          color:#DCE6F9;
+          background:transparent; border:none; box-shadow:none;
+          transition: color .18s ease;
+          isolation:isolate;
         }
-        .ez-nav:hover{
-          transform: translateY(-1px);
-          background: var(--r-btn-hov);
-          border-color: var(--r-edge-hov);
-          box-shadow: inset 0 1px 0 var(--r-inset), 0 4px 10px -3px var(--r-shadow);
+        /* The fill is a pseudo-element so it can wipe independently of the
+           text, which stays put. */
+        .ez-nav::before{
+          content:''; position:absolute; inset:0; border-radius:inherit;
+          background: rgba(255,255,255,.10);
+          transform: scaleX(0); transform-origin: left center;
+          transition: transform .22s cubic-bezier(.2,.8,.2,1);
+          z-index:-1;
         }
-        .ez-nav:active{ transform: translateY(0) scale(.985); box-shadow: inset 0 1px 3px var(--r-shadow) }
-        .ez-nav:focus-visible{ outline:2px solid #2563EB; outline-offset:2px }
+        .ez-nav:hover{ color:#FFFFFF }
+        .ez-nav:hover::before{ transform: scaleX(1) }
+        .ez-nav:active::before{ background: rgba(255,255,255,.16) }
+        .ez-nav:focus-visible{ outline:2px solid #FFFFFF; outline-offset:-2px }
 
-        /* ── The selected one ───────────────────────────────────────────
-           Deep blue, white label, in BOTH themes. Lifted and glowing, so
-           it reads as raised rather than merely filled. */
-        .ez-nav-on, .ez-nav-on:hover{
-          background: linear-gradient(180deg, var(--r-sel1), var(--r-sel2));
-          border-color: var(--r-sel-edge);
-          color: var(--r-sel-ink);
-          transform: translateY(-2px) scale(1.02);
-          box-shadow:
-            inset 0 1px 0 var(--r-inset),
-            0 2px 5px var(--r-shadow),
-            0 8px 18px -8px var(--r-glow);
-          animation: ezPop .34s cubic-bezier(.34,1.56,.64,1) both;
+        /* ── Selected: a white pill ────────────────────────────────────
+           Wipes in from the left rather than popping. */
+        .ez-nav-on{ color:#1B3A9E }
+        .ez-nav-on::before{
+          background:#FFFFFF;
+          transform: scaleX(1);
+          animation: ezWipe .30s cubic-bezier(.2,.8,.2,1) both;
+          box-shadow: 0 1px 2px rgba(6,17,58,.30), 0 6px 16px -6px rgba(6,17,58,.45);
         }
-        .ez-nav-on:active{ transform: translateY(-1px) scale(1.005) }
-        @keyframes ezPop{
-          0%   { transform: translateY(-2px) scale(.96) }
-          55%  { transform: translateY(-3px) scale(1.045) }
-          100% { transform: translateY(-2px) scale(1.02) }
+        .ez-nav-on:hover{ color:#17307E }
+        .ez-nav-on:hover::before{ background:#FFFFFF }
+        @keyframes ezWipe{
+          from{ transform: scaleX(0); opacity:.4 }
+          to  { transform: scaleX(1); opacity:1 }
         }
-        .ez-nav-on .ez-nav-bar{ background: var(--r-sel-ink); box-shadow:0 0 6px var(--r-glow) }
+        /* No left bar any more — the pill IS the marker. It stays only for
+           the 60px rail, where there is no label to carry the state. */
+        .ez-nav-bar{ display:none }
 
-        /* ── The icon tile ─────────────────────────────────────────── */
+        /* ── Icons ─────────────────────────────────────────────────────
+           No tile. A tile was card chrome by another name; on a deep ground
+           the glyph alone reads. */
         .ez-nav-tile{
-          background: var(--r-tile);
-          color: var(--r-icon);
-          box-shadow: inset 0 1px 0 var(--r-inset);
-          transition: transform .18s cubic-bezier(.2,.8,.2,1), background .18s ease, color .18s ease;
+          background:transparent; box-shadow:none;
+          color:#B7CCF2;
+          transition: color .18s ease, transform .18s cubic-bezier(.2,.8,.2,1);
         }
-        .ez-nav:hover .ez-nav-tile{ transform: translateY(-1px) scale(1.05) }
-        .ez-nav-on .ez-nav-tile{
-          background: var(--r-sel-tile);
-          color: var(--r-sel-ink);
-          box-shadow: inset 0 1px 0 var(--r-inset);
-        }
+        .ez-nav:hover .ez-nav-tile{ color:#FFFFFF }
+        .ez-nav-on .ez-nav-tile{ color:#1B3A9E }
 
-        /* ── Sections ──────────────────────────────────────────────── */
+        /* ── Sections: a label, and space ──────────────────────────────
+           No band, no rule box. On a deep ground a quiet label reads as
+           secondary without needing a container drawn around it. */
         .ez-group{ display:flex; flex-direction:column; flex-shrink:0 }
-        .ez-group-items{ display:flex; flex-direction:column; gap:5px; position:relative;
-                         perspective:640px; perspective-origin:top center }
+        .ez-group-items{ display:flex; flex-direction:column; gap:2px; position:relative;
+                         perspective:none }
         .ez-group-panel{ display:grid; grid-template-rows:0fr;
-                         transition: grid-template-rows .34s cubic-bezier(.22,1,.36,1) }
+                         transition: grid-template-rows .30s cubic-bezier(.22,1,.36,1) }
         .ez-open > .ez-group-panel{ grid-template-rows:1fr }
         .ez-group-panel-inner{ overflow:hidden; min-height:0 }
-        .ez-group-items > a{
-          transform-origin: top center; transform: rotateX(-72deg); opacity:0;
-          transition: transform .30s cubic-bezier(.2,.9,.3,1), opacity .2s ease;
-        }
-        .ez-open .ez-group-items > a{ transform:none; opacity:1;
-                                      transition-delay: calc(var(--n) * 26ms) }
+        /* Rows fade up rather than unfolding on a hinge — the hinge was more
+           motion than a list of links needs. */
+        .ez-group-items > a{ opacity:0; transform: translateY(-4px);
+                             transition: opacity .2s ease, transform .2s ease }
+        .ez-open .ez-group-items > a{ opacity:1; transform:none;
+                                      transition-delay: calc(var(--n) * 18ms) }
 
         .ez-group-head{
           position:relative; display:flex; align-items:center; gap:8px;
-          padding:16px 6px 7px; white-space:nowrap; flex-shrink:0;
-          width:100%; border:none; background:none; font:inherit;
-          cursor:pointer; text-align:left; -webkit-tap-highlight-color:transparent;
+          padding:7px 10px 6px; margin:16px 0 4px; white-space:nowrap; flex-shrink:0;
+          width:100%; border:none; background:transparent; font:inherit;
+          cursor:pointer; text-align:left; border-radius:8px;
+          -webkit-tap-highlight-color:transparent;
+          transition: background .18s ease;
         }
-        .ez-group-head::before, .ez-group-rule-shut{
-          content:''; display:block; height:1px; border-radius:1px;
-          background: linear-gradient(90deg, var(--r-edge-hov), transparent 78%);
+        .ez-group-head:hover{ background: rgba(255,255,255,.08) }
+        .ez-group-head:focus-visible{ outline:2px solid #FFFFFF; outline-offset:-2px }
+        /* A hairline ABOVE the label, stopping short of the label itself —
+           it separates the groups without boxing them. */
+        .ez-group-head::before{
+          content:''; position:absolute; left:10px; right:10px; top:-8px; height:1px;
+          background: rgba(255,255,255,.14);
         }
-        .ez-group-head::before{ position:absolute; left:6px; right:6px; top:0 }
-        .ez-group-rule-shut{ margin:9px 8px 8px; flex-shrink:0 }
         .ez-group-name{
-          font-size:${F.micro}px; font-weight:${W.bold}; letter-spacing:.12em;
-          text-transform:uppercase; color:var(--r-head);
-          overflow:hidden; text-overflow:ellipsis; transition:color .2s ease;
+          font-size:${F.micro}px; font-weight:${W.bold}; letter-spacing:.14em;
+          text-transform:uppercase; color:#A9C0EC;
+          overflow:hidden; text-overflow:ellipsis; transition:color .18s ease;
         }
-        .ez-group-head:hover .ez-group-name{ color:var(--r-icon) }
-        .ez-group-head:focus-visible{ outline:2px solid #2563EB; outline-offset:-2px; border-radius:8px }
+        .ez-group-head:hover .ez-group-name{ color:#FFFFFF }
 
         .ez-count{
-          font-size:9.5px; font-weight:${W.bold}; line-height:1; padding:3px 5px;
-          border-radius:5px; flex-shrink:0; font-variant-numeric:tabular-nums;
-          color:var(--r-icon); background:var(--r-tile);
+          font-size:9.5px; font-weight:${W.bold}; line-height:1; padding:3px 6px;
+          border-radius:99px; flex-shrink:0; font-variant-numeric:tabular-nums;
+          color:#16307E; background:rgba(255,255,255,.82);
         }
-        .ez-here-head{ background:var(--r-tile); border-radius:8px }
-        .ez-count-here{
-          background:#2563EB; color:#FFFFFF;
-          animation: ez-here-pulse 2.2s ease-out infinite;
-        }
+        .ez-here-head{ background: rgba(255,255,255,.10) }
+        .ez-count-here{ background:#FFFFFF; color:#16307E;
+                        animation: ez-here-pulse 2.2s ease-out infinite }
         @keyframes ez-here-pulse{
-          0%{ box-shadow:0 0 0 0 var(--r-glow) }
-          70%{ box-shadow:0 0 0 6px transparent }
-          100%{ box-shadow:0 0 0 0 transparent }
+          0%{ box-shadow:0 0 0 0 rgba(255,255,255,.55) }
+          70%{ box-shadow:0 0 0 6px rgba(255,255,255,0) }
+          100%{ box-shadow:0 0 0 0 rgba(255,255,255,0) }
         }
 
         .ez-fold{
           margin-left:auto; flex-shrink:0; display:flex; align-items:center;
-          justify-content:center; width:20px; height:20px; border-radius:7px;
-          color:var(--r-head); background:transparent;
-          transition: background .2s ease, color .2s ease;
+          justify-content:center; width:18px; height:18px;
+          color:#A9C0EC; background:transparent;
+          transition: color .18s ease;
         }
-        .ez-group-head:hover .ez-fold,
-        .ez-group-head:focus-visible .ez-fold{ background:var(--r-tile); color:var(--r-icon) }
+        .ez-group-head:hover .ez-fold{ color:#FFFFFF }
         .ez-fold svg{ transform:rotate(-90deg);
-                      transition: transform .38s cubic-bezier(.22,1,.36,1) }
+                      transition: transform .30s cubic-bezier(.22,1,.36,1) }
         .ez-open .ez-fold svg{ transform:rotate(0deg) }
+        .ez-group-rule-shut{ display:block; height:1px; border-radius:1px;
+                             margin:10px 10px 9px; flex-shrink:0;
+                             background: rgba(255,255,255,.16) }
 
         .ez-sr{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
                 overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0 }
@@ -667,10 +604,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         .ez-brand:hover .ez-brand-chev{ transform:translateX(2px) }
 
         @media (prefers-reduced-motion: reduce){
-          .ez-nav, .ez-nav-tile, .ez-group-panel, .ez-group-items > a,
-          .ez-fold, .ez-fold svg, .ez-group-name{ transition:none }
-          .ez-nav:hover, .ez-nav:active, .ez-nav:hover .ez-nav-tile{ transform:none }
-          .ez-nav-on, .ez-nav-on:hover{ animation:none; transform:none }
+          .ez-nav, .ez-nav::before, .ez-nav-tile, .ez-group-panel,
+          .ez-group-items > a, .ez-fold svg, .ez-group-name, .ez-group-head{ transition:none }
+          .ez-nav-on::before{ animation:none }
+          .ez-nav:hover::before{ transform:scaleX(1) }
           .ez-open .ez-group-items > a{ transition-delay:0ms; transform:none; opacity:1 }
           .ez-count-here{ animation:none }
         }
