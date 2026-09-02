@@ -451,10 +451,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            with outlines drawn on it. Solid, the step is 1.57 dark and 1.35
            light, and the buttons read as objects.
 
-             button vs ground 1.25 light · 1.61 dark  (the step you SEE,
-                              measured where the button actually SITS —
-                              against the gradient's light end, not its
-                              darkest point, which flattered it to 1.35)
+             button vs ground   1.27 light · 1.61 dark
+             selected vs ground  4.07 light · 2.46 dark
+             selected vs button  5.09 light · 1.57 dark
+             (the steps you SEE, measured where each element actually
+              SITS on the gradient, not at its most flattering point)
              resting label   10.4 light ·  7.5 dark
              icon on tile     5.6 light ·  3.8 dark
              section heading  5.3 light ·  5.6 dark
@@ -476,13 +477,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           --r-inset:rgba(255,255,255,.85);
           --r-shadow:rgba(30,58,138,.10);
           --r-glow:rgba(37,99,235,.22);
-          /* The selected row, quiet. Filled solid blue it shouted; the lift,
-             the bar and the weight already say "selected", so the fill only
-             has to agree with them rather than announce on its own. */
-          --r-sel1:#E4EDFE; --r-sel2:#D8E6FD;
-          --r-sel-ink:#1B45C4;
-          --r-sel-edge:rgba(37,99,235,.34);
-          --r-sel-tile:rgba(37,99,235,.18);
+          /* The selected row is DARKER than everything around it.
+             The soft-blue version measured 1.02 against the ground — the
+             same colour, once the ground itself turned blue — so it read as
+             a gap in the rail rather than the active row. Going darker
+             separates it from the ground (4.07) AND from the white buttons
+             (5.09) in one move, without returning to the vivid blue that
+             read as shouting. */
+          --r-sel1:#4272C4; --r-sel2:#3562B0;
+          --r-sel-ink:#FFFFFF;
+          --r-sel-edge:rgba(29,78,216,.55);
+          --r-sel-tile:rgba(255,255,255,.22);
         }
         /* Dark, in all three states: the media query catches "System",
            which stamps no attribute, and the attribute catches an explicit

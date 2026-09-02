@@ -124,9 +124,24 @@ allowed = {'#2563EB', '#1B45C4', '#1D4ED8', '#1E40AF', '#FFFFFF'}
 stray = sorted(set(loose) - allowed)
 check('the rail palette is declared in one block',
       palette.count('--r-') >= 10 and not stray, str(stray))
-check('the selected fill is the same in both themes, and deep enough for white',
-      '#2563EB' in css and '#1B45C4' in css
-      and 'color:#FFFFFF' in cssz.replace('color:#ffffff','color:#FFFFFF'))
+# The selected fill is NOT the same in both themes, and should not be: it has
+# to sit clearly APART from the ground, and on a pale ground that means darker
+# while on a navy ground it means lighter. What must hold in both is the
+# separation and the label — asserted from the palette blocks themselves.
+def _pal(block):
+    return dict(re.findall(r'--r-(g1|g2|sel1|sel2|btn):\s*(#[0-9A-Fa-f]{6})', block))
+blocks = re.findall(r'\.ez-rail\{(.*?)\n *\}', css, re.S)
+sel_ok, sel_bad = 0, []
+for blk in blocks:
+    pal = _pal(blk)
+    if not {'g1', 'sel1'} <= set(pal): continue
+    sep  = cr(pal['sel1'], pal['g1'])
+    label = cr('#FFFFFF', pal['sel1'])
+    if sep >= 1.3 and label >= 4.5: sel_ok += 1
+    else: sel_bad.append((pal['sel1'], round(sep, 2), round(label, 2)))
+check('the selected fill separates from the ground and carries white, per theme',
+      sel_ok >= 2 and not sel_bad,
+      str(sel_bad) if sel_bad else '%d palettes checked' % sel_ok)
 
 # ── 4. the buttons, and the cascade around them ───────────────────────────
 check('every row is a button: surface, border, shadow',
