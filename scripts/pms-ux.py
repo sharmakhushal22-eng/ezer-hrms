@@ -51,18 +51,38 @@ AUDIT = r"""(() => {
   const lin = v => { v/=255; return v<=.04045 ? v/12.92 : Math.pow((v+.055)/1.055,2.4) };
   const L = ([r,g,b]) => .2126*lin(r)+.7152*lin(g)+.0722*lin(b);
   const cr = (a,b) => { const [x,y]=[L(a),L(b)].sort((m,n)=>n-m); return (x+.05)/(y+.05) };
-  // Walk UP through transparent backgrounds to the colour actually painted.
+  // Walk UP through translucent backgrounds to the colour actually painted.
+  //
+  // The alpha has to be carried, not discarded. An earlier version did
+  // `.concat([1])` after the first composite, which declared any stack opaque
+  // the moment two layers had been combined — so a 0.18-alpha pill sitting on
+  // a 0.10-alpha row resolved to bright orange instead of continuing down to
+  // the dark page beneath. It reported 1.66:1 on text that actually measures
+  // 7.8:1, and, far worse, it would have done the same in reverse and passed
+  // something genuinely unreadable.
+  //
+  // Standard source-over: aOut = aA + aB(1-aA), and the colour is the
+  // alpha-weighted mean, divided back out by aOut.
+  const over = (a, b) => {
+    const aOut = a[3] + b[3] * (1 - a[3]);
+    if (aOut === 0) return [0, 0, 0, 0];
+    return [0,1,2].map(k => (a[k]*a[3] + b[k]*b[3]*(1-a[3])) / aOut).concat([aOut]);
+  };
   const ground = el => {
     let n = el, acc = null;
-    while (n && n !== document.documentElement) {
+    while (n) {
       const c = px(getComputedStyle(n).backgroundColor);
       if (c && c[3] > 0) {
-        acc = acc === null ? c : [0,1,2].map(k => acc[k]*acc[3] + c[k]*(1-acc[3])).concat([1]);
+        acc = acc === null ? c.slice() : over(acc, c);
         if (acc[3] >= .999) return acc.slice(0,3);
       }
+      if (n === document.documentElement) break;
       n = n.parentElement;
     }
-    return (acc || [255,255,255]).slice(0,3);
+    // Nothing fully opaque anywhere up the chain: the browser paints the
+    // canvas white underneath, so finish the composite against that rather
+    // than pretending the last translucent layer was solid.
+    return acc === null ? [255,255,255] : over(acc, [255,255,255,1]).slice(0,3);
   };
   const vis = el => { const s = getComputedStyle(el);
     return s.display!=='none' && s.visibility!=='hidden' && +s.opacity > 0.05

@@ -230,5 +230,77 @@ check('the four period windows are generated, not hardcoded per period',
       'windowsFor' in (LIB / 'policy.ts').read_text())
 check('a period stays open until its last window closes', 'periodState' in (LIB / 'policy.ts').read_text())
 
+
+# ── §3 / §4 / §5 the three role surfaces ─────────────────────────────────
+sec('Employee, RM and HOD surfaces')
+EMP = (CMP / 'EmployeeTabs.tsx'); MGR = (CMP / 'ManagerTabs.tsx')
+emp = EMP.read_text() if EMP.exists() else ''
+mgr = MGR.read_text() if MGR.exists() else ''
+check('the employee surface exists', bool(emp))
+check('the RM and HOD surface exists', bool(mgr))
+
+for label in ['My Dashboard', 'My KRAs', 'One-to-One Log', 'Self Rating',
+              'My Result', 'My Analytics']:
+    check(f'§3 tab present: {label}', label in emp)
+for label in ['Team Dashboard', 'KRA Approval & One-to-One', 'Rate My Team',
+              'PIP Request', 'Team Analytics']:
+    check(f'§4 tab present: {label}', label in mgr)
+for label in ['Review & Finalise', 'Feedback & Recognition', 'Department Analytics']:
+    check(f'§5 tab present: {label}', label in mgr)
+
+# The rules must live in lib, not be re-implemented inside a screen.
+ui_all = emp + mgr
+check('the screens do not hardcode the KRA numbers',
+      not re.search(r'(minKra|maxKra)\s*[:=]\s*\d', ui_all)
+      and 'DEFAULT_RULES' in ui_all)
+check('no screen re-implements the weightage check',
+      'checkKras' in emp and ui_all.count('=== 100') == 0)
+check('the gap threshold is not restated in a screen',
+      "'MAJOR_GAP'" in ui_all and 'Math.abs' not in ui_all)
+
+# §3.5 — nothing before publish.
+check('§3.5 the result is withheld entirely until published',
+      re.search(r'if \(!published\)', emp) is not None)
+check('§3.6 analytics are withheld too, for the same reason',
+      emp.count('if (!published)') >= 2)
+
+# The gates that stop a step.
+LIB_O2O = (LIB / 'oneToOne.ts').read_text() if (LIB / 'oneToOne.ts').exists() else ''
+check('RULE 5 lives in one place', 'canLockWeightage' in LIB_O2O and 'canLockWeightage' in ui_all)
+check('RULE 8 lives in one place', 'canPublishResult' in LIB_O2O and 'canPublishResult' in ui_all)
+check('RULE 6 is stated where a manager would hit it',
+      'canManagerRate' in mgr)
+check('both acknowledgements are required, not either',
+      "employee_ack" in LIB_O2O and "manager_ack" in LIB_O2O
+      and "'both'" in LIB_O2O)
+
+# §8 across the manager screens.
+TEAM = (LIB / 'team.ts').read_text() if (LIB / 'team.ts').exists() else ''
+check('the queue order is computed, not a sort dropdown', 'queuePriority' in TEAM)
+check('a highlighted row carries its reason in words', 'priorityNote' in TEAM)
+check('the exit and notice row classes are used by the manager screens',
+      'exitrow' in mgr and 'noticerow' in mgr)
+check('the DB employment flag is trusted over a derived one', 'flagOverride' in TEAM)
+
+# §4.5 / §5.3 — v2 removed the bell curve.
+#
+# Grepping for the WORDS fails the honest code: team.ts explains that v2
+# removed the curve, and the screen tells a manager there is no curve to fit.
+# Those sentences are the feature. What must not exist is an IMPLEMENTATION,
+# so this looks for one — an identifier that fits, forces, caps or quotas a
+# distribution — in code with the comments and copy stripped out.
+code_only = re.sub(r'/\*.*?\*/|//[^\n]*|"[^"]*"|\'[^\']*\'|`[^`]*`', ' ',
+                   src + ui_all, flags=re.S)
+curve = re.findall(r'\b\w*(?:[Bb]ellCurve|[Ff]orceDistribution|[Qq]uota|[Cc]urveFit|'
+                   r'[Nn]ormalise[Rr]atings|[Cc]apRatings)\w*\b', code_only)
+check('no forced distribution is IMPLEMENTED anywhere in PMS', not curve, str(curve[:3]))
+check('and the screens say plainly that there is no curve',
+      re.search(r'no curve to fit', ui_all, re.I) is not None)
+
+# Recognition must stay non-monetary on the surface that awards it.
+check('recognition is stated as non-monetary where it is granted',
+      re.search(r'non-monetary', mgr, re.I) is not None
+      and re.search(r'cash component', mgr, re.I) is not None)
+
 print(f'\n  {ok} passed, {fail} failed\n')
 sys.exit(1 if fail else 0)
