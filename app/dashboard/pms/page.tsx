@@ -22,9 +22,16 @@ import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
 import { PERIOD_OPEN } from '@/lib/pms/status'
 import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
+import { ADMIN_TABS, ConfigTab, PolicyTab, UploadTab, PipTab, ReportsTab,
+         type AdminTab } from '@/components/pms/AdminTabs'
+import { type Frequency, type Policy } from '@/lib/pms/policy'
 import { localToday } from '@/components/pms/CycleHeader'
 
-type Tab = 'overview' | 'fill' | 'setup' | 'chain'
+// Spec §6 names six tabs. 'overview' and 'chain' are kept alongside them:
+// the roll-up is what an admin opens first, and routing coverage is the thing
+// that decides whether an appraisal can move at all — neither belongs inside
+// one of the six.
+type Tab = 'overview' | AdminTab | 'chain'
 
 /** PostgREST's code for "that relation does not exist". */
 const MISSING_TABLE = 'PGRST205'
@@ -47,6 +54,12 @@ export default function PmsPage() {
   const [fill, setFill] = useState<FillRow[] | null>(null)
   const [naming, setNaming] = useState<PeriodNaming | null>(null)
   const [deptNames, setDeptNames] = useState<Record<string, string>>({})
+  const [freq, setFreq] = useState<Frequency>('QUARTERLY')
+  const [policies, setPolicies] = useState<Policy[]>([])
+  // The Indian financial year. Periods are generated from it, so the preview
+  // has to start where the real thing starts.
+  const fyStart = `${new Date().getMonth() >= 3 ? new Date().getFullYear()
+                                                : new Date().getFullYear() - 1}-04-01`
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null)
@@ -84,6 +97,24 @@ export default function PmsPage() {
       // vw_pms_fill_status already collapses ten workflow values into the five
       // states an admin chases. One CASE in SQL beats the same mapping
       // rewritten in every screen that needs it.
+      const pol = await supabase.from('pms_policies')
+        .select('id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
+              + ' total_weightage, min_weightage_per_kra, who_can_finalise')
+        .limit(50)
+      if (!pol.error) {
+        setPolicies(((pol.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
+          id: String(r.id), name: String(r.policy_name ?? 'Policy'),
+          frequency: (r.frequency as Frequency) ?? 'QUARTERLY',
+          isActive: r.is_active !== false,
+          minKra: Number(r.min_kra_count) || 4, maxKra: Number(r.max_kra_count) || 10,
+          totalWeightage: Number(r.total_weightage) || 100,
+          minWeightagePerKra: Number(r.min_weightage_per_kra) || 5,
+          whoCanFinalise: (r.who_can_finalise as Policy['whoCanFinalise']) ?? 'RM1_RM2_HOD',
+        })))
+        const first = (pol.data ?? [])[0] as { frequency?: Frequency } | undefined
+        if (first?.frequency) setFreq(first.frequency)
+      }
+
       const f = await supabase.from('vw_pms_fill_status')
         .select('employee_name, employee_code, department_id, fill_status, kra_count, total_weightage')
         .eq('period_id', row.id).limit(2000)
@@ -166,10 +197,9 @@ export default function PmsPage() {
   // Named for what you go there to DO. "KRA Oversight" told nobody what they
   // would find; "Who has not started" is the question somebody actually has.
   const TABS: { k: Tab; label: string; hint: string }[] = [
-    { k: 'overview', label: 'This cycle',        hint: 'where the whole organisation has got to' },
-    { k: 'fill',     label: 'Who has not started', hint: 'the people to chase, by department' },
-    { k: 'setup',    label: 'Cycle setup',       hint: 'frequency, windows and KRA rules' },
-    { k: 'chain',    label: 'Approval routing',  hint: 'whether an appraisal can route at all' },
+    { k: 'overview', label: 'This cycle', hint: 'where the whole organisation has got to' },
+    ...ADMIN_TABS.map(t => ({ k: t.k as Tab, label: t.label, hint: t.blurb })),
+    { k: 'chain',    label: 'Approval routing', hint: 'whether an appraisal can route at all' },
   ]
 
   return (
@@ -253,7 +283,11 @@ export default function PmsPage() {
                 </Card>
           )}
 
-          {tab === 'setup' && <CycleSetup naming={naming} />}
+          {tab === 'config'   && <ConfigTab freq={freq} setFreq={setFreq} fyStart={fyStart} />}
+          {tab === 'policies' && <PolicyTab policies={policies} />}
+          {tab === 'upload'   && <UploadTab />}
+          {tab === 'pip'      && <PipTab />}
+          {tab === 'reports'  && <ReportsTab />}
           {tab === 'chain' && cov && <ChainCoverage cov={cov} />}
         </>
       )}
@@ -296,83 +330,6 @@ function MigrationPending() {
         changes itself. Nothing on this page is broken; it is waiting.
       </div>
     </Card>
-  )
-}
-
-/**
- * What the cycle is configured to do, said in sentences.
- *
- * The mockup put twenty dropdowns on this screen. Most of them are settings
- * nobody changes twice a year, and a wall of selects is how a configuration
- * page becomes something people are frightened to touch. So the settings are
- * READ here in plain language, with the rule stated next to each one, and
- * changing them stays where changing them belongs — with the policy record
- * itself, which HR owns and which the database validates.
- *
- * The honest part: none of this can be written from the browser today. The
- * anon key cannot be trusted with policy writes, and there is no server route
- * for it yet, so offering a Save button would be offering something that
- * silently does nothing.
- */
-function CycleSetup({ naming }: { naming: PeriodNaming | null }) {
-  const RULES: { k: string; v: string; why: string }[] = [
-    { k: 'KRAs per person', v: '4 to 10',
-      why: 'Fewer than four and a rating rests on too little; more than ten and nothing carries real weight.' },
-    { k: 'Weightage must total', v: 'exactly 100',
-      why: 'The database rejects a set that does not, so a manager can never approve one that is short.' },
-    { k: 'Smallest weightage on one KRA', v: '5',
-      why: 'Stops a goal being added for appearances and then weighted to nothing.' },
-    { k: 'Who writes the KRAs', v: 'the employee, their manager approves',
-      why: 'The person doing the work drafts it; the manager agrees it before it locks.' },
-    { k: 'One-to-one before locking', v: 'required',
-      why: 'Both sides confirm the discussion happened. Without it the set cannot lock.' },
-    { k: 'Approval chain', v: 'employee → manager → second manager → HOD',
-      why: 'The HOD finalises. You are not a step in it.' },
-    { k: 'Pay, increment or CTC linkage', v: 'off, and locked off',
-      why: 'This module is developmental. The database enforces it — no screen or API can switch it on.' },
-  ]
-  return (
-    <>
-      <Card>
-        <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>
-          {naming ? <>Running now: {naming.title}</> : 'No period is running'}
-        </div>
-        <div style={{ fontSize: F.small, color: TK.muted, marginTop: 6, lineHeight: 1.6, maxWidth: 760 }}>
-          {naming
-            ? <>{naming.sub}. Periods are generated from the policy&apos;s frequency rather than
-                entered by hand, so the windows below always line up with the financial year.</>
-            : <>Periods generate from a policy&apos;s frequency — every month, every three months,
-                twice a year or once a year. Until one is active there is no cycle to run.</>}
-        </div>
-      </Card>
-      <Card>
-        <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink, marginBottom: 3 }}>
-          The rules this cycle runs on
-        </div>
-        <div style={{ fontSize: F.micro, color: TK.muted, marginBottom: 14 }}>
-          Every one of these is enforced by the database, not just by the screen.
-        </div>
-        <div style={{ display: 'grid', gap: 12 }}>
-          {RULES.map(r => (
-            <div key={r.k} style={{ display: 'grid', gap: 2,
-                                    gridTemplateColumns: 'minmax(180px, 260px) 1fr',
-                                    alignItems: 'baseline' }}>
-              <div style={{ fontSize: F.small, color: TK.muted }}>{r.k}</div>
-              <div>
-                <div style={{ fontSize: F.small, fontWeight: W.bold, color: TK.ink }}>{r.v}</div>
-                <div style={{ fontSize: F.micro, color: TK.muted, marginTop: 2, lineHeight: 1.5 }}>{r.why}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-        <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${TK.line}`,
-                      fontSize: F.small, color: TK.muted, lineHeight: 1.6, maxWidth: 760 }}>
-          These are read-only here. Changing them writes to the policy record, which needs a
-          server route that checks who is asking — the browser&apos;s key is not trusted with it.
-          A Save button that silently did nothing would be worse than none.
-        </div>
-      </Card>
-    </>
   )
 }
 
