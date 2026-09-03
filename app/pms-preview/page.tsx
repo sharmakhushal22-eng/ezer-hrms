@@ -26,6 +26,9 @@ import { type TeamMember } from '@/lib/pms/team'
 import { type Kra } from '@/lib/pms/kra'
 import { type Line } from '@/lib/pms/scoring'
 import { type Log } from '@/lib/pms/oneToOne'
+import Channel from '@/components/broadcast/Channel'
+import { Compose, PublisherSetup, Responses } from '@/components/broadcast/Admin'
+import { type Broadcast, type Publisher } from '@/lib/broadcast/channel'
 import '@/components/pms/pms.css'
 
 const TODAY = '2026-09-04'
@@ -80,7 +83,47 @@ const TEAM: TeamMember[] = [
       rmL1Score: 4, rmL2Score: 4 }),
 ]
 
+const BROADCASTS: Broadcast[] = [
+  { id: 'b1', title: 'Gurugram office closed this Friday for the electrical audit',
+    body: 'The annual electrical safety audit runs all day on Friday 12 September and the building will be closed.\n\nWork from home; the VPN and all systems are unaffected. Anyone who needs to collect equipment should do so by Thursday 6pm.',
+    priority: 'URGENT', publishedBy: 'hr', publisherName: 'Priya Nair',
+    sourceDepartment: 'Administration', publishedAt: '2026-09-02T09:00:00Z',
+    isPinned: true, isActive: true },
+  { id: 'b2', title: 'Investment proof submission closes on 30 September',
+    body: 'Upload your Section 80C, 80D and HRA proofs in ESS before 30 September. Anything not submitted by then is treated as not claimed for this year, and the December payroll will deduct accordingly.\n\nThe Finance helpdesk is open all week for questions.',
+    priority: 'IMPORTANT', publishedBy: 'fin', publisherName: 'Rakesh Menon',
+    sourceDepartment: 'Finance & Accounts', publishedAt: '2026-09-01T11:00:00Z',
+    isPinned: false, isActive: true },
+  { id: 'b3', title: 'Canteen menu for September is on the noticeboard',
+    body: 'The September menu is up, with the new Thursday South Indian counter. Feedback goes to the admin desk as usual.',
+    priority: 'NORMAL', publishedBy: 'hr', publisherName: 'Priya Nair',
+    sourceDepartment: 'Administration', publishedAt: '2026-09-03T07:30:00Z',
+    isPinned: false, isActive: true },
+]
+
+const PUBLISHERS: Publisher[] = [
+  { employeeId: 'hr', name: 'Priya Nair', isActive: true,
+    grantedBy: 'Anil Kapoor', grantReason: 'Head of HR' },
+  { employeeId: 'fin', name: 'Rakesh Menon', isActive: true,
+    grantedBy: 'Anil Kapoor', grantReason: 'Finance — payroll and statutory notices' },
+  { employeeId: 'old', name: 'Sunil Bhat', isActive: false },
+]
+
 const CASES: [string, React.ReactNode][] = [
+  // Broadcast channel
+  ['bc-channel', <Channel key="bc" employeeId="emp" items={BROADCASTS}
+      readIds={new Set(['b3'])} onRead={() => {}} onRespond={() => {}} />],
+  ['bc-compose', <Compose key="bcc" me="hr" publishers={PUBLISHERS} headcount={402}
+      departments={[{ id: 'd1', name: 'Finance & Accounts' }, { id: 'd2', name: 'Administration' }]}
+      onSend={() => {}} />],
+  ['bc-setup', <PublisherSetup key="bcs" publishers={PUBLISHERS}
+      staff={[{ id: 'x', name: 'Meera Krishnan', code: 'SRS0101' }]}
+      onGrant={() => {}} onRevoke={() => {}} />],
+  ['bc-responses', <Responses key="bcr" rows={[
+      { id: 'r1', broadcastTitle: 'Gurugram office closed this Friday',
+        authorName: 'Amit Deshmukh', createdAt: '2026-09-02T10:00:00Z', readAt: null,
+        body: 'The Pune plant runs a Friday shift — does the closure apply there too? The notice says Gurugram but the subject line reads company-wide.' },
+    ]} onOpen={() => {}} />],
   // HR Admin
   ['config',   <ConfigTab key="c" freq="QUARTERLY" onFreq={() => {}}
                           fyStart="2026-04-01" fyLabel="2026-27" today={TODAY} />],

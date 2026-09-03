@@ -17,6 +17,7 @@
 import { useState } from 'react'
 import Inbox from './Inbox'
 import WallInbox from '@/components/wall/WallInbox'
+import BroadcastInbox from '@/components/ess/BroadcastInbox'
 // WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
 //
 // tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
@@ -25,7 +26,7 @@ import WallInbox from '@/components/wall/WallInbox'
 // every one of these should have used from the start.
 import { C, F, W, S, R } from '@/lib/ui'
 
-type Group = 'messages' | 'wall'
+type Group = 'messages' | 'wall' | 'broadcast'
 
 function GroupTab({ label, blurb, on, n, onPick }: {
   label: string; blurb: string; on: boolean; n: number; onPick: () => void
@@ -62,6 +63,7 @@ export default function InboxTabs({ employeeId, onUnread }: {
   const [group, setGroup] = useState<Group>('messages')
   const [msgUnread, setMsgUnread] = useState(0)
   const [wallUnread, setWallUnread] = useState(0)
+  const [bcUnread, setBcUnread] = useState(0)
 
   return (
     <div>
@@ -70,6 +72,8 @@ export default function InboxTabs({ employeeId, onUnread }: {
           on={group === 'messages'} n={msgUnread} onPick={() => setGroup('messages')} />
         <GroupTab label="Wall of Fame" blurb="Notes, comments and replies about your recognition"
           on={group === 'wall'} n={wallUnread} onPick={() => setGroup('wall')} />
+        <GroupTab label="Broadcasts" blurb="Company-wide notices. Read only — nobody replies in public"
+          on={group === 'broadcast'} n={bcUnread} onPick={() => setGroup('broadcast')} />
       </div>
 
       {/* Both stay mounted. Switching groups should not throw away a half
@@ -80,6 +84,9 @@ export default function InboxTabs({ employeeId, onUnread }: {
       </div>
       <div hidden={group !== 'wall'}>
         <WallInbox onUnread={setWallUnread} />
+      </div>
+      <div hidden={group !== 'broadcast'}>
+        <BroadcastInbox employeeId={employeeId} onUnread={setBcUnread} />
       </div>
     </div>
   )
