@@ -25,6 +25,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import CycleHeader from '@/components/pms/CycleHeader'
 import { C as TK, F, W, R, numeric } from '@/lib/ui'
 
 const MISSING_TABLE = 'PGRST205'
@@ -158,6 +159,16 @@ export default function Performance({ employeeId }: { employeeId: string }) {
 
   return (
     <div>
+      {/* Orientation before controls. The tabs below say what you CAN do;
+          this says where the cycle is and which one of them is yours right
+          now — which is the whole difference between a screen you can read
+          and one you can operate. */}
+      <CycleHeader
+        employeeId={employeeId}
+        roles={{ isEmployee: true, isRM: roles.isRM, isHOD: roles.isHOD }}
+        onGo={t => setTab(t as typeof tab)}
+      />
+
       {tabs.length > 1 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
           {tabs.map(t => (
