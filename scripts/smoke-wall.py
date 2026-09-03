@@ -24,6 +24,7 @@ WALL_SQL = ['082_access_foundation.sql', '084_wall_of_fame.sql',
             '085_wall_of_fame_seed.sql', '086_shoutouts_and_feed.sql',
             '087_social_and_inbox.sql']
 CODE = [ROOT / 'components/ess/WallOfFame.tsx',
+        ROOT / 'components/wall/Spotlight.tsx',
         ROOT / 'components/wall/ShoutoutComposer.tsx',
         ROOT / 'components/wall/Badge.tsx',
         ROOT / 'lib/wall/shoutout.ts',
@@ -224,6 +225,39 @@ types = set(re.findall(r"'([a-z_]+)'", ev.group(1))) if ev else set()
 check('wall inbox event types exist and none is an approval',
       types and not any('approv' in t for t in types),
       f'{len(types)} types' if types else 'not found')
+
+# ── 6b. the gold rule ────────────────────────────────────────────────────
+sec('The gold rule')
+# Gold appears in exactly three places across the module: the Spotlight
+# winner's frame, the #1 podium card, and the board's award ribbon. Not on a
+# header, not on a button, not on anything clickable. That restraint is what
+# makes gold read as WON rather than as decoration, and it is the first thing
+# to erode when somebody wants a section to "stand out".
+GOLD_HEX = re.compile(r'#(?:B45309|FEF3C7|F5C86B|FCD34D|F59E0B|EAB308|D97706)', re.I)
+# theme.ts DEFINES the token; Badge.tsx owns the gold metal tier; Spotlight
+# owns the two sanctioned uses. The rule is about where gold is APPLIED, not
+# where the palette declares it exists — flagging the token file would mean
+# the only way to pass is to have no gold token at all.
+SANCTIONED = {'Spotlight.tsx', 'Badge.tsx', 'theme.ts'}
+offenders = []
+for p_ in CODE + [ROOT / 'components/wall/Spotlight.tsx']:
+    if not p_.exists() or p_.name in SANCTIONED: continue
+    body = re.sub(r'//[^\n]*|/\*.*?\*/', ' ', p_.read_text(), flags=re.S)
+    if GOLD_HEX.search(body): offenders.append(p_.name)
+check('gold is confined to the Spotlight and the badge metal',
+      not offenders, str(offenders) if offenders else '')
+
+spot = (ROOT / 'components/wall/Spotlight.tsx')
+if spot.exists():
+    sp = spot.read_text()
+    # inside Spotlight.tsx it may only dress the winner and rank 1
+    check('the podium gives gold to rank 1 only',
+          'const first = rank === 1' in sp and 'first ? GOLD' in sp)
+    check('gold comes from one declared constant, not scattered literals',
+          len(set(GOLD_HEX.findall(re.sub(r'//[^\n]*', ' ', sp)))) <= 3,
+          f'{len(set(GOLD_HEX.findall(sp)))} distinct gold values')
+    check('a leaver stays in the hall of legends but not in the spotlight',
+          'hasLeft' in sp and 'no longer here' in sp)
 
 # ── 7. integration ───────────────────────────────────────────────────────
 sec('Integration')

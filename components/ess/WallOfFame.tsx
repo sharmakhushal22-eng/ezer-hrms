@@ -31,6 +31,8 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import Badge, { BADGE_KEYFRAMES, type BadgeTier, type BadgeShape } from '@/components/wall/Badge'
 import ShoutoutComposer from '@/components/wall/ShoutoutComposer'
+import { Spotlight, Leaderboard, HallOfLegends,
+         type Winner, type LeaderRow } from '@/components/wall/Spotlight'
 import { C, F, W, S, R } from '@/lib/ui'
 
 /** PostgREST's "that relation does not exist". */
@@ -205,16 +207,23 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
   const [badges, setBadges] = useState<MyBadge[]>([])
   const [err, setErr] = useState<string | null>(null)
   const [composing, setComposing] = useState(false)
+  const [winner, setWinner] = useState<Winner | null>(null)
+  const [legends, setLegends] = useState<Winner[]>([])
+  const [board, setBoard] = useState<LeaderRow[]>([])
+  const [boardOn, setBoardOn] = useState(true)
 
   const load = useCallback(async () => {
     // One cheap probe against the module's root table decides which screen
     // this is: the real thing, or the honest "not switched on yet".
-    const probe = await supabase.from('wall_config').select('module_enabled').limit(1)
+    const probe = await supabase.from('wall_config')
+      .select('module_enabled, leaderboard_enabled').limit(1)
     if (probe.error) {
       if (missing(probe.error)) { setReady(false); return }
       setErr(probe.error.message); setReady(false); return
     }
     setReady(true)
+    const cfg = (probe.data ?? [])[0] as { leaderboard_enabled?: boolean } | undefined
+    setBoardOn(cfg?.leaderboard_enabled !== false)
 
     const f = await supabase.rpc('get_company_feed', { p_scope: 'company', p_limit: 20 })
     if (!f.error) setFeed((f.data ?? []) as unknown as FeedRow[])
@@ -222,6 +231,62 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
     // employee_badges holds what you have earned; badge_master holds what a
     // badge IS. There is no v_my_badges view — I had invented that name, and
     // PostgREST answers a missing relation with an error, not a nudge.
+    // Awards only. A shoutout is not a spotlight, and mixing them would make
+    // winning look like something that happens several times a week.
+    const aw = await supabase.from('recognitions')
+      .select('id, message, cycle_label, published_at, receiver_employee_ids,'
+            + ' recognition_awards(name)')
+      .eq('kind', 'award').eq('is_archived', false)
+      .not('published_at', 'is', null)
+      .order('published_at', { ascending: false }).limit(12)
+
+    if (!aw.error) {
+      const rows = (aw.data ?? []) as unknown as (Record<string, unknown> & {
+        recognition_awards?: { name?: string } | null })[]
+      const ids = [...new Set(rows.flatMap(r => (r.receiver_employee_ids as string[]) ?? []))]
+      // One lookup for every winner on screen, rather than one per row.
+      // date_of_leaving is read, not filtered: a leaver drops off the feed
+      // but stays in the hall of legends.
+      const who = ids.length
+        ? await supabase.from('employees')
+            .select('id, full_name, designation, date_of_leaving').in('id', ids)
+        : { data: [], error: null }
+      const byId = new Map(((who.data ?? []) as unknown as {
+        id: string; full_name: string; designation: string | null; date_of_leaving: string | null
+      }[]).map(e => [e.id, e]))
+
+      const asWinner = (r: typeof rows[number]): Winner | null => {
+        const first = ((r.receiver_employee_ids as string[]) ?? [])[0]
+        const e = first ? byId.get(first) : undefined
+        if (!e) return null
+        return {
+          id: String(r.id), name: e.full_name, designation: e.designation,
+          awardName: r.recognition_awards?.name ?? 'Award',
+          cycleLabel: (r.cycle_label as string) ?? null,
+          message: (r.message as string) ?? null,
+          publishedAt: (r.published_at as string) ?? null,
+          hasLeft: Boolean(e.date_of_leaving),
+        }
+      }
+      const all = rows.map(asWinner).filter(Boolean) as Winner[]
+      // The current winner must still be here. Spotlighting somebody who has
+      // left reads as the company not knowing they had gone.
+      setWinner(all.find(w => !w.hasLeft) ?? null)
+      setLegends(all.slice(1))
+    }
+
+    const lb = await supabase.from('v_wall_leaderboard')
+      .select('employee_id, full_name, designation, recognition_count, points')
+      .order('recognition_count', { ascending: false }).limit(5)
+    if (!lb.error) {
+      setBoard(((lb.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
+        employeeId: String(r.employee_id), name: String(r.full_name),
+        designation: (r.designation as string) ?? null,
+        recognitionCount: Number(r.recognition_count) || 0,
+        points: (r.points as number) ?? null,
+      })))
+    }
+
     const b = await supabase.from('employee_badges')
       .select('badge_code, earned_count, tier, progress_pct, last_earned_on,'
             + ' badge_master(label, glyph, shape)')
@@ -305,6 +370,18 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
                 the first day, so it will not stay empty for long.
               </div>
             )}
+          </Panel>
+
+          <Panel title="Spotlight" sub="The most recent award winner">
+            <Spotlight winner={winner} />
+          </Panel>
+
+          <Panel title="Most recognised" sub="This is a count of thanks. It affects nothing else.">
+            <Leaderboard rows={board} enabled={boardOn} />
+          </Panel>
+
+          <Panel title="Hall of legends" sub="Everyone who has won an award here">
+            <HallOfLegends winners={legends} />
           </Panel>
 
           <Panel title="My badges" sub="Awards, company values and service milestones">
