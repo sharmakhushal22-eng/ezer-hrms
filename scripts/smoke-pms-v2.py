@@ -133,5 +133,102 @@ check('month names agree between policy.ts and language.ts',
       "'January'" in (LIB / 'policy.ts').read_text()
       and "'January'" in (LIB / 'language.ts').read_text())
 
+
+# ── the design brief: mockup LAYOUT, HRMS THEME ──────────────────────────
+#
+# The instruction was specific — take the layout and structure from
+# EZER-PMS-Mockup-v2.html, but draw it in EZER's own colours rather than the
+# mockup's violet. Both halves are checkable, and both have failed before:
+# the violet nearly came across wholesale, and the scope class that makes the
+# stylesheet apply at all was missing from the real page while the preview
+# harness had it — so the harness looked perfect and the product rendered
+# unstyled.
+sec('Design — mockup layout, HRMS theme')
+CSS = (CMP / 'pms.css')
+css = CSS.read_text() if CSS.exists() else ''
+check('the PMS stylesheet exists', bool(css))
+# Scan DECLARATIONS, not documentation. The file's header carries the whole
+# mockup-to-app colour mapping as a comment — a scan of the raw text finds
+# every violet hex there and fails a file that never declares one.
+decl = re.sub(r'/\*.*?\*/', ' ', css, flags=re.S)
+
+MOCKUP = pathlib.Path('/Users/tusharpanwar/Desktop/HRMS/PMS Ezer 2/EZER-PMS-v2/EZER-PMS-Mockup-v2.html')
+mock = MOCKUP.read_text() if MOCKUP.exists() else ''
+check('the mockup is where it is expected', bool(mock), MOCKUP.name)
+
+# Layout: every structural class the mockup builds its screens from.
+STRUCTURE = ['card', 'sub', 'grid', 'g4', 'g3', 'g2', 'stat', 'lbl', 'val', 'note',
+             'tblwrap', 'num', 'pill', 'rbadge', 'fld', 'btn', 'ghost', 'chip',
+             'bar', 'banner', 'flowbox', 'divider', 'stepper', 'step', 'dot',
+             'wmeter', 'abar', 'tabs', 'exitrow', 'noticerow']
+# A whole-token match, not a substring. `.{c} not in decl` passed a sabotage
+# that renamed .flowbox to .flowboxXX — the substring was still there, so the
+# guard reported a class that no longer existed under that name.
+missing = [c for c in STRUCTURE if not re.search(rf'\.{c}\b', decl)]
+check('every structural class from the mockup is ported', not missing, str(missing[:6]))
+
+# Theme: the mockup's own palette must NOT have come across.
+VIOLET = ['#7C3AED', '#1E1B4B', '#F5F3FF', '#E9E7F5', '#6B6796', '#3C3489',
+          '#F1EFFA', '#C7C2F0', '#EDE6FE', '#DCD3FA']
+leaked = [h for h in VIOLET if h.lower() in decl.lower()]
+check('the mockup palette did not come across', not leaked, str(leaked[:4]))
+check('colour resolves through the app tokens', decl.count('var(--ez-') > 60,
+      f'{decl.count("var(--ez-")} references')
+
+# Any hex at all in the stylesheet has to be a deliberate, documented one.
+# The only literals allowed to be declared are the exit/notice row washes,
+# which no --ez-* token covers: §8 needs orange and yellow to stay tellable
+# apart across three screens, and the state tokens give amber to both.
+hexes = sorted(set(re.findall(r'#[0-9A-Fa-f]{6}', decl)))
+ROW_WASHES = {'#FFF4ED', '#FFE8D8', '#FEFCE8', '#FDF6C3', '#9A3412', '#FFEDD5', '#FDBA74'}
+stray = [h for h in hexes if h.upper() not in ROW_WASHES]
+check('the only declared hexes are the documented row washes', not stray, str(stray[:5]))
+
+# Scoping: generic class names must not leak, and the scope must be applied.
+generic = [l for l in decl.splitlines()
+           if re.match(r'^\s*\.(card|stat|pill|btn|grid|tabs|banner)\b', l)]
+check('no generic class is declared unscoped', not generic, str(generic[:2]))
+check('the real page applies the scope class', 'className="pms"' in page,
+      'without it the whole stylesheet is dead')
+
+# Three-state theming, the same contract the rest of the app follows.
+check('dark is defined for the system default AND the explicit toggle',
+      'prefers-color-scheme: dark' in decl
+      and ':root:not([data-ez-theme="light"])' in decl
+      and ':root[data-ez-theme="dark"]' in decl)
+
+# Type: the mockup's half-pixel sizes must not survive the app's zoom.
+halves = re.findall(r'font-size:\s*\d+\.5px', decl)
+check('no half-pixel type survived the port', not halves, str(halves[:3]))
+
+# The six tabs, named as the mockup names them.
+for label in ['PMS Configuration', 'Policy Builder', 'Fill Status Tracker',
+              'Final Rating Upload', 'PIP Management', 'Reports & Export']:
+    check(f'tab named as the mockup names it: {label}', label in ui)
+
+# The connector bug that struck through the stepper numerals.
+check('the stepper connector is trimmed to the gap between dots',
+      'calc(50% + 18px)' in decl and 'calc(-50% + 18px)' in decl)
+
+# The flex trap that took the page sideways at every width under 900px.
+check('the scoped root can shrink inside a flex column',
+      re.search(r'\.pms\s*\{[^}]*min-width:\s*0', decl, re.S) is not None
+      and re.search(r'\.pms\s*\{[^}]*width:\s*100%', decl, re.S) is not None)
+
+# ── flow and hierarchy, §1 and §2 ────────────────────────────────────────
+sec('Flow & hierarchy')
+H = (LIB / 'hierarchy.ts').read_text() if (LIB / 'hierarchy.ts').exists() else ''
+check('the role matrix is data, not conditionals in screens', 'MATRIX' in H)
+check('all seven roles from §2 are present',
+      all(r in H for r in ['EMPLOYEE', 'RM_L1', 'RM_L2', 'HOD', 'HR_MGR', 'HR_HEAD', 'ADMIN']))
+check('finalise is three-valued, so a screen cannot treat it as a boolean',
+      "'policy'" in H and 'canFinalise' in H)
+check('the flow carries all twelve steps from §1',
+      len(re.findall(r'\{ n: \d+,\s*actor:', H)) == 12)
+check('the RM-L2 gate cannot deadlock a chain without an RM L2', 'blockedByRmL2' in H)
+check('the four period windows are generated, not hardcoded per period',
+      'windowsFor' in (LIB / 'policy.ts').read_text())
+check('a period stays open until its last window closes', 'periodState' in (LIB / 'policy.ts').read_text())
+
 print(f'\n  {ok} passed, {fail} failed\n')
 sys.exit(1 if fail else 0)

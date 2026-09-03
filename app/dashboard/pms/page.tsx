@@ -9,7 +9,7 @@
 //
 // THIS SCREEN RUNS BEFORE ITS TABLES EXIST
 //
-// Migration 055 creates the 15 pms_* tables and has not been applied — Nayan
+// Migration 066 creates the 15 pms_* tables and has not been applied — Nayan
 // owns the database. So every load can legitimately come back "table not
 // found" (PostgREST PGRST205), and that is a state to render, not an error to
 // swallow. A blank page here would read as a broken feature rather than a
@@ -22,8 +22,9 @@ import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
 import { PERIOD_OPEN } from '@/lib/pms/status'
 import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
-import { ADMIN_TABS, ConfigTab, PolicyTab, UploadTab, PipTab, ReportsTab,
-         type AdminTab } from '@/components/pms/AdminTabs'
+import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
+         FlowTab, type AdminTab, type PipRow } from '@/components/pms/AdminTabs'
+import '@/components/pms/pms.css'
 import { type Frequency, type Policy } from '@/lib/pms/policy'
 import { localToday } from '@/components/pms/CycleHeader'
 
@@ -36,13 +37,18 @@ type Tab = 'overview' | AdminTab | 'chain'
 /** PostgREST's code for "that relation does not exist". */
 const MISSING_TABLE = 'PGRST205'
 
+/** The HR PIP queue reads pms_pip, which arrives with 066. Empty rather than
+ *  sample rows: a made-up name in an action queue is something somebody tries
+ *  to act on. Module scope so it is not a fresh array on every render. */
+const PIP_QUEUE: PipRow[] = []
+
 interface Coverage {
   total: number; l1: number; l2: number
   /** HOD resolved from either source. -1 while the department source is unavailable. */
   hodResolved: number
   hodOverride: number      // employees.hod_id — matrix / dotted-line exceptions
   hodDept: number          // departments.hod_employee_id — the primary source
-  deptSourceReady: boolean // false until migration 055 adds the column
+  deptSourceReady: boolean // false until migration 067 adds the column
 }
 
 export default function PmsPage() {
@@ -60,6 +66,9 @@ export default function PmsPage() {
   // has to start where the real thing starts.
   const fyStart = `${new Date().getMonth() >= 3 ? new Date().getFullYear()
                                                 : new Date().getFullYear() - 1}-04-01`
+  // "2026-27" — how an Indian FY is written everywhere else in the product.
+  const fyYear = Number(fyStart.slice(0, 4))
+  const fyLabel = `${fyYear}-${String((fyYear + 1) % 100).padStart(2, '0')}`
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null)
@@ -134,7 +143,7 @@ export default function PmsPage() {
   //   2. departments.hod_employee_id primary source
   //   3. BLOCK
   //
-  // The department column arrives with migration 055, so until that runs only
+  // The department column arrives with migration 067, so until that runs only
   // the override source can be counted. That is reported as a distinct state
   // rather than folded into "0 mapped", which would misdescribe the problem.
   const loadCoverage = useCallback(async () => {
@@ -199,11 +208,18 @@ export default function PmsPage() {
   const TABS: { k: Tab; label: string; hint: string }[] = [
     { k: 'overview', label: 'This cycle', hint: 'where the whole organisation has got to' },
     ...ADMIN_TABS.map(t => ({ k: t.k as Tab, label: t.label, hint: t.blurb })),
-    { k: 'chain',    label: 'Approval routing', hint: 'whether an appraisal can route at all' },
+    { k: 'chain',    label: 'Flow & Hierarchy',
+      hint: 'the twelve steps, the reporting line, and who may do what' },
   ]
 
+  // Every rule in pms.css is scoped under .pms so its very generic class names
+  // (.card, .stat, .pill, .btn) cannot leak into another module. That scoping
+  // means the class below is not decoration — without it the whole stylesheet
+  // is dead on this page, which is exactly what happened: the preview harness
+  // set it, the real screen did not, and the harness looked perfect while the
+  // product rendered unstyled.
   return (
-    <div style={{ padding: `${S.lg}px ${S.xl}px ${S.huge}px`, maxWidth: 1440, margin: '0 auto' }}>
+    <div className="pms" style={{ padding: `${S.lg}px ${S.xl}px ${S.huge}px`, maxWidth: 1440, margin: '0 auto' }}>
 
       <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -223,14 +239,14 @@ export default function PmsPage() {
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+      {/* The mockup's tab strip: an underline, not a row of filled pills. With
+          eight tabs, eight filled chips read as eight competing buttons; an
+          underline puts the weight on the one you are in. */}
+      <div className="tabs">
         {TABS.map(t => (
-          <button key={t.k} onClick={() => setTab(t.k)} className="ez-tab" data-on={tab === t.k ? '1' : '0'}
-            style={{ padding: '7px 13px', borderRadius: 10, cursor: 'pointer',
-                     fontSize: F.tiny, fontWeight: tab === t.k ? W.semi : W.medium, fontFamily: 'inherit',
-                     background: tab === t.k ? TK.brand : 'transparent',
-                     color: tab === t.k ? TK.onAccent : TK.muted,
-                     border: `1px solid ${tab === t.k ? TK.brand : TK.line}` }}>
+          <button key={t.k} type="button" onClick={() => setTab(t.k)}
+                  className={tab === t.k ? 'on' : undefined}
+                  aria-current={tab === t.k ? 'page' : undefined}>
             {t.label}
           </button>
         ))}
@@ -265,30 +281,14 @@ export default function PmsPage() {
             ) : <Overview cov={cov} />
           )}
 
-          {tab === 'fill' && (
-            roll && roll.total > 0
-              ? <div style={{ display: 'grid', gap: S.sm }}>
-                  <ReadinessBanner r={roll} />
-                  <DepartmentTable rows={depts} nameOf={nameOf} />
-                </div>
-              : <Card>
-                  <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>
-                    Nobody is enrolled in a period yet
-                  </div>
-                  <div style={{ fontSize: F.small, color: TK.muted, marginTop: 6, lineHeight: 1.6 }}>
-                    This list fills in once a period is active and employees are attached to it.
-                    Until then there is nobody to chase — which is a different thing from everybody
-                    being up to date, so it is said plainly rather than shown as an empty table.
-                  </div>
-                </Card>
-          )}
-
-          {tab === 'config'   && <ConfigTab freq={freq} setFreq={setFreq} fyStart={fyStart} />}
-          {tab === 'policies' && <PolicyTab policies={policies} />}
+          {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading} />}
+          {tab === 'config'   && <ConfigTab freq={freq} onFreq={setFreq} fyStart={fyStart}
+                                            fyLabel={fyLabel} today={localToday()} />}
+          {tab === 'policies' && <PolicyTab policies={policies} people={[]} />}
           {tab === 'upload'   && <UploadTab />}
-          {tab === 'pip'      && <PipTab />}
+          {tab === 'pip'      && <PipTab queue={PIP_QUEUE} />}
           {tab === 'reports'  && <ReportsTab />}
-          {tab === 'chain' && cov && <ChainCoverage cov={cov} />}
+          {tab === 'chain'    && <FlowTab chainCoverage={cov ? <ChainCoverage cov={cov} /> : null} />}
         </>
       )}
 
@@ -412,7 +412,7 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
             {' · '}
             {cov.deptSourceReady
               ? <><strong style={{ color: TK.ink }}>{cov.hodDept}</strong> covered this way</>
-              : <span style={{ color: TK.warning }}>column arrives with migration 055</span>}
+              : <span style={{ color: TK.warning }}>column arrives with migration 067</span>}
           </li>
           <li>
             Otherwise <strong style={{ color: TK.critical }}>blocked</strong> — no guess is made
@@ -426,7 +426,7 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
           the finalise step today.{' '}
           {cov.deptSourceReady
             ? 'Set an HOD on their department, or an override on the individual where reporting is matrix.'
-            : 'Once 055 is applied, setting an HOD per department covers most of them in one pass — the per-employee override is only for exceptions.'}
+            : 'Once 067 is applied, setting an HOD per department covers most of them in one pass — the per-employee override is only for exceptions.'}
         </div>
       )}
     </Card>

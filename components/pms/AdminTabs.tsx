@@ -5,343 +5,913 @@
 //   PMS Configuration · Policy Builder · Fill Status Tracker
 //   Final Rating Upload · PIP Management · Reports & Export
 //
+// LAYOUT COMES FROM THE MOCKUP, COLOUR COMES FROM THE APP
+//
+// The structure here is EZER-PMS-Mockup-v2.html's, close to literally: the
+// same cards, the same four-up field grids, the same bordered scroll tables,
+// the same pills. The mockup's violet is not carried over — every colour
+// resolves through --ez-* in pms.css, so this looks like the rest of the HRMS
+// and follows the theme toggle. See that file's header for the full mapping.
+//
+// WHAT IS REAL AND WHAT IS WAITING
+//
+// Migration 066 creates the 15 pms_* tables and Nayan has not applied it yet.
+// (The spec folder ships the same schema as 079_pms_module_v2.sql; on this
+// branch 079 is group_profile and 055-057 are an old rolled-back RMS attempt,
+// so 066 — same 15 tables — is the file to run. Citing 079 here would send
+// somebody to the wrong migration.)
+// So the tabs divide into two kinds, and it matters which is which:
+//
+//   Real now  — Cycle setup (periods are computed here, not fetched), Fill
+//               status (reads vw_pms_fill_status when it exists), Reports
+//               (the catalogue is the spec's own table).
+//   Structure — Policies, Upload, PIP. These render their real shape with an
+//               honest empty state naming 066. The mockup fills them with
+//               sample employees; inventing Rajesh Mehta here would be worse
+//               than an empty table, because somebody would try to act on him.
+//
 // HR Admin is NOT a step in the approval chain. The chain runs
-// Employee → RM L1 → RM L2 → finalised by RM/HOD per policy. This screen sits
-// across all of it: configuring, chasing, correcting and reporting.
+// Employee → RM L1 → RM L2 → finalised by whoever the policy appoints. This
+// screen sits across all of it: configuring, chasing, correcting, reporting.
 //
 // THE ONE NON-NEGOTIABLE, restated where somebody might try to change it:
 // the PMS is developmental. payout_linkage_enabled is pinned false by a CHECK
 // constraint. No config surface here can turn it on, and none should try.
 //
-// Sub-components at module scope — inputs lose focus on every keystroke
-// otherwise, a bug this codebase has already had once.
+// Sub-components live at module scope — declared inside the parent they
+// remount on every keystroke and inputs lose focus, a bug this codebase has
+// already had once.
 
-import { useState } from 'react'
-import { C, F, W, S, R } from '@/lib/ui'
-import { PERIODS_PER_YEAR, previewPeriods, resolvePolicy,
-         type Frequency, type Policy } from '@/lib/pms/policy'
+import { useState, useMemo } from 'react'
+import './pms.css'
+import { PERIODS_PER_YEAR, previewPeriods, windowsFor, periodState, conflicts,
+         type Frequency, type Policy, type Person } from '@/lib/pms/policy'
 import { FLAG_LABEL, FLAG_MEANING, type Flag } from '@/lib/pms/employment'
-import { TEMPLATE_COLUMNS, ERROR_TEXT } from '@/lib/pms/upload'
-import { STATUS_LABEL, whatNext, type PipStatus } from '@/lib/pms/pip'
+import { TEMPLATE_COLUMNS, ERROR_TEXT, checkUpload, summarise,
+         type UploadRow } from '@/lib/pms/upload'
+import { STATUS_LABEL, whatNext, type Pip } from '@/lib/pms/pip'
+import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL, FLOW, FLOW_ENDS,
+         ROLES, ROLE_LABEL, ACTIONS, ACTION_LABEL, may, SCOPE_NOTE,
+         REPORTING_LINE, type Role } from '@/lib/pms/hierarchy'
+import { DEFAULT_RULES } from '@/lib/pms/cycle'
+import { FILL_ORDER, FILL_LABEL, type FillStatus } from '@/lib/pms/status'
+import { rollUp, type FillRow } from '@/lib/pms/rollup'
+import { humanDate } from '@/lib/pms/cycle'
 
 export type AdminTab =
   | 'config' | 'policies' | 'fill' | 'upload' | 'pip' | 'reports'
 
 export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
-  { k: 'config',   label: 'Cycle setup',   blurb: 'Frequency, windows and the KRA rules everyone is held to' },
-  { k: 'policies', label: 'Policies',      blurb: 'Different cycles for different groups, and who falls under which' },
-  { k: 'fill',     label: 'Who has filled',blurb: 'Live status for everyone, and who to chase' },
-  { k: 'upload',   label: 'Rating upload', blurb: 'Bulk override from an offline calibration' },
-  { k: 'pip',      label: 'PIP',           blurb: 'Requests from managers, and the plans you have started' },
-  { k: 'reports',  label: 'Reports',       blurb: 'The fourteen reports, and Excel export' },
+  { k: 'config',   label: 'PMS Configuration',  blurb: 'Frequency, windows and the KRA rules everyone is held to' },
+  { k: 'policies', label: 'Policy Builder',     blurb: 'Different cycles for different groups, and who falls under which' },
+  { k: 'fill',     label: 'Fill Status Tracker',blurb: 'Live status for everyone, and who to chase' },
+  { k: 'upload',   label: 'Final Rating Upload',blurb: 'Bulk override from an offline calibration' },
+  { k: 'pip',      label: 'PIP Management',     blurb: 'Requests from managers, and the plans you have started' },
+  { k: 'reports',  label: 'Reports & Export',   blurb: 'The fourteen reports, and Excel export' },
 ]
 
-// ── module scope ─────────────────────────────────────────────────────────
+// ── shared pieces, all at module scope ───────────────────────────────────
 
-function Card({ title, sub, children, tone }: {
-  title?: string; sub?: string; children: React.ReactNode; tone?: 'warn' | 'locked'
+function Card({ title, sub, children }: {
+  title?: string; sub?: string; children: React.ReactNode
 }) {
-  const edge = tone === 'warn' ? `${C.warning}44` : tone === 'locked' ? C.line : C.line
-  const fill = tone === 'warn' ? C.warningTint : tone === 'locked' ? C.sunken : C.surface
   return (
-    <div style={{ background: fill, border: `1px solid ${edge}`, borderRadius: R.sm,
-                  padding: `${S.md}px ${S.lg}px ${S.lg}px`, marginBottom: S.sm, minWidth: 0 }}>
-      {title && (
-        <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{title}</div>
-      )}
-      {sub && <div style={{ fontSize: F.micro, color: C.muted, marginTop: 3, marginBottom: S.md }}>{sub}</div>}
-      {!sub && title && <div style={{ height: S.md }} />}
+    <div className="card">
+      {title && <h3>{title}</h3>}
+      {sub && <div className="sub">{sub}</div>}
       {children}
     </div>
   )
 }
 
-function Rule({ k, v, why }: { k: string; v: string; why: string }) {
-  return (
-    <div style={{ display: 'grid', gap: 2, gridTemplateColumns: 'minmax(160px, 240px) 1fr',
-                  alignItems: 'baseline' }}>
-      <div style={{ fontSize: F.small, color: C.muted }}>{k}</div>
-      <div>
-        <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{v}</div>
-        <div style={{ fontSize: F.micro, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>{why}</div>
-      </div>
-    </div>
-  )
+function Section({ children }: { children: React.ReactNode }) {
+  return <h3 style={{ fontSize: 13, fontWeight: 700, margin: '0 0 10px' }}>{children}</h3>
 }
 
-function Table({ head, rows, empty }: {
-  head: string[]; rows: (string | number | null)[][]; empty: string
+function Field({ label, hint, locked, children }: {
+  label: string; hint?: string; locked?: boolean; children: React.ReactNode
 }) {
-  if (!rows.length) return <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>{empty}</div>
   return (
-    <div style={{ overflowX: 'auto', minWidth: 0, maxWidth: '100%' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 460 }}>
-        <thead>
-          <tr>{head.map(h => (
-            <th key={h} style={{ textAlign: 'left', padding: '0 10px 8px', whiteSpace: 'nowrap',
-                                 fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.08em',
-                                 textTransform: 'uppercase', color: C.muted }}>{h}</th>))}</tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i} style={{ borderTop: `1px solid ${C.line}` }}>
-              {r.map((cell, j) => (
-                <td key={j} style={{ padding: '9px 10px', fontSize: F.small,
-                                     color: j === 0 ? C.ink : C.inkSoft,
-                                     fontWeight: j === 0 ? W.semi : W.regular,
-                                     whiteSpace: 'nowrap' }}>{cell ?? '—'}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className={locked ? 'fld locked' : 'fld'}>
+      <label>{label}</label>
+      {children}
+      {hint && <div className="k">{hint}</div>}
     </div>
   )
 }
 
-/** The frequency picker, showing what it will actually create. A dropdown
- *  reading "Quarterly (4 periods)" does not tell anybody that Q1 runs April
- *  to June — and the periods generate the moment it is saved. */
-function FrequencyPreview({ freq, onPick, fyStart }: {
-  freq: Frequency; onPick: (f: Frequency) => void; fyStart: string
+/**
+ * A value that is in force but cannot be edited here.
+ *
+ * Everything on this screen writes to pms_policies, which does not exist yet.
+ * The first version drew these as <input readOnly> to match the mockup's
+ * fields — and that was a promise the screen could not keep: a bordered white
+ * box with a caret invites typing, and an admin who types gets silence. This
+ * renders as a value instead, so the shape of the thing tells the truth about
+ * what it does.
+ */
+function Fixed({ label, value, hint, locked }: {
+  label: string; value: string; hint?: string; locked?: boolean
+}) {
+  return (
+    <Field label={label} hint={hint} locked={locked}>
+      <div className="ro">{value}</div>
+    </Field>
+  )
+}
+
+function Pill({ tone, children }: {
+  tone: 'green' | 'brand' | 'amber' | 'red' | 'grey' | 'blue' | 'orange'
+  children: React.ReactNode
+}) {
+  return <span className={`pill p-${tone}`}>{children}</span>
+}
+
+function Empty({ what, why }: { what: string; why: string }) {
+  return (
+    <div style={{ padding: '22px 14px', textAlign: 'center' }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>{what}</div>
+      <div className="k" style={{ maxWidth: 460, margin: '0 auto', lineHeight: 1.6 }}>{why}</div>
+    </div>
+  )
+}
+
+const WAITING_ON_066 =
+  'Migration 066 creates the fifteen pms_* tables and has not been applied yet. ' +
+  'The screen is built and will fill itself the moment it is — nothing further is needed here.'
+
+/** dd-Mmm-yy, the mockup's date format, which is what an Indian HR team reads. */
+function shortDate(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  if (Number.isNaN(d.getTime())) return '—'
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  return `${String(d.getUTCDate()).padStart(2, '0')}-${M[d.getUTCMonth()]}-${String(d.getUTCFullYear()).slice(2)}`
+}
+
+/** "01–15 Apr" — a window, collapsed when both ends share a month. */
+function windowText(from: string, to: string): string {
+  const a = new Date(`${from}T00:00:00Z`), b = new Date(`${to}T00:00:00Z`)
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return '—'
+  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+  const dd = (d: Date) => String(d.getUTCDate()).padStart(2, '0')
+  return a.getUTCMonth() === b.getUTCMonth() && a.getUTCFullYear() === b.getUTCFullYear()
+    ? `${dd(a)}–${dd(b)} ${M[b.getUTCMonth()]}`
+    : `${dd(a)} ${M[a.getUTCMonth()]} – ${dd(b)} ${M[b.getUTCMonth()]}`
+}
+
+// ── §6.1 PMS Configuration ───────────────────────────────────────────────
+
+const FREQ_LABEL: Record<Frequency, string> = {
+  MONTHLY: 'Monthly', QUARTERLY: 'Quarterly',
+  HALF_YEARLY: 'Half-Yearly', ANNUAL: 'Annual',
+}
+
+export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
+  freq: Frequency; onFreq: (f: Frequency) => void
+  fyStart: string; fyLabel: string; today: string
 }) {
   const periods = previewPeriods(freq, fyStart)
   return (
     <>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: S.md }}>
-        {(Object.keys(PERIODS_PER_YEAR) as Frequency[]).map(f => {
-          const on = f === freq
+      <Card title="Cycle & frequency configuration"
+            sub="Change the frequency and every period below regenerates, windows and all.">
+        <div className="grid g4">
+          <Fixed label="Company" value="All companies" />
+          <Fixed label="Financial year" value={fyLabel} hint={`Starts ${shortDate(fyStart)}`} />
+          <Field label="Frequency">
+            <select value={freq} onChange={e => onFreq(e.target.value as Frequency)}>
+              {(Object.keys(PERIODS_PER_YEAR) as Frequency[]).map(f => (
+                <option key={f} value={f}>
+                  {FREQ_LABEL[f]} ({PERIODS_PER_YEAR[f]} {PERIODS_PER_YEAR[f] === 1 ? 'period' : 'periods'})
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Fixed label="Applicable to" value="All employees" />
+        </div>
+
+        <div className="divider" />
+        <Section>Periods this creates</Section>
+        <div className="tblwrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Period</th><th>From</th><th>To</th>
+                <th>KRA window</th><th>Self rating</th><th>RM review</th>
+                <th>Finalise</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {periods.map(p => {
+                const w = windowsFor(p, freq)
+                const st = periodState(p, freq, today)
+                return (
+                  <tr key={p.code} className={st === 'active' ? 'currentrow' : undefined}>
+                    <td style={{ fontWeight: st === 'active' ? 700 : 400, whiteSpace: 'nowrap' }}>
+                      {p.label}
+                    </td>
+                    <td>{shortDate(p.start)}</td>
+                    <td>{shortDate(p.end)}</td>
+                    <td>{windowText(w.kra.start, w.kra.end)}</td>
+                    <td>{windowText(w.self.start, w.self.end)}</td>
+                    <td>{windowText(w.rm.start, w.rm.end)}</td>
+                    <td>{windowText(w.finalise.start, w.finalise.end)}</td>
+                    <td>
+                      {st === 'active'    && <Pill tone="brand">Open now</Pill>}
+                      {st === 'closed'    && <Pill tone="grey">Closed</Pill>}
+                      {st === 'scheduled' && <Pill tone="blue">Scheduled</Pill>}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="k" style={{ marginTop: 8, lineHeight: 1.6 }}>
+          KRAs are agreed at the <b>start</b> of a period and rated after it <b>ends</b> —
+          settling KRAs in the last week would leave the one-to-one nothing to influence.
+        </div>
+
+        <div className="divider" />
+        <Section>KRA rules</Section>
+        <div className="grid g4">
+          <Fixed label="Minimum KRA count" value={String(DEFAULT_RULES.minKra)}
+                 hint="Fewer than four and a rating rests on too little" />
+          <Fixed label="Maximum KRA count" value={String(DEFAULT_RULES.maxKra)}
+                 hint="Past ten, weightages get too thin to mean anything" />
+          <Fixed label="Total weightage must be" value={String(DEFAULT_RULES.totalWeightage)}
+                 hint="Exactly — not at least" />
+          <Fixed label="Minimum weightage per KRA" value={String(DEFAULT_RULES.minWeightagePerKra)}
+                 hint="Stops a token KRA carrying 1%" />
+          <Fixed label="Who creates KRAs" value="Employee (RM approves)" />
+          <Fixed label="One-to-one mandatory" value="Yes — before weightage lock" />
+          <Fixed label="Mid-period check-in" value="Optional" />
+          <Fixed label="Final review one-to-one" value="Mandatory before publish" />
+        </div>
+
+        <div className="divider" />
+        <Section>Workflow &amp; rating</Section>
+        <div className="grid g4">
+          <Fixed label="Approval chain" value={CHAIN_LABEL[CHAINS[0]]} />
+          <Fixed label="Who can finalise" value={FINALISER_LABEL[FINALISERS[0]]} />
+          <Fixed label="Rating scale" value="5 point (1–5)" />
+          <Fixed label="Self rating mandatory" value="Yes — a manager cannot rate first" />
+        </div>
+
+        <div className="divider" />
+        <Section>Linkage &amp; eligibility</Section>
+        <div className="grid g4">
+          <Fixed label="Payout / CTC linkage" value="OFF — developmental only" locked
+                 hint="Locked off. No increment, variable or CTC impact." />
+          <Fixed label="New joiner cut-off" value="30 days before the period ends" />
+          <Fixed label="Notice period employees" value="Include, and highlight" />
+          <Fixed label="Exited employees" value="Include, read-only after last working day" />
+        </div>
+        <div className="banner b-red" style={{ marginTop: 14, marginBottom: 0 }}>
+          <span aria-hidden="true">🔒</span>
+          <div>
+            The payout lock is a database constraint, not a setting:{' '}
+            <code>payout_linkage_enabled = false</code>. No screen, admin or API
+            call can turn it on — enabling it would take a migration that drops
+            the CHECK. This PMS is developmental, and additional benefits stay
+            recognition-only: certificate, nomination, award, no cash component.
+          </div>
+        </div>
+      </Card>
+    </>
+  )
+}
+
+// ── §6.2 Policy Builder ──────────────────────────────────────────────────
+
+export function PolicyTab({ policies, people }: {
+  policies: Policy[]; people: (Person & { id: string })[]
+}) {
+  const trouble = useMemo(() => conflicts(policies, people), [policies, people])
+  return (
+    <>
+      <Card title="Policy builder"
+            sub="One company can run several policies at once — sales monthly, leadership half-yearly, workmen annual.">
+        <div className="tblwrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Policy</th><th>Applies to</th><th>Frequency</th>
+                <th>KRA min / max</th><th>Finalised by</th>
+                <th className="num">Employees</th><th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {policies.length === 0 ? (
+                <tr><td colSpan={7} style={{ padding: 0 }}>
+                  <Empty what="No policies configured yet" why={WAITING_ON_066} />
+                </td></tr>
+              ) : policies.map(p => (
+                <tr key={p.id}>
+                  <td style={{ fontWeight: 700 }}>{p.name}</td>
+                  <td>{[p.locationId, (p.grades ?? []).join('/'), p.departmentId].filter(Boolean).join(' · ') || 'All employees'}</td>
+                  <td>{FREQ_LABEL[p.frequency]}</td>
+                  <td>{p.minKra} / {p.maxKra}</td>
+                  <td>{FINALISER_LABEL[p.whoCanFinalise]}</td>
+                  <td className="num">—</td>
+                  <td>{p.isActive ? <Pill tone="green">Active</Pill> : <Pill tone="amber">Draft</Pill>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="divider" />
+        <Section>Which policy an employee falls under</Section>
+        <div className="flowbox">{
+          'narrowest match wins\n\n' +
+          '  location   ← most specific, checked first\n' +
+          '  grade\n' +
+          '  department\n' +
+          '  all        ← the fallback\n\n' +
+          'so a Sales person at the Pune plant follows Pune, not Sales.'
+        }</div>
+        <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+          Rule 14 says an employee is in <b>exactly one</b> active policy. Two policies
+          of equal narrowness is a configuration mistake, so it is refused rather than
+          guessed — silently picking one only surfaces months later, when an appraisal
+          routes to the wrong manager.
+        </div>
+      </Card>
+
+      <Card title="Coverage check"
+            sub="Run before a cycle opens, while a gap is still a five-minute fix.">
+        {people.length === 0 ? (
+          <Empty what="Nothing to check yet"
+                 why="This reads the employee list against the configured policies. Both arrive with migration 066." />
+        ) : (
+          <div className="grid g2">
+            <div className="stat">
+              <div className="lbl">Not covered</div>
+              <div className={`val ${trouble.uncovered.length ? 'bad' : 'good'}`}>
+                {trouble.uncovered.length}
+              </div>
+              <div className="note">No policy matches them — they cannot be rated at all</div>
+            </div>
+            <div className="stat">
+              <div className="lbl">Contested</div>
+              <div className={`val ${trouble.contested.length ? 'bad' : 'good'}`}>
+                {trouble.contested.length}
+              </div>
+              <div className="note">Two policies match equally — the tie has to be broken by hand</div>
+            </div>
+          </div>
+        )}
+      </Card>
+    </>
+  )
+}
+
+// ── §6.3 Fill Status Tracker ─────────────────────────────────────────────
+
+const FILL_TONE: Record<FillStatus, 'red' | 'amber' | 'brand' | 'blue' | 'green'> = {
+  NOT_STARTED: 'red', DRAFT_SAVED: 'amber', SUBMITTED: 'brand',
+  IN_REVIEW: 'blue', FINALISED: 'green',
+}
+
+export function FillTab({ rows, deptNames, loading }: {
+  rows: FillRow[] | null; deptNames: Record<string, string>; loading: boolean
+}) {
+  const [status, setStatus] = useState<'ALL' | FillStatus>('ALL')
+  const [dept, setDept] = useState('ALL')
+  const all = rows ?? []
+  const roll = rollUp(all)
+  const shown = all.filter(r =>
+    (status === 'ALL' || r.fill_status === status) &&
+    (dept === 'ALL' || (r.department_id ?? '') === dept))
+
+  return (
+    <>
+      {/* Six cards, six columns. In a five-column grid the sixth wraps alone
+          onto a second row beside a run of empty space, which reads as a
+          rendering fault rather than a layout. */}
+      <div className="grid g6" style={{ marginBottom: 16 }}>
+        <div className="stat">
+          <div className="lbl">Total employees</div>
+          <div className="val">{roll.total}</div>
+        </div>
+        {FILL_ORDER.map(s => {
+          const n = roll.counts[s]
+          const pct = roll.total ? Math.round((n / roll.total) * 1000) / 10 : 0
+          const tone = s === 'NOT_STARTED' ? 'bad' : s === 'DRAFT_SAVED' ? 'wait'
+                     : s === 'FINALISED' ? 'good' : 'brand'
           return (
-            <button key={f} type="button" onClick={() => onPick(f)} aria-pressed={on}
-              style={{ cursor: 'pointer', fontFamily: 'inherit', padding: '8px 14px',
-                       borderRadius: R.sm, fontSize: F.small, fontWeight: on ? W.bold : W.semi,
-                       border: `1px solid ${on ? C.brand : C.line}`,
-                       background: on ? C.brand : C.surface,
-                       color: on ? C.onAccent : C.inkSoft }}>
-              {f === 'MONTHLY' ? 'Every month' : f === 'QUARTERLY' ? 'Every three months'
-                : f === 'HALF_YEARLY' ? 'Twice a year' : 'Once a year'}
-              <span style={{ opacity: .8, marginLeft: 6 }}>· {PERIODS_PER_YEAR[f]}</span>
-            </button>
+            <div className="stat" key={s}>
+              <div className="lbl">{FILL_LABEL[s]}</div>
+              <div className={`val ${tone}`}>{n}</div>
+              <div className="note">{pct}%</div>
+            </div>
           )
         })}
       </div>
-      <Table head={['Period', 'Covers', 'Starts', 'Ends']}
-             rows={periods.map(p => [p.code, p.label, p.start, p.end])}
-             empty="Pick a financial-year start date to see the periods." />
-      <div style={{ fontSize: F.micro, color: C.faint, marginTop: S.sm, lineHeight: 1.5 }}>
-        Saving this calls pms_generate_periods(), which creates every period above along with its
-        KRA, self-rating, review and finalise windows. Changing the frequency later regenerates them.
-      </div>
-    </>
-  )
-}
 
-// ── the tabs ─────────────────────────────────────────────────────────────
-
-function ConfigTab({ freq, setFreq, fyStart }: {
-  freq: Frequency; setFreq: (f: Frequency) => void; fyStart: string
-}) {
-  return (
-    <>
-      <Card title="How often the cycle runs"
-            sub="Choosing a frequency generates every period and its windows.">
-        <FrequencyPreview freq={freq} onPick={setFreq} fyStart={fyStart} />
-      </Card>
-
-      <Card title="The rules every KRA set is held to"
-            sub="Enforced by pms_validate_kras() in the database, not only by the screen.">
-        <div style={{ display: 'grid', gap: 12 }}>
-          <Rule k="KRAs per person" v="4 to 10"
-                why="Fewer than four and a rating rests on too little; more than ten and nothing carries real weight." />
-          <Rule k="Weightage must total" v="exactly 100"
-                why="A set that does not add up cannot be submitted, so a manager can never approve one that is short." />
-          <Rule k="Smallest weightage on one KRA" v="5"
-                why="Stops a goal being added for appearances and then weighted to nothing." />
-          <Rule k="Who writes them" v="the employee"
-                why="They draft their own; the manager agrees them in the one-to-one before they lock." />
-          <Rule k="One-to-one before locking" v="required"
-                why="Both sides acknowledge it. Without that, pms_lock_kras() refuses and the weightage never locks." />
-          <Rule k="Final review one-to-one" v="required before publishing"
-                why="pms_finalise() blocks without it, so a result cannot reach somebody who was never spoken to." />
-        </div>
-      </Card>
-
-      <Card title="Who is included" sub="Eligibility, and how leavers are treated.">
-        <div style={{ display: 'grid', gap: 12 }}>
-          {(['NEW_JOINER', 'NOTICE_PERIOD', 'EXITED'] as Flag[]).map(f => (
-            <Rule key={f} k={FLAG_LABEL[f]} v={f === 'NEW_JOINER' ? 'Not rated' : 'Included and flagged'}
-                  why={FLAG_MEANING[f]} />
-          ))}
-        </div>
-      </Card>
-
-      {/* The rule that must never move, stated where somebody would look to
-          change it — not hidden in a migration comment. */}
-      <Card tone="locked" title="Pay, increment and CTC linkage"
-            sub="Locked off. This is not a setting.">
-        <div style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.6, maxWidth: '72ch' }}>
-          This module is developmental. A rating here changes nothing about anyone&apos;s salary,
-          increment, variable pay or CTC, and additional benefits are recognition only — a
-          certificate, a nomination, an award, never cash.
-          <br /><br />
-          The database pins it: <code style={{ background: C.sunken, padding: '1px 6px',
-            borderRadius: 5, fontSize: F.micro }}>CHECK (payout_linkage_enabled = false)</code>.
-          No screen, no admin and no API call can set it true — turning it on would take a
-          migration that drops the constraint.
-        </div>
-      </Card>
-    </>
-  )
-}
-
-function PolicyTab({ policies }: { policies: Policy[] }) {
-  return (
-    <Card title="Policies running at once"
-          sub="A company can run several. An employee is on exactly one.">
-      <Table
-        head={['Policy', 'Applies to', 'How often', 'KRAs', 'Finalised by']}
-        rows={policies.map(p => [
-          p.name,
-          p.locationId ? `Location ${p.locationId}`
-            : p.grades?.length ? `Grades ${p.grades.join(', ')}`
-            : p.departmentId ? `Department ${p.departmentId}` : 'Everyone else',
-          p.frequency === 'MONTHLY' ? 'Every month' : p.frequency === 'QUARTERLY' ? 'Every three months'
-            : p.frequency === 'HALF_YEARLY' ? 'Twice a year' : 'Once a year',
-          `${p.minKra}–${p.maxKra}`,
-          p.whoCanFinalise.replace(/_/g, ' → ').replace('RM1', 'RM L1').replace('RM2', 'RM L2'),
-        ])}
-        empty="No policies yet. Everyone follows the default cycle until one is added." />
-      <div style={{ fontSize: F.micro, color: C.muted, marginTop: S.md, lineHeight: 1.6,
-                    maxWidth: '74ch' }}>
-        <strong style={{ color: C.ink }}>When two policies could both apply, the narrower one
-        wins</strong> — location, then grade, then department, then everyone. Somebody in Sales at
-        the Pune plant follows the Pune policy, not the Sales one. Two policies of the same
-        narrowness claiming the same person is refused rather than guessed: it is a configuration
-        mistake, and picking one silently would only surface when an appraisal routed to the wrong
-        manager.
-      </div>
-    </Card>
-  )
-}
-
-function UploadTab() {
-  return (
-    <>
-      <Card title="Bulk rating upload"
-            sub="For an offline calibration, or migrating ratings from an old system.">
-        <div style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.6, maxWidth: '72ch' }}>
-          Upload a file with these columns. Every row is checked before anything is written, and
-          the whole file is rejected until every row is clean — a half-applied upload would leave
-          some people on the system&apos;s rating and some on the spreadsheet&apos;s, with nothing
-          on screen to say which.
-        </div>
-        <div style={{ marginTop: S.md, overflowX: 'auto' }}>
-          <code style={{ fontSize: F.micro, color: C.inkSoft, whiteSpace: 'nowrap' }}>
-            {TEMPLATE_COLUMNS.join(' · ')}
-          </code>
-        </div>
-      </Card>
-
-      <Card title="What will stop a file" sub="Each of these blocks the commit.">
-        <div style={{ display: 'grid', gap: 10 }}>
-          {(Object.keys(ERROR_TEXT) as (keyof typeof ERROR_TEXT)[]).map(k => (
-            <div key={k} style={{ display: 'grid', gap: 2,
-                                  gridTemplateColumns: 'minmax(150px, 210px) 1fr' }}>
-              <code style={{ fontSize: F.micro, color: C.critical, fontWeight: W.semi }}>{k}</code>
-              <div style={{ fontSize: F.small, color: C.inkSoft }}>{ERROR_TEXT[k]}</div>
-            </div>
-          ))}
-        </div>
-        <div style={{ fontSize: F.micro, color: C.muted, marginTop: S.md, lineHeight: 1.6,
-                      maxWidth: '72ch' }}>
-          A reason is required only where the uploaded rating actually differs from the computed
-          one. Asking for one on an unchanged row would train people to type &quot;n/a&quot;, which
-          is worse than not asking. Every changed row is written to
-          <code style={{ fontSize: F.micro }}> pms_rating_upload_log</code> with who did it, when,
-          and why.
-        </div>
-      </Card>
-    </>
-  )
-}
-
-function PipTab() {
-  const STEPS: { n: number; who: string; what: string }[] = [
-    { n: 1, who: 'Manager', what: 'Raises a request — dates, improvement areas, targets, how each is measured, support offered.' },
-    { n: 2, who: 'HR Manager', what: 'Reviews it. Can adjust dates, drop an area, send it back or decline it.' },
-    { n: 3, who: 'HR Manager', what: 'Initiates. The employee is notified and a review frequency is set.' },
-    { n: 4, who: 'Employee', what: 'Acknowledges the plan, with an optional note of their own.' },
-    { n: 5, who: 'Manager', what: 'Records each periodic review — improved, partial or no change, per area.' },
-    { n: 6, who: 'HR Manager', what: 'Closes it: improved, extended, or referred for separation review.' },
-  ]
-  return (
-    <>
-      <Card title="How a PIP moves" sub="Six steps, and step 3 is the one that matters.">
-        <div style={{ display: 'grid', gap: 12 }}>
-          {STEPS.map(s => (
-            <div key={s.n} style={{ display: 'flex', gap: S.md, alignItems: 'flex-start' }}>
-              <span style={{ width: 24, height: 24, borderRadius: '50%', flexShrink: 0,
-                             display: 'grid', placeItems: 'center', fontSize: F.micro,
-                             fontWeight: W.bold, background: C.sunken, color: C.inkSoft }}>{s.n}</span>
-              <div>
-                <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{s.who}</div>
-                <div style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.55 }}>{s.what}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </Card>
-
-      <Card tone="warn" title="A manager cannot start a PIP"
-            sub="They raise a request. HR initiates it.">
-        <div style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.65, maxWidth: '74ch' }}>
-          This is a legal position, not a procedural one. A PIP is the documentation trail. If a
-          separation ever happens on performance grounds, this record is what answers a claim under
-          the Industrial Disputes Act — documented targets, documented reviews and documented
-          employee acknowledgement, all three. HR gatekeeping is what keeps that trail consistent
-          enough to rely on.
-        </div>
-      </Card>
-
-      <Card title="What each state is waiting for">
-        <Table head={['State', 'Waiting on', 'What happens next']}
-               rows={(Object.keys(STATUS_LABEL) as PipStatus[]).map(s => {
-                 const n = whatNext({ status: s })
-                 return [STATUS_LABEL[s], n.who ?? '—', n.what]
-               })}
-               empty="" />
-      </Card>
-    </>
-  )
-}
-
-function ReportsTab() {
-  const REPORTS = [
-    'Employee-wise KRA detail', 'Fill status', 'Rating summary', 'Self vs manager gap',
-    'KRA weightage compliance', 'One-to-one log', 'Exit and notice period',
-    'Appreciation and benefits register', 'PIP register', 'Period-on-period trend',
-    'Category analysis', 'Manager rating behaviour', 'Override and audit log',
-    'Cycle completion',
-  ]
-  return (
-    <Card title="Reports" sub="All fourteen, in the portal and as Excel.">
-      <div style={{ display: 'grid', gap: 7,
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
-        {REPORTS.map((r, i) => (
-          <div key={r} style={{ display: 'flex', gap: 9, alignItems: 'baseline' }}>
-            <span style={{ fontSize: F.micro, color: C.faint, fontVariantNumeric: 'tabular-nums',
-                           minWidth: 18 }}>{i + 1}</span>
-            <span style={{ fontSize: F.small, color: C.inkSoft }}>{r}</span>
+      <Card title="Fill status tracker"
+            sub="Who has done what, live. Every column here is in the Excel export.">
+        <div className="grid g5" style={{ marginBottom: 14 }}>
+          <Field label="Department">
+            <select value={dept} onChange={e => setDept(e.target.value)}>
+              <option value="ALL">All departments</option>
+              {Object.entries(deptNames).map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Status">
+            <select value={status} onChange={e => setStatus(e.target.value as 'ALL' | FillStatus)}>
+              <option value="ALL">All statuses</option>
+              {FILL_ORDER.map(s => <option key={s} value={s}>{FILL_LABEL[s]}</option>)}
+            </select>
+          </Field>
+          <Field label="Employment"><select disabled><option>All</option></select></Field>
+          <Field label="Company"><select disabled><option>All companies</option></select></Field>
+          <div className="fld" style={{ alignSelf: 'end' }}>
+            <button className="btn" style={{ width: '100%' }} type="button"
+                    onClick={() => { setStatus('ALL'); setDept('ALL') }}>
+              Clear filters
+            </button>
           </div>
-        ))}
+        </div>
+
+        <div className="tblwrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Code</th><th>Employee</th><th>Department</th>
+                <th className="num">KRAs</th><th className="num">Weightage</th>
+                <th>Status</th><th>What is owed, and by whom</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={7} style={{ padding: 0 }}>
+                  <Empty what="Loading" why="Reading vw_pms_fill_status." />
+                </td></tr>
+              ) : shown.length === 0 ? (
+                <tr><td colSpan={7} style={{ padding: 0 }}>
+                  <Empty
+                    what={all.length ? 'Nothing matches those filters' : 'No fill status yet'}
+                    why={all.length
+                      ? 'Widen the department or status filter above.'
+                      : WAITING_ON_066} />
+                </td></tr>
+              ) : shown.map((r, i) => {
+                const s = (r.fill_status ?? '') as FillStatus
+                const known = FILL_ORDER.includes(s)
+                const wt = r.total_weightage ?? 0
+                return (
+                  <tr key={`${r.employee_code ?? i}`}>
+                    <td>{r.employee_code ?? '—'}</td>
+                    <td style={{ fontWeight: 600 }}>{r.employee_name ?? '—'}</td>
+                    <td>{deptNames[r.department_id ?? ''] ?? 'Unknown'}</td>
+                    <td className="num">{r.kra_count ?? 0}</td>
+                    <td className="num">
+                      <span className={wt === DEFAULT_RULES.totalWeightage ? 'ok' : 'bad'}>{wt}</span>
+                    </td>
+                    <td>{known
+                      ? <Pill tone={FILL_TONE[s]}>{FILL_LABEL[s]}</Pill>
+                      : <Pill tone="grey">Unknown</Pill>}</td>
+                    <td className="k">{known ? FILL_MEANING_SHORT[s] : 'Status not recognised'}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="btnrow">
+          <button className="btn ghost sm" type="button" disabled>⬇ Export to Excel</button>
+          <button className="btn ghost sm" type="button" disabled>⬇ Export not-started only</button>
+          <button className="btn ghost sm" type="button" disabled>Send bulk reminder</button>
+        </div>
+        <div className="k" style={{ marginTop: 8 }}>
+          Export and reminders switch on with 066 — they need the rows they would send about.
+        </div>
+      </Card>
+    </>
+  )
+}
+
+/** The chase-list phrasing, trimmed to fit a table cell. */
+const FILL_MEANING_SHORT: Record<FillStatus, string> = {
+  NOT_STARTED: 'Cannot be rated at all — chase first',
+  DRAFT_SAVED: 'Started, nothing sent. A nudge, not an escalation',
+  SUBMITTED:   'Waiting on their manager',
+  IN_REVIEW:   'Waiting on the next approver or the HOD',
+  FINALISED:   'Settled — nothing further owed',
+}
+
+// ── §6.4 Final Rating Upload ─────────────────────────────────────────────
+
+export function UploadTab() {
+  const [rows, setRows] = useState<UploadRow[] | null>(null)
+  const [name, setName] = useState('')
+  const preview = rows ? checkUpload(rows, KNOWN_NOTHING) : null
+
+  return (
+    <>
+      <div className="banner b-amber">
+        <span aria-hidden="true">⚠️</span>
+        <div>
+          These are <b>override rights</b>. A manual upload replaces the rating the
+          system computed, and every row is written to the audit log with the actor,
+          the timestamp and the reason. Use it for an offline calibration or a legacy
+          migration — not to correct one person.
+        </div>
       </div>
-      <div style={{ fontSize: F.micro, color: C.muted, marginTop: S.md, lineHeight: 1.6,
-                    maxWidth: '72ch' }}>
-        Each is scoped to what the reader may see: HR and Admin get every column, a manager gets
-        their own team, an HOD their department, an employee only themselves.
+
+      <Card title="Final rating upload"
+            sub="For when a calibration happened offline, or legacy data has to be brought in.">
+        <div className="grid g3">
+          <Field label="Period"><select disabled><option>The open period</option></select></Field>
+          <Field label="Upload file" hint={name || 'CSV, using the template below'}>
+            <input type="file" accept=".csv,text/csv"
+                   onChange={e => {
+                     const f = e.target.files?.[0]
+                     setName(f ? f.name : '')
+                     if (!f) { setRows(null); return }
+                     f.text().then(t => setRows(parseCsv(t))).catch(() => setRows([]))
+                   }} />
+          </Field>
+          <div className="fld" style={{ alignSelf: 'end' }}>
+            <button className="btn ghost" style={{ width: '100%' }} type="button"
+                    onClick={() => downloadTemplate()}>
+              ⬇ Download template
+            </button>
+          </div>
+        </div>
+
+        <div className="flowbox">{`Template columns:\n\n  ${TEMPLATE_COLUMNS.join('\n  ')}`}</div>
+
+        <div className="divider" />
+        <Section>
+          {preview ? `Validation preview — ${preview.rows.length} rows` : 'Validation preview'}
+        </Section>
+        <div className="tblwrap">
+          <table>
+            <thead>
+              <tr>
+                <th className="num">Row</th><th>Code</th><th>Period</th>
+                <th className="num">System</th><th className="num">Uploaded</th>
+                <th>Change</th><th>Override reason</th><th>Validation</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!preview ? (
+                <tr><td colSpan={8} style={{ padding: 0 }}>
+                  <Empty what="Choose a file to see what it would do"
+                         why="Every row is checked before anything is written. Nothing commits while a single row still has an error." />
+                </td></tr>
+              ) : preview.rows.length === 0 ? (
+                <tr><td colSpan={8} style={{ padding: 0 }}>
+                  <Empty what="That file had no data rows" why="A header line on its own, or a format the parser did not recognise." />
+                </td></tr>
+              ) : preview.rows.map((r, i) => (
+                <tr key={i} className={r.errors.length ? 'exitrow' : undefined}>
+                  <td className="num">{i + 1}</td>
+                  <td>{r.row.employee_code || '—'}</td>
+                  <td>{r.row.period_code || '—'}</td>
+                  <td className="num">{r.computed ?? '—'}</td>
+                  <td className="num">{r.uploaded ?? '—'}</td>
+                  <td>{r.delta === null ? <Pill tone="grey">—</Pill>
+                     : r.delta === 0 ? <Pill tone="grey">No change</Pill>
+                     : <Pill tone="amber">{r.delta > 0 ? `+${r.delta}` : r.delta}</Pill>}</td>
+                  <td className={r.errors.includes('ERROR_REASON_MISSING') ? 'bad' : undefined}>
+                    {r.row.override_reason || (r.errors.includes('ERROR_REASON_MISSING') ? 'Missing' : '—')}
+                  </td>
+                  <td>{r.errors.length
+                    ? <Pill tone="red">{ERROR_TEXT[r.errors[0]]}</Pill>
+                    : <Pill tone="green">OK</Pill>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {preview && (
+          <>
+            <div className="btnrow">
+              <button className="btn ghost sm" type="button" disabled={!preview.errorCount}>
+                ⬇ Download error rows
+              </button>
+              <button className="btn dark sm" type="button" disabled={!preview.canCommit}>
+                {preview.canCommit
+                  ? `Commit upload — ${preview.rows.length} rows`
+                  : `Commit blocked — ${preview.errorCount} ${preview.errorCount === 1 ? 'row needs' : 'rows need'} fixing`}
+              </button>
+            </div>
+            <div className="k" style={{ marginTop: 8, lineHeight: 1.6 }}>{summarise(preview)}</div>
+          </>
+        )}
+        <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+          A reason is owed only where the rating actually <b>changes</b>. Demanding one
+          on an unchanged row teaches people to type &ldquo;n/a&rdquo;, which is worse
+          than not asking. And a part-applied upload is worse than a refused one — some
+          people on the system&rsquo;s rating, some on the spreadsheet&rsquo;s, and
+          nothing on screen to say which.
+        </div>
+      </Card>
+    </>
+  )
+}
+
+/**
+ * What the checker knows before migration 066 exists: nothing.
+ *
+ * That is deliberately not a stub that waves rows through. With no lookup,
+ * every row comes back ERROR_NOT_FOUND, which is the honest answer — the file
+ * may well be perfect, but nothing here can confirm a single employee code
+ * against a table that is not there. A permissive stub would show a green
+ * "OK" on all 24 rows and teach an admin to trust a check that never ran.
+ */
+const KNOWN_NOTHING = {
+  lookup: () => null,
+  scale: [1, 2, 3, 4, 5],
+  improvementMandatoryAtOrBelow: 2,
+}
+
+/** Minimal CSV read — the template has no quoted commas in it. */
+function parseCsv(text: string): UploadRow[] {
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  if (lines.length < 2) return []
+  const head = lines[0].split(',').map(h => h.trim())
+  return lines.slice(1).map(line => {
+    const cells = line.split(',')
+    const row: Record<string, string> = {}
+    head.forEach((h, i) => { row[h] = (cells[i] ?? '').trim() })
+    return row as unknown as UploadRow
+  })
+}
+
+function downloadTemplate() {
+  // UTF-8 BOM — the EZER export standard, and what stops Excel mangling names.
+  const blob = new Blob(['﻿' + TEMPLATE_COLUMNS.join(',') + '\n'],
+                        { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = 'pms-final-rating-template.csv'
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+// ── §6.5 PIP Management ──────────────────────────────────────────────────
+
+export interface PipRow { code: string; name: string; raisedBy: string; pip: Pip }
+
+export function PipTab({ queue }: { queue: PipRow[] }) {
+  return (
+    <>
+      <div className="banner b-blue">
+        <span aria-hidden="true">ℹ️</span>
+        <div>
+          <b>RM raises a request → HR Manager reviews → HR initiates → the employee
+          is notified and acknowledges.</b> An RM cannot start a PIP themselves. That
+          is not a permissions detail: the PIP is the documentation trail that answers
+          a claim under the Industrial Disputes Act, and HR gatekeeping is what keeps
+          it consistent enough to rely on.
+        </div>
+      </div>
+
+      <div className="grid g4" style={{ marginBottom: 16 }}>
+        <div className="stat accent">
+          <div className="lbl">Pending my review</div>
+          <div className="val">{queue.filter(r => r.pip.status === 'PENDING_HR').length}</div>
+        </div>
+        <div className="stat">
+          <div className="lbl">Active PIPs</div>
+          <div className="val">{queue.filter(r => r.pip.status === 'ACKNOWLEDGED' || r.pip.status === 'IN_REVIEW').length}</div>
+        </div>
+        <div className="stat">
+          <div className="lbl">Awaiting acknowledgement</div>
+          <div className="val">{queue.filter(r => r.pip.status === 'INITIATED').length}</div>
+        </div>
+        <div className="stat">
+          <div className="lbl">Closed this year</div>
+          <div className="val">{queue.filter(r => r.pip.status === 'CLOSED').length}</div>
+        </div>
+      </div>
+
+      <Card title="PIP requests — HR action queue"
+            sub="Raised by managers, waiting on a decision from HR.">
+        <div className="tblwrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Employee</th><th>Raised by</th><th>Status</th>
+                <th>Waiting on</th><th>What happens next</th>
+              </tr>
+            </thead>
+            <tbody>
+              {queue.length === 0 ? (
+                <tr><td colSpan={5} style={{ padding: 0 }}>
+                  <Empty what="No PIP requests" why={WAITING_ON_066} />
+                </td></tr>
+              ) : queue.map((r, i) => {
+                const nx = whatNext(r.pip)
+                return (
+                  <tr key={r.code || i}>
+                    <td style={{ fontWeight: 600 }}>{r.name} <span className="k">{r.code}</span></td>
+                    <td>{r.raisedBy}</td>
+                    <td><Pill tone={r.pip.status === 'REJECTED' ? 'red'
+                                  : r.pip.status === 'CLOSED' ? 'grey'
+                                  : r.pip.status === 'IN_REVIEW' || r.pip.status === 'ACKNOWLEDGED' ? 'green'
+                                  : 'amber'}>
+                      {STATUS_LABEL[r.pip.status]}
+                    </Pill></td>
+                    <td>{nx.who ?? '—'}</td>
+                    <td className="k">{nx.what}</td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card title="The six steps" sub="Spec §7, in order. Each one is a gate, not a status label.">
+        <div className="tblwrap">
+          <table>
+            <thead><tr><th className="num">Step</th><th>Who</th><th>What happens</th></tr></thead>
+            <tbody>
+              {PIP_STEPS.map(s => (
+                <tr key={s.n}>
+                  <td className="num">{s.n}</td>
+                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{s.who}</td>
+                  <td>{s.what}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
+  )
+}
+
+const PIP_STEPS = [
+  { n: 1, who: 'RM',         what: 'Raises the request — trigger rating, proposed dates, improvement areas with a current state, a target, a measure and a review date, plus the support being offered' },
+  { n: 2, who: 'HR Manager', what: 'Reviews: adjusts dates, drops an area that does not belong, rejects with a reason, or sends it back to the RM. Writes a note to the employee and an internal one to the RM' },
+  { n: 3, who: 'HR',         what: 'Initiates. Review frequency is set — fortnightly or monthly — and the employee is notified' },
+  { n: 4, who: 'Employee',   what: 'Acknowledges, with an optional note of their own' },
+  { n: 5, who: 'RM + HR',    what: 'Periodic reviews — each area marked improved, partial or no change, with notes' },
+  { n: 6, who: 'HR',         what: 'Outcome: improved, extended, or referred for separation review' },
+]
+
+// ── §6.6 Reports & Export ────────────────────────────────────────────────
+
+export function ReportsTab() {
+  return (
+    <Card title="Report library"
+          sub="Every one of these is readable in the portal and exports to Excel or CSV.">
+      <div className="tblwrap">
+        <table>
+          <thead>
+            <tr><th className="num">#</th><th>Report</th><th>What it contains</th><th>Filters</th><th /></tr>
+          </thead>
+          <tbody>
+            {REPORTS.map(r => (
+              <tr key={r.n}>
+                <td className="num">{r.n}</td>
+                <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name}</td>
+                <td>{r.contains}</td>
+                <td className="k" style={{ whiteSpace: 'nowrap' }}>{r.filters}</td>
+                <td><button className="btn sm" type="button" disabled>⬇ Excel</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+        Exports are UTF-8 with a BOM, the EZER standard — without it Excel mangles
+        every name with an accent in it. Columns are filtered by role: HR and admin
+        see all of them, an RM sees their own team, a HOD their department, an
+        employee only their own row.
       </div>
     </Card>
   )
 }
 
-export { ConfigTab, PolicyTab, UploadTab, PipTab, ReportsTab, Card as AdminCard, Table as AdminTable }
+/** Spec §9, all fourteen. */
+const REPORTS = [
+  { n: 1,  name: 'Employee-wise KRA detail', filters: 'Company, dept, RM, period, status',
+    contains: 'Every KRA per employee — title, KPI, target, weightage, category, achievement, self, RM L1, RM L2, final, comments and the weighted contribution' },
+  { n: 2,  name: 'Fill status', filters: 'All, plus employment type',
+    contains: 'Not started, draft saved, submitted, finalised — with the last action timestamp' },
+  { n: 3,  name: 'Rating summary', filters: 'Company, dept, rating',
+    contains: 'Final rating per employee with department, RM, HOD and who finalised it' },
+  { n: 4,  name: 'Self vs manager gap', filters: 'Dept, RM, delta range',
+    contains: 'Self score, final score and the delta — an expectation-mismatch detector' },
+  { n: 5,  name: 'KRA weightage compliance', filters: 'Company, dept',
+    contains: 'Fewer than four KRAs, totals that are not 100, one-to-ones that never happened' },
+  { n: 6,  name: 'One-to-one log', filters: 'Dept, RM, type',
+    contains: 'Every discussion — date, type, points covered, and both acknowledgements' },
+  { n: 7,  name: 'Exit & notice period', filters: 'Company, dept',
+    contains: 'Ratings still owed before somebody’s last working day' },
+  { n: 8,  name: 'Appreciation & benefits register', filters: 'Company, dept, type',
+    contains: 'Who received what recognition — certificate, nomination, award' },
+  { n: 9,  name: 'PIP register', filters: 'Status, outcome',
+    contains: 'Request to initiation to reviews to outcome — the full trail' },
+  { n: 10, name: 'Period-on-period trend', filters: 'Employee, dept',
+    contains: 'Rating movement across periods, per employee or per department' },
+  { n: 11, name: 'Category analysis', filters: 'Dept, category',
+    contains: 'Business, process, people and compliance averages' },
+  { n: 12, name: 'Manager rating behaviour', filters: 'Dept, RM',
+    contains: 'Per-RM average and distribution, with a lenient or harsh flag' },
+  { n: 13, name: 'Override / audit log', filters: 'Actor, date range',
+    contains: 'Manual uploads and changes — actor, old value, new value, reason, timestamp' },
+  { n: 14, name: 'Cycle completion', filters: 'Dept, location, grade',
+    contains: 'Completion percentage by department, location and grade' },
+]
+
+// ── the flow and the hierarchy, §1 and §2 ────────────────────────────────
+
+export function FlowTab({ chainCoverage }: { chainCoverage?: React.ReactNode }) {
+  return (
+    <>
+      <Card title="How a period runs, start to finish"
+            sub="Spec §1. Each step names the gate that stops it — most delays are one of these, not somebody being slow.">
+        <div className="tblwrap">
+          <table>
+            <thead><tr><th className="num">#</th><th>Who</th><th>What happens</th><th>The gate</th></tr></thead>
+            <tbody>
+              {FLOW.map(s => (
+                <tr key={s.n} className={s.n >= 9 ? 'noticerow' : undefined}>
+                  <td className="num">{s.n}</td>
+                  <td style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{s.actor}</td>
+                  <td>{s.what}</td>
+                  <td className="k">{s.gate ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="banner b-green" style={{ marginTop: 14, marginBottom: 0 }}>
+          <span aria-hidden="true">✓</span><div><b>{FLOW_ENDS}</b></div>
+        </div>
+        <div className="k" style={{ marginTop: 8 }}>
+          Steps 9 to 12 only run when a rating is low — they are the PIP branch.
+        </div>
+      </Card>
+
+      <Card title="The reporting line"
+            sub="Ratings travel up it; nothing skips a level unless the policy says so.">
+        <div className="flowbox">{REPORTING_LINE.join('  →  ')}</div>
+      </Card>
+
+      <Card title="Who may do what"
+            sub="Spec §2, cell for cell. ⚙ means the policy decides — see “who can finalise” in the cycle setup.">
+        <div className="tblwrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Action</th>
+                {ROLES.map(r => <th key={r} style={{ textAlign: 'center' }}>{ROLE_LABEL[r]}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {ACTIONS.map(a => (
+                <tr key={a}>
+                  <td style={{ fontWeight: 600 }}>{ACTION_LABEL[a]}</td>
+                  {ROLES.map(r => {
+                    const p = may(r, a)
+                    const scope = SCOPE_NOTE[a]?.[r]
+                    return (
+                      <td key={r} style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {p === 'yes' ? (scope
+                            ? <span className="pill p-green">{scope}</span>
+                            : <span className="ok" style={{ fontWeight: 800 }}>✓</span>)
+                         : p === 'policy' ? <span className="pill p-amber">policy</span>
+                         : <span className="k">—</span>}
+                      </td>
+                    )
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+          Two rows are worth reading twice. <b>Initiate PIP</b> is HR only — an RM can
+          raise a request and nothing more. <b>Finalise rating</b>{' '}
+          {/* An explicit space, not a literal one. The text chunk that follows
+              </b> starts with a space AND contains an entity (&rsquo;), and in
+              that combination the chunk's leading space is dropped — this
+              rendered as "Finalise ratingis" until it was measured in the DOM.
+              {' '} is not whitespace the parser can collapse. */}
+          is the policy&rsquo;s call for the three manager roles, so treating it
+          as a plain yes would let an
+          RM L1 finalise under a HOD-only policy, and treating it as a no would hide the
+          button from the person the policy appointed.
+        </div>
+      </Card>
+
+      {chainCoverage}
+    </>
+  )
+}
+
+export { FLAG_LABEL, FLAG_MEANING }
+export type { Flag, Role }

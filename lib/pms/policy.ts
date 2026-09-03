@@ -159,3 +159,77 @@ export function previewPeriods(freq: Frequency, fyStartISO: string): PeriodWindo
   }
   return out
 }
+
+// ── the four windows inside a period ─────────────────────────────────────
+
+export interface Windows {
+  /** When KRAs may be written and settled. Opens WITH the period. */
+  kra: PeriodWindow
+  /** Self rating. Opens after the period ends — you cannot rate a quarter
+   *  you have not finished. */
+  self: PeriodWindow
+  /** RM L1 and RM L2. */
+  rm: PeriodWindow
+  /** Finalise, and publish the result. */
+  finalise: PeriodWindow
+}
+
+/** Days from the period's end that each downstream window opens and closes. */
+const WINDOW_PLAN = {
+  kraDays:      15,   // from the period's START
+  selfOpen:      1, selfClose:     10,   // all four below are from its END
+  rmOpen:       11, rmClose:       20,
+  finaliseOpen: 21, finaliseClose: 28,
+} as const
+
+function shift(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * The four windows §6.1's period table has to show.
+ *
+ * THE ONE THING TO GET RIGHT: the KRA window runs from the period's START and
+ * everything else from its END. KRAs are a commitment made at the beginning —
+ * agreeing them in July for a quarter that began in April is backfilling, and
+ * the one-to-one that settles them has nothing left to influence. Ratings are
+ * the opposite: they can only be given once the period is over.
+ *
+ * A monthly cycle is the case that breaks a naive plan. A 15-day KRA window
+ * inside a 30-day period is survivable, but 28 days of rating windows after it
+ * would still be open when the NEXT month's ratings start. So the downstream
+ * windows compress proportionally on short periods rather than overlapping the
+ * following cycle.
+ */
+export function windowsFor(p: PeriodWindow, freq: Frequency): Windows {
+  const span = Math.round(
+    (Date.parse(`${p.end}T00:00:00Z`) - Date.parse(`${p.start}T00:00:00Z`)) / 86400000) + 1
+  // Monthly periods get half-length windows; anything a quarter or longer has
+  // room for the full plan.
+  const squeeze = freq === 'MONTHLY' ? 0.5 : 1
+  const at = (n: number) => Math.max(1, Math.round(n * squeeze))
+  const kraLen = Math.min(at(WINDOW_PLAN.kraDays), span - 1)
+  const win = (label: string, from: string, to: string): PeriodWindow =>
+    ({ code: label, label, start: from, end: to })
+  return {
+    kra:      win('KRA window',  p.start, shift(p.start, kraLen - 1)),
+    self:     win('Self rating', shift(p.end, at(WINDOW_PLAN.selfOpen)),
+                                 shift(p.end, at(WINDOW_PLAN.selfClose))),
+    rm:       win('RM review',   shift(p.end, at(WINDOW_PLAN.rmOpen)),
+                                 shift(p.end, at(WINDOW_PLAN.rmClose))),
+    finalise: win('Finalise',    shift(p.end, at(WINDOW_PLAN.finaliseOpen)),
+                                 shift(p.end, at(WINDOW_PLAN.finaliseClose))),
+  }
+}
+
+export type PeriodState = 'closed' | 'active' | 'scheduled'
+
+/** §6.1's Status column. A period is active from its start until the last
+ *  window closes — not merely until the period ends, because the ratings that
+ *  belong to it are still being written for four weeks after that. */
+export function periodState(p: PeriodWindow, freq: Frequency, today: string): PeriodState {
+  if (today < p.start) return 'scheduled'
+  return today > windowsFor(p, freq).finalise.end ? 'closed' : 'active'
+}
