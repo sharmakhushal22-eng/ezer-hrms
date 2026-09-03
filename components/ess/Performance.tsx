@@ -80,10 +80,22 @@ function usePeriod(employeeId: string) {
 
   const reload = useCallback(async () => {
     setLoading(true)
-    const p = await supabase.from('pms_periods')
+    // THE PERIOD MUST BE THIS EMPLOYEE'S COMPANY'S PERIOD.
+    //
+    // Every company runs its own policy and therefore its own periods —
+    // there are currently three open Q2 rows in the live database, one per
+    // company. Selecting with limit(1) and no company filter picked whichever
+    // sorted first, so two employees out of three were shown a period that
+    // was not theirs, and every read hung off it did the same.
+    const me = await supabase.from('employees')
+      .select('company_id').eq('id', employeeId).maybeSingle()
+    const companyId = (me.data as { company_id?: string } | null)?.company_id ?? null
+
+    let q = supabase.from('pms_periods')
       .select('id,period_code,status')
       .not('status', 'in', '("CLOSED","SCHEDULED")')
-      .order('period_start', { ascending: false }).limit(1).maybeSingle()
+    if (companyId) q = q.eq('company_id', companyId)
+    const p = await q.order('period_start', { ascending: false }).limit(1).maybeSingle()
     if (p.error || !p.data) { setPeriod(null); setOverall(null); setLoading(false); return }
     setPeriod(p.data as Period)
 

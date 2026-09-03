@@ -15,18 +15,21 @@
 //
 // WHAT IS REAL AND WHAT IS WAITING
 //
-// Migration 066 creates the 15 pms_* tables and Nayan has not applied it yet.
-// (The spec folder ships the same schema as 079_pms_module_v2.sql; on this
-// branch 079 is group_profile and 055-057 are an old rolled-back RMS attempt,
-// so 066 — same 15 tables — is the file to run. Citing 079 here would send
-// somebody to the wrong migration.)
+// Migration 066 — the 15 pms_* tables — WAS APPLIED on 3 September. Verified
+// against the live database, not assumed: 3 policies, 12 periods and 395
+// enrolment rows. So an empty table on this screen means nothing has been
+// configured, NOT that a migration is missing, and the copy says so.
+//
+// (On this branch 079 is group_profile and 055-057 are an old rolled-back RMS
+// attempt. The spec folder ships the same schema as 079_pms_module_v2.sql;
+// 066 is the file that carries it here.)
 // So the tabs divide into two kinds, and it matters which is which:
 //
 //   Real now  — Cycle setup (periods are computed here, not fetched), Fill
 //               status (reads vw_pms_fill_status when it exists), Reports
 //               (the catalogue is the spec's own table).
 //   Structure — Policies, Upload, PIP. These render their real shape with an
-//               honest empty state naming 066. The mockup fills them with
+//               honest empty state. The mockup fills them with
 //               sample employees; inventing Rajesh Mehta here would be worse
 //               than an empty table, because somebody would try to act on him.
 //
@@ -136,9 +139,20 @@ function Empty({ what, why }: { what: string; why: string }) {
   )
 }
 
-const WAITING_ON_066 =
-  'Migration 066 creates the fifteen pms_* tables and has not been applied yet. ' +
-  'The screen is built and will fill itself the moment it is — nothing further is needed here.'
+/**
+ * "No rows" is NOT "no table", and saying the wrong one wastes somebody's day.
+ *
+ * 066 was applied on 3 September and the live database now holds 3 policies,
+ * 12 periods and 395 enrolment rows. An empty table here therefore means
+ * nothing has been CONFIGURED yet — telling HR that a migration is missing
+ * would send them to the DBA for a problem they can solve themselves in five
+ * minutes. The genuine missing-table case is caught upstream by the PGRST205
+ * probe, which renders its own screen.
+ */
+const NOTHING_CONFIGURED_YET =
+  'The performance tables are live, so this is empty because nothing has been ' +
+  'set up yet rather than because anything is broken. Configure it in the tabs ' +
+  'above and rows appear here.'
 
 /** dd-Mmm-yy, the mockup's date format, which is what an Indian HR team reads. */
 function shortDate(iso: string): string {
@@ -304,7 +318,7 @@ export function PolicyTab({ policies, people }: {
             <tbody>
               {policies.length === 0 ? (
                 <tr><td colSpan={7} style={{ padding: 0 }}>
-                  <Empty what="No policies configured yet" why={WAITING_ON_066} />
+                  <Empty what="No policies configured yet" why={NOTHING_CONFIGURED_YET} />
                 </td></tr>
               ) : policies.map(p => (
                 <tr key={p.id}>
@@ -343,7 +357,7 @@ export function PolicyTab({ policies, people }: {
             sub="Run before a cycle opens, while a gap is still a five-minute fix.">
         {people.length === 0 ? (
           <Empty what="Nothing to check yet"
-                 why="This reads the employee list against the configured policies. Both arrive with migration 066." />
+                 why="This reads the employee list against the configured policies. Add a policy in the tab above and the check runs against everybody." />
         ) : (
           <div className="grid g2">
             <div className="stat">
@@ -457,7 +471,7 @@ export function FillTab({ rows, deptNames, loading }: {
                     what={all.length ? 'Nothing matches those filters' : 'No fill status yet'}
                     why={all.length
                       ? 'Widen the department or status filter above.'
-                      : WAITING_ON_066} />
+                      : NOTHING_CONFIGURED_YET} />
                 </td></tr>
               ) : shown.map((r, i) => {
                 const s = (r.fill_status ?? '') as FillStatus
@@ -488,7 +502,7 @@ export function FillTab({ rows, deptNames, loading }: {
           <button className="btn ghost sm" type="button" disabled>Send bulk reminder</button>
         </div>
         <div className="k" style={{ marginTop: 8 }}>
-          Export and reminders switch on with 066 — they need the rows they would send about.
+          Export and reminders switch on once there are rows to send about.
         </div>
       </Card>
     </>
@@ -707,7 +721,7 @@ export function PipTab({ queue }: { queue: PipRow[] }) {
             <tbody>
               {queue.length === 0 ? (
                 <tr><td colSpan={5} style={{ padding: 0 }}>
-                  <Empty what="No PIP requests" why={WAITING_ON_066} />
+                  <Empty what="No PIP requests" why={NOTHING_CONFIGURED_YET} />
                 </td></tr>
               ) : queue.map((r, i) => {
                 const nx = whatNext(r.pip)
