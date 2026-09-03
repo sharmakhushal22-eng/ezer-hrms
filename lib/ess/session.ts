@@ -11,6 +11,7 @@
 //                    role_approval_rights). No route or component compares a role
 //                    code; they read is_rm / is_hod / approval_types / modules.
 import { NextRequest, NextResponse } from 'next/server'
+import { askedEmployeeId } from './asked'
 import { requireDashboardUser } from '@/lib/api-auth'
 import { rmsServiceClient as sb, grantForEmployee } from '@/lib/rms/server'
 import { hasAdminAccess, type Grant } from '@/lib/rms/resolve'
@@ -51,7 +52,7 @@ export async function essCaller(req: NextRequest): Promise<{ caller: EssCaller; 
   const auth = await requireDashboardUser(req)
   if (auth.error) return { caller: null, error: auth.error }
   const u = auth.user
-  const asked = req.nextUrl.searchParams.get('employee_id') || (req.method !== 'GET' ? null : null)
+  const asked = await askedEmployeeId(req)
 
   if (u.kind === 'ess' && u.employeeId) {
     if (!asked || asked === u.employeeId) {
