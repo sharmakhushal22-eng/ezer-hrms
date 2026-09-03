@@ -453,49 +453,84 @@ export default function Layout({ children }: { children: React.ReactNode }) {
              item label     5.58 (on a raised row)   section 7.95 (recessed)
              icon           5.37    selected ink  8.72 (on the white pill)
         */
+        /* ══ TWO POLARITIES, NOT ONE DESIGN WITH A DARKER SKIN ═════════
+           Light is now a PALE rail: a light-blue ground with navy ink, rows
+           tinted DARKER than the ground and sections lighter. Dark keeps the
+           deep rail: white ink, rows lighter than the ground, sections
+           darker. They are mirror images, so nothing below may assume which
+           way round it is — every colour that depends on polarity is a
+           token, set once per theme and never referenced literally in a
+           rule. A single hard-coded rgba() here is a rule that silently
+           renders one theme's ink on the other theme's surface.
+
+           WHY THE PALE GROUND STOPS WHERE IT DOES. The span is squeezed from
+           both ends and the ends want opposite things:
+
+             the section band is WHITE over the ground, so it separates least
+             at the TOP, where the ground is already near-white and there is
+             no headroom left above it;
+
+             the row is NAVY over the ground, and its navy label separates
+             least at the BOTTOM, where the row is darkest.
+
+           #D2E2FE -> #8FB4F2 is the widest span where both still hold, 16
+           points of lightness. Measured at whichever end is worse:
+
+                          light (pale)        dark (deep)
+             label          4.83                 5.07
+             icon           3.63                 4.55
+             section ink    8.05                 8.53
+             row/ground     1.41                 1.32
+             band/ground    1.19                 1.19
+        */
         .ez-rail{
-          background: linear-gradient(180deg, #2450C6 0%, #16307E 100%);
-          /* FOUR LEVELS, all blue, so nothing has to blend into anything.
-             A dark ground makes this possible: a row can sit ABOVE it and a
-             section BELOW it, which a pale ground could never do — there,
-             everything had to be lighter than everything else and the levels
-             ran out. Steps measured against the rail's lightest stop:
-                 Steps hold at BOTH ends of the gradient, which now travels far
-             enough that the two ends disagree — the midpoint is no longer
-             a stand-in for either:
-
-                        row/rail   band/rail   white label
-               light top  1.23       1.45         5.07
-               light bot  1.46       1.23         6.73
-               dark  top  1.32       1.50         5.61
-               dark  bot  1.53       1.19         7.61
-
-             The two constraints pull in opposite directions and that is
-             what fixes the span. A row is a light tint, so it separates
-             least at the TOP where the ground is already light; a section
-             is black, so it separates least at the BOTTOM where there is
-             little left to take away. Widen the gradient and one end or
-             the other gives out. */
-          --r-row:   linear-gradient(180deg, rgba(61,130,255,.46), rgba(61,130,255,.30));
-          --r-row-h: linear-gradient(180deg, rgba(61,130,255,.52), rgba(61,130,255,.35));
-          --r-band:  rgba(0,0,0,.26);
-          --r-edge:  rgba(255,255,255,.18);
-          /* Everything inside the rail inherits these — the brand mark, the
-             footer, the sign-out row. Without redefining them here, those
-             would still be drawing near-black ink on a deep blue ground. */
-          --ez-rail-text:        #F2F6FF;
-          --ez-rail-item:        #E8EEFB;
-          /* Lifted with the ground. These two carry real text — the 10px
-             subtitle under the brand mark, "Back to my ESS", the sign-out
-             row — and at #C3D4F2 / #A9C0EC they measured 4.01 and 3.27 on
-             the lighter rail. Nothing renders them on a row, so the row
-             checks could never have caught it. */
-          --ez-rail-muted:       #DEE9FC;
-          --ez-rail-faint:       #D8E4FA;
-          --ez-rail-line:        rgba(255,255,255,.16);
-          --ez-rail-hover:       rgba(255,255,255,.10);
-          --ez-rail-active-bg:   rgba(255,255,255,.18);
-          --ez-rail-active-text: #FFFFFF;
+          background: linear-gradient(180deg, #D2E2FE 0%, #8FB4F2 100%);
+          /* A row goes DARKER than this ground; a section goes lighter. */
+          --r-row:   linear-gradient(180deg, rgba(21,45,120,.10), rgba(21,45,120,.22));
+          --r-row-h: linear-gradient(180deg, rgba(21,45,120,.16), rgba(21,45,120,.30));
+          --r-band:  rgba(255,255,255,.62);
+          --r-edge:  rgba(21,45,120,.20);
+          --r-cast:      rgba(21,45,120,.16);
+          --r-cast-far:  rgba(21,45,120,.20);
+          --r-cast-h:    rgba(21,45,120,.20);
+          --r-cast-far-h:rgba(21,45,120,.28);
+          --r-press:     rgba(21,45,120,.14);
+          --r-focus:     #0D2154;
+          --r-pill-edge: rgba(21,45,120,.55);
+          --r-band-in:   rgba(255,255,255,.65);
+          --r-band-h:    rgba(255,255,255,.82);
+          --r-sec-ink-h: #0A1E52;
+          --r-fold:      #2A4E95;
+          --r-pulse:     rgba(20,48,110,.45);
+          /* Lit from above, same as the deep rail — but on a pale surface
+             the highlight is white and the shading below it is the navy. */
+          --r-spec:  rgba(255,255,255,.55);
+          --r-spec-h:rgba(255,255,255,.66);
+          --r-rim-t: rgba(255,255,255,.70);
+          --r-rim-b: rgba(21,45,120,.26);
+          --r-rim-th:rgba(255,255,255,.85);
+          --r-edge-h:rgba(21,45,120,.34);
+          /* Ink DARKENS on hover here, the mirror of going white on a deep
+             rail: the row darkens under it, so the ink has to outrun it. */
+          --r-ink:      #0F2660;
+          --r-ink-h:    #0A1E52;
+          --r-icon:     #1B3A7E;
+          --r-icon-h:   #0A1E52;
+          --r-sec-ink:  #173672;
+          --r-pill-bg:  #14306E;
+          --r-pill-ink: #FFFFFF;
+          --r-pill-ink-h: #FFFFFF;
+          /* The brand mark, the footer and the sign-out row inherit these.
+             On the pale rail they are NAVY, not the near-white they are on
+             the deep one — the single largest thing that flips. */
+          --ez-rail-text:  #0D2154;
+          --ez-rail-item:  #123069;
+          --ez-rail-muted: #1B3A7E;
+          --ez-rail-faint: #204186;
+          --ez-rail-line:  rgba(21,45,120,.20);
+          --ez-rail-hover: rgba(21,45,120,.08);
+          --ez-rail-active-bg:   rgba(21,45,120,.16);
+          --ez-rail-active-text: #0D2154;
         }
         @media (prefers-color-scheme: dark){
           :root:not([data-ez-theme="light"]) .ez-rail{
@@ -504,6 +539,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             --r-row-h: linear-gradient(180deg, rgba(61,130,255,.52), rgba(61,130,255,.35));
             --r-band:  rgba(0,0,0,.34);
             --r-edge:  rgba(255,255,255,.16);
+            --r-cast:      rgba(4,12,42,.30);
+            --r-cast-far:  rgba(4,12,42,.34);
+            --r-cast-h:    rgba(4,12,42,.32);
+            --r-cast-far-h:rgba(4,12,42,.42);
+            --r-press:     rgba(255,255,255,.16);
+            --r-focus:     #FFFFFF;
+            --r-pill-edge: rgba(255,255,255,.55);
+            --r-band-in:   rgba(0,0,0,.22);
+            --r-band-h:    rgba(0,0,0,.42);
+            --r-sec-ink-h: #FFFFFF;
+            --r-fold:      #C3D4F2;
+            --r-pulse:     rgba(255,255,255,.55);
+            --r-spec:  rgba(255,255,255,.26);
+            --r-spec-h:rgba(255,255,255,.34);
+            --r-rim-t: rgba(255,255,255,.34);
+            --r-rim-b: rgba(0,0,0,.20);
+            --r-rim-th:rgba(255,255,255,.55);
+            --r-edge-h:rgba(255,255,255,.42);
+            --r-ink:      #FFFFFF;
+            --r-ink-h:    #FFFFFF;
+            --r-icon:     #DCE8FF;
+            --r-icon-h:   #FFFFFF;
+            --r-sec-ink:  #C3D4F2;
+            --r-pill-bg:  #FFFFFF;
+            --r-pill-ink: #1B3A9E;
+            --r-pill-ink-h: #17307E;
+            --ez-rail-text:  #F2F6FF;
+            --ez-rail-item:  #E8EEFB;
+            --ez-rail-muted: #DEE9FC;
+            --ez-rail-faint: #D8E4FA;
+            --ez-rail-line:  rgba(255,255,255,.16);
+            --ez-rail-hover: rgba(255,255,255,.10);
+            --ez-rail-active-bg:   rgba(255,255,255,.18);
+            --ez-rail-active-text: #FFFFFF;
           }
         }
         :root[data-ez-theme="dark"] .ez-rail{
@@ -512,6 +581,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           --r-row-h: linear-gradient(180deg, rgba(61,130,255,.52), rgba(61,130,255,.35));
           --r-band:  rgba(0,0,0,.34);
           --r-edge:  rgba(255,255,255,.16);
+          --r-cast:      rgba(4,12,42,.30);
+          --r-cast-far:  rgba(4,12,42,.34);
+          --r-cast-h:    rgba(4,12,42,.32);
+          --r-cast-far-h:rgba(4,12,42,.42);
+          --r-press:     rgba(255,255,255,.16);
+          --r-focus:     #FFFFFF;
+          --r-pill-edge: rgba(255,255,255,.55);
+          --r-band-in:   rgba(0,0,0,.22);
+          --r-band-h:    rgba(0,0,0,.42);
+          --r-sec-ink-h: #FFFFFF;
+          --r-fold:      #C3D4F2;
+          --r-pulse:     rgba(255,255,255,.55);
+          --r-spec:  rgba(255,255,255,.26);
+          --r-spec-h:rgba(255,255,255,.34);
+          --r-rim-t: rgba(255,255,255,.34);
+          --r-rim-b: rgba(0,0,0,.20);
+          --r-rim-th:rgba(255,255,255,.55);
+          --r-edge-h:rgba(255,255,255,.42);
+          --r-ink:      #FFFFFF;
+          --r-ink-h:    #FFFFFF;
+          --r-icon:     #DCE8FF;
+          --r-icon-h:   #FFFFFF;
+          --r-sec-ink:  #C3D4F2;
+          --r-pill-bg:  #FFFFFF;
+          --r-pill-ink: #1B3A9E;
+          --r-pill-ink-h: #17307E;
+          --ez-rail-text:  #F2F6FF;
+          --ez-rail-item:  #E8EEFB;
+          --ez-rail-muted: #DEE9FC;
+          --ez-rail-faint: #D8E4FA;
+          --ez-rail-line:  rgba(255,255,255,.16);
+          --ez-rail-hover: rgba(255,255,255,.10);
+          --ez-rail-active-bg:   rgba(255,255,255,.18);
+          --ez-rail-active-text: #FFFFFF;
         }
 
         /* ── A row sits ABOVE the rail; a section sits BELOW it ────────
@@ -522,7 +625,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            pill goes fully white on top. Four levels, one hue. */
         .ez-nav{
           position:relative; border-radius:9px;
-          color:#FFFFFF;
+          color: var(--r-ink);
           /* SHADED, not merely tinted. A flat wash of white at one alpha is
              what read as dull: it lifts a row off the rail arithmetically
              while giving the eye nothing to call a surface. What makes a
@@ -530,25 +633,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
              top-to-bottom, the top edge catches a specular, and the bottom
              sits on a contact shadow.
 
-             The lift is a BLUE, not white. White over a saturated ground
-             does not lighten it, it greys it: white at .24 over the rail
-             left the row holding 53% of the rail's saturation, and that
-             desaturation — not the brightness — is what read as a dull,
-             muddy colour. Tinting with #3D82FF instead reaches the same
-             lightness at 91% saturation, and because the row is then
-             carrying chroma rather than haze it also measures BETTER on
-             every ink: the label goes 4.99 -> 5.59, the icon 4.31 -> 4.83.
+             The tint is a BLUE, never a neutral. White over a saturated
+             ground does not lighten it, it greys it — white at .24 on the
+             old deep rail left the row holding 53% of the rail's
+             saturation, and that desaturation, not the brightness, is what
+             read as a dull muddy colour. Both polarities tint with a blue
+             for the same reason: the deep rail lifts with #3D82FF, the pale
+             one shades with #152D78, and each keeps its ground's hue.
 
-             Alpha is high because the tint is close to the ground in hue;
-             it is the saturation that separates the row, not the alpha. */
+             Which DIRECTION the tint runs is the token's business, not this
+             rule's. On the deep rail --r-row lightens; on the pale rail it
+             darkens. Everything here is written to be true either way. */
           background: var(--r-row);
           border:1px solid var(--r-edge);
-          border-top-color: rgba(255,255,255,.34);
-          border-bottom-color: rgba(0,0,0,.20);
+          border-top-color: var(--r-rim-t);
+          border-bottom-color: var(--r-rim-b);
           box-shadow:
-            inset 0 1px 0 rgba(255,255,255,.26),      /* specular along the top */
-            0 1px 2px rgba(4,12,42,.30),              /* contact with the rail */
-            0 3px 7px -3px rgba(4,12,42,.34);         /* the lift itself */
+            inset 0 1px 0 var(--r-spec),              /* specular along the top */
+            0 1px 2px var(--r-cast),                  /* contact with the rail */
+            0 3px 7px -3px var(--r-cast-far);         /* the lift itself */
           transition: color .18s ease, background .18s ease,
                       border-color .18s ease, box-shadow .18s ease,
                       transform .10s ease;
@@ -569,13 +672,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            measures 4.28 — under the bar. A brighter rim and a taller lift
            cost nothing and read as "raised further". */
         .ez-nav:hover{
-          color:#FFFFFF;
-          border-color: rgba(255,255,255,.42);
-          border-top-color: rgba(255,255,255,.55);
+          color: var(--r-ink-h);
+          border-color: var(--r-edge-h);
+          border-top-color: var(--r-rim-th);
           box-shadow:
-            inset 0 1px 0 rgba(255,255,255,.34),
-            0 2px 4px rgba(4,12,42,.32),
-            0 6px 14px -5px rgba(4,12,42,.42);
+            inset 0 1px 0 var(--r-spec-h),
+            0 2px 4px var(--r-cast-h),
+            0 6px 14px -5px var(--r-cast-far-h);
         }
         .ez-nav:hover::before{ transform: scaleX(1) }
         /* Pressed: the row travels the 1px it was lifted and its shadow
@@ -584,26 +687,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            other half of looking dull. */
         .ez-nav:active{
           transform: translateY(1px);
-          box-shadow:
-            inset 0 1px 2px rgba(4,12,42,.30),
-            0 0 0 rgba(4,12,42,0);
+          box-shadow: inset 0 1px 2px var(--r-cast-h), 0 0 0 rgba(0,0,0,0);
         }
-        .ez-nav:active::before{ background: rgba(255,255,255,.16) }
-        .ez-nav:focus-visible{ outline:2px solid #FFFFFF; outline-offset:-2px }
+        .ez-nav:active::before{ background: var(--r-press) }
+        .ez-nav:focus-visible{ outline:2px solid var(--r-focus); outline-offset:-2px }
 
         /* ── Selected: a white pill ────────────────────────────────────
            Wipes in from the left rather than popping. */
-        .ez-nav-on{ color:#1B3A9E; border-color: rgba(255,255,255,.55);
-                    box-shadow: 0 1px 2px rgba(4,12,42,.26),
-                                0 6px 16px -6px rgba(6,17,58,.45) }
+        /* The selected pill is the one level that does not mirror: it is
+           the FURTHEST thing from its ground either way. On the deep rail
+           that is white; on the pale rail it is near-navy. Same idea, other
+           end of the scale — so it is a token like everything else. */
+        .ez-nav-on{ color: var(--r-pill-ink); border-color: var(--r-pill-edge);
+                    box-shadow: 0 1px 2px var(--r-cast),
+                                0 6px 16px -6px var(--r-cast-far-h) }
         .ez-nav-on::before{
-          background:#FFFFFF;
+          background: var(--r-pill-bg);
           transform: scaleX(1);
           animation: ezWipe .30s cubic-bezier(.2,.8,.2,1) both;
-          box-shadow: 0 1px 2px rgba(6,17,58,.30), 0 6px 16px -6px rgba(6,17,58,.45);
+          box-shadow: 0 1px 2px var(--r-cast), 0 6px 16px -6px var(--r-cast-far-h);
         }
-        .ez-nav-on:hover{ color:#17307E }
-        .ez-nav-on:hover::before{ background:#FFFFFF }
+        .ez-nav-on:hover{ color: var(--r-pill-ink-h) }
+        .ez-nav-on:hover::before{ background: var(--r-pill-bg) }
         @keyframes ezWipe{
           from{ transform: scaleX(0); opacity:.4 }
           to  { transform: scaleX(1); opacity:1 }
@@ -621,11 +726,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
              row look switched off rather than merely unselected. It cleared
              the 3:1 graphics bar and still looked dull, which is the whole
              gap between passing and good. */
-          color:#DCE8FF;
+          color: var(--r-icon);
           transition: color .18s ease, transform .18s cubic-bezier(.2,.8,.2,1);
         }
-        .ez-nav:hover .ez-nav-tile{ color:#FFFFFF }
-        .ez-nav-on .ez-nav-tile{ color:#1B3A9E }
+        .ez-nav:hover .ez-nav-tile{ color: var(--r-icon-h) }
+        .ez-nav-on .ez-nav-tile{ color: var(--r-pill-ink) }
 
         /* ── Sections: a band pressed INTO the rail ────────────────────
            The opposite move to a row. Rows come toward the reader, sections
@@ -651,13 +756,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           /* Recessed BELOW the rail — the opposite direction from the rows,
              so a section can never be mistaken for one. */
           background: var(--r-band);
-          box-shadow: inset 0 1px 2px rgba(0,0,0,.22);
+          box-shadow: inset 0 1px 2px var(--r-band-in);
           cursor:pointer; text-align:left; border-radius:8px;
           -webkit-tap-highlight-color:transparent;
           transition: background .18s ease;
         }
-        .ez-group-head:hover{ background: rgba(0,0,0,.34) }
-        .ez-group-head:focus-visible{ outline:2px solid #FFFFFF; outline-offset:-2px }
+        .ez-group-head:hover{ background: var(--r-band-h) }
+        .ez-group-head:focus-visible{ outline:2px solid var(--r-focus); outline-offset:-2px }
         /* A hairline ABOVE the label, stopping short of the label itself —
            it separates the groups without boxing them. */
         .ez-group-head::before{
@@ -666,38 +771,38 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
         .ez-group-name{
           font-size:${F.micro}px; font-weight:${W.bold}; letter-spacing:.14em;
-          text-transform:uppercase; color:#C3D4F2;
+          text-transform:uppercase; color: var(--r-sec-ink);
           overflow:hidden; text-overflow:ellipsis; transition:color .18s ease;
         }
-        .ez-group-head:hover .ez-group-name{ color:#FFFFFF }
+        .ez-group-head:hover .ez-group-name{ color: var(--r-sec-ink-h) }
 
         .ez-count{
           font-size:9.5px; font-weight:${W.bold}; line-height:1; padding:3px 6px;
           border-radius:99px; flex-shrink:0; font-variant-numeric:tabular-nums;
           color:#16307E; background:rgba(255,255,255,.82);
         }
-        .ez-here-head{ background: rgba(255,255,255,.10) }
-        .ez-count-here{ background:#FFFFFF; color:#16307E;
+        .ez-here-head{ background: var(--ez-rail-hover) }
+        .ez-count-here{ background: var(--r-pill-bg); color: var(--r-pill-ink);
                         animation: ez-here-pulse 2.2s ease-out infinite }
         @keyframes ez-here-pulse{
-          0%{ box-shadow:0 0 0 0 rgba(255,255,255,.55) }
-          70%{ box-shadow:0 0 0 6px rgba(255,255,255,0) }
-          100%{ box-shadow:0 0 0 0 rgba(255,255,255,0) }
+          0%{ box-shadow:0 0 0 0 var(--r-pulse) }
+          70%{ box-shadow:0 0 0 6px transparent }
+          100%{ box-shadow:0 0 0 0 transparent }
         }
 
         .ez-fold{
           margin-left:auto; flex-shrink:0; display:flex; align-items:center;
           justify-content:center; width:18px; height:18px;
-          color:#A9C0EC; background:transparent;
+          color: var(--r-fold); background:transparent;
           transition: color .18s ease;
         }
-        .ez-group-head:hover .ez-fold{ color:#FFFFFF }
+        .ez-group-head:hover .ez-fold{ color: var(--r-sec-ink-h) }
         .ez-fold svg{ transform:rotate(-90deg);
                       transition: transform .30s cubic-bezier(.22,1,.36,1) }
         .ez-open .ez-fold svg{ transform:rotate(0deg) }
         .ez-group-rule-shut{ display:block; height:1px; border-radius:1px;
                              margin:10px 10px 9px; flex-shrink:0;
-                             background: rgba(255,255,255,.16) }
+                             background: var(--r-edge) }
 
         .ez-sr{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
                 overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0 }

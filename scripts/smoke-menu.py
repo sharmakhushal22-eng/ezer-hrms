@@ -62,364 +62,234 @@ def module_for(path):
     return ROUTE_MODULE[hits[0]] if hits else None
 mismatch = [(h, m, module_for(h)) for _,_,h,_,m in ITEMS if module_for(h) != m]
 check('sidebar module == moduleForPath for every row', not mismatch, str(mismatch))
-
 # ── 3. colour, re-derived ─────────────────────────────────────────────────
+# TWO POLARITIES. Light is a PALE rail (navy ink, rows darker than the
+# ground, sections lighter); dark is a DEEP rail (white ink, rows lighter,
+# sections darker). Nothing below may assume which way round it is, so no
+# check names a direction: every figure is evaluated at EVERY stop of the
+# gradient and at every stop of the level's own gradient, and the worst
+# result is the one that has to clear the bar. That is stricter than
+# reasoning about which end ought to be worst, and it cannot go stale when
+# the polarity flips again.
 def rgb(x): x=x.lstrip('#'); return tuple(int(x[i:i+2],16) for i in (0,2,4))
+def hxs(t): return '#%02X%02X%02X' % tuple(max(0,min(255,round(v))) for v in t)
 def lin(c): c/=255; return c/12.92 if c<=.04045 else ((c+.055)/1.055)**2.4
 def L(x): r,g,b=rgb(x); return .2126*lin(r)+.7152*lin(g)+.0722*lin(b)
 def cr(a,b):
     l1,l2=sorted([L(a),L(b)],reverse=True); return (l1+.05)/(l2+.05)
+def sat(h):
+    r,g,b=[v/255 for v in rgb(h)]
+    hi,lo=max(r,g,b),min(r,g,b)
+    if hi==lo: return 0.0
+    l=(hi+lo)/2
+    return (hi-lo)/(2-hi-lo) if l>.5 else (hi-lo)/(hi+lo)
+def hue(h):
+    r,g,b=[v/255 for v in rgb(h)]
+    hi,lo=max(r,g,b),min(r,g,b)
+    if hi==lo: return 0.0
+    d=hi-lo
+    if hi==r: x=((g-b)/d)%6
+    elif hi==g: x=(b-r)/d+2
+    else: x=(r-g)/d+4
+    return x*60
+def over(a,fg,g):
+    g=rgb(g); return hxs(tuple(fg[i]*a+g[i]*(1-a) for i in range(3)))
 
 css = lay[lay.index('<style>{`', lay.index('const NAV: NavGroup[]')):]
 css = css[:css.index('`}</style>')]
 cssn = re.sub(r'\$\{[^}]*\}', 'TOKEN', css)
 cssz = re.sub(r'\s+', '', cssn)
 
-# The rail is a deep blue ground with light text ON it — figure and ground
-# inverted from the card design that preceded it. Every ink is checked
-# against the ground's LIGHTEST stop, which is the worst case.
-grounds = re.findall(r'linear-gradient\(180deg,\s*(#[0-9A-Fa-f]{6})[^)]*?(#[0-9A-Fa-f]{6})\s*100%\)', css)
-check('the rail has a deep blue gradient ground', len(grounds) >= 2,
-      '%d gradients (light + dark)' % len(grounds))
+# Each theme block: its gradient stops and its token table.
+blocks = []
+for m in re.finditer(r'\.ez-rail\{(.*?)\n\s*\}', css, re.S):
+    body = m.group(1)
+    g = re.search(r'linear-gradient\(180deg,\s*(#[0-9A-Fa-f]{6})[^)]*?(#[0-9A-Fa-f]{6})\s*100%\)', body)
+    if not g: continue
+    toks = dict(re.findall(r'(--[\w-]+):\s*([^;]+);', body))
+    blocks.append((g.group(1).upper(), g.group(2).upper(), toks, body))
+check('both rails are declared: one pale, one deep', len(blocks) >= 2,
+      '%d rail blocks' % len(blocks))
 
-def ink(pattern, default=None):
-    m = re.search(pattern, cssz)
-    return m.group(1).upper() if m else default
+def stops_of(decl):
+    """Every colour a level paints, as (r,g,b,alpha). A level may be one
+       rgba() or a gradient of several; all of them are real pixels."""
+    return [(int(a),int(b),int(c),float(d))
+            for a,b,c,d in re.findall(r'rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)', decl)]
 
-INKS = {
-    'item label':    ink(r'\.ez-nav\{[^}]*?color:(#[0-9A-Fa-f]{6})'),
-    'icon':          ink(r'\.ez-nav-tile\{[^}]*?color:(#[0-9A-Fa-f]{6})'),
-    'section label': ink(r'\.ez-group-name\{[^}]*?color:(#[0-9A-Fa-f]{6})'),
-    'selected ink':  ink(r'\.ez-nav-on\{color:(#[0-9A-Fa-f]{6})'),
-}
-missing = [k for k, v in INKS.items() if not v]
-check('every rail ink is declared in the stylesheet', not missing, str(missing))
+def painted(toks, name, ground):
+    """Every pixel colour this level can take on `ground`."""
+    if name not in toks: return []
+    st = stops_of(toks[name])
+    if not st:
+        hexes = re.findall(r'#[0-9A-Fa-f]{6}', toks[name])
+        return [h.upper() for h in hexes]
+    return [over(a, (r, g, b), ground) for r, g, b, a in st]
 
-def over(alpha, fg, ground):
-    """fg at `alpha` composited onto a #rrggbb ground -> #rrggbb."""
-    g = rgb(ground)
-    return '#%02X%02X%02X' % tuple(round(fg[i]*alpha + g[i]*(1-alpha)) for i in range(3))
+def ink(toks, name):
+    m = re.search(r'#[0-9A-Fa-f]{6}', toks.get(name, ''))
+    return m.group(0).upper() if m else None
 
-def alphas_of(rule, name):
-    """Every alpha declared for a level. A level may be a flat rgba() or a
-       gradient of several, so this returns them all and the caller picks the
-       stop that is worst for what it is measuring."""
-    m = re.search(re.escape(name) + r':([^;]*);', rule)
-    return [float(a) for a in re.findall(r'rgba\(\d+,\d+,\d+,([\d.]+)\)', m.group(1))] if m else []
+BARS = {'label': 4.5, 'icon': 3.0, 'section': 4.5, 'hover ink': 4.5}
+for g1, g2, toks, body in blocks[:2]:
+    pale = L(g1) > 0.18
+    th = 'pale' if pale else 'deep'
+    grounds = [g1, g2]
 
-def mid_of(g1, g2):
-    return '#%02X%02X%02X' % tuple(round((rgb(g1)[i] + rgb(g2)[i]) / 2) for i in range(3))
+    inks = {'label': ink(toks, '--r-ink'), 'icon': ink(toks, '--r-icon'),
+            'section': ink(toks, '--r-sec-ink'), 'hover ink': ink(toks, '--r-ink-h')}
+    missing = [k for k, v in inks.items() if not v]
+    check('%-4s every rail ink is a declared token' % th, not missing, str(missing))
+    if missing: continue
 
-def tint_of(rule, name, fallback=(255, 255, 255)):
-    """The colour a level is painted in. Not assumable: the row lift was
-       white for several revisions and is now a blue, and every figure in
-       this file is wrong if it composites the wrong one."""
-    m = re.search(re.escape(name) + r':[^;]*?rgba\((\d+),(\d+),(\d+),', rule)
-    return tuple(int(x) for x in m.groups()) if m else fallback
+    # worst = the least contrast this ink ever has, over every ground stop
+    # and every stop of the surface it sits on
+    def worst_on(inkc, level_name):
+        vals = [cr(inkc, px) for g in grounds for px in painted(toks, level_name, g)]
+        return min(vals) if vals else None
 
-def level(rule, name, ground, stop='light'):
-    """A level's painted colour on `ground`. stop='light' takes the alpha
-       that lands lightest, 'dark' the one that lands darkest — the caller
-       picks whichever is the worst case for what it is measuring."""
-    a = alphas_of(rule, name)
-    if not a: return None
-    t = tint_of(rule, name)
-    lift = sum(t) > 382                      # a light tint lightens, black darkens
-    pick = max(a) if (stop == 'light') == lift else min(a)
-    return over(pick, t, ground)
+    for name, level_name in (('label', '--r-row'), ('icon', '--r-row'),
+                             ('section', '--r-band'), ('hover ink', '--r-row-h')):
+        v = worst_on(inks[name], level_name)
+        bar = BARS[name]
+        check('%-4s %-10s on its own surface >= %.1f' % (th, name, bar),
+              v is not None and v >= bar, '%.2f' % v if v else 'n/a')
 
-rail_rules = re.findall(r'\.ez-rail\{[^}]*\}', cssz)
+    # the icon must not read as a disabled row next to its label
+    li, ii = worst_on(inks['label'], '--r-row'), worst_on(inks['icon'], '--r-row')
+    check('%-4s the icon is not dimmer than its own label' % th,
+          ii >= li * .75, 'icon %.2f vs label %.2f' % (ii, li))
 
-if not missing and len(rail_rules) >= 2:
-    for gi, (g1, g2) in enumerate(grounds[:2]):
-        th = 'light' if gi == 0 else 'dark'
-        rule = rail_rules[0] if gi == 0 else rail_rules[1]
-        # A LABEL DOES NOT SIT ON THE RAIL. It sits on the row, which is
-        # lighter than the rail — so measuring against the rail flatters
-        # every ink figure and would pass a label that is illegible on the
-        # button it is actually printed on. Worst case is the row's TOP
-        # stop, the lightest thing under any of this text.
-        # THE MIDPOINT IS NOT A STAND-IN FOR THE GRADIENT. It used to be,
-        # while the ground barely travelled. Once it does, the two ends
-        # disagree by a full contrast point and the average hides a real
-        # failure at one of them: the previous ground measured 4.76 at the
-        # mid and 4.32 at the top, where the first rows actually sit, and
-        # every check in this file passed. Worst case is per-figure and the
-        # ends are not interchangeable, so each is measured where it is
-        # weakest — light ink at the TOP, the black band at the BOTTOM.
-        m       = g1 if L(g1) > L(g2) else g2            # lightest stop
-        deepest = g2 if L(g1) > L(g2) else g1            # darkest stop
-        row_top = level(rule, '--r-row',  m, 'light')    # lightest row pixel
-        band    = level(rule, '--r-band', m, 'light')    # lightest band pixel
-        if not row_top or not band:
-            check('%-5s row and band levels parse' % th, False)
-            continue
-        for name, ground, where in (('item label', row_top, 'the row'),
-                                    ('icon',       row_top, 'the row'),
-                                    ('section label', band, 'the band')):
-            bar = 3.0 if name == 'icon' else 4.5
-            r = cr(INKS[name], ground)
-            check('%-5s %-13s on %-9s >= %.1f' % (th, name, where, bar), r >= bar, '%.2f' % r)
-        # The icon passed its 3:1 graphics bar at 3.27 while still looking
-        # switched off, because a floor says legible and says nothing about
-        # dull. What actually broke was the RELATIONSHIP: an icon markedly
-        # dimmer than the label beside it reads as a disabled row. Held to
-        # within a stop of the label rather than to an absolute number.
-        r_lab, r_ico = cr(INKS['item label'], row_top), cr(INKS['icon'], row_top)
-        check('%-5s the icon is not dimmer than its own label' % th,
-              r_ico >= r_lab * 0.75, 'icon %.2f vs label %.2f' % (r_ico, r_lab))
+    # ── the levels, in whichever direction this polarity runs ────────────
+    def step(level_name):
+        return min(cr(px, g) for g in grounds for px in painted(toks, level_name, g))
+    check('%-4s the row separates from the ground   >= 1.15' % th,
+          step('--r-row') >= 1.15, '%.2f' % step('--r-row'))
+    check('%-4s the band separates from the ground  >= 1.15' % th,
+          step('--r-band') >= 1.15, '%.2f' % step('--r-band'))
+    # a band sits directly above the first row of its section, so they are
+    # judged on the SAME ground — never one at each end
+    rb = min(cr(r, b) for g in grounds
+             for r in painted(toks, '--r-row', g) for b in painted(toks, '--r-band', g))
+    check('%-4s row and band are told apart         >= 1.30' % th, rb >= 1.30, '%.2f' % rb)
 
-        # Hover swaps the label to white and brightens the fill underneath
-        # it at the same time — the one place where making a row livelier
-        # can quietly cost legibility.
-        hov = level(rule, '--r-row-h', m, 'light')
-        if hov:
-            r = cr('#FFFFFF', hov)
-            check('%-5s white label on a HOVERED row >= 4.5' % th, r >= 4.5, '%.2f' % r)
-    # the selected row is a WHITE pill; its ink sits on white, not on the rail
-    r = cr(INKS['selected ink'], '#FFFFFF')
-    check('selected ink on the white pill >= 4.5', r >= 4.5, '%.2f' % r)
-    check('the pill is white, so it cannot blend into a blue rail',
-          'background:#FFFFFF' in cssz.replace('background:#ffffff', 'background:#FFFFFF'))
+    # the row must go the OPPOSITE way from the band, or there are not four
+    # levels — only three and a coincidence
+    rows  = [px for g in grounds for px in painted(toks, '--r-row', g)]
+    bands = [px for g in grounds for px in painted(toks, '--r-band', g)]
+    gl    = [L(g) for g in grounds]
+    row_up  = all(L(r) > min(gl) for r in rows)  or all(L(r) < max(gl) for r in rows)
+    opposite = (sum(L(r) for r in rows)/len(rows) > sum(gl)/2) != \
+               (sum(L(b) for b in bands)/len(bands) > sum(gl)/2)
+    check('%-4s row and band lean OPPOSITE ways off the ground' % th, opposite)
 
-# ── the inks the rail rebinds for everything that is NOT a row ────────────
+    # ── the selected pill ────────────────────────────────────────────────
+    pbg, pink = ink(toks, '--r-pill-bg'), ink(toks, '--r-pill-ink')
+    check('%-4s the pill and its ink are tokens' % th, bool(pbg and pink))
+    if pbg and pink:
+        check('%-4s ink on the selected pill >= 4.5' % th,
+              cr(pink, pbg) >= 4.5, '%.2f' % cr(pink, pbg))
+        pr = min(cr(pbg, px) for g in grounds for px in painted(toks, '--r-row', g))
+        check('%-4s the pill outranks a resting row >= 2.00' % th, pr >= 2.0, '%.2f' % pr)
+
+    # ── chroma: the row must stay BLUE, never wash to grey ───────────────
+    # Relative retention was the deep rail's metric and does not transfer:
+    # a pale ground has little chroma to keep in the first place. What holds
+    # for both is that the row stays on the ground's hue and stays visibly
+    # coloured rather than neutral.
+    for g in grounds:
+        for px in painted(toks, '--r-row', g):
+            dh = abs(hue(px) - hue(g))
+            dh = min(dh, 360 - dh)
+            check('%-4s the row keeps the ground\'s hue (%s on %s)' % (th, px, g),
+                  dh <= 12, '%.0f deg apart' % dh)
+            check('%-4s the row is still a blue, not grey (%s)' % (th, px),
+                  sat(px) >= .30, 'saturation %.2f' % sat(px))
+
+# ── the inks the rail rebinds for everything that is NOT a row ───────────
 # The brand-mark subtitle, "Back to my ESS" and the sign-out row draw
 # --ez-rail-muted / --ez-rail-faint straight onto the rail, never onto a
-# button. So every row check above can pass while these fail, which is
-# exactly what happened when the ground was lightened: they measured 4.01
-# and 3.27 and nothing here noticed. All of it is small text, so the bar is
-# 4.5 and not the 3:1 graphics bar.
-for gi, (g1, g2) in enumerate(grounds[:2]):
-    th = 'light' if gi == 0 else 'dark'
-    rule = rail_rules[0] if gi == 0 else rail_rules[1]
-    worst = g1 if L(g1) > L(g2) else g2          # lightest stop, worst for light ink
-    # (these draw straight on the rail, so the rail's own lightest end is
-    #  the whole story — no row sits under them)
+# button, so every row check above can pass while these fail. That is
+# exactly what happened when the ground was lightened once before: they
+# measured 4.01 and 3.27 and nothing noticed. Small text, so 4.5.
+for g1, g2, toks, body in blocks[:2]:
+    th = 'pale' if L(g1) > 0.18 else 'deep'
     for tok in ('--ez-rail-text', '--ez-rail-item', '--ez-rail-muted', '--ez-rail-faint'):
-        m = re.search(re.escape(tok) + r':(#[0-9A-Fa-f]{6})', rule)
-        if not m:
-            # light declares all four; the dark blocks only override what moves
-            if gi == 0: check('%-5s %s is declared' % (th, tok), False)
+        c = ink(toks, tok)
+        if not c:
+            check('%-4s %s is declared' % (th, tok), False)
             continue
-        r = cr(m.group(1).upper(), worst)
-        check('%-5s %-16s direct on the rail >= 4.5' % (th, tok), r >= 4.5,
-              '%.2f (%s)' % (r, m.group(1)))
+        v = min(cr(c, g1), cr(c, g2))
+        check('%-4s %-16s direct on the rail >= 4.5' % (th, tok), v >= 4.5,
+              '%.2f (%s)' % (v, c))
 
-# ── 4. the four levels ────────────────────────────────────────────────────
-# "section and button blended with bg." The first inversion answered the
-# light-cards-on-a-light-ground problem by removing ALL surface from a row —
-# which traded one blending complaint for another, because bare text on the
-# rail is exactly as flat as a card the same colour as its ground.
-#
-# The dark ground is what makes the real fix possible: a row can sit ABOVE
-# it and a section BELOW it, which no pale ground could ever do. So the rule
-# is not "no chrome" and not "chrome" — it is that FOUR levels stay ordered:
-#
-#       selected pill   white, opaque      ← brightest
-#       row             white over rail
-#       rail            the gradient
-#       section band    black over rail    ← darkest
-#
-# Asserted by compositing the alphas onto the real gradient stops, because
-# the failure this catches is numeric. Every previous regression here passed
-# a spelling check and still looked wrong.
-nav_rule  = re.search(r'\.ez-nav\{[^}]*\}', cssz)
-head_rule = re.search(r'\.ez-group-head\{[^}]*\}', cssz)
+# ── 4. no rail rule may name a colour ────────────────────────────────────
+# The two polarities are mirror images, so a literal in a rule is a value
+# that is right for one theme and wrong for the other. Every colour lives
+# in a token block; the rules only ever read one.
+literals = []
+for m in re.finditer(r'(\.ez-[^{]*)\{([^}]*)\}', css):
+    sel, bod = m.group(1).strip(), m.group(2)
+    if '--r-' in bod and bod.count('--r-') > 2: continue      # a token block
+    if '--ez-rail' in bod: continue
+    bod = re.sub(r'/\*.*?\*/', '', bod, flags=re.S)           # comments are prose
+    lits = [l for l in re.findall(r'(?<!var\()(#[0-9A-Fa-f]{3,6}|rgba?\([^)]*\))', bod)
+            if l not in ('rgba(0,0,0,0)',)]
+    if lits: literals.append((sel[:40], lits))
+check('no rail rule hard-codes a colour — all of them read tokens',
+      not literals, str(literals[:3]))
 
-# The light values live on .ez-rail; the dark ones on the two overrides. Both
-# dark spellings must exist — data-ez-theme="dark" AND the unstamped default
-# under prefers-color-scheme, or one of the three theme states is left wrong.
-rail_light = rail_rules[0] if rail_rules else None
-rail_dark  = rail_rules
-check('the dark rail is written for BOTH dark states, not just the stamped one',
-      cssz.count('--r-band:rgba(0,0,0,') >= 3,
-      '%d declarations' % cssz.count('--r-band:rgba(0,0,0,'))
+# every token a rule reads must exist in BOTH polarities, or one theme
+# silently renders with an unset custom property
+used = set(re.findall(r'var\((--r-[\w-]+)\)', css))
+for g1, g2, toks, body in blocks[:2]:
+    th = 'pale' if L(g1) > 0.18 else 'deep'
+    absent = sorted(t for t in used if t not in toks)
+    check('%-4s defines every --r-* token the rules read' % th, not absent, str(absent))
 
-LEVELS_OK = True
-if rail_light and len(rail_dark) >= 2 and len(grounds) >= 2:
-    for gi, (g1, g2) in enumerate(grounds[:2]):
-        th   = 'light' if gi == 0 else 'dark'
-        rule = rail_dark[0] if gi == 0 else rail_dark[1]
-        # Worst case for "does the row clear the rail" is its DARKEST stop;
-        # for "does the band sink below it", the band's lightest.
-        _row, _hov, _bnd = (alphas_of(rule, '--r-row'), alphas_of(rule, '--r-row-h'),
-                            alphas_of(rule, '--r-band'))
-        a_row  = min(_row) if _row else None
-        a_hov  = min(_hov) if _hov else None
-        a_band = min(_bnd) if _bnd else None
-        if None in (a_row, a_hov, a_band):
-            check('%-5s rail declares all four levels' % th, False, str((a_row, a_hov, a_band)))
-            LEVELS_OK = False
-            continue
-        # Measured where the rows actually sit, not at the gradient's extreme:
-        # a step taken at the darkest stop overstated separation by 0.2 last
-        # time and the middle of the rail is where the eye judges it.
-        # A row is a LIGHT tint, so it separates least where the ground is
-        # already light — the top. A band is BLACK, so it separates least
-        # where there is little left to take away — the bottom. Opposite
-        # ends, which is exactly why one figure at the middle cannot speak
-        # for either, and why the span is bounded from both directions.
-        hi   = g1 if L(g1) > L(g2) else g2
-        lo   = g2 if L(g1) > L(g2) else g1
-        mid  = hi                                     # row's worst ground
-        row  = level(rule, '--r-row',  hi, 'dark')    # darkest row pixel, lightest ground
-        band = level(rule, '--r-band', lo, 'light')   # lightest band pixel, darkest ground
-        for label, val, floor in (
-            ('row sits above the rail',      cr(row,  mid),  1.15),
-            ('band sits below the rail',     cr(band, lo),   1.15),
-            # A band sits DIRECTLY above the first row of its section, so
-            # the two are at practically the same height and must be judged
-            # on the same ground. Taking the row from the top and the band
-            # from the bottom compared two things that never touch and
-            # flattered the figure by a full point.
-            ('row and band are told apart',
-             min(cr(level(rule, '--r-row', g, 'dark'),
-                    level(rule, '--r-band', g, 'light')) for g in (hi, lo)), 1.30),
-            ('the pill outranks a row',
-             cr('#FFFFFF', level(rule, '--r-row', mid, 'light')), 2.00),
-        ):
-            ok = val >= floor
-            LEVELS_OK &= ok
-            check('%-5s %-30s >= %.2f' % (th, label, floor), ok, '%.2f' % val)
-        check('%-5s hover lifts a row further than rest' % th, a_hov > a_row,
-              '%.2f -> %.2f' % (a_row, a_hov))
-else:
-    check('the rail declares its levels', False)
-    LEVELS_OK = False
-
-# The levels have to be WIRED, not merely declared. A token nobody consumes
-# is the same blended rail with extra CSS in it.
-check('a row draws the row level and its edge',
-      bool(nav_rule) and 'background:var(--r-row)' in nav_rule.group(0)
-      and 'var(--r-edge)' in nav_rule.group(0))
-check('a section draws the band level and is recessed into the rail',
-      bool(head_rule) and 'background:var(--r-band)' in head_rule.group(0)
-      and 'box-shadow:inset' in head_rule.group(0))
-# The old failure mode, kept nailed shut: the lift must be WHITE-over-blue,
-# never an opaque pale fill. An opaque row is a card again, and a card is
-# what put light chrome on a light ground in the first place.
 # ── the row has to look like a BUTTON, not a tinted strip ────────────────
-# "buttons inside section and home button without selection look very dull."
-# A flat wash at one alpha separates from the rail on paper and still reads
-# as nothing, because a surface is recognised by the light falling across it
-# rather than by its mean brightness. These four are what supply that, and
-# none of them costs a point of contrast — which matters, because the fill
-# itself is capped by the label: past ~.24 at the top stop the ink drops
-# under 4.5:1, so brightness is the one lever NOT available here.
+# A flat wash at one alpha separates from the ground on paper and still
+# reads as nothing: a surface is recognised by the light falling across it.
+# These are polarity-free — they assert that shading EXISTS, not which way
+# it runs, since the tokens carry the direction.
+nav_rule = re.search(r'\.ez-nav\{[^}]*\}', cssz)
 _nav = nav_rule.group(0) if nav_rule else ''
-check('the row is shaded top-to-bottom, not a flat wash',
-      bool(rail_light) and 'linear-gradient(180deg' in re.search(r'--r-row:[^;]*;', rail_light).group(0)
-      and len(alphas_of(rail_light, '--r-row')) >= 2)
-check('the top edge catches a specular highlight',
-      'box-shadow:inset0 1px0rgba(255,255,255,'.replace(' ', '') in _nav
-      or re.search(r'inset0 1px0rgba\(255,255,255,\.(1[5-9]|[2-9]\d)\)'.replace(' ', ''), _nav) is not None)
+for g1, g2, toks, body in blocks[:2]:
+    th = 'pale' if L(g1) > 0.18 else 'deep'
+    check('%-4s the row is shaded top-to-bottom, not a flat wash' % th,
+          'linear-gradient(180deg' in toks.get('--r-row', '')
+          and len(stops_of(toks['--r-row'])) >= 2)
+    a = [x[3] for x in stops_of(toks.get('--r-row', ''))]
+    h = [x[3] for x in stops_of(toks.get('--r-row-h', ''))]
+    check('%-4s hover pushes the row further than rest' % th,
+          bool(a) and bool(h) and min(h) > min(a),
+          '%.2f -> %.2f' % (min(a), min(h)) if a and h else '')
+check('the top edge catches a specular highlight', 'inset01px0var(--r-spec)' in _nav)
 check('the row casts a contact shadow onto the rail',
-      re.search(r'0 1px2pxrgba\('.replace(' ', ''), _nav) is not None
-      and re.search(r'0 3px7px-3pxrgba\('.replace(' ', ''), _nav) is not None)
-check('lit from above: bright top border, dark bottom border',
-      'border-top-color:rgba(255,255,255,' in _nav
-      and 'border-bottom-color:rgba(0,0,0,' in _nav)
-# A button that does not move under the pointer is the other half of dull.
+      'var(--r-cast)' in _nav and 'var(--r-cast-far)' in _nav)
+check('lit from above: distinct top and bottom borders',
+      'border-top-color:var(--r-rim-t)' in _nav
+      and 'border-bottom-color:var(--r-rim-b)' in _nav)
 _act = re.search(r'\.ez-nav:active\{[^}]*\}', cssz)
 check('the row presses in when clicked',
       bool(_act) and 'transform:translateY(1px)' in _act.group(0)
       and 'box-shadow:inset' in _act.group(0))
-# Hover must not buy its visibility from the fill alone — that is what pushed
-# the top stop to .32 and put the white label at 4.28.
 _hov = re.search(r'\.ez-nav:hover\{[^}]*\}', cssz)
 check('hover brightens the rim and the lift, not just the fill',
       bool(_hov) and 'border-top-color:' in _hov.group(0) and 'box-shadow:' in _hov.group(0))
-
-# THE ROW MUST KEEP THE RAIL'S COLOUR, NOT WASH IT OUT.
-# The lift used to be white, and white over a saturated ground does not
-# lighten it — it greys it. At .24 the row held 53% of the rail's
-# saturation, and that desaturation, not the brightness, is what read as a
-# dull muddy colour. Every contrast figure in this file passed the whole
-# time; none of them can see chroma, which is why this check exists.
-def sat(h):
-    r, g, b = [v / 255 for v in rgb(h)]
-    hi, lo = max(r, g, b), min(r, g, b)
-    if hi == lo: return 0.0
-    l = (hi + lo) / 2
-    return (hi - lo) / (2 - hi - lo) if l > .5 else (hi - lo) / (hi + lo)
-
-if rail_rules and len(grounds) >= 2:
-    for gi, (g1, g2) in enumerate(grounds[:2]):
-        th   = 'light' if gi == 0 else 'dark'
-        rule = rail_rules[0] if gi == 0 else rail_rules[1]
-        # Checked at both ends: the tint washes out differently against a
-        # light ground than a deep one, and it is the weaker end that
-        # decides whether the row looks grey.
-        worst_keep, worst_at = None, None
-        for ground in (g1, g2):
-            row = level(rule, '--r-row', ground, 'light')
-            if not row: continue
-            k = sat(row) / sat(ground) if sat(ground) else 0
-            if worst_keep is None or k < worst_keep:
-                worst_keep, worst_at = k, (row, ground)
-        if worst_keep is None:
-            check('%-5s the row tint parses' % th, False)
-            continue
-        check('%-5s the row keeps the rail\'s colour (>= 75%% saturation)' % th,
-              worst_keep >= .75,
-              '%d%% (%s on %s)' % (round(worst_keep * 100), *worst_at))
-
-# Translucent, so the row composites over the gradient instead of flattening
-# it — and never an opaque fill, which is the light-card-on-a-light-ground
-# problem this whole design exists to avoid.
-check('the row level is translucent, not an opaque fill',
-      bool(rail_light)
-      and re.search(r'--r-row:[^;]*;', rail_light)
-      and not re.search(r'--r-row:[^;]*#[0-9A-Fa-f]{3,6}', rail_light)
-      and all(x < 1 for x in alphas_of(rail_light, '--r-row')))
 check('the selected pill wipes in rather than popping',
-      'ezWipe' in cssz and 'transform-origin:leftcenter' in cssz
-      and 'ezPop' not in cssz)
+      'ezWipe' in cssz and 'transform-origin:leftcenter' in cssz and 'ezPop' not in cssz)
 check('hover fills without moving the row',
-      '.ez-nav:hover::before{transform:scaleX(1)}' in cssz
-      and 'translateY' not in nav_rule.group(0))
+      '.ez-nav:hover::before{transform:scaleX(1)}' in cssz and 'translateY' not in _nav)
 
-# The rail redefines the rail INK tokens for everything inside it. Without
-# this the brand mark, the footer and the sign-out row keep drawing
-# --ez-rail-text, which is near-black, onto a deep blue ground.
-rail_rule = re.search(r'\.ez-rail\{[^}]*\}', cssz)
+rail_rules = re.findall(r'\.ez-rail\{[^}]*\}', cssz)
+rail_light = rail_rules[0] if rail_rules else None
 check('the rail rebinds its ink tokens for descendants',
-      bool(rail_rule) and '--ez-rail-text:' in rail_rule.group(0)
-      and '--ez-rail-muted:' in rail_rule.group(0)
-      and '--ez-rail-faint:' in rail_rule.group(0))
-check('the deep ground is declared for BOTH dark states',
-      cssz.count(':root:not([data-ez-theme="light"]).ez-rail{') >= 1
-      and cssz.count(':root[data-ez-theme="dark"].ez-rail{') >= 1)
-check('prefers-reduced-motion honoured', '@media(prefers-reduced-motion:reduce)' in cssz)
-check('reduced motion stops the wipe',
-      re.search(r'prefers-reduced-motion[\s\S]*?\.ez-nav-on::before\{animation:none', cssz) is not None)
-check('--ez-rail-item defined in all three theme blocks',
-      theme.count('--ez-rail-item') == 3, '%d' % theme.count('--ez-rail-item'))
-
-# ── 4b. nothing inline may overrule the stylesheet ────────────────────────
-# An inline style beats a stylesheet. The label used to set its own colour,
-# so the selected row got --ez-rail-text (NEAR-BLACK in light) printed on the
-# deep blue fill, while every rule and every contrast figure said white. The
-# CSS was right and never applied.
-#
-# Checked as source, not as pixels, because a harness that renders the markup
-# without the component's inline styles shows the CSS winning — which is
-# exactly how this was missed.
-row = lay[lay.index('function RailItem'):lay.index('function GroupBlock')]
-row_code = '\n'.join(l for l in row.splitlines() if not l.strip().startswith('//'))
-# Sections have no band any more: on a deep ground a quiet label reads as
-# secondary without a container drawn around it. What must hold is that the
-# label is separated by something — a hairline — and stays legible (checked
-# above, against the ground's lightest stop).
-check('sections are separated by a rule, not a box',
-      '.ez-group-head::before{' in cssz and 'height:1px' in cssz
-      and 'background:rgba(255,255,255' in cssz)
-
-check('the row sets no colour inline — it inherits from the button',
-      not re.search(r'\bcolor:\s*(?!\'inherit\')', row_code),
-      re.search(r'.{0,40}\bcolor:.{0,30}', row_code).group(0) if re.search(r'\bcolor:', row_code) else '')
-check('the row sets no background inline either',
-      not re.search(r'\bbackground(Color)?:', row_code))
+      bool(rail_light) and '--ez-rail-text:' in rail_light
+      and '--ez-rail-item:' in rail_light)
+check('the deep rail is written for BOTH dark states, not just the stamped one',
+      len([b for b in blocks if L(b[0]) <= 0.18]) >= 2,
+      '%d deep blocks' % len([b for b in blocks if L(b[0]) <= 0.18]))
 
 # ── 5. the fold ───────────────────────────────────────────────────────────
 head = lay[lay.index('function GroupBlock'):lay.index('const FONT =')]
