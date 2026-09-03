@@ -12,6 +12,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant, authToken } from '@/lib/rms/client'
+import { canSee } from '@/lib/rms/resolve'
 import { buildForest, flatten, pathTo, countNodes, type TreeNode } from '@/lib/rms/tree'
 import type { OrgTreeNode } from '@/lib/rms/server'
 
@@ -253,10 +254,22 @@ export default function OrgChartPage() {
   const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
-      .then(({ data }) => { setCompanies(data || []); if (data?.length && !companyId) setCompanyId(data[0].id) })
+    // Open on the viewer's OWN company. This page now also lives inside every
+    // employee's ESS portal, and an STC employee landing on SRS's chart (the
+    // alphabetical first) reads as the wrong chart, not as a default.
+    ;(async () => {
+      const { data } = await supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
+      const list = data || []
+      setCompanies(list)
+      let own: string | null = null
+      if (grant.employeeId) {
+        const { data: me } = await supabase.from('employees').select('company_id').eq('id', grant.employeeId).maybeSingle()
+        own = me?.company_id ?? null
+      }
+      setCompanyId(prev => prev || (list.some(c => c.id === own) ? own! : list[0]?.id ?? ''))
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [grant.employeeId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -408,9 +421,11 @@ export default function OrgChartPage() {
 
         <button onClick={() => setCollapsedIds(new Set())} style={btn}>⤢ Expand all</button>
         <button onClick={resetToDefault} style={btn}>⤡ Collapse to my level</button>
-        <button onClick={() => setShowDiag(s => !s)} style={{ ...btn, background: showDiag ? P.purple : '#fff', color: showDiag ? '#fff' : P.purpleDark, borderColor: showDiag ? P.purple : P.border }}>
-          ⚠ Diagnostics
-        </button>
+        {canSee(grant, 'Employees') && (
+          <button onClick={() => setShowDiag(s => !s)} style={{ ...btn, background: showDiag ? P.purple : '#fff', color: showDiag ? '#fff' : P.purpleDark, borderColor: showDiag ? P.purple : P.border }}>
+            ⚠ Diagnostics
+          </button>
+        )}
         <button onClick={downloadJpeg} disabled={downloading || forest.length === 0}
           style={{
             ...btn, marginLeft: 'auto', color: '#fff', border: 'none',

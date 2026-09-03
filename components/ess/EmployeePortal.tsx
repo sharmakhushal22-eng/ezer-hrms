@@ -3234,6 +3234,10 @@ const SECTIONS: NavSection[] = [
     desc:'Who is above you, who is beside you, who reports to you — read from the same reporting lines HR maintains',
     items:[{ k:'team', label:'Team' }]},
 
+  { k:'orgchart', label:'Org Chart', short:'Org', icon:'', status:'ready',
+    desc:'The whole company as one tree — the same chart HR sees, read from the same reporting lines',
+    items:[{ k:'orgchart', label:'Org Chart' }]},
+
   { k:'payroll', label:'Payroll', short:'Payroll', icon:'', status:'partial',
     desc:'Salary, benefits, declarations and claims — all in one place',
     items:[
@@ -3714,6 +3718,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'letters':       return <MyLetters emp={emp} />
       case 'requests':      return <Requests emp={emp} notify={notify} />
       case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
+      case 'orgchart':      return <AdminModuleHost moduleKey="org-chart" />
       case 'directory':     return <Directory isMobile={isMobile} />
       case 'approvals':     return <ApprovalsSection employeeId={emp.id} go={go} notify={notify} />
       case 'exit':          return <ExitSection employeeId={emp.id} notify={notify} />

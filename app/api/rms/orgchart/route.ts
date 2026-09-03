@@ -9,18 +9,24 @@
 // Gated on the Employees module: an org chart is an employee data view, not a module
 // of its own, and giving it a separate permission would mean two grants for one job.
 import { NextRequest, NextResponse } from 'next/server'
-import { requireModule } from '@/lib/api-auth'
+import { requireModule, requireDashboardUser } from '@/lib/api-auth'
 import { orgTreeFor, peersFor, orphansFor, spanOfControlFor, driftReportFor } from '@/lib/rms/server'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: NextRequest) {
-  const gate = await requireModule(req, 'Employees')
-  if (gate.error) return gate.error
-
   const url = new URL(req.url)
   const view = url.searchParams.get('view') || 'tree'
+
+  // The TREE is for every signed-in employee — an org chart is who works here and
+  // who they report to, the same facts the ESS Team tab and the inbox directory
+  // already show. The diagnostics stay behind the Employees module: orphans and
+  // span-of-control are HR's problem list, not a colleague directory.
+  const gate = view === 'tree'
+    ? await requireDashboardUser(req)
+    : await requireModule(req, 'Employees')
+  if (gate.error) return gate.error
   const companyId = url.searchParams.get('company_id') || undefined
 
   if (view === 'peers') {
