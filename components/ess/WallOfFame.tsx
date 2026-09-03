@@ -31,6 +31,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import Badge, { BADGE_KEYFRAMES, type BadgeTier, type BadgeShape } from '@/components/wall/Badge'
 import ShoutoutComposer from '@/components/wall/ShoutoutComposer'
+import AppreciationComposer from '@/components/wall/AppreciationComposer'
 import { Spotlight, Leaderboard, HallOfLegends,
          type Winner, type LeaderRow } from '@/components/wall/Spotlight'
 import { C, F, W, S, R } from '@/lib/ui'
@@ -206,7 +207,10 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
   const [feed, setFeed] = useState<FeedRow[]>([])
   const [badges, setBadges] = useState<MyBadge[]>([])
   const [err, setErr] = useState<string | null>(null)
-  const [composing, setComposing] = useState(false)
+  // Two composers, one panel. They are different channels — a shoutout is
+  // published, a note is private and cannot become a conversation — so the
+  // choice is explicit rather than a toggle buried in one form.
+  const [composing, setComposing] = useState<null | 'shoutout' | 'note'>(null)
   const [winner, setWinner] = useState<Winner | null>(null)
   const [legends, setLegends] = useState<Winner[]>([])
   const [board, setBoard] = useState<LeaderRow[]>([])
@@ -342,20 +346,34 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
           <Panel title="Give a shoutout"
                  sub="Recognition here is thanks, never pay — it changes nothing about anyone's salary."
                  action={
-                   <button type="button" onClick={() => setComposing(v => !v)}
-                     style={{ fontFamily: 'inherit', fontSize: F.small, fontWeight: W.bold,
-                              padding: '8px 15px', borderRadius: R.sm, cursor: 'pointer',
-                              border: `1px solid ${composing ? C.line : C.brand}`,
-                              background: composing ? C.surface : C.brand,
-                              color: composing ? C.inkSoft : '#FFFFFF' }}>
-                     {composing ? 'Close' : 'Recognise a colleague'}
-                   </button>
+                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                     {([['shoutout', 'Give a shoutout'], ['note', 'Send a private note']] as const)
+                       .map(([k, label]) => (
+                       <button key={k} type="button"
+                         onClick={() => setComposing(v => v === k ? null : k)}
+                         aria-pressed={composing === k}
+                         style={{ fontFamily: 'inherit', fontSize: F.small, fontWeight: W.bold,
+                                  padding: '8px 15px', borderRadius: R.sm, cursor: 'pointer',
+                                  border: `1px solid ${composing === k ? C.brand : C.line}`,
+                                  background: composing === k ? C.brand : C.surface,
+                                  color: composing === k ? '#FFFFFF' : C.inkSoft }}>
+                         {composing === k ? 'Close' : label}
+                       </button>
+                     ))}
+                   </div>
                  }>
-            {composing
-              ? <ShoutoutComposer actorId={employeeId} onSent={() => { setComposing(false); load() }} />
-              : <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>
-                  Noticed someone doing something well? Say so. It takes a minute and they keep it.
-                </div>}
+            {composing === 'shoutout' && (
+              <ShoutoutComposer actorId={employeeId} onSent={() => { setComposing(null); load() }} />
+            )}
+            {composing === 'note' && (
+              <AppreciationComposer actorId={employeeId} onSent={() => setComposing(null)} />
+            )}
+            {!composing && (
+              <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>
+                Noticed someone doing something well? Say so. A shoutout goes on the wall for
+                everyone; a note goes only to them.
+              </div>
+            )}
           </Panel>
 
           <Panel title="Recently recognised"
