@@ -3290,8 +3290,12 @@ const SECTIONS: NavSection[] = [
     desc:'Your KRAs, and the reviews you owe',
     items:[{ k:'performance', label:'Performance' }] },
 
-  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'soon',
-    desc:'Peer-to-peer appreciation, casual and public',
+  // Was a 'soon' placeholder. Promoted rather than duplicated — adding a
+  // second entry with the same key is what produced React's "two children
+  // with the same key" warning, and duplicate keys let React drop or swap
+  // siblings silently.
+  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'ready',
+    desc:'What your colleagues have noticed — shoutouts, awards, badges and service milestones. Thanks, never pay.',
     items:[{ k:'wall', label:'Wall of Fame' }],
     features:[
       { icon:'', name:'Give a Shoutout', note:'Quick appreciation post' },
@@ -3308,10 +3312,6 @@ const SECTIONS: NavSection[] = [
       { icon:'', name:'Redeem',      note:'Vouchers, leave, merch' },
       { icon:'', name:'Leaderboard', note:'Top recognized employees' },
     ]},
-
-  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'ready',
-    desc:'What your colleagues have noticed — shoutouts, awards, badges and service milestones. Thanks, never pay.',
-    items:[{ k:'wall', label:'Wall of Fame' }] },
 
   { k:'funzone', label:'Fun Zone', short:'Fun', icon:'', status:'ready',
     desc:'Take a break — play a quick game with your team',
