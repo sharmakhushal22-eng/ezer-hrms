@@ -219,10 +219,27 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
     const f = await supabase.rpc('get_company_feed', { p_scope: 'company', p_limit: 20 })
     if (!f.error) setFeed((f.data ?? []) as unknown as FeedRow[])
 
-    const b = await supabase.from('v_my_badges')
-      .select('badge_code, label, glyph, tier, shape, earned_count, progress_pct, earned_at')
+    // employee_badges holds what you have earned; badge_master holds what a
+    // badge IS. There is no v_my_badges view — I had invented that name, and
+    // PostgREST answers a missing relation with an error, not a nudge.
+    const b = await supabase.from('employee_badges')
+      .select('badge_code, earned_count, tier, progress_pct, last_earned_on,'
+            + ' badge_master(label, glyph, shape)')
       .eq('employee_id', employeeId).limit(60)
-    if (!b.error) setBadges((b.data ?? []) as unknown as MyBadge[])
+    if (!b.error) {
+      const rows = (b.data ?? []) as unknown as (Record<string, unknown> & {
+        badge_master?: { label?: string; glyph?: string; shape?: string } | null })[]
+      setBadges(rows.map(r => ({
+        badge_code: String(r.badge_code),
+        label: r.badge_master?.label ?? String(r.badge_code),
+        glyph: r.badge_master?.glyph ?? null,
+        shape: r.badge_master?.shape ?? null,
+        tier: (r.tier as string) ?? null,
+        earned_count: (r.earned_count as number) ?? 0,
+        progress_pct: (r.progress_pct as number) ?? 0,
+        earned_at: (r.last_earned_on as string) ?? null,
+      })))
+    }
   }, [employeeId])
 
   useEffect(() => { load() }, [load])

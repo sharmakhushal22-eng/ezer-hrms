@@ -176,7 +176,9 @@ export default function ShoutoutComposer({
         .select('id, code, label, helper_text, glyph, requires_value')
         .eq('is_active', true).order('sort_order').limit(24)
       if (!c.error) setCats((c.data ?? []) as unknown as Category[])
-      const v = await supabase.from('company_values').select('id, label')
+      // recognition_values, not company_values. I had guessed the name, and a
+      // guessed relation fails the whole select rather than returning nothing.
+      const v = await supabase.from('recognition_values').select('id, label')
         .eq('is_active', true).order('sort_order').limit(24)
       if (!v.error) setValues((v.data ?? []) as unknown as CompanyValue[])
     })()
