@@ -110,7 +110,12 @@ export default function NextAction({ action, onGo, restingTitle, restingWhy }: N
         </div>
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, flexShrink: 0 }}>
+      {/* flexShrink 0 on this group cost 47px of page overflow at 320px: the
+          chip and a button reading "Ask your manager to reopen it" cannot
+          both fit, and neither was allowed to give. It wraps now, and the
+          button is free to take two lines rather than push the page wide. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: S.sm,
+                    flexWrap: 'wrap', minWidth: 0 }}>
         {when && (
           <span style={{
             fontSize: F.micro, fontWeight: W.bold, padding: '5px 10px', borderRadius: 999,
@@ -125,7 +130,7 @@ export default function NextAction({ action, onGo, restingTitle, restingWhy }: N
           onClick={() => onGo?.(action.tab)}
           style={{
             fontFamily: 'inherit', fontSize: F.small, fontWeight: W.bold, cursor: 'pointer',
-            padding: '10px 16px', borderRadius: R.sm, whiteSpace: 'nowrap',
+            padding: '10px 16px', borderRadius: R.sm, maxWidth: '100%',
             border: blocked ? `1px solid ${C.lineStrong}` : 'none',
             background: blocked ? C.surface : '#FFFFFF',
             color: blocked ? C.ink : (action.urgency === 'overdue' ? C.critical : C.brand),

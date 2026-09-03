@@ -187,6 +187,27 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
         .pms-dot-wrap:hover + .pms-blurb,
         .pms-dot-wrap:focus-visible + .pms-blurb{ opacity:1; transform:translate(-50%,0) }
 
+        /* EDGE CLAMP. The blurb is 190px centred on its dot, so the first and
+           last stages hang ~95px past the rail. Absolute positioning keeps it
+           out of the parent's layout but NOT out of the document's scroll
+           width, so between roughly 760 and 900px the page picked up a few
+           pixels of sideways scroll — invisible, and enough to make the whole
+           layout feel loose on a tablet. The end stages anchor to their own
+           edge instead of to their centre. */
+        .pms-step:first-child .pms-blurb{ left:0; transform:translate(0,-4px) }
+        .pms-step:first-child .pms-dot-wrap:hover + .pms-blurb,
+        .pms-step:first-child .pms-dot-wrap:focus-visible + .pms-blurb{ transform:translate(0,0) }
+        .pms-step:last-child .pms-blurb{ left:auto; right:0; transform:translate(0,-4px) }
+        .pms-step:last-child .pms-dot-wrap:hover + .pms-blurb,
+        .pms-step:last-child .pms-dot-wrap:focus-visible + .pms-blurb{ transform:translate(0,0) }
+
+        /* Below the widest tablet the rail is tight enough that even the
+           second stage in from each end can reach past. Narrowing the blurb
+           costs a line of wrapping and buys the page back. */
+        @media (max-width: 900px){
+          .pms-blurb{ width:158px }
+        }
+
         .ez-sr{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);
                 clip-path:inset(50%); white-space:nowrap }
 
