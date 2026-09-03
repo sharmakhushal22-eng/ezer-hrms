@@ -484,49 +484,79 @@ export default function Layout({ children }: { children: React.ReactNode }) {
              band/ground    1.19                 1.19
         */
         .ez-rail{
-          background: linear-gradient(180deg, #D2E2FE 0%, #8FB4F2 100%);
-          /* A row goes DARKER than this ground; a section goes lighter. */
-          --r-row:   linear-gradient(180deg, rgba(21,45,120,.10), rgba(21,45,120,.22));
-          --r-row-h: linear-gradient(180deg, rgba(21,45,120,.16), rgba(21,45,120,.30));
-          --r-band:  rgba(255,255,255,.62);
-          --r-edge:  rgba(21,45,120,.20);
-          --r-cast:      rgba(21,45,120,.16);
-          --r-cast-far:  rgba(21,45,120,.20);
-          --r-cast-h:    rgba(21,45,120,.20);
-          --r-cast-far-h:rgba(21,45,120,.28);
+          background: linear-gradient(180deg, #BBD4FA 0%, #79A3EA 100%);
+          /* ── A ROW IS A DIFFERENT MATERIAL, NOT A DIFFERENT SHADE ──────
+             Every earlier attempt separated the row from the ground by
+             moving it along the same blue, and every one of them was told
+             the two looked identical — correctly, because a step of 1.41
+             between two colours of the SAME hue at the SAME saturation
+             gives the eye one weak cue and nothing else.
+
+             So the row stops being blue. It is a WHITE CARD lying on a
+             blue ground: the difference is chroma, not lightness, and 86%
+             saturation against ~0% is a difference of kind that no amount
+             of nudging a shared hue can produce. It also costs nothing —
+             navy on white measures 12.5, where navy on a tinted row was
+             4.83, and the step doubles to 2.23 at the deep end of the
+             gradient.
+
+             The ground can now be a real light blue rather than a
+             near-white, because it no longer has to stay pale enough for
+             navy text to sit directly on it. Nothing does: text sits on
+             cards. */
+          --r-row:   linear-gradient(180deg, rgba(255,255,255,.97), rgba(255,255,255,.84));
+          --r-row-h: linear-gradient(180deg, rgba(255,255,255,1), rgba(255,255,255,.92));
+          /* The band leans the other way — into the ground, away from the
+             cards — so the three levels are never the same move twice. */
+          --r-band:  rgba(21,45,120,.24);
+          --r-edge:  rgba(21,45,120,.22);
+          --r-cast:      rgba(16,36,100,.20);
+          --r-cast-far:  rgba(16,36,100,.26);
+          --r-cast-h:    rgba(16,36,100,.24);
+          --r-cast-far-h:rgba(16,36,100,.34);
           --r-press:     rgba(21,45,120,.14);
           --r-focus:     #0D2154;
           --r-pill-edge: rgba(21,45,120,.55);
           --r-band-in:   rgba(255,255,255,.65);
           --r-band-h:    rgba(255,255,255,.82);
-          --r-sec-ink-h: #0A1E52;
-          --r-fold:      #2A4E95;
+          --r-sec-ink-h: #06122C;
+          --r-fold:      #10275C;
           --r-pulse:     rgba(20,48,110,.45);
           /* Lit from above, same as the deep rail — but on a pale surface
              the highlight is white and the shading below it is the navy. */
-          --r-spec:  rgba(255,255,255,.55);
-          --r-spec-h:rgba(255,255,255,.66);
-          --r-rim-t: rgba(255,255,255,.70);
-          --r-rim-b: rgba(21,45,120,.26);
-          --r-rim-th:rgba(255,255,255,.85);
-          --r-edge-h:rgba(21,45,120,.34);
+          --r-spec:  rgba(255,255,255,.90);
+          --r-spec-h:rgba(255,255,255,1);
+          --r-rim-t: rgba(255,255,255,.95);
+          --r-rim-b: rgba(21,45,120,.16);
+          --r-rim-th:rgba(255,255,255,1);
+          --r-edge-h:rgba(21,45,120,.30);
           /* Ink DARKENS on hover here, the mirror of going white on a deep
              rail: the row darkens under it, so the ink has to outrun it. */
           --r-ink:      #0F2660;
           --r-ink-h:    #0A1E52;
-          --r-icon:     #1B3A7E;
-          --r-icon-h:   #0A1E52;
-          --r-sec-ink:  #173672;
+          /* Free to be more colourful than the label now: on white it
+             measures 7.5 either way, so the icon can carry the blue the
+             row itself gave up. */
+          --r-icon:     #1E46A0;
+          --r-icon-h:   #14306E;
+          /* The band darkened, so its label has to go with it. */
+          --r-sec-ink:  #0A1B3E;
           --r-pill-bg:  #14306E;
           --r-pill-ink: #FFFFFF;
           --r-pill-ink-h: #FFFFFF;
           /* The brand mark, the footer and the sign-out row inherit these.
              On the pale rail they are NAVY, not the near-white they are on
-             the deep one — the single largest thing that flips. */
+             the deep one — the single largest thing that flips.
+
+             These are the ONLY text in the rail that touches the ground
+             directly; everything else sits on a card. That has now broken
+             three times running, once per ground change, because a check
+             on rows can never see it. It has its own check for that reason
+             and these values are re-derived whenever the ground moves. */
           --ez-rail-text:  #0D2154;
           --ez-rail-item:  #123069;
-          --ez-rail-muted: #1B3A7E;
-          --ez-rail-faint: #204186;
+          --ez-rail-muted: #142C60;
+          --ez-rail-faint: #17326E;
           --ez-rail-line:  rgba(21,45,120,.20);
           --ez-rail-hover: rgba(21,45,120,.08);
           --ez-rail-active-bg:   rgba(21,45,120,.16);

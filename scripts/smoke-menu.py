@@ -156,9 +156,15 @@ for g1, g2, toks, body in blocks[:2]:
               v is not None and v >= bar, '%.2f' % v if v else 'n/a')
 
     # the icon must not read as a disabled row next to its label
+    # An icon markedly dimmer than the label beside it reads as a disabled
+    # row — that is what this catches. But the rule is about the icon being
+    # WEAK, not about the ratio: on a white card the label is near-black at
+    # 12.5 and an icon at 7.5 is in no danger of looking switched off, it
+    # is simply not black. So either it tracks the label, or it is strong
+    # enough on its own account.
     li, ii = worst_on(inks['label'], '--r-row'), worst_on(inks['icon'], '--r-row')
-    check('%-4s the icon is not dimmer than its own label' % th,
-          ii >= li * .75, 'icon %.2f vs label %.2f' % (ii, li))
+    check('%-4s the icon does not read as disabled next to its label' % th,
+          ii >= li * .75 or ii >= 4.5, 'icon %.2f vs label %.2f' % (ii, li))
 
     # ── the levels, in whichever direction this polarity runs ────────────
     def step(level_name):
@@ -197,14 +203,28 @@ for g1, g2, toks, body in blocks[:2]:
     # a pale ground has little chroma to keep in the first place. What holds
     # for both is that the row stays on the ground's hue and stays visibly
     # coloured rather than neutral.
+    # WHAT THIS ACTUALLY FORBIDS IS MUD, not achromatic surfaces.
+    #
+    # The original rule — "keep the ground's hue at saturation >= .30" —
+    # was written when a row was a tint of the ground, and it would now
+    # reject a WHITE CARD, which is the opposite of the problem it exists
+    # to catch. Worse, it was passing one by accident: HSL saturation
+    # divides by (2 - hi - lo), so a near-white with two levels of blue in
+    # it scores .83 and looks like a saturated colour to the metric.
+    #
+    # The real fault is a row landing in the middle: mid-lightness and
+    # low chroma, which is the grey that got rejected. So a row may be a
+    # tint that keeps the ground's hue, OR a deliberate near-white / near
+    # -black surface. What it may not be is neither.
     for g in grounds:
         for px in painted(toks, '--r-row', g):
-            dh = abs(hue(px) - hue(g))
-            dh = min(dh, 360 - dh)
-            check('%-4s the row keeps the ground\'s hue (%s on %s)' % (th, px, g),
-                  dh <= 12, '%.0f deg apart' % dh)
-            check('%-4s the row is still a blue, not grey (%s)' % (th, px),
-                  sat(px) >= .30, 'saturation %.2f' % sat(px))
+            l = (max(rgb(px)) + min(rgb(px))) / 510
+            material = l >= .90 or l <= .12          # a surface, not a shade
+            dh = abs(hue(px) - hue(g)); dh = min(dh, 360 - dh)
+            tint = dh <= 12 and sat(px) >= .30       # a shade of the ground
+            check('%-4s the row is a surface or a true tint, never mud (%s)' % (th, px),
+                  material or tint,
+                  'L %.2f, %.0f deg off the ground, sat %.2f' % (l, dh, sat(px)))
 
 # ── the inks the rail rebinds for everything that is NOT a row ───────────
 # The brand-mark subtitle, "Back to my ESS" and the sign-out row draw
