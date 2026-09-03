@@ -22,7 +22,7 @@
 //   actually got. A fully drawn line with a dot part-way along reads as
 //   decoration; a line that stops reads as progress.
 
-import { useId } from 'react'
+import { useId, useEffect, useState } from 'react'
 import { STAGES, type StageKey, type StageState } from '@/lib/pms/cycle'
 import { C, F, W, R } from '@/lib/ui'
 
@@ -44,8 +44,19 @@ const TONE: Record<StageState, { dot: string; ink: string; ring: string; label: 
 export default function CycleStepper({ states, detail, dense }: CycleStepperProps) {
   const rid = useId().replace(/[:]/g, '')
 
+  // Assume calm until the browser says otherwise, so a server render never
+  // ships motion to somebody who asked for none.
+  const [calm, setCalm] = useState(true)
+  useEffect(() => {
+    const q = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const on = () => setCalm(q.matches)
+    on(); q.addEventListener('change', on)
+    return () => q.removeEventListener('change', on)
+  }, [])
+
   return (
-    <div className="pms-stepper" role="list" aria-label="Appraisal cycle progress" data-dense={dense ? '1' : '0'}>
+    <div className="pms-stepper" role="list" aria-label="Appraisal cycle progress"
+         data-dense={dense ? '1' : '0'} data-calm={calm ? '1' : '0'}>
       {STAGES.map((s, i) => {
         const st = states[s.key] ?? 'upcoming'
         const t = TONE[st]
@@ -54,7 +65,8 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
         const filled = prev === 'done'
         return (
           <div key={s.key} className="pms-step" role="listitem" data-state={st}
-               aria-current={st === 'active' ? 'step' : undefined}>
+               aria-current={st === 'active' ? 'step' : undefined}
+               style={{ animationDelay: calm ? undefined : `${i * 45}ms` }}>
             {i > 0 && <span className="pms-line" data-filled={filled ? '1' : '0'} aria-hidden />}
             <button type="button" className="pms-dot-wrap"
                     aria-describedby={`${rid}-${s.key}`}
@@ -106,13 +118,55 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
           position:absolute; top:13px; right:50%; left:-50%; height:2px; border-radius:2px;
           background:${C.line};
         }
-        .pms-line[data-filled="1"]{ background:${C.positive} }
+        /* The completed part of the line GROWS from the previous stage, so
+           progress is something that happened rather than something that was
+           always there. */
+        .pms-line::after{
+          content:''; position:absolute; inset:0; border-radius:inherit;
+          background:${C.positive}; transform-origin:left center; transform:scaleX(0);
+          transition: transform .5s cubic-bezier(.2,.8,.2,1);
+        }
+        .pms-line[data-filled="1"]::after{ transform:scaleX(1) }
         .pms-dot-wrap{ display:flex; flex-direction:column; align-items:center; gap:7px;
                        position:relative; z-index:1; width:100%; font:inherit; color:inherit }
+        /* The dot is a physical token: lit from above, sitting on the rail
+           rather than printed on it. The inset highlight is what does the
+           work — a flat disc with a drop shadow reads as a sticker. */
         .pms-dot{
-          width:26px; height:26px; border-radius:50%; display:grid; place-items:center;
+          width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
           font-size:${F.tiny}px; font-weight:${W.bold}; flex-shrink:0;
-          transition: box-shadow .2s ease, background .2s ease;
+          position:relative; z-index:1;
+          box-shadow:
+            inset 0 1px 0 rgba(255,255,255,.45),
+            0 1px 2px rgba(16,36,100,.22),
+            0 3px 8px -3px rgba(16,36,100,.28);
+          transition: box-shadow .22s ease, background .22s ease,
+                      transform .22s cubic-bezier(.2,.8,.2,1);
+        }
+        .pms-dot-wrap:hover .pms-dot{ transform: translateY(-2px) scale(1.06) }
+
+        /* The stage you are ON breathes. One element, slowly, so it reads as
+           "here" rather than as an alarm — and it is the only thing moving
+           once the entrance has finished. */
+        .pms-step[data-state="active"] .pms-dot::after,
+        .pms-step[data-state="blocked"] .pms-dot::after{
+          content:''; position:absolute; inset:-5px; border-radius:50%;
+          border:2px solid currentColor; opacity:.28;
+          animation: pmsPulse 2.4s cubic-bezier(.4,0,.6,1) infinite;
+        }
+        @keyframes pmsPulse{
+          0%,100%{ transform:scale(.92); opacity:.30 }
+          50%    { transform:scale(1.14); opacity:0 }
+        }
+
+        /* Each stage arrives in turn, so the rail draws itself once on load
+           and the reader's eye follows the order of the process. */
+        .pms-stepper[data-calm="0"] .pms-step{
+          animation: pmsStepIn .40s cubic-bezier(.2,.8,.2,1) both;
+        }
+        @keyframes pmsStepIn{
+          from{ opacity:0; transform: translateY(7px) }
+          to  { opacity:1; transform: translateY(0) }
         }
         .pms-step-label{ font-size:${F.tiny}px; font-weight:${W.semi}; color:${C.inkSoft};
                          line-height:1.25; max-width:11ch }
@@ -137,7 +191,10 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
                 clip-path:inset(50%); white-space:nowrap }
 
         @media (prefers-reduced-motion: reduce){
-          .pms-dot, .pms-blurb{ transition:none }
+          .pms-dot, .pms-blurb, .pms-line::after{ transition:none }
+          .pms-stepper .pms-step{ animation:none }
+          .pms-dot::after{ animation:none; opacity:.30 }
+          .pms-dot-wrap:hover .pms-dot{ transform:none }
         }
 
         /* Narrow: the rail becomes a column and stops pretending to be a

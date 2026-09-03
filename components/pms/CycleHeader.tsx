@@ -18,6 +18,8 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import CycleStepper from './CycleStepper'
 import NextAction from './NextAction'
+import StatCards, { type Stat } from './StatCards'
+import { nameThePeriod, periodSpanShort, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
 import {
   stageStates, nextAction, humanDate, DEFAULT_RULES,
   type Period, type Progress, type Roles, type Queues, type Rules,
@@ -39,10 +41,18 @@ export function localToday(d = new Date()): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
-interface Loaded { period: Period; progress: Progress; queues: Queues; rules: Rules }
+interface Loaded {
+  period: Period; progress: Progress; queues: Queues; rules: Rules
+  naming: PeriodNaming
+  span: string
+  frequency: string
+  lastRating?: { score: number | null; label: string | null } | null
+}
 
 const EMPTY: Loaded = {
-  period: { label: 'No active period' }, progress: {}, queues: {}, rules: DEFAULT_RULES,
+  period: { label: '' }, progress: {}, queues: {}, rules: DEFAULT_RULES,
+  naming: { title: 'No review period is open', sub: 'Nothing is running right now', code: '' },
+  span: '', frequency: '',
 }
 
 export default function CycleHeader({
@@ -56,9 +66,11 @@ export default function CycleHeader({
     let alive = true
     ;(async () => {
       const per = await supabase.from('pms_periods')
-        .select('id, period_name, period_code, financial_year, kra_window_from, kra_window_to,'
+        .select('id, period_name, period_code, financial_year, period_no, period_start, period_end,'
+              + ' kra_window_from, kra_window_to,'
               + ' self_rating_from, self_rating_to, rm_review_from, rm_review_to,'
-              + ' finalise_from, finalise_to, result_publish_date, status')
+              + ' finalise_from, finalise_to, result_publish_date, status,'
+              + ' pms_policies(frequency)')
         // NOT .eq('status','ACTIVE') — pms_periods has no such value, and
         // that filter matches zero rows forever without ever erroring.
         .in('status', PERIOD_OPEN)
@@ -71,8 +83,24 @@ export default function CycleHeader({
       const win = (a: string, b: string) =>
         row[a] && row[b] ? { from: row[a] as string, to: row[b] as string } : undefined
 
+      // How many periods a year, so "3rd of 4" can be said without arithmetic.
+      const freq = ((row as unknown as { pms_policies?: { frequency?: string } })
+        .pms_policies?.frequency) ?? null
+      const perYear = freq === 'MONTHLY' ? 12 : freq === 'QUARTERLY' ? 4
+                    : freq === 'HALF_YEARLY' ? 2 : freq === 'ANNUAL' ? 1 : null
+
+      // The heading is the months this covers. "Q3 2026-27" is a filing code
+      // and is kept as one — small, and underneath.
+      const naming = nameThePeriod({
+        periodName: row.period_name, periodCode: row.period_code,
+        financialYear: row.financial_year,
+        periodStart: row.period_start, periodEnd: row.period_end,
+        periodNo: row.period_no ? Number(row.period_no) : null,
+        totalPeriods: perYear, frequency: freq,
+      }, today)
+
       const period: Period = {
-        label: [row.period_name || row.period_code, row.financial_year].filter(Boolean).join(' · '),
+        label: naming.title,
         kra: win('kra_window_from', 'kra_window_to'),
         self: win('self_rating_from', 'self_rating_to'),
         review: win('rm_review_from', 'rm_review_to'),
@@ -89,7 +117,7 @@ export default function CycleHeader({
         supabase.from('pms_one_to_one')
           .select('employee_ack, manager_ack').eq('period_id', periodId).eq('employee_id', employeeId),
         supabase.from('pms_overall_rating')
-          .select('workflow_status, published_at, self_score, final_score')
+          .select('workflow_status, published_at, self_score, final_score, final_rating')
           .eq('period_id', periodId).eq('employee_id', employeeId).maybeSingle(),
       ])
 
@@ -138,7 +166,14 @@ export default function CycleHeader({
         }
       }
 
-      if (alive) setD({ period, progress, queues, rules: DEFAULT_RULES })
+      if (alive) setD({
+        period, progress, queues, rules: DEFAULT_RULES, naming,
+        span: periodSpanShort(row.period_start, row.period_end),
+        frequency: frequencyPhrase(freq),
+        lastRating: ov?.final_score != null
+          ? { score: Number(ov.final_score), label: (ov.final_rating as string) ?? null }
+          : null,
+      })
     })().catch(() => { if (alive) setD(EMPTY) })
     return () => { alive = false }
   }, [employeeId, roles.isRM, roles.isHOD])
@@ -158,24 +193,88 @@ export default function CycleHeader({
     finalise: d.period.finalise ? `by ${humanDate(d.period.finalise.to)}` : undefined,
   }
 
+  const r = d.rules
+  const kn = d.progress.kraCount ?? 0
+  const wt = d.progress.weightageTotal ?? 0
+  const setDone = kn >= r.minKra && kn <= r.maxKra && wt === r.totalWeightage
+
+  // Each number carries the sentence that makes it mean something. "6" on its
+  // own is decoration; "needs 4 to 10" is the rule the reader is being held to.
+  const stats: Stat[] = [
+    {
+      label: 'Your KRAs', value: kn, unit: kn === 1 ? 'goal' : 'goals',
+      tone: kn === 0 ? 'neutral' : (kn >= r.minKra && kn <= r.maxKra) ? 'good' : 'warn',
+      fill: Math.min(1, kn / r.minKra),
+      meaning: kn === 0 ? `You need between ${r.minKra} and ${r.maxKra}.`
+             : kn < r.minKra ? `${r.minKra - kn} more to reach the minimum of ${r.minKra}.`
+             : kn > r.maxKra ? `That is ${kn - r.maxKra} over the limit of ${r.maxKra}.`
+             : `Within the ${r.minKra}–${r.maxKra} allowed.`,
+    },
+    {
+      label: 'Weightage used', value: wt, unit: `of ${r.totalWeightage}%`,
+      tone: wt === r.totalWeightage ? 'good' : wt > r.totalWeightage ? 'bad' : 'warn',
+      fill: wt / r.totalWeightage,
+      meaning: wt === r.totalWeightage ? 'Adds up exactly. Nothing to change.'
+             : wt > r.totalWeightage ? `${wt - r.totalWeightage}% too much — take some off a goal.`
+             : `${r.totalWeightage - wt}% still to share out across your goals.`,
+    },
+    {
+      label: 'How often', value: d.frequency || 'Not set',
+      meaning: d.span ? `This one covers ${d.span}.` : 'Your HR team sets the dates.',
+    },
+    d.lastRating
+      ? { label: 'Your last result', value: d.lastRating.score ?? '—',
+          unit: d.lastRating.label ? `· ${d.lastRating.label}` : undefined, tone: 'brand',
+          meaning: 'Published for the previous period.' }
+      : { label: 'Your last result', value: 'Not yet', tone: 'neutral',
+          meaning: 'Your first result appears here once a cycle finishes.' },
+  ]
+
   return (
     <section style={{ marginBottom: S.lg }} aria-label="Where this appraisal cycle is">
-      <div style={{
-        background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.sm,
-        padding: `${S.md}px ${S.lg}px ${S.lg}px`, marginBottom: S.sm,
+      <div className="pms-head" style={{
+        border: `1px solid ${C.line}`, borderRadius: R.sm,
+        padding: `${S.lg}px ${S.lg}px ${S.lg}px`, marginBottom: S.sm,
       }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
-                      gap: S.sm, flexWrap: 'wrap', marginBottom: S.md }}>
-          <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{d.period.label}</div>
-          <div style={{ fontSize: F.micro, color: C.muted }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
+                      gap: S.md, flexWrap: 'wrap', marginBottom: S.lg }}>
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{
+              fontSize: F.title, fontWeight: W.bold, color: C.ink, letterSpacing: '-.015em',
+              lineHeight: 1.15, margin: 0,
+            }}>{d.naming.title}</h2>
+            <div style={{ fontSize: F.small, color: C.inkSoft, marginTop: 4 }}>
+              {d.naming.sub}
+              {d.naming.code && (
+                <span style={{
+                  marginLeft: 8, padding: '2px 7px', borderRadius: 999, background: C.sunken,
+                  color: C.muted, fontSize: F.micro, fontWeight: W.semi, whiteSpace: 'nowrap',
+                }} title="The code your HR team files this under">{d.naming.code}</span>
+              )}
+            </div>
+          </div>
+          <div style={{ fontSize: F.micro, color: C.muted, maxWidth: '38ch', textAlign: 'right' }}>
             {pending
-              ? 'Showing the stages only — the module is not switched on in this database yet.'
-              : 'Hover a stage to see what happens in it.'}
+              ? 'These are the stages every appraisal goes through. The module is not switched on in this database yet, so nothing is filled in.'
+              : 'Hover any stage to see what happens in it.'}
           </div>
         </div>
+
         <CycleStepper states={states as never} detail={detail as never} />
       </div>
-      <NextAction action={action} onGo={onGo} />
+
+      <div style={{ marginBottom: S.sm }}><NextAction action={action} onGo={onGo} /></div>
+      <StatCards stats={stats} />
+
+      <style>{`
+        /* A ground, not a flat panel: the rail of stages sits on a faint
+           vertical wash so the stepper reads as a surface with things on it
+           rather than a row of icons floating on the page. */
+        .pms-head{
+          background: linear-gradient(180deg, ${C.surface} 0%, ${C.canvas} 100%);
+          box-shadow: 0 1px 2px rgba(16,36,100,.05);
+        }
+      `}</style>
     </section>
   )
 }
