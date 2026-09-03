@@ -40,6 +40,12 @@ export interface SyncCategory {
    * from and those are filed monthly.
    */
   syncable?: boolean
+  /**
+   * True = payroll_sync_pending() (086) can say who actually changed, because the
+   * category COPIES a source into the snapshot. Computed categories have no
+   * source-vs-snapshot diff, so their picker shows the whole month.
+   */
+  diffable?: boolean
 }
 
 // The four Ready categories are the ones with a live source table AND columns frozen
@@ -47,7 +53,7 @@ export interface SyncCategory {
 // feeds flexi_car…flexi_total today — so it is a real category, not a planned one.
 export const SYNC_CATEGORIES: SyncCategory[] = [
   {
-    key: 'employee', label: 'Employee info', icon: '👤', status: 'ready',
+    key: 'employee', label: 'Employee info', icon: '👤', status: 'ready', diffable: true,
     note: 'Department, designation, DOJ/DOL, cost centre and address. Statutory sits in its own category below.',
     rpc: 'sync_month_employee_info', countKey: 'eligible',
     columns: [
@@ -63,7 +69,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'statutory', label: 'Statutory', icon: '⚖️', status: 'ready',
+    key: 'statutory', label: 'Statutory', icon: '⚖️', status: 'ready', diffable: true,
     note: 'PAN, UAN, ESIC and PF account numbers, plus the PF · ESIC · PT · LWF flags and limits. Its own category because a flag changes the payout, a designation does not.',
     rpc: 'sync_month_statutory', countKey: 'with_statutory',
     columns: [
@@ -79,13 +85,13 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'bank', label: 'Bank', icon: '🏦', status: 'ready',
+    key: 'bank', label: 'Bank', icon: '🏦', status: 'ready', diffable: true,
     note: 'Bank name, account number, IFSC and account type. A new joiner arriving through any category comes in with their full row; removals happen only in Employee info.',
     rpc: 'sync_month_bank', countKey: 'with_bank',
     columns: ['employee_code', 'full_name', 'bank_name', 'bank_account_number', 'bank_account_last4', 'ifsc_code', 'account_type'],
   },
   {
-    key: 'salary', label: 'Salary', icon: '💰', status: 'ready',
+    key: 'salary', label: 'Salary', icon: '💰', status: 'ready', diffable: true,
     note: 'CTC, basic, HRA, conveyance, special allowance, gross, employer & employee PF/ESIC — from CTC Master and Salary Structures.',
     rpc: 'sync_month_salary', countKey: 'with_salary',
     columns: [
@@ -97,7 +103,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'flexi', label: 'Flexi (allowances)', icon: '🎛️', status: 'ready',
+    key: 'flexi', label: 'Flexi (allowances)', icon: '🎛️', status: 'ready', diffable: true,
     note: 'Car lease, driver, fuel, telephone, meal, LTA and the rest — from the employee’s flexi declaration for this financial year.',
     rpc: 'sync_month_flexi', countKey: 'with_flexi',
     columns: [
@@ -221,7 +227,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     columns: ['employee_code', 'full_name'],
   },
   {
-    key: 'inv_decl', label: 'Investment declaration', icon: '📄', status: 'ready',
+    key: 'inv_decl', label: 'Investment declaration', icon: '📄', status: 'ready', diffable: true,
     // The declaration itself stays FY-global. What this sync does is apply its ONE
     // month-level consequence: the regime the employee chose lands in this month's
     // snapshot. That column used to come from employees.tds_regime via Statutory,
@@ -335,6 +341,23 @@ export async function loadSyncStatus(runIds: string[], codes: string[] | null = 
     })
   }
   return { status: total, missing: false, detail: null }
+}
+
+/**
+ * Who actually changed, per category — live HRMS vs the frozen snapshot, from
+ * payroll_sync_pending() (086). Returns code → "which fields", or null when the
+ * category has no diff (computed), the migration is not applied yet, or the call
+ * failed — null tells the picker to fall back to the full month.
+ */
+export async function loadPendingChanges(cat: SyncCategory, runIds: string[]): Promise<Map<string, string> | null> {
+  if (!cat.diffable) return null
+  const out = new Map<string, string>()
+  for (const id of runIds) {
+    const { data, error } = await supabase.rpc('payroll_sync_pending', { p_run_id: id, p_category: cat.key })
+    if (error) return null
+    ;((data as any[]) || []).forEach(r => out.set(String(r.employee_code), String(r.changes || '')))
+  }
+  return out
 }
 
 /** Run one category's sync across the month's runs. Returns rows touched. */
