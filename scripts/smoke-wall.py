@@ -84,10 +84,62 @@ check('the module declares its functions', len(FUNCS) >= 15, f'{len(FUNCS)} func
 sec('Access model')
 acc = (ROOT / 'lib/wall/access.ts').read_text()
 perms_ts = set(re.findall(r"\|\s*'(wof\.[a-z.]+)'", acc)) | set(re.findall(r"=\s*'(wof\.[a-z.]+)'", acc))
-mapped = set(re.findall(r"\('(wof\.[a-z.]+|company\.activate)',", sql_all))
+# ONLY 082's map. 084 creates a wall_permissions catalogue and 087 seeds it
+# with the same tuple shape, so a regex over all the SQL matched THOSE rows
+# and reported every permission as mapped — including the four that were not.
+# Two tables, one pattern, and the check quietly answered a different question
+# from the one it was asked.
+map_sql = strip_sql_comments((MIG / '082_access_foundation.sql').read_text())
+map_block = map_sql[map_sql.index('access_permission_map'):] if 'access_permission_map' in map_sql else ''
+mapped = set(re.findall(r"\('(wof\.[a-z.]+|company\.activate)',", map_block))
+
+# THE INVARIANT THAT ACTUALLY MATTERS, and it is not obvious from the code.
+#
+# wof_can() is the gate, and for an everyday permission it ends:
+#
+#     if to_regprocedure('can(uuid,text,text)') is not null then
+#       return coalesce((select can(p_employee, p_permission, 'self')), true);
+#     end if;
+#     return true;
+#
+# The module was built to work WITHOUT migration 083: no can(), everyday
+# permissions allowed. Adding 082 makes can() exist — and mine denies an
+# unmapped name, which is right for a standalone gate and disastrous here.
+# Every wall_permissions code missing from 082's map flips from ALLOWED to
+# DENIED the moment 082 is applied.
+#
+# So introducing the access floor can only ever narrow access, never widen it,
+# and the map must cover the catalogue completely or 082 is worse than not
+# having it at all.
+catalogue = set()
+for _m in re.finditer(r'insert into wall_permissions[^;]*;', sql_all, re.I | re.S):
+    catalogue |= set(re.findall(r"\('(wof\.[a-z.]+)'", _m.group(0)))
+check('082 covers every wall_permissions code (or it NARROWS access)',
+      not sorted(c for c in catalogue if c not in mapped),
+      str(sorted(c for c in catalogue if c not in mapped))
+      if any(c not in mapped for c in catalogue) else f'{len(catalogue)} catalogue codes')
+
 missing_perm = sorted(p for p in perms_ts if p not in mapped)
-check('every permission the code names is in the permission map',
+check('every permission the TypeScript names is in the permission map',
       not missing_perm, str(missing_perm[:4]) if missing_perm else f'{len(perms_ts)} permissions')
+
+# THE CHECK ABOVE IS NOT ENOUGH, AND MISSING THAT COST FOUR PERMISSIONS.
+# access.ts is a convenience for routes; the SQL is what actually ENFORCES.
+# 087 gates commenting, mentions, the inbox and direct appreciation on four
+# names that neither the bundle's union nor my first map contained — and
+# can() denies an unmapped name, so all four would have denied everyone,
+# silently, forever. What matters is what the database asks for.
+# Every wof.* literal in the SQL, not just the ones a regex can tie to a
+# wof_can( call — those calls wrap across lines and a [^)]*? stops at the
+# first paren, which found 7 of 19 and let the very gap this check exists
+# for slip through a second time.
+enforced = set(re.findall(r"'(wof\.[a-z.]+)'", sql_all))
+unmapped = sorted(p for p in enforced if p not in mapped)
+check('every permission the SQL ENFORCES is in the permission map',
+      not unmapped, str(unmapped) if unmapped else f'{len(enforced)} enforced')
+untyped = sorted(p for p in enforced if p not in perms_ts)
+check('every enforced permission is also in the TypeScript union',
+      not untyped, str(untyped) if untyped else '')
 check('can() and explain_access() are defined', 'can' in FUNCS and 'explain_access' in FUNCS)
 check('an unknown permission is DENIED, not allowed',
       re.search(r'if not found then return false', sql_all, re.I) is not None)

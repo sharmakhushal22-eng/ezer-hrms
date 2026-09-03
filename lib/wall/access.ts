@@ -14,6 +14,11 @@ export type WallPermission =
   | 'wof.shoutout.create'
   | 'wof.nominate'
   | 'wof.react'
+  // Added: 087 enforces these four and the bundle's union predates that file.
+  | 'wof.comment'
+  | 'wof.mention'
+  | 'wof.message.send'
+  | 'wof.inbox.view'
   | 'wof.endorse'
   | 'wof.shortlist'
   | 'wof.publish'

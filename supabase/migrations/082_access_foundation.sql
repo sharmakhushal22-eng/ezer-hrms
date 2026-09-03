@@ -59,6 +59,18 @@ INSERT INTO access_permission_map (permission, module, needs_level, everyday, ez
   ('wof.unpublish',       'wall_of_fame', 'EDIT', false, false, 'Remove a published recognition'),
   ('wof.moderate',        'wall_of_fame', 'EDIT', false, false, 'Moderate reported content'),
   ('wof.report.view',     'wall_of_fame', 'VIEW', false, false, 'See recognition reports'),
+  -- The four social permissions. They arrive with 087, which shipped after
+  -- the bundle's access helper was written, so neither that helper nor my
+  -- first draft of this map listed them. can() denies an unmapped name — the
+  -- right default — which means commenting, mentions, the inbox and direct
+  -- appreciation would have denied EVERYONE, silently, from day one.
+  --
+  -- All four are everyday. Saying thank you to a colleague, or reading a note
+  -- somebody left you, is not a privilege that needs granting.
+  ('wof.comment',         'wall_of_fame', 'VIEW', true,  false, 'Comment on a recognition'),
+  ('wof.mention',         'wall_of_fame', 'VIEW', true,  false, 'Mention a colleague in a comment'),
+  ('wof.message.send',    'wall_of_fame', 'VIEW', true,  false, 'Send a direct appreciation note'),
+  ('wof.inbox.view',      'wall_of_fame', 'VIEW', true,  false, 'Read your own Wall of Fame inbox'),
   ('wof.board.manage',    'wall_of_fame', 'EDIT', false, false, 'Manage the digital board'),
   ('wof.badge.manage',    'wall_of_fame', 'FULL', false, false, 'Create and change badges'),
   ('wof.configure',       'wall_of_fame', 'FULL', false, false, 'Configure the module'),
