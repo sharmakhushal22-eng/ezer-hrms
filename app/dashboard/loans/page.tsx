@@ -43,7 +43,7 @@ function Badge({ status }: { status: string }) {
 }
 
 // ── 1) Pending approvals ─────────────────────────────────────────
-function PendingApprovals({ companyId, empMap, typeMap, notify }: { companyId: string; empMap: Record<string, string>; typeMap: Record<string, string>; notify: (m: string, t?: 'error') => void }) {
+function PendingApprovals({ companyId, companyEmpIds, empMap, typeMap, notify }: { companyId: string; companyEmpIds: Set<string>; empMap: Record<string, string>; typeMap: Record<string, string>; notify: (m: string, t?: 'error') => void }) {
   const [rows, setRows] = useState<any[]>([])
   const [levels, setLevels] = useState<Record<string, any>>({}) // request_id -> current pending level row
   const [busy, setBusy] = useState<string | null>(null)
@@ -83,10 +83,13 @@ function PendingApprovals({ companyId, empMap, typeMap, notify }: { companyId: s
     if (res.ok) load(); else notify(d.error || 'Failed', 'error')
   }
 
+  // Loaded per company, narrowed per filter — filtering at render keeps typing in
+  // the search box free of database round trips.
+  const visible = rows.filter(r => companyEmpIds.has(r.employee_id))
   return (
     <div style={S.card}>
       <div style={S.section}>Pending approvals</div>
-      {rows.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>Nothing awaiting approval.</div> : rows.map(r => {
+      {visible.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>Nothing awaiting approval.</div> : visible.map(r => {
         const lv = levels[r.id]
         return (
           <div key={r.id} style={S.row}>
@@ -111,9 +114,10 @@ function AgreementsReview({ companyEmpIds, empMap, notify }: { companyEmpIds: Se
   const [busy, setBusy] = useState<string | null>(null)
   const load = useCallback(async () => {
     const { data } = await supabase.from('loan_agreements').select('*').eq('status', 'UNDER_REVIEW').order('signed_at', { ascending: false })
-    setRows((data || []).filter(a => companyEmpIds.has(a.employee_id)))
-  }, [companyEmpIds])
+    setRows(data || [])
+  }, [])
   useEffect(() => { load() }, [load])
+  const visible = rows.filter(a => companyEmpIds.has(a.employee_id))
 
   const act = async (a: any, action: 'APPROVED' | 'REJECTED') => {
     setBusy(a.id)
@@ -126,7 +130,7 @@ function AgreementsReview({ companyEmpIds, empMap, notify }: { companyEmpIds: Se
   return (
     <div style={S.card}>
       <div style={S.section}>Agreements to review</div>
-      {rows.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>No agreements pending review.</div> : rows.map(a => (
+      {visible.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>No agreements pending review.</div> : visible.map(a => (
         <div key={a.id} style={S.row}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{a.agreement_number} · {empMap[a.employee_id] || a.employee_id}</div>
@@ -172,13 +176,14 @@ function ReadyToDisburse({ companyEmpIds, empMap, notify }: { companyEmpIds: Set
   const [rows, setRows] = useState<any[]>([])
   const load = useCallback(async () => {
     const { data } = await supabase.from('loan_agreements').select('*').eq('status', 'APPROVED').is('loan_id', null).order('created_at', { ascending: false })
-    setRows((data || []).filter(a => companyEmpIds.has(a.employee_id)))
-  }, [companyEmpIds])
+    setRows(data || [])
+  }, [])
   useEffect(() => { load() }, [load])
+  const visible = rows.filter(a => companyEmpIds.has(a.employee_id))
   return (
     <div style={S.card}>
       <div style={S.section}>Ready to disburse</div>
-      {rows.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>Nothing ready for disbursement.</div> : rows.map(a => (
+      {visible.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>Nothing ready for disbursement.</div> : visible.map(a => (
         <DisburseRow key={a.id} agr={a} empMap={empMap} onDone={load} notify={notify} />
       ))}
     </div>
@@ -197,10 +202,10 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
 
   const load = useCallback(() => {
     supabase.from('loans').select('*').then(({ data }) => {
-      const mine = (data || []).filter(l => companyEmpIds.has(l.employee_id))
-      setRows(mine)
-      if (!mine.length) { setPaid({}); return }
-      supabase.from('loan_emi_ledger').select('loan_id, emi_amount').in('loan_id', mine.map(l => l.id))
+      const all = data || []
+      setRows(all)
+      if (!all.length) { setPaid({}); return }
+      supabase.from('loan_emi_ledger').select('loan_id, emi_amount').in('loan_id', all.map(l => l.id))
         .then(({ data: led }) => {
           const acc: Record<string, { n: number; total: number }> = {}
           ;(led || []).forEach((g: any) => {
@@ -210,8 +215,9 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
           setPaid(acc)
         })
     })
-  }, [companyEmpIds])
+  }, [])
   useEffect(() => { load() }, [load])
+  const visible = rows.filter(l => companyEmpIds.has(l.employee_id))
 
   async function foreclose(l: any) {
     const left = Number(l.outstanding_principal) || 0
@@ -229,14 +235,14 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
   return (
     <div style={S.card}>
       <div style={S.section}>Active loans</div>
-      {rows.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>No loans for this company.</div> : (
+      {visible.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>No loans for this selection.</div> : (
         <div style={{ overflowX:'auto' }}>
           <table style={{ borderCollapse:'collapse', width:'100%', minWidth:640 }}>
             <thead><tr style={{ background:TK.sunken }}>
               <th style={{ ...th, textAlign:'left' }}>Loan #</th><th style={{ ...th, textAlign:'left' }}>Employee</th><th style={th}>Principal</th><th style={th}>EMI</th><th style={th}>Recovered</th><th style={th}>Outstanding</th><th style={{ ...th, textAlign:'left' }}>Status</th><th style={th}></th>
             </tr></thead>
             <tbody>
-              {rows.map(l => (
+              {visible.map(l => (
                 <tr key={l.id} style={{ borderTop:`1px solid ${C.border}` }}>
                   <td style={{ ...td, textAlign:'left', fontWeight:600 }}>{l.loan_number}</td>
                   <td style={{ ...td, textAlign:'left' }}>{empMap[l.employee_id] || l.employee_id}</td>
@@ -294,12 +300,83 @@ function LoanTypes({ companyId }: { companyId: string }) {
   )
 }
 
+// ── Filter bar ───────────────────────────────────────────────────
+// The same shape the Payroll Run filter has: Location and Department from the
+// people actually in scope, and one search box instead of an employee dropdown —
+// a 398-entry list is scrolling, not choosing. The box takes a pasted comma
+// list of emp codes (SRS0001, SRS0042, …) as readily as a single name.
+// Defined OUTSIDE the parent — an inline component remounts per keystroke and
+// the search box loses focus after one character.
+function LoanFilterBar({ locations, departments, location, department, search, matched, total, onLocation, onDepartment, onSearch, onClear }: {
+  locations: string[]; departments: string[]
+  location: string; department: string; search: string
+  matched: number; total: number
+  onLocation: (v: string) => void; onDepartment: (v: string) => void; onSearch: (v: string) => void
+  onClear: () => void
+}) {
+  const on = !!(location || department || search.trim())
+  const inp: React.CSSProperties = {
+    padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12,
+    background: TK.surface, color: C.navy, fontFamily: '"DM Sans","Segoe UI",sans-serif', outline: 'none',
+  }
+  const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }
+  return (
+    <div style={{
+      background: on ? TK.brandTint : TK.sunken, border: `1px solid ${on ? TK.brandEdge : C.border}`,
+      borderRadius: 14, padding: '10px 12px', marginBottom: 14,
+    }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: TK.brandDeep, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
+        {locations.length > 1 && (
+          <div>
+            <label style={lbl}>Location</label>
+            <select style={{ ...inp, minWidth: 150 }} value={location} onChange={e => onLocation(e.target.value)}>
+              <option value="">All locations</option>
+              {locations.map(l => <option key={l} value={l}>{l}</option>)}
+            </select>
+          </div>
+        )}
+        {departments.length > 1 && (
+          <div>
+            <label style={lbl}>Department</label>
+            <select style={{ ...inp, minWidth: 150 }} value={department} onChange={e => onDepartment(e.target.value)}>
+              <option value="">All departments</option>
+              {departments.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 230 }}>
+          <label style={lbl}>Emp code / name — paste a comma list too</label>
+          <input style={{ ...inp, width: '100%', boxSizing: 'border-box' }} value={search} onChange={e => onSearch(e.target.value)}
+            placeholder="SRS0001, SRS0042   ya   umesh" />
+        </div>
+        {on && (
+          <button onClick={onClear}
+            style={{ padding: '7px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: TK.critical, fontWeight: 700, fontSize: 12, fontFamily: 'inherit', cursor: 'pointer' }}>
+            Clear
+          </button>
+        )}
+      </div>
+      {on && (
+        <div style={{ fontSize: 11, marginTop: 8, color: TK.brandDeep }}>
+          {matched === 0
+            ? <b style={{ color: TK.critical }}>Nobody matches — every panel below will be empty.</b>
+            : <>Filter on — every panel below shows only these <b>{matched}</b> of {total} employees.</>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Parent ───────────────────────────────────────────────────────
 export default function LoansPage() {
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([])
   const [companyId, setCompanyId] = useState('')
   const [emps, setEmps] = useState<any[]>([])
   const [types, setTypes] = useState<any[]>([])
+  const [fLocation, setFLocation] = useState('')
+  const [fDepartment, setFDepartment] = useState('')
+  const [fSearch, setFSearch] = useState('')
   const [toast, setToast] = useState<{ msg: string; err?: boolean } | null>(null)
   const notify = (msg: string, t?: 'error') => { setToast({ msg, err: t === 'error' }); setTimeout(() => setToast(null), 3000) }
 
@@ -313,16 +390,29 @@ export default function LoansPage() {
   useEffect(() => {
     // '' = All companies. Every panel below scopes through empIds / these queries,
     // so this one effect is the whole of "group mode" for this page.
-    let eq = supabase.from('employees').select('id, emp_code, full_name')
+    let eq = supabase.from('employees').select('id, emp_code, full_name, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
     let tq = supabase.from('loan_types').select('id, name')
     if (companyId) { eq = eq.eq('company_id', companyId); tq = tq.eq('company_id', companyId) }
     eq.then(({ data }) => setEmps(data || []))
     tq.then(({ data }) => setTypes(data || []))
   }, [companyId])
 
+  // The filter narrows the employee set ONCE, here — every panel already scopes
+  // through empIds/empMap, so they all follow without touching their queries.
+  const locations = Array.from(new Set(emps.map(e => e.locations?.location_name).filter(Boolean))).sort() as string[]
+  const departments = Array.from(new Set(emps.map(e => e.departments?.dept_name).filter(Boolean))).sort() as string[]
+  const terms = fSearch.split(/[\s,;]+/).map(t => t.trim().toLowerCase()).filter(Boolean)
+  const filteredEmps = emps.filter(e => {
+    if (fLocation && e.locations?.location_name !== fLocation) return false
+    if (fDepartment && e.departments?.dept_name !== fDepartment) return false
+    if (!terms.length) return true
+    const code = String(e.emp_code || '').toLowerCase()
+    const name = String(e.full_name || '').toLowerCase()
+    return terms.some(t => code === t || code.includes(t) || name.includes(t))
+  })
   const empMap: Record<string, string> = {}
   const empIds = new Set<string>()
-  emps.forEach(e => { empMap[e.id] = `${e.full_name}${e.emp_code ? ` (${e.emp_code})` : ''}`; empIds.add(e.id) })
+  filteredEmps.forEach(e => { empMap[e.id] = `${e.full_name}${e.emp_code ? ` (${e.emp_code})` : ''}`; empIds.add(e.id) })
   const typeMap: Record<string, string> = {}
   types.forEach(t => { typeMap[t.id] = t.name })
 
@@ -343,7 +433,13 @@ export default function LoansPage() {
           </div>
         </div>
 
-        <PendingApprovals companyId={companyId} empMap={empMap} typeMap={typeMap} notify={notify} />
+        <LoanFilterBar locations={locations} departments={departments}
+          location={fLocation} department={fDepartment} search={fSearch}
+          matched={filteredEmps.length} total={emps.length}
+          onLocation={setFLocation} onDepartment={setFDepartment} onSearch={setFSearch}
+          onClear={() => { setFLocation(''); setFDepartment(''); setFSearch('') }} />
+
+        <PendingApprovals companyId={companyId} companyEmpIds={empIds} empMap={empMap} typeMap={typeMap} notify={notify} />
         <AgreementsReview companyEmpIds={empIds} empMap={empMap} notify={notify} />
         <ReadyToDisburse companyEmpIds={empIds} empMap={empMap} notify={notify} />
         <ActiveLoans companyEmpIds={empIds} empMap={empMap} />
