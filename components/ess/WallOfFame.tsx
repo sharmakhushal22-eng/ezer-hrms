@@ -32,8 +32,15 @@ import { supabase } from '@/lib/supabase'
 import Badge, { BADGE_KEYFRAMES, type BadgeTier, type BadgeShape } from '@/components/wall/Badge'
 import ShoutoutComposer from '@/components/wall/ShoutoutComposer'
 import AppreciationComposer from '@/components/wall/AppreciationComposer'
+import AdminConsole from '@/components/wall/AdminConsole'
 import { Spotlight, Leaderboard, HallOfLegends,
          type Winner, type LeaderRow } from '@/components/wall/Spotlight'
+// WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
+//
+// tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
+// mode and white on it falls to 2.5:1. Measured here at 2.54 on the Send
+// button. C.onAccent is the theme-aware ink for an accent fill and is what
+// every one of these should have used from the start.
 import { C, F, W, S, R } from '@/lib/ui'
 
 /** PostgREST's "that relation does not exist". */
@@ -356,7 +363,7 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
                                   padding: '8px 15px', borderRadius: R.sm, cursor: 'pointer',
                                   border: `1px solid ${composing === k ? C.brand : C.line}`,
                                   background: composing === k ? C.brand : C.surface,
-                                  color: composing === k ? '#FFFFFF' : C.inkSoft }}>
+                                  color: composing === k ? C.onAccent : C.inkSoft }}>
                          {composing === k ? 'Close' : label}
                        </button>
                      ))}
@@ -400,6 +407,14 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
 
           <Panel title="Hall of legends" sub="Everyone who has won an award here">
             <HallOfLegends winners={legends} />
+          </Panel>
+
+          {/* Shown to everybody. Somebody without a grant sees each area
+              locked WITH the reason, which names who can grant it — a hidden
+              tab is indistinguishable from a missing feature. */}
+          <Panel title="Manage the wall"
+                 sub="Awards, values, badges, screens and who may change them">
+            <AdminConsole employeeId={employeeId} />
           </Panel>
 
           <Panel title="My badges" sub="Awards, company values and service milestones">

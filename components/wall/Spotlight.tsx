@@ -22,8 +22,50 @@
 import { useEffect, useState } from 'react'
 import { C, F, W, S, R } from '@/lib/ui'
 
-/** Gold, and the only place in this file it is allowed to come from. */
-const GOLD = { ink: '#B45309', wash: '#FEF3C7', edge: '#F5C86B' }
+// GOLD IS THEME-AWARE, AND HARDCODING IT WAS A REAL BUG.
+//
+// The first version pinned three light hexes here. In dark mode the app's own
+// ink token resolves LIGHT, so a near-white name landed on pale gold and
+// measured 1.01:1 — invisible. wall-theme.ts already carried fgDark and
+// bgDark and I had ignored them.
+//
+// So the palette lives in CSS custom properties, declared for all THREE
+// theme states: the bare :root (light), the unstamped default under
+// prefers-color-scheme, and the explicit data-ez-theme stamp. A rule written
+// only one way leaves the other state wrong, which is exactly what happened.
+//
+// Every piece of text on a gold surface also takes its colour from --g-text
+// rather than from the app's ink token, so the pair can never drift apart
+// again: the ground and the ink move together or not at all.
+const GOLD_CSS = `
+  .wof-gold{
+    --g-wash: #FEF3C7;
+    --g-ink:  #B45309;
+    --g-text: #3A2A08;
+    --g-edge: #F5C86B;
+    --g-soft: #6B4E12;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-ez-theme="light"]) .wof-gold{
+      --g-wash: #3A2A08;
+      --g-ink:  #FCD34D;
+      --g-text: #FDF3D6;
+      --g-edge: #7A5A18;
+      --g-soft: #E4CE96;
+    }
+  }
+  :root[data-ez-theme="dark"] .wof-gold{
+    --g-wash: #3A2A08;
+    --g-ink:  #FCD34D;
+    --g-text: #FDF3D6;
+    --g-edge: #7A5A18;
+    --g-soft: #E4CE96;
+  }
+`
+const GOLD = {
+  ink: 'var(--g-ink)', wash: 'var(--g-wash)', edge: 'var(--g-edge)',
+  text: 'var(--g-text)', soft: 'var(--g-soft)',
+}
 
 export interface Winner {
   id: string
@@ -64,9 +106,9 @@ function Empty({ children }: { children: React.ReactNode }) {
 /** The winner. The only card in the module that gets a gold frame. */
 function WinnerCard({ w, calm }: { w: Winner; calm: boolean }) {
   return (
-    <div className="wof-spot" style={{
+    <div className="wof-spot wof-gold" style={{
       border: `2px solid ${GOLD.edge}`, borderRadius: R.sm, padding: `${S.lg}px`,
-      background: `linear-gradient(180deg, ${GOLD.wash} 0%, ${C.surface} 62%)`,
+      background: `linear-gradient(180deg, ${GOLD.wash} 0%, ${C.surface} 68%)`,
       animation: calm ? undefined : 'wofSpotIn .52s cubic-bezier(.2,.8,.2,1) both',
     }}>
       {w.awardName && (
@@ -78,16 +120,16 @@ function WinnerCard({ w, calm }: { w: Winner; calm: boolean }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: S.md, flexWrap: 'wrap' }}>
         <Initials name={w.name} size={52} />
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: F.lead, fontWeight: W.bold, color: C.ink, lineHeight: 1.2 }}>
+          <div style={{ fontSize: F.lead, fontWeight: W.bold, color: GOLD.text, lineHeight: 1.2 }}>
             {w.name}
           </div>
           {w.designation && (
-            <div style={{ fontSize: F.small, color: C.muted, marginTop: 2 }}>{w.designation}</div>
+            <div style={{ fontSize: F.small, color: GOLD.soft, marginTop: 2 }}>{w.designation}</div>
           )}
         </div>
       </div>
       {w.message && (
-        <p style={{ margin: `${S.md}px 0 0`, fontSize: F.small, color: C.inkSoft, lineHeight: 1.65 }}>
+        <p style={{ margin: `${S.md}px 0 0`, fontSize: F.small, color: GOLD.text, lineHeight: 1.65 }}>
           {w.message}
         </p>
       )}
@@ -99,7 +141,7 @@ function WinnerCard({ w, calm }: { w: Winner; calm: boolean }) {
 function PodiumRow({ row, rank, calm }: { row: LeaderRow; rank: number; calm: boolean }) {
   const first = rank === 1
   return (
-    <div className={first && !calm ? 'wof-first' : undefined} style={{
+    <div className={`wof-gold${first && !calm ? ' wof-first' : ''}`} style={{
       display: 'flex', alignItems: 'center', gap: S.md, padding: `${S.sm}px ${S.md}px`,
       borderRadius: R.sm,
       border: `1px solid ${first ? GOLD.edge : C.line}`,
@@ -108,19 +150,22 @@ function PodiumRow({ row, rank, calm }: { row: LeaderRow; rank: number; calm: bo
       <span style={{
         width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center',
         flexShrink: 0, fontSize: F.micro, fontWeight: W.bold,
-        background: first ? GOLD.ink : C.sunken, color: first ? '#FFFFFF' : C.inkSoft,
+        background: first ? GOLD.ink : C.sunken, color: first ? GOLD.wash : C.inkSoft,
       }}>{rank}</span>
       <Initials name={row.name} size={34} />
       <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{row.name}</div>
+        {/* On a gold row the ink comes from the gold palette; on a plain row
+            from the app's. Mixing them is what produced 1.01:1 in dark mode. */}
+        <div style={{ fontSize: F.small, fontWeight: W.bold,
+                      color: first ? GOLD.text : C.ink }}>{row.name}</div>
         {row.designation && (
-          <div style={{ fontSize: F.micro, color: C.muted }}>{row.designation}</div>
+          <div style={{ fontSize: F.micro, color: first ? GOLD.soft : C.muted }}>{row.designation}</div>
         )}
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: F.body, fontWeight: W.bold, color: C.ink,
+        <div style={{ fontSize: F.body, fontWeight: W.bold, color: first ? GOLD.text : C.ink,
                       fontVariantNumeric: 'tabular-nums' }}>{row.recognitionCount}</div>
-        <div style={{ fontSize: F.micro, color: C.muted }}>
+        <div style={{ fontSize: F.micro, color: first ? GOLD.soft : C.muted }}>
           {row.recognitionCount === 1 ? 'recognition' : 'recognitions'}
         </div>
       </div>
@@ -175,6 +220,7 @@ export function Spotlight({ winner }: { winner: Winner | null }) {
     <>
       <WinnerCard w={winner} calm={calm} />
       <style>{`
+        ${GOLD_CSS}
         @keyframes wofSpotIn { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform:none } }
         @media (prefers-reduced-motion: reduce){ .wof-spot{ animation:none !important } }
       `}</style>
@@ -201,6 +247,7 @@ export function Leaderboard({ rows, enabled }: { rows: LeaderRow[]; enabled: boo
         Counts recognitions received. It affects nothing else.
       </div>
       <style>{`
+        ${GOLD_CSS}
         .wof-first{ animation: wofShimmer 4.5s ease-in-out infinite }
         @keyframes wofShimmer{ 0%,100%{ filter:none } 50%{ filter:brightness(1.045) } }
         @media (prefers-reduced-motion: reduce){ .wof-first{ animation:none } }

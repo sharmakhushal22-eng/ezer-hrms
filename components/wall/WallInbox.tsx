@@ -25,6 +25,12 @@ import {
   STREAMS, STREAM_OF, headlineFor, glyphFor, countFor, countsReconcile,
   type Stream, type WallEvent, type Counts,
 } from '@/lib/wall/inbox'
+// WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
+//
+// tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
+// mode and white on it falls to 2.5:1. Measured here at 2.54 on the Send
+// button. C.onAccent is the theme-aware ink for an accent fill and is what
+// every one of these should have used from the start.
 import { C, F, W, S, R } from '@/lib/ui'
 
 const MISSING = 'PGRST205'
@@ -61,12 +67,12 @@ function Tab({ s, on, n, onPick }: {
                fontSize: F.small, fontWeight: on ? W.bold : W.semi,
                border: `1px solid ${on ? C.brand : C.line}`,
                background: on ? C.brand : C.surface,
-               color: on ? '#FFFFFF' : C.inkSoft }}>
+               color: on ? C.onAccent : C.inkSoft }}>
       {s.label}
       {n > 0 && (
         <span style={{ fontSize: F.micro, fontWeight: W.bold, padding: '1px 7px', borderRadius: 999,
                        background: on ? 'rgba(255,255,255,.24)' : C.brandTint,
-                       color: on ? '#FFFFFF' : C.brand }}>{n}</span>
+                       color: on ? C.onAccent : C.brand }}>{n}</span>
       )}
     </button>
   )

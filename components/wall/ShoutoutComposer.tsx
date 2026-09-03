@@ -21,6 +21,12 @@ import {
   VISIBILITIES, DEFAULT_RULES, EMPTY_DRAFT,
   type Draft, type WallRules, type Problem,
 } from '@/lib/wall/shoutout'
+// WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
+//
+// tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
+// mode and white on it falls to 2.5:1. Measured here at 2.54 on the Send
+// button. C.onAccent is the theme-aware ink for an accent fill and is what
+// every one of these should have used from the start.
 import { C, F, W, S, R } from '@/lib/ui'
 
 export interface Person { id: string; full_name: string; emp_code?: string | null; designation?: string | null }
@@ -380,7 +386,7 @@ export default function ShoutoutComposer({
                      padding: '11px 20px', borderRadius: R.sm, border: 'none',
                      cursor: sending || left === 0 ? 'not-allowed' : 'pointer',
                      background: left === 0 ? C.sunken : C.brand,
-                     color: left === 0 ? C.muted : '#FFFFFF',
+                     color: left === 0 ? C.muted : C.onAccent,
                      opacity: sending ? .7 : 1 }}>
             {sending ? 'Sending…' : 'Send it'}
           </button>

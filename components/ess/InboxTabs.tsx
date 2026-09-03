@@ -17,6 +17,12 @@
 import { useState } from 'react'
 import Inbox from './Inbox'
 import WallInbox from '@/components/wall/WallInbox'
+// WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
+//
+// tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
+// mode and white on it falls to 2.5:1. Measured here at 2.54 on the Send
+// button. C.onAccent is the theme-aware ink for an accent fill and is what
+// every one of these should have used from the start.
 import { C, F, W, S, R } from '@/lib/ui'
 
 type Group = 'messages' | 'wall'
@@ -37,7 +43,7 @@ function GroupTab({ label, blurb, on, n, onPick }: {
         {n > 0 && (
           <span style={{ fontSize: F.micro, fontWeight: W.bold, padding: '1px 7px',
                          borderRadius: 999, background: on ? C.brand : C.sunken,
-                         color: on ? '#FFFFFF' : C.inkSoft }}>{n}</span>
+                         color: on ? C.onAccent : C.inkSoft }}>{n}</span>
         )}
       </div>
       <div style={{ fontSize: F.micro, color: C.muted, marginTop: 3, lineHeight: 1.45 }}>

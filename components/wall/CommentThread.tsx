@@ -17,6 +17,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+// WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
+//
+// tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
+// mode and white on it falls to 2.5:1. Measured here at 2.54 on the Send
+// button. C.onAccent is the theme-aware ink for an accent fill and is what
+// every one of these should have used from the start.
 import { C, F, W, S, R } from '@/lib/ui'
 import { threadComments, renderBody,
          type CommentRow, type Reaction, type Threaded } from '@/lib/wall/comments'
@@ -213,7 +219,7 @@ export default function CommentThread({
                    padding: '9px 16px', borderRadius: R.sm, border: 'none',
                    cursor: busy || !draft.trim() ? 'not-allowed' : 'pointer',
                    background: draft.trim() ? C.brand : C.sunken,
-                   color: draft.trim() ? '#FFFFFF' : C.muted }}>
+                   color: draft.trim() ? C.onAccent : C.muted }}>
           {busy ? 'Posting…' : replyTo ? 'Reply' : 'Comment'}
         </button>
       </div>

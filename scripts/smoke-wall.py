@@ -31,6 +31,7 @@ CODE = [ROOT / 'components/ess/WallOfFame.tsx',
         ROOT / 'components/wall/WallInbox.tsx',
         ROOT / 'components/ess/InboxTabs.tsx',
         ROOT / 'components/wall/Badge.tsx',
+        ROOT / 'components/wall/AdminConsole.tsx',
         ROOT / 'lib/wall/shoutout.ts',
         ROOT / 'lib/wall/appreciation.ts',
         ROOT / 'lib/wall/comments.ts',
@@ -320,11 +321,50 @@ if spot.exists():
     # inside Spotlight.tsx it may only dress the winner and rank 1
     check('the podium gives gold to rank 1 only',
           'const first = rank === 1' in sp and 'first ? GOLD' in sp)
-    check('gold comes from one declared constant, not scattered literals',
-          len(set(GOLD_HEX.findall(re.sub(r'//[^\n]*', ' ', sp)))) <= 3,
-          f'{len(set(GOLD_HEX.findall(sp)))} distinct gold values')
+    # Gold literals may appear ONLY inside the palette block. Outside it,
+    # every use must go through a CSS variable — that is what makes the light
+    # and dark values move together. The old form of this check counted total
+    # distinct hexes and capped them at three, which was right when gold was
+    # light-only and became wrong the moment a dark palette was added: five
+    # hexes is now correct, and the cap would have argued for deleting the
+    # dark theme to satisfy the test.
+    body_only = re.sub(r'//[^\n]*|/\*.*?\*/', ' ', sp, flags=re.S)
+    palette = body_only[body_only.index('GOLD_CSS'):body_only.index('const GOLD =')] \
+              if 'GOLD_CSS' in body_only and 'const GOLD =' in body_only else ''
+    outside = GOLD_HEX.findall(body_only.replace(palette, ' '))
+    check('gold literals appear only inside the palette block',
+          not outside, str(sorted(set(outside))) if outside else
+          f'{len(set(GOLD_HEX.findall(palette)))} in the palette, 0 loose')
     check('a leaver stays in the hall of legends but not in the spotlight',
           'hasLeft' in sp and 'no longer here' in sp)
+
+# ── theme-awareness ──────────────────────────────────────────────────────
+sec('Theme-awareness')
+# TWO REAL BUGS LIVED HERE, BOTH THE SAME SHAPE: a colour hardcoded for one
+# theme, sitting on a ground that moves with the other.
+#
+#   White on the brand fill measured 2.54 in dark mode. tokens.ts documents
+#   that trap right beside onAccent — "the brand blue lightens there and white
+#   on it falls to 2.5:1" — and I hardcoded '#FFFFFF' thirteen times anyway.
+#
+#   Gold was three fixed light hexes. In dark mode the app's ink token
+#   resolves LIGHT, so a near-white name sat on pale gold at 1.01:1.
+hard_white = []
+for p_ in CODE:
+    if not p_.exists() or p_.name == 'Badge.tsx': continue    # Badge owns its metals
+    body = re.sub(r'//[^\n]*|/\*.*?\*/', ' ', p_.read_text(), flags=re.S)
+    for m in re.finditer(r"color:\s*[^,;}]*'#(?:FFFFFF|FFF)'", body, re.I):
+        hard_white.append(f'{p_.name}: {m.group(0)[:44]}')
+check('no component hardcodes white ink (C.onAccent exists for this)',
+      not hard_white, str(hard_white[:2]) if hard_white else '')
+
+if spot.exists():
+    check('the gold palette is declared for all THREE theme states',
+          sp.count('--g-wash') >= 3 and 'prefers-color-scheme: dark' in sp
+          and ':root[data-ez-theme="dark"]' in sp,
+          f"{sp.count('--g-wash')} declarations")
+    check('gold surfaces take ink from the gold palette, not the app token',
+          '--g-text' in sp and 'GOLD.text' in sp)
 
 # ── 6c. the inbox rules ──────────────────────────────────────────────────
 sec('Inbox')
@@ -353,6 +393,31 @@ if tabs.exists():
           summed.group(0) if summed else '')
     check('the existing approvals inbox is rendered, not re-implemented',
           "from './Inbox'" in tt and 'supabase' not in body)
+
+# ── 6d. the public board ─────────────────────────────────────────────────
+sec('Public board')
+board = ROOT / 'app/board/[pairCode]/page.tsx'
+check('the board route exists', board.exists())
+if board.exists():
+    bd = board.read_text()
+    check('it lives OUTSIDE /dashboard, so no auth gate can blank it',
+          'app/board' in str(board) and '/dashboard/' not in str(board))
+    check('get_board_payload is the only query it makes',
+          bd.count('.rpc(') == 1 and 'get_board_payload' in bd and '.from(' not in bd)
+    # A television in a corridor is the last place to trust a client-side
+    # filter, so the restriction lives in the SQL. This asserts the client
+    # never even names a sensitive field.
+    leaky = [w for w in ('salary', 'ctc', 'rating', 'mobile', 'email', 'phone', 'bank')
+             if re.search(r'\b%s\b' % w, re.sub(r'//[^\n]*|/\*.*?\*/', ' ', bd, flags=re.S), re.I)]
+    check('no salary, rating or contact field is named in the client',
+          not leaky, str(leaky) if leaky else '')
+    check("it neutralises the app's interface zoom in CSS, not in an effect",
+          'zoom: 1 !important' in bd)
+    check('it hides the app chrome that has no use on a television',
+          '.ez-zoom' in bd and 'display: none' in bd)
+    check('the stylesheet is at module scope so every state renders it',
+          'function BoardStyles' in bd and bd.count('<BoardStyles />') >= 3)
+    check('a board never scrolls', 'overflow: hidden' in bd)
 
 # ── 7. integration ───────────────────────────────────────────────────────
 sec('Integration')

@@ -35,9 +35,9 @@ export interface NextActionProps {
 // deadline stand out was the least legible thing on the card. A near-opaque
 // chip carrying the card's own colour as ink inverts that and lands above 8.
 const TONE: Record<Urgency, { bg: string; ink: string; sub: string; chip: string; chipInk: string }> = {
-  overdue: { bg: C.critical, ink: '#FFFFFF', sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.critical },
-  due:     { bg: C.brand,    ink: '#FFFFFF', sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.brand },
-  info:    { bg: C.brand,    ink: '#FFFFFF', sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.brand },
+  overdue: { bg: C.critical, ink: C.onAccent, sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.critical },
+  due:     { bg: C.brand,    ink: C.onAccent, sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.brand },
+  info:    { bg: C.brand,    ink: C.onAccent, sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.brand },
   none:    { bg: C.surface,  ink: C.ink,     sub: C.muted,                chip: C.sunken,                chipInk: C.inkSoft },
 }
 
@@ -60,7 +60,7 @@ export default function NextAction({ action, onGo, restingTitle, restingWhy }: N
         alignItems: 'center', gap: S.sm,
       }}>
         <span aria-hidden style={{
-          width: 22, height: 22, borderRadius: '50%', background: C.positive, color: '#FFFFFF',
+          width: 22, height: 22, borderRadius: '50%', background: C.positive, color: C.onAccent,
           display: 'grid', placeItems: 'center', flexShrink: 0,
         }}>
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor"
@@ -137,7 +137,7 @@ export default function NextAction({ action, onGo, restingTitle, restingWhy }: N
             fontFamily: 'inherit', fontSize: F.small, fontWeight: W.bold, cursor: 'pointer',
             padding: '10px 16px', borderRadius: R.sm, maxWidth: '100%',
             border: blocked ? `1px solid ${C.lineStrong}` : 'none',
-            background: blocked ? C.surface : '#FFFFFF',
+            background: blocked ? C.surface : C.onAccent,
             color: blocked ? C.ink : (action.urgency === 'overdue' ? C.critical : C.brand),
             boxShadow: blocked ? 'none' : '0 1px 2px rgba(6,17,58,.18)',
           }}
