@@ -30,6 +30,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import Badge, { BADGE_KEYFRAMES, type BadgeTier, type BadgeShape } from '@/components/wall/Badge'
+import ShoutoutComposer from '@/components/wall/ShoutoutComposer'
 import { C, F, W, S, R } from '@/lib/ui'
 
 /** PostgREST's "that relation does not exist". */
@@ -203,6 +204,7 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
   const [feed, setFeed] = useState<FeedRow[]>([])
   const [badges, setBadges] = useState<MyBadge[]>([])
   const [err, setErr] = useState<string | null>(null)
+  const [composing, setComposing] = useState(false)
 
   const load = useCallback(async () => {
     // One cheap probe against the module's root table decides which screen
@@ -255,6 +257,25 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
 
       {ready && (
         <>
+          <Panel title="Give a shoutout"
+                 sub="Recognition here is thanks, never pay — it changes nothing about anyone's salary."
+                 action={
+                   <button type="button" onClick={() => setComposing(v => !v)}
+                     style={{ fontFamily: 'inherit', fontSize: F.small, fontWeight: W.bold,
+                              padding: '8px 15px', borderRadius: R.sm, cursor: 'pointer',
+                              border: `1px solid ${composing ? C.line : C.brand}`,
+                              background: composing ? C.surface : C.brand,
+                              color: composing ? C.inkSoft : '#FFFFFF' }}>
+                     {composing ? 'Close' : 'Recognise a colleague'}
+                   </button>
+                 }>
+            {composing
+              ? <ShoutoutComposer actorId={employeeId} onSent={() => { setComposing(false); load() }} />
+              : <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>
+                  Noticed someone doing something well? Say so. It takes a minute and they keep it.
+                </div>}
+          </Panel>
+
           <Panel title="Recently recognised"
                  sub={feed.length ? `The last ${feed.length} across your company` : undefined}>
             {feed.length ? (
