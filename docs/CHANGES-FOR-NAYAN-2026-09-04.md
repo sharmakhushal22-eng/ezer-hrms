@@ -10,10 +10,17 @@
 ## The short version
 
 **No new migrations.** Everything built since the 3 September handover runs on
-tables you already have. The eight files from last time are still waiting, and
-they are the same eight — nothing has been added to the pile.
+tables you already have.
 
-There is **one new question for you**, in §4: the ESS inbox tables exist but
+**Seven files to run, not eight** — `075` turns out to be applied already, and
+I had been checking it against a table that no migration creates. §1.
+
+**Running them does not populate the Wall of Fame.** `085` and `086` define
+seeding functions rather than seeding anything; they have to be called once
+per company. Miss that and every Wall screen comes up empty and looks like a
+failed migration. §5 has the exact statements.
+
+There is **one question for you**, in §4: the ESS inbox tables exist but
 `anon` cannot read them, and what the fix should be is your call, not mine.
 
 ---
@@ -33,15 +40,23 @@ of assumptions old and I had already written UI copy based on a wrong guess.
 | `076_pms_persist_scores` | `pms_overall_rating.self_score` selectable |
 | `077_company_profile_full` | `company_contacts` readable |
 | `078_company_documents_policies` | `company_documents` readable |
+| `075_ess_notification_catalogue` | `ess_notifications.priority`, `.read_at`, `.actor_employee_id` — three columns **only** 075 adds |
 | `080_ess_inbox` | tables exist — **but see §4** |
 | `081_registration_documents` | `registrations.document_path` selectable |
 
 ### Still not applied
 
-`074` · `075` · `079` · `082` · `084` · `085` · `086` · `087`
+`079` · `082` · `084` · `085` · `086` · `087`  (plus `074`, see below)
 
 Each confirmed by `PGRST205 — Could not find the table … in the schema cache`
-on a table that file creates. Same eight as 3 September.
+on a table that file creates.
+
+**`075` was wrong on 3 September and in my first draft of this.** I had been
+probing for a table called `ess_notification_catalogue`, which no migration
+creates. The filename says catalogue; the file actually adds four columns to
+`ess_notifications`, backfills them and adds three indexes. Probing the
+columns instead shows all four present. So it is done, and the run list is
+seven.
 
 > **A caveat I owe you.** My first probe reported six of those eight as
 > *applied*. It used `head: true` with `.limit(0)`, and that combination
@@ -103,6 +118,49 @@ vanished, and the employee would have written their KRAs a second time. This
 is why `pms_employee_goals` has **0 rows** and everything else has data;
 nobody has successfully saved a KRA set yet. Worth knowing before you conclude
 that people simply have not started.
+
+---
+
+## 3b. What data these files do and do not carry
+
+You asked, so here it is exactly.
+
+**Seeded the moment you run the file** — catalogue rows, same for every
+company, not business data:
+
+| File | Table | Rows |
+|---|---|---|
+| `082` | `access_permission_map` | ~21 |
+| `084` | `wall_permissions` | ~18 |
+| `087` | `wall_permissions` | ~5 more |
+
+**Not seeded — you have to call something.** `085` and `086` create functions
+and insert nothing:
+
+```sql
+-- once per company, and there are three
+select seed_wall_defaults('<company_uuid>', '<hr_head_employee_uuid>');
+select seed_shoutout_categories('<company_uuid>');
+select generate_service_milestones('<company_uuid>');
+
+update wall_config set module_enabled = true where company_id = '<company_uuid>';
+```
+
+Every badge, award, recognition value, shoutout category and `wall_config` row
+comes from those calls. `seed_wall_defaults` returns jsonb describing what it
+created, and all of it is `ON CONFLICT DO NOTHING`, so calling twice is safe.
+
+**Already in the database, nothing to do:**
+
+- **PMS** — 3 policies, 12 periods, 15 rating bands, **120 KRA library rows**,
+  395 enrolment rows. From `066` and `068`, both applied.
+- **Inbox** — tables exist, no rows. Nothing here seeds it and nothing should:
+  those are real messages between real people.
+
+One number worth not misreading: `pms_employee_goals`, `pms_one_to_one` and
+`pms_reviews` are all at **zero**. Nobody has written a KRA yet. That is
+partly my fault — the INSERT was missing `period_id`, so saves went nowhere.
+Fixed on the branch. It is not a migration problem.
 
 ---
 

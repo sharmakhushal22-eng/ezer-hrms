@@ -6,9 +6,16 @@ Branch TusharPanwar @ 154928f
 
 WHAT THIS IS
 
-The same eight migrations as the 3 September handover. Nothing new has been
-added to the pile — everything I have built since then runs on tables you
-already have.
+SEVEN migrations to run. The 3 September handover said eight; 075 turns out to
+be applied already and I had checked it wrongly. See section 2.
+
+Nothing new has been added to the pile — everything I have built since then
+runs on tables you already have.
+
+READ SECTION 6 BEFORE YOU FINISH. Running these seven does NOT populate the
+Wall of Fame. The seed files define functions you have to CALL, once per
+company, and without that step every Wall screen comes up empty and looks
+broken.
 
 What HAS changed is that I probed the live database this time instead of
 working from the previous list, so section 2 is measured rather than
@@ -23,7 +30,6 @@ changes to this project.
 --------------------------------------------------------------------------------
 
     migrations/074_pms_not_found_guards.sql
-    migrations/075_ess_notification_catalogue.sql
     migrations/079_group_profile.sql
     migrations/082_access_foundation.sql        <-- 084 will not work without it
     migrations/084_wall_of_fame.sql
@@ -60,18 +66,30 @@ I probed rather than assumed. These came back present, with the evidence I
 used:
 
     066_pms_module          all 15 pms_* tables readable
-                            3 policies · 12 periods · 395 enrolment rows
+                            3 policies · 12 periods · 15 rating bands
+                            120 KRA library rows · 395 enrolment rows
     067_pms_org_chain       departments.hod_employee_id selectable
     068_pms_setup_data      pms_rating_scale has 15 rows
     076_pms_persist_scores  pms_overall_rating.self_score selectable
     077_company_profile     company_contacts readable
     078_company_documents   company_documents readable
+    075_ess_notification    ess_notifications.priority, .read_at and
+                            .actor_employee_id all selectable -- three columns
+                            that ONLY 075 adds
     080_ess_inbox           tables exist -- BUT SEE SECTION 5
     081_registration_docs   registrations.document_path selectable
 
 And these came back absent, each with PGRST205 on a table the file creates:
 
-    074 (see below) · 075 · 079 · 082 · 084 · 085 · 086 · 087
+    079 · 082 · 084 · 085 · 086 · 087       (074: see below)
+
+A SECOND CORRECTION, ON 075. The 3 September handover listed it as pending and
+so did my first draft of this one. I had been probing for a table called
+ess_notification_catalogue -- which NO migration creates. The file's name says
+catalogue; what it actually does is add four columns to ess_notifications,
+backfill them, and add three indexes. Probing for the columns instead shows
+all four present, three of them added by nothing else. So 075 is done, and the
+run list is seven files rather than eight.
 
 Copies of the applied files are in reference/ so you can diff them against
 what is live. They are idempotent; re-running is harmless.
@@ -100,9 +118,6 @@ ONE THING I COULD NOT DETERMINE, and I am not going to guess:
        whole appraisal hangs on -- weightage cannot lock until BOTH the
        employee and the manager have acknowledged the KRA one-to-one.
 
-  075  The ESS notification catalogue. Without it the portal has no titles or
-       templates to render notifications from.
-
   079  group_profile. The group-level company record above the individual
        companies.
 
@@ -111,11 +126,15 @@ ONE THING I COULD NOT DETERMINE, and I am not going to guess:
 
   084  Wall of Fame: badge master, employee badges, recognition values.
 
-  085  Seeds 084's catalogues. Six INSERT blocks, all ON CONFLICT DO NOTHING.
+  085  Does NOT seed anything by itself, despite the name. It defines two
+       functions -- seed_wall_defaults() and generate_service_milestones() --
+       which you call per company. Section 6.
 
-  086  Shoutouts and the feed.
+  086  Shoutouts and the feed. Its category list is also behind a function,
+       seed_shoutout_categories(), not seeded on apply.
 
-  087  Comments, mentions and the inbox wiring.
+  087  Comments, mentions and the inbox wiring. Adds 5 more rows to the
+       wall_permissions catalogue on apply.
 
 
 --------------------------------------------------------------------------------
@@ -129,9 +148,10 @@ meant what it said:
                                  a "not switched on yet" panel
 
   ESS portal -> Inbox            see section 5 first; this one has a separate
-                                 problem that these eight files do not fix
+                                 problem that these seven files do not fix
 
-  Performance (main menu)        already works today. If the Policies tab is
+  Performance (main menu)        already works today -- it has real data. If
+                                 the Policies tab is
                                  empty that means nothing is CONFIGURED, not
                                  that anything is missing -- 066 is applied and
                                  the screen says so correctly now.
@@ -178,7 +198,81 @@ which is the correct failure -- it fails closed, not open.
 
 
 --------------------------------------------------------------------------------
-6. DO NOT RUN THESE
+6. WHAT DATA IS AND IS NOT IN THESE FILES
+--------------------------------------------------------------------------------
+
+Worth being exact about, because "run the migrations" and "the feature works"
+are not the same sentence here.
+
+SEEDED AUTOMATICALLY, the moment you run the file:
+
+    082   access_permission_map      ~21 rows   the permission catalogue
+    084   wall_permissions           ~18 rows   Wall of Fame permission codes
+    087   wall_permissions           ~5 rows    the social/inbox additions
+
+    Those are catalogue rows -- codes and labels the app looks up. They are
+    not company data and they are the same for everybody.
+
+NOT SEEDED. You have to call something:
+
+    085   seed_wall_defaults(company, owner)
+          generate_service_milestones(company)
+    086   seed_shoutout_categories(company)
+
+    Running 085 and 086 creates the FUNCTIONS. It inserts nothing. Every
+    badge, award, recognition value, shoutout category and wall_config row
+    comes from calling them, once per company.
+
+    THIS IS THE STEP THAT IS EASY TO MISS. Run all seven files, open the Wall
+    of Fame, and it is empty -- not broken, just never seeded -- and it looks
+    exactly like a migration that failed.
+
+    Per 085's own usage note, for each company:
+
+        select seed_wall_defaults('<company_uuid>', '<hr_head_employee_uuid>');
+        select seed_shoutout_categories('<company_uuid>');
+        select generate_service_milestones('<company_uuid>');
+
+    then, in the same admin session, flip the master switch:
+
+        update wall_config set module_enabled = true
+        where company_id = '<company_uuid>';
+
+    There are three companies in this database, so that is three passes. Get
+    the UUIDs with:
+
+        select id, company_name from companies order by company_name;
+
+    and the HR head's employee id with:
+
+        select id, full_name, emp_code from employees
+        where company_id = '<company_uuid>' and date_of_leaving is null
+        order by full_name;
+
+    seed_wall_defaults returns jsonb saying what it created, so you can read
+    the result rather than guess. It is safe to call twice -- everything
+    inside is ON CONFLICT DO NOTHING.
+
+ALREADY IN THE DATABASE, nothing for you to do:
+
+    PMS      3 policies, 12 periods, 15 rating bands, 120 KRA library rows
+             and 395 enrolment rows. All of it arrived with 066 and 068,
+             which are applied. The reference/ copies are for diffing only.
+
+             pms_employee_goals, pms_one_to_one and pms_reviews are all at
+             ZERO -- nobody has written a KRA yet. That is expected, and
+             partly my fault: the INSERT was missing period_id, so saves
+             silently went nowhere. Fixed on the branch. Do not read those
+             zeroes as a migration problem.
+
+    INBOX    Tables exist, no rows readable, and that is the grant problem in
+             section 5 -- not missing data. Nothing in this bundle seeds the
+             inbox, and nothing should: those rows are real messages between
+             real people, created by people using the product.
+
+
+--------------------------------------------------------------------------------
+7. DO NOT RUN THESE
 --------------------------------------------------------------------------------
 
   055, 056, 057   An old, already-rolled-back RMS attempt occupies those
@@ -193,7 +287,7 @@ which is the correct failure -- it fails closed, not open.
 
 
 --------------------------------------------------------------------------------
-7. THE RULE THAT MUST NOT MOVE
+8. THE RULE THAT MUST NOT MOVE
 --------------------------------------------------------------------------------
 
 pms_policies.payout_linkage_enabled is pinned false by a CHECK constraint:
@@ -209,7 +303,7 @@ one. Leave the constraint where it is.
 
 
 --------------------------------------------------------------------------------
-8. IF SOMETHING GOES WRONG
+9. IF SOMETHING GOES WRONG
 --------------------------------------------------------------------------------
 
 Every file is idempotent, so the first move is almost always to fix the cause
@@ -226,10 +320,13 @@ and run the whole file again rather than to unpick a partial run.
   42P01 relation does not exist, mid-file
       Run order. Check 082-before-084 and 084-before-085/086/087.
 
+  Wall of Fame empty after everything ran cleanly
+      You have not called the seed functions yet. Section 6.
+
   Anything you would rather not decide alone
       Send it to me with the error text and I will look. Do not work around a
       constraint to make a file run -- the constraints are load-bearing, and
-      one of them (section 7) is a product commitment.
+      one of them (section 8) is a product commitment.
 
 ================================================================================
 MANIFEST.txt lists a sha256 for every file, so a truncated or altered transfer
