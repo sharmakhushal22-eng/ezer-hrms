@@ -26,8 +26,15 @@ WALL_SQL = ['082_access_foundation.sql', '084_wall_of_fame.sql',
 CODE = [ROOT / 'components/ess/WallOfFame.tsx',
         ROOT / 'components/wall/Spotlight.tsx',
         ROOT / 'components/wall/ShoutoutComposer.tsx',
+        ROOT / 'components/wall/AppreciationComposer.tsx',
+        ROOT / 'components/wall/CommentThread.tsx',
+        ROOT / 'components/wall/WallInbox.tsx',
+        ROOT / 'components/ess/InboxTabs.tsx',
         ROOT / 'components/wall/Badge.tsx',
         ROOT / 'lib/wall/shoutout.ts',
+        ROOT / 'lib/wall/appreciation.ts',
+        ROOT / 'lib/wall/comments.ts',
+        ROOT / 'lib/wall/inbox.ts',
         ROOT / 'lib/wall/access.ts',
         ROOT / 'lib/wall/theme.ts']
 
@@ -264,9 +271,17 @@ check('no component performs a money operation on recognition',
 
 # The direct channel is appreciation only. These are the affordances the
 # brief names explicitly as things that must never be added.
+# Comments NAME the forbidden affordances in order to explain why they are
+# forbidden — the same trap as the money check, where a screen stating the
+# rule failed for saying the word. Strip comments first; a file that
+# describes the limit is upholding it, not breaking it.
+code_nc = ''
+for _p in CODE:
+    if _p.exists():
+        code_nc += re.sub(r'//[^\n]*|/\*.*?\*/', ' ', _p.read_text(), flags=re.S)
 chat = []
 for word in ('typing indicator', 'conversation view', 'continue this thread'):
-    if word in code_all.lower(): chat.append(word)
+    if word in code_nc.lower(): chat.append(word)
 if re.search(r'create table (?:if not exists )?wall_message_replies', sql_all, re.I):
     chat.append('a replies table')
 check('no open-thread affordance was added to the direct channel',
@@ -310,6 +325,34 @@ if spot.exists():
           f'{len(set(GOLD_HEX.findall(sp)))} distinct gold values')
     check('a leaver stays in the hall of legends but not in the spotlight',
           'hasLeft' in sp and 'no longer here' in sp)
+
+# ── 6c. the inbox rules ──────────────────────────────────────────────────
+sec('Inbox')
+inbox_ts = (ROOT / 'lib/wall/inbox.ts')
+tabs = (ROOT / 'components/ess/InboxTabs.tsx')
+wall_inbox = (ROOT / 'components/wall/WallInbox.tsx')
+check('the wall inbox exists as its own list', wall_inbox.exists() and tabs.exists())
+
+if inbox_ts.exists():
+    it = inbox_ts.read_text()
+    evs = set(re.findall(r"^\s*(\w+):\s*'(?:appreciation|comments|replies)'", it, re.M))
+    check('no event type in the stream map looks like an approval',
+          not [e for e in evs if re.search(r'approv|endors|publish', e, re.I)],
+          f'{len(evs)} event types')
+
+if tabs.exists():
+    tt = tabs.read_text()
+    # The two counts must be held apart. A single number, or one added to the
+    # other, is the exact failure the brief names: people triage the tab
+    # instead of reading it and the appreciation goes unread first.
+    check('the two unread counts are held in separate state',
+          'msgUnread' in tt and 'wallUnread' in tt)
+    body = re.sub(r'//[^\n]*|/\*.*?\*/', ' ', tt, flags=re.S)
+    summed = re.search(r'(msgUnread|wallUnread)\s*\+\s*(msgUnread|wallUnread)', body)
+    check('the counts are never summed', not summed,
+          summed.group(0) if summed else '')
+    check('the existing approvals inbox is rendered, not re-implemented',
+          "from './Inbox'" in tt and 'supabase' not in body)
 
 # ── 7. integration ───────────────────────────────────────────────────────
 sec('Integration')

@@ -28,6 +28,7 @@ import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import Inbox from './Inbox'
+import InboxTabs from './InboxTabs'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
@@ -3582,7 +3583,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
       // The inbox reports its own unread straight into the bell's state, so
       // the badge and the screen can never show two different numbers.
-      case 'inbox':         return <Inbox employeeId={emp.id} onUnread={setUnread} />
+      case 'inbox':         return <InboxTabs employeeId={emp.id} onUnread={setUnread} />
       case 'vpf':           return <VpfSection emp={emp} notify={notify} />
       case 'nps':           return <NpsSection emp={emp} notify={notify} />
       case 'loans':         return <LoansSection emp={emp} notify={notify} />
