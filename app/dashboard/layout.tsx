@@ -454,22 +454,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
              icon           5.37    selected ink  8.72 (on the white pill)
         */
         .ez-rail{
-          background: linear-gradient(180deg, #2A59D6 0%, #1E40AB 100%);
+          background: linear-gradient(180deg, #2450C6 0%, #16307E 100%);
           /* FOUR LEVELS, all blue, so nothing has to blend into anything.
              A dark ground makes this possible: a row can sit ABOVE it and a
              section BELOW it, which a pale ground could never do — there,
              everything had to be lighter than everything else and the levels
              ran out. Steps measured against the rail's lightest stop:
-                 light   section 1.43 below   row 1.28 above
-                 dark    section 1.44 below   row 1.43 above
-                 pill    white — not a step but a different kind of thing
+                 Steps hold at BOTH ends of the gradient, which now travels far
+             enough that the two ends disagree — the midpoint is no longer
+             a stand-in for either:
 
-             The ground is as light as it can go. A row sits ABOVE it, so
-             lightening the rail lightens the row too, and the row's label
-             is what runs out first: at this ground it measures 4.76, and
-             one more step up puts it under 4.5. */
-          --r-row:   linear-gradient(180deg, rgba(61,130,255,.50), rgba(61,130,255,.33));
-          --r-row-h: linear-gradient(180deg, rgba(61,130,255,.56), rgba(61,130,255,.38));
+                        row/rail   band/rail   white label
+               light top  1.23       1.45         5.07
+               light bot  1.46       1.23         6.73
+               dark  top  1.32       1.50         5.61
+               dark  bot  1.53       1.19         7.61
+
+             The two constraints pull in opposite directions and that is
+             what fixes the span. A row is a light tint, so it separates
+             least at the TOP where the ground is already light; a section
+             is black, so it separates least at the BOTTOM where there is
+             little left to take away. Widen the gradient and one end or
+             the other gives out. */
+          --r-row:   linear-gradient(180deg, rgba(61,130,255,.46), rgba(61,130,255,.30));
+          --r-row-h: linear-gradient(180deg, rgba(61,130,255,.52), rgba(61,130,255,.35));
           --r-band:  rgba(0,0,0,.26);
           --r-edge:  rgba(255,255,255,.18);
           /* Everything inside the rail inherits these — the brand mark, the
@@ -491,18 +499,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
         @media (prefers-color-scheme: dark){
           :root:not([data-ez-theme="light"]) .ez-rail{
-            background: linear-gradient(180deg, #214A96 0%, #153672 100%);
-            --r-row:   linear-gradient(180deg, rgba(61,130,255,.50), rgba(61,130,255,.33));
-            --r-row-h: linear-gradient(180deg, rgba(61,130,255,.56), rgba(61,130,255,.38));
-            --r-band:  rgba(0,0,0,.36);
+            background: linear-gradient(180deg, #204A93 0%, #0F2657 100%);
+            --r-row:   linear-gradient(180deg, rgba(61,130,255,.46), rgba(61,130,255,.30));
+            --r-row-h: linear-gradient(180deg, rgba(61,130,255,.52), rgba(61,130,255,.35));
+            --r-band:  rgba(0,0,0,.34);
             --r-edge:  rgba(255,255,255,.16);
           }
         }
         :root[data-ez-theme="dark"] .ez-rail{
-          background: linear-gradient(180deg, #214A96 0%, #153672 100%);
-          --r-row:   linear-gradient(180deg, rgba(61,130,255,.50), rgba(61,130,255,.33));
-          --r-row-h: linear-gradient(180deg, rgba(61,130,255,.56), rgba(61,130,255,.38));
-          --r-band:  rgba(0,0,0,.36);
+          background: linear-gradient(180deg, #204A93 0%, #0F2657 100%);
+          --r-row:   linear-gradient(180deg, rgba(61,130,255,.46), rgba(61,130,255,.30));
+          --r-row-h: linear-gradient(180deg, rgba(61,130,255,.52), rgba(61,130,255,.35));
+          --r-band:  rgba(0,0,0,.34);
           --r-edge:  rgba(255,255,255,.16);
         }
 
@@ -514,7 +522,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
            pill goes fully white on top. Four levels, one hue. */
         .ez-nav{
           position:relative; border-radius:9px;
-          color:#F4F8FF;
+          color:#FFFFFF;
           /* SHADED, not merely tinted. A flat wash of white at one alpha is
              what read as dull: it lifts a row off the rail arithmetically
              while giving the eye nothing to call a surface. What makes a

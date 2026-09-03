@@ -139,7 +139,16 @@ if not missing and len(rail_rules) >= 2:
         # every ink figure and would pass a label that is illegible on the
         # button it is actually printed on. Worst case is the row's TOP
         # stop, the lightest thing under any of this text.
-        m       = mid_of(g1, g2)
+        # THE MIDPOINT IS NOT A STAND-IN FOR THE GRADIENT. It used to be,
+        # while the ground barely travelled. Once it does, the two ends
+        # disagree by a full contrast point and the average hides a real
+        # failure at one of them: the previous ground measured 4.76 at the
+        # mid and 4.32 at the top, where the first rows actually sit, and
+        # every check in this file passed. Worst case is per-figure and the
+        # ends are not interchangeable, so each is measured where it is
+        # weakest — light ink at the TOP, the black band at the BOTTOM.
+        m       = g1 if L(g1) > L(g2) else g2            # lightest stop
+        deepest = g2 if L(g1) > L(g2) else g1            # darkest stop
         row_top = level(rule, '--r-row',  m, 'light')    # lightest row pixel
         band    = level(rule, '--r-band', m, 'light')    # lightest band pixel
         if not row_top or not band:
@@ -184,6 +193,8 @@ for gi, (g1, g2) in enumerate(grounds[:2]):
     th = 'light' if gi == 0 else 'dark'
     rule = rail_rules[0] if gi == 0 else rail_rules[1]
     worst = g1 if L(g1) > L(g2) else g2          # lightest stop, worst for light ink
+    # (these draw straight on the rail, so the rail's own lightest end is
+    #  the whole story — no row sits under them)
     for tok in ('--ez-rail-text', '--ez-rail-item', '--ez-rail-muted', '--ez-rail-faint'):
         m = re.search(re.escape(tok) + r':(#[0-9A-Fa-f]{6})', rule)
         if not m:
@@ -243,13 +254,27 @@ if rail_light and len(rail_dark) >= 2 and len(grounds) >= 2:
         # Measured where the rows actually sit, not at the gradient's extreme:
         # a step taken at the darkest stop overstated separation by 0.2 last
         # time and the middle of the rail is where the eye judges it.
-        mid  = mid_of(g1, g2)
-        row  = level(rule, '--r-row',  mid, 'dark')   # darkest row pixel
-        band = level(rule, '--r-band', mid, 'light')  # lightest band pixel
+        # A row is a LIGHT tint, so it separates least where the ground is
+        # already light — the top. A band is BLACK, so it separates least
+        # where there is little left to take away — the bottom. Opposite
+        # ends, which is exactly why one figure at the middle cannot speak
+        # for either, and why the span is bounded from both directions.
+        hi   = g1 if L(g1) > L(g2) else g2
+        lo   = g2 if L(g1) > L(g2) else g1
+        mid  = hi                                     # row's worst ground
+        row  = level(rule, '--r-row',  hi, 'dark')    # darkest row pixel, lightest ground
+        band = level(rule, '--r-band', lo, 'light')   # lightest band pixel, darkest ground
         for label, val, floor in (
             ('row sits above the rail',      cr(row,  mid),  1.15),
-            ('band sits below the rail',     cr(band, mid),  1.15),
-            ('row and band are told apart',  cr(row,  band), 1.30),
+            ('band sits below the rail',     cr(band, lo),   1.15),
+            # A band sits DIRECTLY above the first row of its section, so
+            # the two are at practically the same height and must be judged
+            # on the same ground. Taking the row from the top and the band
+            # from the bottom compared two things that never touch and
+            # flattered the figure by a full point.
+            ('row and band are told apart',
+             min(cr(level(rule, '--r-row', g, 'dark'),
+                    level(rule, '--r-band', g, 'light')) for g in (hi, lo)), 1.30),
             ('the pill outranks a row',
              cr('#FFFFFF', level(rule, '--r-row', mid, 'light')), 2.00),
         ):
@@ -322,14 +347,22 @@ if rail_rules and len(grounds) >= 2:
     for gi, (g1, g2) in enumerate(grounds[:2]):
         th   = 'light' if gi == 0 else 'dark'
         rule = rail_rules[0] if gi == 0 else rail_rules[1]
-        ground = mid_of(g1, g2)
-        row = level(rule, '--r-row', ground, 'light')
-        if not row:
+        # Checked at both ends: the tint washes out differently against a
+        # light ground than a deep one, and it is the weaker end that
+        # decides whether the row looks grey.
+        worst_keep, worst_at = None, None
+        for ground in (g1, g2):
+            row = level(rule, '--r-row', ground, 'light')
+            if not row: continue
+            k = sat(row) / sat(ground) if sat(ground) else 0
+            if worst_keep is None or k < worst_keep:
+                worst_keep, worst_at = k, (row, ground)
+        if worst_keep is None:
             check('%-5s the row tint parses' % th, False)
             continue
-        keep = sat(row) / sat(ground) if sat(ground) else 0
         check('%-5s the row keeps the rail\'s colour (>= 75%% saturation)' % th,
-              keep >= .75, '%d%% (%s on %s)' % (round(keep * 100), row, ground))
+              worst_keep >= .75,
+              '%d%% (%s on %s)' % (round(worst_keep * 100), *worst_at))
 
 # Translucent, so the row composites over the gradient instead of flattening
 # it — and never an opaque fill, which is the light-card-on-a-light-ground
