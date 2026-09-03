@@ -18,8 +18,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { C as TK, F, W, S, R, E, numeric } from '@/lib/ui'
+import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components/pms/AdminOverview'
+import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
+import { PERIOD_OPEN } from '@/lib/pms/status'
+import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
+import { localToday } from '@/components/pms/CycleHeader'
 
-type Tab = 'overview' | 'fill' | 'kra' | 'setup'
+type Tab = 'overview' | 'fill' | 'setup' | 'chain'
 
 /** PostgREST's code for "that relation does not exist". */
 const MISSING_TABLE = 'PGRST205'
@@ -39,6 +44,9 @@ export default function PmsPage() {
   const [loading, setLoading] = useState(true)
   const [cov, setCov] = useState<Coverage | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [fill, setFill] = useState<FillRow[] | null>(null)
+  const [naming, setNaming] = useState<PeriodNaming | null>(null)
+  const [deptNames, setDeptNames] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null)
@@ -51,8 +59,39 @@ export default function PmsPage() {
     }
     setReady(true)
 
-    // Chain coverage is worth showing whether or not the module is live: it is
-    // the thing that decides if an appraisal can actually route to anybody.
+    // The active period, named the way a person would say it rather than by
+    // its filing code.
+    const today = localToday()
+    const per = await supabase.from('pms_periods')
+      .select('id, period_name, period_code, financial_year, period_no, period_start, period_end,'
+            + ' status, pms_policies(frequency)')
+      .in('status', PERIOD_OPEN)
+      .order('period_start', { ascending: false }).limit(1).maybeSingle()
+
+    const row = (per.data ?? null) as unknown as (Record<string, string | null> & { id: string }) | null
+    if (row) {
+      const freq = ((row as unknown as { pms_policies?: { frequency?: string } })
+        .pms_policies?.frequency) ?? null
+      const perYear = freq === 'MONTHLY' ? 12 : freq === 'QUARTERLY' ? 4
+                    : freq === 'HALF_YEARLY' ? 2 : freq === 'ANNUAL' ? 1 : null
+      setNaming(nameThePeriod({
+        periodName: row.period_name, periodCode: row.period_code,
+        financialYear: row.financial_year, periodStart: row.period_start,
+        periodEnd: row.period_end, periodNo: row.period_no ? Number(row.period_no) : null,
+        totalPeriods: perYear, frequency: freq,
+      }, today))
+
+      // vw_pms_fill_status already collapses ten workflow values into the five
+      // states an admin chases. One CASE in SQL beats the same mapping
+      // rewritten in every screen that needs it.
+      const f = await supabase.from('vw_pms_fill_status')
+        .select('employee_name, employee_code, department_id, fill_status, kra_count, total_weightage')
+        .eq('period_id', row.id).limit(2000)
+      if (!f.error) setFill((f.data ?? []) as unknown as FillRow[])
+    } else {
+      setFill([])
+    }
+
     setLoading(false)
   }, [])
 
@@ -102,13 +141,30 @@ export default function PmsPage() {
     })
   }, [])
 
+  // Department names, so the table says "Finance & Accounts" and not a uuid.
+  useEffect(() => {
+    (async () => {
+      const d = await supabase.from('departments').select('id, name').limit(400)
+      if (d.error) return
+      const m: Record<string, string> = {}
+      for (const r of (d.data ?? []) as unknown as { id: string; name: string }[]) m[r.id] = r.name
+      setDeptNames(m)
+    })()
+  }, [])
+
   useEffect(() => { load(); loadCoverage() }, [load, loadCoverage])
 
-  const TABS: { k: Tab; label: string }[] = [
-    { k: 'overview', label: 'Overview' },
-    { k: 'fill',     label: 'Fill Status' },
-    { k: 'kra',      label: 'KRA Oversight' },
-    { k: 'setup',    label: 'Setup' },
+  const roll: Rollup | null = fill ? rollUp(fill) : null
+  const depts: DeptRollup[] = fill ? byDepartment(fill) : []
+  const nameOf = (id: string | null) => id ? (deptNames[id] ?? 'Unknown department') : 'No department set'
+
+  // Named for what you go there to DO. "KRA Oversight" told nobody what they
+  // would find; "Who has not started" is the question somebody actually has.
+  const TABS: { k: Tab; label: string; hint: string }[] = [
+    { k: 'overview', label: 'This cycle',        hint: 'where the whole organisation has got to' },
+    { k: 'fill',     label: 'Who has not started', hint: 'the people to chase, by department' },
+    { k: 'setup',    label: 'Cycle setup',       hint: 'frequency, windows and KRA rules' },
+    { k: 'chain',    label: 'Approval routing',  hint: 'whether an appraisal can route at all' },
   ]
 
   return (
@@ -120,7 +176,10 @@ export default function PmsPage() {
             Performance
           </h1>
           <div style={{ marginTop: 3, fontSize: F.small, color: TK.muted }}>
-            KRAs, appraisal cycle and ratings · Employee → RM L1 → RM L2 → HOD, managed here
+            {naming
+              ? <>Running now: <strong style={{ color: TK.ink }}>{naming.title}</strong> · {naming.sub}</>
+              : <>KRAs, the appraisal cycle and ratings. You are not a step in the chain —
+                 it runs Employee → manager → second manager → HOD, and you keep it moving.</>}
           </div>
         </div>
         {ready === true && (
@@ -141,6 +200,11 @@ export default function PmsPage() {
           </button>
         ))}
       </div>
+      {/* The hint belongs on the page, not in a tooltip: a title attribute is
+          invisible to touch and to anyone not hovering. */}
+      <div style={{ fontSize: F.micro, color: TK.faint, marginTop: -10, marginBottom: 16 }}>
+        {TABS.find(t => t.k === tab)?.hint}
+      </div>
 
       {loading && <Card><div style={{ color: TK.muted, fontSize: F.small }}>Loading…</div></Card>}
 
@@ -155,22 +219,44 @@ export default function PmsPage() {
 
       {!loading && !err && ready === true && (
         <>
-          {tab === 'overview' && <Overview cov={cov} />}
-          {tab !== 'overview' && (
-            <Card>
-              <div style={{ fontSize: F.small, color: TK.muted }}>
-                This tab is next in the build. The module is live, so it will read real data
-                once wired.
-              </div>
-            </Card>
+          {tab === 'overview' && (
+            roll ? (
+              <>
+                <ReadinessBanner r={roll} />
+                <div style={{ display: 'grid', gap: S.sm, marginBottom: S.sm }}>
+                  <FillDistribution r={roll} />
+                </div>
+              </>
+            ) : <Overview cov={cov} />
           )}
+
+          {tab === 'fill' && (
+            roll && roll.total > 0
+              ? <div style={{ display: 'grid', gap: S.sm }}>
+                  <ReadinessBanner r={roll} />
+                  <DepartmentTable rows={depts} nameOf={nameOf} />
+                </div>
+              : <Card>
+                  <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>
+                    Nobody is enrolled in a period yet
+                  </div>
+                  <div style={{ fontSize: F.small, color: TK.muted, marginTop: 6, lineHeight: 1.6 }}>
+                    This list fills in once a period is active and employees are attached to it.
+                    Until then there is nobody to chase — which is a different thing from everybody
+                    being up to date, so it is said plainly rather than shown as an empty table.
+                  </div>
+                </Card>
+          )}
+
+          {tab === 'setup' && <CycleSetup naming={naming} />}
+          {tab === 'chain' && cov && <ChainCoverage cov={cov} />}
         </>
       )}
 
-      {/* Chain coverage is the thing that decides whether an appraisal can route
-          at all, so it is shown even while the module is pending — it is data
-          work that can start today and does not wait on the migration. */}
-      {!loading && cov && <ChainCoverage cov={cov} />}
+      {/* Routing coverage is data work that can start TODAY: it reads employees
+          and departments, not pms_*, so it is shown while the module is still
+          pending rather than waiting on a migration to become useful. */}
+      {!loading && ready === false && cov && <ChainCoverage cov={cov} />}
     </div>
   )
 }
@@ -190,13 +276,13 @@ function MigrationPending() {
   return (
     <Card tone="warning">
       <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>
-        Waiting on migration 055
+        Waiting on migration 066
       </div>
       <div style={{ fontSize: F.small, color: TK.muted, marginTop: 8, lineHeight: 1.6, maxWidth: 720 }}>
         The performance module's tables do not exist in the database yet. The screens and the
         approval flow are built; they have nothing to read until{' '}
         <code style={{ background: TK.sunken, padding: '1px 6px', borderRadius: 6, fontSize: F.micro }}>
-          supabase/migrations/055_pms_module.sql
+          supabase/migrations/066_pms_module.sql
         </code>{' '}
         is applied. That file creates 15 tables, 9 functions, 10 views and 2 triggers.
       </div>
@@ -205,6 +291,83 @@ function MigrationPending() {
         changes itself. Nothing on this page is broken; it is waiting.
       </div>
     </Card>
+  )
+}
+
+/**
+ * What the cycle is configured to do, said in sentences.
+ *
+ * The mockup put twenty dropdowns on this screen. Most of them are settings
+ * nobody changes twice a year, and a wall of selects is how a configuration
+ * page becomes something people are frightened to touch. So the settings are
+ * READ here in plain language, with the rule stated next to each one, and
+ * changing them stays where changing them belongs — with the policy record
+ * itself, which HR owns and which the database validates.
+ *
+ * The honest part: none of this can be written from the browser today. The
+ * anon key cannot be trusted with policy writes, and there is no server route
+ * for it yet, so offering a Save button would be offering something that
+ * silently does nothing.
+ */
+function CycleSetup({ naming }: { naming: PeriodNaming | null }) {
+  const RULES: { k: string; v: string; why: string }[] = [
+    { k: 'KRAs per person', v: '4 to 10',
+      why: 'Fewer than four and a rating rests on too little; more than ten and nothing carries real weight.' },
+    { k: 'Weightage must total', v: 'exactly 100',
+      why: 'The database rejects a set that does not, so a manager can never approve one that is short.' },
+    { k: 'Smallest weightage on one KRA', v: '5',
+      why: 'Stops a goal being added for appearances and then weighted to nothing.' },
+    { k: 'Who writes the KRAs', v: 'the employee, their manager approves',
+      why: 'The person doing the work drafts it; the manager agrees it before it locks.' },
+    { k: 'One-to-one before locking', v: 'required',
+      why: 'Both sides confirm the discussion happened. Without it the set cannot lock.' },
+    { k: 'Approval chain', v: 'employee → manager → second manager → HOD',
+      why: 'The HOD finalises. You are not a step in it.' },
+    { k: 'Pay, increment or CTC linkage', v: 'off, and locked off',
+      why: 'This module is developmental. The database enforces it — no screen or API can switch it on.' },
+  ]
+  return (
+    <>
+      <Card>
+        <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>
+          {naming ? <>Running now: {naming.title}</> : 'No period is running'}
+        </div>
+        <div style={{ fontSize: F.small, color: TK.muted, marginTop: 6, lineHeight: 1.6, maxWidth: 760 }}>
+          {naming
+            ? <>{naming.sub}. Periods are generated from the policy&apos;s frequency rather than
+                entered by hand, so the windows below always line up with the financial year.</>
+            : <>Periods generate from a policy&apos;s frequency — every month, every three months,
+                twice a year or once a year. Until one is active there is no cycle to run.</>}
+        </div>
+      </Card>
+      <Card>
+        <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink, marginBottom: 3 }}>
+          The rules this cycle runs on
+        </div>
+        <div style={{ fontSize: F.micro, color: TK.muted, marginBottom: 14 }}>
+          Every one of these is enforced by the database, not just by the screen.
+        </div>
+        <div style={{ display: 'grid', gap: 12 }}>
+          {RULES.map(r => (
+            <div key={r.k} style={{ display: 'grid', gap: 2,
+                                    gridTemplateColumns: 'minmax(180px, 260px) 1fr',
+                                    alignItems: 'baseline' }}>
+              <div style={{ fontSize: F.small, color: TK.muted }}>{r.k}</div>
+              <div>
+                <div style={{ fontSize: F.small, fontWeight: W.bold, color: TK.ink }}>{r.v}</div>
+                <div style={{ fontSize: F.micro, color: TK.muted, marginTop: 2, lineHeight: 1.5 }}>{r.why}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${TK.line}`,
+                      fontSize: F.small, color: TK.muted, lineHeight: 1.6, maxWidth: 760 }}>
+          These are read-only here. Changing them writes to the policy record, which needs a
+          server route that checks who is asking — the browser&apos;s key is not trusted with it.
+          A Save button that silently did nothing would be worse than none.
+        </div>
+      </Card>
+    </>
   )
 }
 

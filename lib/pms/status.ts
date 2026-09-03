@@ -64,3 +64,35 @@ export function reached(status: string | null | undefined, mark: string): boolea
   const j = WORKFLOW_ORDER.indexOf(mark)
   return i >= 0 && j >= 0 && i >= j
 }
+
+/**
+ * vw_pms_fill_status collapses the ten workflow values into the five states
+ * an HR admin actually chases. Derived in the VIEW, not here — one CASE in
+ * SQL beats the same mapping rewritten in every screen that needs it.
+ */
+export const FILL = {
+  NOT_STARTED: 'NOT_STARTED', DRAFT_SAVED: 'DRAFT_SAVED', SUBMITTED: 'SUBMITTED',
+  IN_REVIEW: 'IN_REVIEW', FINALISED: 'FINALISED',
+} as const
+
+export type FillStatus = (typeof FILL)[keyof typeof FILL]
+
+/** In the order the work happens, so a roll-up can be read left to right. */
+export const FILL_ORDER: FillStatus[] = [
+  FILL.NOT_STARTED, FILL.DRAFT_SAVED, FILL.SUBMITTED, FILL.IN_REVIEW, FILL.FINALISED,
+]
+
+/** What each one means to somebody chasing it, in their words. */
+export const FILL_MEANING: Record<FillStatus, string> = {
+  NOT_STARTED: 'Has not written a single KRA. Cannot be rated at all this period.',
+  DRAFT_SAVED: 'Started writing, nothing sent. Usually needs a nudge, not an escalation.',
+  SUBMITTED:   'Self rating is in. Waiting on their manager.',
+  IN_REVIEW:   'A manager has rated. Waiting on the next approver or the HOD.',
+  FINALISED:   'Settled. Nothing further is owed on this one.',
+}
+
+/** Short label for a column heading or a chip. */
+export const FILL_LABEL: Record<FillStatus, string> = {
+  NOT_STARTED: 'Not started', DRAFT_SAVED: 'Draft saved', SUBMITTED: 'Submitted',
+  IN_REVIEW: 'In review', FINALISED: 'Finalised',
+}

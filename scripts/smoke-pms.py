@@ -150,7 +150,18 @@ st_raw = (ROOT / 'lib/pms/status.ts').read_text()
 st = re.sub(r'/\*.*?\*/', ' ', st_raw, flags=re.S)
 st = re.sub(r'//[^\n]*', ' ', st)
 declared = set(re.findall(r"'([A-Z0-9_]{3,})'", st))
-known = period_status | goal_status | workflow
+# vw_pms_fill_status invents its own five-value vocabulary in a CASE, not in
+# a CHECK constraint — it collapses the ten workflow values into the states an
+# admin chases. Those are schema-defined too, just not by a constraint, so the
+# extractor has to read the view as well or it reports real values as strays.
+view_m = re.search(r'CREATE (?:OR REPLACE )?VIEW vw_pms_fill_status(.*?);', sql, re.S)
+view_vals = set(re.findall(r"'([A-Z0-9_]+)'\s+AS\s+fill_status|THEN\s+'([A-Z0-9_]+)'",
+                           view_m.group(1))) if view_m else set()
+view_vals = {v for pair in view_vals for v in pair if v}
+check('the fill-status vocabulary is readable from the view', len(view_vals) >= 5,
+      f'{len(view_vals)} values')
+
+known = period_status | goal_status | workflow | view_vals
 strays = sorted(v for v in declared if v not in known)
 check('every status constant in lib/pms/status.ts is a real schema value',
       not strays, str(strays[:5]) if strays else f'{len(declared)} constants')
