@@ -208,8 +208,16 @@ check('the stepper draws a BLOCKED state distinctly from ACTIVE',
       "'blocked'" in step and 'pms-blocked' in step)
 check('the tooltip is reachable from the keyboard, not hover-only',
       'aria-describedby' in step and 'focus-visible' in step)
-check('stage state reaches a screen reader as words, not colour alone',
-      'ez-sr' in step and 'label:' in step)
+# The connector must occupy the GAP between dots, never run under them.
+# Spanning centre-to-centre struck a line through the numerals — 84 crossings
+# across the seven stages — and z-index cannot fix it, because each line
+# belongs to a later sibling than the dot it crosses.
+check('the connector is trimmed clear of the dots it joins',
+      'calc(-50% + 18px)' in step and 'calc(50%  + 18px)' in step)
+check('stage state reaches assistive tech as an attribute, not hidden text',
+      'aria-label={`Step ' in step and 'ez-sr' not in step)
+check('stage labels reserve two lines so the dates below them line up',
+      'min-height:calc(2 * 1.25em)' in step)
 check('the tooltip is clamped at both ends of the rail',
       ':first-child .pms-blurb' in step and ':last-child .pms-blurb' in step)
 check('the action card refuses to render an instruction without a reason',

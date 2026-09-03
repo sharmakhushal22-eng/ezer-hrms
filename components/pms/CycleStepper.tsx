@@ -70,6 +70,13 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
             {i > 0 && <span className="pms-line" data-filled={filled ? '1' : '0'} aria-hidden />}
             <button type="button" className="pms-dot-wrap"
                     aria-describedby={`${rid}-${s.key}`}
+                    /* State reaches a screen reader as WORDS — never colour
+                       alone — but as an attribute rather than hidden text.
+                       As text it was invisible on screen and yet came out in
+                       every copy-paste of the page, so anyone quoting the
+                       stepper got "in progress now" and "not started"
+                       interleaved through it. */
+                    aria-label={`Step ${s.n} of ${STAGES.length}: ${s.label} — ${t.label}`}
                     // A stage is not a control; it is a thing you can inspect.
                     // Button only so the blurb is reachable from the keyboard.
                     style={{ background: 'none', border: 'none', padding: 0, cursor: 'help' }}>
@@ -88,8 +95,6 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
               </span>
               <span className="pms-step-label">{s.label}</span>
               {detail?.[s.key] && <span className="pms-step-detail">{detail[s.key]}</span>}
-              {/* Screen readers get the state as words, not as a colour. */}
-              <span className="ez-sr">{t.label}</span>
             </button>
             <span id={`${rid}-${s.key}`} role="tooltip" className="pms-blurb">{s.blurb}</span>
           </div>
@@ -111,11 +116,19 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
         }
         .pms-step{ position:relative; display:flex; flex-direction:column; align-items:center;
                    text-align:center; padding:0 4px; min-width:0 }
-        /* The connector starts at the previous dot's centre and ends at this
-           one's, so it reads as the gap BETWEEN stages rather than a rule
-           under them. */
+        /* THE CONNECTOR OCCUPIES THE GAP, NOT THE DOTS.
+           Spanning centre-to-centre put the line UNDER the previous dot, and
+           because each step draws its own incoming line, that line belongs to
+           a later sibling — later siblings paint on top, so it came out over
+           the dot and struck a line clean through the numeral. z-index cannot
+           fix it: the dots sit in different stacking contexts from the lines
+           that cross them. Trimming the span by a dot radius plus a little
+           air removes the overlap altogether, and reads as a connector
+           between stages rather than a rule ruled under them. */
         .pms-line{
-          position:absolute; top:13px; right:50%; left:-50%; height:2px; border-radius:2px;
+          position:absolute; top:13px; height:2px; border-radius:2px;
+          left:  calc(-50% + 18px);
+          right: calc(50%  + 18px);
           background:${C.line};
         }
         /* The completed part of the line GROWS from the previous stage, so
@@ -168,8 +181,15 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
           from{ opacity:0; transform: translateY(7px) }
           to  { opacity:1; transform: translateY(0) }
         }
+        /* Two lines' worth of room whether the label needs it or not. Four
+           of the seven wrap ("Weightage Lock", "Manager Review", "HOD
+           Finalise") and three do not, so without this the dates underneath
+           sat at three different heights and the row read as ragged rather
+           than as a rail. */
         .pms-step-label{ font-size:${F.tiny}px; font-weight:${W.semi}; color:${C.inkSoft};
-                         line-height:1.25; max-width:11ch }
+                         line-height:1.25; max-width:11ch;
+                         min-height:calc(2 * 1.25em); display:flex; align-items:flex-start;
+                         justify-content:center; text-align:center }
         .pms-step[data-state="active"] .pms-step-label{ color:${C.brand}; font-weight:${W.bold} }
         .pms-step[data-state="blocked"] .pms-step-label{ color:${C.warning}; font-weight:${W.bold} }
         .pms-step[data-state="upcoming"] .pms-step-label{ color:${C.faint} }
@@ -208,8 +228,6 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
           .pms-blurb{ width:158px }
         }
 
-        .ez-sr{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0);
-                clip-path:inset(50%); white-space:nowrap }
 
         @media (prefers-reduced-motion: reduce){
           .pms-dot, .pms-blurb, .pms-line::after{ transition:none }

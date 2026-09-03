@@ -29,10 +29,15 @@ export interface NextActionProps {
   restingWhy?: string
 }
 
+// THE DEADLINE CHIP WAS UNREADABLE AND MEASURED IT: 3.49 against a 4.5 bar.
+// White text on a 22% white wash is the trap — the wash lightens the ground
+// underneath it and moves it TOWARDS the ink, so a chip meant to make the
+// deadline stand out was the least legible thing on the card. A near-opaque
+// chip carrying the card's own colour as ink inverts that and lands above 8.
 const TONE: Record<Urgency, { bg: string; ink: string; sub: string; chip: string; chipInk: string }> = {
-  overdue: { bg: C.critical, ink: '#FFFFFF', sub: 'rgba(255,255,255,.86)', chip: 'rgba(255,255,255,.22)', chipInk: '#FFFFFF' },
-  due:     { bg: C.brand,    ink: '#FFFFFF', sub: 'rgba(255,255,255,.86)', chip: 'rgba(255,255,255,.22)', chipInk: '#FFFFFF' },
-  info:    { bg: C.brand,    ink: '#FFFFFF', sub: 'rgba(255,255,255,.86)', chip: 'rgba(255,255,255,.22)', chipInk: '#FFFFFF' },
+  overdue: { bg: C.critical, ink: '#FFFFFF', sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.critical },
+  due:     { bg: C.brand,    ink: '#FFFFFF', sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.brand },
+  info:    { bg: C.brand,    ink: '#FFFFFF', sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.brand },
   none:    { bg: C.surface,  ink: C.ink,     sub: C.muted,                chip: C.sunken,                chipInk: C.inkSoft },
 }
 
