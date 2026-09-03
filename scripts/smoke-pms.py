@@ -120,6 +120,25 @@ for f in SRC:
             if c and c not in SCHEMA[t]: embeds.append(f'{t}.{c}')
 check('every embedded relation column exists', not embeds, str(embeds[:3]) if embeds else '')
 
+# Base tables the PMS screens read. These are NOT in any migration here —
+# employees/departments predate this series — so the names cannot be checked
+# against a CREATE TABLE. They are pinned to what the rest of the app already
+# uses, which is the only source of truth available offline. `departments.name`
+# shipped once and failed the entire select, so every department rendered as
+# "Unknown department" on a screen that otherwise looked fine.
+BASE_COLS = {'departments': {'id', 'dept_name', 'dept_code', 'company_id', 'status',
+                             'hod_employee_id'}}
+base_bad = []
+for f in SRC:
+    if not f.exists(): continue
+    for m in re.finditer(r"\.from\('(departments)'\)\s*\n?\s*\.select\(\s*'([^']*)'", f.read_text()):
+        for col in re.split(r'[,\s]+', m.group(2)):
+            col = col.strip()
+            if col and col not in BASE_COLS[m.group(1)]:
+                base_bad.append(f'{f.name}: {m.group(1)}.{col}')
+check('columns read from base tables match what the rest of the app uses',
+      not base_bad, '; '.join(base_bad[:3]) if base_bad else '')
+
 # ── status vocabularies ──────────────────────────────────────────────────
 def allowed(col):
     m = re.search(r'CHECK\s*\(\s*%s\s+IN\s*\(([^)]*)\)' % col, sql)

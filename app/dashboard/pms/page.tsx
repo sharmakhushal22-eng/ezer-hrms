@@ -144,10 +144,15 @@ export default function PmsPage() {
   // Department names, so the table says "Finance & Accounts" and not a uuid.
   useEffect(() => {
     (async () => {
-      const d = await supabase.from('departments').select('id, name').limit(400)
+      // dept_name, not name. `name` does not exist on this table, and asking
+      // for it fails the whole select — so every department silently rendered
+      // as "Unknown department" while the screen looked like it had loaded.
+      const d = await supabase.from('departments').select('id, dept_name').limit(400)
       if (d.error) return
       const m: Record<string, string> = {}
-      for (const r of (d.data ?? []) as unknown as { id: string; name: string }[]) m[r.id] = r.name
+      for (const r of (d.data ?? []) as unknown as { id: string; dept_name: string }[]) {
+        m[r.id] = r.dept_name
+      }
       setDeptNames(m)
     })()
   }, [])
