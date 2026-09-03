@@ -38,6 +38,7 @@ import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
+import WallOfFame from '@/components/ess/WallOfFame'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
@@ -3308,6 +3309,10 @@ const SECTIONS: NavSection[] = [
       { icon:'', name:'Leaderboard', note:'Top recognized employees' },
     ]},
 
+  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'ready',
+    desc:'What your colleagues have noticed — shoutouts, awards, badges and service milestones. Thanks, never pay.',
+    items:[{ k:'wall', label:'Wall of Fame' }] },
+
   { k:'funzone', label:'Fun Zone', short:'Fun', icon:'', status:'ready',
     desc:'Take a break — play a quick game with your team',
     items:[{ k:'funzone', label:'Fun Zone' }] },
@@ -3597,6 +3602,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />
           case 'performance':   return <Performance employeeId={emp.id} />
+      case 'wall':          return <WallOfFame employeeId={emp.id} />
       case 'funzone':       return <FunZone />
       default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
     }
