@@ -91,8 +91,19 @@ backfill them, and add three indexes. Probing for the columns instead shows
 all four present, three of them added by nothing else. So 075 is done, and the
 run list is seven files rather than eight.
 
-Copies of the applied files are in reference/ so you can diff them against
-what is live. They are idempotent; re-running is harmless.
+WHAT IS IN THE BUNDLE
+
+  migrations/       the 7 files above, the ones to run now
+  all-migrations/   EVERY migration in the project — all 85, 0001 to 087 —
+                    so you have the complete history in one place and can
+                    diff any of them against what is live
+  previous/         the 3 September changes document, for continuity
+
+  Numbering: there is no 003 and no 083. Both gaps are real and deliberate;
+  nothing is missing from all-migrations/.
+
+Everything already applied is idempotent, so re-running any of it is
+harmless.
 
 A CAVEAT I OWE YOU. My first probe reported six of those eight as APPLIED. It
 used head:true together with .limit(0), and that combination swallowed the
@@ -257,7 +268,7 @@ ALREADY IN THE DATABASE, nothing for you to do:
 
     PMS      3 policies, 12 periods, 15 rating bands, 120 KRA library rows
              and 395 enrolment rows. All of it arrived with 066 and 068,
-             which are applied. The reference/ copies are for diffing only.
+             which are applied. The all-migrations/ copies are for diffing.
 
              pms_employee_goals, pms_one_to_one and pms_reviews are all at
              ZERO -- nobody has written a KRA yet. That is expected, and

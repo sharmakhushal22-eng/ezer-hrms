@@ -3,7 +3,11 @@
 **For:** Nayan Ahuja
 **From:** Tushar
 **Date:** 4 September 2026
-**Branch:** `TusharPanwar` @ `154928f`
+**Branch:** `TusharPanwar`
+
+The zip carries **every migration in the project** — all 85, `0001` through
+`087` — in `all-migrations/`, so you have the full history in one place.
+`migrations/` holds just the seven that still need running.
 
 ---
 
