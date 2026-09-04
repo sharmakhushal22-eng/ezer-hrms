@@ -89,6 +89,21 @@ create table if not exists game_sessions (
   status         text not null default 'OPEN'
                  check (status in ('OPEN','FINISHED','ABANDONED')),
 
+  -- Both clients deal from this. Memory Match and Trivia need the same cards
+  -- and the same question order on two screens with no server to deal them,
+  -- so the order comes from a seed rather than from Math.random() — which
+  -- would deal two different decks. See shuffled() in lib/funzone/games.ts.
+  seed           int not null default (floor(random() * 2147483647))::int,
+
+  -- Where a result the database cannot replay is parked until the second
+  -- player confirms it. See finish_game().
+  pending_claim  jsonb,
+  claimed_by     uuid references employees(id),
+
+  -- Pairs or correct answers, for the games that score rather than win.
+  host_score     int,
+  guest_score    int,
+
   -- 'HOST' | 'GUEST' | null for a draw. Set by finish_game(), never by a
   -- client.
   winner         text check (winner in ('HOST','GUEST')),
@@ -148,6 +163,7 @@ declare
   v_me    uuid := wof_current_employee();
   v_inv   game_invites%rowtype;
   v_id    uuid;
+  v_seed  int;
   v_age   interval;
 begin
   select * into v_inv from game_invites where id = p_invite for update;
@@ -171,7 +187,7 @@ begin
 
   insert into game_sessions (company_id, game_code, host_employee, guest_employee, invite_id)
   values (v_inv.company_id, v_inv.game_code, v_inv.from_employee, v_me, v_inv.id)
-  returning id into v_id;
+  returning id, seed into v_id, v_seed;
 
   update game_invites
      set status = 'ACCEPTED', answered_at = now(), session_id = v_id
@@ -183,7 +199,10 @@ begin
           (select full_name from employees where id = v_me) || ' accepted your game invite',
           'They are waiting in the Fun Zone.', 'FUNZONE_INVITE_ACCEPTED', v_me);
 
-  return jsonb_build_object('session_id', v_id, 'game_code', v_inv.game_code);
+  -- The seed goes back with the session: both clients need it to deal the
+  -- same deck and ask the same questions in the same order.
+  return jsonb_build_object('session_id', v_id, 'game_code', v_inv.game_code,
+                            'seed', v_seed, 'host', v_inv.from_employee);
 end $$;
 
 
@@ -195,7 +214,10 @@ end $$;
 -- the session as ABANDONED rather than inventing a result.
 -- ---------------------------------------------------------------------
 
-create or replace function finish_game(p_session uuid, p_moves jsonb)
+create or replace function finish_game(
+  p_session uuid,
+  p_moves   jsonb default '[]'::jsonb,
+  p_claim   jsonb default null)
 returns jsonb
 language plpgsql
 security definer
@@ -220,6 +242,52 @@ begin
   end if;
   if v_s.status <> 'OPEN' then
     return jsonb_build_object('id', v_s.id, 'already', v_s.status);
+  end if;
+
+  ----------------------------------------------------------------- claims
+  -- TIC-TAC-TOE IS REPLAYED HERE. Nine squares and eight lines is cheap to
+  -- re-derive, so the database decides who won and no client is believed.
+  --
+  -- MEMORY MATCH AND TRIVIA ARE NOT. Both depend on a seeded shuffle, and
+  -- reimplementing mulberry32 and Fisher-Yates in plpgsql to check a
+  -- break-time game would be three copies of the same logic drifting apart.
+  --
+  -- So they are settled by AGREEMENT: each client reports what it computed,
+  -- the first is parked, and the second must match it. One player alone
+  -- cannot post a result — they can only stall the game as unfinished, which
+  -- gains them nothing. Two clients that disagree end it ABANDONED rather
+  -- than picking a winner, because a disagreement means at least one of them
+  -- is wrong and there is no way to tell which.
+  if p_claim is not null then
+    if v_s.pending_claim is null then
+      update game_sessions
+         set pending_claim = p_claim, claimed_by = v_me
+       where id = p_session;
+      return jsonb_build_object('id', p_session, 'status', 'AWAITING_CONFIRMATION');
+    end if;
+
+    if v_s.claimed_by = v_me then
+      return jsonb_build_object('id', p_session, 'status', 'AWAITING_CONFIRMATION',
+                                'why', 'waiting for the other player');
+    end if;
+
+    if v_s.pending_claim <> p_claim then
+      update game_sessions set status = 'ABANDONED', finished_at = now()
+       where id = p_session;
+      return jsonb_build_object('id', p_session, 'status', 'ABANDONED',
+                                'why', 'the two players reported different results');
+    end if;
+
+    update game_sessions
+       set status = 'FINISHED', finished_at = now(),
+           is_draw = coalesce((p_claim->>'draw')::boolean, false),
+           winner  = case when (p_claim->>'draw')::boolean then null
+                          else p_claim->>'winner' end,
+           host_score = (p_claim->>'host')::int,
+           guest_score = (p_claim->>'guest')::int
+     where id = p_session;
+    return jsonb_build_object('id', p_session, 'status', 'FINISHED',
+                              'winner', p_claim->>'winner');
   end if;
 
   -- Replay. Anything malformed and the session is abandoned rather than

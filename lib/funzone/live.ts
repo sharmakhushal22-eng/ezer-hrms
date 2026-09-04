@@ -24,7 +24,7 @@
 // "they left" rather than a rejoin protocol, which for a break-time game is
 // the honest amount of engineering.
 
-import type { Move } from './games'
+import type { Move, MemTurn, Answer } from './games'
 
 /** One channel per session. Namespaced so a session id can never collide
  *  with another feature's channel on the same project. */
@@ -39,6 +39,24 @@ export type Packet =
   | { t: 'sync'; from: string; moves: Move[] }
   /** One move. `n` is its index in the move list — see canApply. */
   | { t: 'move'; from: string; move: Move }
+  /** Memory Match: both cards of one turn, sent together after the second
+   *  flip. The opponent never watches a half-finished turn, so there is no
+   *  "one card is face up" state to keep in sync. */
+  | { t: 'mem'; from: string; turn: MemTurn }
+  | { t: 'memSync'; from: string; turns: MemTurn[] }
+  /**
+   * Trivia, phase one: "I have locked in an answer to question q."
+   *
+   * WITHOUT THE CHOICE, deliberately. Broadcast reaches the other browser
+   * immediately, so sending the answer as soon as it is picked would put it
+   * in the opponent's client BEFORE they had answered — and a modified client
+   * could read it. Announcing only THAT you answered gives the other side a
+   * progress indicator and nothing to copy.
+   */
+  | { t: 'ready'; from: string; q: number }
+  /** Trivia, phase two: the choice itself, sent once both are ready. */
+  | { t: 'answer'; from: string; answer: Answer }
+  | { t: 'quizSync'; from: string; answers: Answer[] }
   /** Deliberately leaving, as opposed to a socket that simply died. */
   | { t: 'leave'; from: string }
   /** Play again on the same channel. Both must send it. */
@@ -59,12 +77,45 @@ export function isPacket(v: unknown): v is Packet {
   const p = v as Record<string, unknown>
   if (typeof p.from !== 'string' || !p.from) return false
   switch (p.t) {
-    case 'sync':    return Array.isArray(p.moves) && p.moves.every(isMove)
-    case 'move':    return isMove(p.move)
+    case 'sync':     return Array.isArray(p.moves) && p.moves.every(isMove)
+    case 'move':     return isMove(p.move)
+    case 'mem':      return isMemTurn(p.turn)
+    case 'memSync':  return Array.isArray(p.turns) && p.turns.every(isMemTurn)
+    case 'ready':    return Number.isInteger(p.q)
+    case 'answer':   return isAnswer(p.answer)
+    case 'quizSync': return Array.isArray(p.answers) && p.answers.every(isAnswer)
     case 'leave':
-    case 'rematch': return true
-    default:        return false
+    case 'rematch':  return true
+    default:         return false
   }
+}
+
+function isSide(v: unknown): boolean { return v === 'HOST' || v === 'GUEST' }
+
+function isMemTurn(v: unknown): v is MemTurn {
+  if (!v || typeof v !== 'object') return false
+  const t = v as Record<string, unknown>
+  return Number.isInteger(t.n) && Number.isInteger(t.a) && Number.isInteger(t.b)
+      && isSide(t.by)
+}
+
+function isAnswer(v: unknown): v is Answer {
+  if (!v || typeof v !== 'object') return false
+  const a = v as Record<string, unknown>
+  return Number.isInteger(a.q) && Number.isInteger(a.choice) && isSide(a.by)
+}
+
+/** The same longer-list-wins rule as `reconcile`, for the other two games.
+ *  Generic because the argument is about length, not about what is in the
+ *  list — and three copies of it would be three chances to get one wrong. */
+export function reconcileList<T>(mine: T[], theirs: T[]): T[] {
+  return theirs.length > mine.length ? theirs : mine
+}
+
+/** Which side of the table somebody is on. The host is HOST — fixed at
+ *  session creation, like the X in tic-tac-toe, so a reload cannot swap it. */
+export function sideFor(employeeId: string, hostId: string): 'HOST' | 'GUEST' {
+  return employeeId === hostId ? 'HOST' : 'GUEST'
 }
 
 function isMove(v: unknown): v is Move {

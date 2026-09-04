@@ -5,12 +5,16 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import {
   boardFrom, outcome, canApply, apply, resultOf, other, EMPTY_BOARD,
   GAMES, LIVE_GAMES, gameByCode, type Move, type Cell,
+  memDeck, memReplay, memCanApply, memApply, memResult, MEM_FACES, MEM_CARDS,
+  quizFor, quizReplay, quizCanApply, quizResult, shuffled, type MemTurn,
 } from '../games.ts'
 import {
-  isPacket, reconcile, markFor, channelFor, isMine, type Packet,
+  isPacket, reconcile, markFor, channelFor, isMine, reconcileList, sideFor,
+  type Packet,
 } from '../live.ts'
 import {
   canInvite, canAccept, canDecline, canCancel, isExpired, effectiveStatus,
@@ -284,4 +288,235 @@ test('every live game takes exactly two players, and the solo one explains itsel
   for (const g of GAMES.filter(x => !x.live)) {
     assert.match(g.soloReason ?? '', /\S/, `${g.code} must say why it is solo`)
   }
+})
+
+// ═════════════════════════════════════════════════════════════════════════
+// MEMORY MATCH AND TRIVIA
+//
+// Both deal from a seed because there is no server to deal for them. If the
+// shuffle is not identical on two machines the players see different cards
+// and the game is nonsense, so determinism is the first thing tested.
+// ═════════════════════════════════════════════════════════════════════════
+
+test('the same seed deals the same deck, every time', () => {
+  assert.deepEqual(memDeck(12345), memDeck(12345))
+  assert.deepEqual(quizFor(999).map(q => q.q), quizFor(999).map(q => q.q))
+})
+
+test('different seeds deal different decks', () => {
+  // Not a guarantee for any single pair, so this checks across a spread —
+  // a shuffle that ignored its seed would fail every one of them.
+  const decks = new Set([1, 2, 3, 4, 5, 6].map(s => memDeck(s).join('')))
+  assert.ok(decks.size >= 5, `only ${decks.size} distinct decks from 6 seeds`)
+})
+
+test('a deck is always the full set of pairs, whatever the seed', () => {
+  for (const seed of [0, 1, 7, 12345, 2147483646]) {
+    const d = memDeck(seed)
+    assert.equal(d.length, MEM_CARDS)
+    for (const face of MEM_FACES) {
+      assert.equal(d.filter(c => c === face).length, 2, `${face} at seed ${seed}`)
+    }
+  }
+})
+
+test('the faces are distinct — a blank deck matches everything', () => {
+  // The single-player game shipped with eight empty strings, so '' === ''
+  // made the first two flips a pair and the game was won in eight turns.
+  assert.equal(new Set(MEM_FACES).size, MEM_FACES.length)
+  for (const f of MEM_FACES) assert.match(f, /\S/)
+})
+
+test('shuffling does not mutate the caller’s array', () => {
+  // A shuffle that mutated its input would reshuffle the deck on every
+  // re-render, and the two screens would drift apart mid-game.
+  const src = [...MEM_FACES]
+  shuffled(src, 42)
+  assert.deepEqual(src, MEM_FACES)
+})
+
+// ── memory match rules ───────────────────────────────────────────────────
+
+const DECK = memDeck(2026)
+/** Find the partner of card `i` in this deck. */
+const partner = (i: number) => DECK.findIndex((c, j) => j !== i && c === DECK[i])
+const miss = (): [number, number] => {
+  for (let a = 0; a < DECK.length; a++)
+    for (let b = a + 1; b < DECK.length; b++)
+      if (DECK[a] !== DECK[b]) return [a, b]
+  throw new Error('no mismatched pair')
+}
+
+test('a hit keeps the turn; a miss passes it', () => {
+  const hit: MemTurn = { n: 0, by: 'HOST', a: 0, b: partner(0) }
+  assert.equal(memReplay(DECK, [hit]).turn, 'HOST', 'a hit keeps the turn')
+  assert.equal(memReplay(DECK, [hit]).scores.HOST, 1)
+
+  const [a, b] = miss()
+  const missed: MemTurn = { n: 0, by: 'HOST', a, b }
+  assert.equal(memReplay(DECK, [missed]).turn, 'GUEST', 'a miss passes it')
+  assert.equal(memReplay(DECK, [missed]).scores.HOST, 0)
+})
+
+test('a card off the deck, or the same card twice, is refused', () => {
+  for (const t of [
+    { n: 0, by: 'HOST' as const, a: -1, b: 2 },
+    { n: 0, by: 'HOST' as const, a: 0, b: 99 },
+    { n: 0, by: 'HOST' as const, a: 3, b: 3 },
+  ]) assert.equal(memCanApply(DECK, [], t).legal, false, JSON.stringify(t))
+})
+
+test('an already-matched card cannot be turned again', () => {
+  const hit: MemTurn = { n: 0, by: 'HOST', a: 0, b: partner(0) }
+  const again: MemTurn = { n: 1, by: 'HOST', a: 0, b: 1 }
+  const v = memCanApply(DECK, [hit], again)
+  assert.equal(v.legal, false)
+  assert.match(v.because, /already been matched/i)
+})
+
+test('playing out of turn is refused', () => {
+  const [a, b] = miss()
+  const missed: MemTurn = { n: 0, by: 'HOST', a, b }   // turn passes to GUEST
+  const v = memCanApply(DECK, [missed], { n: 1, by: 'HOST', a: 0, b: partner(0) })
+  assert.equal(v.legal, false)
+  assert.match(v.because, /GUEST's turn/)
+})
+
+test('a repeated turn is refused, so a reconnect cannot double-score', () => {
+  const hit: MemTurn = { n: 0, by: 'HOST', a: 0, b: partner(0) }
+  assert.deepEqual(memApply(DECK, [hit], hit), [hit])
+})
+
+test('the game is over when every pair is found, and the winner is by pairs', () => {
+  // HOST takes all eight: every turn is a hit, so the turn never passes.
+  const turns: MemTurn[] = []
+  const used = new Set<number>()
+  for (let i = 0; i < DECK.length; i++) {
+    if (used.has(i)) continue
+    const p = partner(i)
+    used.add(i); used.add(p)
+    turns.push({ n: turns.length, by: 'HOST', a: i, b: p })
+  }
+  const s = memReplay(DECK, turns)
+  assert.equal(s.done, true)
+  assert.equal(s.scores.HOST, 8)
+  const r = memResult(DECK, turns)!
+  assert.equal(r.winner, 'HOST'); assert.equal(r.draw, false)
+  assert.equal(memCanApply(DECK, turns, { n: turns.length, by: 'HOST', a: 0, b: 1 }).legal,
+               false, 'nothing can be played after the last pair')
+})
+
+test('an unfinished game has no result', () => {
+  assert.equal(memResult(DECK, []), null)
+})
+
+// ── trivia rules ─────────────────────────────────────────────────────────
+
+const QS = quizFor(7)
+const ans = (q: number, by: 'HOST' | 'GUEST', choice: number) => ({ q, by, choice })
+const right = (q: number, by: 'HOST' | 'GUEST') => ans(q, by, QS[q].correct)
+const wrong = (q: number, by: 'HOST' | 'GUEST') =>
+  ans(q, by, (QS[q].correct + 1) % QS[q].opts.length)
+
+test('a question advances only when BOTH have answered', () => {
+  assert.equal(quizReplay(QS, []).at, 0)
+  assert.equal(quizReplay(QS, [right(0, 'HOST')]).at, 0, 'one answer is not enough')
+  assert.equal(quizReplay(QS, [right(0, 'HOST'), wrong(0, 'GUEST')]).at, 1)
+})
+
+test('scoring counts only correct answers', () => {
+  const s = quizReplay(QS, [right(0, 'HOST'), wrong(0, 'GUEST')])
+  assert.equal(s.scores.HOST, 1); assert.equal(s.scores.GUEST, 0)
+})
+
+test('answering the same question twice is refused', () => {
+  const v = quizCanApply(QS, [right(0, 'HOST')], wrong(0, 'HOST'))
+  assert.equal(v.legal, false)
+  assert.match(v.because, /already answered/i)
+})
+
+test('racing ahead to a later question is refused', () => {
+  // Both players are on the same question. A client that jumped forward
+  // would be scoring against a question its opponent has not seen.
+  const v = quizCanApply(QS, [], right(2, 'HOST'))
+  assert.equal(v.legal, false)
+  assert.match(v.because, /question 1/)
+})
+
+test('an option that does not exist is refused', () => {
+  for (const choice of [99, -2, 1.5]) {
+    assert.equal(quizCanApply(QS, [], ans(0, 'HOST', choice)).legal, false, `${choice}`)
+  }
+  // -1 is legal: it means the answer timed out.
+  assert.equal(quizCanApply(QS, [], ans(0, 'HOST', -1)).legal, true)
+})
+
+test('a timed-out answer scores nothing but still advances the question', () => {
+  const s = quizReplay(QS, [ans(0, 'HOST', -1), right(0, 'GUEST')])
+  assert.equal(s.scores.HOST, 0)
+  assert.equal(s.at, 1)
+})
+
+test('the quiz ends after the last question, and ties are draws', () => {
+  const all = QS.flatMap((_, i) => [right(i, 'HOST'), right(i, 'GUEST')])
+  const r = quizResult(QS, all)!
+  assert.equal(r.draw, true); assert.equal(r.winner, null)
+  assert.equal(r.scores.HOST, QS.length)
+  assert.equal(quizCanApply(QS, all, right(0, 'HOST')).legal, false)
+})
+
+test('the higher score wins', () => {
+  const mixed = QS.flatMap((_, i) =>
+    [right(i, 'HOST'), i === 0 ? right(i, 'GUEST') : wrong(i, 'GUEST')])
+  const r = quizResult(QS, mixed)!
+  assert.equal(r.winner, 'HOST'); assert.equal(r.draw, false)
+})
+
+// ── the wire, for the two new games ──────────────────────────────────────
+
+test('memory and trivia packets are validated like every other', () => {
+  assert.equal(isPacket({ t: 'mem', from: 'a',
+    turn: { n: 0, by: 'HOST', a: 0, b: 1 } }), true)
+  assert.equal(isPacket({ t: 'answer', from: 'a',
+    answer: { q: 0, by: 'GUEST', choice: 1 } }), true)
+  assert.equal(isPacket({ t: 'ready', from: 'a', q: 0 }), true)
+  for (const bad of [
+    { t: 'mem', from: 'a', turn: { n: 0, by: 'X', a: 0, b: 1 } },      // wrong side
+    { t: 'mem', from: 'a', turn: { n: 0, by: 'HOST', a: 'x', b: 1 } },
+    { t: 'answer', from: 'a', answer: { q: 0, by: 'HOST' } },
+    { t: 'ready', from: 'a' },
+    { t: 'memSync', from: 'a', turns: [{ bad: 1 }] },
+  ]) assert.equal(isPacket(bad), false, JSON.stringify(bad))
+})
+
+test('THE PEEK GUARD: the ready packet the component sends carries no choice', () => {
+  // Broadcast reaches the other browser immediately. If the choice travelled
+  // with "I have answered", a modified client could read it off the wire
+  // before committing its own.
+  //
+  // This has to be checked in the SOURCE. A value-level assertion cannot see
+  // it: adding `choice?: number` to the type is erased at runtime, and an
+  // object literal written inside this test proves nothing about what
+  // LiveTrivia actually broadcasts.
+  const src = readFileSync(
+    new URL('../../../components/funzone/LiveTrivia.tsx', import.meta.url), 'utf8')
+  const sends = [...src.matchAll(/send\(\{\s*t:\s*'ready'[^}]*\}/g)].map(m => m[0])
+  assert.ok(sends.length > 0, 'LiveTrivia must announce readiness')
+  for (const call of sends) {
+    assert.doesNotMatch(call, /choice|answer|pending/,
+      `a ready packet must carry only the question number: ${call}`)
+  }
+  // And the choice must go out separately, after both are ready.
+  assert.match(src, /send\(\{\s*t:\s*'answer'/,
+    'the choice has to be sent by its own packet')
+})
+
+test('sides are fixed by the session for these games too', () => {
+  assert.equal(sideFor('h', 'h'), 'HOST')
+  assert.equal(sideFor('g', 'h'), 'GUEST')
+})
+
+test('reconcileList follows the same longer-wins rule as reconcile', () => {
+  assert.deepEqual(reconcileList([1], [1, 2]), [1, 2])
+  assert.deepEqual(reconcileList([1, 2], [1]), [1, 2])
 })

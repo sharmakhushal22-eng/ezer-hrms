@@ -27,10 +27,10 @@ const gameTitle: React.CSSProperties = { fontSize:18, fontWeight:700, marginBott
 const gameSub: React.CSSProperties = { fontSize:12, color:F.muted, marginBottom:18 }
 
 const GAMES = [
-  { k:'ttt',   icon:'', name:'Tic-Tac-Toe',    desc:'Classic 2-player, take turns on this screen', badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
-  { k:'mem',   icon:'', name:'Memory Match',   desc:'Flip cards, find all the pairs',              badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
-  { k:'quiz',  icon:'', name:'EZER Trivia',    desc:'How well do you know company policy?',        badge:'Quiz',   bg:F.blueBg,     fg:F.blue },
-  { k:'wheel', icon:'', name:'Spin the Wheel', desc:'Daily spin — win a fun shoutout or a treat',  badge:'Social', bg:F.pinkBg,     fg:F.pink },
+  { k:'ttt',   icon:'⭕', name:'Tic-Tac-Toe',    desc:'Classic 2-player, take turns on this screen', badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
+  { k:'mem',   icon:'🧩', name:'Memory Match',   desc:'Flip cards, find all the pairs',              badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
+  { k:'quiz',  icon:'💡', name:'EZER Trivia',    desc:'How well do you know company policy?',        badge:'Quiz',   bg:F.blueBg,     fg:F.blue },
+  { k:'wheel', icon:'🎡', name:'Spin the Wheel', desc:'Daily spin — win a fun shoutout or a treat',  badge:'Social', bg:F.pinkBg,     fg:F.pink },
 ]
 
 function BackBtn({ onClick }: { onClick: () => void }) {
@@ -80,7 +80,11 @@ function TicTacToe({ onBack }: { onBack: () => void }) {
 }
 
 // ── Memory Match ────────────────────────────────────────────────
-const MEM_EMOJIS = ['','','','','','','','']
+// Eight DISTINCT faces. They were eight empty strings, which meant
+// cards[a] === cards[b] was '' === '' for any two cards: every first pair
+// matched and the game was won in eight flips. A blank deck also renders as
+// sixteen blank tiles, so it looked broken as well as being broken.
+const MEM_EMOJIS = ['🍕', '🎧', '🚀', '🌵', '🎲', '⚓', '🧩', '🎸']
 // Fisher–Yates. sort(() => Math.random() - 0.5) — what the prototype used — is not a
 // uniform shuffle; some layouts come up far more often than others.
 function shuffleDeck(): string[] {

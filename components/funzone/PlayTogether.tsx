@@ -18,6 +18,8 @@ import { canInvite, canAccept, canDecline, canCancel, effectiveStatus,
          minutesLeft, inboxOrder, STATUS_LABEL, inviteLine,
          INVITE_TTL_MINUTES, type Invite } from '@/lib/funzone/invite'
 import LiveTicTacToe from './LiveTicTacToe'
+import LiveMemoryMatch from './LiveMemoryMatch'
+import LiveTrivia from './LiveTrivia'
 
 const MISSING = 'PGRST205'
 const nowIso = () => new Date().toISOString()
@@ -34,7 +36,8 @@ export default function PlayTogether({ meId }: { meId: string }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState<string | null>(null)
   const [live, setLive] = useState<
-    { sessionId: string; hostId: string; opponent: string } | null>(null)
+    { sessionId: string; hostId: string; opponent: string
+      gameCode: string; seed: number } | null>(null)
   // Re-render on a timer so the countdown on a pending invite actually counts
   // down, rather than sitting at the value it had when the page loaded.
   const [, tick] = useState(0)
@@ -88,10 +91,14 @@ export default function PlayTogether({ meId }: { meId: string }) {
   }, [meId])
 
   if (live) {
-    return (
-      <LiveTicTacToe sessionId={live.sessionId} meId={meId} hostId={live.hostId}
-        opponentName={live.opponent} onExit={() => { setLive(null); load() }} />
-    )
+    const shared = {
+      sessionId: live.sessionId, seed: live.seed, meId, hostId: live.hostId,
+      opponentName: live.opponent, onExit: () => { setLive(null); load() },
+    }
+    if (live.gameCode === 'mem')  return <LiveMemoryMatch {...shared} />
+    if (live.gameCode === 'quiz') return <LiveTrivia {...shared} />
+    return <LiveTicTacToe sessionId={shared.sessionId} meId={meId} hostId={live.hostId}
+             opponentName={live.opponent} onExit={shared.onExit} />
   }
 
   if (ready === false) {
@@ -134,10 +141,11 @@ export default function PlayTogether({ meId }: { meId: string }) {
     const r = await supabase.rpc('accept_game_invite', { p_invite: inv.id })
     setBusy(false)
     if (r.error) { setErr(r.error.message); load(); return }
-    const d = r.data as { session_id?: string } | null
+    const d = r.data as { session_id?: string; seed?: number; game_code?: string } | null
     if (d?.session_id) {
       setLive({ sessionId: d.session_id, hostId: inv.fromId,
-                opponent: inv.fromName ?? 'your opponent' })
+                opponent: inv.fromName ?? 'your opponent',
+                gameCode: d.game_code ?? inv.gameCode, seed: d.seed ?? 1 })
     }
   }
 
