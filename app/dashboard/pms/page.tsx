@@ -24,6 +24,7 @@ import { PERIOD_OPEN } from '@/lib/pms/status'
 import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
 import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
          FlowTab, type AdminTab, type PipRow } from '@/components/pms/AdminTabs'
+import AdminEditor from '@/components/pms/AdminEditor'
 import '@/components/pms/pms.css'
 import { type Frequency, type Policy } from '@/lib/pms/policy'
 import { localToday } from '@/components/pms/CycleHeader'
@@ -284,6 +285,7 @@ export default function PmsPage() {
           {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading} />}
           {tab === 'config'   && <ConfigTab freq={freq} onFreq={setFreq} fyStart={fyStart}
                                             fyLabel={fyLabel} today={localToday()} />}
+          {tab === 'setup'    && <AdminEditor />}
           {tab === 'policies' && <PolicyTab policies={policies} people={[]} />}
           {tab === 'upload'   && <UploadTab />}
           {tab === 'pip'      && <PipTab queue={PIP_QUEUE} />}

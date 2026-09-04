@@ -62,10 +62,12 @@ import { rollUp, type FillRow } from '@/lib/pms/rollup'
 import { humanDate } from '@/lib/pms/cycle'
 
 export type AdminTab =
-  | 'config' | 'policies' | 'fill' | 'upload' | 'pip' | 'reports'
+  | 'config' | 'setup' | 'policies' | 'fill' | 'upload' | 'pip' | 'reports'
 
 export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
   { k: 'config',   label: 'PMS Configuration',  blurb: 'Frequency, windows and the KRA rules everyone is held to' },
+  // The only tab that writes. Everything else on this screen reports.
+  { k: 'setup',    label: 'Setup & Controls',   blurb: 'Edit the policy, KRA library and rating scale; generate and open periods' },
   { k: 'policies', label: 'Policy Builder',     blurb: 'Different cycles for different groups, and who falls under which' },
   { k: 'fill',     label: 'Fill Status Tracker',blurb: 'Live status for everyone, and who to chase' },
   { k: 'upload',   label: 'Final Rating Upload',blurb: 'Bulk override from an offline calibration' },
@@ -187,12 +189,17 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
   const periods = previewPeriods(freq, fyStart)
   return (
     <>
-      <Card title="Cycle & frequency configuration"
-            sub="Change the frequency and every period below regenerates, windows and all.">
+      <Card title="Cycle & frequency preview"
+            sub="Try a frequency and every period below regenerates, windows and all. This is a preview — nothing here is saved.">
         <div className="grid g4">
           <Fixed label="Company" value="All companies" />
           <Fixed label="Financial year" value={fyLabel} hint={`Starts ${shortDate(fyStart)}`} />
-          <Field label="Frequency">
+          {/* A preview control, and now labelled as one. It sat beside real
+              settings reading just "Frequency", so changing it looked like a
+              change that would stick — onFreq only ever set React state.
+              The control that saves is in Setup & Controls. */}
+          <Field label="Frequency (preview only)"
+                 hint="Save it in Setup & Controls → Policy rules">
             <select value={freq} onChange={e => onFreq(e.target.value as Frequency)}>
               {(Object.keys(PERIODS_PER_YEAR) as Frequency[]).map(f => (
                 <option key={f} value={f}>
