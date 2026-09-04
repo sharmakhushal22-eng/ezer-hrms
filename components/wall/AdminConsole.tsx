@@ -20,6 +20,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { wallRpc } from '@/lib/wall/rpc'
 // WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
 //
 // tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
@@ -116,6 +117,116 @@ function Table({ head, rows, empty }: {
 }
 
 // ── the console ──────────────────────────────────────────────────────────
+
+interface Loc { id: string; location_name: string }
+interface Screen { id: string; screen_name: string; pair_code: string; rotate_seconds: number; is_active: boolean; location_id: string }
+
+// The Screens area, writable. Every change goes through /api/ess/wall, which
+// resolves the actor from the session and calls the 101 wrapper — the board_screens
+// guard rejects an unidentified write, so there is no client-side shortcut.
+function ScreensManager({ employeeId }: { employeeId: string }) {
+  const [locs, setLocs] = useState<Loc[]>([])
+  const [screens, setScreens] = useState<Screen[]>([])
+  const [name, setName] = useState('')
+  const [locId, setLocId] = useState('')
+  const [rotate, setRotate] = useState('8')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState(''); const [err, setErr] = useState('')
+  const [copied, setCopied] = useState('')
+
+  const load = useCallback(async () => {
+    const { data: me } = await supabase.from('employees').select('company_id').eq('id', employeeId).maybeSingle()
+    const co = me?.company_id
+    if (co) {
+      const { data: l } = await supabase.from('locations').select('id, location_name').eq('company_id', co).eq('status', 'Active').order('location_name')
+      setLocs((l ?? []) as Loc[])
+      if (l?.length && !locId) setLocId(l[0].id)
+    }
+    const { data: s } = await supabase.from('board_screens').select('id, screen_name, pair_code, rotate_seconds, is_active, location_id').order('created_at', { ascending: false })
+    setScreens((s ?? []) as Screen[])
+  }, [employeeId])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load() }, [load])
+
+  const flash = (setter: (v: string) => void, v: string) => { setter(v); setTimeout(() => setter(''), 3000) }
+
+  async function add() {
+    setErr(''); setMsg('')
+    if (!name.trim()) return flash(setErr, 'Give the screen a name')
+    if (!locId) return flash(setErr, 'Pick a location')
+    setBusy(true)
+    const { error } = await wallRpc('create_board_screen', { p_location: locId, p_name: name.trim(), p_rotate: Number(rotate) || 8 }, employeeId)
+    setBusy(false)
+    if (error) return flash(setErr, error.message)
+    setName(''); flash(setMsg, 'Screen added — share its pair code with the TV'); load()
+  }
+  async function toggle(sc: Screen) {
+    const { error } = await wallRpc('set_board_screen_active', { p_screen: sc.id, p_active: !sc.is_active }, employeeId)
+    if (error) return flash(setErr, error.message); load()
+  }
+  async function rotateCode(sc: Screen) {
+    const { error } = await wallRpc('rotate_board_pair_code', { p_screen: sc.id }, employeeId)
+    if (error) return flash(setErr, error.message); flash(setMsg, 'New pair code issued — the old one no longer works'); load()
+  }
+  async function remove(sc: Screen) {
+    const { error } = await wallRpc('delete_board_screen', { p_screen: sc.id }, employeeId)
+    if (error) return flash(setErr, error.message); load()
+  }
+  const copy = async (code: string) => { try { await navigator.clipboard.writeText(code) } catch { /* best effort */ } flash(setCopied, code) }
+
+  const inp: React.CSSProperties = { padding: '8px 10px', border: `1px solid ${C.line}`, borderRadius: 9, fontSize: F.small, background: C.sunken, color: C.ink, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
+
+  return (
+    <Card>
+      <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>Screens</div>
+      <div style={{ fontSize: F.micro, color: C.muted, marginTop: 3, marginBottom: S.md }}>Televisions on the wall, and their pair codes</div>
+
+      {/* Add a screen */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: S.md, padding: S.md, background: C.sunken, borderRadius: R.md }}>
+        <div style={{ flex: '2 1 180px' }}>
+          <label style={{ fontSize: F.micro, color: C.muted, display: 'block', marginBottom: 3 }}>Screen name</label>
+          <input style={{ ...inp, width: '100%' }} placeholder="Manesar Plant · Gate 2" value={name} onChange={e => setName(e.target.value)} />
+        </div>
+        <div style={{ flex: '1 1 140px' }}>
+          <label style={{ fontSize: F.micro, color: C.muted, display: 'block', marginBottom: 3 }}>Location</label>
+          <select style={{ ...inp, width: '100%', cursor: 'pointer' }} value={locId} onChange={e => setLocId(e.target.value)}>
+            {locs.length === 0 && <option value="">No locations</option>}
+            {locs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+        </div>
+        <div style={{ width: 96 }}>
+          <label style={{ fontSize: F.micro, color: C.muted, display: 'block', marginBottom: 3 }}>Rotate (s)</label>
+          <input type="number" min={5} max={120} style={{ ...inp, width: '100%' }} value={rotate} onChange={e => setRotate(e.target.value)} />
+        </div>
+        <button onClick={add} disabled={busy}
+          style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: C.brand, color: C.onAccent, fontWeight: W.bold, fontSize: F.small, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: busy ? 0.6 : 1 }}>
+          {busy ? 'Adding…' : '+ Add screen'}
+        </button>
+      </div>
+
+      {/* Existing screens */}
+      {screens.length === 0 ? (
+        <div style={{ fontSize: F.micro, color: C.muted, padding: '14px 0', textAlign: 'center' }}>No screens paired yet. Add one to put the wall on a television.</div>
+      ) : screens.map(sc => (
+        <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.line}`, flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 160px', minWidth: 0 }}>
+            <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.screen_name}</div>
+            <div style={{ fontSize: F.micro, color: C.muted }}>{sc.rotate_seconds}s rotation · {sc.is_active ? 'active' : 'off'}</div>
+          </div>
+          <button onClick={() => copy(sc.pair_code)} title="Copy pair code"
+            style={{ fontFamily: 'ui-monospace, monospace', fontSize: F.small, fontWeight: W.bold, letterSpacing: '.12em', color: C.brandDeep, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}>
+            {copied === sc.pair_code ? 'Copied ✓' : sc.pair_code}
+          </button>
+          <button onClick={() => rotateCode(sc)} style={{ fontSize: F.micro, padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.line}`, background: C.surface, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>↻ New code</button>
+          <button onClick={() => toggle(sc)} style={{ fontSize: F.micro, padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.line}`, background: C.surface, color: sc.is_active ? C.warning : C.positive, cursor: 'pointer', fontFamily: 'inherit' }}>{sc.is_active ? 'Deactivate' : 'Activate'}</button>
+          <button onClick={() => remove(sc)} style={{ fontSize: F.micro, padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.line}`, background: C.surface, color: C.critical, cursor: 'pointer', fontFamily: 'inherit' }}>Remove</button>
+        </div>
+      ))}
+
+      {msg && <div style={{ fontSize: F.micro, color: C.positive, marginTop: S.md }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize: F.micro, color: C.critical, marginTop: S.md }}>⚠ {err}</div>}
+    </Card>
+  )
+}
 
 export default function AdminConsole({ employeeId }: { employeeId: string }) {
   const [area, setArea] = useState<AreaKey>('awards')
@@ -248,7 +359,9 @@ export default function AdminConsole({ employeeId }: { employeeId: string }) {
         })}
       </div>
 
-      {may ? (
+      {may && area === 'screens' ? (
+        <ScreensManager employeeId={employeeId} />
+      ) : may ? (
         <Card>
           <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{current.label}</div>
           <div style={{ fontSize: F.micro, color: C.muted, marginTop: 3, marginBottom: S.md }}>

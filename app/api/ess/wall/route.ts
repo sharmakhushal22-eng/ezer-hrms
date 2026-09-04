@@ -47,6 +47,13 @@ const ACTIONS: Record<string, { fn: string; params: readonly string[]; write: bo
   request_share_to_feed:  { fn: 'request_share_to_feed_as',  params: ['p_message'] , write: true },
   approve_share_to_feed:  { fn: 'approve_share_to_feed_as',  params: ['p_message', 'p_visibility'] , write: true },
   set_recognition_marks:  { fn: 'set_recognition_marks_as',  params: ['p_recognition', 'p_badge_ref', 'p_tag_refs'] , write: true },
+  // Board screens (wall TVs) — 101. Each wrapper sets the actor for its own
+  // transaction, so the enforce_wall_admin('wof.board.manage') guard on
+  // board_screens sees a real administrator.
+  create_board_screen:    { fn: 'create_board_screen_as',    params: ['p_location', 'p_name', 'p_rotate', 'p_scope'] , write: true },
+  set_board_screen_active:{ fn: 'set_board_screen_active_as', params: ['p_screen', 'p_active'] , write: true },
+  rotate_board_pair_code: { fn: 'rotate_board_pair_code_as',  params: ['p_screen'] , write: true },
+  delete_board_screen:    { fn: 'delete_board_screen_as',     params: ['p_screen'] , write: true },
 }
 
 /** PostgREST's "no such function". Means 094 has not been run — a deployment
