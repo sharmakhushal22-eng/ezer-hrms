@@ -15,6 +15,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { funzone } from '@/lib/funzone/client'
 import { C, F, W, S, R } from '@/lib/ui'
 import { memDeck, memReplay, memCanApply, memResult, MEM_CARDS,
          type MemTurn } from '@/lib/funzone/games'
@@ -110,9 +111,9 @@ export default function LiveMemoryMatch({ sessionId, seed, meId, hostId, opponen
     const r = memResult(deck, turns)
     if (saved.current || !r) return
     saved.current = true
-    supabase.rpc('finish_game', {
-      p_session: sessionId, p_moves: [],
-      p_claim: { winner: r.winner, draw: r.draw, host: r.scores.HOST, guest: r.scores.GUEST },
+    funzone('finish', {
+      session: sessionId, moves: [],
+      claim: { winner: r.winner, draw: r.draw, host: r.scores.HOST, guest: r.scores.GUEST },
     }).then(() => {}, () => {})
   }, [turns, deck, sessionId])
 

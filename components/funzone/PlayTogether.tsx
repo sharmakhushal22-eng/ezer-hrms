@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { listInvites, funzone } from '@/lib/funzone/client'
 import { C, F, W, S, R } from '@/lib/ui'
 import { LIVE_GAMES, gameByCode } from '@/lib/funzone/games'
 import { canInvite, canAccept, canDecline, canCancel, effectiveStatus,
@@ -29,6 +30,11 @@ interface Colleague { id: string; name: string; code?: string | null }
 export default function PlayTogether({ meId }: { meId: string }) {
   const [invites, setInvites] = useState<Invite[]>([])
   const [people, setPeople] = useState<Colleague[]>([])
+  const [query, setQuery] = useState('')
+  /** Held separately from the search results, which are cleared on pick —
+   *  otherwise the field would forget who it is addressed to. */
+  const [chosen, setChosen] = useState<Colleague | null>(null)
+  const [searching, setSearching] = useState(false)
   const [ready, setReady] = useState<boolean | null>(null)
   const [game, setGame] = useState(LIVE_GAMES[0].code)
   const [who, setWho] = useState('')
@@ -42,53 +48,44 @@ export default function PlayTogether({ meId }: { meId: string }) {
   // down, rather than sitting at the value it had when the page loaded.
   const [, tick] = useState(0)
   useEffect(() => {
-    const t = setInterval(() => tick(n => n + 1), 30_000)
+    // It also REFETCHES now. This used to only bump the counter, so an invite
+    // arriving while the tab was open never appeared — the page had to be
+    // reloaded to see it. That, with the missing notification, is why invites
+    // looked like they went nowhere.
+    const t = setInterval(() => { tick(n => n + 1); load() }, 15_000)
     return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const load = useCallback(async () => {
-    const r = await supabase.from('game_invites')
-      .select('id,game_code,from_employee,to_employee,status,created_at,message,session_id')
-      .or(`from_employee.eq.${meId},to_employee.eq.${meId}`)
-      .order('created_at', { ascending: false }).limit(40)
-    if (r.error) {
-      setReady((r.error as { code?: string }).code !== MISSING)
-      return
-    }
-    setReady(true)
-    const rows = (r.data ?? []) as Record<string, unknown>[]
-    const ids = [...new Set(rows.flatMap(x =>
-      [String(x.from_employee), String(x.to_employee)]))].filter(i => i !== meId)
-    const names = new Map<string, string>()
-    if (ids.length) {
-      const e = await supabase.from('employees').select('id,full_name').in('id', ids)
-      for (const x of (e.data ?? []) as { id: string; full_name: string }[]) {
-        names.set(x.id, x.full_name)
-      }
-    }
-    setInvites(rows.map(x => ({
-      id: String(x.id), gameCode: String(x.game_code),
-      fromId: String(x.from_employee), fromName: names.get(String(x.from_employee)) ?? null,
-      toId: String(x.to_employee), toName: names.get(String(x.to_employee)) ?? null,
-      status: String(x.status) as Invite['status'],
-      createdAt: String(x.created_at), message: (x.message as string) ?? null,
-    })))
-  }, [meId])
+    // One call. The route resolves who I am, reads both sides of the invite
+    // list and resolves the names, so there is no second trip to employees.
+    const r = await listInvites()
+    if (r.error) { setReady(false); return }
+    setReady(r.data?.installed !== false)
+    setInvites(r.data?.invites ?? [])
+  }, [])
 
   useEffect(() => { load() }, [load])
 
+  // Search, never browse. This used to pull up to 300 colleagues into a
+  // dropdown the moment the tab opened — the whole company directory handed
+  // to everybody, whether or not they had somebody in mind. Now you type at
+  // least two characters of a name or an employee code and the server returns
+  // at most ten matches.
   useEffect(() => {
-    (async () => {
-      const me = await supabase.from('employees').select('company_id').eq('id', meId).maybeSingle()
-      const cid = (me.data as { company_id?: string } | null)?.company_id
-      let q = supabase.from('employees').select('id,full_name,emp_code')
-        .neq('id', meId).is('date_of_leaving', null).order('full_name').limit(300)
-      if (cid) q = q.eq('company_id', cid)
-      const r = await q
-      setPeople(((r.data ?? []) as { id: string; full_name: string; emp_code: string }[])
-        .map(x => ({ id: x.id, name: x.full_name, code: x.emp_code })))
-    })()
-  }, [meId])
+    const term = query.trim()
+    if (term.length < 2) { setPeople([]); setSearching(false); return }
+    setSearching(true)
+    // Debounced: a keystroke per request would fire one for every letter of a
+    // name, and the answers could arrive out of order.
+    const t = setTimeout(async () => {
+      const r = await funzone<{ people: Colleague[] }>('search', { q: term })
+      setSearching(false)
+      setPeople(r.error ? [] : (r.data?.people ?? []))
+    }, 250)
+    return () => clearTimeout(t)
+  }, [query])
 
   if (live) {
     const shared = {
@@ -125,35 +122,39 @@ export default function PlayTogether({ meId }: { meId: string }) {
 
   const send = async () => {
     setBusy(true); setErr(null)
-    const me = await supabase.from('employees').select('company_id').eq('id', meId).maybeSingle()
-    const r = await supabase.from('game_invites').insert({
-      company_id: (me.data as { company_id?: string } | null)?.company_id,
-      game_code: game, from_employee: meId, to_employee: who,
-      message: note.trim() || null,
-    })
+    // The route files the invite AND notifies the recipient. The insert used
+    // to happen right here, and nothing ever told the other person.
+    const r = await funzone('send', { to: who, game, message: note.trim() || null })
     setBusy(false)
     if (r.error) { setErr(r.error.message); return }
-    setWho(''); setNote(''); load()
+    // Clear the whole picker, not just the id — leaving the name behind
+    // would suggest the next invite is already addressed.
+    setWho(''); setChosen(null); setQuery(''); setPeople([]); setNote(''); load()
   }
 
   const accept = async (inv: Invite) => {
     setBusy(true); setErr(null)
-    const r = await supabase.rpc('accept_game_invite', { p_invite: inv.id })
+    const r = await funzone<{ session?: { session_id?: string; seed?: number; game_code?: string } }>(
+      'accept', { id: inv.id })
     setBusy(false)
     if (r.error) { setErr(r.error.message); load(); return }
-    const d = r.data as { session_id?: string; seed?: number; game_code?: string } | null
+    const d = r.data?.session
     if (d?.session_id) {
       setLive({ sessionId: d.session_id, hostId: inv.fromId,
                 opponent: inv.fromName ?? 'your opponent',
                 gameCode: d.game_code ?? inv.gameCode, seed: d.seed ?? 1 })
     }
+    load()
   }
 
   const answer = async (inv: Invite, status: 'DECLINED' | 'CANCELLED') => {
-    setBusy(true)
-    await supabase.from('game_invites')
-      .update({ status, answered_at: now }).eq('id', inv.id)
-    setBusy(false); load()
+    setBusy(true); setErr(null)
+    // Was a bare UPDATE with no ownership test — anybody could decline
+    // anybody's invite. The route checks who may decline and who may cancel.
+    const r = await funzone('answer', { id: inv.id, status })
+    setBusy(false)
+    if (r.error) setErr(r.error.message)
+    load()
   }
 
   return (
@@ -179,12 +180,28 @@ export default function PlayTogether({ meId }: { meId: string }) {
           </label>
           <label style={{ display: 'block' }}>
             <span style={lbl}>Who</span>
-            <select value={who} onChange={e => setWho(e.target.value)} style={fld}>
-              <option value="">Choose a colleague</option>
-              {people.map(p => (
-                <option key={p.id} value={p.id}>{p.name}{p.code ? ` (${p.code})` : ''}</option>
-              ))}
-            </select>
+            {/* Once somebody is chosen the search box is replaced by their
+                name, so the field always shows who the invite is actually
+                for rather than whatever was last typed. */}
+            {who ? (
+              <div style={{ ...fld, display: 'flex', alignItems: 'center',
+                            justifyContent: 'space-between', gap: 8 }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis',
+                               whiteSpace: 'nowrap' }}>
+                  {chosen ? `${chosen.name}${chosen.code ? ` (${chosen.code})` : ''}` : ''}
+                </span>
+                <button type="button"
+                        onClick={() => { setWho(''); setChosen(null); setQuery(''); setPeople([]) }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer',
+                                 color: C.muted, fontSize: F.micro, padding: 0 }}>
+                  change
+                </button>
+              </div>
+            ) : (
+              <input value={query} onChange={e => setQuery(e.target.value)}
+                     placeholder="Name or employee code" style={fld}
+                     aria-label="Search for a colleague by name or employee code" />
+            )}
           </label>
           <label style={{ display: 'block' }}>
             <span style={lbl}>Say something (optional)</span>
@@ -198,7 +215,36 @@ export default function PlayTogether({ meId }: { meId: string }) {
             {verdict.because}
           </div>
         )}
-        {err && <div style={{ fontSize: F.micro, color: C.critical, marginTop: 8 }}>{err}</div>}
+        {err && <div style={{ fontSize: F.micro, color: C.critical, marginTop: 8 }}>{err}</div>}        {/* Only rendered while searching. There is no idle state listing
+            everybody — that is the point of the change. */}
+        {!who && query.trim().length >= 2 && (
+          <div style={{ marginTop: S.sm, border: `1px solid ${C.line}`,
+                        borderRadius: R.md, overflow: 'hidden' }}>
+            {searching && (
+              <div style={{ padding: '8px 10px', fontSize: F.micro, color: C.muted }}>
+                Searching…
+              </div>
+            )}
+            {!searching && !people.length && (
+              <div style={{ padding: '8px 10px', fontSize: F.micro, color: C.muted }}>
+                Nobody matches “{query.trim()}”. Try a different spelling, or their employee code.
+              </div>
+            )}
+            {!searching && people.map(pp => (
+              <button key={pp.id} type="button"
+                      onClick={() => { setWho(pp.id); setChosen(pp); setPeople([]) }}
+                      style={{ display: 'block', width: '100%', textAlign: 'left',
+                               padding: '8px 10px', background: 'none', cursor: 'pointer',
+                               border: 'none', borderTop: `1px solid ${C.line}`,
+                               fontSize: F.micro, color: C.ink }}>
+                <b>{pp.name}</b>
+                {pp.code ? <span style={{ color: C.muted }}> · {pp.code}</span> : null}
+              </button>
+            ))}
+          </div>
+        )}
+
+
 
         <button onClick={send} disabled={!who || !verdict.ok || busy}
           style={{ marginTop: 12, fontFamily: 'inherit', fontSize: F.small,

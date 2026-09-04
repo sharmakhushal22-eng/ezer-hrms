@@ -21,6 +21,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { funzone } from '@/lib/funzone/client'
 import { C, F, W, S, R } from '@/lib/ui'
 import { boardFrom, outcome, canApply, resultOf, other,
          type Move, type Mark } from '@/lib/funzone/games'
@@ -120,7 +121,10 @@ export default function LiveTicTacToe({ sessionId, meId, hostId, opponentName, o
   useEffect(() => {
     if (saved.current || state.kind === 'playing' || !resultOf(moves)) return
     saved.current = true
-    supabase.rpc('finish_game', { p_session: sessionId, p_moves: moves })
+    // Through the route: finish_game identifies the player from a session
+    // setting PostgREST cannot set, so called directly it recorded the result
+    // against nobody.
+    funzone('finish', { session: sessionId, moves })
       .then(() => {}, () => {})   // a lost score must not break the screen
   }, [state.kind, moves, sessionId])
 

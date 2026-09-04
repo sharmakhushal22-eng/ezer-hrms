@@ -22,6 +22,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { funzone } from '@/lib/funzone/client'
 import { C, F, W, S, R } from '@/lib/ui'
 import { quizFor, quizReplay, quizCanApply, quizResult, type Answer } from '@/lib/funzone/games'
 import { channelFor, EVENT, isPacket, reconcileList, sideFor, STATUS_TEXT,
@@ -127,9 +128,9 @@ export default function LiveTrivia({ sessionId, seed, meId, hostId, opponentName
     const r = quizResult(qs, answers)
     if (saved.current || !r) return
     saved.current = true
-    supabase.rpc('finish_game', {
-      p_session: sessionId, p_moves: [],
-      p_claim: { winner: r.winner, draw: r.draw, host: r.scores.HOST, guest: r.scores.GUEST },
+    funzone('finish', {
+      session: sessionId, moves: [],
+      claim: { winner: r.winner, draw: r.draw, host: r.scores.HOST, guest: r.scores.GUEST },
     }).then(() => {}, () => {})
   }, [answers, qs, sessionId])
 
