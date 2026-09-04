@@ -35,12 +35,10 @@ NAVSRC = lay[lay.index('const NAV: NavGroup[]'):lay.index('const OPEN_W')]
 GROUPS = [(m.group(1), re.findall(r"label: '([^']+)',\s*href: '([^']+)',\s*Icon: (\w+),\s*module: (null|'[^']*')", m.group(2)))
           for m in re.finditer(r"\{ group: '([^']*)', items: \[(.*?)\]\}", NAVSRC, re.S)]
 ITEMS = [(g,l,h,i,m.strip("'") if m!='null' else None) for g,its in GROUPS for l,h,i,m in its]
-HUE  = dict(re.findall(r"'(/dashboard[^']*)':\s*'(#[0-9A-Fa-f]{6})'", lay))
-INK  = {g:(l,d) for g,l,d in re.findall(r"'([^']+)':\s*\{ inkL: '(#[0-9A-Fa-f]{6})', inkD: '(#[0-9A-Fa-f]{6})' \}", lay)}
 ROUTE_MODULE = dict(re.findall(r"'(/dashboard[^']*)':\s*'([^']+)'", mods[mods.index('ROUTE_MODULE'):]))
 
-print('\n  parsed: %d groups, %d items, %d hues, %d group inks, %d routes\n'
-      % (len(GROUPS), len(ITEMS), len(HUE), len(INK), len(ROUTE_MODULE)))
+print('\n  parsed: %d groups, %d items, %d routes — one blue, no per-item hues\n'
+      % (len(GROUPS), len(ITEMS), len(ROUTE_MODULE)))
 
 # ── 1. structure ──────────────────────────────────────────────────────────
 check('every NAV item parsed with a module field', len(ITEMS) == 27, '%d items' % len(ITEMS))
@@ -51,15 +49,10 @@ missing_page = [h for _,_,h,_,_ in ITEMS
                 if not (ROOT/('app'+h)/'page.tsx').exists() and not (ROOT/('app'+h)/'page.ts').exists()]
 check('every href has a page file', not missing_page, str(missing_page))
 
-no_hue = [h for _,_,h,_,_ in ITEMS if h not in HUE]
-check('every item has an explicit hue (no silent fallback)', not no_hue, str(no_hue))
-check('no orphan hues (a hue with no row)', set(HUE) == set(x[2] for x in ITEMS),
-      str(set(HUE) ^ set(x[2] for x in ITEMS)))
-
-named = [g for g,_ in GROUPS if g]
-check('every named section has its own ink pair', all(g in INK for g in named),
-      str([g for g in named if g not in INK]))
-check('no orphan section inks', set(INK) == set(named), str(set(INK) ^ set(named)))
+# The rail is ONE BLUE now. A per-item hue map or a per-section ink map
+# coming back would be the multi-colour design returning by accident.
+check('no per-item hue map', "hueOf" not in lay and "const HUE" not in lay)
+check('no per-section ink map', "GROUP_INK" not in lay and "inkOf" not in lay)
 
 # ── 2. sidebar filter vs URL guard — one source of truth ──────────────────
 def module_for(path):
@@ -69,74 +62,254 @@ def module_for(path):
     return ROUTE_MODULE[hits[0]] if hits else None
 mismatch = [(h, m, module_for(h)) for _,_,h,_,m in ITEMS if module_for(h) != m]
 check('sidebar module == moduleForPath for every row', not mismatch, str(mismatch))
-
 # ── 3. colour, re-derived ─────────────────────────────────────────────────
+# TWO POLARITIES. Light is a PALE rail (navy ink, rows darker than the
+# ground, sections lighter); dark is a DEEP rail (white ink, rows lighter,
+# sections darker). Nothing below may assume which way round it is, so no
+# check names a direction: every figure is evaluated at EVERY stop of the
+# gradient and at every stop of the level's own gradient, and the worst
+# result is the one that has to clear the bar. That is stricter than
+# reasoning about which end ought to be worst, and it cannot go stale when
+# the polarity flips again.
 def rgb(x): x=x.lstrip('#'); return tuple(int(x[i:i+2],16) for i in (0,2,4))
+def hxs(t): return '#%02X%02X%02X' % tuple(max(0,min(255,round(v))) for v in t)
 def lin(c): c/=255; return c/12.92 if c<=.04045 else ((c+.055)/1.055)**2.4
 def L(x): r,g,b=rgb(x); return .2126*lin(r)+.7152*lin(g)+.0722*lin(b)
-def cr(a,b): l1,l2=sorted([L(a),L(b)],reverse=True); return (l1+.05)/(l2+.05)
-def over(f,b,a):
-    F_,B=rgb(f),rgb(b); return '#%02X%02X%02X'%tuple(round(F_[i]*a+B[i]*(1-a)) for i in range(3))
-def lab(x):
-    r,g,b=[lin(v) for v in rgb(x)]
-    X=(.4124*r+.3576*g+.1805*b)/.95047; Y=.2126*r+.7152*g+.0722*b; Z=(.0193*r+.1192*g+.9505*b)/1.08883
-    f=lambda t:t**(1/3) if t>.008856 else 7.787*t+16/116
-    fx,fy,fz=f(X),f(Y),f(Z); return (116*fy-16,500*(fx-fy),200*(fy-fz))
-def dE(a,b): A,B=lab(a),lab(b); return sum((A[i]-B[i])**2 for i in range(3))**.5
-def addL(c,d):
-    r,g,b=[v/255 for v in rgb(c)]; h,l,s=colorsys.rgb_to_hls(r,g,b)
-    R,G,B=colorsys.hls_to_rgb(h,min(l+d,.92),s); return '#%02X%02X%02X'%(round(R*255),round(G*255),round(B*255))
+def cr(a,b):
+    l1,l2=sorted([L(a),L(b)],reverse=True); return (l1+.05)/(l2+.05)
+def sat(h):
+    r,g,b=[v/255 for v in rgb(h)]
+    hi,lo=max(r,g,b),min(r,g,b)
+    if hi==lo: return 0.0
+    l=(hi+lo)/2
+    return (hi-lo)/(2-hi-lo) if l>.5 else (hi-lo)/(hi+lo)
+def hue(h):
+    r,g,b=[v/255 for v in rgb(h)]
+    hi,lo=max(r,g,b),min(r,g,b)
+    if hi==lo: return 0.0
+    d=hi-lo
+    if hi==r: x=((g-b)/d)%6
+    elif hi==g: x=(b-r)/d+2
+    else: x=(r-g)/d+4
+    return x*60
+def over(a,fg,g):
+    g=rgb(g); return hxs(tuple(fg[i]*a+g[i]*(1-a) for i in range(3)))
 
-RAIL_L, RAIL_D = '#FFFFFF', '#171B21'
-order = [h for _,_,h,_,_ in ITEMS]
-seq   = [HUE[h] for h in order]
+css = lay[lay.index('<style>{`', lay.index('const NAV: NavGroup[]')):]
+css = css[:css.index('`}</style>')]
+cssn = re.sub(r'\$\{[^}]*\}', 'TOKEN', css)
+cssz = re.sub(r'\s+', '', cssn)
 
-worst = min((dE(seq[i-1],seq[i]), order[i-1], order[i]) for i in range(1,len(seq)))
-check('adjacent rows distinguishable in light (dE >= 15)', worst[0] >= 15,
-      'worst %.1f  %s / %s' % (worst[0], worst[1].split('/')[-1], worst[2].split('/')[-1]))
-dseq  = [addL(c,.26) for c in seq]
-worstd = min((dE(dseq[i-1],dseq[i]), order[i-1], order[i]) for i in range(1,len(seq)))
-check('adjacent rows distinguishable in dark (dE >= 15)', worstd[0] >= 15,
-      'worst %.1f  %s / %s' % (worstd[0], worstd[1].split('/')[-1], worstd[2].split('/')[-1]))
+# Each theme block: its gradient stops and its token table.
+blocks = []
+for m in re.finditer(r'\.ez-rail\{(.*?)\n\s*\}', css, re.S):
+    body = m.group(1)
+    g = re.search(r'linear-gradient\(180deg,\s*(#[0-9A-Fa-f]{6})[^)]*?(#[0-9A-Fa-f]{6})\s*100%\)', body)
+    if not g: continue
+    toks = dict(re.findall(r'(--[\w-]+):\s*([^;]+);', body))
+    blocks.append((g.group(1).upper(), g.group(2).upper(), toks, body))
+check('both rails are declared: one pale, one deep', len(blocks) >= 2,
+      '%d rail blocks' % len(blocks))
 
-badL = [(h, round(cr(HUE[h], over(HUE[h], RAIL_L, .12)),2)) for h in order
-        if cr(HUE[h], over(HUE[h], RAIL_L, .12)) < 3.0]
-check('idle glyph >= 3:1 on its tile, light', not badL, str(badL))
-badD = [(h, round(cr(addL(HUE[h],.26), over(HUE[h], RAIL_D, .20)),2)) for h in order
-        if cr(addL(HUE[h],.26), over(HUE[h], RAIL_D, .20)) < 3.0]
-check('idle glyph >= 3:1 on its tile, dark', not badD, str(badD))
-badA = [(h, round(cr('#FFFFFF', HUE[h]),2)) for h in order if cr('#FFFFFF', HUE[h]) < 3.0]
-check('active white glyph >= 3:1 on its tile', not badA, str(badA))
+def stops_of(decl):
+    """Every colour a level paints, as (r,g,b,alpha). A level may be one
+       rgba() or a gradient of several; all of them are real pixels."""
+    return [(int(a),int(b),int(c),float(d))
+            for a,b,c,d in re.findall(r'rgba\((\d+),\s*(\d+),\s*(\d+),\s*([\d.]+)\)', decl)]
 
-def tok(name, block):
-    m = re.search(re.escape(name)+r':\s*(#[0-9A-Fa-f]{6})', block); return m.group(1) if m else None
-light_blk = theme[:theme.index('@media (prefers-color-scheme: dark)')]
-dark_blk  = theme[theme.index(':root[data-ez-theme="dark"]'):]
-itemL, itemD = tok('--ez-rail-item', light_blk), tok('--ez-rail-item', dark_blk)
-check('label ink >= 4.5:1 light', itemL and cr(itemL, RAIL_L) >= 4.5, '%s %.2f' % (itemL, cr(itemL, RAIL_L)))
-check('label ink >= 4.5:1 dark',  itemD and cr(itemD, RAIL_D) >= 4.5, '%s %.2f' % (itemD, cr(itemD, RAIL_D)))
-check('label ink not near-black (the "extremely dark" regression)',
-      cr(itemL, RAIL_L) <= 12.0, '%.2f:1 (cap 12)' % cr(itemL, RAIL_L))
+def painted(toks, name, ground):
+    """Every pixel colour this level can take on `ground`."""
+    if name not in toks: return []
+    st = stops_of(toks[name])
+    if not st:
+        hexes = re.findall(r'#[0-9A-Fa-f]{6}', toks[name])
+        return [h.upper() for h in hexes]
+    return [over(a, (r, g, b), ground) for r, g, b, a in st]
 
-badG = [(g, round(cr(l,RAIL_L),2), round(cr(d,RAIL_D),2)) for g,(l,d) in INK.items()
-        if cr(l,RAIL_L) < 4.5 or cr(d,RAIL_D) < 4.5]
-check('section heading ink >= 4.5:1 in both themes', not badG, str(badG))
-same = [g for g,(l,d) in INK.items() if l == d]
-check('section inks differ per theme', not same, str(same))
+def ink(toks, name):
+    m = re.search(r'#[0-9A-Fa-f]{6}', toks.get(name, ''))
+    return m.group(0).upper() if m else None
 
-# ── 4. theming discipline ─────────────────────────────────────────────────
-css = lay[lay.index('<style>{`', lay.index('const HUE')):lay.index('`}</style>', lay.index('const HUE'))]
-check('dark tile rule declared for BOTH system and explicit dark',
-      css.count('.ez-nav:not(.ez-nav-on) .ez-nav-tile{') >= 2 and
-      ':root:not([data-ez-theme="light"])' in css and ':root[data-ez-theme="dark"]' in css)
-check('section ink swapped for BOTH dark states',
-      css.count('.ez-group{ --g-ink: var(--g-ink-d) }') == 2,
-      '%d occurrences' % css.count('.ez-group{ --g-ink: var(--g-ink-d) }'))
-check('relative-colour lift is @supports-guarded', '@supports (color: hsl(from' in css)
-check('prefers-reduced-motion honoured', '@media (prefers-reduced-motion: reduce)' in css)
-check('.ez-nav carries a default hue for rows without one', '--nav-hue: ' in css.split('transition')[0])
-check('--ez-rail-item defined in all three theme blocks',
-      theme.count('--ez-rail-item') == 3, '%d' % theme.count('--ez-rail-item'))
+BARS = {'label': 4.5, 'icon': 3.0, 'section': 4.5, 'hover ink': 4.5}
+for g1, g2, toks, body in blocks[:2]:
+    pale = L(g1) > 0.18
+    th = 'pale' if pale else 'deep'
+    grounds = [g1, g2]
+
+    inks = {'label': ink(toks, '--r-ink'), 'icon': ink(toks, '--r-icon'),
+            'section': ink(toks, '--r-sec-ink'), 'hover ink': ink(toks, '--r-ink-h')}
+    missing = [k for k, v in inks.items() if not v]
+    check('%-4s every rail ink is a declared token' % th, not missing, str(missing))
+    if missing: continue
+
+    # worst = the least contrast this ink ever has, over every ground stop
+    # and every stop of the surface it sits on
+    def worst_on(inkc, level_name):
+        vals = [cr(inkc, px) for g in grounds for px in painted(toks, level_name, g)]
+        return min(vals) if vals else None
+
+    for name, level_name in (('label', '--r-row'), ('icon', '--r-row'),
+                             ('section', '--r-band'), ('hover ink', '--r-row-h')):
+        v = worst_on(inks[name], level_name)
+        bar = BARS[name]
+        check('%-4s %-10s on its own surface >= %.1f' % (th, name, bar),
+              v is not None and v >= bar, '%.2f' % v if v else 'n/a')
+
+    # the icon must not read as a disabled row next to its label
+    # An icon markedly dimmer than the label beside it reads as a disabled
+    # row — that is what this catches. But the rule is about the icon being
+    # WEAK, not about the ratio: on a white card the label is near-black at
+    # 12.5 and an icon at 7.5 is in no danger of looking switched off, it
+    # is simply not black. So either it tracks the label, or it is strong
+    # enough on its own account.
+    li, ii = worst_on(inks['label'], '--r-row'), worst_on(inks['icon'], '--r-row')
+    check('%-4s the icon does not read as disabled next to its label' % th,
+          ii >= li * .75 or ii >= 4.5, 'icon %.2f vs label %.2f' % (ii, li))
+
+    # ── the levels, in whichever direction this polarity runs ────────────
+    def step(level_name):
+        return min(cr(px, g) for g in grounds for px in painted(toks, level_name, g))
+    check('%-4s the row separates from the ground   >= 1.15' % th,
+          step('--r-row') >= 1.15, '%.2f' % step('--r-row'))
+    check('%-4s the band separates from the ground  >= 1.15' % th,
+          step('--r-band') >= 1.15, '%.2f' % step('--r-band'))
+    # a band sits directly above the first row of its section, so they are
+    # judged on the SAME ground — never one at each end
+    rb = min(cr(r, b) for g in grounds
+             for r in painted(toks, '--r-row', g) for b in painted(toks, '--r-band', g))
+    check('%-4s row and band are told apart         >= 1.30' % th, rb >= 1.30, '%.2f' % rb)
+
+    # the row must go the OPPOSITE way from the band, or there are not four
+    # levels — only three and a coincidence
+    rows  = [px for g in grounds for px in painted(toks, '--r-row', g)]
+    bands = [px for g in grounds for px in painted(toks, '--r-band', g)]
+    gl    = [L(g) for g in grounds]
+    row_up  = all(L(r) > min(gl) for r in rows)  or all(L(r) < max(gl) for r in rows)
+    opposite = (sum(L(r) for r in rows)/len(rows) > sum(gl)/2) != \
+               (sum(L(b) for b in bands)/len(bands) > sum(gl)/2)
+    check('%-4s row and band lean OPPOSITE ways off the ground' % th, opposite)
+
+    # ── the selected pill ────────────────────────────────────────────────
+    pbg, pink = ink(toks, '--r-pill-bg'), ink(toks, '--r-pill-ink')
+    check('%-4s the pill and its ink are tokens' % th, bool(pbg and pink))
+    if pbg and pink:
+        check('%-4s ink on the selected pill >= 4.5' % th,
+              cr(pink, pbg) >= 4.5, '%.2f' % cr(pink, pbg))
+        pr = min(cr(pbg, px) for g in grounds for px in painted(toks, '--r-row', g))
+        check('%-4s the pill outranks a resting row >= 2.00' % th, pr >= 2.0, '%.2f' % pr)
+
+    # ── chroma: the row must stay BLUE, never wash to grey ───────────────
+    # Relative retention was the deep rail's metric and does not transfer:
+    # a pale ground has little chroma to keep in the first place. What holds
+    # for both is that the row stays on the ground's hue and stays visibly
+    # coloured rather than neutral.
+    # WHAT THIS ACTUALLY FORBIDS IS MUD, not achromatic surfaces.
+    #
+    # The original rule — "keep the ground's hue at saturation >= .30" —
+    # was written when a row was a tint of the ground, and it would now
+    # reject a WHITE CARD, which is the opposite of the problem it exists
+    # to catch. Worse, it was passing one by accident: HSL saturation
+    # divides by (2 - hi - lo), so a near-white with two levels of blue in
+    # it scores .83 and looks like a saturated colour to the metric.
+    #
+    # The real fault is a row landing in the middle: mid-lightness and
+    # low chroma, which is the grey that got rejected. So a row may be a
+    # tint that keeps the ground's hue, OR a deliberate near-white / near
+    # -black surface. What it may not be is neither.
+    for g in grounds:
+        for px in painted(toks, '--r-row', g):
+            l = (max(rgb(px)) + min(rgb(px))) / 510
+            material = l >= .90 or l <= .12          # a surface, not a shade
+            dh = abs(hue(px) - hue(g)); dh = min(dh, 360 - dh)
+            tint = dh <= 12 and sat(px) >= .30       # a shade of the ground
+            check('%-4s the row is a surface or a true tint, never mud (%s)' % (th, px),
+                  material or tint,
+                  'L %.2f, %.0f deg off the ground, sat %.2f' % (l, dh, sat(px)))
+
+# ── the inks the rail rebinds for everything that is NOT a row ───────────
+# The brand-mark subtitle, "Back to my ESS" and the sign-out row draw
+# --ez-rail-muted / --ez-rail-faint straight onto the rail, never onto a
+# button, so every row check above can pass while these fail. That is
+# exactly what happened when the ground was lightened once before: they
+# measured 4.01 and 3.27 and nothing noticed. Small text, so 4.5.
+for g1, g2, toks, body in blocks[:2]:
+    th = 'pale' if L(g1) > 0.18 else 'deep'
+    for tok in ('--ez-rail-text', '--ez-rail-item', '--ez-rail-muted', '--ez-rail-faint'):
+        c = ink(toks, tok)
+        if not c:
+            check('%-4s %s is declared' % (th, tok), False)
+            continue
+        v = min(cr(c, g1), cr(c, g2))
+        check('%-4s %-16s direct on the rail >= 4.5' % (th, tok), v >= 4.5,
+              '%.2f (%s)' % (v, c))
+
+# ── 4. no rail rule may name a colour ────────────────────────────────────
+# The two polarities are mirror images, so a literal in a rule is a value
+# that is right for one theme and wrong for the other. Every colour lives
+# in a token block; the rules only ever read one.
+literals = []
+for m in re.finditer(r'(\.ez-[^{]*)\{([^}]*)\}', css):
+    sel, bod = m.group(1).strip(), m.group(2)
+    if '--r-' in bod and bod.count('--r-') > 2: continue      # a token block
+    if '--ez-rail' in bod: continue
+    bod = re.sub(r'/\*.*?\*/', '', bod, flags=re.S)           # comments are prose
+    lits = [l for l in re.findall(r'(?<!var\()(#[0-9A-Fa-f]{3,6}|rgba?\([^)]*\))', bod)
+            if l not in ('rgba(0,0,0,0)',)]
+    if lits: literals.append((sel[:40], lits))
+check('no rail rule hard-codes a colour — all of them read tokens',
+      not literals, str(literals[:3]))
+
+# every token a rule reads must exist in BOTH polarities, or one theme
+# silently renders with an unset custom property
+used = set(re.findall(r'var\((--r-[\w-]+)\)', css))
+for g1, g2, toks, body in blocks[:2]:
+    th = 'pale' if L(g1) > 0.18 else 'deep'
+    absent = sorted(t for t in used if t not in toks)
+    check('%-4s defines every --r-* token the rules read' % th, not absent, str(absent))
+
+# ── the row has to look like a BUTTON, not a tinted strip ────────────────
+# A flat wash at one alpha separates from the ground on paper and still
+# reads as nothing: a surface is recognised by the light falling across it.
+# These are polarity-free — they assert that shading EXISTS, not which way
+# it runs, since the tokens carry the direction.
+nav_rule = re.search(r'\.ez-nav\{[^}]*\}', cssz)
+_nav = nav_rule.group(0) if nav_rule else ''
+for g1, g2, toks, body in blocks[:2]:
+    th = 'pale' if L(g1) > 0.18 else 'deep'
+    check('%-4s the row is shaded top-to-bottom, not a flat wash' % th,
+          'linear-gradient(180deg' in toks.get('--r-row', '')
+          and len(stops_of(toks['--r-row'])) >= 2)
+    a = [x[3] for x in stops_of(toks.get('--r-row', ''))]
+    h = [x[3] for x in stops_of(toks.get('--r-row-h', ''))]
+    check('%-4s hover pushes the row further than rest' % th,
+          bool(a) and bool(h) and min(h) > min(a),
+          '%.2f -> %.2f' % (min(a), min(h)) if a and h else '')
+check('the top edge catches a specular highlight', 'inset01px0var(--r-spec)' in _nav)
+check('the row casts a contact shadow onto the rail',
+      'var(--r-cast)' in _nav and 'var(--r-cast-far)' in _nav)
+check('lit from above: distinct top and bottom borders',
+      'border-top-color:var(--r-rim-t)' in _nav
+      and 'border-bottom-color:var(--r-rim-b)' in _nav)
+_act = re.search(r'\.ez-nav:active\{[^}]*\}', cssz)
+check('the row presses in when clicked',
+      bool(_act) and 'transform:translateY(1px)' in _act.group(0)
+      and 'box-shadow:inset' in _act.group(0))
+_hov = re.search(r'\.ez-nav:hover\{[^}]*\}', cssz)
+check('hover brightens the rim and the lift, not just the fill',
+      bool(_hov) and 'border-top-color:' in _hov.group(0) and 'box-shadow:' in _hov.group(0))
+check('the selected pill wipes in rather than popping',
+      'ezWipe' in cssz and 'transform-origin:leftcenter' in cssz and 'ezPop' not in cssz)
+check('hover fills without moving the row',
+      '.ez-nav:hover::before{transform:scaleX(1)}' in cssz and 'translateY' not in _nav)
+
+rail_rules = re.findall(r'\.ez-rail\{[^}]*\}', cssz)
+rail_light = rail_rules[0] if rail_rules else None
+check('the rail rebinds its ink tokens for descendants',
+      bool(rail_light) and '--ez-rail-text:' in rail_light
+      and '--ez-rail-item:' in rail_light)
+check('the deep rail is written for BOTH dark states, not just the stamped one',
+      len([b for b in blocks if L(b[0]) <= 0.18]) >= 2,
+      '%d deep blocks' % len([b for b in blocks if L(b[0]) <= 0.18]))
 
 # ── 5. the fold ───────────────────────────────────────────────────────────
 head = lay[lay.index('function GroupBlock'):lay.index('const FONT =')]
@@ -148,49 +321,35 @@ check('shut panel is inert, so its links leave the tab order',
 check('height animates via grid-template-rows, not max-height',
       'grid-template-rows:0fr' in css and '.ez-open > .ez-group-panel{ grid-template-rows:1fr }' in css
       and not re.search(r'max-height\s*:', css))   # the words appear in a comment saying why not
-check('rows unfold on a hinge with a shared vanishing point',
-      'perspective: 640px' in css and 'rotateX(-72deg)' in css)
-check('open staggers, close does not', 'transition-delay: calc(var(--n) * 28ms)' in css)
-# The glyph figures above are computed against a tile sitting on the bare rail.
-# That is only true while the tile is OPAQUE — a translucent one lets each
-# section's wash through and every one of those numbers moves.
-# Scoped to the TILE rules only. The row's own hover and active tints stay
-# translucent on purpose — they are meant to sit over the section wash.
-# "Opaque" here means either a gradient (already solid) or a colour mixed with
-# the rail rather than with transparent.
-tile_bg = [r.split('background:')[1].split(';')[0]
-           for r in re.findall(r'\.ez-nav-tile\b[^{]*\{[^}]*\}', css)
-           if 'background:' in r and 'nav-hue' in r]
-def opaque(bg):
-    return 'linear-gradient' in bg or 'C.rail' in bg or 'var(--ez-rail)' in bg
-check('every tile background is opaque, so no wash reaches the glyph',
-      len(tile_bg) >= 3 and all(opaque(bg) for bg in tile_bg),
-      '%d rules, %d opaque' % (len(tile_bg), sum(opaque(bg) for bg in tile_bg)))
-
-# Each section's wash, at its strongest, under the ink that sits on it.
-HEAD_A, BODY_A = .03, .10
-bad_wash = []
-for g, (il, idk) in INK.items():
-    hL, hD = over(il, RAIL_L, HEAD_A), over(idk, RAIL_D, HEAD_A)
-    bL, bD = over(il, RAIL_L, BODY_A), over(idk, RAIL_D, BODY_A)
-    if min(cr(il, hL), cr(idk, hD)) < 4.5: bad_wash.append((g, 'heading'))
-    if min(cr(itemL, bL), cr(itemD, bD)) < 4.5: bad_wash.append((g, 'label'))
-check('section wash keeps heading and label above 4.5:1', not bad_wash, str(bad_wash))
-check('wash is shaped, weakest under the heading',
-      'var(--g-ink)  3%, transparent) 0,' in css and 'var(--g-ink) 10%, transparent) 62px' in css)
-check('the sectionless Home row gets no wash', '.ez-group-plain{ background:none' in css)
-
+# The 3D hinge was more motion than a list of links needs; rows fade up.
+check('rows arrive with a fade, not a 3D hinge',
+      'rotateX' not in cssz and 'opacity:0' in cssz and 'translateY(-4px)' in cssz)
+check('open staggers, close does not', 'transition-delay:calc(var(--n)*18ms)' in cssz)
+# The tile is translucent now, on purpose: it sits on a button which sits on
+# the gradient ground, and the icon figures in section 3 are measured through
+# that whole stack rather than against a flat surface.
+# No tile behind the icon: a tile was card chrome by another name, and on a
+# deep ground the glyph alone carries.
+_tile = cssz[cssz.index('.ez-nav-tile{'):] if '.ez-nav-tile{' in cssz else ''
+_tile = _tile[:_tile.index('}') + 1] if '}' in _tile else ''
+check('the icon has no tile behind it', 'background:transparent' in _tile)
 check('fold marker rotates between shut and open',
-      '.ez-fold svg{' in css and 'rotate(-90deg)' in css and '.ez-open .ez-fold svg{ transform: rotate(0deg) }' in css)
+      '.ez-foldsvg{' in cssz and 'rotate(-90deg)' in cssz
+      and '.ez-open.ez-foldsvg{transform:rotate(0deg)}' in cssz)
+# Asserts the BEHAVIOUR, not the exact spelling: transparent at rest, tinted
+# when the heading is hovered or focused. The literal-string version of this
+# failed on a missing space after a colon while the code was correct.
+_fold = re.search(r'\.ez-fold\{[^}]*\}', cssn)
 check('fold chip is an affordance, not permanent weight',
-      '.ez-fold{' in css and 'background: transparent;' in css
-      and '.ez-group-head:hover .ez-fold,' in css)
+      bool(_fold) and re.search(r'background\s*:\s*transparent', _fold.group(0))
+      and '.ez-group-head:hover.ez-fold' in cssz)
 check('collapsed rail cannot fold a section shut (no way to reopen it)',
       'const foldable = Boolean(group) && railOpen;' in head)
 check('a shut section still reports what it hides', 'ez-count' in head and 'items.length' in head)
 check('"you are here" is not colour alone', 'ez-sr' in head and '.ez-sr{' in css)
+_rm = css[css.index('@media (prefers-reduced-motion: reduce)'):]
 check('reduced motion covers the fold too',
-      '.ez-group-panel{ transition:none }' in css and '.ez-count-here{ animation:none }' in css)
+      '.ez-group-panel' in _rm and '.ez-count-here' in _rm and 'transition:none' in _rm)
 check('section state persisted under its own key', "'ezer_rail_sections'" in lay)
 check('a corrupt persisted value cannot take the rail down',
       'catch { localStorage.removeItem(' in lay)

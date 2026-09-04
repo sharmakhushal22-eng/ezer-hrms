@@ -6,6 +6,7 @@
 // answer means lives in lib/rms/resolve.ts, so the sidebar and a page guard cannot
 // disagree.
 import { useEffect, useState } from 'react'
+import { grantIsUseless, shouldDropEssToken } from './grant-state'
 import { supabase } from '@/lib/supabase'
 import { emptyGrant, type Grant } from '@/lib/rms/resolve'
 import type { ManagerSlot } from '@/lib/rms/hierarchy'
@@ -46,11 +47,40 @@ export async function loadGrant(force = false) {
   if (!force && inflight) return inflight
 
   inflight = (async () => {
+    const ess = essToken()
     const token = await authToken()
     if (!token) { cached = { grant: emptyGrant(), managers: [] }; return cached }
+    const ask = async (t: string) => {
+      const r = await fetch('/api/rms/me', { headers: { Authorization: `Bearer ${t}` }, cache: 'no-store' })
+      return r.json()
+    }
     try {
-      const res = await fetch('/api/rms/me', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
-      const json = await res.json()
+      let json = await ask(token)
+
+      // A STALE ESS TOKEN LOCKED PEOPLE OUT OF THE DASHBOARD.
+      //
+      // authToken() prefers the ESS session over the Supabase one, so anybody
+      // who had used the ESS portal kept sending that token afterwards. Once
+      // it expired the server could not verify it, could not read it as a
+      // Supabase JWT either, and answered with an empty grant — so the
+      // dashboard bounced them back to the login screen immediately after a
+      // SUCCESSFUL sign-in, with nothing on screen to say why. The Supabase
+      // session was sitting right there and was never tried.
+      //
+      // Only fires when the ESS token already produced nothing AND a Supabase
+      // session exists, so a working ESS login is never disturbed.
+      if (grantIsUseless(json?.grant) && ess && token === ess) {
+        const { data } = await supabase.auth.getSession()
+        const fallback = data.session?.access_token
+        if (shouldDropEssToken({
+              usedEssToken: true, grant: json?.grant,
+              hasSupabaseSession: Boolean(fallback),
+            }) && fallback) {
+          try { localStorage.removeItem(ESS_KEY) } catch { /* private mode */ }
+          json = await ask(fallback)
+        }
+      }
+
       cached = { grant: (json?.grant as Grant) || emptyGrant(), managers: (json?.managers as ManagerSlot[]) || [] }
     } catch {
       // A network failure must not read as "not signed in" — that would bounce a working

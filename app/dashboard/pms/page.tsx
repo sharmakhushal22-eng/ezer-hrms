@@ -9,7 +9,7 @@
 //
 // THIS SCREEN RUNS BEFORE ITS TABLES EXIST
 //
-// Migration 055 creates the 15 pms_* tables and has not been applied — Nayan
+// Migration 066 creates the 15 pms_* tables and has not been applied — Nayan
 // owns the database. So every load can legitimately come back "table not
 // found" (PostgREST PGRST205), and that is a state to render, not an error to
 // swallow. A blank page here would read as a broken feature rather than a
@@ -18,11 +18,30 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { C as TK, F, W, S, R, E, numeric } from '@/lib/ui'
+import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components/pms/AdminOverview'
+import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
+import { PERIOD_OPEN } from '@/lib/pms/status'
+import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
+import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
+         FlowTab, type AdminTab, type PipRow } from '@/components/pms/AdminTabs'
+import AdminEditor from '@/components/pms/AdminEditor'
+import '@/components/pms/pms.css'
+import { type Frequency, type Policy } from '@/lib/pms/policy'
+import { localToday } from '@/components/pms/CycleHeader'
 
-type Tab = 'overview' | 'fill' | 'kra' | 'setup'
+// Spec §6 names six tabs. 'overview' and 'chain' are kept alongside them:
+// the roll-up is what an admin opens first, and routing coverage is the thing
+// that decides whether an appraisal can move at all — neither belongs inside
+// one of the six.
+type Tab = 'overview' | AdminTab | 'chain'
 
 /** PostgREST's code for "that relation does not exist". */
 const MISSING_TABLE = 'PGRST205'
+
+/** The HR PIP queue reads pms_pip, which arrives with 066. Empty rather than
+ *  sample rows: a made-up name in an action queue is something somebody tries
+ *  to act on. Module scope so it is not a fresh array on every render. */
+const PIP_QUEUE: PipRow[] = []
 
 interface Coverage {
   total: number; l1: number; l2: number
@@ -30,7 +49,7 @@ interface Coverage {
   hodResolved: number
   hodOverride: number      // employees.hod_id — matrix / dotted-line exceptions
   hodDept: number          // departments.hod_employee_id — the primary source
-  deptSourceReady: boolean // false until migration 055 adds the column
+  deptSourceReady: boolean // false until migration 067 adds the column
 }
 
 export default function PmsPage() {
@@ -39,6 +58,18 @@ export default function PmsPage() {
   const [loading, setLoading] = useState(true)
   const [cov, setCov] = useState<Coverage | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [fill, setFill] = useState<FillRow[] | null>(null)
+  const [naming, setNaming] = useState<PeriodNaming | null>(null)
+  const [deptNames, setDeptNames] = useState<Record<string, string>>({})
+  const [freq, setFreq] = useState<Frequency>('QUARTERLY')
+  const [policies, setPolicies] = useState<Policy[]>([])
+  // The Indian financial year. Periods are generated from it, so the preview
+  // has to start where the real thing starts.
+  const fyStart = `${new Date().getMonth() >= 3 ? new Date().getFullYear()
+                                                : new Date().getFullYear() - 1}-04-01`
+  // "2026-27" — how an Indian FY is written everywhere else in the product.
+  const fyYear = Number(fyStart.slice(0, 4))
+  const fyLabel = `${fyYear}-${String((fyYear + 1) % 100).padStart(2, '0')}`
 
   const load = useCallback(async () => {
     setLoading(true); setErr(null)
@@ -51,8 +82,57 @@ export default function PmsPage() {
     }
     setReady(true)
 
-    // Chain coverage is worth showing whether or not the module is live: it is
-    // the thing that decides if an appraisal can actually route to anybody.
+    // The active period, named the way a person would say it rather than by
+    // its filing code.
+    const today = localToday()
+    const per = await supabase.from('pms_periods')
+      .select('id, period_name, period_code, financial_year, period_no, period_start, period_end,'
+            + ' status, pms_policies(frequency)')
+      .in('status', PERIOD_OPEN)
+      .order('period_start', { ascending: false }).limit(1).maybeSingle()
+
+    const row = (per.data ?? null) as unknown as (Record<string, string | null> & { id: string }) | null
+    if (row) {
+      const freq = ((row as unknown as { pms_policies?: { frequency?: string } })
+        .pms_policies?.frequency) ?? null
+      const perYear = freq === 'MONTHLY' ? 12 : freq === 'QUARTERLY' ? 4
+                    : freq === 'HALF_YEARLY' ? 2 : freq === 'ANNUAL' ? 1 : null
+      setNaming(nameThePeriod({
+        periodName: row.period_name, periodCode: row.period_code,
+        financialYear: row.financial_year, periodStart: row.period_start,
+        periodEnd: row.period_end, periodNo: row.period_no ? Number(row.period_no) : null,
+        totalPeriods: perYear, frequency: freq,
+      }, today))
+
+      // vw_pms_fill_status already collapses ten workflow values into the five
+      // states an admin chases. One CASE in SQL beats the same mapping
+      // rewritten in every screen that needs it.
+      const pol = await supabase.from('pms_policies')
+        .select('id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
+              + ' total_weightage, min_weightage_per_kra, who_can_finalise')
+        .limit(50)
+      if (!pol.error) {
+        setPolicies(((pol.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
+          id: String(r.id), name: String(r.policy_name ?? 'Policy'),
+          frequency: (r.frequency as Frequency) ?? 'QUARTERLY',
+          isActive: r.is_active !== false,
+          minKra: Number(r.min_kra_count) || 4, maxKra: Number(r.max_kra_count) || 10,
+          totalWeightage: Number(r.total_weightage) || 100,
+          minWeightagePerKra: Number(r.min_weightage_per_kra) || 5,
+          whoCanFinalise: (r.who_can_finalise as Policy['whoCanFinalise']) ?? 'RM1_RM2_HOD',
+        })))
+        const first = (pol.data ?? [])[0] as { frequency?: Frequency } | undefined
+        if (first?.frequency) setFreq(first.frequency)
+      }
+
+      const f = await supabase.from('vw_pms_fill_status')
+        .select('employee_name, employee_code, department_id, fill_status, kra_count, total_weightage')
+        .eq('period_id', row.id).limit(2000)
+      if (!f.error) setFill((f.data ?? []) as unknown as FillRow[])
+    } else {
+      setFill([])
+    }
+
     setLoading(false)
   }, [])
 
@@ -64,7 +144,7 @@ export default function PmsPage() {
   //   2. departments.hod_employee_id primary source
   //   3. BLOCK
   //
-  // The department column arrives with migration 055, so until that runs only
+  // The department column arrives with migration 067, so until that runs only
   // the override source can be counted. That is reported as a distinct state
   // rather than folded into "0 mapped", which would misdescribe the problem.
   const loadCoverage = useCallback(async () => {
@@ -102,17 +182,45 @@ export default function PmsPage() {
     })
   }, [])
 
+  // Department names, so the table says "Finance & Accounts" and not a uuid.
+  useEffect(() => {
+    (async () => {
+      // dept_name, not name. `name` does not exist on this table, and asking
+      // for it fails the whole select — so every department silently rendered
+      // as "Unknown department" while the screen looked like it had loaded.
+      const d = await supabase.from('departments').select('id, dept_name').limit(400)
+      if (d.error) return
+      const m: Record<string, string> = {}
+      for (const r of (d.data ?? []) as unknown as { id: string; dept_name: string }[]) {
+        m[r.id] = r.dept_name
+      }
+      setDeptNames(m)
+    })()
+  }, [])
+
   useEffect(() => { load(); loadCoverage() }, [load, loadCoverage])
 
-  const TABS: { k: Tab; label: string }[] = [
-    { k: 'overview', label: 'Overview' },
-    { k: 'fill',     label: 'Fill Status' },
-    { k: 'kra',      label: 'KRA Oversight' },
-    { k: 'setup',    label: 'Setup' },
+  const roll: Rollup | null = fill ? rollUp(fill) : null
+  const depts: DeptRollup[] = fill ? byDepartment(fill) : []
+  const nameOf = (id: string | null) => id ? (deptNames[id] ?? 'Unknown department') : 'No department set'
+
+  // Named for what you go there to DO. "KRA Oversight" told nobody what they
+  // would find; "Who has not started" is the question somebody actually has.
+  const TABS: { k: Tab; label: string; hint: string }[] = [
+    { k: 'overview', label: 'This cycle', hint: 'where the whole organisation has got to' },
+    ...ADMIN_TABS.map(t => ({ k: t.k as Tab, label: t.label, hint: t.blurb })),
+    { k: 'chain',    label: 'Flow & Hierarchy',
+      hint: 'the twelve steps, the reporting line, and who may do what' },
   ]
 
+  // Every rule in pms.css is scoped under .pms so its very generic class names
+  // (.card, .stat, .pill, .btn) cannot leak into another module. That scoping
+  // means the class below is not decoration — without it the whole stylesheet
+  // is dead on this page, which is exactly what happened: the preview harness
+  // set it, the real screen did not, and the harness looked perfect while the
+  // product rendered unstyled.
   return (
-    <div style={{ padding: `${S.lg}px ${S.xl}px ${S.huge}px`, maxWidth: 1440, margin: '0 auto' }}>
+    <div className="pms" style={{ padding: `${S.lg}px ${S.xl}px ${S.huge}px`, maxWidth: 1440, margin: '0 auto' }}>
 
       <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
         <div style={{ minWidth: 0, flex: 1 }}>
@@ -120,7 +228,10 @@ export default function PmsPage() {
             Performance
           </h1>
           <div style={{ marginTop: 3, fontSize: F.small, color: TK.muted }}>
-            KRAs, appraisal cycle and ratings · Employee → RM L1 → RM L2 → HOD, managed here
+            {naming
+              ? <>Running now: <strong style={{ color: TK.ink }}>{naming.title}</strong> · {naming.sub}</>
+              : <>KRAs, the appraisal cycle and ratings. You are not a step in the chain —
+                 it runs Employee → manager → second manager → HOD, and you keep it moving.</>}
           </div>
         </div>
         {ready === true && (
@@ -129,17 +240,22 @@ export default function PmsPage() {
         )}
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+      {/* The mockup's tab strip: an underline, not a row of filled pills. With
+          eight tabs, eight filled chips read as eight competing buttons; an
+          underline puts the weight on the one you are in. */}
+      <div className="tabs">
         {TABS.map(t => (
-          <button key={t.k} onClick={() => setTab(t.k)} className="ez-tab" data-on={tab === t.k ? '1' : '0'}
-            style={{ padding: '7px 13px', borderRadius: 10, cursor: 'pointer',
-                     fontSize: F.tiny, fontWeight: tab === t.k ? W.semi : W.medium, fontFamily: 'inherit',
-                     background: tab === t.k ? TK.brand : 'transparent',
-                     color: tab === t.k ? TK.onAccent : TK.muted,
-                     border: `1px solid ${tab === t.k ? TK.brand : TK.line}` }}>
+          <button key={t.k} type="button" onClick={() => setTab(t.k)}
+                  className={tab === t.k ? 'on' : undefined}
+                  aria-current={tab === t.k ? 'page' : undefined}>
             {t.label}
           </button>
         ))}
+      </div>
+      {/* The hint belongs on the page, not in a tooltip: a title attribute is
+          invisible to touch and to anyone not hovering. */}
+      <div style={{ fontSize: F.micro, color: TK.faint, marginTop: -10, marginBottom: 16 }}>
+        {TABS.find(t => t.k === tab)?.hint}
       </div>
 
       {loading && <Card><div style={{ color: TK.muted, fontSize: F.small }}>Loading…</div></Card>}
@@ -155,22 +271,33 @@ export default function PmsPage() {
 
       {!loading && !err && ready === true && (
         <>
-          {tab === 'overview' && <Overview cov={cov} />}
-          {tab !== 'overview' && (
-            <Card>
-              <div style={{ fontSize: F.small, color: TK.muted }}>
-                This tab is next in the build. The module is live, so it will read real data
-                once wired.
-              </div>
-            </Card>
+          {tab === 'overview' && (
+            roll ? (
+              <>
+                <ReadinessBanner r={roll} />
+                <div style={{ display: 'grid', gap: S.sm, marginBottom: S.sm }}>
+                  <FillDistribution r={roll} />
+                </div>
+              </>
+            ) : <Overview cov={cov} />
           )}
+
+          {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading} />}
+          {tab === 'config'   && <ConfigTab freq={freq} onFreq={setFreq} fyStart={fyStart}
+                                            fyLabel={fyLabel} today={localToday()} />}
+          {tab === 'setup'    && <AdminEditor />}
+          {tab === 'policies' && <PolicyTab policies={policies} people={[]} />}
+          {tab === 'upload'   && <UploadTab />}
+          {tab === 'pip'      && <PipTab queue={PIP_QUEUE} />}
+          {tab === 'reports'  && <ReportsTab />}
+          {tab === 'chain'    && <FlowTab chainCoverage={cov ? <ChainCoverage cov={cov} /> : null} />}
         </>
       )}
 
-      {/* Chain coverage is the thing that decides whether an appraisal can route
-          at all, so it is shown even while the module is pending — it is data
-          work that can start today and does not wait on the migration. */}
-      {!loading && cov && <ChainCoverage cov={cov} />}
+      {/* Routing coverage is data work that can start TODAY: it reads employees
+          and departments, not pms_*, so it is shown while the module is still
+          pending rather than waiting on a migration to become useful. */}
+      {!loading && ready === false && cov && <ChainCoverage cov={cov} />}
     </div>
   )
 }
@@ -190,13 +317,13 @@ function MigrationPending() {
   return (
     <Card tone="warning">
       <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>
-        Waiting on migration 055
+        Waiting on migration 066
       </div>
       <div style={{ fontSize: F.small, color: TK.muted, marginTop: 8, lineHeight: 1.6, maxWidth: 720 }}>
         The performance module's tables do not exist in the database yet. The screens and the
         approval flow are built; they have nothing to read until{' '}
         <code style={{ background: TK.sunken, padding: '1px 6px', borderRadius: 6, fontSize: F.micro }}>
-          supabase/migrations/055_pms_module.sql
+          supabase/migrations/066_pms_module.sql
         </code>{' '}
         is applied. That file creates 15 tables, 9 functions, 10 views and 2 triggers.
       </div>
@@ -287,7 +414,7 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
             {' · '}
             {cov.deptSourceReady
               ? <><strong style={{ color: TK.ink }}>{cov.hodDept}</strong> covered this way</>
-              : <span style={{ color: TK.warning }}>column arrives with migration 055</span>}
+              : <span style={{ color: TK.warning }}>column arrives with migration 067</span>}
           </li>
           <li>
             Otherwise <strong style={{ color: TK.critical }}>blocked</strong> — no guess is made
@@ -301,7 +428,7 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
           the finalise step today.{' '}
           {cov.deptSourceReady
             ? 'Set an HOD on their department, or an override on the individual where reporting is matrix.'
-            : 'Once 055 is applied, setting an HOD per department covers most of them in one pass — the per-employee override is only for exceptions.'}
+            : 'Once 067 is applied, setting an HOD per department covers most of them in one pass — the per-employee override is only for exceptions.'}
         </div>
       )}
     </Card>

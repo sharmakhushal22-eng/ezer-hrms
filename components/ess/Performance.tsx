@@ -1,69 +1,78 @@
 'use client'
 // components/ess/Performance.tsx — PMS inside the employee portal.
+// Spec §3 (employee), §4 (RM L1/L2) and §5 (HOD).
 //
-// Three audiences share this one screen, and which tabs appear is decided by
-// data rather than by a role table:
+// THREE AUDIENCES, ONE SCREEN
 //
-//   Everyone   My KRAs — write 4 to 10, weightage totalling exactly 100
-//   RM L1/L2   My Team — approve reportees' KRAs, then rate them
-//   HOD        Department — finalise and publish
+// The mockup switches role with a control at the top and then shows that
+// role's tabs. This does the same, except the switch only offers the roles
+// you actually hold — showing an empty "My Team" to somebody with no
+// reportees is a dead end, and hiding it entirely is one fewer thing to
+// explain.
 //
 // WHY ROLES ARE DERIVED, NOT LOOKED UP
 //
-// user_roles has 0 rows, so there is nothing to read. But the org columns are
-// already populated and mean exactly the same thing: somebody is an RM because
-// people report to them, and an HOD because a department points at them. That
-// is more truthful than a role flag anyway — a role flag can disagree with the
-// hierarchy, this cannot.
+// user_roles has 0 rows, so there is nothing to read. The org columns are
+// populated and mean exactly the same thing: somebody is an RM because people
+// report to them, and an HOD because a department points at them. That is
+// more truthful than a role flag anyway — a flag can disagree with the
+// hierarchy; this cannot.
+//
+// THE FROZEN CHAIN
+//
+// Whose appraisals are mine comes from pms_overall_rating's rm_l1_id /
+// rm_l2_id / hod_id snapshot, NOT from a live lookup of who reports to me. A
+// reorg mid-cycle must not move half-rated appraisals between managers, and
+// pms_finalise reads the same snapshot.
 //
 // THE TABLES DO NOT EXIST YET
 //
-// Migrations 055 and 056 are written and handed to Nayan, not applied. Every
-// pms_* read can legitimately come back PGRST205, and that is a state to render
-// rather than an error to swallow — otherwise this looks broken when it is
-// merely waiting.
+// Migration 066 is written and handed to Nayan, not applied. Every pms_* read
+// can legitimately come back PGRST205, and that is a state to render rather
+// than an error to swallow — otherwise this looks broken when it is waiting.
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import { C as TK, F, W, R, numeric } from '@/lib/ui'
+import '@/components/pms/pms.css'
+import CycleHeader from '@/components/pms/CycleHeader'
+import {
+  EMP_TABS, DashboardTab, KraTab, OneToOneTab, SelfRatingTab, ResultTab,
+  AnalyticsTab, type EmpTab, type Who, type SelfRow,
+} from '@/components/pms/EmployeeTabs'
+import {
+  MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab,
+  TeamAnalyticsTab, FinaliseTab, FeedbackTab,
+  type MgrTab, type HodTab, type RateRow, type BenefitType,
+} from '@/components/pms/ManagerTabs'
+import { type TeamMember } from '@/lib/pms/team'
+import { type Kra, type Category } from '@/lib/pms/kra'
+import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
+import { type Line } from '@/lib/pms/scoring'
+import { stageStates, currentStage, settled, STAGES, DEFAULT_RULES,
+         type Progress, type StageKey } from '@/lib/pms/cycle'
+import { type Flag } from '@/lib/pms/employment'
 
 const MISSING_TABLE = 'PGRST205'
 
-/** Spec §3.2 — these drive the category analytics later. */
-const CATEGORIES = ['BUSINESS', 'PROCESS', 'PEOPLE', 'CUSTOMER', 'COMPLIANCE', 'LEARNING'] as const
-type Category = typeof CATEGORIES[number]
-
-const KRA_MIN = 4, KRA_MAX = 10, WEIGHT_TOTAL = 100, WEIGHT_MIN_PER_KRA = 5
-
-interface Kra {
-  id?: string
-  seq_no: number
-  kra_title: string
-  kpi_metric: string
-  target_value: string
-  category: Category
-  weightage: number
+interface Period { id: string; period_code: string; status: string }
+interface Overall {
+  workflow_status?: string | null
+  self_score?: number | null
+  final_rating?: number | null
+  final_rating_code?: string | null
+  is_readonly?: boolean | null
 }
-
 interface Roles { isRM: boolean; isHOD: boolean; reportees: number; deptCount: number }
 
-interface Period { id: string; period_code: string; status: string }
-/** The employee's row for the period — scores, workflow status, read-only lock. */
-interface Overall {
-  workflow_status: string
-  self_score: number | null
-  final_rating: number | null
-  final_rating_code: string | null
-  is_readonly: boolean
-}
+type Scope = 'me' | 'team' | 'dept'
 
-/**
- * The active period and this employee's row in it.
- *
- * Everything past the KRA builder depends on a period existing. Rather than
- * each view discovering that separately and inventing its own flavour of
- * "nothing here", they share this and say the same thing.
- */
+const blankKra = (seq: number): Kra => ({
+  seq_no: seq, kra_title: '', kpi_metric: '', target_value: '',
+  category: 'BUSINESS', weightage: 0,
+})
+
+/** The active period and this employee's row in it. Shared so that every view
+ *  says the same thing about "nothing here" instead of inventing its own. */
 function usePeriod(employeeId: string) {
   const [period, setPeriod] = useState<Period | null>(null)
   const [overall, setOverall] = useState<Overall | null>(null)
@@ -71,10 +80,22 @@ function usePeriod(employeeId: string) {
 
   const reload = useCallback(async () => {
     setLoading(true)
-    const p = await supabase.from('pms_periods')
+    // THE PERIOD MUST BE THIS EMPLOYEE'S COMPANY'S PERIOD.
+    //
+    // Every company runs its own policy and therefore its own periods —
+    // there are currently three open Q2 rows in the live database, one per
+    // company. Selecting with limit(1) and no company filter picked whichever
+    // sorted first, so two employees out of three were shown a period that
+    // was not theirs, and every read hung off it did the same.
+    const me = await supabase.from('employees')
+      .select('company_id').eq('id', employeeId).maybeSingle()
+    const companyId = (me.data as { company_id?: string } | null)?.company_id ?? null
+
+    let q = supabase.from('pms_periods')
       .select('id,period_code,status')
       .not('status', 'in', '("CLOSED","SCHEDULED")')
-      .order('period_start', { ascending: false }).limit(1).maybeSingle()
+    if (companyId) q = q.eq('company_id', companyId)
+    const p = await q.order('period_start', { ascending: false }).limit(1).maybeSingle()
     if (p.error || !p.data) { setPeriod(null); setOverall(null); setLoading(false); return }
     setPeriod(p.data as Period)
 
@@ -89,27 +110,22 @@ function usePeriod(employeeId: string) {
   return { period, overall, loading, reload }
 }
 
-/** 5-point scale — the spec's default, and what 055 seeds. */
-const RATINGS = [
-  { v: 5, label: 'Outstanding' },
-  { v: 4, label: 'Exceeds' },
-  { v: 3, label: 'Meets' },
-  { v: 2, label: 'Partially meets' },
-  { v: 1, label: 'Below expectations' },
-]
-
-const blankKra = (seq: number): Kra => ({
-  seq_no: seq, kra_title: '', kpi_metric: '', target_value: '',
-  category: 'BUSINESS', weightage: 0,
-})
+/** Today, in the browser's own zone. An ISO slice of a UTC timestamp is
+ *  yesterday for anybody east of Greenwich after 05:30 IST, and these dates
+ *  decide whether a window is open. */
+function localToday(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 export default function Performance({ employeeId }: { employeeId: string }) {
   const [roles, setRoles] = useState<Roles | null>(null)
   const [moduleReady, setModuleReady] = useState<boolean | null>(null)
-  const [tab, setTab] = useState<'mine' | 'oneone' | 'self' | 'result' | 'team' | 'dept'>('mine')
+  const [scope, setScope] = useState<Scope>('me')
+  const [empTab, setEmpTab] = useState<EmpTab>('dashboard')
+  const [mgrTab, setMgrTab] = useState<MgrTab>('team')
+  const [hodTab, setHodTab] = useState<HodTab>('finalise')
 
-  // Who is this person, in org terms? Both reads work today — they hit
-  // employees and departments, not pms_*.
   useEffect(() => {
     (async () => {
       const { count: reportees } = await supabase
@@ -117,7 +133,7 @@ export default function Performance({ employeeId }: { employeeId: string }) {
         .or(`l1_manager_id.eq.${employeeId},l2_manager_id.eq.${employeeId}`)
         .is('date_of_leaving', null)
 
-      // departments.hod_employee_id arrives with 056. Until then only the
+      // departments.hod_employee_id arrives with 067. Until then only the
       // per-employee override can identify an HOD.
       let deptCount = 0
       const d = await supabase.from('departments').select('id', { count: 'exact', head: true })
@@ -145,861 +161,413 @@ export default function Performance({ employeeId }: { employeeId: string }) {
   }, [])
 
   if (moduleReady === false) return <ModulePending />
-  if (!roles) return <Muted>Loading…</Muted>
+  if (!roles) return <div className="pms"><div className="k">Loading…</div></div>
 
-  const tabs: { k: typeof tab; label: string; hint: string }[] = [
-    { k: 'mine',   label: 'My KRAs',     hint: 'what you are measured on' },
-    { k: 'oneone', label: 'One-to-One',  hint: 'discussions with your manager' },
-    { k: 'self',   label: 'Self Rating', hint: 'rate your own delivery' },
-    { k: 'result', label: 'My Result',   hint: 'once published' },
-    ...(roles.isRM  ? [{ k: 'team' as const, label: `My Team (${roles.reportees})`, hint: 'approve and rate' }] : []),
-    ...(roles.isHOD ? [{ k: 'dept' as const, label: 'Department', hint: 'finalise and publish' }] : []),
+  const scopes: { k: Scope; label: string }[] = [
+    { k: 'me', label: 'Me' },
+    ...(roles.isRM  ? [{ k: 'team' as const, label: `My team (${roles.reportees})` }] : []),
+    ...(roles.isHOD ? [{ k: 'dept' as const, label: 'My department' }] : []),
   ]
 
+  const tabs = scope === 'me' ? EMP_TABS : scope === 'team' ? MGR_TABS : HOD_TABS
+  const activeKey = scope === 'me' ? empTab : scope === 'team' ? mgrTab : hodTab
+  const pick = (k: string) => {
+    if (scope === 'me') setEmpTab(k as EmpTab)
+    else if (scope === 'team') setMgrTab(k as MgrTab)
+    else setHodTab(k as HodTab)
+  }
+
   return (
-    <div>
-      {tabs.length > 1 && (
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
-          {tabs.map(t => (
-            <button key={t.k} onClick={() => setTab(t.k)} className="ez-tab" data-on={tab === t.k ? '1' : '0'}
-              title={t.hint}
-              style={{ padding: '7px 13px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-                       fontSize: F.tiny, fontWeight: tab === t.k ? W.semi : W.medium,
-                       background: tab === t.k ? TK.brand : 'transparent',
-                       color: tab === t.k ? TK.onAccent : TK.muted,
-                       border: `1px solid ${tab === t.k ? TK.brand : TK.line}` }}>
-              {t.label}
-            </button>
+    <div className="pms">
+      <CycleHeader
+        employeeId={employeeId}
+        roles={{ isEmployee: true, isRM: roles.isRM, isHOD: roles.isHOD }}
+        onGo={() => setScope('me')}
+      />
+
+      {scopes.length > 1 && (
+        <div className="chips" role="tablist" aria-label="Which side of the review"
+             style={{ marginBottom: 4 }}>
+          {scopes.map(s => (
+            <button key={s.k} type="button" role="tab" aria-selected={scope === s.k}
+                    className={scope === s.k ? 'chip sel' : 'chip'}
+                    onClick={() => setScope(s.k)}>{s.label}</button>
           ))}
         </div>
       )}
 
-      {tab === 'mine'   && <MyKras employeeId={employeeId} />}
-      {tab === 'oneone' && <OneToOne employeeId={employeeId} />}
-      {tab === 'self'   && <SelfRating employeeId={employeeId} />}
-      {tab === 'result' && <MyResult employeeId={employeeId} />}
-      {tab === 'team'   && <TeamQueue employeeId={employeeId} n={roles.reportees} />}
-      {tab === 'dept'   && <DeptQueue employeeId={employeeId} />}
+      <div className="tabs">
+        {tabs.map(t => (
+          <button key={t.k} type="button" onClick={() => pick(t.k)}
+                  className={activeKey === t.k ? 'on' : undefined}
+                  aria-current={activeKey === t.k ? 'page' : undefined}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      <div className="k" style={{ marginTop: -10, marginBottom: 16 }}>
+        {tabs.find(t => t.k === activeKey)?.blurb}
+      </div>
+
+      {scope === 'me'   && <MySide employeeId={employeeId} tab={empTab} />}
+      {scope === 'team' && <TeamSide employeeId={employeeId} tab={mgrTab} />}
+      {scope === 'dept' && <DeptSide employeeId={employeeId} tab={hodTab} />}
     </div>
   )
 }
 
-// ── My KRAs ────────────────────────────────────────────────────────────────
-//
-// The validation is the substance of this screen. Spec §3.2: at least 4, at
-// most 10, weightage totalling exactly 100, and no single KRA below 5. All of
-// it is live — the employee should never be able to press Submit on a set that
-// the database will reject, so the button stays disabled and says why.
+// ── the employee's own side ──────────────────────────────────────────────
 
-function MyKras({ employeeId }: { employeeId: string }) {
-  const [kras, setKras] = useState<Kra[]>(() =>
-    Array.from({ length: KRA_MIN }, (_, i) => blankKra(i + 1)))
+function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
+  const { period, overall, loading, reload } = usePeriod(employeeId)
+  const [who, setWho] = useState<Who>({ name: '', code: '' })
+  const [goals, setGoals] = useState<Record<string, unknown>[]>([])
+  const [logs, setLogs] = useState<Log[]>([])
+  const [reviews, setReviews] = useState<Record<string, unknown>[]>([])
+  const [feedback, setFeedback] = useState<Record<string, unknown> | null>(null)
+  const [draftKras, setDraftKras] = useState<Kra[] | null>(null)
+  const [selfDraft, setSelfDraft] = useState<SelfRow[] | null>(null)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
+  const today = localToday()
 
-  const total = kras.reduce((s, k) => s + (Number(k.weightage) || 0), 0)
-  const filled = kras.filter(k => k.kra_title.trim()).length
+  useEffect(() => {
+    (async () => {
+      const e = await supabase.from('employees')
+        .select('emp_code,full_name,designation').eq('id', employeeId).maybeSingle()
+      if (!e.error && e.data) {
+        const r = e.data as Record<string, unknown>
+        setWho({ name: String(r.full_name ?? ''), code: String(r.emp_code ?? ''),
+                 designation: r.designation ? String(r.designation) : null })
+      }
+    })()
+  }, [employeeId])
 
-  const problems: string[] = []
-  if (kras.length < KRA_MIN) problems.push(`At least ${KRA_MIN} KRAs — you have ${kras.length}`)
-  if (kras.length > KRA_MAX) problems.push(`At most ${KRA_MAX} KRAs`)
-  if (filled < kras.length) problems.push(`${kras.length - filled} KRA${kras.length - filled === 1 ? '' : 's'} still need a title`)
-  if (total !== WEIGHT_TOTAL) problems.push(`Weightage must total exactly ${WEIGHT_TOTAL} — currently ${total}`)
-  const light = kras.filter(k => k.weightage > 0 && k.weightage < WEIGHT_MIN_PER_KRA).length
-  if (light) problems.push(`${light} KRA${light === 1 ? '' : 's'} below the ${WEIGHT_MIN_PER_KRA} minimum`)
+  const loadPeriodData = useCallback(async () => {
+    if (!period) return
+    const g = await supabase.from('pms_employee_goals')
+      .select('id,seq_no,kra_title,kpi_metric,target_value,category,weightage,status')
+      .eq('employee_id', employeeId).eq('period_id', period.id).order('seq_no')
+    setGoals(g.data ?? [])
 
-  const set = (i: number, patch: Partial<Kra>) =>
-    setKras(ks => ks.map((k, n) => n === i ? { ...k, ...patch } : k))
+    const l = await supabase.from('pms_one_to_one')
+      .select('id,discussion_type,discussion_date,mode,discussion_points,employee_ack,manager_ack')
+      .eq('employee_id', employeeId).eq('period_id', period.id)
+      .order('discussion_date', { ascending: true })
+    setLogs((l.data ?? []) as unknown as Log[])
 
-  const add = () => setKras(ks => ks.length >= KRA_MAX ? ks : [...ks, blankKra(ks.length + 1)])
-  const remove = (i: number) =>
-    setKras(ks => ks.length <= KRA_MIN ? ks : ks.filter((_, n) => n !== i).map((k, n) => ({ ...k, seq_no: n + 1 })))
+    const r = await supabase.from('pms_reviews')
+      .select('goal_id,rater_role,rating,achievement_value,comments')
+      .eq('employee_id', employeeId).eq('period_id', period.id)
+    setReviews(r.data ?? [])
 
-  const submit = async () => {
+    const f = await supabase.from('pms_feedback')
+      .select('appreciation_remark,improvement_feedback,development_plan,visible_to_employee')
+      .eq('employee_id', employeeId).eq('period_id', period.id).maybeSingle()
+    setFeedback(f.error ? null : (f.data as Record<string, unknown> | null))
+  }, [employeeId, period])
+  useEffect(() => { loadPeriodData() }, [loadPeriodData])
+
+  const kras: Kra[] = draftKras ?? (goals.length
+    ? goals.map(g => ({
+        seq_no: Number(g.seq_no), kra_title: String(g.kra_title ?? ''),
+        kpi_metric: String(g.kpi_metric ?? ''), target_value: String(g.target_value ?? ''),
+        category: (String(g.category ?? 'BUSINESS')) as Category,
+        weightage: Number(g.weightage) || 0,
+      }))
+    : Array.from({ length: DEFAULT_RULES.minKra }, (_, i) => blankKra(i + 1)))
+
+  const lockGate = canLockWeightage(logs)
+  const publishGate = canPublishResult(logs)
+  const locked = goals.length > 0 && goals.every(g => g.status === 'LOCKED')
+  const selfSubmitted = !!(overall?.workflow_status && overall.workflow_status !== 'NOT_STARTED'
+    && overall.self_score != null)
+  const published = !!feedback?.visible_to_employee || overall?.final_rating != null
+
+  const ratingOf = (goalId: string, role: string) => {
+    const row = reviews.find(r => String(r.goal_id) === goalId && r.rater_role === role)
+    return row?.rating === null || row?.rating === undefined ? null : Number(row.rating)
+  }
+
+  const lines: Line[] = goals.map(g => ({
+    goalId: String(g.id), title: String(g.kra_title ?? ''),
+    category: String(g.category ?? 'BUSINESS') as Category,
+    weightage: Number(g.weightage) || 0,
+    self: ratingOf(String(g.id), 'SELF'),
+    rmL1: ratingOf(String(g.id), 'RM_L1'),
+    rmL2: ratingOf(String(g.id), 'RM_L2'),
+    final: ratingOf(String(g.id), 'HOD') ?? ratingOf(String(g.id), 'RM_L2') ?? ratingOf(String(g.id), 'RM_L1'),
+  }))
+
+  const selfRows: SelfRow[] = selfDraft ?? goals.map(g => {
+    const row = reviews.find(r => String(r.goal_id) === String(g.id) && r.rater_role === 'SELF')
+    return {
+      goalId: String(g.id), title: String(g.kra_title ?? ''),
+      weightage: Number(g.weightage) || 0,
+      category: String(g.category ?? 'BUSINESS') as Category,
+      achievement: String(row?.achievement_value ?? ''),
+      rating: row?.rating === null || row?.rating === undefined ? null : Number(row.rating),
+      comment: String(row?.comments ?? ''),
+    }
+  })
+
+  const progress: Progress = settled({
+    kraCount: goals.length,
+    weightageTotal: kras.reduce((s, k) => s + k.weightage, 0),
+    kraSubmitted: goals.length > 0,
+    kraApproved: locked,
+    oneToOneLogged: logs.length > 0,
+    oneToOneBothConfirmed: lockGate.open,
+    selfSubmitted,
+    rmL1Done: lines.some(l => l.rmL1 !== null),
+    rmL2Done: lines.some(l => l.rmL2 !== null),
+    finalised: overall?.final_rating != null,
+    published,
+  })
+  const stage = currentStage(progress)
+  // Computed above the `!period` guard because hooks and the values they feed
+  // must not sit behind a conditional return.
+  const states = stageStates({ label: period?.period_code ?? '' }, progress, today)
+
+  if (loading) return <div className="k">Loading…</div>
+  if (!period) return <NoPeriod />
+
+  const submitKras = async () => {
     setSaving(true); setMsg(null)
+    // period_id was missing here before, so a saved set could never be read
+    // back: every other query filters on it. The KRAs went in and vanished.
     const { error } = await supabase.from('pms_employee_goals').insert(
-      kras.map(k => ({ ...k, employee_id: employeeId, status: 'PENDING_RM_APPROVAL' })))
+      kras.map(k => ({ ...k, employee_id: employeeId, period_id: period.id,
+                       status: 'PENDING_RM_APPROVAL' })))
     setSaving(false)
     setMsg(error
       ? ((error as { code?: string }).code === MISSING_TABLE
-          ? 'The performance module is not live yet — migration 055 has not been applied.'
+          ? 'The performance module is not live yet — migration 066 has not been applied.'
           : error.message)
       : 'Sent to your reporting manager.')
+    if (!error) { setDraftKras(null); loadPeriodData() }
   }
 
-  return (
-    <div>
-      <WeightMeter total={total} count={kras.length} />
-
-      <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
-        {kras.map((k, i) => (
-          <div key={i} style={{ border: `1px solid ${TK.line}`, borderRadius: 14, padding: 12,
-                                background: TK.surface }}>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ ...numeric, width: 22, height: 22, borderRadius: 999, flexShrink: 0,
-                             background: TK.brandTint, color: TK.brandDeep, fontSize: F.micro,
-                             fontWeight: W.bold, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {k.seq_no}
-              </span>
-              <input value={k.kra_title} onChange={e => set(i, { kra_title: e.target.value })}
-                placeholder="What are you accountable for?"
-                style={{ ...inp, flex: 1, fontWeight: W.semi }} />
-              <button onClick={() => remove(i)} disabled={kras.length <= KRA_MIN}
-                title={kras.length <= KRA_MIN ? `${KRA_MIN} is the minimum` : 'Remove'}
-                style={{ ...ghost, opacity: kras.length <= KRA_MIN ? .4 : 1 }}>Remove</button>
-            </div>
-            <div style={{ display: 'grid', gap: 8, gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))' }}>
-              <input value={k.kpi_metric} onChange={e => set(i, { kpi_metric: e.target.value })}
-                placeholder="How it is measured" style={inp} />
-              <input value={k.target_value} onChange={e => set(i, { target_value: e.target.value })}
-                placeholder="Target" style={inp} />
-              <select value={k.category} onChange={e => set(i, { category: e.target.value as Category })} style={inp}>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c[0] + c.slice(1).toLowerCase()}</option>)}
-              </select>
-              <input type="number" min={0} max={100} value={k.weightage || ''}
-                onChange={e => set(i, { weightage: Number(e.target.value) })}
-                placeholder="Weightage"
-                style={{ ...inp, ...numeric,
-                         borderColor: k.weightage > 0 && k.weightage < WEIGHT_MIN_PER_KRA ? TK.warning : TK.line }} />
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-        <button onClick={add} disabled={kras.length >= KRA_MAX}
-          title={kras.length >= KRA_MAX ? `${KRA_MAX} is the maximum` : 'Add another KRA'}
-          style={{ ...ghost, opacity: kras.length >= KRA_MAX ? .4 : 1 }}>
-          + Add KRA
-        </button>
-        <button onClick={submit} disabled={problems.length > 0 || saving}
-          style={{ padding: '9px 18px', borderRadius: 10, cursor: problems.length ? 'not-allowed' : 'pointer',
-                   fontFamily: 'inherit', fontSize: F.small, fontWeight: W.semi,
-                   border: `1px solid ${problems.length ? TK.line : TK.brand}`,
-                   background: problems.length ? TK.sunken : TK.brand,
-                   color: problems.length ? TK.faint : TK.onAccent }}>
-          {saving ? 'Sending…' : 'Send to manager'}
-        </button>
-      </div>
-
-      {/* Why the button is off, rather than a disabled control with no
-          explanation. */}
-      {problems.length > 0 && (
-        <ul style={{ margin: '10px 0 0', paddingLeft: 18, fontSize: F.small, color: TK.muted, lineHeight: 1.7 }}>
-          {problems.map(p => <li key={p}>{p}</li>)}
-        </ul>
-      )}
-      {msg && <div style={{ marginTop: 10, fontSize: F.small, color: TK.muted }}>{msg}</div>}
-    </div>
-  )
-}
-
-/** The weightage meter — red until it is exactly 100, because close is not valid. */
-function WeightMeter({ total, count }: { total: number; count: number }) {
-  const ok = total === WEIGHT_TOTAL
-  return (
-    <div style={{ border: `1px solid ${ok ? TK.positive : TK.warning}`, borderRadius: 14, padding: '12px 14px',
-                  background: ok ? TK.positiveTint : TK.warningTint }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: F.small, fontWeight: W.semi, color: TK.ink }}>
-          {count} KRA{count === 1 ? '' : 's'} · weightage {}
-          <span style={{ ...numeric, color: ok ? TK.positive : TK.warning }}>{total}</span> / {WEIGHT_TOTAL}
-        </span>
-        <span style={{ fontSize: F.micro, color: TK.muted }}>
-          {ok ? 'Ready to send' : total > WEIGHT_TOTAL ? `${total - WEIGHT_TOTAL} over` : `${WEIGHT_TOTAL - total} left to allocate`}
-        </span>
-      </div>
-      <div style={{ height: 8, borderRadius: 999, background: TK.sunken, marginTop: 8, overflow: 'hidden' }}>
-        <div style={{ width: `${Math.min(100, total)}%`, height: '100%',
-                      background: ok ? TK.positive : total > WEIGHT_TOTAL ? TK.critical : TK.warning }} />
-      </div>
-    </div>
-  )
-}
-
-// ── One-to-One ─────────────────────────────────────────────────────────────
-//
-// Spec §3.3. This is not a diary — it is a gate. Without both sides
-// acknowledging a KRA_SETTING discussion the weightage cannot lock, and without
-// a FINAL_REVIEW one the result cannot publish. pms_lock_kras() and
-// pms_finalise() both refuse otherwise, so the screen states the rule rather
-// than letting someone discover it at the point of being blocked.
-
-function OneToOne({ employeeId }: { employeeId: string }) {
-  const { period, loading } = usePeriod(employeeId)
-  const [logs, setLogs] = useState<Record<string, unknown>[]>([])
-  const [busy, setBusy] = useState<string | null>(null)
-
-  const load = useCallback(async () => {
-    if (!period) return
-    const { data } = await supabase.from('pms_one_to_one')
-      .select('id,discussion_type,discussion_date,mode,discussion_points,employee_ack,manager_ack')
-      .eq('employee_id', employeeId).eq('period_id', period.id)
-      .order('discussion_date', { ascending: false })
-    setLogs(data || [])
-  }, [employeeId, period])
-  useEffect(() => { load() }, [load])
-
-  // The employee can only acknowledge their own side. The manager's tick is
-  // theirs to give, from their own screen.
-  const ack = async (id: string) => {
-    setBusy(id)
-    await supabase.from('pms_one_to_one')
-      .update({ employee_ack: true, employee_ack_at: new Date().toISOString() }).eq('id', id)
-    setBusy(null); load()
-  }
-
-  if (loading) return <Muted>Loading…</Muted>
-  if (!period)  return <NoPeriod />
-
-  return (
-    <div>
-      <Muted>
-        A KRA-setting discussion must be acknowledged by <strong style={{ color: TK.ink }}>both</strong> you
-        and your manager before your weightage locks. The same applies to the final review before your
-        result can be published. Your manager logs the discussion; you confirm it here.
-      </Muted>
-
-      {logs.length === 0 && (
-        <div style={{ marginTop: 12 }}>
-          <Muted>No discussions logged for {period.period_code} yet.</Muted>
-        </div>
-      )}
-
-      <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
-        {logs.map(l => {
-          const both = Boolean(l.employee_ack) && Boolean(l.manager_ack)
-          return (
-            <div key={String(l.id)} style={{ border: `1px solid ${both ? TK.positive : TK.line}`,
-                          background: TK.surface, borderRadius: 14, padding: 12 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: F.micro, fontWeight: W.bold, padding: '3px 9px', borderRadius: 999,
-                               background: TK.brandTint, color: TK.brandDeep }}>
-                  {String(l.discussion_type).replace(/_/g, ' ')}
-                </span>
-                <span style={{ fontSize: F.small, color: TK.muted }}>{String(l.discussion_date)}</span>
-                <span style={{ marginLeft: 'auto', fontSize: F.micro, color: both ? TK.positive : TK.warning,
-                               fontWeight: W.semi }}>
-                  {both ? 'Acknowledged by both' : l.employee_ack ? 'Waiting on your manager' : 'Waiting on you'}
-                </span>
-              </div>
-              <div style={{ fontSize: F.small, color: TK.ink, marginTop: 8, lineHeight: 1.6 }}>
-                {String(l.discussion_points || '')}
-              </div>
-              {!l.employee_ack && (
-                <button onClick={() => ack(String(l.id))} disabled={busy === l.id}
-                  style={{ ...ghost, marginTop: 10, borderColor: TK.brand, color: TK.brand }}>
-                  {busy === l.id ? 'Confirming…' : 'I confirm this discussion happened'}
-                </button>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── Self Rating ────────────────────────────────────────────────────────────
-//
-// Spec §3.4. Two rules the screen has to respect rather than discover:
-//   * KRAs must be LOCKED first — rating goals that can still change is
-//     meaningless, and the weightage is what the score is computed from.
-//   * On submit the self rating locks and the manager's unlocks. The database
-//     enforces the ordering via trg_pms_self_first; this just does not offer
-//     an edit afterwards.
-
-function SelfRating({ employeeId }: { employeeId: string }) {
-  const { period, overall, loading, reload } = usePeriod(employeeId)
-  const [goals, setGoals] = useState<Record<string, unknown>[]>([])
-  const [draft, setDraft] = useState<Record<string, { achievement: string; rating: number; comment: string }>>({})
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-
-  useEffect(() => {
-    (async () => {
-      if (!period) return
-      const { data } = await supabase.from('pms_employee_goals')
-        .select('id,seq_no,kra_title,kpi_metric,target_value,weightage,status')
-        .eq('employee_id', employeeId).eq('period_id', period.id).order('seq_no')
-      setGoals(data || [])
-    })()
-  }, [employeeId, period])
-
-  if (loading) return <Muted>Loading…</Muted>
-  if (!period)  return <NoPeriod />
-
-  const locked = goals.length > 0 && goals.every(g => g.status === 'LOCKED')
-  const submitted = overall?.workflow_status && overall.workflow_status !== 'NOT_STARTED'
-    && overall.self_score != null
-
-  if (!goals.length) return <Muted>No KRAs yet for {period.period_code}. Start in <strong style={{ color: TK.ink }}>My KRAs</strong>.</Muted>
-
-  if (!locked) return (
-    <Muted>
-      Your KRAs are not locked yet, so self rating is not open. Weightage locks after you and your
-      manager both acknowledge the KRA-setting discussion — see <strong style={{ color: TK.ink }}>One-to-One</strong>.
-    </Muted>
-  )
-
-  if (submitted) return (
-    <Muted>
-      Self rating submitted for {period.period_code}, weighted score{' '}
-      <strong style={{ ...numeric, color: TK.ink }}>{overall?.self_score}</strong>. It is locked now —
-      your manager rates next, and you will see the outcome under <strong style={{ color: TK.ink }}>My Result</strong>.
-    </Muted>
-  )
-
-  const ready = goals.every(g => draft[String(g.id)]?.rating)
-
-  const submit = async () => {
+  const submitSelf = async () => {
     setSaving(true); setMsg(null)
-    const rows = goals.map(g => ({
-      period_id: period.id, employee_id: employeeId, goal_id: g.id,
+    const rows = selfRows.map(r => ({
+      period_id: period.id, employee_id: employeeId, goal_id: r.goalId,
       rater_id: employeeId, rater_role: 'SELF',
-      achievement_value: draft[String(g.id)]?.achievement || null,
-      rating: draft[String(g.id)]?.rating,
-      comments: draft[String(g.id)]?.comment || null,
-      submitted: true, submitted_at: new Date().toISOString(),
-    }))
-    const { error } = await supabase.from('pms_reviews').upsert(rows, { onConflict: 'period_id,employee_id,goal_id,rater_role' })
-    setSaving(false)
-    if (error) { setMsg(error.message); return }
-    reload()
-  }
-
-  return (
-    <div>
-      <Muted>
-        Rate each KRA on what you actually delivered. Once submitted this locks and your manager&apos;s
-        rating opens — you cannot revise it afterwards, so finish before you send.
-      </Muted>
-
-      <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
-        {goals.map(g => {
-          const d = draft[String(g.id)] || { achievement: '', rating: 0, comment: '' }
-          const put = (patch: Partial<typeof d>) =>
-            setDraft(x => ({ ...x, [String(g.id)]: { ...d, ...patch } }))
-          return (
-            <div key={String(g.id)} style={{ border: `1px solid ${TK.line}`, background: TK.surface,
-                          borderRadius: 14, padding: 12 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                <span style={{ ...numeric, fontSize: F.micro, fontWeight: W.bold, color: TK.brandDeep }}>
-                  {String(g.seq_no)}
-                </span>
-                <strong style={{ fontSize: F.small, color: TK.ink }}>{String(g.kra_title)}</strong>
-                <span style={{ ...numeric, marginLeft: 'auto', fontSize: F.micro, color: TK.faint }}>
-                  weightage {String(g.weightage)}
-                </span>
-              </div>
-              {Boolean(g.kpi_metric) && (
-                <div style={{ fontSize: F.micro, color: TK.faint, marginTop: 3 }}>
-                  {String(g.kpi_metric)}{g.target_value ? ` · target ${String(g.target_value)}` : ''}
-                </div>
-              )}
-              <div style={{ display: 'grid', gap: 8, marginTop: 10,
-                            gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
-                <input value={d.achievement} onChange={e => put({ achievement: e.target.value })}
-                  placeholder="What you achieved" style={inp} />
-                <select value={d.rating || ''} onChange={e => put({ rating: Number(e.target.value) })} style={inp}>
-                  <option value="">Your rating…</option>
-                  {RATINGS.map(r => <option key={r.v} value={r.v}>{r.v} — {r.label}</option>)}
-                </select>
-              </div>
-              <input value={d.comment} onChange={e => put({ comment: e.target.value })}
-                placeholder="Anything your manager should know" style={{ ...inp, marginTop: 8 }} />
-            </div>
-          )
-        })}
-      </div>
-
-      <button onClick={submit} disabled={!ready || saving}
-        style={{ marginTop: 12, padding: '9px 18px', borderRadius: 10,
-                 cursor: ready ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
-                 fontSize: F.small, fontWeight: W.semi,
-                 border: `1px solid ${ready ? TK.brand : TK.line}`,
-                 background: ready ? TK.brand : TK.sunken,
-                 color: ready ? TK.onAccent : TK.faint }}>
-        {saving ? 'Submitting…' : 'Submit self rating'}
-      </button>
-      {!ready && (
-        <div style={{ fontSize: F.small, color: TK.muted, marginTop: 8 }}>
-          Every KRA needs a rating before you can submit.
-        </div>
-      )}
-      {msg && <div style={{ fontSize: F.small, color: TK.critical, marginTop: 8 }}>{msg}</div>}
-    </div>
-  )
-}
-
-// ── My Result ──────────────────────────────────────────────────────────────
-//
-// Spec §3.5: "Result publish hone se pehle rating, comments — kuch bhi visible
-// nahi." So this shows nothing at all until the workflow says FINALISED and the
-// feedback row is marked visible_to_employee. A half-published result — a score
-// with no feedback, or a manager comment before the conversation — is worse
-// than waiting.
-
-function MyResult({ employeeId }: { employeeId: string }) {
-  const { period, overall, loading } = usePeriod(employeeId)
-  const [fb, setFb] = useState<Record<string, unknown> | null>(null)
-
-  useEffect(() => {
-    (async () => {
-      if (!period) return
-      const { data } = await supabase.from('pms_feedback')
-        .select('appreciation_remark,improvement_feedback,development_plan,visible_to_employee')
-        .eq('employee_id', employeeId).eq('period_id', period.id).maybeSingle()
-      setFb(data as Record<string, unknown> | null)
-    })()
-  }, [employeeId, period])
-
-  if (loading) return <Muted>Loading…</Muted>
-  if (!period)  return <NoPeriod />
-
-  const published = overall?.workflow_status === 'FINALISED' && Boolean(fb?.visible_to_employee)
-  if (!published) return (
-    <Muted>
-      Nothing to show for {period.period_code} yet. Your result and feedback appear here once your
-      HOD has finalised and published them — not before.
-    </Muted>
-  )
-
-  return (
-    <div style={{ display: 'grid', gap: 10 }}>
-      <div style={{ border: `1px solid ${TK.brandEdge}`, background: TK.brandTint,
-                    borderRadius: 14, padding: '16px 18px' }}>
-        <div style={{ fontSize: F.micro, fontWeight: W.semi, letterSpacing: '.05em',
-                      textTransform: 'uppercase', color: TK.muted }}>Final rating</div>
-        <div style={{ ...numeric, fontSize: 30, fontWeight: W.bold, color: TK.brandDeep, lineHeight: 1.2 }}>
-          {overall?.final_rating ?? '—'}
-          {overall?.final_rating_code && (
-            <span style={{ fontSize: F.small, fontWeight: W.semi, color: TK.muted, marginLeft: 8 }}>
-              {overall.final_rating_code}
-            </span>
-          )}
-        </div>
-        {overall?.self_score != null && (
-          <div style={{ fontSize: F.small, color: TK.muted, marginTop: 6 }}>
-            You rated yourself <strong style={{ ...numeric, color: TK.ink }}>{overall.self_score}</strong>
-          </div>
-        )}
-      </div>
-
-      {Boolean(fb?.appreciation_remark) && (
-        <FeedbackCard tone="positive" title="Appreciation" body={String(fb?.appreciation_remark)} />
-      )}
-      {Boolean(fb?.improvement_feedback) && (
-        <FeedbackCard tone="warning" title="Where to improve" body={String(fb?.improvement_feedback)} />
-      )}
-      {Boolean(fb?.development_plan) && (
-        <FeedbackCard title="Development plan" body={String(fb?.development_plan)} />
-      )}
-    </div>
-  )
-}
-
-function FeedbackCard({ title, body, tone }: { title: string; body: string; tone?: 'positive' | 'warning' }) {
-  const edge = tone === 'positive' ? TK.positive : tone === 'warning' ? TK.warning : TK.line
-  const fill = tone === 'positive' ? TK.positiveTint : tone === 'warning' ? TK.warningTint : TK.surface
-  return (
-    <div style={{ border: `1px solid ${edge}`, background: fill, borderRadius: 14, padding: '14px 16px' }}>
-      <div style={{ fontSize: F.micro, fontWeight: W.semi, letterSpacing: '.05em',
-                    textTransform: 'uppercase', color: TK.muted, marginBottom: 6 }}>{title}</div>
-      <div style={{ fontSize: F.small, color: TK.ink, lineHeight: 1.65 }}>{body}</div>
-    </div>
-  )
-}
-
-function NoPeriod() {
-  return (
-    <Muted>
-      No appraisal cycle is open. HR opens a period once the policy and the reporting chain are set —
-      nothing for you to do until then.
-    </Muted>
-  )
-}
-
-// ── RM and HOD queues ──────────────────────────────────────────────────────
-// Both read pms_overall_rating, which does not exist yet. They are structured
-// so that wiring them up later is a query change, not a rewrite.
-
-function TeamQueue({ employeeId, n }: { employeeId: string; n: number }) {
-  const { period, loading } = usePeriod(employeeId)
-  const [rows, setRows] = useState<Record<string, unknown>[]>([])
-  const [rating, setRating] = useState<{ id: string; name: string; code: string; role: 'RM_L1' | 'RM_L2' } | null>(null)
-  const [tick, setTick] = useState(0)
-
-  useEffect(() => {
-    (async () => {
-      if (!period) return
-      // The frozen chain decides whose appraisals are mine, not a live lookup
-      // of who reports to me — a reorg mid-cycle must not move work between
-      // managers. Same reason pms_finalise reads the snapshot.
-      const { data } = await supabase.from('pms_overall_rating')
-        .select('employee_id,workflow_status,kra_count,total_weightage,self_score,rm_l1_score,rm_l2_score,rm_l1_id,rm_l2_id,employment_flag')
-        .eq('period_id', period.id)
-        .or(`rm_l1_id.eq.${employeeId},rm_l2_id.eq.${employeeId}`)
-      if (!data?.length) { setRows([]); return }
-
-      const ids = data.map(d => d.employee_id)
-      const { data: emps } = await supabase.from('employees')
-        .select('id,emp_code,full_name,designation').in('id', ids)
-      const byId = new Map((emps || []).map(e => [e.id, e]))
-      setRows(data.map(d => ({ ...d, emp: byId.get(d.employee_id) })))
-    })()
-  }, [employeeId, period, tick])
-
-  if (rating && period) return (
-    <RateReportee meId={employeeId} reportee={rating} period={period} myRole={rating.role}
-      onDone={() => { setRating(null); setTick(t => t + 1) }} />
-  )
-
-  if (loading) return <Muted>Loading…</Muted>
-  if (!period)  return <NoPeriod />
-  if (!rows.length) return (
-    <Muted>
-      <strong style={{ color: TK.ink }}>{n} people report to you</strong>, but none are enrolled in{' '}
-      {period.period_code}. Enrolment happens when HR opens the period.
-    </Muted>
-  )
-
-  return (
-    <div>
-      <Muted>
-        Your team for {period.period_code}. Approve their KRAs first; rating opens once they have
-        submitted their self rating.
-      </Muted>
-      <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-        {rows.map(r => {
-          const e = r.emp as Record<string, unknown> | undefined
-          const flag = String(r.employment_flag || 'ACTIVE')
-          // Notice-period and exited people are highlighted because their
-          // window closes with their last working day — spec §4.1.
-          const edge = flag === 'EXITED' ? TK.critical : flag === 'NOTICE_PERIOD' ? TK.warning : TK.line
-          // Which seat do I occupy for THIS person? The frozen chain decides,
-          // not a live reporting lookup — somebody can be L1 for one report and
-          // L2 for another.
-          const myRole: 'RM_L1' | 'RM_L2' | null =
-            r.rm_l1_id === employeeId ? 'RM_L1' : r.rm_l2_id === employeeId ? 'RM_L2' : null
-          // L2 waits for L1, and nobody rates before the self rating lands.
-          const canRate = Boolean(myRole) && r.self_score != null
-            && (myRole === 'RM_L1' || r.rm_l1_score != null)
-          const already = myRole === 'RM_L1' ? r.rm_l1_score != null : r.rm_l2_score != null
-          return (
-            <div key={String(r.employee_id)} style={{ border: `1px solid ${edge}`, background: TK.surface,
-                          borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 12,
-                          alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: F.small, fontWeight: W.semi, color: TK.ink }}>
-                  {String(e?.full_name || 'Unknown')}
-                  {flag !== 'ACTIVE' && (
-                    <span style={{ fontSize: F.micro, fontWeight: W.semi, marginLeft: 8,
-                                   color: flag === 'EXITED' ? TK.critical : TK.warning }}>
-                      {flag.replace(/_/g, ' ').toLowerCase()}
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: F.micro, color: TK.faint }}>
-                  {String(e?.emp_code || '')}{e?.designation ? ` · ${String(e.designation)}` : ''}
-                </div>
-              </div>
-              <div style={{ ...numeric, fontSize: F.micro, color: TK.muted, minWidth: 150 }}>
-                {r.kra_count ? `${String(r.kra_count)} KRAs · ${String(r.total_weightage)}%` : 'no KRAs yet'}
-              </div>
-              <span style={{ fontSize: F.micro, fontWeight: W.semi, padding: '4px 10px', borderRadius: 999,
-                             background: TK.sunken, color: TK.muted, whiteSpace: 'nowrap' }}>
-                {String(r.workflow_status || 'NOT_STARTED').replace(/_/g, ' ').toLowerCase()}
-              </span>
-              {/* A button only where there is something to press. Where there is
-                  not, the reason is given instead of a dead control. */}
-              {canRate ? (
-                <button onClick={() => setRating({
-                  id: String(r.employee_id),
-                  name: String((r.emp as Record<string, unknown>)?.full_name || ''),
-                  code: String((r.emp as Record<string, unknown>)?.emp_code || ''),
-                  role: myRole as 'RM_L1' | 'RM_L2',
-                })}
-                  style={{ ...ghost, borderColor: already ? TK.line : TK.brand,
-                           color: already ? TK.muted : TK.brand }}>
-                  {already ? 'Revise rating' : 'Rate'}
-                </button>
-              ) : (
-                <span style={{ fontSize: F.micro, color: TK.faint, whiteSpace: 'nowrap' }}>
-                  {r.self_score == null ? 'awaiting self rating'
-                    : myRole === 'RM_L2' ? 'awaiting RM L1' : 'not yours to rate'}
-                </span>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── Rating a reportee ──────────────────────────────────────────────────────
-//
-// Spec §4.3. The manager rates against what the employee actually claimed, so
-// their achievement text and self rating sit next to each input — rating in the
-// dark invites a number pulled from memory of the last conversation.
-//
-// Two orderings are enforced, both mirroring the database rather than trusting
-// the UI to be the only guard:
-//   * self rating must be submitted first — trg_pms_self_first rejects the
-//     insert otherwise, so the screen refuses rather than letting somebody type
-//     for ten minutes into a form that cannot save.
-//   * RM L2 rates after RM L1. L2 sees L1's numbers; L1 does not see L2's.
-
-function RateReportee({
-  meId, reportee, period, myRole, onDone,
-}: {
-  meId: string
-  reportee: { id: string; name: string; code: string }
-  period: Period
-  myRole: 'RM_L1' | 'RM_L2'
-  onDone: () => void
-}) {
-  const [goals, setGoals] = useState<Record<string, unknown>[]>([])
-  const [others, setOthers] = useState<Record<string, Record<string, unknown>>>({})
-  const [draft, setDraft] = useState<Record<string, { rating: number; comment: string }>>({})
-  const [overallComment, setOverallComment] = useState('')
-  const [selfSubmitted, setSelfSubmitted] = useState<boolean | null>(null)
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState<string | null>(null)
-
-  useEffect(() => {
-    (async () => {
-      const { data: g } = await supabase.from('pms_employee_goals')
-        .select('id,seq_no,kra_title,kpi_metric,target_value,weightage')
-        .eq('employee_id', reportee.id).eq('period_id', period.id).order('seq_no')
-      setGoals(g || [])
-
-      // Everything already said about these KRAs: the employee's own rating,
-      // and RM L1's if I am L2.
-      const roles = myRole === 'RM_L2' ? ['SELF', 'RM_L1'] : ['SELF']
-      const { data: r } = await supabase.from('pms_reviews')
-        .select('goal_id,rater_role,rating,achievement_value,comments,submitted')
-        .eq('employee_id', reportee.id).eq('period_id', period.id).in('rater_role', roles)
-
-      const byGoal: Record<string, Record<string, unknown>> = {}
-      ;(r || []).forEach(row => {
-        const k = `${row.goal_id}:${row.rater_role}`
-        byGoal[k] = row as Record<string, unknown>
-      })
-      setOthers(byGoal)
-      setSelfSubmitted((r || []).some(x => x.rater_role === 'SELF' && x.submitted))
-
-      // Resume a rating already in progress rather than starting blank.
-      const { data: mine } = await supabase.from('pms_reviews')
-        .select('goal_id,rating,comments')
-        .eq('employee_id', reportee.id).eq('period_id', period.id).eq('rater_role', myRole)
-      const d: Record<string, { rating: number; comment: string }> = {}
-      ;(mine || []).forEach(m => { d[String(m.goal_id)] = { rating: Number(m.rating) || 0, comment: String(m.comments || '') } })
-      setDraft(d)
-    })()
-  }, [reportee.id, period.id, myRole])
-
-  // Same formula as pms_score(): weighted by weightage, divided by the
-  // weightage actually rated — not by 100. They agree even on a part-finished
-  // set that way.
-  const rated = goals.filter(g => draft[String(g.id)]?.rating)
-  const wSum = rated.reduce((s, g) => s + Number(g.weightage || 0), 0)
-  const score = wSum
-    ? rated.reduce((s, g) => s + draft[String(g.id)].rating * Number(g.weightage || 0), 0) / wSum
-    : 0
-
-  const complete = goals.length > 0 && rated.length === goals.length
-
-  const submit = async () => {
-    setSaving(true); setMsg(null)
-    const rows = goals.map(g => ({
-      period_id: period.id, employee_id: reportee.id, goal_id: g.id,
-      rater_id: meId, rater_role: myRole,
-      rating: draft[String(g.id)].rating,
-      comments: draft[String(g.id)].comment || null,
-      submitted: true, submitted_at: new Date().toISOString(),
+      achievement_value: r.achievement || null, rating: r.rating,
+      comments: r.comment || null, submitted: true,
+      submitted_at: new Date().toISOString(),
     }))
     const { error } = await supabase.from('pms_reviews')
       .upsert(rows, { onConflict: 'period_id,employee_id,goal_id,rater_role' })
     setSaving(false)
     if (error) { setMsg(error.message); return }
-    onDone()
+    setSelfDraft(null); reload(); loadPeriodData()
   }
 
-  if (selfSubmitted === false) return (
-    <div>
-      <BackLink onDone={onDone} name={reportee.name} />
-      <Muted>
-        {reportee.name} has not submitted their self rating yet, so rating is not open. The database
-        rejects a manager rating before the employee&apos;s own — you would lose the work.
-      </Muted>
-    </div>
-  )
+  const logDiscussion = async (l: Log) => {
+    setSaving(true)
+    const { error } = await supabase.from('pms_one_to_one').insert({
+      period_id: period.id, employee_id: employeeId,
+      discussion_type: l.discussion_type, discussion_date: l.discussion_date,
+      mode: l.mode, discussion_points: l.discussion_points,
+      employee_ack: true, employee_ack_at: new Date().toISOString(),
+    })
+    setSaving(false)
+    if (error) setMsg(error.message); else loadPeriodData()
+  }
 
   return (
-    <div>
-      <BackLink onDone={onDone} name={reportee.name} />
+    <>
+      {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
 
-      <div style={{ border: `1px solid ${TK.brandEdge}`, background: TK.brandTint, borderRadius: 14,
-                    padding: '12px 16px', display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: F.small, fontWeight: W.bold, color: TK.ink }}>{reportee.name}</div>
-          <div style={{ fontSize: F.micro, color: TK.muted }}>
-            {reportee.code} · you are rating as {myRole.replace('_', ' ')}
-          </div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: F.micro, color: TK.muted }}>Weighted score</div>
-          <div style={{ ...numeric, fontSize: 22, fontWeight: W.bold, color: TK.brandDeep, lineHeight: 1.2 }}>
-            {score ? score.toFixed(2) : '—'}
-          </div>
-        </div>
-      </div>
-
-      <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
-        {goals.map(g => {
-          const id = String(g.id)
-          const d = draft[id] || { rating: 0, comment: '' }
-          const put = (patch: Partial<typeof d>) => setDraft(x => ({ ...x, [id]: { ...d, ...patch } }))
-          const self = others[`${id}:SELF`]
-          const l1 = others[`${id}:RM_L1`]
-          return (
-            <div key={id} style={{ border: `1px solid ${TK.line}`, background: TK.surface,
-                          borderRadius: 14, padding: 12 }}>
-              <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
-                <span style={{ ...numeric, fontSize: F.micro, fontWeight: W.bold, color: TK.brandDeep }}>
-                  {String(g.seq_no)}
-                </span>
-                <strong style={{ fontSize: F.small, color: TK.ink }}>{String(g.kra_title)}</strong>
-                <span style={{ ...numeric, marginLeft: 'auto', fontSize: F.micro, color: TK.faint }}>
-                  weightage {String(g.weightage)}
-                </span>
-              </div>
-
-              {/* What they said they did, and how they rated it. Rating without
-                  this in view is rating from memory. */}
-              <div style={{ marginTop: 8, padding: '8px 10px', background: TK.sunken, borderRadius: 10 }}>
-                <div style={{ fontSize: F.micro, color: TK.faint, marginBottom: 3 }}>
-                  Their claim{self?.rating ? ` · self-rated ${String(self.rating)}` : ''}
-                </div>
-                <div style={{ fontSize: F.small, color: TK.ink, lineHeight: 1.5 }}>
-                  {String(self?.achievement_value || '—')}
-                </div>
-                {Boolean(self?.comments) && (
-                  <div style={{ fontSize: F.micro, color: TK.muted, marginTop: 4 }}>{String(self?.comments)}</div>
-                )}
-                {l1?.rating != null && (
-                  <div style={{ fontSize: F.micro, color: TK.muted, marginTop: 6 }}>
-                    RM L1 rated <strong style={{ ...numeric, color: TK.ink }}>{String(l1.rating)}</strong>
-                    {l1.comments ? ` — ${String(l1.comments)}` : ''}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'grid', gap: 8, marginTop: 10,
-                            gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))' }}>
-                <select value={d.rating || ''} onChange={e => put({ rating: Number(e.target.value) })} style={inp}>
-                  <option value="">Your rating…</option>
-                  {RATINGS.map(r => <option key={r.v} value={r.v}>{r.v} — {r.label}</option>)}
-                </select>
-                <input value={d.comment} onChange={e => put({ comment: e.target.value })}
-                  placeholder="Why — evidence, not adjectives" style={inp} />
-              </div>
-            </div>
-          )
-        })}
-      </div>
-
-      <textarea value={overallComment} onChange={e => setOverallComment(e.target.value)}
-        placeholder="Overall comment for the appraisal conversation"
-        rows={3} style={{ ...inp, marginTop: 12, resize: 'vertical' }} />
-
-      <button onClick={submit} disabled={!complete || saving}
-        style={{ marginTop: 12, padding: '9px 18px', borderRadius: 10,
-                 cursor: complete ? 'pointer' : 'not-allowed', fontFamily: 'inherit',
-                 fontSize: F.small, fontWeight: W.semi,
-                 border: `1px solid ${complete ? TK.brand : TK.line}`,
-                 background: complete ? TK.brand : TK.sunken,
-                 color: complete ? TK.onAccent : TK.faint }}>
-        {saving ? 'Submitting…' : `Submit as ${myRole.replace('_', ' ')}`}
-      </button>
-      {!complete && (
-        <div style={{ fontSize: F.small, color: TK.muted, marginTop: 8 }}>
-          {goals.length - rated.length} of {goals.length} KRAs still need a rating.
-        </div>
+      {tab === 'dashboard' && (
+        <DashboardTab
+          who={who}
+          stages={STAGE_KEYS.map(k => ({ key: k, state: states[k],
+                                         detail: k === 'kra' && goals.length
+                                           ? `${goals.length} KRAs` : '' }))}
+          current={stage}
+          kraCount={goals.length}
+          weightage={kras.reduce((s, k) => s + k.weightage, 0)}
+          frequency="This period" periodLabel={period.period_code}
+          lastRating={overall?.final_rating ?? null}
+          lastScore={overall?.self_score ?? null}
+          actionLabel={ACTION_LABEL[stage] ?? 'Nothing right now'}
+          actionNote={ACTION_NOTE[stage] ?? ''} />
       )}
-      {msg && <div style={{ fontSize: F.small, color: TK.critical, marginTop: 8 }}>{msg}</div>}
-    </div>
+      {tab === 'kras' && (
+        <KraTab kras={kras} onChange={setDraftKras} locked={locked}
+                lockGate={lockGate} onSubmit={submitKras} saving={saving} />
+      )}
+      {tab === 'oneToOne' && (
+        <OneToOneTab logs={logs} managerName="your manager"
+                     onLog={logDiscussion} saving={saving} />
+      )}
+      {tab === 'self' && (
+        !locked
+          ? <div className="banner b-amber"><span aria-hidden="true">🔒</span><div>
+              Self rating opens once your weightages are locked. {lockGate.because}
+            </div></div>
+          : <SelfRatingTab rows={selfRows} onChange={setSelfDraft} submitted={selfSubmitted}
+                           onSubmit={submitSelf} saving={saving} />
+      )}
+      {tab === 'result' && (
+        <ResultTab
+          published={published} lines={lines}
+          finalRating={overall?.final_rating ?? null}
+          finalisedBy={null} finalisedOn={null} deptAverage={null}
+          appreciation={feedback?.appreciation_remark as string | undefined}
+          improvement={feedback?.improvement_feedback as string | undefined}
+          benefits={[]} publishGate={publishGate} />
+      )}
+      {tab === 'analytics' && (
+        <AnalyticsTab lines={lines} trend={[]} published={published} />
+      )}
+    </>
   )
 }
 
-function BackLink({ onDone, name }: { onDone: () => void; name: string }) {
+const STAGE_KEYS = STAGES.map(s => s.key)
+
+const ACTION_LABEL: Record<StageKey, string> = {
+  kra: 'Write your KRAs', oneToOne: 'The KRA discussion',
+  lock: 'Waiting on your manager', self: 'Your self rating',
+  review: 'With your manager', finalise: 'With the HOD', result: 'Read your result',
+}
+const ACTION_NOTE: Record<StageKey, string> = {
+  kra: `${DEFAULT_RULES.minKra} to ${DEFAULT_RULES.maxKra}, totalling ${DEFAULT_RULES.totalWeightage}`,
+  oneToOne: 'Both of you have to acknowledge it',
+  lock: 'They lock the weightages once acknowledged',
+  self: 'Rate every KRA, then submit — it locks',
+  review: 'Nothing owed from you right now',
+  finalise: 'Nothing owed from you right now',
+  result: 'Acknowledge once you have read it',
+}
+
+// ── the manager's side ───────────────────────────────────────────────────
+
+/** Reads the frozen chain, not a live reporting lookup. */
+function useRoster(employeeId: string, period: Period | null, as: 'rm' | 'hod') {
+  const [rows, setRows] = useState<TeamMember[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    if (!period) { setRows([]); setLoading(false); return }
+    setLoading(true)
+    const q = supabase.from('pms_overall_rating')
+      .select('employee_id,workflow_status,kra_count,total_weightage,self_score,rm_l1_score,rm_l2_score,final_rating,rm_l1_id,rm_l2_id,employment_flag')
+      .eq('period_id', period.id)
+    const { data } = as === 'hod'
+      ? await q.eq('hod_id', employeeId)
+      : await q.or(`rm_l1_id.eq.${employeeId},rm_l2_id.eq.${employeeId}`)
+    if (!data?.length) { setRows([]); setLoading(false); return }
+
+    const ids = data.map(d => d.employee_id)
+    const { data: emps } = await supabase.from('employees')
+      .select('id,emp_code,full_name,date_of_leaving').in('id', ids)
+    const byId = new Map((emps ?? []).map(e => [e.id, e as Record<string, unknown>]))
+
+    setRows(data.map(d => {
+      const e = byId.get(d.employee_id)
+      return {
+        employeeId: String(d.employee_id),
+        code: String(e?.emp_code ?? ''),
+        name: String(e?.full_name ?? 'Unknown'),
+        dateOfLeaving: (e?.date_of_leaving as string | null) ?? null,
+        flagOverride: (d.employment_flag as Flag | null) ?? null,
+        kraCount: Number(d.kra_count) || 0,
+        totalWeightage: Number(d.total_weightage) || 0,
+        oneToOneDone: String(d.workflow_status ?? '') !== 'NOT_STARTED'
+                   && Number(d.total_weightage) === DEFAULT_RULES.totalWeightage,
+        selfSubmitted: d.self_score != null,
+        selfScore: d.self_score == null ? null : Number(d.self_score),
+        rmL1Score: d.rm_l1_score == null ? null : Number(d.rm_l1_score),
+        rmL2Score: d.rm_l2_score == null ? null : Number(d.rm_l2_score),
+        finalRating: d.final_rating == null ? null : Number(d.final_rating),
+        finalised: d.final_rating != null,
+      }
+    }))
+    setLoading(false)
+  }, [employeeId, period, as])
+
+  useEffect(() => { load() }, [load])
+  return { rows, loading, reload: load }
+}
+
+function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
+  const { period, loading: pLoading } = usePeriod(employeeId)
+  const { rows, loading } = useRoster(employeeId, period, 'rm')
+  const [picked, setPicked] = useState<string | null>(null)
+  const [rateRows, setRateRows] = useState<RateRow[]>([])
+  const [overall, setOverall] = useState('')
+  const today = localToday()
+
+  const member = useMemo(
+    () => rows.find(r => r.employeeId === picked) ?? null, [rows, picked])
+
+  if (pLoading || loading) return <div className="k">Loading…</div>
+  if (!period) return <NoPeriod />
+
   return (
-    <button onClick={onDone} style={{ ...ghost, marginBottom: 12 }}>
-      ← Back to team{name ? '' : ''}
-    </button>
+    <>
+      {tab === 'team' && <TeamTab members={rows} today={today} managerName="your team" />}
+      {tab === 'approve' && <ApproveTab members={rows} today={today} />}
+      {tab === 'rate' && (
+        <RateTab member={member} rows={rateRows} onChange={setRateRows}
+                 onSubmit={() => {}} overallComment={overall}
+                 onOverallComment={setOverall} />
+      )}
+      {tab === 'pip' && <PipRequestTab members={rows} today={today} />}
+      {tab === 'analytics' && (
+        <TeamAnalyticsTab members={rows} today={today} lines={[]}
+                          deptAverage={null} companyAverage={null} scopeLabel="your team" />
+      )}
+    </>
   )
 }
 
-function DeptQueue({ employeeId }: { employeeId: string }) {
-  const { period, loading } = usePeriod(employeeId)
-  const [rows, setRows] = useState<Record<string, unknown>[]>([])
+function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
+  const { period, loading: pLoading } = usePeriod(employeeId)
+  const { rows, loading } = useRoster(employeeId, period, 'hod')
+  const [picked] = useState<string | null>(null)
+  const today = localToday()
+  const member = rows.find(r => r.employeeId === picked) ?? null
 
-  useEffect(() => {
-    (async () => {
-      if (!period) return
-      const { data } = await supabase.from('pms_overall_rating')
-        .select('employee_id,workflow_status,self_score,rm_l1_score,rm_l2_score,final_rating,employment_flag')
-        .eq('period_id', period.id).eq('hod_id', employeeId)
-      if (!data?.length) { setRows([]); return }
-      const { data: emps } = await supabase.from('employees')
-        .select('id,emp_code,full_name').in('id', data.map(d => d.employee_id))
-      const byId = new Map((emps || []).map(e => [e.id, e]))
-      setRows(data.map(d => ({ ...d, emp: byId.get(d.employee_id) })))
-    })()
-  }, [employeeId, period])
-
-  if (loading) return <Muted>Loading…</Muted>
-  if (!period)  return <NoPeriod />
-  if (!rows.length) return (
-    <Muted>
-      Nothing waiting to be finalised in {period.period_code}. Appraisals reach you after RM L1 and
-      RM L2 have rated them.
-    </Muted>
-  )
+  if (pLoading || loading) return <div className="k">Loading…</div>
+  if (!period) return <NoPeriod />
 
   return (
-    <div>
-      <Muted>
-        You finalise these. RM L2 must have rated first, and a final-review one-to-one must be
-        acknowledged by both sides — the database refuses to finalise otherwise.
-      </Muted>
-      <div style={{ display: 'grid', gap: 8, marginTop: 12 }}>
-        {rows.map(r => {
-          const e = r.emp as Record<string, unknown> | undefined
-          const ready = r.rm_l2_score != null
-          return (
-            <div key={String(r.employee_id)} style={{ border: `1px solid ${TK.line}`, background: TK.surface,
-                          borderRadius: 14, padding: '12px 14px', display: 'flex', gap: 12,
-                          alignItems: 'center', flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: F.small, fontWeight: W.semi, color: TK.ink }}>
-                  {String(e?.full_name || 'Unknown')}
-                </div>
-                <div style={{ fontSize: F.micro, color: TK.faint }}>{String(e?.emp_code || '')}</div>
-              </div>
-              <div style={{ ...numeric, fontSize: F.micro, color: TK.muted, minWidth: 190 }}>
-                self {String(r.self_score ?? '—')} · L1 {String(r.rm_l1_score ?? '—')} · L2 {String(r.rm_l2_score ?? '—')}
-              </div>
-              <span style={{ fontSize: F.micro, fontWeight: W.semi, padding: '4px 10px', borderRadius: 999,
-                             background: ready ? TK.brandTint : TK.sunken,
-                             color: ready ? TK.brandDeep : TK.faint, whiteSpace: 'nowrap' }}>
-                {ready ? 'ready to finalise' : 'waiting on RM L2'}
-              </span>
-            </div>
-          )
-        })}
+    <>
+      {tab === 'finalise' && (
+        <FinaliseTab members={rows} today={today} role="HOD"
+                     chain="SELF_RM1_RM2_HOD" whoCanFinalise="RM1_RM2_HOD"
+                     deptName="your department" />
+      )}
+      {tab === 'feedback' && (
+        <FeedbackTab member={member} rating={member?.finalRating ?? null}
+                     appreciation="" improvement=""
+                     benefits={[] as { type: BenefitType; note: string }[]}
+                     logs={[]} onChange={() => {}} />
+      )}
+      {tab === 'deptAnalytics' && (
+        <TeamAnalyticsTab members={rows} today={today} lines={[]}
+                          deptAverage={null} companyAverage={null}
+                          scopeLabel="your department" />
+      )}
+    </>
+  )
+}
+
+// ── shared empties ───────────────────────────────────────────────────────
+
+function NoPeriod() {
+  return (
+    <div className="card">
+      <h3>No period is open</h3>
+      <div className="k" style={{ lineHeight: 1.7, maxWidth: 620 }}>
+        Nothing is running right now. A period opens when HR publishes the cycle
+        configuration, and everybody eligible is enrolled at that moment — there is
+        nothing to do here until then.
       </div>
     </div>
   )
@@ -1007,34 +575,19 @@ function DeptQueue({ employeeId }: { employeeId: string }) {
 
 function ModulePending() {
   return (
-    <div style={{ border: `1px solid ${TK.warning}`, background: TK.warningTint,
-                  borderRadius: 14, padding: '16px 18px' }}>
-      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>Performance is not live yet</div>
-      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 8, lineHeight: 1.6 }}>
-        The screens are built, but the module's tables have not been created in the database yet.
-        Nothing here is broken — it is waiting on migrations 055 and 056.
+    <div className="pms">
+      <div className="card">
+        <h3>Waiting on migration 066</h3>
+        <div className="k" style={{ lineHeight: 1.7, maxWidth: 680 }}>
+          The performance module&rsquo;s tables do not exist in the database yet. These
+          screens and the whole approval flow are built; they have nothing to read
+          until <code>supabase/migrations/066_pms_module.sql</code> is applied. That
+          file creates 15 tables, 9 functions, 10 views and 2 triggers.
+          <br /><br />
+          It is handed to Nayan rather than run from here — this project does not
+          apply schema changes itself. Nothing on this page is broken; it is waiting.
+        </div>
       </div>
     </div>
   )
-}
-
-function Muted({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ border: `1px solid ${TK.line}`, background: TK.surface, borderRadius: 14,
-                  padding: '16px 18px', fontSize: F.small, color: TK.muted, lineHeight: 1.6 }}>
-      {children}
-    </div>
-  )
-}
-
-const inp: React.CSSProperties = {
-  padding: '8px 10px', border: `1px solid ${TK.line}`, borderRadius: 10,
-  fontSize: F.small, fontFamily: 'inherit', background: TK.surface, color: TK.ink,
-  outline: 'none', boxSizing: 'border-box', width: '100%',
-}
-
-const ghost: React.CSSProperties = {
-  padding: '8px 13px', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-  fontSize: F.tiny, fontWeight: W.semi, border: `1px solid ${TK.line}`,
-  background: 'transparent', color: TK.muted,
 }

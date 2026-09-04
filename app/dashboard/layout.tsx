@@ -51,81 +51,22 @@ interface NavItem { label: string; href: string; Icon: (p: IconProps) => React.R
 // ambers, Compliance in violets and roses, Setup in slates, Help in warm —
 // so every item is distinct AND the groups still read as families. A random
 // assignment would differentiate the items and destroy the grouping.
-// Twenty-seven rows, twenty-seven colours. The rail's problem was not that it
-// lacked colour but that every row had the SAME colour, so the eye had nothing
-// to fix on and had to read all twenty-seven labels to find one.
+// ── One blue ──────────────────────────────────────────────────────────────
+// This rail used to carry twenty-seven hues, one per module, plus six more
+// for the section headings. It was replaced on request with the product's
+// own blue, used everywhere.
 //
-// The hues are not picked at random and not picked by group alone. Each group
-// occupies its own arc of the wheel — People cool blue through violet, Time
-// teal through blue, Money green through amber, Compliance magenta through
-// rose, Setup deliberately quieter, Help warm — so the rail still reads as
-// organised. Within an arc the LIGHTNESS alternates, because seven neighbouring
-// blues at one lightness are seven versions of the same blue. Every adjacent
-// pair was measured in CIE Lab: the closest is dE 17.5 (the three Money greens,
-// which are a family on purpose), and everything else is further apart.
+// What did the work before was COLOUR; what does it now is SHAPE. Every row
+// is a button — a surface, a hairline, a shadow — and the selected one is
+// lifted off the rail rather than merely tinted. That is a stronger signal
+// than hue was, and it survives for people who cannot separate twenty-seven
+// colours anyway.
 //
-// Every value also had to survive both themes. Measured, not eyeballed:
-//   · glyph on its own tile >= 3.0:1 in light AND dark (the AA bar for a
-//     graphic, not the 4.5:1 text bar — these are 15px stroke icons)
-//   · white glyph on the active tile >= 3.0:1 for all 27
-// That is what pushed the cyan and the ambers darker than they want to be:
-// #15A7C1 and #C88D04 came out at 2.53 and 2.57 on white and were unusable.
-const HUE: Record<string, string> = {
-  '/dashboard':                      '#084FA0',
-  // People — blue → violet, alternating light and deep
-  '/dashboard/recruitment':          '#4B82E2',
-  '/dashboard/onboarding':           '#1631CA',
-  '/dashboard/employees':            '#655EDE',
-  '/dashboard/org-chart':            '#481EC8',
-  '/dashboard/bulk-upload':          '#955CDB',
-  '/dashboard/transfer':             '#871AC1',
-  '/dashboard/pms':                  '#C54DDB',
-  // Time & Attendance — teal → blue
-  '/dashboard/attendance':           '#08917F',
-  '/dashboard/attendance-reports':   '#0B8BB1',
-  '/dashboard/leave-upload':         '#0A4A8A',
-  // Money — green → amber
-  '/dashboard/payroll':              '#057F5B',
-  '/dashboard/finance':              '#269757',
-  '/dashboard/flexi-claims':         '#137222',
-  '/dashboard/travel-claims':        '#549523',
-  '/dashboard/loans':                '#B77606',
-  // Compliance & Docs — magenta → rose
-  '/dashboard/compliance':           '#AB21A0',
-  '/dashboard/letters':              '#DB4DB0',
-  '/dashboard/policies':             '#AB1C5F',
-  '/dashboard/reports':              '#E43A61',
-  // Setup — muted on purpose. Configuration should not shout louder than work.
-  '/dashboard/ess':                  '#1C649C',
-  '/dashboard/admin':                '#6F4BC3',
-  '/dashboard/flexi-policy':         '#243B99',
-  '/dashboard/company-profile':      '#147390',
-  '/dashboard/db-export':            '#4F5A69',
-  // Help — warm, and the only warm pair in the rail, so it reads as "not work"
-  '/dashboard/ai':                   '#D8510E',
-  '/dashboard/support':              '#A57403',
-}
-const hueOf = (href: string) => HUE[href] ?? '#2563EB'
-
-// The section headings had one grey between them all, which made six different
-// sections look like one list with words dropped into it. Each now carries its
-// own ink — the centre of that group's item arc, so the heading is visibly the
-// same family as the rows beneath it.
-//
-// Two values per group, not one, because a hue that clears 5.5:1 on white is
-// nowhere near readable on #171B21 and vice versa. 10px uppercase is small
-// text: 4.5:1 is the floor, not a comfortable place to sit, so these were
-// walked until both themes cleared 5.5:1.
-const GROUP_INK: Record<string, { inkL: string; inkD: string }> = {
-  'People':            { inkL: '#562FB1', inkD: '#9E82DE' },
-  'Time & Attendance': { inkL: '#187091', inkD: '#50BBE2' },
-  'Money':             { inkL: '#1F753C', inkD: '#5ED485' },
-  'Compliance & Docs': { inkL: '#B12F82', inkD: '#D86EB1' },
-  'Setup':             { inkL: '#51698A', inkD: '#7E95B4' },
-  'Help':              { inkL: '#9E531A', inkD: '#E28F50' },
-}
-const inkOf = (group: string) =>
-  GROUP_INK[group] ?? { inkL: 'var(--ez-rail-faint)', inkD: 'var(--ez-rail-faint)' }
+// Every value comes from the theme tokens (--ez-brand, --ez-brand-deep,
+// --ez-brand-tint), so the rail follows the product's blue rather than
+// keeping a private copy of it. Measured on both themes: resting label
+// 8.2:1 light / 12.9:1 dark, selected label 5.2:1 against the lighter end of
+// the gradient, icons 4.0:1 on their tile.
 
 interface NavGroup { group: string; items: NavItem[] }
 
@@ -176,39 +117,33 @@ function RailItem({ item, open, active, n }: {
   n: number;
 }) {
   const { Icon } = item;
-  const hue = hueOf(item.href);
   return (
     <Link href={item.href} title={open ? undefined : item.label}
       style={{ textDecoration: 'none', width: '100%', flexShrink: 0,
                ['--n' as string]: n }}>
+      {/* Colour, depth and motion are all in CSS — an inline background wins
+          the cascade, and the dark theme has to be able to change these.
+          Only geometry is set here. */}
       <div className={`ez-nav${active ? ' ez-nav-on' : ''}`} style={{
-        height: 40, borderRadius: R.md, display: 'flex', alignItems: 'center',
+        height: 40, display: 'flex', alignItems: 'center',
         gap: 10, padding: open ? '0 8px' : 0,
         justifyContent: open ? 'flex-start' : 'center',
-        // The row tint and the tile colour are BOTH in CSS, keyed off the
-        // custom property below — an inline background would win the cascade
-        // and the dark-theme rules could never lift it. Only geometry and the
-        // hue itself are inline here.
-        color: active ? C.railText : C.railItem,
         position: 'relative',
-        // Set as a custom property so the hover and active rules in
-        // ez-nav CSS can reach the hue without a style tag per row.
-        ['--nav-hue' as string]: hue,
       }}>
-        {/* The bar carries the selection when the tint alone is too quiet —
-            and it survives at 60px wide, where the label does not. */}
+        {/* Collapsed to 60px there is no label and no room for the button to
+            grow, so the selection needs something that reads at that width.
+            Coloured in CSS, because on a filled blue button it has to be the
+            accent's own ink rather than blue on blue. */}
         {active && (
-          <span aria-hidden style={{
-            position: 'absolute', left: 0, top: 7, bottom: 7, width: 3,
-            borderRadius: '0 3px 3px 0', background: hue,
-            boxShadow: `0 0 8px ${hue}80`,
+          <span className="ez-nav-bar" aria-hidden style={{
+            position: 'absolute', left: 3, top: 8, bottom: 8, width: 3,
+            borderRadius: 3,
           }} />
         )}
 
-        {/* The icon TILE is what carries the colour. An icon tinted on its own
-            is a thin coloured glyph on a white ground and reads as grey at
-            16px; a filled tile behind it is a solid block of the hue, which
-            is what makes twenty-seven rows distinguishable at a glance. */}
+        {/* The icon tile. A glyph on its own reads as grey at 15px; a filled
+            tile behind it is a solid block, which is what gives the button
+            something to be built around. */}
         <span className="ez-nav-tile" aria-hidden style={{
           width: 26, height: 26, borderRadius: 8, flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -229,7 +164,15 @@ function RailItem({ item, open, active, n }: {
             fontSize: 13.5,
             fontWeight: active ? W.bold : W.semi,
             letterSpacing: '-.005em',
-            color: active ? C.railText : C.railItem,
+            // NO COLOUR HERE — it inherits from the button.
+            //
+            // This used to set `active ? C.railText : C.railItem` inline, and
+            // an inline colour beats the stylesheet. So the selected row got
+            // --ez-rail-text, which is NEAR-BLACK in light mode, printed bold
+            // on the deep blue fill. That is the heavy black-on-blue that kept
+            // coming back: the CSS said white, the inline style overruled it,
+            // and every contrast figure I measured was of the rule that never
+            // applied.
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{item.label}</span>
         )}
@@ -256,7 +199,6 @@ function GroupBlock({ group, index, items, railOpen, path, expanded, onToggle }:
   group: string; index: number; items: NavItem[]; railOpen: boolean;
   path: string; expanded: boolean; onToggle: () => void;
 }) {
-  const { inkL, inkD } = inkOf(group);
   // Stable across server and client. A module-level counter is not, and that
   // is exactly how the logo produced a hydration mismatch earlier.
   const rid = useId();
@@ -273,11 +215,8 @@ function GroupBlock({ group, index, items, railOpen, path, expanded, onToggle }:
   const shown = foldable ? expanded : true;
 
   return (
-    <div className={`ez-group${shown ? ' ez-open' : ''}${group ? '' : ' ez-group-plain'}`} style={{
-      ['--g-ink-l' as string]: inkL,
-      ['--g-ink-d' as string]: inkD,
-      ['--i' as string]: index,
-    }}>
+    <div className={`ez-group${shown ? ' ez-open' : ''}${group ? '' : ' ez-group-plain'}`}
+      style={{ ['--i' as string]: index }}>
       {foldable && (
         <button type="button" className={`ez-group-head${here ? ' ez-here-head' : ''}`}
           onClick={onToggle} aria-expanded={expanded} aria-controls={panelId}
@@ -469,354 +408,426 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <LogoStyles />
       <UIKeyframes />
       <style>{`
-        /* Colour and motion both live here rather than in inline styles, for
-           two different reasons. Motion, because twenty-seven inline hover
-           handlers would be twenty-seven closures re-created on every render.
-           Colour, because an inline background wins the cascade outright — and
-           the dark theme needs to LIFT these hues, which it cannot do to a
-           style attribute. Everything below reads the row's own --nav-hue. */
+        /* ══ THE RAIL IS THE BLUE ══════════════════════════════════════
+           Previous passes all had the same shape: a pale ground with
+           card-like buttons drawn on it, and every complaint — "button and
+           bg are similar", "selected blends in", "section blends in" — was
+           the same problem, because separating a light thing from a light
+           thing can only ever be a matter of degree.
 
-        .ez-nav{
-          /* Sign out and "Back to my ESS" wear this class too, and they have no
-             hue of their own — without a default here their hover background
-             would be an invalid var() substitution, which drops the whole
-             declaration and leaves them with no hover state at all. Rail items
-             set --nav-hue inline and override this. */
-          --nav-hue: ${C.railFaint};
-          transition: background .16s ease, color .16s ease,
-                      transform .16s cubic-bezier(.2,.8,.2,1);
+           So the figure and ground are swapped. The rail is deep blue; the
+           items are light text ON it with no card chrome at all; and the
+           selected row is a WHITE pill. Nothing has to be tuned into
+           visibility — white on deep blue is 8.7:1 by construction, and the
+           section labels can be quiet without disappearing because the
+           ground is dark enough to carry a quiet colour.
+
+           Motion changed with it. No lift, no scale, no bounce: the selected
+           pill WIPES IN from the left edge, which is the direction reading
+           goes and the direction the content sits. Hover is a wash that
+           fades, not a movement.
+
+           Measured at the rail's lightest point, which is the worst case:
+             item label     5.58 (on a raised row)   section 7.95 (recessed)
+             icon           5.37    selected ink  8.72 (on the white pill)
+        */
+        /* ══ TWO POLARITIES, NOT ONE DESIGN WITH A DARKER SKIN ═════════
+           Light is now a PALE rail: a light-blue ground with navy ink, rows
+           tinted DARKER than the ground and sections lighter. Dark keeps the
+           deep rail: white ink, rows lighter than the ground, sections
+           darker. They are mirror images, so nothing below may assume which
+           way round it is — every colour that depends on polarity is a
+           token, set once per theme and never referenced literally in a
+           rule. A single hard-coded rgba() here is a rule that silently
+           renders one theme's ink on the other theme's surface.
+
+           WHY THE PALE GROUND STOPS WHERE IT DOES. The span is squeezed from
+           both ends and the ends want opposite things:
+
+             the section band is WHITE over the ground, so it separates least
+             at the TOP, where the ground is already near-white and there is
+             no headroom left above it;
+
+             the row is NAVY over the ground, and its navy label separates
+             least at the BOTTOM, where the row is darkest.
+
+           #D2E2FE -> #8FB4F2 is the widest span where both still hold, 16
+           points of lightness. Measured at whichever end is worse:
+
+                          light (pale)        dark (deep)
+             label          4.83                 5.07
+             icon           3.63                 4.55
+             section ink    8.05                 8.53
+             row/ground     1.41                 1.32
+             band/ground    1.19                 1.19
+        */
+        .ez-rail{
+          background: linear-gradient(180deg, #BBD4FA 0%, #79A3EA 100%);
+          /* ── A ROW IS A DIFFERENT MATERIAL, NOT A DIFFERENT SHADE ──────
+             Every earlier attempt separated the row from the ground by
+             moving it along the same blue, and every one of them was told
+             the two looked identical — correctly, because a step of 1.41
+             between two colours of the SAME hue at the SAME saturation
+             gives the eye one weak cue and nothing else.
+
+             So the row stops being blue. It is a WHITE CARD lying on a
+             blue ground: the difference is chroma, not lightness, and 86%
+             saturation against ~0% is a difference of kind that no amount
+             of nudging a shared hue can produce. It also costs nothing —
+             navy on white measures 12.5, where navy on a tinted row was
+             4.83, and the step doubles to 2.23 at the deep end of the
+             gradient.
+
+             The ground can now be a real light blue rather than a
+             near-white, because it no longer has to stay pale enough for
+             navy text to sit directly on it. Nothing does: text sits on
+             cards. */
+          --r-row:   linear-gradient(180deg, rgba(255,255,255,.97), rgba(255,255,255,.84));
+          --r-row-h: linear-gradient(180deg, rgba(255,255,255,1), rgba(255,255,255,.92));
+          /* The band leans the other way — into the ground, away from the
+             cards — so the three levels are never the same move twice. */
+          --r-band:  rgba(21,45,120,.24);
+          --r-edge:  rgba(21,45,120,.22);
+          --r-cast:      rgba(16,36,100,.20);
+          --r-cast-far:  rgba(16,36,100,.26);
+          --r-cast-h:    rgba(16,36,100,.24);
+          --r-cast-far-h:rgba(16,36,100,.34);
+          --r-press:     rgba(21,45,120,.14);
+          --r-focus:     #0D2154;
+          --r-pill-edge: rgba(21,45,120,.55);
+          --r-band-in:   rgba(255,255,255,.65);
+          --r-band-h:    rgba(255,255,255,.82);
+          --r-sec-ink-h: #06122C;
+          --r-fold:      #10275C;
+          --r-pulse:     rgba(20,48,110,.45);
+          /* Lit from above, same as the deep rail — but on a pale surface
+             the highlight is white and the shading below it is the navy. */
+          --r-spec:  rgba(255,255,255,.90);
+          --r-spec-h:rgba(255,255,255,1);
+          --r-rim-t: rgba(255,255,255,.95);
+          --r-rim-b: rgba(21,45,120,.16);
+          --r-rim-th:rgba(255,255,255,1);
+          --r-edge-h:rgba(21,45,120,.30);
+          /* Ink DARKENS on hover here, the mirror of going white on a deep
+             rail: the row darkens under it, so the ink has to outrun it. */
+          --r-ink:      #0F2660;
+          --r-ink-h:    #0A1E52;
+          /* Free to be more colourful than the label now: on white it
+             measures 7.5 either way, so the icon can carry the blue the
+             row itself gave up. */
+          --r-icon:     #1E46A0;
+          --r-icon-h:   #14306E;
+          /* The band darkened, so its label has to go with it. */
+          --r-sec-ink:  #0A1B3E;
+          --r-pill-bg:  #14306E;
+          --r-pill-ink: #FFFFFF;
+          --r-pill-ink-h: #FFFFFF;
+          /* The brand mark, the footer and the sign-out row inherit these.
+             On the pale rail they are NAVY, not the near-white they are on
+             the deep one — the single largest thing that flips.
+
+             These are the ONLY text in the rail that touches the ground
+             directly; everything else sits on a card. That has now broken
+             three times running, once per ground change, because a check
+             on rows can never see it. It has its own check for that reason
+             and these values are re-derived whenever the ground moves. */
+          --ez-rail-text:  #0D2154;
+          --ez-rail-item:  #123069;
+          --ez-rail-muted: #142C60;
+          --ez-rail-faint: #17326E;
+          --ez-rail-line:  rgba(21,45,120,.20);
+          --ez-rail-hover: rgba(21,45,120,.08);
+          --ez-rail-active-bg:   rgba(21,45,120,.16);
+          --ez-rail-active-text: #0D2154;
         }
-        .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 9%, transparent) }
-
-        /* The icon TILE is what carries the colour. A tinted glyph on its own
-           is a thin coloured stroke on a white ground and reads as grey at
-           15px; a filled tile behind it is a solid block of the hue, which is
-           what makes twenty-seven rows tell themselves apart at a glance. */
-        .ez-nav-tile{
-          /* Mixed with the RAIL colour, not with transparent. Every glyph
-             contrast figure on this rail was measured against a tile sitting
-             on the bare rail; once each section has its own wash behind it, a
-             translucent tile lets that wash through and every one of those
-             figures moves — the worst dropped to 2.93:1 at even the lightest
-             wash tried. Opaque, the tile renders identically whatever is
-             behind it, and the measurements hold. */
-          background: color-mix(in srgb, var(--nav-hue) 12%, ${C.rail});
-          color: var(--nav-hue);
-          /* Inner highlight: the top edge catches light, so a flat square
-             reads as a raised object rather than a swatch. */
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.14);
-          transition: transform .18s cubic-bezier(.2,.8,.2,1),
-                      box-shadow .18s ease, background .16s ease, color .16s ease;
-        }
-        .ez-nav-on .ez-nav-tile{
-          background: linear-gradient(145deg, var(--nav-hue),
-                      color-mix(in srgb, var(--nav-hue) 78%, #000));
-          color: #FFF;
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.32),
-                      0 3px 8px -1px color-mix(in srgb, var(--nav-hue) 44%, transparent);
-        }
-
-        /* Slide, not lift. The rail is a vertical list, and a row that rises
-           off its neighbours breaks the column; sliding is also the direction
-           the click takes you. The tile is the part that lifts. */
-        .ez-nav:hover{
-          background: color-mix(in srgb, var(--nav-hue) 12%, transparent);
-          color: ${C.railText};
-          transform: translateX(2px);
-        }
-        .ez-nav:hover .ez-nav-tile{
-          transform: translateY(-1px) scale(1.06);
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.28),
-                      0 4px 10px -2px color-mix(in srgb, var(--nav-hue) 55%, transparent);
-        }
-        .ez-nav:active{ transform: translateX(1px) scale(.99) }
-        .ez-nav-on:hover{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
-        .ez-nav:focus-visible,
-        .ez-nav-tile:focus-visible{ outline: 2px solid var(--nav-hue); outline-offset: 2px }
-
-        /* Dark. A hue chosen to clear 3:1 on white is too dark to read on
-           #171B21, so the tile takes more of it (20% rather than 12%) and the
-           glyph is lifted.
-
-           HOW it is lifted matters more than it looks. Mixing toward white was
-           the obvious move and the wrong one: it desaturates, and this palette
-           separates its neighbours by SATURATION and LIGHTNESS as much as by
-           hue, so white-mixing collapsed the worst adjacent pair from dE 17.5
-           to 12.3 — the rail went back to looking uniform in dark mode, which
-           is the whole problem being fixed. Adding to lightness while leaving
-           hue and saturation alone keeps the alternation intact: worst pair
-           dE 18.8, and the glyph clears 4.18:1.
-
-           Setting lightness to a fixed value is the same trap by another
-           route — it flattens the light/deep alternation the palette is built
-           on and measures dE 6.9. It has to be an offset.
-
-           Both dark states are declared, because they are genuinely different
-           selectors: the media query catches "System", which stamps no
-           attribute at all, and the attribute catches an explicit choice. A
-           rule written only one way leaves the other showing light-theme ink
-           on a dark rail. */
         @media (prefers-color-scheme: dark){
-          :root:not([data-ez-theme="light"]) .ez-nav:not(.ez-nav-on) .ez-nav-tile{
-            background: color-mix(in srgb, var(--nav-hue) 20%, ${C.rail});
-            color: color-mix(in srgb, var(--nav-hue) 74%, #FFF);
+          :root:not([data-ez-theme="light"]) .ez-rail{
+            background: linear-gradient(180deg, #204A93 0%, #0F2657 100%);
+            --r-row:   linear-gradient(180deg, rgba(61,130,255,.46), rgba(61,130,255,.30));
+            --r-row-h: linear-gradient(180deg, rgba(61,130,255,.52), rgba(61,130,255,.35));
+            --r-band:  rgba(0,0,0,.34);
+            --r-edge:  rgba(255,255,255,.16);
+            --r-cast:      rgba(4,12,42,.30);
+            --r-cast-far:  rgba(4,12,42,.34);
+            --r-cast-h:    rgba(4,12,42,.32);
+            --r-cast-far-h:rgba(4,12,42,.42);
+            --r-press:     rgba(255,255,255,.16);
+            --r-focus:     #FFFFFF;
+            --r-pill-edge: rgba(255,255,255,.55);
+            --r-band-in:   rgba(0,0,0,.22);
+            --r-band-h:    rgba(0,0,0,.42);
+            --r-sec-ink-h: #FFFFFF;
+            --r-fold:      #C3D4F2;
+            --r-pulse:     rgba(255,255,255,.55);
+            --r-spec:  rgba(255,255,255,.26);
+            --r-spec-h:rgba(255,255,255,.34);
+            --r-rim-t: rgba(255,255,255,.34);
+            --r-rim-b: rgba(0,0,0,.20);
+            --r-rim-th:rgba(255,255,255,.55);
+            --r-edge-h:rgba(255,255,255,.42);
+            --r-ink:      #FFFFFF;
+            --r-ink-h:    #FFFFFF;
+            --r-icon:     #DCE8FF;
+            --r-icon-h:   #FFFFFF;
+            --r-sec-ink:  #C3D4F2;
+            --r-pill-bg:  #FFFFFF;
+            --r-pill-ink: #1B3A9E;
+            --r-pill-ink-h: #17307E;
+            --ez-rail-text:  #F2F6FF;
+            --ez-rail-item:  #E8EEFB;
+            --ez-rail-muted: #DEE9FC;
+            --ez-rail-faint: #D8E4FA;
+            --ez-rail-line:  rgba(255,255,255,.16);
+            --ez-rail-hover: rgba(255,255,255,.10);
+            --ez-rail-active-bg:   rgba(255,255,255,.18);
+            --ez-rail-active-text: #FFFFFF;
           }
-          :root:not([data-ez-theme="light"]) .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
-          :root:not([data-ez-theme="light"]) .ez-group{ --g-ink: var(--g-ink-d) }
         }
-        :root[data-ez-theme="dark"] .ez-nav:not(.ez-nav-on) .ez-nav-tile{
-            background: color-mix(in srgb, var(--nav-hue) 20%, ${C.rail});
-            color: color-mix(in srgb, var(--nav-hue) 74%, #FFF);
-          }
-        :root[data-ez-theme="dark"] .ez-nav-on{ background: color-mix(in srgb, var(--nav-hue) 20%, transparent) }
-        :root[data-ez-theme="dark"] .ez-group{ --g-ink: var(--g-ink-d) }
+        :root[data-ez-theme="dark"] .ez-rail{
+          background: linear-gradient(180deg, #204A93 0%, #0F2657 100%);
+          --r-row:   linear-gradient(180deg, rgba(61,130,255,.46), rgba(61,130,255,.30));
+          --r-row-h: linear-gradient(180deg, rgba(61,130,255,.52), rgba(61,130,255,.35));
+          --r-band:  rgba(0,0,0,.34);
+          --r-edge:  rgba(255,255,255,.16);
+          --r-cast:      rgba(4,12,42,.30);
+          --r-cast-far:  rgba(4,12,42,.34);
+          --r-cast-h:    rgba(4,12,42,.32);
+          --r-cast-far-h:rgba(4,12,42,.42);
+          --r-press:     rgba(255,255,255,.16);
+          --r-focus:     #FFFFFF;
+          --r-pill-edge: rgba(255,255,255,.55);
+          --r-band-in:   rgba(0,0,0,.22);
+          --r-band-h:    rgba(0,0,0,.42);
+          --r-sec-ink-h: #FFFFFF;
+          --r-fold:      #C3D4F2;
+          --r-pulse:     rgba(255,255,255,.55);
+          --r-spec:  rgba(255,255,255,.26);
+          --r-spec-h:rgba(255,255,255,.34);
+          --r-rim-t: rgba(255,255,255,.34);
+          --r-rim-b: rgba(0,0,0,.20);
+          --r-rim-th:rgba(255,255,255,.55);
+          --r-edge-h:rgba(255,255,255,.42);
+          --r-ink:      #FFFFFF;
+          --r-ink-h:    #FFFFFF;
+          --r-icon:     #DCE8FF;
+          --r-icon-h:   #FFFFFF;
+          --r-sec-ink:  #C3D4F2;
+          --r-pill-bg:  #FFFFFF;
+          --r-pill-ink: #1B3A9E;
+          --r-pill-ink-h: #17307E;
+          --ez-rail-text:  #F2F6FF;
+          --ez-rail-item:  #E8EEFB;
+          --ez-rail-muted: #DEE9FC;
+          --ez-rail-faint: #D8E4FA;
+          --ez-rail-line:  rgba(255,255,255,.16);
+          --ez-rail-hover: rgba(255,255,255,.10);
+          --ez-rail-active-bg:   rgba(255,255,255,.18);
+          --ez-rail-active-text: #FFFFFF;
+        }
 
-        /* The lift proper. Guarded, because relative colour syntax is the one
-           thing here a browser might not have — and the color-mix above is a
-           usable fallback (3.15:1) rather than an unreadable one. */
-        @supports (color: hsl(from #000 h s calc(l + 1%))){
-          @media (prefers-color-scheme: dark){
-            :root:not([data-ez-theme="light"]) .ez-nav:not(.ez-nav-on) .ez-nav-tile{
-            color: hsl(from var(--nav-hue) h s calc(l + 26%));
-          }
-          }
-          :root[data-ez-theme="dark"] .ez-nav:not(.ez-nav-on) .ez-nav-tile{
-            color: hsl(from var(--nav-hue) h s calc(l + 26%));
-          }
-        }
+        /* ── A row sits ABOVE the rail; a section sits BELOW it ────────
+           Bare text on the rail was as flat as a card the colour of its own
+           ground — the same blending complaint, from the other direction.
+           A dark ground is what fixes it: white at 12% lifts a row off the
+           rail, black at 26/38% presses a section into it, and the selected
+           pill goes fully white on top. Four levels, one hue. */
+        .ez-nav{
+          position:relative; border-radius:9px;
+          color: var(--r-ink);
+          /* SHADED, not merely tinted. A flat wash of white at one alpha is
+             what read as dull: it lifts a row off the rail arithmetically
+             while giving the eye nothing to call a surface. What makes a
+             button look like a button is the light on it, so the fill runs
+             top-to-bottom, the top edge catches a specular, and the bottom
+             sits on a contact shadow.
 
-        /* ── Sections ────────────────────────────────────────────────────
-           --g-ink is the section's own ink, swapped per theme further down.
-           Everything in a section reads from it, so one value moves the
-           heading, the dot, the boundary rule and the spine together. */
-        /* Each section sits on its own wash, tinted with its own ink, so the
-           six read as six surfaces rather than six labels on one sheet.
+             The tint is a BLUE, never a neutral. White over a saturated
+             ground does not lighten it, it greys it — white at .24 on the
+             old deep rail left the row holding 53% of the rail's
+             saturation, and that desaturation, not the brightness, is what
+             read as a dull muddy colour. Both polarities tint with a blue
+             for the same reason: the deep rail lifts with #3D82FF, the pale
+             one shades with #152D78, and each keeps its ground's hue.
 
-           The gradient is SHAPED, not uniform: weakest across the top where
-           the heading sits, fullest through the rows, easing off at the foot.
-           A flat tint strong enough to see would have put the heading ink on a
-           wash of itself — the two are the same hue, so contrast collapses
-           exactly where the label needs it. This way the heading keeps 5.3:1
-           and the rows still sit on something visibly coloured. */
-        .ez-group{
-          display:flex; flex-direction:column; flex-shrink:0;
-          --g-ink: var(--g-ink-l);
-          border-radius: 12px;
-          padding-bottom: 5px;
-          margin-bottom: 5px;
-          background: linear-gradient(180deg,
-            color-mix(in srgb, var(--g-ink)  3%, transparent) 0,
-            color-mix(in srgb, var(--g-ink) 10%, transparent) 62px,
-            color-mix(in srgb, var(--g-ink)  4%, transparent) 100%);
+             Which DIRECTION the tint runs is the token's business, not this
+             rule's. On the deep rail --r-row lightens; on the pale rail it
+             darkens. Everything here is written to be true either way. */
+          background: var(--r-row);
+          border:1px solid var(--r-edge);
+          border-top-color: var(--r-rim-t);
+          border-bottom-color: var(--r-rim-b);
+          box-shadow:
+            inset 0 1px 0 var(--r-spec),              /* specular along the top */
+            0 1px 2px var(--r-cast),                  /* contact with the rail */
+            0 3px 7px -3px var(--r-cast-far);         /* the lift itself */
+          transition: color .18s ease, background .18s ease,
+                      border-color .18s ease, box-shadow .18s ease,
+                      transform .10s ease;
+          isolation:isolate;
         }
-        /* Home has no section and no ink of its own; a grey wash under one row
-           would look like a rendering fault rather than a decision. */
-        .ez-group-plain{ background:none; padding-bottom:0; margin-bottom:0 }
-        .ez-group-items{ display:flex; flex-direction:column; gap:1px; position:relative }
+        /* The fill is a pseudo-element so it can wipe independently of the
+           text, which stays put. */
+        .ez-nav::before{
+          content:''; position:absolute; inset:0; border-radius:inherit;
+          background: var(--r-row-h);
+          transform: scaleX(0); transform-origin: left center;
+          transition: transform .22s cubic-bezier(.2,.8,.2,1);
+          z-index:-1;
+        }
+        /* Hover carries most of its signal in the EDGE and the shadow rather
+           than in fill brightness. Pushing the fill far enough to read on
+           luminance alone takes the top stop to .32, where a white label
+           measures 4.28 — under the bar. A brighter rim and a taller lift
+           cost nothing and read as "raised further". */
+        .ez-nav:hover{
+          color: var(--r-ink-h);
+          border-color: var(--r-edge-h);
+          border-top-color: var(--r-rim-th);
+          box-shadow:
+            inset 0 1px 0 var(--r-spec-h),
+            0 2px 4px var(--r-cast-h),
+            0 6px 14px -5px var(--r-cast-far-h);
+        }
+        .ez-nav:hover::before{ transform: scaleX(1) }
+        /* Pressed: the row travels the 1px it was lifted and its shadow
+           collapses, so the click lands on the rail instead of hovering
+           above it. A button that does not move under the pointer is the
+           other half of looking dull. */
+        .ez-nav:active{
+          transform: translateY(1px);
+          box-shadow: inset 0 1px 2px var(--r-cast-h), 0 0 0 rgba(0,0,0,0);
+        }
+        .ez-nav:active::before{ background: var(--r-press) }
+        .ez-nav:focus-visible{ outline:2px solid var(--r-focus); outline-offset:-2px }
 
-        /* The spine. It sits at left:0 BEHIND the rows rather than indenting
-           them — an indent would have cost 10px of label width, and
-           "ESS & Role Management" already runs to the edge. The row tints are
-           translucent, so it shows through them; the active row's own bar
-           covers it, which is the right precedence. */
-        .ez-group-items::before{
-          content:''; position:absolute; left:0; top:3px; bottom:3px; width:2px;
-          border-radius:2px; pointer-events:none;
-          background: linear-gradient(180deg,
-            color-mix(in srgb, var(--g-ink) 62%, transparent),
-            color-mix(in srgb, var(--g-ink) 14%, transparent));
-          transform-origin: top;
-          animation: ez-spine .42s cubic-bezier(.2,.8,.2,1) both;
-          animation-delay: calc(var(--i) * 70ms + 90ms);
-          transition: opacity .2s ease;
+        /* ── Selected: a white pill ────────────────────────────────────
+           Wipes in from the left rather than popping. */
+        /* The selected pill is the one level that does not mirror: it is
+           the FURTHEST thing from its ground either way. On the deep rail
+           that is white; on the pale rail it is near-navy. Same idea, other
+           end of the scale — so it is a token like everything else. */
+        .ez-nav-on{ color: var(--r-pill-ink); border-color: var(--r-pill-edge);
+                    box-shadow: 0 1px 2px var(--r-cast),
+                                0 6px 16px -6px var(--r-cast-far-h) }
+        .ez-nav-on::before{
+          background: var(--r-pill-bg);
+          transform: scaleX(1);
+          animation: ezWipe .30s cubic-bezier(.2,.8,.2,1) both;
+          box-shadow: 0 1px 2px var(--r-cast), 0 6px 16px -6px var(--r-cast-far-h);
         }
-        .ez-group-bare::before{ display:none }
+        .ez-nav-on:hover{ color: var(--r-pill-ink-h) }
+        .ez-nav-on:hover::before{ background: var(--r-pill-bg) }
+        @keyframes ezWipe{
+          from{ transform: scaleX(0); opacity:.4 }
+          to  { transform: scaleX(1); opacity:1 }
+        }
+        /* No left bar any more — the pill IS the marker. It stays only for
+           the 60px rail, where there is no label to carry the state. */
+        .ez-nav-bar{ display:none }
 
-        /* The boundary. Full width, fading out to the right so it reads as a
-           rule under the section above rather than a box around this one. */
-        .ez-group-head{
-          position:relative; display:flex; align-items:center; gap:8px;
-          padding:15px 8px 6px; white-space:nowrap; flex-shrink:0;
-          /* It is a <button> now: a real one, so it is reachable by keyboard
-             and announces its own state, rather than a div with a click. */
-          width:100%; border:none; background:none; font:inherit;
-          cursor:pointer; text-align:left; -webkit-tap-highlight-color:transparent;
-          animation: ez-sec-in .42s cubic-bezier(.2,.8,.2,1) both;
-          animation-delay: calc(var(--i) * 70ms);
+        /* ── Icons ─────────────────────────────────────────────────────
+           No tile. A tile was card chrome by another name; on a deep ground
+           the glyph alone reads. */
+        .ez-nav-tile{
+          background:transparent; box-shadow:none;
+          /* Was #B7CCF2 — dimmer than the label beside it, which made the
+             row look switched off rather than merely unselected. It cleared
+             the 3:1 graphics bar and still looked dull, which is the whole
+             gap between passing and good. */
+          color: var(--r-icon);
+          transition: color .18s ease, transform .18s cubic-bezier(.2,.8,.2,1);
         }
-        .ez-group-head::before,
-        .ez-group-rule-shut{
-          content:''; display:block; height:1px; border-radius:1px;
-          background: linear-gradient(90deg,
-            color-mix(in srgb, var(--g-ink) 60%, transparent),
-            color-mix(in srgb, var(--g-ink) 8%, transparent) 78%, transparent);
-          transform-origin: left;
-          animation: ez-sec-line .5s cubic-bezier(.2,.8,.2,1) both;
-          animation-delay: calc(var(--i) * 70ms);
-        }
-        /* Inset, now that it caps a rounded panel rather than crossing a flat
-           sheet — at left:0 it would run straight through the corner radius. */
-        .ez-group-head::before{ position:absolute; left:9px; right:9px; top:0 }
-        .ez-group-rule-shut{ margin:9px 8px 8px; flex-shrink:0 }
+        .ez-nav:hover .ez-nav-tile{ color: var(--r-icon-h) }
+        .ez-nav-on .ez-nav-tile{ color: var(--r-pill-ink) }
 
-        /* ── The fold ────────────────────────────────────────────────────
-           Height animates with grid-template-rows 0fr -> 1fr. The rail has
-           sections of three rows and sections of seven; a max-height would
-           either clip the long ones or leave the short ones drifting open
-           against dead space, and measuring heights in JS means a layout read
-           on every toggle. This animates to the content's real height with
-           neither problem. */
-        .ez-group-panel{
-          display:grid; grid-template-rows:0fr;
-          transition: grid-template-rows .34s cubic-bezier(.22,1,.36,1);
-        }
+        /* ── Sections: a band pressed INTO the rail ────────────────────
+           The opposite move to a row. Rows come toward the reader, sections
+           sink away, and the rail sits between them. */
+        .ez-group{ display:flex; flex-direction:column; flex-shrink:0 }
+        .ez-group-items{ display:flex; flex-direction:column; gap:2px; position:relative;
+                         perspective:none }
+        .ez-group-panel{ display:grid; grid-template-rows:0fr;
+                         transition: grid-template-rows .30s cubic-bezier(.22,1,.36,1) }
         .ez-open > .ez-group-panel{ grid-template-rows:1fr }
         .ez-group-panel-inner{ overflow:hidden; min-height:0 }
+        /* Rows fade up rather than unfolding on a hinge — the hinge was more
+           motion than a list of links needs. */
+        .ez-group-items > a{ opacity:0; transform: translateY(-4px);
+                             transition: opacity .2s ease, transform .2s ease }
+        .ez-open .ez-group-items > a{ opacity:1; transform:none;
+                                      transition-delay: calc(var(--n) * 18ms) }
 
-        /* The rows do not slide in — they UNFOLD, hinged along their own top
-           edge. It is the one motion that says "this was folded away" rather
-           than "this arrived from somewhere", which is what a disclosure
-           actually did. The perspective is on the list, so the rows share one
-           vanishing point instead of each tilting in its own little world. */
-        .ez-group-items{ perspective: 640px; perspective-origin: top center }
-        .ez-group-items > a{
-          transform-origin: top center;
-          transform: rotateX(-72deg); opacity:0;
-          transition: transform .30s cubic-bezier(.2,.9,.3,1), opacity .2s ease;
+        .ez-group-head{
+          position:relative; display:flex; align-items:center; gap:8px;
+          padding:7px 10px 6px; margin:16px 0 4px; white-space:nowrap; flex-shrink:0;
+          width:100%; border:none; font:inherit;
+          /* Recessed BELOW the rail — the opposite direction from the rows,
+             so a section can never be mistaken for one. */
+          background: var(--r-band);
+          box-shadow: inset 0 1px 2px var(--r-band-in);
+          cursor:pointer; text-align:left; border-radius:8px;
+          -webkit-tap-highlight-color:transparent;
+          transition: background .18s ease;
         }
-        .ez-open .ez-group-items > a{
-          transform:none; opacity:1;
-          /* Dealt out in order on the way open. On the way shut every row
-             leaves at once — a staggered close reads as hesitation, and you
-             already know what you clicked. */
-          transition-delay: calc(var(--n) * 28ms);
-        }
-
-        /* A chevron, pointing right when shut and down when open — the
-           disclosure convention, and the one shape people already read
-           without being taught it.
-
-           This was a plus-becoming-a-minus, on the reasoning that a chevron
-           would smudge at this size. Drawn at 12px against the alternatives it
-           plainly does not, and the plus was the least attractive of the five.
-           The two-bar chevrons that fold flat were tried too and both leave a
-           notch where the arms meet in the open state.
-
-           The chip behind it is transparent until the heading is hovered or
-           focused. Six chips sitting there permanently would add weight to
-           every section for an affordance that is only needed when someone is
-           reaching for it. */
-        .ez-fold{
-          margin-left:auto; flex-shrink:0;
-          display:flex; align-items:center; justify-content:center;
-          width:20px; height:20px; border-radius:7px;
-          color: var(--g-ink); background: transparent;
-          transition: background .2s ease;
-        }
-        .ez-group-head:hover .ez-fold,
-        .ez-group-head:focus-visible .ez-fold{
-          background: color-mix(in srgb, var(--g-ink) 13%, transparent);
-        }
-        .ez-fold svg{
-          transform: rotate(-90deg);
-          transition: transform .38s cubic-bezier(.22,1,.36,1);
-        }
-        .ez-open .ez-fold svg{ transform: rotate(0deg) }
-
-        /* What a shut section still tells you. Without these, folding a
-           section hides both its rows and the fact that you are standing in
-           one of them. */
-        .ez-count{
-          font-size:9.5px; font-weight:${W.bold}; line-height:1;
-          padding:3px 5px; border-radius:5px; flex-shrink:0;
-          font-variant-numeric: tabular-nums;
-          color: var(--g-ink);
-          background: color-mix(in srgb, var(--g-ink) 14%, transparent);
-        }
-        /* Visually hidden, still announced. Not display:none, which removes it
-           from the accessibility tree along with everything else. */
-        .ez-sr{
-          position:absolute; width:1px; height:1px; padding:0; margin:-1px;
-          overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0;
-        }
-        .ez-dotwrap{ position:relative; display:flex; flex-shrink:0 }
-
-        /* "The page you are on is in here." First attempt was a conic-gradient
-           ring turning around the 6px dot, and at that size it rendered as a
-           lopsided smudge — an indicator you have to squint at is not an
-           indicator. This says it at the scale the rail actually reads at:
-           the whole heading takes a wash of its own ink, and the count flips
-           from a quiet tint to a solid pill. */
-        .ez-here-head{
-          background: color-mix(in srgb, var(--g-ink) 9%, transparent);
-          border-radius:8px;
-        }
-        .ez-count-here{
-          background: var(--g-ink);
-          color: ${C.rail};
-          animation: ez-here-pulse 2.2s ease-out infinite;
-        }
-        /* The pulse rides on box-shadow, which does not affect layout — a
-           scaling badge would nudge the heading text on every beat. */
-        @keyframes ez-here-pulse{
-          0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--g-ink) 55%, transparent) }
-          70%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--g-ink) 0%, transparent) }
-          100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--g-ink) 0%, transparent) }
-        }
-
-        .ez-group-dot{
-          width:6px; height:6px; border-radius:2px; flex-shrink:0;
-          background: var(--g-ink);
-          transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .22s ease;
+        .ez-group-head:hover{ background: var(--r-band-h) }
+        .ez-group-head:focus-visible{ outline:2px solid var(--r-focus); outline-offset:-2px }
+        /* A hairline ABOVE the label, stopping short of the label itself —
+           it separates the groups without boxing them. */
+        .ez-group-head::before{
+          content:''; position:absolute; left:10px; right:10px; top:-8px; height:1px;
+          background: var(--r-edge);
         }
         .ez-group-name{
-          font-size:${F.micro}px; font-weight:${W.bold}; letter-spacing:.12em;
-          text-transform:uppercase; color: var(--g-ink);
-          overflow:hidden; text-overflow:ellipsis;
+          font-size:${F.micro}px; font-weight:${W.bold}; letter-spacing:.14em;
+          text-transform:uppercase; color: var(--r-sec-ink);
+          overflow:hidden; text-overflow:ellipsis; transition:color .18s ease;
+        }
+        .ez-group-head:hover .ez-group-name{ color: var(--r-sec-ink-h) }
+
+        .ez-count{
+          font-size:9.5px; font-weight:${W.bold}; line-height:1; padding:3px 6px;
+          border-radius:99px; flex-shrink:0; font-variant-numeric:tabular-nums;
+          color:#16307E; background:rgba(255,255,255,.82);
+        }
+        .ez-here-head{ background: var(--ez-rail-hover) }
+        .ez-count-here{ background: var(--r-pill-bg); color: var(--r-pill-ink);
+                        animation: ez-here-pulse 2.2s ease-out infinite }
+        @keyframes ez-here-pulse{
+          0%{ box-shadow:0 0 0 0 var(--r-pulse) }
+          70%{ box-shadow:0 0 0 6px transparent }
+          100%{ box-shadow:0 0 0 0 transparent }
         }
 
-        /* Hovering anywhere in a section shows you its extent. The resting
-           state is not dimmed to make room for this — the ink already clears
-           5.5:1 — so what changes is the spine and the dot, never the text. */
-        .ez-group:hover .ez-group-items::before{ opacity:1 }
-        .ez-group .ez-group-items::before{ opacity:.72 }
-        .ez-group-head:hover .ez-group-dot,
-        .ez-group-head:focus-visible .ez-group-dot{
-          transform: scale(1.4);
-          box-shadow: 0 0 0 3px color-mix(in srgb, var(--g-ink) 20%, transparent);
+        .ez-fold{
+          margin-left:auto; flex-shrink:0; display:flex; align-items:center;
+          justify-content:center; width:18px; height:18px;
+          color: var(--r-fold); background:transparent;
+          transition: color .18s ease;
         }
-        .ez-group-head:hover .ez-group-name{ letter-spacing:.145em }
-        .ez-group-name{ transition: letter-spacing .28s cubic-bezier(.22,1,.36,1) }
-        .ez-group-head:active{ transform: translateY(.5px) }
-        .ez-group-head:focus-visible{ outline:2px solid var(--g-ink); outline-offset:-2px; border-radius:8px }
+        .ez-group-head:hover .ez-fold{ color: var(--r-sec-ink-h) }
+        .ez-fold svg{ transform:rotate(-90deg);
+                      transition: transform .30s cubic-bezier(.22,1,.36,1) }
+        .ez-open .ez-fold svg{ transform:rotate(0deg) }
+        .ez-group-rule-shut{ display:block; height:1px; border-radius:1px;
+                             margin:10px 10px 9px; flex-shrink:0;
+                             background: var(--r-edge) }
 
-        @keyframes ez-sec-line{ from{ transform:scaleX(0); opacity:0 } to{ transform:scaleX(1); opacity:1 } }
-        @keyframes ez-sec-in{ from{ opacity:0; transform:translateX(-6px) } to{ opacity:1; transform:none } }
-        @keyframes ez-spine{ from{ transform:scaleY(0) } to{ transform:scaleY(1) } }
-
-        .ez-brand:hover .ez-brand-chev{transform:translateX(2px)}
+        .ez-sr{ position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+                overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0 }
+        .ez-dotwrap{ display:none }
+        .ez-brand:hover .ez-brand-chev{ transform:translateX(2px) }
 
         @media (prefers-reduced-motion: reduce){
-          .ez-nav, .ez-nav-tile, .ez-nav:hover, .ez-nav:active,
-          .ez-nav:hover .ez-nav-tile,
-          .ez-group:hover .ez-group-dot{ transition:none; transform:none }
-          /* The sections still have to ARRIVE — only the movement goes. */
-          .ez-group-head, .ez-group-head::before,
-          .ez-group-rule-shut, .ez-group-items::before{
-            animation:none; transform:none; opacity:1;
-          }
-          /* The fold still WORKS — it just stops being a performance. The
-             panel snaps, the rows are simply there or not, and the ring that
-             marks your place holds still instead of turning. */
-          .ez-group-panel{ transition:none }
-          .ez-group-items > a{ transition:none; transform:none; opacity:1 }
-          .ez-open .ez-group-items > a{ transition-delay:0ms }
-          .ez-fold, .ez-fold svg, .ez-group-name{ transition:none }
+          .ez-nav, .ez-nav::before, .ez-nav-tile, .ez-group-panel,
+          .ez-group-items > a, .ez-fold svg, .ez-group-name, .ez-group-head{ transition:none }
+          .ez-nav-on::before{ animation:none }
+          .ez-nav:hover::before{ transform:scaleX(1) }
+          .ez-open .ez-group-items > a{ transition-delay:0ms; transform:none; opacity:1 }
           .ez-count-here{ animation:none }
         }
       `}</style>
 
-      <nav aria-label="Main" className="ez-scroll" style={{
+      <nav aria-label="Main" className="ez-rail ez-scroll" style={{
         // The rail asked for "DM Sans" — as 71 files in this repo do — and DM
         // Sans is not loaded anywhere, so every one of those declarations fell
         // through to plain sans-serif. Meanwhile app/layout.tsx already loads
@@ -831,7 +842,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         fontFamily: RAIL_FONT,
         width: open ? OPEN_W : SHUT_W,
         transition: `width ${M.slow}`,
-        background: C.rail,
+        // The ground is the gradient in .ez-rail; a flat background here
+        // would sit on top of it and win.
         display: 'flex', flexDirection: 'column',
         padding: open ? '12px 10px' : '12px 8px',
         flexShrink: 0, overflow: 'hidden',

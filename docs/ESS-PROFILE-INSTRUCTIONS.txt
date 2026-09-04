@@ -1,0 +1,248 @@
+================================================================================
+UPDATED ESS PROFILE — WHAT I NEED FROM YOU
+Prepared 4 September 2026 · for Nayan Ahuja
+Branch TusharPanwar
+================================================================================
+
+FOUR THINGS, and only the first two are migrations.
+
+    1.  Run migrations/091_profile_360.sql
+    2.  Run migrations/092_id_card_qr.sql        (after 091 — it needs a column
+                                                  091 adds)
+    3.  Create a private storage bucket          section 3
+    4.  Set two environment variables            section 4
+
+Nothing here has been run by me. Nobody but you applies schema changes to this
+project.
+
+THE PROFILE PAGE IS NOT FINISHED. The screens are still being built. These
+migrations are the foundation, handed over early and separately so the schema
+work can start while the UI is written — nothing in the app reads these tables
+yet, so applying them changes nothing a user can see.
+
+
+--------------------------------------------------------------------------------
+1. RUN 091 FIRST, THEN 092
+--------------------------------------------------------------------------------
+
+091 adds employees.photo_path. 092's consume_id_token() returns it to the
+guard's screen. Run 092 first and it creates cleanly and then fails at the
+first scan, because plpgsql does not validate a body until it runs.
+
+091  12 tables, 1 view, 4 functions, 1 trigger
+     documents, assets, app access, family, nominations, insurance,
+     education, experience, certifications, trainings, field config,
+     change requests
+     + 29 columns on employees
+     + v_employee_profile_360, get_employee_profile(), profile_completeness(),
+       raise_profile_change_request()
+
+092  3 tables, 5 functions, 1 trigger
+     id_card_credentials, id_card_tokens, id_card_scans
+
+Both are idempotent. 092 has one caveat: re-running it ROTATES every card
+secret, which invalidates every live QR at that moment. Correct behaviour, and
+a useful emergency lever, but do not re-run it in the middle of a shift change.
+
+
+--------------------------------------------------------------------------------
+2. WHY THESE ARE 091 AND 092 AND NOT 085 AND 086
+--------------------------------------------------------------------------------
+
+The module ships them as 085 and 086. Both numbers are taken here by the Wall
+of Fame, which is in your other bundle. This is the third time — the PMS was
+renumbered 055->066 and the wall needed the same family of renames — so it is
+a property of where these bundles come from rather than an accident.
+
+The files were also written against a DIFFERENT SCHEMA and would not have run
+here. docs/PROFILE360-ADAPTATION.md in the repo has the evidence for every
+change; the short version is in section 6.
+
+
+--------------------------------------------------------------------------------
+3. STORAGE BUCKET — please create this
+--------------------------------------------------------------------------------
+
+Supabase -> Storage -> New bucket
+
+    name              employee-photos
+    public            NO — private
+    allowed MIME      image/jpeg, image/png, image/webp
+    file size limit   2 MB
+
+PRIVATE MATTERS. The app serves eight-hour signed URLs. A public bucket would
+make every employee photo readable by anybody who guessed a path, which is a
+DPDP problem rather than a convenience one.
+
+Nothing breaks before it exists — photo upload simply fails with a clear
+message, and every other part of the profile works.
+
+
+--------------------------------------------------------------------------------
+4. ENVIRONMENT VARIABLES — two, and I have not set either
+--------------------------------------------------------------------------------
+
+Add to .env.local AND to Vercel, all three environments:
+
+    ID_CARD_PEPPER=<64 random characters>
+    NEXT_PUBLIC_APP_URL=https://ezerhrms.com
+
+Generate the pepper once:
+
+    node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+
+I did not generate it and I do not want to see it. It is the second half of
+every QR signature — the per-employee secret lives in the database, the pepper
+lives only in the environment, and neither alone is enough to forge a code.
+
+ROTATING THE PEPPER INVALIDATES EVERY LIVE QR INSTANTLY. That is a good
+emergency lever and a bad accident, so treat it like a signing key rather than
+a config value.
+
+SUPABASE_SERVICE_ROLE_KEY is already set here. Nothing else is new.
+
+
+--------------------------------------------------------------------------------
+5. TWO BUGS I FOUND WHILE ADAPTING, BOTH SILENT
+--------------------------------------------------------------------------------
+
+Recorded because both would have looked like working code.
+
+THE ID CARDS WOULD ALL HAVE BEEN MISSING. 086 ends by issuing a card to every
+active employee:
+
+    where coalesce(status,'active') = 'active'
+
+This database stores employment_status = 'Active', capitalised. That predicate
+matches NOTHING here. The migration would have run without error and issued
+ZERO cards, and it would only have surfaced when somebody held up a blank ID
+at a gate. Every comparison is lower()ed now, in the trigger too.
+
+EVERY CHANGE REQUEST WOULD HAVE FAILED. raise_profile_change_request() did
+
+    format('select %I::text from employees where id = $1', cfg.source_column)
+
+with source_column holding 'employees.full_name'. %I quotes the whole string as
+ONE identifier — "employees.full_name" — which is not a column. The config now
+stores the bare column name, the function splits defensively in case an old row
+holds the qualified form, and an undefined_column is caught so a bad config row
+cannot stop somebody raising a request.
+
+
+--------------------------------------------------------------------------------
+6. WHAT WAS ADAPTED, IN ONE PAGE
+--------------------------------------------------------------------------------
+
+FOUR TABLES THE MODULE READS DO NOT EXIST HERE
+    employee_roles · shifts · branches · employee_assets
+
+    employee_roles is the dangerous one: get_employee_profile() resolved the
+    viewer's role from it, so the function would have been created cleanly and
+    failed at the first call. Role resolution now reads ess_user_roles joined
+    to ess_roles, which is where roles live here. branches is locations.
+    shifts has no equivalent, so the shift field is dropped rather than faked.
+
+FOURTEEN COLUMNS ARE RENAMES, each verified present under its real name
+    emp_code · company_doj · employment_status · l1_manager_id · l2_manager_id
+    office_email · alternate_mobile · pan_number · uan_number · ifsc_code
+    esic_number · bank_account_last4 · res_address1 · perm_address1
+    dept_name · company_name · location_name · location_code
+
+    departments.name is the one that has already cost this project a bug:
+    asking for it fails the whole select and every department renders as
+    "Unknown".
+
+ELEVEN GENUINELY DO NOT EXIST and 091 adds them. Two deliberately are not:
+
+    md_id          the MD is already companies.md_employee_id, which the PMS
+                   chain resolution uses. A per-employee copy would be a
+                   second source of truth for one fact.
+    auth_user_id   this app resolves the viewer through essRoute(), not a
+                   Supabase auth mapping. See below.
+
+THE INSECURE FALLBACK IS NOT CARRIED OVER AT ALL
+
+    The module's getViewerId() falls back to an x-employee-code header or an
+    ezer_emp cookie, and its own guide says:
+
+        "Delete the fallback block before go-live — with it in place, anyone
+         can set a header and read any profile."
+
+    It is not in this version in any form. Two answers to "who is asking"
+    means an attacker picks the weaker one.
+
+
+--------------------------------------------------------------------------------
+7. RLS — ONE DECISION, AND ONE ALREADY MADE
+--------------------------------------------------------------------------------
+
+092 NEEDS NOTHING FROM YOU. Its three tables are already locked to deny-all
+for anon and authenticated, and the functions are SECURITY DEFINER. There is
+no version of "who should be able to read the QR signing secrets" other than
+nobody, so it is not left as a question.
+
+091 IS THE ONE TO DECIDE, and it matters more than the RLS questions in the
+other bundles. These tables hold Aadhaar last four, bank details, family
+members, salary and documents. The house default
+
+    FOR ALL TO anon, authenticated USING (true) WITH CHECK (true)
+
+would make every employee's record readable by every other employee — the
+exact opposite of what get_employee_profile() spends its whole body
+preventing.
+
+The read path is already narrow: everything the page shows comes through that
+one SECURITY DEFINER function, which resolves the viewer's role positionally
+and strips what they may not see. The app never reads the tables directly.
+
+So my recommendation is NO DIRECT GRANTS AT ALL — the same posture the ESS
+inbox already has, where the 42501 you may have seen is the system working.
+Tell me if you would rather have explicit policies and I will write them.
+
+
+--------------------------------------------------------------------------------
+8. HOW TO TELL IT WORKED
+--------------------------------------------------------------------------------
+
+    select count(*) from id_card_credentials;    -- expect 398, not 0
+                                                 -- 0 means section 5's bug
+
+    select score, pending from profile_completeness(
+      (select id from employees limit 1));       -- a score and a to-do list
+
+    select jsonb_pretty(get_employee_profile(e.id, e.id))
+      from employees e limit 1;                  -- your own profile, viewer
+                                                 -- role 'self'
+
+Check masking actually masks — take two different employees:
+
+    select get_employee_profile(a.id, b.id) -> 'employee' ? 'pan'
+      from employees a, employees b
+     where a.id <> b.id limit 1;              -- false, unless b is HR
+
+--------------------------------------------------------------------------------
+9. IF SOMETHING GOES WRONG
+--------------------------------------------------------------------------------
+
+  "relation ess_user_roles does not exist"
+      091 half-applied, or run against the wrong project. It is idempotent —
+      run the whole file again.
+
+  id_card_credentials is empty after 092
+      Section 5. The status casing. Should not happen in this version.
+
+  "This code was not issued by EZER" on every scan
+      The pepper differs between the machine that issued and the one that
+      verified. Section 4.
+
+  A profile page shows nothing after both ran
+      Expected for now — the screens are still being built.
+
+  Anything you would rather not decide alone
+      Send it to me with the error text.
+
+================================================================================
+HOW-IT-WORKS.md explains the module. ADAPTATION.md carries the evidence for
+every change, so it is a record rather than my memory.
+MANIFEST.txt lists a sha256 for every file; check it before you run anything.
+================================================================================

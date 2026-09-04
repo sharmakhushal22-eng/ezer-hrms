@@ -14,7 +14,7 @@
 
 export type StreamCode =
   | 'DIRECT' | 'HR' | 'PAYROLL' | 'FINANCE' | 'TIME'
-  | 'PERFORMANCE' | 'RECRUITMENT' | 'EXIT' | 'IT'
+  | 'PERFORMANCE' | 'RECRUITMENT' | 'EXIT' | 'IT' | 'FUNZONE'
 
 export interface StreamDef {
   code: StreamCode
@@ -46,6 +46,13 @@ export const STREAMS: StreamDef[] = [
     ink: { l: '#B1402F', d: '#D46E5E' } },
   { code: 'IT',          label: 'IT & Access',     hint: 'Accounts, roles, the portal itself',
     ink: { l: '#497A29', d: '#89C95E' } },
+  // The tenth folder. Its ink was computed against the same two bars as the
+  // other nine rather than picked by eye: 7.58:1 on the light surface and
+  // 8.33:1 on the dark one, and 21.1 dE from its nearest neighbour in light,
+  // 23.7 in dark. The closest existing pair is 20.1 apart, so ten folders in
+  // a column stay as tellable apart as nine were.
+  { code: 'FUNZONE',     label: 'Fun Zone',        hint: 'Game invites and scores colleagues shared',
+    ink: { l: '#115E59', d: '#3FC7BE' } },
 ]
 
 export const STREAM = new Map(STREAMS.map(s => [s.code, s]))
@@ -107,6 +114,9 @@ const RULES: [string, StreamCode][] = [
   ['ACCESS',       'IT'],
   ['PASSWORD',     'IT'],
   ['LOGIN',        'IT'],
+
+  ['FUNZONE',      'FUNZONE'],
+  ['GAME',         'FUNZONE'],
 ].sort((a, b) => b[0].length - a[0].length) as [string, StreamCode][]
 
 /** Which folder a notification code belongs in. */

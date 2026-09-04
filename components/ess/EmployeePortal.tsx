@@ -28,6 +28,7 @@ import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import Inbox from './Inbox'
+import InboxTabs from './InboxTabs'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
@@ -38,6 +39,7 @@ import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
+import WallOfFame from '@/components/ess/WallOfFame'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
@@ -3297,8 +3299,12 @@ const SECTIONS: NavSection[] = [
     desc:'Your KRAs, and the reviews you owe',
     items:[{ k:'performance', label:'Performance' }] },
 
-  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'soon',
-    desc:'Peer-to-peer appreciation, casual and public',
+  // Was a 'soon' placeholder. Promoted rather than duplicated — adding a
+  // second entry with the same key is what produced React's "two children
+  // with the same key" warning, and duplicate keys let React drop or swap
+  // siblings silently.
+  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'ready',
+    desc:'What your colleagues have noticed — shoutouts, awards, badges and service milestones. Thanks, never pay.',
     items:[{ k:'wall', label:'Wall of Fame' }],
     features:[
       { icon:'', name:'Give a Shoutout', note:'Quick appreciation post' },
@@ -3704,7 +3710,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
       // The inbox reports its own unread straight into the bell's state, so
       // the badge and the screen can never show two different numbers.
-      case 'inbox':         return <Inbox employeeId={emp.id} onUnread={setUnread} />
+      case 'inbox':         return <InboxTabs employeeId={emp.id} onUnread={setUnread} />
       case 'vpf':           return <VpfSection emp={emp} notify={notify} />
       case 'nps':           return <NpsSection emp={emp} notify={notify} />
       case 'loans':         return <LoansSection emp={emp} notify={notify} />
@@ -3725,7 +3731,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />
           case 'performance':   return <Performance employeeId={emp.id} />
-      case 'funzone':       return <FunZone />
+      case 'wall':          return <WallOfFame employeeId={emp.id} />
+      case 'funzone':       return <FunZone employeeId={emp.id} />
       default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
     }
   }

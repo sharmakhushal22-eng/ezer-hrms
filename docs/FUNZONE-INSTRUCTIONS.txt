@@ -1,0 +1,186 @@
+================================================================================
+FUN ZONE — DATABASE INSTRUCTIONS
+Prepared 4 September 2026 · for Nayan Ahuja
+Branch TusharPanwar
+================================================================================
+
+ONE FILE TO RUN.
+
+    migrations/090_funzone_multiplayer.sql
+
+Nothing here has been run by me. Nobody but you applies schema changes to this
+project.
+
+THIS IS THE LEAST URGENT THING I HAVE SENT YOU. Three of the four games work
+today with no database at all, and so does the computer opponent. Only
+"play with a colleague" needs 090. Nothing breaks while it waits — the mode
+says it is not switched on yet, and the other modes carry on.
+
+
+--------------------------------------------------------------------------------
+1. WHAT IT CREATES
+--------------------------------------------------------------------------------
+
+    game_invites        who asked whom to play what, and what came of it
+    game_sessions       one row per match: the two players, the seed, the
+                        result
+    game_score_shares   a result somebody chose to share
+
+    funzone_current_employee()   reads app.current_employee_id
+    accept_game_invite()         turns an invite into a session
+    finish_game()                records the result — see section 4
+    share_game_score()           shares one, and notifies whoever it names
+
+No seed data, and nothing to call afterwards. The channel is empty until
+somebody sends an invite, which is the correct empty.
+
+
+--------------------------------------------------------------------------------
+2. IT DEPENDS ON NOTHING YOU HAVE NOT ALREADY RUN
+--------------------------------------------------------------------------------
+
+    employees            long applied
+    ess_notifications    021, plus the columns 075 adds — both applied
+
+Run it on its own, in any order relative to everything else outstanding.
+
+A CORRECTION I MADE BEFORE SENDING THIS. 090 originally called
+wof_current_employee(), which ONLY 084_wall_of_fame.sql defines. That would
+have made the Fun Zone silently depend on the Wall of Fame: the functions
+would have been created cleanly and then failed at the first call with
+"function wof_current_employee() does not exist", because plpgsql does not
+validate a body until it runs. Nothing would have surfaced until somebody
+accepted a game invite.
+
+It now resolves the caller itself, with its own copy of that one line. Two
+unrelated break-time features should not be coupled by a function name.
+
+
+--------------------------------------------------------------------------------
+3. AFTER IT RUNS
+--------------------------------------------------------------------------------
+
+Nothing. There is no seed function to call — unlike the Wall of Fame, where
+forgetting that step leaves the whole module looking broken.
+
+To confirm it took:
+
+    select count(*) from game_invites;     -- 0, correctly
+    select count(*) from game_sessions;    -- 0, correctly
+
+    select column_name from information_schema.columns
+     where table_name = 'game_sessions'
+       and column_name in ('seed','pending_claim','host_score','guest_score');
+                                            -- expect 4 rows
+
+In the app:
+
+    ESS portal -> Fun Zone -> any game -> "With a colleague"
+
+Before 090 that mode shows an amber "not switched on yet" panel naming the
+file. After it, you get the invite screen.
+
+
+--------------------------------------------------------------------------------
+4. THE PART THAT IS WORTH UNDERSTANDING — WHO DECIDES WHO WON
+--------------------------------------------------------------------------------
+
+Live games run over Supabase Realtime broadcast, client to client, with no
+server in the loop. Only the start and the finish reach the database.
+
+TIC-TAC-TOE IS REPLAYED. finish_game() walks the move list and derives the
+winner itself. Nine squares and eight lines is cheap, so no client is
+believed.
+
+MEMORY MATCH AND TRIVIA ARE SETTLED BY AGREEMENT. Both depend on a seeded
+shuffle, and reimplementing that in plpgsql to check a break-time game would
+be a third copy of the same logic drifting from the other two. So each client
+reports its result, the first claim is parked in pending_claim, and the second
+must match it.
+
+  * One player alone cannot post a result. They can only leave the game
+    unfinished, which gains them nothing.
+  * Two clients that disagree end the session ABANDONED rather than picking a
+    winner — a disagreement means one of them is wrong and there is no way to
+    tell which.
+
+If you see ABANDONED rows, that is the design working, not a fault. Somebody
+closed a tab, or two clients disagreed.
+
+
+--------------------------------------------------------------------------------
+5. REALTIME — NOTHING TO ENABLE
+--------------------------------------------------------------------------------
+
+I tested it against this project rather than assuming: subscribing with the
+anon key returns SUBSCRIBED and a broadcast echoes back in about 2.6 seconds.
+It works as configured.
+
+This is the first use of Supabase Realtime in the app — the inbox deliberately
+polls — so if you ever tighten Realtime settings at the project level, this is
+the feature that would notice. Nothing else uses it.
+
+
+--------------------------------------------------------------------------------
+6. A DECISION I NEED FROM YOU — RLS
+--------------------------------------------------------------------------------
+
+The three tables have no policies and I did not write them.
+
+The stakes are the lowest of anything I have handed over — it is tic-tac-toe.
+But "who has been playing games with whom, and when" reads badly in a
+workplace, and scoping it costs nothing.
+
+What I would write:
+
+    game_invites        SELECT where the reader is from_employee or
+                        to_employee; INSERT where from_employee is them
+    game_sessions       SELECT where the reader is host or guest
+    game_score_shares   SELECT where the reader is shared_by, or is named in
+                        shared_with
+
+The house default USING (true) would let anybody read every invite and every
+game in the company.
+
+The three functions are SECURITY DEFINER and check the caller themselves, so
+writes are already gated whatever the policies end up saying. This is about
+reads.
+
+
+--------------------------------------------------------------------------------
+7. NO PRIZES, AND NOTHING TO RECONCILE
+--------------------------------------------------------------------------------
+
+There is no link to recognition, the Wall of Fame leaderboard, performance or
+pay. Results are stored and nothing ranks them, deliberately. A game that
+counts towards something stops being a game.
+
+If somebody later asks for a Fun Zone leaderboard, that is a product decision
+rather than a schema one — the rows are already there.
+
+
+--------------------------------------------------------------------------------
+8. IF SOMETHING GOES WRONG
+--------------------------------------------------------------------------------
+
+  "function funzone_current_employee() does not exist"
+      090 half-applied. It is idempotent — run the whole file again.
+
+  "This invite expired — they were offering to play at the time"
+      Working as intended. Invites last fifteen minutes.
+
+  duplicate key on uq_game_invites_open
+      Also intended: one open invite per sender, recipient and game.
+
+  Sessions stuck at OPEN
+      Somebody closed a tab mid-game. Harmless; nothing reads them.
+
+  The mode still says "not switched on yet" after a clean run
+      PostgREST's schema cache. It refreshes shortly, or reload it from the
+      dashboard.
+
+================================================================================
+HOW-IT-WORKS.md explains the module — the modes, the live protocol, the
+computer opponent, and what is deliberately not built.
+MANIFEST.txt lists a sha256 for every file; check it before you run anything.
+================================================================================
