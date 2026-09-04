@@ -136,9 +136,12 @@ export async function POST(req: NextRequest) {
 
   if (action === 'edit') {
     if (!value.trim()) return bad(`${spec.label} cannot be emptied here.`)
-    // Only the column this field names, and only on your own row.
-    const column = spec.source.startsWith('employees.') ? spec.source.slice('employees.'.length) : null
-    if (!column) return bad(`${spec.label} is not stored on your employee record.`, 400)
+    // The explicit write column, never derived from the displayed source.
+    // 091 renamed fourteen columns on the way in, so `employees.alt_mobile`
+    // reads correctly on screen and does not exist to UPDATE — the real one
+    // is alternate_mobile. A field with no column declared cannot be written.
+    const column = spec.column
+    if (!column) return bad(`${spec.label} cannot be edited directly.`, 400)
     const { error: upErr } = await sb.from('employees').update({ [column]: value }).eq('id', me)
     if (upErr) return bad(upErr.message, 500)
     return NextResponse.json({ ok: true, saved: spec.label })

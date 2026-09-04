@@ -50,14 +50,14 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
   personal: [
     { title: 'Identity', fields: [
       { label: 'Full name',       key: 'full_name',      state: 'locked',  source: 'employees.full_name' },
-      { label: 'Preferred name',  key: 'display_name',   state: 'direct',  source: 'employees.display_name' },
+      { label: 'Preferred name',  key: 'display_name',   state: 'direct',  source: 'employees.display_name', column: 'display_name' },
       { label: 'Employee code',   key: 'employee_code',  state: 'locked',  source: 'employees.emp_code', mono: true },
       { label: 'Date of birth',   key: 'date_of_birth',  state: 'locked',  source: 'employees.date_of_birth', min: 'self' },
       { label: 'Gender',          key: 'gender',         state: 'locked',  source: 'employees.gender' },
-      { label: 'Blood group',     key: 'blood_group',    state: 'direct',  source: 'employees.blood_group' },
+      { label: 'Blood group',     key: 'blood_group',    state: 'direct',  source: 'employees.blood_group', column: 'blood_group' },
       { label: 'Marital status',  key: 'marital_status', state: 'event',   source: 'employees.marital_status',
         hint: 'Opens family, nominee and insurance steps' },
-      { label: 'Anniversary',     key: 'marriage_date',  state: 'direct',  source: 'employees.marriage_date' },
+      { label: 'Anniversary',     key: 'marriage_date',  state: 'direct',  source: 'employees.marriage_date', column: 'marriage_date' },
     ]},
     { title: 'Background', fields: [
       { label: "Father's name",   key: 'father_name',  state: 'locked',  source: 'employees.father_name', min: 'self' },
@@ -66,7 +66,7 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
       { label: 'Nationality',     key: 'nationality',  state: 'locked',  source: 'employees.nationality' },
       { label: 'Place of birth',  key: 'place_of_birth', state: 'locked', source: 'employees.place_of_birth' },
       { label: 'Domicile state',  key: 'domicile_state', state: 'locked', source: 'employees.domicile_state' },
-      { label: 'Languages',       key: 'languages',    state: 'direct',  source: 'employees.languages' },
+      { label: 'Languages',       key: 'languages',    state: 'direct',  source: 'employees.languages', column: 'languages' },
       { label: 'Differently abled', key: 'is_disabled', state: 'request', source: 'employees.is_disabled',
         hint: 'Drives Section 80U relief' },
       { label: 'International worker', key: 'is_international_worker', state: 'locked',
@@ -74,11 +74,11 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
     ]},
     { title: 'Contact', fields: [
       { label: 'Official email',  key: 'official_email',  state: 'locked', source: 'employees.official_email' },
-      { label: 'Personal email',  key: 'personal_email',  state: 'direct', source: 'employees.personal_email', min: 'self' },
-      { label: 'Mobile',          key: 'mobile',          state: 'direct', source: 'employees.mobile', min: 'self' },
-      { label: 'Alternate number', key: 'alt_mobile',     state: 'direct', source: 'employees.alt_mobile', min: 'self' },
+      { label: 'Personal email',  key: 'personal_email',  state: 'direct', source: 'employees.personal_email', column: 'personal_email', min: 'self' },
+      { label: 'Mobile',          key: 'mobile',          state: 'direct', source: 'employees.mobile', column: 'mobile', min: 'self' },
+      { label: 'Alternate number', key: 'alt_mobile',     state: 'direct', source: 'employees.alt_mobile', column: 'alternate_mobile', min: 'self' },
       { label: 'Extension',       key: 'extension',       state: 'locked', source: 'employees.extension', mono: true },
-      { label: 'WhatsApp alerts', key: 'whatsapp_optin',  state: 'direct', source: 'employees.whatsapp_optin' },
+      { label: 'WhatsApp alerts', key: 'whatsapp_optin',  state: 'direct', source: 'employees.whatsapp_optin', column: 'whatsapp_optin' },
     ]},
     { title: 'Address and emergency', fields: [
       { label: 'Present address',   key: 'present_address',   state: 'request', source: 'employees.present_address',
@@ -86,9 +86,9 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
       { label: 'Permanent address', key: 'permanent_address', state: 'request', source: 'employees.permanent_address',
         wide: true, min: 'self' },
       { label: 'Emergency contact 1', key: 'emergency_contact_1', state: 'direct',
-        source: 'employees.emergency_contact_1', wide: true, min: 'self' },
+        source: 'employees.emergency_contact_1', column: 'emergency_contact_1', wide: true, min: 'self' },
       { label: 'Emergency contact 2', key: 'emergency_contact_2', state: 'direct',
-        source: 'employees.emergency_contact_2', wide: true, min: 'self' },
+        source: 'employees.emergency_contact_2', column: 'emergency_contact_2', wide: true, min: 'self' },
     ]},
   ],
 
@@ -104,10 +104,16 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
       { label: 'Cost centre',      key: 'cost_centre',       state: 'locked', source: 'employees.cost_centre', mono: true },
       { label: 'Company',          key: 'company_name',      state: 'locked', source: 'companies.company_name' },
       { label: 'Business unit',    key: 'business_unit',     state: 'locked', source: 'employees.business_unit' },
-      { label: 'Work location',    key: 'location_name',     state: 'request', source: 'locations.name',
-        hint: 'Goes through the Transfer module' },
+      // Locked, not `request`. The design file marks this requestable, but a
+      // location change IS a transfer — the Transfer module owns the approval,
+      // the effective date and the PT/HRA consequences. Raising it here would
+      // open a second, thinner door to the same decision. There is also no
+      // employees.location_name for the old-value lookup to read; the column
+      // is location_id.
+      { label: 'Work location',    key: 'location_name',     state: 'locked', source: 'locations.name',
+        hint: 'Changed through the Transfer module' },
       { label: 'Branch code',      key: 'branch_code',       state: 'locked', source: 'branches.code', mono: true },
-      { label: 'Seat',             key: 'workstation',       state: 'direct', source: 'employees.workstation' },
+      { label: 'Seat',             key: 'workstation',       state: 'direct', source: 'employees.workstation', column: 'workstation' },
     ]},
     { title: 'Dates and terms', fields: [
       { label: 'Date of joining',   key: 'date_of_joining',    state: 'locked', source: 'employees.date_of_joining' },
@@ -135,7 +141,7 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
       { label: 'UAN',             key: 'uan',            state: 'locked', source: 'employees.uan', mono: true, min: 'self' },
       { label: 'PF number',       key: 'pf_number',      state: 'locked', source: 'employees.pf_number', mono: true, min: 'self' },
       { label: 'PF applicability', key: 'pf_applicable', state: 'locked', source: 'employees.pf_applicable' },
-      { label: 'Voluntary PF',    key: 'vpf_amount',     state: 'direct', source: 'employees.vpf_amount' },
+      { label: 'Voluntary PF',    key: 'vpf_amount',     state: 'direct', source: 'employees.vpf_amount', column: 'vpf_amount' },
       { label: 'Pension (EPS)',   key: 'eps_status',     state: 'locked', source: 'employees.eps_status' },
     ]},
     { title: 'Other statutory', fields: [
@@ -147,9 +153,9 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
     { title: 'Other identity documents', fields: [
       { label: 'Passport',        key: 'passport_no',    state: 'request', source: 'employees.passport_no',
         mono: true, mask: true, min: 'hr' },
-      { label: 'Driving licence', key: 'driving_licence', state: 'direct', source: 'employees.driving_licence',
+      { label: 'Driving licence', key: 'driving_licence', state: 'direct', source: 'employees.driving_licence', column: 'driving_licence',
         mono: true, min: 'self' },
-      { label: 'Voter ID',        key: 'voter_id',       state: 'direct', source: 'employees.voter_id',
+      { label: 'Voter ID',        key: 'voter_id',       state: 'direct', source: 'employees.voter_id', column: 'voter_id',
         mono: true, min: 'self' },
     ]},
   ],

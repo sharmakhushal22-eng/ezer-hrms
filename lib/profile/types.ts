@@ -30,8 +30,16 @@ export interface ProfileField {
   key: string
   state: FieldState
   /** Where the value really lives — shown small under the value, because a
-   *  person asking "why can't I edit this" is really asking "who owns it". */
+   *  person asking "why can't I edit this" is really asking "who owns it".
+   *  This is for READING. It is a label, and it uses the logical name. */
   source: string
+  /** The actual employees column to write, for `direct` fields only.
+   *  Kept SEPARATE from `source` on purpose: 091 renamed fourteen columns on
+   *  the way in (alt_mobile -> alternate_mobile, ifsc -> ifsc_code, pan ->
+   *  pan_number and so on), so the name the screen shows and the name the
+   *  UPDATE needs are not always the same string. Deriving one from the other
+   *  is how an edit ends up writing to a column that does not exist. */
+  column?: string
   /** Monospace: codes, numbers, identifiers. */
   mono?: boolean
   /** Masked behind a reveal control. */
