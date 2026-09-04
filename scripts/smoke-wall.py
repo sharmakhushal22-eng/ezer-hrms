@@ -470,5 +470,57 @@ for table, cols in pairs:
     missing = [c for c in asked if c not in defined]
     check(f'{table}: every column the console asks for exists', not missing, str(missing))
 
+
+# ── unqualified columns inside returns-table functions ───────────────────
+#
+# A function declared `returns table (id uuid, …)` has `id` as a variable for
+# its whole body, so an unqualified `where id = …` is ambiguous against it.
+# Postgres accepts the migration and raises 42702 at CALL time — which is how
+# get_wall_inbox() shipped erroring for every user, before its permission
+# check, so an admin and a stranger got the identical failure.
+sec('Ambiguous OUT parameters')
+
+ALL_WALL_SQL = ''
+for f in WALL_SQL + ['093_wall_inbox_fix.sql']:
+    p_ = MIG / f
+    if p_.exists(): ALL_WALL_SQL += p_.read_text() + '\n'
+
+# Split into per-function chunks FIRST. A single regex over the whole file
+# spans function boundaries — the first version of this check reported
+# access_level_rank, which returns int, quoting get_wall_inbox's line.
+chunks = re.split(r'(?=create or replace function )', ALL_WALL_SQL)
+latest = {}
+for ch in chunks:
+    m = re.match(r'create or replace function (\w+)', ch)
+    if m: latest[m.group(1)] = ch      # a later file replaces an earlier one
+
+offenders = []
+for name, ch in latest.items():
+    # Split on the dollar quote itself. Looking for ' as $$' finds nothing —
+    # the SQL puts `as $$` on its own line after `language plpgsql stable`, so
+    # the head fell back to 400 characters, truncated the returns-table block,
+    # and the check silently matched nothing at all.
+    dq = ch.find('$$')
+    head = ch[:dq] if dq > 0 else ch
+    tm = re.search(r'returns\s+table\s*\((.*?)\)\s*language', head, re.S | re.I)
+    if not tm: continue
+    out_names = set(re.findall(r'^\s*(\w+)\s+\w', tm.group(1), re.M))
+    body = re.sub(r'--[^\n]*', ' ', ch[dq:] if dq > 0 else ch)
+    for col in sorted(out_names):
+        for hit in re.finditer(rf'(?<![.\w]){col}\s*=', body):
+            frag = body[max(0, hit.start() - 34):hit.start() + 14].replace('\n', ' ')
+            if re.search(r'\b(where|and|on)\b', frag, re.I):
+                offenders.append(f'{name}.{col}')
+                break
+
+live = offenders
+check('no returns-table function uses an unqualified OUT column name',
+      not live, str(sorted(set(live))[:3]))
+check('093 is present to replace the one that did',
+      (MIG / '093_wall_inbox_fix.sql').exists())
+check('and 093 qualifies the employees lookup',
+      'from employees me where me.id = v_actor' in
+      (MIG / '093_wall_inbox_fix.sql').read_text() if (MIG / '093_wall_inbox_fix.sql').exists() else False)
+
 print(f'\n  {ok} passed, {fail} failed\n')
 sys.exit(1 if fail else 0)
