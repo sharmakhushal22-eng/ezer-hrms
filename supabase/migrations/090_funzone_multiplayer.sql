@@ -29,8 +29,35 @@
 -- another thing to be measured on.
 --
 -- DEPENDS ON  employees, ess_notifications (021 + 075)
+--
+-- AND ON NOTHING ELSE. It used to call wof_current_employee(), which only
+-- 084_wall_of_fame.sql defines — so the Fun Zone silently required the Wall
+-- of Fame to be installed, and without it these functions would CREATE
+-- cleanly and then fail at the first call with "function does not exist".
+-- plpgsql does not validate a body until it runs, so nothing would have
+-- surfaced until somebody accepted a game invite.
+--
+-- It now resolves the caller itself, three lines below. That is a deliberate
+-- duplicate of 084's one-liner rather than a shared helper: two unrelated
+-- break-time features should not be coupled by a function name, and the
+-- alternative — CREATE OR REPLACE on 084's own function — would silently
+-- redefine it depending on which migration ran last.
 -- SAFE TO RUN TWICE — IF NOT EXISTS / OR REPLACE throughout.
 -- =====================================================================
+
+
+-- ---------------------------------------------------------------------
+-- 0. Who is calling
+--
+-- The same one line as 084's wof_current_employee(), under a name this
+-- module owns. See the note in the header for why it is copied rather than
+-- shared.
+-- ---------------------------------------------------------------------
+
+create or replace function funzone_current_employee()
+returns uuid language sql stable as $$
+  select nullif(current_setting('app.current_employee_id', true), '')::uuid;
+$$;
 
 
 -- ---------------------------------------------------------------------
@@ -160,7 +187,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_me    uuid := wof_current_employee();
+  v_me    uuid := funzone_current_employee();
   v_inv   game_invites%rowtype;
   v_id    uuid;
   v_seed  int;
@@ -224,7 +251,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_me     uuid := wof_current_employee();
+  v_me     uuid := funzone_current_employee();
   v_s      game_sessions%rowtype;
   v_board  text[] := array_fill(''::text, array[9]);
   v_mv     jsonb;
@@ -346,7 +373,7 @@ security definer
 set search_path = public
 as $$
 declare
-  v_me uuid := wof_current_employee();
+  v_me uuid := funzone_current_employee();
   v_s  game_sessions%rowtype;
   v_r  uuid;
 begin
