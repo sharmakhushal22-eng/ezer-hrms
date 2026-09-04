@@ -73,8 +73,20 @@ export async function POST(req: NextRequest) {
   // Copy across only the parameters this action declares, dropping undefined
   // so the function's own defaults apply rather than a null overriding them.
   if (spec.write && ctx.caller.viewAs) {
-    return forbidden('Recognition is posted under your own name, so it cannot '
-                   + 'be sent while you are viewing somebody else\'s portal.')
+    // Two different situations, and the earlier message described only one of
+    // them. essCaller sets viewAs TRUE UNCONDITIONALLY for the legacy shared
+    // dashboard login, because that session is not attached to an employee at
+    // all — so somebody signed in that way was told they were "viewing
+    // somebody else's portal" while looking at their own.
+    //
+    // actorEmployeeId separates them: null means the shared login, non-null
+    // means a real person looking at a colleague's portal.
+    return forbidden(ctx.caller.actorEmployeeId === null
+      ? 'This session is the shared dashboard login, which is not attached to '
+        + 'an employee record. Recognition is posted under a name, so sign in '
+        + 'with your own ESS account to send it.'
+      : 'Recognition is posted under your own name, so it cannot be sent while '
+        + 'you are viewing somebody else\'s portal. Open your own portal to send it.')
   }
 
   const args: Record<string, unknown> = {}
