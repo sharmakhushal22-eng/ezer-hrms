@@ -345,44 +345,57 @@ and the problem is which role your secret key resolves to.
 
 Without it, no profile page can load anything at all.
 
-### 5.3 RLS on `091`'s fourteen tables — asked three times, still open
+### 5.3 RLS on `091`'s tables — **answered, and one real hole found**
 
-I cannot determine this myself, and I want to be clear why rather than keep
-asking blindly: **PostgREST answers an RLS denial with an empty set, not an
-error.** From the anon key, a protected empty table and an unprotected empty
-table are indistinguishable. I confirmed that with a control against `092`'s
-deny-all tables and my probe could not tell them apart, so I will not claim
-either way.
+I asked about this three times and could not answer it. While building the
+Profile UI I found the probe that settles it: PostgREST answers *"no grant at
+all"* with `42501 permission denied for table`, which is unambiguous — unlike
+an empty result set, which could be RLS or could be an empty table.
 
-What I do know, and it is not hypothetical:
+**The good news.** All twelve tables `091` creates are properly locked. Every
+one returns `42501` to the publishable key:
 
-* `employee_education` returns a **real row** — a person's name and their
-  institute — to the anon key. That table has no effective RLS today.
-* Today's regression showed the **inbox** tables *are* protected
-  (`inbox_conversations`, `inbox_participants`, `inbox_messages`,
-  `inbox_policy` all return 401 to anon), while every wall, PMS and Fun Zone
-  table returns rows. So the protection is inconsistent across modules.
-* `091` has now added `employee_family_members`, `employee_insurance`,
-  `employee_nominations` and `employee_documents` alongside — spouse and
-  children's names, dates of birth, nominee and insurance details.
-
-Please run this and send the output:
-
-```sql
-select relname, relrowsecurity
-  from pg_class
- where relnamespace = 'public'::regnamespace
-   and relname in ('employee_family_members','employee_insurance',
-                   'employee_nominations','employee_documents',
-                   'employee_education','employee_experience',
-                   'employee_assets','profile_change_requests',
-                   'profile_field_config','employee_certifications',
-                   'employee_trainings','employee_app_access')
- order by relrowsecurity, relname;
+```
+employee_family_members   employee_insurance      employee_nominations
+employee_documents        employee_education      employee_experience
+employee_assets           profile_change_requests profile_field_config
+employee_certifications   employee_trainings      employee_app_access
 ```
 
-`relrowsecurity = false` means wide open. I will write the policies against your
-answer rather than guess at them.
+My earlier concern about those was wrong, and I would rather say so than leave
+you chasing it.
+
+**The bad news — this one is real.** `v_employee_profile_360` is *not* locked.
+With the publishable key that ships in every browser, an unauthenticated
+caller can read, for **398 employees**:
+
+```
+pan   ifsc   bank_name   bank_last4   uan   date_of_birth
+personal_email   mobile   annual_ctc   gross_monthly
+```
+
+and the view also carries `passport_no`, `aadhar_last4`, `pf_number`,
+`esic_ip_number`, `driving_licence`, `voter_id`, both addresses, the emergency
+contacts, and father/mother/spouse names.
+
+This is worse than any single table, because joining it all into one row is
+exactly what the view is for. A Postgres view runs with its **owner's**
+privileges unless it is declared `security_invoker`, so RLS on the underlying
+tables does not protect it.
+
+`get_employee_profile()` already strips these per viewer role, exactly as
+designed. The view simply sat beside it, ungated, and querying it directly
+walks straight past the masking.
+
+**`100_close_profile_view.sql` fixes it** — revokes the view from `anon` and
+`authenticated`, and sets `security_invoker` where the server supports it.
+Nothing legitimate breaks: `get_employee_profile` is `SECURITY DEFINER`, so it
+keeps reading the view on the caller's behalf, and that function is how the
+application reads profiles. Reaching the view directly was never part of the
+design.
+
+**Please run this one first**, ahead of `098` and `099`. Those two restore
+function; this one closes an open door.
 
 ### 5.4 Optional, only if wanted
 
@@ -407,3 +420,4 @@ Verified live on 4 September, not assumed:
 | 097 Endorse / shortlist | applied |
 | **098 Grant repair** | **pending** |
 | **099 Profile RPC fix** | **pending** |
+| **100 Close the profile view** | **pending — run this first** |
