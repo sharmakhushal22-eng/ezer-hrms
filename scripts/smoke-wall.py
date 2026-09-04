@@ -22,7 +22,13 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 MIG = ROOT / 'supabase/migrations'
 WALL_SQL = ['082_access_foundation.sql', '084_wall_of_fame.sql',
             '085_wall_of_fame_seed.sql', '086_shoutouts_and_feed.sql',
-            '087_social_and_inbox.sql']
+            '087_social_and_inbox.sql',
+    # 089 adds the recognition catalogue and set_recognition_marks(). It is
+    # part of the wall's surface, so its functions and tables belong in the
+    # same sweep — otherwise this suite reports the wall calling an RPC that
+    # nobody defined, when in fact the harness was not looking at the file.
+    '089_recognition_catalogue.sql',
+]
 CODE = [ROOT / 'components/ess/WallOfFame.tsx',
         ROOT / 'components/wall/Spotlight.tsx',
         ROOT / 'components/wall/ShoutoutComposer.tsx',
@@ -215,9 +221,16 @@ for old, new in STALE.items():
     check(f'no {old} survives (this schema uses {new})', n == 0, f'{n} left' if n else '')
 n_branches = len(re.findall(r'\bbranches\b', sql_all))
 check('no branches table reference survives', n_branches == 0, f'{n_branches} left' if n_branches else '')
+# The files ADAPTED from the EZER-WallOfFame-v7 bundle, named rather than
+# matched on an '08' prefix. The prefix was a stand-in for "came from the
+# bundle", and it stopped meaning that the moment a file was written for this
+# schema from scratch: 089 has no adaptation to document, and demanding the
+# marker there would have meant either a false failure or a lie in its header.
+ADAPTED = ['084_wall_of_fame.sql', '085_wall_of_fame_seed.sql',
+           '086_shoutouts_and_feed.sql', '087_social_and_inbox.sql']
 check('the adaptation is documented in every adapted file',
       all('ADAPTED FOR THIS DATABASE' in (MIG / f).read_text()
-          for f in WALL_SQL if f.startswith('08') and f != '082_access_foundation.sql'))
+          for f in ADAPTED if (MIG / f).exists()))
 # And the header must still NAME the renames, or the next person has no
 # record of what was changed or why.
 check('the renames are still documented, not just applied',

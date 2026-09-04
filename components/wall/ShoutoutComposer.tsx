@@ -15,6 +15,8 @@
 // while typing rather than after pressing send. The database still decides.
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
+import RecognitionPicker from '@/components/wall/RecognitionPicker'
+import { MAX_TAGS } from '@/lib/wall/catalogue'
 import { supabase } from '@/lib/supabase'
 import {
   problems, problemFor, remainingToday, messageLength, visibilityNote,
@@ -240,6 +242,22 @@ export default function ShoutoutComposer({
       p_value_ids: draft.valueIds,
       p_visibility: draft.visibility,
     })
+    // The badge and tags go on afterwards, through their own function.
+    // create_shoutout's signature is 086's and adding arguments to it would
+    // either make every existing call ambiguous or mean copying its whole
+    // body into 089 — see the note there. A failure here loses the marks,
+    // not the shoutout, so it is reported without discarding the post.
+    if (!r.error && (draft.badgeRef || (draft.tagRefs ?? []).length)) {
+      const id = (r.data as { id?: string } | null)?.id
+      if (id) {
+        const m = await supabase.rpc('set_recognition_marks', {
+          p_recognition: id,
+          p_badge_ref: draft.badgeRef ?? null,
+          p_tag_refs: draft.tagRefs ?? [],
+        })
+        if (m.error) setServerErr(`Posted, but the badge did not attach — ${m.error.message}`)
+      }
+    }
     setSending(false)
     if (r.error) {
       // The database's own words. It is the authority, and rephrasing its
@@ -332,6 +350,19 @@ export default function ShoutoutComposer({
             <Err>{show('value')}</Err>
           </div>
         )}
+
+        {/* badge and tags — the catalogue from the Applause master (089).
+            Optional on purpose: forcing a badge onto every thank-you would
+            spend the badges on "thanks for covering my shift". */}
+        <div>
+          <Label hint={`One badge, and up to ${MAX_TAGS} tags saying why`}>
+            Badge and tags
+          </Label>
+          <RecognitionPicker
+            value={{ badgeRef: draft.badgeRef ?? null, tagRefs: draft.tagRefs ?? [] }}
+            onChange={sel => setDraft(d => ({ ...d, badgeRef: sel.badgeRef,
+                                              tagRefs: sel.tagRefs }))} />
+        </div>
 
         {/* the words */}
         <div>

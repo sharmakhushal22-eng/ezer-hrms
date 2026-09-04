@@ -29,6 +29,7 @@ import { type Log } from '@/lib/pms/oneToOne'
 import Channel from '@/components/broadcast/Channel'
 import { Compose, PublisherSetup, Responses } from '@/components/broadcast/Admin'
 import { type Broadcast, type Publisher } from '@/lib/broadcast/channel'
+import RecognitionPicker from '@/components/wall/RecognitionPicker'
 import '@/components/pms/pms.css'
 
 const TODAY = '2026-09-04'
@@ -110,6 +111,9 @@ const PUBLISHERS: Publisher[] = [
 ]
 
 const CASES: [string, React.ReactNode][] = [
+  ['recognition', <RecognitionPicker key="rp"
+      value={{ badgeRef: 'B001', tagRefs: ['T001', 'T007', 'T011'] }}
+      onChange={() => {}} />],
   // Broadcast channel
   ['bc-channel', <Channel key="bc" employeeId="emp" items={BROADCASTS}
       readIds={new Set(['b3'])} onRead={() => {}} onRespond={() => {}} />],

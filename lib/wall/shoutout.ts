@@ -43,12 +43,19 @@ export interface Draft {
   /** True when the chosen category demands a company value. */
   categoryRequiresValue?: boolean
   valueIds: string[]
+  /** The badge and tags from the recognition catalogue (089). Optional — a
+   *  shoutout is still a shoutout without one, and forcing a badge onto every
+   *  thank-you would devalue the badges. */
+  badgeRef?: string | null
+  tagRefs?: string[]
   message: string
   visibility: string
 }
 
 export const EMPTY_DRAFT: Draft = {
   receiverIds: [], categoryCode: null, valueIds: [], message: '', visibility: 'company',
+  badgeRef: null,
+  tagRefs: [],
 }
 
 /** Which field a problem belongs to, so the composer can point at it. */
