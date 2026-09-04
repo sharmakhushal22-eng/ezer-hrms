@@ -161,8 +161,13 @@ export default function AdminConsole({ employeeId }: { employeeId: string }) {
   const loadArea = useCallback(async () => {
     if (!may) { setRows([]); return }
     const q = {
-      awards:  ['recognition_awards', 'name, cadence, is_active', (r: Record<string, unknown>) =>
-                 [r.name as string, r.cadence as string, r.is_active ? 'active' : 'off']],
+      // `frequency`, not `cadence`. There is no cadence column on
+      // recognition_awards, and a wrong name fails the WHOLE select with
+      // 42703 — so the Awards panel showed nothing at all rather than a
+      // blank column. Found by checking every selected column against the
+      // database once the migrations were applied.
+      awards:  ['recognition_awards', 'name, frequency, is_active', (r: Record<string, unknown>) =>
+                 [r.name as string, r.frequency as string, r.is_active ? 'active' : 'off']],
       values:  ['recognition_values', 'label, code, is_active', (r: Record<string, unknown>) =>
                  [r.label as string, r.code as string, r.is_active ? 'active' : 'off']],
       badges:  ['badge_master', 'label, shape, base_tier, is_active', (r: Record<string, unknown>) =>

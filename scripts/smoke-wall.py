@@ -445,5 +445,30 @@ check('the composer is reachable from the wall', 'ShoutoutComposer' in wof)
 check("Badge's keyframes are injected by the screen that mounts it",
       'BADGE_KEYFRAMES' in wof)
 
+
+# ── the admin console's queries ──────────────────────────────────────────
+#
+# AdminConsole holds its queries in an ARRAY LITERAL, not .from().select(),
+# so a sweep that looks for the usual call shape misses them entirely. That
+# is how `recognition_awards.cadence` survived: the column does not exist,
+# the real name is `frequency`, and a wrong name fails the whole select with
+# 42703 — so the Awards panel rendered nothing rather than one blank column.
+sec('Admin console columns')
+console = ROOT / 'components' / 'wall' / 'AdminConsole.tsx'
+csrc = console.read_text() if console.exists() else ''
+pairs = re.findall(r"\['([a-z_]+)',\s*'([^']+)'", csrc)
+check('the console queries were found', len(pairs) >= 5, f'{len(pairs)} panels')
+
+for table, cols in pairs:
+    block = re.search(rf'create table if not exists {table}\s*\((.*?)\n\);',
+                      sql_all, re.S | re.I)
+    if not block:
+        check(f'{table}: table is defined in the migrations', False)
+        continue
+    defined = set(re.findall(r'^\s*([a-z_]+)\s', block.group(1), re.M))
+    asked = [c.strip() for c in cols.split(',') if c.strip()]
+    missing = [c for c in asked if c not in defined]
+    check(f'{table}: every column the console asks for exists', not missing, str(missing))
+
 print(f'\n  {ok} passed, {fail} failed\n')
 sys.exit(1 if fail else 0)
