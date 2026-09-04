@@ -14,20 +14,24 @@ import { useState, useEffect, useCallback } from 'react'
 import * as XLSX from 'xlsx'
 import { loadRuns, loadRunsForPeriod, loadRunRegister, loadMonthMaster, RUN_SHEET_COLS, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { calculateRun } from '@/lib/payroll/engine'
-import { SYNC_CATEGORIES, runCategorySync } from '@/lib/payroll/sync'
+import { SYNC_CATEGORIES, runCategorySync, defaultRegimesForFy } from '@/lib/payroll/sync'
 import { lockEmployees } from '@/lib/payroll/lock'
+import PayslipDownload from '@/components/payroll/PayslipDownload'
 import {
   loadSnapshotRows, computeReadiness, applyFilter, filterOptions, blockerSummary,
   EMPTY_FILTER, isFiltered, NOT_ACTIVE,
   type Readiness, type ReadinessCheck, type ReadinessFilter, type SnapshotRow,
 } from '@/lib/payroll/readiness'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#6D28D9', purpleSoft: '#F3EEFF',
-  card: '#FFFFFF', border: '#ECEAFB', muted: '#6B7280',
-  green: '#059669', greenBg: '#ECFDF5', greenBd: '#A7F3D0',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A',
-  red: '#DC2626', redBg: '#FEF2F2', redBd: '#FECACA', redDark: '#B91C1C',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, purpleSoft: TK.brandTint,
+  card: TK.surface, border: TK.brandEdge, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, redBd: TK.criticalTint, redDark: TK.critical,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -51,6 +55,12 @@ const NPS_CAT = SYNC_CATEGORIES.find(c => c.key === 'nps')
 // Last: arrear differences a back month against what it actually paid, so it needs the
 // other categories for this month settled first.
 const ARREAR_CAT = SYNC_CATEGORIES.find(c => c.key === 'arrear')
+// Very last: the monthly TDS figure reads this month's own earned income, arrear (now
+// taxed as actual), professional tax and the regime — all of which have to be settled
+// by the time this runs. This is what turns tds_declarations.monthly_tds from the
+// figure the payslip actually deducts into a fallback for a month synced before this
+// engine existed — see lib/payroll/engine.ts.
+const TDS_CAT = SYNC_CATEGORIES.find(c => c.key === 'tds')
 
 // ── Tab strip button ───────────────────────────────────────────────────────
 // Defined outside the parent: a tab that re-mounts on every render loses its hover
@@ -66,7 +76,7 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
     background: active
       ? 'rgba(255,255,255,0.28)'
       : blocked ? C.red : clear ? C.greenBg : 'rgba(0,0,0,0.08)',
-    color: active ? '#fff' : blocked ? '#fff' : clear ? C.green : C.navy,
+    color: active ? TK.surface : blocked ? TK.surface : clear ? C.green : C.navy,
   }
   return (
     <button
@@ -77,7 +87,7 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
         flexShrink: 0, background: active ? C.purple : C.card,
         border: `1px solid ${active ? C.purple : C.border}`, borderRadius: 10,
         padding: '10px 16px', cursor: off ? 'not-allowed' : 'pointer',
-        fontSize: 12.5, fontWeight: 600, color: active ? '#fff' : C.navy,
+        fontSize: 13, fontWeight: 600, color: active ? TK.surface : C.navy,
         display: 'flex', alignItems: 'center', gap: 8, fontFamily: font,
         opacity: off ? 0.45 : 1, transition: 'all .15s',
       }}>
@@ -90,7 +100,7 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
 // ── The selected check's employee list ─────────────────────────────────────
 function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolean }) {
   const th: React.CSSProperties = {
-    textAlign: 'left', fontSize: 10.5, color: C.muted, textTransform: 'uppercase',
+    textAlign: 'left', fontSize: 11, color: C.muted, textTransform: 'uppercase',
     letterSpacing: '0.03em', padding: 8, borderBottom: `1px solid ${C.border}`, fontWeight: 600,
   }
   const td: React.CSSProperties = { padding: '10px 8px', borderBottom: `1px solid ${C.border}`, verticalAlign: 'top' }
@@ -104,12 +114,12 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
 
       {check.rows.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: C.green }}>
-          <div style={{ fontSize: 32, marginBottom: 8 }}>✓</div>
+          <div style={{ fontSize: 32, marginBottom: 8 }}></div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Nobody in this month has this problem.</div>
         </div>
       ) : (
         <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
               <tr>
                 <th style={th}>Employee</th>
@@ -129,12 +139,12 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
                       }}>{e.initials}</div>
                       <div>
                         <div style={{ fontWeight: 600 }}>{e.name || '—'}</div>
-                        <div style={{ fontSize: 10.5, color: C.muted }}>{e.code}</div>
+                        <div style={{ fontSize: 11, color: C.muted }}>{e.code}</div>
                       </div>
                     </div>
                   </td>
-                  {isGroup && <td style={{ ...td, color: C.muted, fontSize: 11.5 }}>{e.company || '—'}</td>}
-                  <td style={{ ...td, color: check.blocking ? C.redDark : C.amber, fontSize: 11.5 }}>{e.impact}</td>
+                  {isGroup && <td style={{ ...td, color: C.muted, fontSize: 12 }}>{e.company || '—'}</td>}
+                  <td style={{ ...td, color: check.blocking ? C.redDark : C.amber, fontSize: 12 }}>{e.impact}</td>
                 </tr>
               ))}
             </tbody>
@@ -148,10 +158,10 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
 // ── Banner ─────────────────────────────────────────────────────────────────
 function Banner({ tone, title, sub }: { tone: 'red' | 'green' | 'amber'; title: string; sub: string }) {
   const t = tone === 'red'
-    ? { bg: 'linear-gradient(135deg,#FEF2F2,#FFF5F5)', bd: C.redBd, dot: C.red, fg: C.red, sub: C.redDark, ic: '⚠️' }
+    ? { bg: `linear-gradient(135deg,${TK.criticalTint},${TK.criticalTint})`, bd: C.redBd, dot: C.red, fg: C.red, sub: C.redDark, ic: '' }
     : tone === 'green'
-      ? { bg: 'linear-gradient(135deg,#ECFDF5,#F3FDF8)', bd: C.greenBd, dot: C.green, fg: C.green, sub: '#047857', ic: '✓' }
-      : { bg: 'linear-gradient(135deg,#FFFBEB,#FFFDF5)', bd: C.amberBd, dot: C.amber, fg: C.amber, sub: '#92400E', ic: '⏳' }
+      ? { bg: `linear-gradient(135deg,${TK.positiveTint},${TK.positiveTint})`, bd: C.greenBd, dot: C.green, fg: C.green, sub: TK.positive, ic: '' }
+      : { bg: `linear-gradient(135deg,${TK.warningTint},${TK.warningTint})`, bd: C.amberBd, dot: C.amber, fg: C.amber, sub: TK.warning, ic: '' }
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 12, borderRadius: 14, padding: '16px 20px',
@@ -159,7 +169,7 @@ function Banner({ tone, title, sub }: { tone: 'red' | 'green' | 'amber'; title: 
     }}>
       <div style={{
         width: 38, height: 38, borderRadius: 10, display: 'flex', alignItems: 'center',
-        justifyContent: 'center', flexShrink: 0, fontSize: 18, background: t.dot, color: '#fff',
+        justifyContent: 'center', flexShrink: 0, fontSize: 18, background: t.dot, color: TK.onAccent,
       }}>{t.ic}</div>
       <div>
         <div style={{ fontSize: 14, fontWeight: 700, color: t.fg }}>{title}</div>
@@ -186,14 +196,14 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
   const { companies, locations, departments, statuses } = filterOptions(rows)
   const on = isFiltered(filter)
   const inp: React.CSSProperties = {
-    padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12,
-    background: '#fff', color: C.navy, fontFamily: font, outline: 'none',
+    padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12,
+    background: TK.surface, color: C.navy, fontFamily: font, outline: 'none',
   }
-  const lbl: React.CSSProperties = { fontSize: 9.5, color: C.muted, display: 'block', marginBottom: 3 }
+  const lbl: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }
   return (
     <div style={{
-      background: on ? C.purpleSoft : '#F8F7FF', border: `1px solid ${on ? '#DDD6FE' : C.border}`,
-      borderRadius: 12, padding: '10px 12px', marginBottom: 14,
+      background: on ? C.purpleSoft : TK.sunken, border: `1px solid ${on ? TK.brandEdge : C.border}`,
+      borderRadius: 14, padding: '10px 12px', marginBottom: 14,
     }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
@@ -242,12 +252,12 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
         </div>
         {on && (
           <button onClick={onClear} style={{
-            padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff',
-            color: C.red, fontWeight: 700, fontSize: 11.5, fontFamily: font, cursor: 'pointer',
+            padding: '7px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface,
+            color: C.red, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: 'pointer',
           }}>Clear</button>
         )}
       </div>
-      <div style={{ fontSize: 10.5, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 11, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
         {!on ? <>No filter — payroll will run on the <b>whole month</b> ({rows.length} employees).</>
           : matched === 0
             ? <b style={{ color: C.red }}>This filter matches no employees — there is nothing to run.</b>
@@ -371,8 +381,13 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       // engine falls back to the frozen figures for whatever is missing. One of them
       // breaking used to abort the whole run, so a single bad step meant nobody got paid
       // and no sheet came out. Now the error is reported and payroll still runs.
+      //
+      // Regime rule first: anyone still undecided after the 4th goes on the New
+      // Regime before the TDS step reads the snapshot (072). Reported, never fatal.
+      const rd = await defaultRegimesForFy(r.fy)
+      if (rd.error) fails.push(`${r.company_name || label}: regime default — ${rd.error}`)
       let prereqFailed = false
-      for (const [what, cat] of [['earnings', EARN_CAT], ['EPF', EPF_CAT], ['ESIC', ESIC_CAT], ['PT', PT_CAT], ['LWF', LWF_CAT], ['employer NPS', NPS_CAT], ['arrear', ARREAR_CAT]] as const) {
+      for (const [what, cat] of [['earnings', EARN_CAT], ['EPF', EPF_CAT], ['ESIC', ESIC_CAT], ['PT', PT_CAT], ['LWF', LWF_CAT], ['employer NPS', NPS_CAT], ['arrear', ARREAR_CAT], ['TDS', TDS_CAT]] as const) {
         if (!cat) continue
         const { error } = await runCategorySync(cat, [r.id], codes)
         if (!error) continue
@@ -542,10 +557,10 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
         <select value={monthVal} onChange={e => { setMonthVal(e.target.value); setResult(null) }}
           style={{
             background: C.card, border: `1px solid ${C.border}`, borderRadius: 999, padding: '7px 16px',
-            fontSize: 12.5, fontWeight: 600, color: C.purpleD, fontFamily: font, cursor: 'pointer', outline: 'none',
-            boxShadow: '0 1px 3px rgba(124,58,237,0.06)',
+            fontSize: 13, fontWeight: 600, color: C.purpleD, fontFamily: font, cursor: 'pointer', outline: 'none',
+            boxShadow: 'var(--ez-shadow-flat)',
           }}>
-          {monthOpts.length === 0 && <option value="">📅 No month created</option>}
+          {monthOpts.length === 0 && <option value="">No month created</option>}
           {monthOpts.map(r => <option key={r.month} value={String(r.month)}>📅 {periodLabel(r)}</option>)}
         </select>
       </div>
@@ -567,8 +582,8 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
           </div>
 
           <div style={{
-            background: C.card, borderRadius: 16, padding: '22px 24px', marginBottom: 18,
-            boxShadow: '0 1px 4px rgba(124,58,237,0.06)', border: `1px solid ${C.border}`,
+            background: C.card, borderRadius: 14, padding: '22px 24px', marginBottom: 18,
+            boxShadow: 'var(--ez-shadow-flat)', border: `1px solid ${C.border}`,
           }}>
             {active && <CheckPanel check={active} isGroup={isGroup} />}
           </div>
@@ -582,17 +597,17 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
         <button onClick={run} disabled={!canRun}
           style={{
-            fontFamily: font, fontSize: 14, fontWeight: 700, color: '#fff',
-            background: canRun ? C.purple : '#D8D3F5', border: 'none', borderRadius: 12,
+            fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
+            background: canRun ? C.purple: TK.brandTint, border: 'none', borderRadius: 14,
             padding: '14px 28px', cursor: canRun ? 'pointer' : 'not-allowed',
             display: 'flex', alignItems: 'center', gap: 8,
-            boxShadow: canRun ? '0 4px 14px rgba(124,58,237,0.25)' : 'none',
+            boxShadow: canRun ? '0 4px 14px rgba(37,99,235,0.25)' : 'none',
           }}>
-          {busy ? '⏳ Running…'
-            : willRun.length === 0 ? '▶️ Run Payroll'
+          {busy ? 'Running…'
+            : willRun.length === 0 ? 'Run Payroll'
               : (filtering || excluded.length)
                 ? `▶️ Run Payroll for ${willRun.length} employee${willRun.length === 1 ? '' : 's'}`
-                : calculated ? '▶️ Re-run Payroll' : '▶️ Run Payroll'}
+                : calculated ? 'Re-run Payroll' : 'Run Payroll'}
         </button>
         {/* Available whenever the month has rows, not only after a clean run. The sheet
             was previously produced only as the last step of a successful run, so any
@@ -601,17 +616,26 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
           <button onClick={() => downloadSheet(null).catch(e => setErr('Sheet download failed: ' + (e?.message || e)))}
             disabled={busy}
             style={{
-              fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.purpleD, background: C.card,
+              fontFamily: font, fontSize: 13, fontWeight: 600, color: C.purpleD, background: C.card,
               border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px',
               cursor: busy ? 'not-allowed' : 'pointer',
-            }}>📄 Download sheet</button>
+            }}>Download sheet</button>
         )}
         {calculated && (
           <button onClick={downloadRegister} disabled={busy}
             style={{
-              fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.purpleD, background: C.card,
+              fontFamily: font, fontSize: 13, fontWeight: 600, color: C.purpleD, background: C.card,
               border: `1px solid ${C.border}`, borderRadius: 10, padding: '11px 18px', cursor: busy ? 'not-allowed' : 'pointer',
-            }}>📥 Register</button>
+            }}>Register</button>
+        )}
+        {/* Payslips exist only for a calculated month; the server confirms payroll_lines
+            are there and that the run is not older than its own inputs before anything
+            is rendered. Re-mounted per month AND per run result, so a stale preflight
+            never survives a month change or a re-run. */}
+        {monthRuns.length > 0 && (
+          <PayslipDownload key={`${monthRuns.map(r => r.id).join(',')}|${result ? `${result.processed}:${result.net}` : ''}`}
+            runs={monthRuns.map(r => ({ id: r.id, company_name: r.company_name }))}
+            enabled={calculated} busyOutside={busy} />
         )}
         <span style={{ fontSize: 12, color: C.muted }}>{hint}</span>
       </div>

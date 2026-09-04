@@ -6,28 +6,41 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
+import { parseOrgSheet, summarise, type ParsedSheet } from '@/lib/rms/excel'
+import { authToken } from '@/lib/rms/client'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B6B7B',
-  green: '#059669', greenBg: '#ECFDF5', red: '#DC2626', redBg: '#FEF2F2',
-  amber: '#B45309', amberBg: '#FFFBEB', purpleBg: '#EEEDFE',
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint,
+  amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 const UPLOADERS = [
-  { id: 'personal', label: 'Personal Info', icon: '👤', color: '#7C3AED', colorBg: '#EEEDFE', desc: 'Name, DOB, gender, blood group, marital status, mobile, emergency contact', payrollAlert: false, dateColumns: ['date_of_birth'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Personal_Info.xlsx' },
-  { id: 'employment', label: 'Employment Details', icon: '💼', color: '#3C3489', colorBg: '#DBEAFE', desc: 'Designation, grade, department, location, DOJ, confirmation, reporting manager', payrollAlert: true, payrollAlertMsg: 'Changing Group DOJ or Company DOJ impacts gratuity seniority and EPF enrolment. Verify with payroll before uploading.', dateColumns: ['group_doj', 'company_doj', 'confirmation_date'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Employment.xlsx' },
-  { id: 'statutory', label: 'Statutory IDs', icon: '🏛️', color: '#991B1B', colorBg: '#FEF2F2', desc: 'PAN, UAN, ESIC IP, EPF method & wage limit, PT state, LWF, TDS regime', payrollAlert: true, payrollAlertMsg: 'Changing EPF method or wage limit impacts the current payroll run. Coordinate with payroll.', confidential: true, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Statutory_IDs.xlsx' },
-  { id: 'bank', label: 'Bank Details', icon: '🏦', color: '#065F46', colorBg: '#ECFDF5', desc: 'Bank name, account number, IFSC, account type — for salary disbursement', payrollAlert: true, payrollAlertMsg: 'New bank accounts require penny-drop verification. Accounts changed after the 25th apply from next month.', confidential: true, dateColumns: ['effective_from'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Bank_Details.xlsx' },
-  { id: 'salary', label: 'Salary Structure', icon: '💰', color: '#D97706', colorBg: '#FFFBEB', desc: 'CTC revision, increment, grade-wise salary breakup, variable %, effective date', payrollAlert: true, payrollAlertMsg: '⚠ PAYROLL IMPACT — Salary changes affect the current/next payroll run. Upload before the 25th. Coordinate with payroll.', dateColumns: ['effective_date'], requiredColumns: ['emp_code', 'effective_date', 'revision_reason', 'annual_ctc'], downloadFile: 'EZER_Uploader_Salary_Structure.xlsx' },
-  { id: 'exit', label: 'Exit & Separation', icon: '🚪', color: '#DC2626', colorBg: '#FEF2F2', desc: 'Resignation, last working date, separation reason, FNF initiation, blacklist', payrollAlert: true, payrollAlertMsg: '🚨 CRITICAL — Last Working Date triggers final payroll & FNF. Verify with payroll before uploading.', dateColumns: ['date_of_resignation', 'last_working_date', 'relieving_date', 'fnf_date'], requiredColumns: ['emp_code', 'employment_status', 'last_working_date', 'leaving_reason'], downloadFile: 'EZER_Uploader_Exit_Separation.xlsx' },
-  { id: 'address', label: 'Address & Contact', icon: '📍', color: '#3C3489', colorBg: '#EDE9FE', desc: 'Residential & permanent address — used for salary slip and statutory forms', payrollAlert: false, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Address_Contact.xlsx' },
+  { id: 'personal', label: 'Personal Info', icon: '', color: TK.brand, colorBg: TK.brandTint, desc: 'Name, DOB, gender, blood group, marital status, mobile, emergency contact', payrollAlert: false, dateColumns: ['date_of_birth'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Personal_Info.xlsx' },
+  { id: 'employment', label: 'Employment Details', icon: '', color: TK.brandDeep, colorBg: TK.infoTint, desc: 'Designation, grade, department, location, DOJ, confirmation, reporting manager', payrollAlert: true, payrollAlertMsg: 'Changing Group DOJ or Company DOJ impacts gratuity seniority and EPF enrolment. Verify with payroll before uploading.', dateColumns: ['group_doj', 'company_doj', 'confirmation_date'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Employment.xlsx' },
+  { id: 'statutory', label: 'Statutory IDs', icon: '', color: TK.critical, colorBg: TK.criticalTint, desc: 'PAN, UAN, ESIC IP, EPF method & wage limit, PT state, LWF, TDS regime', payrollAlert: true, payrollAlertMsg: 'Changing EPF method or wage limit impacts the current payroll run. Coordinate with payroll.', confidential: true, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Statutory_IDs.xlsx' },
+  { id: 'bank', label: 'Bank Details', icon: '', color: TK.positive, colorBg: TK.positiveTint, desc: 'Bank name, account number, IFSC, account type — for salary disbursement', payrollAlert: true, payrollAlertMsg: 'New bank accounts require penny-drop verification. Accounts changed after the 25th apply from next month.', confidential: true, dateColumns: ['effective_from'], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Bank_Details.xlsx' },
+  { id: 'salary', label: 'Salary Structure', icon: '', color: TK.warning, colorBg: TK.warningTint, desc: 'CTC revision, increment, grade-wise salary breakup, variable %, effective date', payrollAlert: true, payrollAlertMsg: 'PAYROLL IMPACT — Salary changes affect the current/next payroll run. Upload before the 25th. Coordinate with payroll.', dateColumns: ['effective_date'], requiredColumns: ['emp_code', 'effective_date', 'revision_reason', 'annual_ctc'], downloadFile: 'EZER_Uploader_Salary_Structure.xlsx' },
+  { id: 'exit', label: 'Exit & Separation', icon: '', color: TK.critical, colorBg: TK.criticalTint, desc: 'Resignation, last working date, separation reason, FNF initiation, blacklist', payrollAlert: true, payrollAlertMsg: 'CRITICAL — Last Working Date triggers final payroll & FNF. Verify with payroll before uploading.', dateColumns: ['date_of_resignation', 'last_working_date', 'relieving_date', 'fnf_date'], requiredColumns: ['emp_code', 'employment_status', 'last_working_date', 'leaving_reason'], downloadFile: 'EZER_Uploader_Exit_Separation.xlsx' },
+  { id: 'orgstructure', label: 'Org Structure & Roles', icon: '', color: TK.positive, colorBg: TK.positiveTint, desc: 'Reporting lines (L1 / L2 / HOD) and the seven functional roles, from the org-chart workbook', payrollAlert: false, wide: true, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: '' },
+  { id: 'address', label: 'Address & Contact', icon: '', color: TK.brandDeep, colorBg: TK.brandTint, desc: 'Residential & permanent address — used for salary slip and statutory forms', payrollAlert: false, dateColumns: [], requiredColumns: ['emp_code'], downloadFile: 'EZER_Uploader_Address_Contact.xlsx' },
 ]
 
-const sel: React.CSSProperties = { width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 12, background: '#FAFAF8', color: C.navy, outline: 'none', fontFamily: font }
-const priBtn: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }
-const secBtn: React.CSSProperties = { padding: '7px 12px', background: C.card, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: font }
+/** The uploader endpoint writes employee records with the service key, so it now asks
+ *  who is calling. This hands over whichever session the browser holds. */
+async function authHeaders(): Promise<Record<string, string>> {
+  const t = await authToken()
+  return t ? { Authorization: `Bearer ${t}` } : {}
+}
+
+const sel: React.CSSProperties = { width: '100%', padding: '6px 8px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font }
+const priBtn: React.CSSProperties = { padding: '8px 16px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }
+const secBtn: React.CSSProperties = { padding: '7px 12px', background: C.card, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer', fontSize: 12, fontFamily: font }
 
 function UploaderCard({ u, active, onClick }: any) {
   return (
@@ -38,16 +51,16 @@ function UploaderCard({ u, active, onClick }: any) {
           <div style={{ fontSize: 12, fontWeight: 600, color: C.navy }}>{u.label}</div>
           <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>{u.desc.slice(0, 52)}…</div>
         </div>
-        {u.payrollAlert && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: C.amberBg, color: C.amber, fontWeight: 700 }}>⚠ Payroll</span>}
-        {u.confidential && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: C.redBg, color: C.red, fontWeight: 700 }}>🔒</span>}
+        {u.payrollAlert && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: C.amberBg, color: C.amber, fontWeight: 700 }}>Payroll</span>}
+        {u.confidential && <span style={{ fontSize: 9, padding: '1px 6px', borderRadius: 10, background: C.redBg, color: C.red, fontWeight: 700 }}></span>}
       </div>
     </div>
   )
 }
 function AlertBanner({ msg, type }: { msg: string; type: 'warn' | 'error' | 'success' }) {
-  const map = { warn: [C.amberBg, C.amber, '#FDE68A'], error: [C.redBg, C.red, '#FCA5A5'], success: [C.greenBg, C.green, '#BBF7D0'] } as const
+  const map = { warn: [C.amberBg, C.amber, TK.warningTint], error: [C.redBg, C.red, TK.criticalTint], success: [C.greenBg, C.green, TK.positiveTint] } as const
   const [bg, fg, br] = map[type]
-  return <div style={{ background: bg, border: `1px solid ${br}`, borderRadius: 8, padding: '10px 14px', fontSize: 12, color: fg, marginBottom: 10, display: 'flex', gap: 8 }}><span>{type === 'warn' ? '⚠️' : type === 'error' ? '❌' : '✅'}</span><span>{msg}</span></div>
+  return <div style={{ background: bg, border: `1px solid ${br}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: fg, marginBottom: 10, display: 'flex', gap: 8 }}><span>{type === 'warn' ? '' : type === 'error' ? '' : ''}</span><span>{msg}</span></div>
 }
 function ValRow({ row, errors, index }: any) {
   const bad = errors?.length > 0
@@ -55,7 +68,7 @@ function ValRow({ row, errors, index }: any) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 14px', borderBottom: `1px solid ${C.border}`, background: bad ? C.redBg : 'transparent' }}>
       <span style={{ fontSize: 10, color: C.muted, width: 26 }}>{index + 1}</span>
       <span style={{ fontSize: 11, color: C.navy, flex: 1, fontFamily: 'monospace' }}>{row.emp_code || '—'}</span>
-      {bad ? <span style={{ fontSize: 11, color: C.red }}>{errors.join(' · ')}</span> : <span style={{ fontSize: 11, color: C.green }}>✓ Valid</span>}
+      {bad ? <span style={{ fontSize: 11, color: C.red }}>{errors.join(' · ')}</span> : <span style={{ fontSize: 11, color: C.green }}>Valid</span>}
     </div>
   )
 }
@@ -84,10 +97,14 @@ export default function BulkUploaderPage() {
   const [ack, setAck] = useState(false)
   const [toast, setToast] = useState('')
   const [logs, setLogs] = useState<any[]>([])
+  // The org-chart workbook is kept as the raw grid: the server parses it again and its
+  // answer is the one that counts, so this copy exists only to show a preview first.
+  const [grid, setGrid] = useState<unknown[][]>([])
+  const [orgPreview, setOrgPreview] = useState<ParsedSheet | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(''), 4000) }
 
-  const loadLogs = useCallback(() => { fetch('/api/employees/bulk-upload?limit=8').then(r => r.json()).then(d => setLogs(d.logs || [])) }, [])
+  const loadLogs = useCallback(() => { authHeaders().then(h => fetch('/api/employees/bulk-upload?limit=8', { headers: h }).then(r => r.json()).then(d => setLogs(d.logs || []))) }, [])
   useEffect(() => {
     Promise.all([
       supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name'),
@@ -99,7 +116,8 @@ export default function BulkUploaderPage() {
 
   function select(u: any) {
     setActive(u); setFile(null); setRows([]); setValidation([]); setStage('idle'); setAck(false); setShowAlert(false)
-    setResult({ success: 0, errors: 0, details: [] }); if (fileRef.current) fileRef.current.value = ''
+    setResult({ success: 0, errors: 0, details: [] }); setGrid([]); setOrgPreview(null)
+    if (fileRef.current) fileRef.current.value = ''
   }
 
   function parseFile(f: File) {
@@ -108,6 +126,19 @@ export default function BulkUploaderPage() {
       const wb = XLSX.read(new Uint8Array(e.target!.result as ArrayBuffer), { type: 'array', cellDates: false })
       const ws = wb.Sheets[wb.SheetNames.find(n => !n.includes('Instruction')) || wb.SheetNames[0]]
       const all = XLSX.utils.sheet_to_json<any>(ws, { header: 1, raw: true, defval: '' })
+
+      // The org-chart workbook has two header rows and repeating Code/Name/Email blocks
+      // rather than one flat header, so it takes the shared parser instead of the
+      // template reader below.
+      if (active.wide) {
+        const asText = (all as any[][]).map(r => (r || []).map(v => (v === null || v === undefined ? '' : String(v).trim())))
+        const parsed = parseOrgSheet(asText)
+        setGrid(asText); setOrgPreview(parsed); setRows(parsed.rows as any[]); setStage('parsed')
+        const s = summarise(parsed)
+        showToast(`Read ${s.employees} employees, ${s.relationships} reporting lines, ${Object.keys(s.roles).length} roles`)
+        return
+      }
+
       if (all.length < 4) { showToast('File too short — no data rows found'); return }
       const headers: string[] = (all[2] as string[]).map((h: string) => { const m = String(h || '').match(/\(([^)]+)\)$/); return m ? m[1].trim() : String(h || '').toLowerCase().trim().replace(/\s+/g, '_') })
       const parsed: any[] = []
@@ -128,6 +159,22 @@ export default function BulkUploaderPage() {
   }
 
   const validate = useCallback(() => {
+    // For the org chart the parser has already checked everything, so validation is a
+    // matter of showing what it found rather than running a second set of rules.
+    if (active.wide) {
+      if (!orgPreview) { showToast('Load the workbook first'); return }
+      const byCode = new Map<string, string[]>()
+      for (const i of orgPreview.issues) {
+        if (i.severity !== 'error' || !i.emp_code) continue
+        byCode.set(i.emp_code, [...(byCode.get(i.emp_code) || []), i.message])
+      }
+      const res = orgPreview.rows.map(r => ({ row: r as any, errors: byCode.get(r.emp_code) || [] }))
+      setValidation(res); setStage('validated')
+      const bad = res.filter(r => r.errors.length).length
+      showToast(bad === 0 ? `All ${res.length} rows valid ✓` : `${bad} rows have errors`)
+      return
+    }
+
     const res = rows.map(row => {
       const e: string[] = []
       active.requiredColumns.forEach((c: string) => { if (!row[c]) e.push(`${c} is required`) })
@@ -145,15 +192,47 @@ export default function BulkUploaderPage() {
     setValidation(filtered); setStage('validated')
     const bad = filtered.filter(r => r.errors.length).length
     showToast(bad === 0 ? `All ${filtered.length} rows valid ✓` : `${bad} rows have errors`)
-  }, [rows, filters, active])
+  }, [rows, filters, active, orgPreview])
 
   async function upload() {
     if (active.payrollAlert && !ack) { setShowAlert(true); return }
+
+    if (active.wide) {
+      if (!grid.length) { showToast('Load the workbook first'); return }
+      setStage('uploading')
+      const res = await fetch('/api/employees/bulk-upload', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+        // The whole grid goes up: the server parses and validates it again, because a
+        // client that decides what the validator sees is not a validator.
+        body: JSON.stringify({ uploaderType: 'orgstructure', grid, companyId: filters.company || null, performedBy: 'HR' }),
+      }).then(r => r.json()).catch(e => ({ error: e.message }))
+
+      if (res.error) {
+        const lines = (res.issues || []).filter((i: any) => i.severity === 'error').slice(0, 20).map((i: any) => i.message)
+        setResult({ success: 0, errors: res.errors || 1, details: lines.length ? lines : [res.message || res.error] })
+        setStage('done'); showToast('Nothing was imported — see the errors'); return
+      }
+      const r = res.relationships || {}
+      const roleLines = (res.roles || []).filter((x: any) => !x.ok).map((x: any) => `${x.emp_code} → ${x.role}: ${x.message}`)
+      const issueLines = (res.issues || []).filter((i: any) => i.severity !== 'info').slice(0, 15).map((i: any) => `[${i.severity}] ${i.message}`)
+      setResult({
+        success: res.success || 0, errors: res.errors || 0,
+        details: [
+          `Reporting lines — ${r.written || 0} new, ${r.replaced || 0} replaced, ${r.unchanged || 0} unchanged, ${r.closed || 0} closed`,
+          `Roles assigned — ${(res.roles || []).filter((x: any) => x.ok).length}`,
+          ...roleLines, ...issueLines,
+        ],
+      })
+      setStage('done'); loadLogs()
+      showToast(`Done: ${r.written || 0} written, ${r.unchanged || 0} unchanged`)
+      return
+    }
+
     const valid = validation.filter(r => !r.errors.length).map(r => r.row)
     if (!valid.length) { showToast('No valid rows to upload'); return }
     setStage('uploading')
     const res = await fetch('/api/employees/bulk-upload', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
       body: JSON.stringify({ uploaderType: active.id, rows: valid, companyId: filters.company || null, acknowledged: ack, performedBy: 'HR' }),
     }).then(r => r.json()).catch(e => ({ error: e.message }))
     if (res.error) { setResult({ success: 0, errors: valid.length, details: [res.error] }); setStage('done'); showToast('Upload failed'); return }
@@ -167,7 +246,7 @@ export default function BulkUploaderPage() {
 
   return (
     <div style={{ padding: 24, background: C.bg, minHeight: '100vh', fontFamily: font, fontSize: 13, color: C.navy }}>
-      <div style={{ marginBottom: 16 }}>
+      <div className="ez-page-head" style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 22, fontWeight: 700 }}>Bulk Uploader</div>
         <div style={{ fontSize: 12, color: C.muted }}>Update employee data in bulk via Excel templates · 7 categories · server-validated</div>
       </div>
@@ -180,7 +259,7 @@ export default function BulkUploaderPage() {
           <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', margin: '16px 0 8px' }}>Recent uploads</div>
           {!logs.length && <div style={{ fontSize: 11, color: C.muted }}>No uploads yet.</div>}
           {logs.map(l => (
-            <div key={l.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: '7px 10px', marginBottom: 6, fontSize: 11 }}>
+            <div key={l.id} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: '7px 10px', marginBottom: 6, fontSize: 11 }}>
               <div style={{ fontWeight: 600, textTransform: 'capitalize' }}>{l.uploader_type}</div>
               <div style={{ color: C.muted, marginTop: 1 }}><span style={{ color: C.green }}>{l.success_rows}✓</span>{l.error_rows > 0 && <span style={{ color: C.red }}> · {l.error_rows}✕</span>} · {new Date(l.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
             </div>
@@ -189,17 +268,19 @@ export default function BulkUploaderPage() {
 
         <div>
           {/* Header */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 18px', marginBottom: 14 }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 18px', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ fontSize: 28 }}>{active.icon}</span>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 16, fontWeight: 700 }}>{active.label} Uploader</div>
                 <div style={{ fontSize: 12, color: C.muted }}>{active.desc}</div>
               </div>
-              {active.confidential && <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: C.redBg, color: C.red, fontWeight: 600 }}>🔒 Confidential</span>}
-              <a href={`/uploads/templates/${active.downloadFile}`} download style={{ ...priBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>⬇ Download template</a>
+              {active.confidential && <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: C.redBg, color: C.red, fontWeight: 600 }}>Confidential</span>}
+              {active.downloadFile
+                ? <a href={`/uploads/templates/${active.downloadFile}`} download style={{ ...priBtn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}>⬇ Download template</a>
+                : <span style={{ fontSize: 11, color: C.muted, maxWidth: 230, textAlign: 'right', lineHeight: 1.5 }}>No template — upload the org-chart workbook exactly as HR maintains it.</span>}
             </div>
-            {active.payrollAlert && <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 8, padding: '8px 12px', marginTop: 10, fontSize: 12, color: C.amber }}>⚠️ {active.payrollAlertMsg}</div>}
+            {active.payrollAlert && <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 10, padding: '8px 12px', marginTop: 10, fontSize: 12, color: C.amber }}>⚠️ {active.payrollAlertMsg}</div>}
           </div>
 
           {/* Filter bar (emp-code scoping) */}
@@ -214,27 +295,83 @@ export default function BulkUploaderPage() {
           </div>
 
           {/* Upload zone */}
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', marginBottom: 14 }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>Upload filled template</div>
-            <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${file ? C.purple : C.border}`, borderRadius: 10, padding: 20, textAlign: 'center', cursor: 'pointer', background: file ? C.purpleBg : '#FAFAFE' }}>
-              <div style={{ fontSize: 24, marginBottom: 6 }}>📂</div>
+            <div onClick={() => fileRef.current?.click()} style={{ border: `2px dashed ${file ? C.purple : C.border}`, borderRadius: 10, padding: 20, textAlign: 'center', cursor: 'pointer', background: file ? C.purpleBg: TK.brandTint }}>
+              <div style={{ fontSize: 24, marginBottom: 6 }}></div>
               <div style={{ fontSize: 13, color: file ? C.purple : C.muted }}>{file ? `✓ ${file.name} (${(file.size / 1024).toFixed(0)} KB)` : 'Click to select a filled .xlsx template'}</div>
-              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Only .xlsx · Max 5,000 rows · must use the EZER template</div>
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>{active.wide ? 'Only .xlsx · the first sheet is read · two header rows expected' : 'Only .xlsx · Max 5,000 rows · must use the EZER template'}</div>
             </div>
             <input ref={fileRef} type="file" accept=".xlsx" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) { setFile(f); parseFile(f) } }} />
             <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <button onClick={validate} disabled={!rows.length || stage === 'uploading'} style={{ ...priBtn, opacity: rows.length ? 1 : .5 }}>✓ Validate {rows.length ? `(${rows.length} rows)` : ''}</button>
-              {stage === 'validated' && <button onClick={() => setStage('parsed')} style={secBtn}>🔄 Re-parse</button>}
+              <button onClick={validate} disabled={!rows.length || stage === 'uploading'} style={{ ...priBtn, opacity: rows.length ? 1 : .5 }}>Validate {rows.length ? `(${rows.length} rows)` : ''}</button>
+              {stage === 'validated' && <button onClick={() => setStage('parsed')} style={secBtn}>Re-parse</button>}
             </div>
           </div>
 
+          {/* What the org-chart workbook would write — shown before anything is written */}
+          {active.wide && orgPreview && (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 10 }}>What this workbook says</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 8, marginBottom: 12 }}>
+                {[
+                  ['Employees', String(summarise(orgPreview).employees)],
+                  ['Reporting lines', String(summarise(orgPreview).relationships)],
+                  ...Object.entries(summarise(orgPreview).byLevel).map(([k, v]) => [k, String(v)]),
+                  ['Role holders', String(Object.keys(orgPreview.roleHolders).length)],
+                ].map(([label, value]) => (
+                  <div key={label} style={{ background: '#FAFAFE', border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px' }}>
+                    <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+                    <div style={{ fontSize: 17, fontWeight: 700, color: C.navy, fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ fontSize: 11, color: C.purple, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Blocks read from the header</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 12 }}>
+                {orgPreview.groups.map(g => (
+                  <span key={g.label} style={{
+                    fontSize: 10.5, fontWeight: 600, padding: '3px 9px', borderRadius: 99,
+                    background: g.kind === 'hierarchy' ? '#EEF2FF' : g.kind === 'role' ? '#ECFDF5' : C.redBg,
+                    color: g.kind === 'hierarchy' ? '#3730A3' : g.kind === 'role' ? '#065F46' : C.red,
+                  }}>{g.label} → {g.level ?? g.roleCode ?? 'not recognised'}</span>
+                ))}
+              </div>
+
+              {orgPreview.issues.length > 0 && (
+                <>
+                  <div style={{ fontSize: 11, color: C.purple, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 6 }}>Findings</div>
+                  <div style={{ maxHeight: 190, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {orgPreview.issues.slice(0, 60).map((i, n) => (
+                      <div key={n} style={{
+                        fontSize: 11.5, lineHeight: 1.5, padding: '6px 9px', borderRadius: 7,
+                        background: i.severity === 'error' ? C.redBg : i.severity === 'warning' ? C.amberBg : '#F5F3FF',
+                        color: i.severity === 'error' ? C.red : i.severity === 'warning' ? C.amber : C.muted,
+                      }}>
+                        <b>{i.severity === 'error' ? '✗' : i.severity === 'warning' ? '⚠' : 'ℹ'}</b>{' '}
+                        {i.row ? <span style={{ fontFamily: 'monospace' }}>row {i.row} </span> : null}
+                        {i.message}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div style={{ fontSize: 11, color: C.muted, marginTop: 10, lineHeight: 1.55 }}>
+                A person listed as their own manager means nobody is above them, and a level that
+                repeats the person below it is dropped — both are how this workbook writes “no
+                more levels”. Running the import again changes nothing that has not moved.
+              </div>
+            </div>
+          )}
+
           {/* Payroll alert */}
           {showAlert && (
-            <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 12, padding: '16px 18px', marginBottom: 14 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, marginBottom: 8 }}>⚠️ Payroll impact alert</div>
-              <div style={{ fontSize: 12, color: '#7c4a03', marginBottom: 12, lineHeight: 1.6 }}>{active.payrollAlertMsg}<br /><b>Proceeding means you have verified this with the payroll team.</b></div>
+            <div style={{ background: C.amberBg, border: `1px solid #FDE68A`, borderRadius: 14, padding: '16px 18px', marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: C.amber, marginBottom: 8 }}>Payroll impact alert</div>
+              <div style={{ fontSize: 12, color: TK.warning, marginBottom: 12, lineHeight: 1.6 }}>{active.payrollAlertMsg}<br /><b>Proceeding means you have verified this with the payroll team.</b></div>
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => { setAck(true); setShowAlert(false) }} style={{ padding: '7px 16px', background: C.amber, color: '#fff', border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }}>I have verified with payroll — proceed</button>
+                <button onClick={() => { setAck(true); setShowAlert(false) }} style={{ padding: '7px 16px', background: C.amber, color: TK.onAccent, border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: font }}>I have verified with payroll — proceed</button>
                 <button onClick={() => setShowAlert(false)} style={secBtn}>Cancel</button>
               </div>
             </div>
@@ -242,7 +379,7 @@ export default function BulkUploaderPage() {
 
           {/* Validation results */}
           {stage === 'validated' && (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, marginBottom: 14, overflow: 'hidden' }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, marginBottom: 14, overflow: 'hidden' }}>
               <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', justifyContent: 'space-between' }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>Validation results</div>
                 <div style={{ display: 'flex', gap: 8, fontSize: 11 }}><span style={{ color: C.green, fontWeight: 600 }}>✓ {validCount} valid</span>{errRows.length > 0 && <span style={{ color: C.red, fontWeight: 600 }}>✕ {errRows.length} errors</span>}</div>
@@ -250,7 +387,7 @@ export default function BulkUploaderPage() {
               {errRows.length > 0 && <div style={{ padding: '10px 14px' }}><AlertBanner msg={`${errRows.length} rows have errors — fix in Excel & re-upload. The ${validCount} valid rows can still be uploaded.`} type="warn" /></div>}
               {errRows.slice(0, 12).map((r, i) => <ValRow key={i} row={r.row} errors={r.errors} index={i} />)}
               {errRows.length > 12 && <div style={{ padding: '8px 16px', fontSize: 11, color: C.muted }}>… and {errRows.length - 12} more error rows (export below to see all)</div>}
-              <div style={{ padding: '8px 16px', background: '#F0FDF4', borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.green }}>✓ {validCount} rows ready to upload{errRows.length > 0 && <span style={{ color: C.muted }}> · {errRows.length} will be skipped</span>}</div>
+              <div style={{ padding: '8px 16px', background: TK.positiveTint, borderTop: `1px solid ${C.border}`, fontSize: 11, color: C.green }}>✓ {validCount} rows ready to upload{errRows.length > 0 && <span style={{ color: C.muted }}> · {errRows.length} will be skipped</span>}</div>
             </div>
           )}
 
@@ -264,7 +401,7 @@ export default function BulkUploaderPage() {
 
           {/* Done */}
           {stage === 'done' && (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px' }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px' }}>
               <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Upload complete</div>
               {result.success > 0 && <AlertBanner msg={`${result.success} rows uploaded successfully.`} type="success" />}
               {result.errors > 0 && <AlertBanner msg={`${result.errors} rows failed. See details below.`} type="error" />}
@@ -275,7 +412,7 @@ export default function BulkUploaderPage() {
         </div>
       </div>
 
-      {toast && <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: '#fff', padding: '10px 16px', borderRadius: 8, fontSize: 12, fontWeight: 600, zIndex: 999 }}>{toast}</div>}
+      {toast && <div style={{ position: 'fixed', bottom: 20, right: 20, background: C.navy, color: TK.onAccent, padding: '10px 16px', borderRadius: 10, fontSize: 12, fontWeight: 600, zIndex: 999 }}>{toast}</div>}
     </div>
   )
 }

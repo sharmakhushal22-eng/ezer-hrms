@@ -1,12 +1,16 @@
 // app/api/employees/bulk-upload/route.ts — schema-aware bulk uploader.
-// POST: validate + transform + upsert rows for any of the 7 uploader types.
+// POST: validate + transform + upsert rows for any of the 8 uploader types.
 //   • personal / statutory / address / exit → employees (upsert on emp_code)
 //   • employment → employees, resolving company/dept/location NAMES + manager CODES → IDs
 //   • bank      → employees, encrypt account → last4 + base64
 //   • salary    → ctc_master (annual) + salary_structures (monthly), keyed by employee_id
+//   • orgstructure → employee_relationships (L1/L2/HOD) + ess_user_roles, from the
+//                    two-header-row org-chart workbook. See importOrgStructure below.
 // GET: recent upload log.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { parseOrgSheet, relationshipRows, summarise, type Issue } from '@/lib/rms/excel'
+import { requireModule } from '@/lib/api-auth'
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -64,9 +68,210 @@ function rowErrors(row: any, type: string): string[] {
   return e
 }
 
+
+// ── Org structure & roles ────────────────────────────────────────────────────
+// The org-chart workbook is not the flat template the other seven uploaders use, so it
+// arrives here as the raw grid and is parsed on the SERVER. The browser parses a copy of
+// it too, but only to show a preview — nothing it says is trusted, because a client that
+// can choose what the validator sees is not a validator.
+//
+// Idempotent by construction: a relationship that already points at the same manager is
+// left alone, one that points somewhere else is closed and replaced, and role assignment
+// is an upsert on (account, role).
+async function importOrgStructure(grid: unknown[][], performedBy: string | null, companyId: string | null) {
+  const parsed = parseOrgSheet(grid)
+
+  // Sheet-level problems stop everything. A missing employee-code column or a loop in the
+  // reporting chain is not something to import "most of".
+  const FATAL = new Set(['EMPTY', 'NO_EMP_CODE', 'NO_HIERARCHY', 'CIRCULAR_HIERARCHY'])
+  const fatal = parsed.issues.filter(i => i.severity === 'error' && FATAL.has(i.code))
+  if (fatal.length) {
+    return NextResponse.json({
+      error: 'sheet_rejected',
+      message: 'The sheet was not imported. Fix these first.',
+      issues: parsed.issues, summary: summarise(parsed), success: 0, errors: fatal.length,
+    }, { status: 422 })
+  }
+
+  const issues: Issue[] = [...parsed.issues]
+
+  // ── resolve every code in one round trip ──────────────────────────────────
+  const wanted = new Set<string>()
+  for (const r of parsed.rows) {
+    wanted.add(r.emp_code)
+    for (const m of Object.values(r.hierarchy)) wanted.add(m as string)
+  }
+  for (const holders of Object.values(parsed.roleHolders)) for (const h of holders) wanted.add(h)
+
+  const idByCode: Record<string, string> = {}
+  const codes = [...wanted]
+  for (let i = 0; i < codes.length; i += 400) {
+    const { data } = await supa.from('employees').select('id, emp_code').in('emp_code', codes.slice(i, i + 400))
+    for (const e of data || []) idByCode[String((e as any).emp_code).trim()] = (e as any).id
+  }
+
+  const missing = codes.filter(c => !idByCode[c])
+  for (const c of missing) {
+    issues.push({ row: null, emp_code: c, severity: 'error', code: 'NOT_IN_DATABASE',
+      message: `${c} appears in the sheet but there is no employee with that code in the system. Rows referring to it were skipped.` })
+  }
+
+  // ── relationships ─────────────────────────────────────────────────────────
+  const results: { emp_code: string; status: string; errors: string[] }[] = []
+  const status = new Map<string, { status: string; errors: string[] }>()
+  const mark = (code: string, st: string, err?: string) => {
+    const cur = status.get(code) || { status: 'SUCCESS', errors: [] }
+    if (err) { cur.errors.push(err); cur.status = st }
+    else if (cur.status !== 'ERROR') cur.status = st
+    status.set(code, cur)
+  }
+  for (const r of parsed.rows) mark(r.emp_code, 'SUCCESS')
+
+  const today = new Date().toISOString().slice(0, 10)
+  let written = 0, unchanged = 0, closed = 0
+
+  const wanting = relationshipRows(parsed)
+    .filter(r => idByCode[r.emp_code] && idByCode[r.manager_code])
+
+  // What is live now, so an unchanged row is left alone rather than rewritten.
+  const live = new Map<string, { id: string; manager: string }>()
+  {
+    const empIds = [...new Set(wanting.map(r => idByCode[r.emp_code]))]
+    for (let i = 0; i < empIds.length; i += 300) {
+      const { data } = await supa.from('employee_relationships')
+        .select('id, employee_id, manager_employee_id, relationship_type')
+        .in('employee_id', empIds.slice(i, i + 300)).is('valid_to', null)
+      for (const row of data || []) {
+        live.set(`${(row as any).employee_id}|${(row as any).relationship_type}`,
+          { id: (row as any).id, manager: (row as any).manager_employee_id })
+      }
+    }
+  }
+
+  for (const r of wanting) {
+    const empId = idByCode[r.emp_code], mgrId = idByCode[r.manager_code]
+    const key = `${empId}|${r.relationship_type}`
+    const cur = live.get(key)
+    if (cur && cur.manager === mgrId) { unchanged++; continue }
+
+    if (cur) {
+      const { error } = await supa.from('employee_relationships')
+        .update({ valid_to: today }).eq('id', cur.id)
+      if (error) { mark(r.emp_code, 'ERROR', `${r.relationship_type}: ${error.message}`); continue }
+      closed++
+    }
+    const { error } = await supa.from('employee_relationships').insert({
+      employee_id: empId, manager_employee_id: mgrId,
+      relationship_type: r.relationship_type, source: 'IMPORT', valid_from: today,
+    })
+    if (error) {
+      // The cycle guard and the self-manager constraint both surface here, already
+      // phrased for a human by the database.
+      mark(r.emp_code, 'ERROR', `${r.relationship_type}: ${error.message.replace(/^.*ERROR:\s*/, '')}`)
+      issues.push({ row: null, emp_code: r.emp_code, severity: 'error', code: 'RELATIONSHIP_REJECTED',
+        message: `${r.emp_code} ${r.relationship_type} -> ${r.manager_code}: ${error.message}` })
+      continue
+    }
+    written++
+  }
+
+  // Relationships the sheet no longer names are closed, so an import is a statement of
+  // what is true rather than an accumulation of everything ever true.
+  let removed = 0
+  {
+    const wantKeys = new Set(wanting.map(r => `${idByCode[r.emp_code]}|${r.relationship_type}`))
+    const sheetEmpIds = new Set(parsed.rows.map(r => idByCode[r.emp_code]).filter(Boolean))
+    for (const [key, v] of live) {
+      const [empId] = key.split('|')
+      if (!sheetEmpIds.has(empId)) continue          // not in this sheet: leave alone
+      if (wantKeys.has(key)) continue
+      const { error } = await supa.from('employee_relationships').update({ valid_to: today }).eq('id', v.id)
+      if (!error) removed++
+    }
+  }
+
+  // ── functional roles ──────────────────────────────────────────────────────
+  const roleAssignments: { role: string; emp_code: string; ok: boolean; message?: string }[] = []
+  {
+    const roleCodes = Object.keys(parsed.roleHolders)
+    const { data: roleRows } = await supa.from('ess_roles').select('id, role_code').in('role_code', roleCodes)
+    const roleIdByCode: Record<string, string> = {}
+    for (const r of roleRows || []) roleIdByCode[(r as any).role_code] = (r as any).id
+
+    for (const code of roleCodes) {
+      if (!roleIdByCode[code]) {
+        issues.push({ row: null, emp_code: null, severity: 'error', code: 'ROLE_NOT_IN_APP',
+          message: `The sheet names ${code} but no such role exists in the application. Run migration 058 first.` })
+        continue
+      }
+      for (const holderCode of parsed.roleHolders[code]) {
+        const empId = idByCode[holderCode]
+        if (!empId) { roleAssignments.push({ role: code, emp_code: holderCode, ok: false, message: 'not in the system' }); continue }
+
+        // A role has to hang off an ESS account, so one is created if missing — INACTIVE
+        // and without a password, so nobody can sign in with it until HR issues
+        // credentials.
+        let acctId: string | null = null
+        const { data: acct } = await supa.from('ess_accounts').select('id').eq('employee_id', empId).maybeSingle()
+        if (acct?.id) acctId = (acct as any).id
+        else {
+          const { data: made } = await supa.from('ess_accounts')
+            .insert({ employee_id: empId, status: 'INACTIVE' }).select('id').single()
+          acctId = (made as any)?.id ?? null
+        }
+        if (!acctId) { roleAssignments.push({ role: code, emp_code: holderCode, ok: false, message: 'could not create an ESS account' }); continue }
+
+        const { error } = await supa.from('ess_user_roles').upsert(
+          { ess_account_id: acctId, role_id: roleIdByCode[code], is_active: true, assigned_at: new Date().toISOString() },
+          { onConflict: 'ess_account_id,role_id' },
+        )
+        roleAssignments.push({ role: code, emp_code: holderCode, ok: !error, message: error?.message })
+      }
+    }
+  }
+
+  for (const [code, v] of status) results.push({ emp_code: code, status: v.status, errors: v.errors })
+  const failed = results.filter(r => r.status === 'ERROR').length
+
+  await supa.from('bulk_upload_log').insert({
+    uploader_type: 'orgstructure', company_id: companyId || null,
+    total_rows: parsed.rows.length, success_rows: parsed.rows.length - failed, error_rows: failed,
+    performed_by: performedBy || null, payroll_acknowledged: false,
+  })
+
+  return NextResponse.json({
+    success: parsed.rows.length - failed,
+    errors: failed,
+    results,
+    issues,
+    summary: summarise(parsed),
+    relationships: { written, unchanged, replaced: closed, closed: removed },
+    roles: roleAssignments,
+  })
+}
+
 export async function POST(req: NextRequest) {
   try {
-    const { uploaderType, rows, performedBy, companyId, acknowledged } = await req.json()
+    // This endpoint upserts the employee table with the service key, which bypasses RLS.
+    // It had no gate of its own at all — an anonymous POST from anywhere could rewrite
+    // salaries, statutory ids and now reporting lines. Bulk Upload at EDIT is the least
+    // it should ask for.
+    const gate = await requireModule(req, 'Bulk Upload', 'EDIT')
+    if (gate.error) return gate.error
+
+    const body = await req.json()
+    const { uploaderType, rows, performedBy, companyId, acknowledged } = body
+
+    // The org-chart workbook has a different shape from the seven flat templates, so it
+    // takes a different path — but the same endpoint, the same log and the same
+    // per-row result format the uploader screen already knows how to render.
+    if (uploaderType === 'orgstructure') {
+      if (!Array.isArray(body.grid) || body.grid.length < 3) {
+        return NextResponse.json({ error: 'The sheet appears to be empty.' }, { status: 400 })
+      }
+      return await importOrgStructure(body.grid as unknown[][], performedBy || null, companyId || null)
+    }
+
     if (!uploaderType || !rows?.length) return NextResponse.json({ error: 'uploaderType and rows required' }, { status: 400 })
     if (PAYROLL_IMPACT.includes(uploaderType) && !acknowledged) return NextResponse.json({ error: 'payroll_alert', message: 'Payroll impact not acknowledged' }, { status: 409 })
 
@@ -196,6 +401,9 @@ async function logUpload(type: string, companyId: string | null, total: number, 
 }
 
 export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Bulk Upload')
+  if (gate.error) return gate.error
+
   const { searchParams } = new URL(req.url)
   const companyId = searchParams.get('company_id')
   const limit = Number(searchParams.get('limit') || '50')

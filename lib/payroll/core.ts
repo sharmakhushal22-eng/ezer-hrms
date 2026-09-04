@@ -227,6 +227,23 @@ const TAXABLE_COLS = [
   'taxable_flexi_telephone_internet', 'taxable_flexi_meal_card', 'taxable_flexi_gadget_device',
   'taxable_flexi_attire_uniform', 'taxable_flexi_books_periodicals', 'taxable_flexi_lta',
 ]
+// Monthly TDS (sql125/126, extended by 064 to the rest of the spec) — every step
+// of the calculation as its own column, in the order it runs, so the final
+// figure can be tied out by hand instead of trusted on faith: actual + current +
+// projected income (now including perquisites, house property and a previous
+// employer's income), less exemptions and the full Chapter VI-A, taxed with
+// age-aware slabs and marginal relief, less what this FY already deducted,
+// divided by the months left.
+const TDS_COLS = [
+  'tds_regime_used', 'tds_age_category', 'tds_actual_ytd', 'tds_current_gross', 'tds_arrear', 'tds_projected',
+  'tds_perquisites', 'tds_employer_contrib_excess', 'tds_house_property', 'tds_other_income',
+  'tds_prev_employer_income', 'tds_prev_employer_tds', 'tds_annual_gross',
+  'tds_hra_exempt', 'tds_lta_exempt', 'tds_pt_deduction', 'tds_std_deduction', 'tds_chapter_via',
+  'tds_taxable_income', 'tds_slab_tax', 'tds_rebate_87a', 'tds_marginal_relief_87a',
+  'tds_surcharge', 'tds_marginal_relief_surcharge', 'tds_cess',
+  'tds_annual_liability', 'tds_paid_ytd', 'tds_months_remaining',
+  'tds_monthly', 'tds_additional', 'tds_reason',
+]
 
 // ── Month Master column groups ─────────────────────────────────────────────
 // The export is grouped so related fields sit together and each block reads as a
@@ -310,8 +327,13 @@ export const MM_GROUPS: MmGroup[] = [
     cols: [...EARN_COLS, 'earn_gross_monthly',
       'pay_incentive', 'pay_variable', 'pay_bonus', 'pay_buyout',
       'ded_parking', 'ded_insurance', 'ded_canteen',
-      'total_deduction', 'net_pay'],
+      // The snapshot's own partial figures, renamed so nobody mistakes them for the
+      // bank transfer (C3): structural statutory + company deductions, before TDS,
+      // loan and NPS. The real totals come from payroll_lines, below.
+      'structural_deductions', 'earnings_less_statutory',
+      'gross_earnings', 'total_deductions', 'net_pay'],
   },
+  { key: 'tds', label: 'TDS', cols: [...TDS_COLS] },
   { key: 'investment', label: 'Investment', cols: [...TAXABLE_COLS] },
   {
     key: 'bank', label: 'Bank details',
@@ -351,7 +373,11 @@ export const RUN_SHEET_COLS: string[] = [
   // esic_wages / esic_employee. Showing both invites the reader to reconcile two numbers
   // that were never meant to agree.
   'ded_parking', 'ded_insurance', 'ded_canteen',
-  'total_deduction',
+  // What the snapshot itself summed — structural PF/ESIC/PT/LWF plus the three company
+  // deductions, BEFORE the statutory recompute and before TDS, loan and NPS. Kept for
+  // reconciliation, named so it cannot be read as net pay (C3). The bank figures —
+  // gross_earnings / total_deductions / net_pay — sit at the very end of the sheet.
+  'structural_deductions', 'earnings_less_statutory',
 
   // Code of Wages — the 50% basic floor. Reported alongside the structured basic
   // rather than replacing it: this figure is a compliance measure, and folding it
@@ -360,6 +386,11 @@ export const RUN_SHEET_COLS: string[] = [
   // "CTC" figures (agreed CTC, fixed cost, total cost) that differ from each other, and
   // putting one of them next to earned pay reads as a contradiction rather than context.
   'basic_50_floor', 'basic_for_wages', 'earn_basic_for_wages', 'basic_50_applied',
+  // Skill band under the state's minimum-wage notification, derived at sheet time from
+  // basic_for_wages against minimum_wage_pivot for location_state: the highest band
+  // whose rate the wage meets. Below even the unskilled rate is still "Unskilled",
+  // with min_wage_status saying so.
+  'employee_type', 'min_wage_rate', 'min_wage_status',
 
   // EPF · EPS · EDLI · Admin. The inputs sit next to the outputs on purpose — a
   // ceiling that did or did not apply is unarguable when pf_gross_limit, the actual
@@ -406,7 +437,21 @@ export const RUN_SHEET_COLS: string[] = [
   'arrear_appraisal_effective_date', 'arrear_months',
   'arrear_basic', 'arrear_hra', 'arrear_special_allowance',
   'arrear_epf_wage', 'arrear_employee_pf', 'arrear_employer_pf',
-  'arrear_total', 'final_net_pay',
+  'arrear_total',
+
+  // Monthly TDS (sql125/126) — recomputed from this run's own income rather than a
+  // frozen number typed once in April. The columns run in calculation order — actual
+  // + current + projected income, less HRA/LTA/PT/Chapter VI-A, taxed, less what this
+  // FY already deducted, divided by the months left — so tds_monthly at the end can be
+  // tied out by reading the row left to right. tds_reason is the one-line explanation:
+  // which regime, how many months the date of leaving cut, whether a one-off pushed
+  // Additional TDS this month.
+  ...TDS_COLS,
+
+  // THE BANK FIGURES — from payroll_lines, which is what the engine actually paid.
+  // Everything deducted, TDS and Additional TDS included; net_pay is the transfer
+  // amount. Last on the sheet so a row reads left to right and ends on the answer.
+  'ded_tds', 'ded_additional_tax', 'gross_earnings', 'total_deductions', 'net_pay',
 ]
 
 // Month-to-month attendance columns. These are *expected* to differ every month, so the
@@ -438,7 +483,40 @@ export async function loadMonthMaster(runs: { id: string; company_name?: string 
   const out: Record<string, any>[] = []
   const empIds: string[] = []
   const fys = new Set<string>()
+
+  // State minimum-wage bands, once per sheet. Keyed by lower-cased state name; the
+  // pivot carries one row per state (zone ALL) with the four category rates.
+  const bands = new Map<string, { unskilled: number; semi: number; skilled: number; highly: number }>()
+  {
+    const { data } = await supabase.from('minimum_wage_pivot').select('state, zone, unskilled, semi_skilled, skilled, highly_skilled')
+    ;(data || []).forEach((w: any) => {
+      const k = String(w.state || '').trim().toLowerCase()
+      if (!k || (bands.has(k) && String(w.zone || 'ALL') !== 'ALL')) return
+      bands.set(k, { unskilled: Number(w.unskilled || 0), semi: Number(w.semi_skilled || 0), skilled: Number(w.skilled || 0), highly: Number(w.highly_skilled || 0) })
+    })
+  }
+  const skillBand = (row: any): { employee_type: string | null; min_wage_rate: number | null; min_wage_status: string | null } => {
+    const b = bands.get(String(row.location_state || row.actual_posted_state || '').trim().toLowerCase())
+    const wage = Number(row.basic_for_wages ?? row.basic_monthly ?? 0)
+    if (!b || !wage) return { employee_type: null, min_wage_rate: null, min_wage_status: b ? 'No wage on record' : 'State not in minimum-wage table' }
+    // highest band whose rate the wage meets; below unskilled is still unskilled
+    const type = wage >= b.highly && b.highly > 0 ? 'Highly skilled'
+      : wage >= b.skilled && b.skilled > 0 ? 'Skilled'
+      : wage >= b.semi && b.semi > 0 ? 'Semi-skilled'
+      : 'Unskilled'
+    return { employee_type: type, min_wage_rate: b.unskilled, min_wage_status: wage < b.unskilled ? `Below minimum wage by ${Math.round(b.unskilled - wage)}` : 'OK' }
+  }
+
   for (const r of runs) {
+    // What the engine actually paid this run — the only net pay that goes to the bank.
+    const lineBy = new Map<string, any>()
+    for (let from = 0; ; from += 1000) {
+      const { data } = await supabase.from('payroll_lines')
+        .select('employee_id, gross_earning, total_deductions, net_pay, ded_tds, ded_additional_tax')
+        .eq('run_id', r.id).range(from, from + 999)
+      ;(data || []).forEach((l: any) => lineBy.set(l.employee_id, l))
+      if ((data || []).length < 1000) break
+    }
     for (let from = 0; ; from += 1000) {
       const { data, error } = await supabase.from('payroll_employee_snapshot')
         .select('*').eq('run_id', r.id).order('employee_code').range(from, from + 999)
@@ -447,9 +525,22 @@ export async function loadMonthMaster(runs: { id: string; company_name?: string 
       batch.forEach((row: any) => {
         empIds.push(row.employee_id)
         if (row.fy) fys.add(row.fy)
+        // The snapshot's net_pay is earn_gross − structural statutory − company deductions,
+        // computed BEFORE TDS, loan and NPS exist. Two columns named net_pay three
+        // characters apart is how a bank file gets built from the wrong one (C3), so the
+        // snapshot's pair is renamed here and the payroll_lines figures take the names.
+        const { net_pay: partialNet, total_deduction: structuralDed, ...rest } = row
+        delete rest.final_net_pay   // the same partial figure again, under a name that promises more
+        const l = lineBy.get(row.employee_id)
         // id / run_id / employee_id are part of the agreed column spec (System / Base),
         // so they are carried through rather than stripped as internal keys.
-        out.push({ Company: r.company_name || '', ...row })
+        out.push({
+          Company: r.company_name || '', ...rest,
+          ...skillBand(row),
+          structural_deductions: structuralDed ?? null, earnings_less_statutory: partialNet ?? null,
+          ded_tds: l?.ded_tds ?? null, ded_additional_tax: l?.ded_additional_tax ?? null,
+          gross_earnings: l?.gross_earning ?? null, total_deductions: l?.total_deductions ?? null, net_pay: l?.net_pay ?? null,
+        })
       })
       if (batch.length < 1000) break
     }
@@ -654,7 +745,7 @@ export interface PayrollEmployee {
 }
 export async function loadPayrollEmployees(companyId: string): Promise<PayrollEmployee[]> {
   let q = supabase.from('employees')
-    .select('id, emp_code, full_name, designation, tds_regime, pf_applicable, esic_applicable, pt_applicable, lwf_applicable, bank_name, ifsc_code, bank_account_last4, companies(company_name), departments(dept_name), locations!location_id(location_name)')
+    .select('id, emp_code, full_name, designation, tds_regime, pf_applicable, esic_applicable, pt_applicable, lwf_applicable, bank_name, ifsc_code, bank_account_last4, companies!employees_company_id_fkey(company_name), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
     .eq('employment_status', 'Active').order('emp_code')
   if (companyId) q = q.eq('company_id', companyId)   // '' = all companies (Group Companies mode)
   const { data: emps } = await q
@@ -688,7 +779,7 @@ export interface BankRow {
 }
 export async function loadBankDetails(companyId: string): Promise<BankRow[]> {
   let q = supabase.from('employees')
-    .select('emp_code, full_name, company_doj, date_of_leaving, last_working_date, relieving_date, bank_name, bank_account_number, bank_account_last4, ifsc_code, account_type, companies(company_name), departments(dept_name), locations!location_id(location_name)')
+    .select('emp_code, full_name, company_doj, date_of_leaving, last_working_date, relieving_date, bank_name, bank_account_number, bank_account_last4, ifsc_code, account_type, companies!employees_company_id_fkey(company_name), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
     .neq('is_test', true).order('emp_code')
   if (companyId) q = q.eq('company_id', companyId)
   const { data } = await q

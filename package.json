@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test \"lib/**/__tests__/*.test.ts\""
   },
   "engines": {
     "node": "22.x"
@@ -15,6 +16,7 @@
     "@googlemaps/js-api-loader": "^2.0.2",
     "@supabase/supabase-js": "^2.105.4",
     "@types/nodemailer": "^8.0.0",
+    "html2canvas": "^1.4.1",
     "mammoth": "^1.12.0",
     "next": "16.2.6",
     "nodemailer": "^8.0.10",

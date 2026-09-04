@@ -1,0 +1,436 @@
+'use client'
+// app/dashboard/pms/page.tsx — Performance Management, HR Admin side.
+//
+// HR Admin is not a step in the approval chain. The chain is
+//   Employee -> RM L1 -> RM L2 -> HOD (finalises)
+// and this screen sits across all of it: chasing people who have not written
+// their KRAs, consolidating ratings into results, coordinating RM/HOD/MD, and
+// correcting KRA sets that were raised wrongly.
+//
+// THIS SCREEN RUNS BEFORE ITS TABLES EXIST
+//
+// Migration 066 creates the 15 pms_* tables and has not been applied — Nayan
+// owns the database. So every load can legitimately come back "table not
+// found" (PostgREST PGRST205), and that is a state to render, not an error to
+// swallow. A blank page here would read as a broken feature rather than a
+// pending migration, and someone would spend an afternoon debugging the app.
+
+import { useState, useEffect, useCallback } from 'react'
+import { supabase } from '@/lib/supabase'
+import { C as TK, F, W, S, R, E, numeric } from '@/lib/ui'
+import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components/pms/AdminOverview'
+import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
+import { PERIOD_OPEN } from '@/lib/pms/status'
+import { nameThePeriod, frequencyPhrase, type PeriodNaming } from '@/lib/pms/language'
+import { ADMIN_TABS, ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
+         FlowTab, type AdminTab, type PipRow } from '@/components/pms/AdminTabs'
+import AdminEditor from '@/components/pms/AdminEditor'
+import '@/components/pms/pms.css'
+import { type Frequency, type Policy } from '@/lib/pms/policy'
+import { localToday } from '@/components/pms/CycleHeader'
+
+// Spec §6 names six tabs. 'overview' and 'chain' are kept alongside them:
+// the roll-up is what an admin opens first, and routing coverage is the thing
+// that decides whether an appraisal can move at all — neither belongs inside
+// one of the six.
+type Tab = 'overview' | AdminTab | 'chain'
+
+/** PostgREST's code for "that relation does not exist". */
+const MISSING_TABLE = 'PGRST205'
+
+/** The HR PIP queue reads pms_pip, which arrives with 066. Empty rather than
+ *  sample rows: a made-up name in an action queue is something somebody tries
+ *  to act on. Module scope so it is not a fresh array on every render. */
+const PIP_QUEUE: PipRow[] = []
+
+interface Coverage {
+  total: number; l1: number; l2: number
+  /** HOD resolved from either source. -1 while the department source is unavailable. */
+  hodResolved: number
+  hodOverride: number      // employees.hod_id — matrix / dotted-line exceptions
+  hodDept: number          // departments.hod_employee_id — the primary source
+  deptSourceReady: boolean // false until migration 067 adds the column
+}
+
+export default function PmsPage() {
+  const [tab, setTab] = useState<Tab>('overview')
+  const [ready, setReady] = useState<boolean | null>(null)   // null = still checking
+  const [loading, setLoading] = useState(true)
+  const [cov, setCov] = useState<Coverage | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [fill, setFill] = useState<FillRow[] | null>(null)
+  const [naming, setNaming] = useState<PeriodNaming | null>(null)
+  const [deptNames, setDeptNames] = useState<Record<string, string>>({})
+  const [freq, setFreq] = useState<Frequency>('QUARTERLY')
+  const [policies, setPolicies] = useState<Policy[]>([])
+  // The Indian financial year. Periods are generated from it, so the preview
+  // has to start where the real thing starts.
+  const fyStart = `${new Date().getMonth() >= 3 ? new Date().getFullYear()
+                                                : new Date().getFullYear() - 1}-04-01`
+  // "2026-27" — how an Indian FY is written everywhere else in the product.
+  const fyYear = Number(fyStart.slice(0, 4))
+  const fyLabel = `${fyYear}-${String((fyYear + 1) % 100).padStart(2, '0')}`
+
+  const load = useCallback(async () => {
+    setLoading(true); setErr(null)
+
+    // Does the module exist yet? One cheap probe against the root table.
+    const probe = await supabase.from('pms_policies').select('id').limit(1)
+    if (probe.error) {
+      if ((probe.error as { code?: string }).code === MISSING_TABLE) { setReady(false); setLoading(false); return }
+      setErr(probe.error.message); setReady(false); setLoading(false); return
+    }
+    setReady(true)
+
+    // The active period, named the way a person would say it rather than by
+    // its filing code.
+    const today = localToday()
+    const per = await supabase.from('pms_periods')
+      .select('id, period_name, period_code, financial_year, period_no, period_start, period_end,'
+            + ' status, pms_policies(frequency)')
+      .in('status', PERIOD_OPEN)
+      .order('period_start', { ascending: false }).limit(1).maybeSingle()
+
+    const row = (per.data ?? null) as unknown as (Record<string, string | null> & { id: string }) | null
+    if (row) {
+      const freq = ((row as unknown as { pms_policies?: { frequency?: string } })
+        .pms_policies?.frequency) ?? null
+      const perYear = freq === 'MONTHLY' ? 12 : freq === 'QUARTERLY' ? 4
+                    : freq === 'HALF_YEARLY' ? 2 : freq === 'ANNUAL' ? 1 : null
+      setNaming(nameThePeriod({
+        periodName: row.period_name, periodCode: row.period_code,
+        financialYear: row.financial_year, periodStart: row.period_start,
+        periodEnd: row.period_end, periodNo: row.period_no ? Number(row.period_no) : null,
+        totalPeriods: perYear, frequency: freq,
+      }, today))
+
+      // vw_pms_fill_status already collapses ten workflow values into the five
+      // states an admin chases. One CASE in SQL beats the same mapping
+      // rewritten in every screen that needs it.
+      const pol = await supabase.from('pms_policies')
+        .select('id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
+              + ' total_weightage, min_weightage_per_kra, who_can_finalise')
+        .limit(50)
+      if (!pol.error) {
+        setPolicies(((pol.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
+          id: String(r.id), name: String(r.policy_name ?? 'Policy'),
+          frequency: (r.frequency as Frequency) ?? 'QUARTERLY',
+          isActive: r.is_active !== false,
+          minKra: Number(r.min_kra_count) || 4, maxKra: Number(r.max_kra_count) || 10,
+          totalWeightage: Number(r.total_weightage) || 100,
+          minWeightagePerKra: Number(r.min_weightage_per_kra) || 5,
+          whoCanFinalise: (r.who_can_finalise as Policy['whoCanFinalise']) ?? 'RM1_RM2_HOD',
+        })))
+        const first = (pol.data ?? [])[0] as { frequency?: Frequency } | undefined
+        if (first?.frequency) setFreq(first.frequency)
+      }
+
+      const f = await supabase.from('vw_pms_fill_status')
+        .select('employee_name, employee_code, department_id, fill_status, kra_count, total_weightage')
+        .eq('period_id', row.id).limit(2000)
+      if (!f.error) setFill((f.data ?? []) as unknown as FillRow[])
+    } else {
+      setFill([])
+    }
+
+    setLoading(false)
+  }, [])
+
+  // Coverage reads `employees`, which exists regardless of the migration, so it
+  // is loaded separately and still works while the module is pending.
+  //
+  // HOD resolves in a fixed order and never guesses:
+  //   1. employees.hod_id            explicit override (matrix / dotted-line)
+  //   2. departments.hod_employee_id primary source
+  //   3. BLOCK
+  //
+  // The department column arrives with migration 067, so until that runs only
+  // the override source can be counted. That is reported as a distinct state
+  // rather than folded into "0 mapped", which would misdescribe the problem.
+  const loadCoverage = useCallback(async () => {
+    const count = async (col?: 'l1_manager_id' | 'l2_manager_id' | 'hod_id') => {
+      let q = supabase.from('employees').select('id', { count: 'exact', head: true })
+      if (col) q = q.not(col, 'is', null)
+      const { count: n } = await q
+      return n || 0
+    }
+
+    const total = await count()
+    const l1 = await count('l1_manager_id')
+    const l2 = await count('l2_manager_id')
+    const hodOverride = await count('hod_id')
+
+    // Does the department source exist yet?
+    const dept = await supabase.from('departments').select('id,hod_employee_id').limit(400)
+    if (dept.error) {
+      setCov({ total, l1, l2, hodOverride, hodDept: 0, hodResolved: hodOverride, deptSourceReady: false })
+      return
+    }
+    const mapped = new Set(
+      (dept.data || []).filter(d => d.hod_employee_id).map(d => d.id as string),
+    )
+    // Employees covered by their department having an HOD
+    const { count: byDept } = mapped.size
+      ? await supabase.from('employees').select('id', { count: 'exact', head: true })
+          .in('department_id', [...mapped]).is('hod_id', null)
+      : { count: 0 }
+    setCov({
+      total, l1, l2, hodOverride,
+      hodDept: byDept || 0,
+      hodResolved: hodOverride + (byDept || 0),
+      deptSourceReady: true,
+    })
+  }, [])
+
+  // Department names, so the table says "Finance & Accounts" and not a uuid.
+  useEffect(() => {
+    (async () => {
+      // dept_name, not name. `name` does not exist on this table, and asking
+      // for it fails the whole select — so every department silently rendered
+      // as "Unknown department" while the screen looked like it had loaded.
+      const d = await supabase.from('departments').select('id, dept_name').limit(400)
+      if (d.error) return
+      const m: Record<string, string> = {}
+      for (const r of (d.data ?? []) as unknown as { id: string; dept_name: string }[]) {
+        m[r.id] = r.dept_name
+      }
+      setDeptNames(m)
+    })()
+  }, [])
+
+  useEffect(() => { load(); loadCoverage() }, [load, loadCoverage])
+
+  const roll: Rollup | null = fill ? rollUp(fill) : null
+  const depts: DeptRollup[] = fill ? byDepartment(fill) : []
+  const nameOf = (id: string | null) => id ? (deptNames[id] ?? 'Unknown department') : 'No department set'
+
+  // Named for what you go there to DO. "KRA Oversight" told nobody what they
+  // would find; "Who has not started" is the question somebody actually has.
+  const TABS: { k: Tab; label: string; hint: string }[] = [
+    { k: 'overview', label: 'This cycle', hint: 'where the whole organisation has got to' },
+    ...ADMIN_TABS.map(t => ({ k: t.k as Tab, label: t.label, hint: t.blurb })),
+    { k: 'chain',    label: 'Flow & Hierarchy',
+      hint: 'the twelve steps, the reporting line, and who may do what' },
+  ]
+
+  // Every rule in pms.css is scoped under .pms so its very generic class names
+  // (.card, .stat, .pill, .btn) cannot leak into another module. That scoping
+  // means the class below is not decoration — without it the whole stylesheet
+  // is dead on this page, which is exactly what happened: the preview harness
+  // set it, the real screen did not, and the harness looked perfect while the
+  // product rendered unstyled.
+  return (
+    <div className="pms" style={{ padding: `${S.lg}px ${S.xl}px ${S.huge}px`, maxWidth: 1440, margin: '0 auto' }}>
+
+      <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <h1 style={{ margin: 0, fontSize: F.page, fontWeight: W.bold, color: TK.ink, letterSpacing: '-.02em' }}>
+            Performance
+          </h1>
+          <div style={{ marginTop: 3, fontSize: F.small, color: TK.muted }}>
+            {naming
+              ? <>Running now: <strong style={{ color: TK.ink }}>{naming.title}</strong> · {naming.sub}</>
+              : <>KRAs, the appraisal cycle and ratings. You are not a step in the chain —
+                 it runs Employee → manager → second manager → HOD, and you keep it moving.</>}
+          </div>
+        </div>
+        {ready === true && (
+          <span style={{ fontSize: F.micro, fontWeight: W.semi, padding: '5px 11px', borderRadius: 999,
+                         background: TK.positiveTint, color: TK.positive }}>Module live</span>
+        )}
+      </div>
+
+      {/* The mockup's tab strip: an underline, not a row of filled pills. With
+          eight tabs, eight filled chips read as eight competing buttons; an
+          underline puts the weight on the one you are in. */}
+      <div className="tabs">
+        {TABS.map(t => (
+          <button key={t.k} type="button" onClick={() => setTab(t.k)}
+                  className={tab === t.k ? 'on' : undefined}
+                  aria-current={tab === t.k ? 'page' : undefined}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {/* The hint belongs on the page, not in a tooltip: a title attribute is
+          invisible to touch and to anyone not hovering. */}
+      <div style={{ fontSize: F.micro, color: TK.faint, marginTop: -10, marginBottom: 16 }}>
+        {TABS.find(t => t.k === tab)?.hint}
+      </div>
+
+      {loading && <Card><div style={{ color: TK.muted, fontSize: F.small }}>Loading…</div></Card>}
+
+      {!loading && err && (
+        <Card tone="critical">
+          <strong style={{ color: TK.critical }}>Could not read the performance module.</strong>
+          <div style={{ fontSize: F.small, color: TK.muted, marginTop: 6 }}>{err}</div>
+        </Card>
+      )}
+
+      {!loading && !err && ready === false && <MigrationPending />}
+
+      {!loading && !err && ready === true && (
+        <>
+          {tab === 'overview' && (
+            roll ? (
+              <>
+                <ReadinessBanner r={roll} />
+                <div style={{ display: 'grid', gap: S.sm, marginBottom: S.sm }}>
+                  <FillDistribution r={roll} />
+                </div>
+              </>
+            ) : <Overview cov={cov} />
+          )}
+
+          {tab === 'fill'     && <FillTab rows={fill} deptNames={deptNames} loading={loading} />}
+          {tab === 'config'   && <ConfigTab freq={freq} onFreq={setFreq} fyStart={fyStart}
+                                            fyLabel={fyLabel} today={localToday()} />}
+          {tab === 'setup'    && <AdminEditor />}
+          {tab === 'policies' && <PolicyTab policies={policies} people={[]} />}
+          {tab === 'upload'   && <UploadTab />}
+          {tab === 'pip'      && <PipTab queue={PIP_QUEUE} />}
+          {tab === 'reports'  && <ReportsTab />}
+          {tab === 'chain'    && <FlowTab chainCoverage={cov ? <ChainCoverage cov={cov} /> : null} />}
+        </>
+      )}
+
+      {/* Routing coverage is data work that can start TODAY: it reads employees
+          and departments, not pms_*, so it is shown while the module is still
+          pending rather than waiting on a migration to become useful. */}
+      {!loading && ready === false && cov && <ChainCoverage cov={cov} />}
+    </div>
+  )
+}
+
+function Card({ children, tone }: { children: React.ReactNode; tone?: 'critical' | 'warning' }) {
+  const edge = tone === 'critical' ? TK.critical : tone === 'warning' ? TK.warning : TK.line
+  const fill = tone === 'critical' ? TK.criticalTint : tone === 'warning' ? TK.warningTint : TK.surface
+  return (
+    <div style={{ background: fill, border: `1px solid ${edge}`, borderRadius: 14,
+                  padding: '16px 18px', marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
+      {children}
+    </div>
+  )
+}
+
+function MigrationPending() {
+  return (
+    <Card tone="warning">
+      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>
+        Waiting on migration 066
+      </div>
+      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 8, lineHeight: 1.6, maxWidth: 720 }}>
+        The performance module's tables do not exist in the database yet. The screens and the
+        approval flow are built; they have nothing to read until{' '}
+        <code style={{ background: TK.sunken, padding: '1px 6px', borderRadius: 6, fontSize: F.micro }}>
+          supabase/migrations/066_pms_module.sql
+        </code>{' '}
+        is applied. That file creates 15 tables, 9 functions, 10 views and 2 triggers.
+      </div>
+      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 10, lineHeight: 1.6, maxWidth: 720 }}>
+        It is handed to Nayan rather than run from here — this project does not apply schema
+        changes itself. Nothing on this page is broken; it is waiting.
+      </div>
+    </Card>
+  )
+}
+
+function Overview({ cov }: { cov: Coverage | null }) {
+  return (
+    <Card>
+      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink, marginBottom: 4 }}>
+        Cycle overview
+      </div>
+      <div style={{ fontSize: F.small, color: TK.muted, lineHeight: 1.6 }}>
+        No active period yet. Create a policy in Setup and periods generate from its frequency —
+        monthly, quarterly, half-yearly or annual.
+        {cov && cov.hodResolved === 0 && ' Note the HOD warning below: the finalise step has nobody to route to yet.'}
+      </div>
+    </Card>
+  )
+}
+
+/**
+ * The approval chain can only route where the org data exists, and the finalise
+ * step is the one that has nobody today — so it is stated here rather than
+ * discovered when the first cycle jams.
+ *
+ * HOD resolves in a fixed order and never guesses:
+ *   1. employees.hod_id             explicit override (matrix / dotted-line)
+ *   2. departments.hod_employee_id  primary source
+ *   3. BLOCK
+ *
+ * No fallback to RM L2 or a parent department. A wrong finaliser signs off
+ * somebody's appraisal, and a silent guess makes that impossible to notice.
+ */
+function ChainCoverage({ cov }: { cov: Coverage }) {
+  const rows = [
+    { label: 'RM L1', n: cov.l1, col: 'l1_manager_id', note: 'approves KRAs and rates' },
+    { label: 'RM L2', n: cov.l2, col: 'l2_manager_id', note: 'confirms the RM L1 rating' },
+    { label: 'HOD',   n: cov.hodResolved, col: 'resolved', note: 'finalises and publishes' },
+  ]
+  const blocked = cov.total - cov.hodResolved
+  return (
+    <Card tone={cov.hodResolved < cov.total ? 'warning' : undefined}>
+      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>Approval chain coverage</div>
+      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 4, marginBottom: 12 }}>
+        An appraisal can only move to a stage that has somebody mapped to it.
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {rows.map(r => {
+          const pct = cov.total ? Math.round((r.n / cov.total) * 100) : 0
+          const bad = r.n === 0
+          return (
+            <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ width: 60, fontSize: F.small, fontWeight: W.semi, color: TK.ink }}>{r.label}</div>
+              <div style={{ flex: 1, minWidth: 160, height: 8, borderRadius: 999, background: TK.sunken, overflow: 'hidden' }}>
+                <div style={{ width: `${pct}%`, height: '100%',
+                              background: bad ? TK.critical : pct === 100 ? TK.positive : TK.warning }} />
+              </div>
+              <div style={{ ...numeric, width: 96, fontSize: F.small, color: bad ? TK.critical : TK.ink, fontWeight: W.semi }}>
+                {r.n} / {cov.total}
+              </div>
+              <div style={{ fontSize: F.micro, color: TK.faint, minWidth: 180 }}>
+                <code>{r.col}</code> · {r.note}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {/* How the HOD number above was arrived at. Shown because "0 mapped" on
+          its own does not tell anyone which of the two sources to go and fill. */}
+      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${TK.line}` }}>
+        <div style={{ fontSize: F.micro, fontWeight: W.semi, letterSpacing: '.05em',
+                      textTransform: 'uppercase', color: TK.faint, marginBottom: 8 }}>
+          How HOD resolves
+        </div>
+        <ol style={{ margin: 0, paddingLeft: 18, fontSize: F.small, color: TK.muted, lineHeight: 1.8 }}>
+          <li>
+            <code>employees.hod_id</code> — explicit override for matrix and dotted-line cases
+            {' · '}<strong style={{ color: TK.ink }}>{cov.hodOverride}</strong> set
+          </li>
+          <li>
+            <code>departments.hod_employee_id</code> — the primary source
+            {' · '}
+            {cov.deptSourceReady
+              ? <><strong style={{ color: TK.ink }}>{cov.hodDept}</strong> covered this way</>
+              : <span style={{ color: TK.warning }}>column arrives with migration 067</span>}
+          </li>
+          <li>
+            Otherwise <strong style={{ color: TK.critical }}>blocked</strong> — no guess is made
+          </li>
+        </ol>
+      </div>
+
+      {blocked > 0 && (
+        <div style={{ fontSize: F.small, color: TK.muted, marginTop: 12, lineHeight: 1.6 }}>
+          <strong style={{ color: TK.ink }}>{blocked} of {cov.total}</strong> employees cannot reach
+          the finalise step today.{' '}
+          {cov.deptSourceReady
+            ? 'Set an HOD on their department, or an override on the individual where reporting is matrix.'
+            : 'Once 067 is applied, setting an HOD per department covers most of them in one pass — the per-employee override is only for exceptions.'}
+        </div>
+      )}
+    </Card>
+  )
+}

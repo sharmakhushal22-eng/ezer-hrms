@@ -70,12 +70,12 @@ export function letterheadHeaderHtml(lh: Letterhead): string {
     <div style="text-align:right;font-size:11px;color:rgba(255,255,255,.8);line-height:1.8">${lh.addr.map(_esc).join('<br>')}</div>
   </div>
   <div style="height:5px;background:${lh.accent}"></div>
-  <div style="padding:6px 28px;font-size:10.5px;color:#6B7280;border-bottom:1px solid #EEE">CIN: ${_esc(lh.cin)} &nbsp;·&nbsp; GSTIN: ${_esc(lh.gstin)} &nbsp;·&nbsp; PAN: ${_esc(lh.pan)}${lh.extra ? ' &nbsp;·&nbsp; ' + _esc(lh.extra) : ''}</div>`
+  <div style="padding:6px 28px;font-size:11px;color:#6B7280;border-bottom:1px solid #EEE">CIN: ${_esc(lh.cin)} &nbsp;·&nbsp; GSTIN: ${_esc(lh.gstin)} &nbsp;·&nbsp; PAN: ${_esc(lh.pan)}${lh.extra ? ' &nbsp;·&nbsp; ' + _esc(lh.extra) : ''}</div>`
 }
 export function letterheadFooterHtml(lh: Letterhead): string {
   return `<div style="border-top:1px dashed #E5E7EB;padding:8px 28px;font-size:10px;color:#9CA3AF">${_esc(lh.confidential)}</div>
   <div style="height:4px;background:${lh.accent}"></div>
-  <div style="background:${lh.headerBg};color:rgba(255,255,255,.85);padding:12px 28px;font-size:10.5px">${_esc(lh.footerRegistered)}<br><span style="color:rgba(255,255,255,.6)">CIN: ${_esc(lh.cin)} · GSTIN: ${_esc(lh.gstin)} · ${_esc(lh.eyebrow)}</span></div>`
+  <div style="background:${lh.headerBg};color:rgba(255,255,255,.85);padding:12px 28px;font-size:11px">${_esc(lh.footerRegistered)}<br><span style="color:rgba(255,255,255,.6)">CIN: ${_esc(lh.cin)} · GSTIN: ${_esc(lh.gstin)} · ${_esc(lh.eyebrow)}</span></div>`
 }
 
 // ── Satori-compatible header (for ImageResponse) ──

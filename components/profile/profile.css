@@ -1,0 +1,272 @@
+/* components/profile/profile.css — the Profile 360 design language.
+ *
+ * A port of EZER-ESS-Profile-360.html's layout, drawn in EZER's own colours.
+ * The structure is kept: the field card with its state chip and source line,
+ * three-up grids that collapse, section cards, the completeness ring.
+ *
+ * The mapping was easy this time — the design file's accent is #2563EB, which
+ * is already --ez-brand. What still had to change is everything it hard-codes:
+ * every colour below resolves through --ez-*, so Profile follows the theme
+ * toggle like the rest of the HRMS rather than staying light when the app
+ * goes dark.
+ *
+ *   design file          here                     role
+ *   #2563EB  brand       --ez-brand               accent, active tab
+ *   #1D4ED8  brand-deep  --ez-brand-deep          labels, emphasis
+ *   #0F172A  ink         --ez-ink                 values, headings
+ *   #64748B  muted       --ez-muted / --ez-faint  sub-lines, source
+ *   #F2F5F9  canvas      --ez-canvas              page ground
+ *   #E5E9EF  line        --ez-line                borders
+ *   #059669  ok          --ez-positive            direct  (you may change it)
+ *   #D97706  warn        --ez-warning             request (needs approval)
+ *   #64748B  lock        --ez-muted               locked  (owned elsewhere)
+ *   #7C3AED  evt         --ez-info                event   (opens a workflow)
+ *
+ * Everything is scoped under .ezp. That is not decoration — the PMS
+ * stylesheet shipped once with every rule under .pms while the page never set
+ * the class, so it looked perfect in the harness and unstyled in the product.
+ * The root element of Profile360 sets .ezp; nothing here applies without it.
+ */
+
+.ezp { width: 100%; min-width: 0; color: var(--ez-ink); }
+
+/* ── tab strip ─────────────────────────────────────────────────────────── */
+.ezp .ptabs {
+  display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none;
+  border-bottom: 1px solid var(--ez-line); margin-bottom: 16px;
+}
+.ezp .ptabs::-webkit-scrollbar { display: none; }
+.ezp .ptabs button {
+  flex: 0 0 auto; background: none; border: 0; cursor: pointer;
+  padding: 10px 14px; font-size: 13px; font-weight: 600; color: var(--ez-muted);
+  border-bottom: 2px solid transparent; white-space: nowrap;
+}
+.ezp .ptabs button:hover { color: var(--ez-ink); }
+.ezp .ptabs button.on { color: var(--ez-brand); border-bottom-color: var(--ez-brand); }
+
+/* ── cards and sections ───────────────────────────────────────────────── */
+.ezp .pcard {
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 14px; padding: 18px; margin-bottom: 14px;
+}
+.ezp .pcard > h3 { margin: 0 0 2px; font-size: 14px; font-weight: 700; color: var(--ez-ink); }
+.ezp .pcard > .sub { font-size: 12px; color: var(--ez-muted); margin-bottom: 14px; }
+/* .sub is also used deeper than a card's first child — under the nomination
+   meters and the movement note — so it needs a rule that does not depend on
+   position. The two above stay for the top-of-card spacing. */
+.ezp .sub { font-size: 12px; color: var(--ez-muted); }
+
+.ezp .grid { display: grid; gap: 10px; }
+.ezp .g3 { grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); }
+.ezp .g2 { grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
+
+/* ── the field card — the heart of the design ─────────────────────────── */
+.ezp .fld {
+  position: relative; border: 1px solid var(--ez-line); border-radius: 10px;
+  padding: 10px 12px 9px; background: var(--ez-surface); min-width: 0;
+}
+.ezp .fld.span2 { grid-column: 1 / -1; }
+.ezp .fld .k { font-size: 11px; color: var(--ez-muted); margin-bottom: 3px; }
+.ezp .fld .v {
+  font-size: 13.5px; font-weight: 600; color: var(--ez-ink);
+  overflow-wrap: anywhere;
+}
+.ezp .fld .v.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+.ezp .fld .hint { font-size: 11px; color: var(--ez-warning); margin-top: 4px; }
+.ezp .fld .src {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px; color: var(--ez-faint); margin-top: 5px;
+}
+
+/* The state chip. Its colour IS the information — which of the four things
+   you can do with this field — so it sits top-right where the eye lands
+   before it reads the label. */
+.ezp .st {
+  position: absolute; top: 8px; right: 8px;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 20px; border: 1px solid transparent;
+}
+.ezp .st.locked  { color: var(--ez-muted);    background: var(--ez-sunken);          border-color: var(--ez-line); }
+.ezp .st.direct  { color: var(--ez-positive); background: var(--ez-positive-tint);   border-color: var(--ez-positive); }
+.ezp .st.request { color: var(--ez-warning);  background: var(--ez-warning-tint);    border-color: var(--ez-warning); }
+.ezp .st.event   { color: var(--ez-info);     background: var(--ez-info-tint);       border-color: var(--ez-info); }
+
+.ezp .fld .fx { margin-top: 8px; }
+.ezp .fld .fx button {
+  background: none; border: 1px solid var(--ez-line); border-radius: 8px;
+  padding: 3px 9px; font-size: 11px; font-weight: 600; color: var(--ez-brand); cursor: pointer;
+}
+.ezp .fld .fx button:hover { border-color: var(--ez-brand); background: var(--ez-brand-tint); }
+
+/* Restricted is a STATEMENT, not an empty box. A blank value reads as "not
+   filled in"; this has to read as "not yours to see". */
+.ezp .no { font-size: 12px; color: var(--ez-faint); font-style: italic; }
+.ezp .msk { font-family: ui-monospace, Menlo, monospace; letter-spacing: .12em; }
+.ezp .eye {
+  background: none; border: 0; cursor: pointer; color: var(--ez-muted);
+  padding: 0 0 0 6px; font-size: 11px; font-weight: 600;
+}
+.ezp .eye:hover { color: var(--ez-brand); }
+
+/* ── completeness ─────────────────────────────────────────────────────── */
+.ezp .meter { height: 8px; border-radius: 20px; background: var(--ez-sunken); overflow: hidden; }
+.ezp .meter > i { display: block; height: 100%; background: var(--ez-brand); border-radius: 20px; }
+.ezp .todo { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.ezp .todo li {
+  font-size: 12px; color: var(--ez-ink-soft);
+  padding-left: 16px; position: relative;
+}
+.ezp .todo li::before {
+  content: ''; position: absolute; left: 0; top: 5px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--ez-warning);
+}
+
+/* ── identity header ──────────────────────────────────────────────────── */
+.ezp .who { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.ezp .av {
+  width: 62px; height: 62px; border-radius: 50%; object-fit: cover;
+  border: 2px solid var(--ez-line); background: var(--ez-sunken); flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 20px; font-weight: 700; color: var(--ez-brand);
+}
+.ezp .who h2 { margin: 0; font-size: 17px; font-weight: 700; }
+.ezp .who .role { font-size: 12.5px; color: var(--ez-muted); margin-top: 2px; }
+
+.ezp .pill {
+  display: inline-block; font-size: 11px; font-weight: 600;
+  padding: 2px 9px; border-radius: 20px; border: 1px solid var(--ez-line);
+  color: var(--ez-muted); background: var(--ez-sunken);
+}
+.ezp .pill.brand { color: var(--ez-brand); background: var(--ez-brand-tint); border-color: var(--ez-brand); }
+
+/* ── tables inside record cards ───────────────────────────────────────── */
+.ezp .tbl { width: 100%; overflow-x: auto; }
+.ezp table { width: 100%; border-collapse: collapse; font-size: 12.5px; min-width: 420px; }
+.ezp th {
+  text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ez-muted); font-weight: 700; padding: 7px 10px;
+  background: var(--ez-sunken); border-bottom: 1px solid var(--ez-line); white-space: nowrap;
+}
+.ezp td { padding: 8px 10px; border-bottom: 1px solid var(--ez-line); color: var(--ez-ink); }
+.ezp tbody tr:last-child td { border-bottom: 0; }
+.ezp .empty { font-size: 12.5px; color: var(--ez-muted); padding: 4px 0; }
+
+/* ── the change modal ─────────────────────────────────────────────────── */
+.ezp .scrim {
+  position: fixed; inset: 0; background: rgba(15, 23, 42, .45);
+  display: grid; place-items: center; padding: 18px; z-index: 60;
+}
+.ezp .modal {
+  background: var(--ez-surface); border: 1px solid var(--ez-line); border-radius: 16px;
+  padding: 20px; width: min(460px, 100%); max-height: 90vh; overflow: auto;
+}
+.ezp .modal h3 { margin: 0 0 4px; font-size: 15px; }
+.ezp .modal label { display: block; font-size: 11px; color: var(--ez-muted); margin: 12px 0 4px; }
+.ezp input, .ezp textarea, .ezp select {
+  width: 100%; padding: 8px 10px; font-size: 13px; font: inherit; font-size: 13px;
+  color: var(--ez-ink); background: var(--ez-surface);
+  border: 1px solid var(--ez-line); border-radius: 9px;
+}
+.ezp textarea { min-height: 74px; resize: vertical; }
+.ezp input:focus-visible, .ezp textarea:focus-visible, .ezp select:focus-visible,
+.ezp button:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 1px; }
+
+.ezp .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.ezp .btn {
+  background: var(--ez-brand); color: var(--ez-on-accent); border: 1px solid var(--ez-brand);
+  border-radius: 9px; padding: 8px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+}
+.ezp .btn:disabled { opacity: .55; cursor: not-allowed; }
+.ezp .btn.ghost { background: none; color: var(--ez-muted); border-color: var(--ez-line); }
+
+.ezp .note { font-size: 12px; border-radius: 9px; padding: 9px 11px; margin-top: 10px; }
+.ezp .note.bad  { color: var(--ez-critical); background: var(--ez-critical-tint); }
+.ezp .note.good { color: var(--ez-positive); background: var(--ez-positive-tint); }
+.ezp .note.warn { color: var(--ez-warning);  background: var(--ez-warning-tint); }
+
+/* ── legend ───────────────────────────────────────────────────────────── */
+.ezp .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11px; color: var(--ez-muted); }
+.ezp .legend span { display: inline-flex; align-items: center; gap: 5px; }
+.ezp .legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+@media (max-width: 560px) {
+  .ezp .pcard { padding: 14px; }
+  .ezp .st { position: static; display: inline-block; margin-bottom: 5px; }
+}
+
+/* ══ blocks from the design file ═══════════════════════════════════════ */
+
+.ezp .cardhd {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px;
+}
+.ezp .cardhd h3 { margin: 0 0 2px; font-size: 14px; font-weight: 700; }
+.ezp .cardhd .sub { margin: 0; }
+
+/* A person row — used for family, the chain, and anywhere a human is the
+   subject rather than a value. The circle carries initials rather than a
+   photo: photo_path is a private-bucket key, not a URL, so rendering it
+   would need a signed URL per row and would silently break without one. */
+.ezp .pc {
+  display: flex; gap: 11px; align-items: center;
+  border: 1px solid var(--ez-line); border-radius: 12px;
+  padding: 11px 12px; background: var(--ez-surface); min-width: 0;
+}
+.ezp .ph {
+  width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 13px; font-weight: 700;
+  background: var(--ez-brand-tint); color: var(--ez-brand);
+}
+.ezp .pc .n { font-size: 13px; font-weight: 600; color: var(--ez-ink);
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ezp .pc .s { font-size: 11.5px; color: var(--ez-muted); margin-top: 1px; }
+.ezp .pl { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+
+/* The reporting chain, drawn as a ladder with the person at the bottom. */
+.ezp .chain { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ezp .chain li {
+  display: flex; gap: 10px; align-items: center; position: relative;
+  padding-left: 4px;
+}
+.ezp .chain li + li::before {
+  content: ''; position: absolute; left: 21px; top: -8px; height: 8px;
+  width: 1px; background: var(--ez-line);
+}
+.ezp .chain .p {
+  width: 34px; height: 34px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--ez-sunken); color: var(--ez-muted);
+}
+.ezp .chain li.self .p { background: var(--ez-brand); color: var(--ez-on-accent); }
+.ezp .chain .n { font-size: 13px; font-weight: 600; }
+.ezp .chain .r { font-size: 11.5px; color: var(--ez-muted); }
+
+/* Upcoming things. Emoji as the marker is the design's choice and it earns
+   its place here — four different kinds of event, told apart at a glance. */
+.ezp .feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ezp .feed li { display: flex; gap: 10px; align-items: flex-start; }
+.ezp .feed .i { font-size: 16px; line-height: 1.2; flex: 0 0 auto; }
+.ezp .feed .t { font-size: 12.5px; font-weight: 600; }
+.ezp .feed .s { font-size: 11.5px; color: var(--ez-muted); }
+
+/* Movement history. */
+.ezp .tl { position: relative; padding-left: 16px; }
+.ezp .tl::before {
+  content: ''; position: absolute; left: 4px; top: 4px; bottom: 4px;
+  width: 1px; background: var(--ez-line);
+}
+.ezp .tl .it { position: relative; padding-bottom: 14px; }
+.ezp .tl .it:last-child { padding-bottom: 0; }
+.ezp .tl .it::before {
+  content: ''; position: absolute; left: -15px; top: 4px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ez-surface); border: 2px solid var(--ez-brand);
+}
+.ezp .tl .w { font-size: 11px; color: var(--ez-muted); }
+.ezp .tl .t { font-size: 13px; font-weight: 600; margin-top: 1px; }
+.ezp .tl .s { font-size: 11.5px; color: var(--ez-muted); }
+
+/* A label with a value pushed to the right — used above the share meters. */
+.ezp .mrow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; font-size: 12.5px; margin-bottom: 6px;
+}

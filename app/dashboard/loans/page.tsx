@@ -4,24 +4,27 @@
 // Inline styles only. All sub-components OUTSIDE the parent (no focus-loss).
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 // ── Admin C palette ──────────────────────────────────────────────
 const C = {
-  page:'#F0F4F8', card:'#FFFFFF', border:'#E2E8F0', purple:'#7C3AED', navy:'#0F172A', muted:'#64748B',
-  red:'#DC2626', redBg:'#FEF2F2', green:'#059669', greenBg:'#ECFDF5', amber:'#B45309', amberBg:'#FFFBEB', blue:'#185FA5', blueBg:'#E6F1FB',
+  page: TK.sunken, card:TK.surface, border:TK.line, purple:TK.brand, navy:TK.ink, muted:TK.muted,
+  red:TK.critical, redBg:TK.criticalTint, green:TK.positive, greenBg:TK.positiveTint, amber:TK.warning, amberBg:TK.warningTint, blue: TK.brand, blueBg: TK.brandTint,
 }
 const S = {
   page: { background:C.page, minHeight:'100vh', color:C.navy, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:13, padding:'20px 16px' } as React.CSSProperties,
   content: { maxWidth:1100, margin:'0 auto' } as React.CSSProperties,
-  card: { background:C.card, borderRadius:12, border:`1px solid ${C.border}`, padding:'16px 18px', marginBottom:16 } as React.CSSProperties,
+  card: { background:C.card, borderRadius:14, border:`1px solid ${C.border}`, padding:'16px 18px', marginBottom:16 } as React.CSSProperties,
   h1: { fontSize:22, fontWeight:700, color:C.navy, margin:0 } as React.CSSProperties,
-  sub: { fontSize:12.5, color:C.muted, marginTop:3 } as React.CSSProperties,
+  sub: { fontSize:13, color:C.muted, marginTop:3 } as React.CSSProperties,
   section: { fontSize:14, fontWeight:600, color:C.navy, marginBottom:12 } as React.CSSProperties,
   label: { fontSize:11, fontWeight:600, color:C.purple, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'8px 10px', background:'#fff', border:`1px solid ${C.border}`, borderRadius:8, color:C.navy, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  btnP: { padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.purple, color:'#fff' } as React.CSSProperties,
-  btnG: { padding:'7px 14px', borderRadius:8, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.green, color:'#fff' } as React.CSSProperties,
-  btnR: { padding:'7px 14px', borderRadius:8, border:`1px solid ${C.red}`, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:'#fff', color:C.red } as React.CSSProperties,
+  input: { width:'100%', padding:'8px 10px', background:TK.surface, border:`1px solid ${C.border}`, borderRadius:10, color:C.navy, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
+  btnP: { padding:'7px 14px', borderRadius:10, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.purple, color:TK.onAccent } as React.CSSProperties,
+  btnG: { padding:'7px 14px', borderRadius:10, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:C.green, color:TK.onAccent } as React.CSSProperties,
+  btnR: { padding:'7px 14px', borderRadius:10, border:`1px solid ${C.red}`, cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.surface, color:C.red } as React.CSSProperties,
   row: { display:'flex', justifyContent:'space-between', gap:12, padding:'10px 0', borderBottom:`1px solid ${C.border}`, alignItems:'center', flexWrap:'wrap' as const },
 }
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
@@ -33,9 +36,9 @@ function Badge({ status }: { status: string }) {
     IN_APPROVAL:[C.amberBg, C.amber], SUBMITTED:[C.amberBg, C.amber], REQUESTED:[C.amberBg, C.amber], GENERATED:[C.amberBg, C.amber], UNDER_REVIEW:[C.blueBg, C.blue],
     APPROVED:[C.greenBg, C.green], RECOVERING:[C.greenBg, C.green], DISBURSED:[C.greenBg, C.green], SIGNED:[C.greenBg, C.green],
     REJECTED:[C.redBg, C.red], CANCELLED:[C.redBg, C.red], EXIT_RECOVERY:[C.redBg, C.red],
-    CLOSED:['#F1F5F9', C.muted], FORECLOSED:['#F1F5F9', C.muted],
+    CLOSED:[TK.sunken, C.muted], FORECLOSED:[TK.sunken, C.muted],
   }
-  const [bg, c] = map[s] || ['#F3F0FF', C.purple]
+  const [bg, c] = map[s] || [TK.brandTint, C.purple]
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{s.replace(/_/g, ' ')}</span>
 }
 
@@ -48,10 +51,20 @@ function PendingApprovals({ companyId, empMap, typeMap, notify }: { companyId: s
     const { data } = await supabase.from('loan_requests').select('*').eq('company_id', companyId).eq('status', 'IN_APPROVAL').order('created_at', { ascending: false })
     const reqs = data || []
     setRows(reqs)
+    // One query, not one per request. This was an await inside a for loop, so
+    // the round trips ran end to end rather than together — with N pending
+    // requests it cost N times the latency, and the panel sat empty for all of
+    // it. Fetching every approval row for the visible requests and picking the
+    // matching level in memory makes it a single trip.
     const lvlMap: Record<string, any> = {}
-    for (const r of reqs) {
-      const { data: lv } = await supabase.from('loan_approvals').select('*').eq('request_id', r.id).eq('level_order', r.current_approval_level).maybeSingle()
-      if (lv) lvlMap[r.id] = lv
+    if (reqs.length) {
+      const { data: lvls } = await supabase
+        .from('loan_approvals').select('*')
+        .in('request_id', reqs.map((r: any) => r.id))
+      ;(lvls || []).forEach((lv: any) => {
+        const req = reqs.find((r: any) => r.id === lv.request_id)
+        if (req && lv.level_order === req.current_approval_level) lvlMap[lv.request_id] = lv
+      })
     }
     setLevels(lvlMap)
   }, [companyId])
@@ -76,7 +89,7 @@ function PendingApprovals({ companyId, empMap, typeMap, notify }: { companyId: s
           <div key={r.id} style={S.row}>
             <div style={{ minWidth:0 }}>
               <div style={{ fontSize:13, fontWeight:600 }}>{empMap[r.employee_id] || r.employee_id} · {typeMap[r.loan_type_id] || 'Loan'}</div>
-              <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>{inr(r.requested_amount)} · {r.requested_tenure_months} mo · EMI {inr(r.indicative_emi)} · level {r.current_approval_level}{lv ? ` (${lv.approver_role})` : ''}</div>
+              <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{inr(r.requested_amount)} · {r.requested_tenure_months} mo · EMI {inr(r.indicative_emi)} · level {r.current_approval_level}{lv ? ` (${lv.approver_role})` : ''}</div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
               <button disabled={busy === r.id} onClick={() => act(r, 'APPROVED')} style={S.btnG}>Approve</button>
@@ -114,7 +127,7 @@ function AgreementsReview({ companyEmpIds, empMap, notify }: { companyEmpIds: Se
         <div key={a.id} style={S.row}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{a.agreement_number} · {empMap[a.employee_id] || a.employee_id}</div>
-            <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>Signed via {a.signature_type || '—'}{a.signed_at ? ` · ${new Date(a.signed_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}` : ''}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Signed via {a.signature_type || '—'}{a.signed_at ? ` · ${new Date(a.signed_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' })}` : ''}</div>
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center' }}>
             <button disabled={busy === a.id} onClick={() => act(a, 'APPROVED')} style={S.btnG}>Approve</button>
@@ -216,7 +229,7 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
       {rows.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>No loans for this company.</div> : (
         <div style={{ overflowX:'auto' }}>
           <table style={{ borderCollapse:'collapse', width:'100%', minWidth:640 }}>
-            <thead><tr style={{ background:'#F8FAFC' }}>
+            <thead><tr style={{ background:TK.sunken }}>
               <th style={{ ...th, textAlign:'left' }}>Loan #</th><th style={{ ...th, textAlign:'left' }}>Employee</th><th style={th}>Principal</th><th style={th}>EMI</th><th style={th}>Recovered</th><th style={th}>Outstanding</th><th style={{ ...th, textAlign:'left' }}>Status</th><th style={th}></th>
             </tr></thead>
             <tbody>
@@ -235,7 +248,7 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
                   <td style={td}>
                     {['DISBURSED','ACTIVE'].includes(String(l.status || '').toUpperCase()) && (
                       <button onClick={() => foreclose(l)} disabled={busy === l.id}
-                        style={{ padding:'4px 11px', borderRadius:99, border:`0.5px solid ${C.amber}`, background:'#FFFBEB', color:C.amber, fontWeight:700, fontSize:10.5, cursor: busy === l.id ? 'not-allowed' : 'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
+                        style={{ padding:'4px 11px', borderRadius:99, border:`1px solid ${C.amber}`, background:TK.warningTint, color:C.amber, fontWeight:700, fontSize:11, cursor: busy === l.id ? 'not-allowed' : 'pointer', fontFamily:'inherit', whiteSpace:'nowrap' }}>
                         {busy === l.id ? '…' : 'Foreclose'}
                       </button>
                     )}
@@ -249,8 +262,8 @@ function ActiveLoans({ companyEmpIds, empMap }: { companyEmpIds: Set<string>; em
       <div style={{ fontSize:11, color:C.muted, marginTop:10, lineHeight:1.55 }}>
         EMI is deducted through <b>Payroll → Data Sync → Loan</b> — once per payroll month, however many times you run the sync. The last EMI is only as large as the balance that is left.
       </div>
-      {msg && <div style={{ fontSize:12, fontWeight:600, color:C.green, background:'#ECFDF5', borderRadius:8, padding:'9px 12px', marginTop:10 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize:12, color:C.red, background:'#FEF2F2', borderRadius:8, padding:'9px 12px', marginTop:10 }}>{err}</div>}
+      {msg && <div style={{ fontSize:12, fontWeight:600, color:C.green, background:TK.positiveTint, borderRadius:10, padding:'9px 12px', marginTop:10 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize:12, color:C.red, background:TK.criticalTint, borderRadius:10, padding:'9px 12px', marginTop:10 }}>{err}</div>}
     </div>
   )
 }
@@ -268,7 +281,7 @@ function LoanTypes({ companyId }: { companyId: string }) {
         <div key={t.id} style={S.row}>
           <div style={{ minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{t.code ? `${t.code} · ` : ''}{t.name}</div>
-            <div style={{ fontSize:11.5, color:C.muted, marginTop:2 }}>Base {t.eligibility_base || '—'} · max {t.max_loan_percent ?? '—'}% · tenure {t.min_tenure_months ?? '—'}–{t.max_tenure_months ?? '—'} mo · {t.interest_rate ?? '—'}% {t.interest_type ? `(${t.interest_type})` : ''}</div>
+            <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>Base {t.eligibility_base || '—'} · max {t.max_loan_percent ?? '—'}% · tenure {t.min_tenure_months ?? '—'}–{t.max_tenure_months ?? '—'} mo · {t.interest_rate ?? '—'}% {t.interest_type ? `(${t.interest_type})` : ''}</div>
           </div>
         </div>
       ))}
@@ -307,7 +320,7 @@ export default function LoansPage() {
   return (
     <div style={S.page}>
       <div style={S.content}>
-        <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:16, flexWrap:'wrap', background:'#fff', borderRadius:12, border:`1px solid ${C.border}`, padding:'14px 16px', position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+          <div className="ez-page-head" style={{ display:'flex', alignItems:'flex-start', gap:16, flexWrap:'wrap', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
           <div style={{ flex:1, minWidth:200 }}>
             <h1 style={S.h1}>Loan Management</h1>
             <div style={S.sub}>Approve requests, review agreements, disburse funds, and track active loans.</div>
@@ -333,7 +346,7 @@ export default function LoansPage() {
       </div>
 
       {toast && (
-        <div style={{ position:'fixed', bottom:20, left:'50%', transform:'translateX(-50%)', background: toast.err ? C.red : C.navy, color:'#fff', padding:'10px 18px', borderRadius:10, fontSize:13, fontWeight:500, boxShadow:'0 4px 16px rgba(0,0,0,.18)', zIndex:1000 }}>{toast.msg}</div>
+        <div style={{ position:'fixed', bottom:20, left:'50%', transform:'translateX(-50%)', background: toast.err ? C.red : C.navy, color:TK.onAccent, padding:'10px 18px', borderRadius:10, fontSize:13, fontWeight:500, boxShadow:'0 4px 16px rgba(0,0,0,.18)', zIndex:1000 }}>{toast.msg}</div>
       )}
     </div>
   )

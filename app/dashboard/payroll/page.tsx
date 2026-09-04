@@ -34,39 +34,60 @@ import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutory
 import NpsReport from '@/components/payroll/NpsReport'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 
+// The design system. This file owns C, S and F already, so the tokens are
+// aliased: TK for colour, TF for type, SP for spacing.
+import {
+  C as TK, F as TF, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
+} from '@/lib/ui'
+import { useDismiss } from '@/lib/ui/useDismiss'
+
 // ── Palette (guide-mandated) ──────────────────────────────────────
+// This file already owns the name C, so the design tokens come in as TK and
+// every value below is bound to them. Nothing here is a private hex any more.
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B6B7B',
-  success: '#059669', amber: '#B45309', red: '#DC2626',
-  font: '"DM Sans","Segoe UI",sans-serif',
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted,
+  success: TK.positive, amber: TK.warning, red: TK.critical,
+  font: TF.family,
 }
 const S = {
-  page: { background: C.bg, minHeight: '100vh', padding: 20, color: C.navy, fontFamily: C.font, fontSize: 13 } as React.CSSProperties,
-  content: { maxWidth: 1100, margin: '0 auto' } as React.CSSProperties,
-  card: { background: C.card, borderRadius: 12, border: `1px solid ${C.border}`, padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  label: { fontSize: 11, fontWeight: 600, color: C.purple, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  input: { width: '100%', padding: '8px 11px', background: '#FAFAF8', border: `1px solid ${C.border}`, borderRadius: 8, color: C.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
-  btnPrimary: { padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', background: C.purple, color: '#fff', whiteSpace: 'nowrap' } as React.CSSProperties,
-  btnOutline: { padding: '7px 13px', borderRadius: 8, border: `1px solid ${C.border}`, cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: C.purple, whiteSpace: 'nowrap' } as React.CSSProperties,
-  btnDanger: { padding: '6px 12px', borderRadius: 8, border: `1px solid ${C.red}`, cursor: 'pointer', fontSize: 11, fontWeight: 600, fontFamily: 'inherit', background: '#fff', color: C.red } as React.CSSProperties,
-  h1: { fontSize: 22, fontWeight: 700, color: C.navy, margin: 0 } as React.CSSProperties,
-  sub: { fontSize: 12, color: C.muted, marginTop: 2 } as React.CSSProperties,
-  cardTitle: { fontSize: 14, fontWeight: 600, color: C.navy, marginBottom: 12 } as React.CSSProperties,
-  note: { background: 'rgba(124,58,237,0.05)', border: `1px dashed ${C.border}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.muted } as React.CSSProperties,
+  page: { background: C.bg, minHeight: '100vh', padding: `${SP.xl}px ${SP.xl}px ${SP.huge}px`,
+          color: C.navy, fontFamily: C.font, fontSize: TF.body } as React.CSSProperties,
+  // Payroll is read across the row — a wider column than the old 1100 keeps
+  // the month tables from wrapping.
+  content: { maxWidth: 1320, margin: '0 auto' } as React.CSSProperties,
+  card: { background: C.card, borderRadius: R.lg, border: `1px solid ${C.border}`,
+          padding: '16px 18px', marginBottom: SP.lg, boxShadow: E.raised } as React.CSSProperties,
+  label: { ...eyebrow, display: 'block', marginBottom: 5 } as React.CSSProperties,
+  input: { ...inputStyle() } as React.CSSProperties,
+  btnPrimary: { height: 36, padding: '0 16px', borderRadius: R.md, border: `1px solid ${TK.brandDeep}`,
+          cursor: 'pointer', fontSize: TF.small, fontWeight: W.semi, fontFamily: 'inherit',
+          background: `linear-gradient(180deg, ${TK.brand}, ${TK.brandDeep})`, color: TK.onAccent,
+          whiteSpace: 'nowrap', boxShadow: E.brand } as React.CSSProperties,
+  btnOutline: { height: 34, padding: '0 13px', borderRadius: R.md, border: `1px solid ${TK.lineStrong}`,
+          cursor: 'pointer', fontSize: TF.small, fontWeight: W.medium, fontFamily: 'inherit',
+          background: TK.surface, color: TK.ink, whiteSpace: 'nowrap', boxShadow: E.flat } as React.CSSProperties,
+  btnDanger: { height: 30, padding: '0 12px', borderRadius: R.md, border: `1px solid ${tone('critical').edge}`,
+          cursor: 'pointer', fontSize: TF.tiny, fontWeight: W.semi, fontFamily: 'inherit',
+          background: TK.surface, color: TK.critical } as React.CSSProperties,
+  h1: { fontSize: TF.page, fontWeight: W.bold, color: C.navy, margin: 0, letterSpacing: '-.02em' } as React.CSSProperties,
+  sub: { fontSize: TF.small, color: C.muted, marginTop: 5 } as React.CSSProperties,
+  cardTitle: { fontSize: TF.lead, fontWeight: W.semi, color: C.navy, marginBottom: SP.md } as React.CSSProperties,
+  note: { background: TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius: R.md,
+          padding: `${SP.md}px ${SP.lg}px`, fontSize: TF.small, color: TK.inkSoft } as React.CSSProperties,
 }
 
 const TABS: { id: string; label: string; title: string; subtitle: string }[] = [
-  { id: 'dashboard', label: '📊 Dashboard', title: 'Dashboard', subtitle: 'Headcount, cost, compliance deadlines & recent activity at a glance' },
-  { id: 'config', label: '🔧 Configuration', title: 'Configuration', subtitle: 'Group setup, pay heads, statutory slabs & tax rules' },
-  { id: 'attendance', label: '📤 Attendance', title: 'Attendance', subtitle: 'Upload attendance / leave / OT into the month snapshot' },
-  { id: 'employees', label: '👥 Employees & CTC', title: 'Employees & CTC', subtitle: 'Payroll view of the workforce, CTC master and bank details' },
-  { id: 'run', label: '▶️ Payroll Run', title: 'Payroll Run', subtitle: 'The heart — month create → sync → calculate → approve → disburse → lock' },
-  { id: 'statutory', label: '⚖️ Statutory & Tax', title: 'Statutory & Tax', subtitle: 'Compliance-by-design — PF, ESIC, PT, LWF, NPS and TDS' },
-  { id: 'benefits', label: '🎁 Benefits & Loans', title: 'Benefits & Loans', subtitle: 'Flexi benefits, NPS, insurance and the full loan lifecycle' },
-  { id: 'offcycle', label: '🔁 Off-cycle · Bonus · FNF', title: 'Off-cycle · Bonus · FNF', subtitle: 'Ad-hoc payments, bonus registers and full & final settlement' },
-  { id: 'reports', label: '📊 Outputs & Reports', title: 'Outputs & Reports', subtitle: 'Payslips, registers, bank files, challans and dashboards' },
-  { id: 'admin', label: '🛡️ Admin & Controls', title: 'Admin & Controls', subtitle: 'Access control, approvals and the full audit trail' },
+  { id: 'dashboard', label: 'Dashboard', title: 'Dashboard', subtitle: 'Headcount, cost, compliance deadlines & recent activity at a glance' },
+  { id: 'config', label: 'Configuration', title: 'Configuration', subtitle: 'Group setup, pay heads, statutory slabs & tax rules' },
+  { id: 'attendance', label: 'Attendance', title: 'Attendance', subtitle: 'Upload attendance / leave / OT into the month snapshot' },
+  { id: 'employees', label: 'Employees & CTC', title: 'Employees & CTC', subtitle: 'Payroll view of the workforce, CTC master and bank details' },
+  { id: 'run', label: 'Payroll Run', title: 'Payroll Run', subtitle: 'The heart — month create → sync → calculate → approve → disburse → lock' },
+  { id: 'statutory', label: 'Statutory & Tax', title: 'Statutory & Tax', subtitle: 'Compliance-by-design — PF, ESIC, PT, LWF, NPS and TDS' },
+  { id: 'benefits', label: 'Benefits & Loans', title: 'Benefits & Loans', subtitle: 'Flexi benefits, NPS, insurance and the full loan lifecycle' },
+  { id: 'offcycle', label: 'Off-cycle · Bonus · FNF', title: 'Off-cycle · Bonus · FNF', subtitle: 'Ad-hoc payments, bonus registers and full & final settlement' },
+  { id: 'reports', label: 'Outputs & Reports', title: 'Outputs & Reports', subtitle: 'Payslips, registers, bank files, challans and dashboards' },
+  { id: 'admin', label: 'Admin & Controls', title: 'Admin & Controls', subtitle: 'Access control, approvals and the full audit trail' },
 ]
 
 // ── Small shared bits ─────────────────────────────────────────────
@@ -77,7 +98,7 @@ function Badge({ text, bg, color }: { text: string; bg: string; color: string })
 const HEAD_COLORS: Record<string, { bg: string; color: string }> = {
   EARNING: { bg: 'rgba(5,150,105,0.12)', color: C.success },
   DEDUCTION: { bg: 'rgba(220,38,38,0.12)', color: C.red },
-  EMPLOYER: { bg: 'rgba(124,58,237,0.12)', color: C.purple },
+  EMPLOYER: { bg: 'rgba(37,99,235,0.12)', color: C.purple },
   NON_SALARY: { bg: 'rgba(180,83,9,0.12)', color: C.amber },
 }
 
@@ -108,7 +129,7 @@ function SubTabHead({ crumbs, subtitle, built, total }: { crumbs: string[]; subt
             const last = i === crumbs.length - 1
             return (
               <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                {i > 0 && <span style={{ color: '#C9C7D6', fontSize: 15 }}>›</span>}
+                {i > 0 && <span style={{ color: TK.line, fontSize: 15 }}>›</span>}
                 <span style={{ fontSize: 17, fontWeight: last ? 700 : 600, color: last ? C.navy : C.muted }}>{c}</span>
               </span>
             )
@@ -118,7 +139,7 @@ function SubTabHead({ crumbs, subtitle, built, total }: { crumbs: string[]; subt
       </div>
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12, fontSize: 11, color: C.muted }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: C.success }} />{built} built</span>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: '#C9C7D6' }} />{total - built} planned</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><span style={{ width: 8, height: 8, borderRadius: 99, background: TK.line }} />{total - built} planned</span>
       </div>
     </div>
   )
@@ -130,6 +151,9 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
   label: string; isActive: boolean; sections: SubTab[]; activeSub: string; activeChild?: string; onPick: (id: string, childId?: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  // One click, not two: a document listener lets the click through to whatever
+  // is under it, so moving straight to another trigger opens that one.
+  const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
   const [alignRight, setAlignRight] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())   // which sections have their children expanded
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -161,24 +185,23 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
   }
   const toggleExpand = (id: string) => setExpanded(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
   return (
-    <div style={{ position: 'relative', flexShrink: 0 }}>
+    <div ref={pop} style={{ position: 'relative', flexShrink: 0 }}>
       <button ref={btnRef} onClick={toggle} style={{
-        display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 8,
-        border: `1px solid ${isActive || open ? C.purple : C.border}`, background: isActive ? C.purple : '#fff',
-        color: isActive ? '#fff' : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
-        boxShadow: open ? '0 6px 20px rgba(124,58,237,0.18)' : 'none',
+        display: 'inline-flex', alignItems: 'center', gap: 7, padding: '9px 14px', borderRadius: 10,
+        border: `1px solid ${isActive || open ? C.purple : C.border}`, background: isActive ? C.purple: TK.surface,
+        color: isActive ? TK.surface : C.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap',
+        boxShadow: open ? '0 6px 20px rgba(37,99,235,0.18)' : 'none',
       }}>
         {label}
-        {sections.length > 0 && <span style={{ fontSize: 10, opacity: .9, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}>▾</span>}
+        {sections.length > 0 && <span style={{ fontSize: 10, opacity: .9, transform: open ? 'rotate(180deg)' : 'none', transition: 'transform .18s' }}></span>}
       </button>
       {open && sections.length > 0 && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 1000 }} />
           <div style={{
             position: 'absolute', top: 'calc(100% + 6px)',
             ...(alignRight ? { right: 0 } : { left: 0 }),
             zIndex: 1001, minWidth: 262, maxHeight: '70vh', overflowY: 'auto',
-            background: '#fff', border: `1px solid ${C.border}`, borderRadius: 12,
+            background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 14,
             boxShadow: '0 14px 38px rgba(30,27,75,0.22)', padding: 6,
           }}>
             <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, textTransform: 'uppercase', letterSpacing: '.06em', padding: '6px 10px 8px' }}>Sections · {built}/{sections.length} built</div>
@@ -192,21 +215,21 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                 <div key={s.id}>
                   <button
                     onClick={() => { if (hasKids) { toggleExpand(s.id) } else { onPick(s.id); setOpen(false) } }}
-                    onMouseEnter={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = '#F7F5FF' }}
+                    onMouseEnter={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = TK.brandTint }}
                     onMouseLeave={e => { if (!rowActive) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
                     style={{
-                      width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 9,
+                      width: '100%', display: 'flex', alignItems: 'center', gap: 11, padding: '9px 11px', borderRadius: 10,
                       border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 2,
-                      background: rowActive ? 'rgba(124,58,237,0.09)' : 'transparent',
+                      background: rowActive ? 'rgba(37,99,235,0.09)' : 'transparent',
                     }}>
                     <span style={{ fontSize: 16, width: 24, textAlign: 'center', flexShrink: 0 }}>{s.icon}</span>
                     <span style={{ fontSize: 13, fontWeight: on ? 700 : 500, color: on ? C.purpleDark : C.navy, flex: 1 }}>{s.label}</span>
                     {hasKids ? (
-                      <span style={{ color: C.muted, fontSize: 11, flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>▸</span>
+                      <span style={{ color: C.muted, fontSize: 11, flexShrink: 0, transform: isExp ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}></span>
                     ) : (
                       <>
-                        <span title={s.built ? 'Built' : 'Planned'} style={{ width: 7, height: 7, borderRadius: 99, flexShrink: 0, background: s.built ? C.success : '#C9C7D6' }} />
-                        {on && <span style={{ color: C.purple, fontSize: 13, marginLeft: 2 }}>✓</span>}
+                        <span title={s.built ? 'Built' : 'Planned'} style={{ width: 7, height: 7, borderRadius: 99, flexShrink: 0, background: s.built ? C.success: TK.line }} />
+                        {on && <span style={{ color: C.purple, fontSize: 13, marginLeft: 2 }}></span>}
                       </>
                     )}
                   </button>
@@ -217,15 +240,15 @@ function MainTabDropdown({ label, isActive, sections, activeSub, activeChild, on
                         const kon = on && k.id === activeChild
                         return (
                           <button key={k.id} onClick={() => { onPick(s.id, k.id); setOpen(false) }}
-                            onMouseEnter={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = '#F7F5FF' }}
+                            onMouseEnter={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = TK.brandTint }}
                             onMouseLeave={e => { if (!kon) (e.currentTarget as HTMLButtonElement).style.background = 'transparent' }}
                             style={{
-                              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8,
+                              width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 10,
                               border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', marginBottom: 1,
-                              background: kon ? 'rgba(124,58,237,0.09)' : 'transparent',
+                              background: kon ? 'rgba(37,99,235,0.09)' : 'transparent',
                             }}>
-                            <span style={{ fontSize: 12.5, fontWeight: kon ? 700 : 500, color: kon ? C.purpleDark : C.navy, flex: 1 }}>{k.label}</span>
-                            {kon && <span style={{ color: C.purple, fontSize: 12 }}>✓</span>}
+                            <span style={{ fontSize: 13, fontWeight: kon ? 700 : 500, color: kon ? C.purpleDark : C.navy, flex: 1 }}>{k.label}</span>
+                            {kon && <span style={{ color: C.purple, fontSize: 12 }}></span>}
                           </button>
                         )
                       })}
@@ -245,7 +268,7 @@ function Chips({ items }: { items: string[] }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 14, justifyContent: 'center' }}>
       {items.map(p => (
-        <span key={p} style={{ fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 99, background: 'rgba(124,58,237,0.06)', border: `1px solid ${C.border}`, color: C.purpleDark }}>{p}</span>
+        <span key={p} style={{ fontSize: 11, fontWeight: 500, padding: '4px 10px', borderRadius: 99, background: 'rgba(37,99,235,0.06)', border: `1px solid ${C.border}`, color: C.purpleDark }}>{p}</span>
       ))}
     </div>
   )
@@ -254,7 +277,7 @@ function Chips({ items }: { items: string[] }) {
 function PlannedPanel({ s }: { s: SubTab }) {
   return (
     <div style={{ ...S.card, textAlign: 'center', padding: '38px 24px' }}>
-      <div style={{ width: 58, height: 58, borderRadius: 16, background: 'rgba(124,58,237,0.07)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 14px' }}>{s.icon}</div>
+      <div style={{ width: 58, height: 58, borderRadius: 14, background: 'rgba(37,99,235,0.07)', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26, margin: '0 auto 14px' }}>{s.icon}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'center', marginBottom: 6 }}>
         <span style={{ fontSize: 16, fontWeight: 700, color: C.navy }}>{s.label}</span>
         <PlannedBadge />
@@ -304,123 +327,123 @@ function subsForTab(tab: string, ctx: { companyId: string; fy: string; subView: 
 // ── Sub-section definitions per main tab (metadata + inline render) ──
 function configSubs(companyId: string, subView: string, fy: string): SubTab[] {
   return [
-    { id: 'payheads', label: 'Pay Heads', icon: '🧾', built: true,
+    { id: 'payheads', label: 'Pay Heads', icon: '', built: true,
       children: [
-        { id: 'catalog', label: '📋 Standard Pay Heads' },
-        { id: 'flexi', label: '🎛️ Flexi / FBP' },
-        { id: 'nonstd', label: '👥 Non-standard Types' },
-        { id: 'rules', label: '⚖️ Business Rules' },
+        { id: 'catalog', label: 'Standard Pay Heads' },
+        { id: 'flexi', label: 'Flexi / FBP' },
+        { id: 'nonstd', label: 'Non-standard Types' },
+        { id: 'rules', label: 'Business Rules' },
       ],
       render: () => <PayHeadCatalog view={['flexi', 'nonstd', 'rules'].includes(subView) ? subView : 'catalog'} /> },
-    { id: 'group', label: 'Group & Company', icon: '🏢', built: true, groupGlobal: true, render: () => <CompanyProfileView /> },
-    { id: 'fymonth', label: 'Payroll Month', icon: '🗓️', built: true,
+    { id: 'group', label: 'Group & Company', icon: '', built: true, groupGlobal: true, render: () => <CompanyProfileView /> },
+    { id: 'fymonth', label: 'Payroll Month', icon: '', built: true,
       children: [
-        { id: 'create', label: '📅 Create Month' },
-        { id: 'freeze', label: '❄️ Freeze Month' },
-        { id: 'unfreeze', label: '☀️ Unfreeze Month' },
+        { id: 'create', label: 'Create Month' },
+        { id: 'freeze', label: 'Freeze Month' },
+        { id: 'unfreeze', label: 'Unfreeze Month' },
         // PayrollMonthTab always supported this mode; it just had no menu entry, so the
         // only way to lock a month was the Advance button that Run Cycle no longer has.
-        { id: 'lock', label: '🔒 Lock / Unlock Month' },
+        { id: 'lock', label: 'Lock / Unlock Month' },
       ],
       render: () => <PayrollMonthTab companyId={companyId} fy={fy} mode={(['create', 'freeze', 'unfreeze'].includes(subView) ? subView : 'create') as PmMode} /> },
-    { id: 'categories', label: 'Department · Sub-dept · Location', icon: '🗂️', built: true, render: () => <CompanyStructureView companyId={companyId} /> },
-    { id: 'perquisite', label: 'Perquisite', icon: '🚗', built: true, render: () => <PerquisitesConfig fy={fy} /> },
-    { id: 'bonus', label: 'Bonus Config', icon: '🎯', built: true, render: () => <BonusConfig fy={fy} /> },
-    { id: 'tax', label: 'Tax Config', icon: '🧮', built: true, render: () => <IncomeTaxConfig /> },
-    { id: 'lwf', label: 'LWF', icon: '🏛️', built: true, render: () => <LwfConfig /> },
-    { id: 'esic', label: 'ESIC', icon: '🏥', built: true, render: () => <EsicConfig /> },
-    { id: 'epf', label: 'EPF', icon: '🏦', built: true, render: () => <EpfConfig /> },
-    { id: 'slabs', label: 'PT Slabs', icon: '⚖️', built: true, render: () => <PtConfig /> },
-    { id: 'minwages', label: 'Minimum Wages', icon: '📊', built: true, render: () => <MinimumWageConfig /> },
+    { id: 'categories', label: 'Department · Sub-dept · Location', icon: '', built: true, render: () => <CompanyStructureView companyId={companyId} /> },
+    { id: 'perquisite', label: 'Perquisite', icon: '', built: true, render: () => <PerquisitesConfig fy={fy} /> },
+    { id: 'bonus', label: 'Bonus Config', icon: '', built: true, render: () => <BonusConfig fy={fy} /> },
+    { id: 'tax', label: 'Tax Config', icon: '', built: true, render: () => <IncomeTaxConfig /> },
+    { id: 'lwf', label: 'LWF', icon: '', built: true, render: () => <LwfConfig /> },
+    { id: 'esic', label: 'ESIC', icon: '', built: true, render: () => <EsicConfig /> },
+    { id: 'epf', label: 'EPF', icon: '', built: true, render: () => <EpfConfig /> },
+    { id: 'slabs', label: 'PT Slabs', icon: '', built: true, render: () => <PtConfig /> },
+    { id: 'minwages', label: 'Minimum Wages', icon: '', built: true, render: () => <MinimumWageConfig /> },
   ]
 }
 
 function attendanceSubs(companyId: string, fy: string): SubTab[] {
   return [
-    { id: 'upload', label: 'Attendance Upload', icon: '📤', built: true, render: () => <AttendanceUpload companyId={companyId} fy={fy} /> },
-    { id: 'ot', label: 'OT Upload', icon: '⏱️', built: true, render: () => <OtUpload companyId={companyId} fy={fy} /> },
-    { id: 'edit', label: 'Attendance Edit', icon: '✏️', built: true, render: () => <AttendanceEditTab companyId={companyId} fy={fy} /> },
-    { id: 'arrear', label: 'Arrear Days', icon: '📌', built: true, render: () => <AttendanceEdit companyId={companyId} fy={fy} mode="arrear" /> },
+    { id: 'upload', label: 'Attendance Upload', icon: '', built: true, render: () => <AttendanceUpload companyId={companyId} fy={fy} /> },
+    { id: 'ot', label: 'OT Upload', icon: '', built: true, render: () => <OtUpload companyId={companyId} fy={fy} /> },
+    { id: 'edit', label: 'Attendance Edit', icon: '', built: true, render: () => <AttendanceEditTab companyId={companyId} fy={fy} /> },
+    { id: 'arrear', label: 'Arrear Days', icon: '', built: true, render: () => <AttendanceEdit companyId={companyId} fy={fy} mode="arrear" /> },
   ]
 }
 
 function employeeSubs(companyId: string): SubTab[] {
   return [
-    { id: 'master', label: 'Employee & CTC Master', icon: '👥', built: true, render: () => <EmployeesTab companyId={companyId} /> },
-    { id: 'bank', label: 'Bank Details', icon: '🏦', built: true, render: () => <BankDetailsTab companyId={companyId} /> },
-    { id: 'revision', label: 'Salary Revision & Arrears', icon: '📈', built: true, render: () => <Appraisal /> },
+    { id: 'master', label: 'Employee & CTC Master', icon: '', built: true, render: () => <EmployeesTab companyId={companyId} /> },
+    { id: 'bank', label: 'Bank Details', icon: '', built: true, render: () => <BankDetailsTab companyId={companyId} /> },
+    { id: 'revision', label: 'Salary Revision & Arrears', icon: '', built: true, render: () => <Appraisal /> },
   ]
 }
 
 function runSubs(companyId: string, fy: string): SubTab[] {
   return [
-    { id: 'cycle', label: 'Run Cycle', icon: '▶️', built: true, render: () => <RunCycle companyId={companyId} headerFy={fy} /> },
-    { id: 'sync', label: 'Data Sync', icon: '🔄', built: true, render: () => <MonthSync companyId={companyId} fy={fy} /> },
-    { id: 'uploaders', label: 'Bulk Uploaders', icon: '📤', built: true, render: () => <ManualVoucher companyId={companyId} fy={fy} /> },
-    { id: 'arrearpay', label: 'Arrear & Payments', icon: '💸', built: true, render: () => <ArrearPayments companyId={companyId} fy={fy} /> },
-    { id: 'lock', label: 'Lock / Unlock', icon: '🔒', built: true, render: () => <LockUnlock companyId={companyId} fy={fy} /> },
-    { id: 'minwage', label: 'Minimum Wages Check', icon: '🛡️', desc: 'Flags employees whose gross falls below the applicable state minimum wage before payroll is processed.' },
+    { id: 'cycle', label: 'Run Cycle', icon: '', built: true, render: () => <RunCycle companyId={companyId} headerFy={fy} /> },
+    { id: 'sync', label: 'Data Sync', icon: '', built: true, render: () => <MonthSync companyId={companyId} fy={fy} /> },
+    { id: 'uploaders', label: 'Bulk Uploaders', icon: '', built: true, render: () => <ManualVoucher companyId={companyId} fy={fy} /> },
+    { id: 'arrearpay', label: 'Arrear & Payments', icon: '', built: true, render: () => <ArrearPayments companyId={companyId} fy={fy} /> },
+    { id: 'lock', label: 'Lock / Unlock', icon: '', built: true, render: () => <LockUnlock companyId={companyId} fy={fy} /> },
+    { id: 'minwage', label: 'Minimum Wages Check', icon: '', desc: 'Flags employees whose gross falls below the applicable state minimum wage before payroll is processed.' },
   ]
 }
 
 function statutorySubs(fy: string): SubTab[] {
   return [
-    { id: 'pf', label: 'PF / EPF + VPF', icon: '🏦', built: true, href: '/dashboard/ess', desc: 'EPF @12% of capped wage is computed in the engine; VPF opt-in is available in the employee ESS portal.' },
-    { id: 'esic', label: 'ESIC', icon: '🩺', built: true, desc: '0.75% employee / 3.25% employer, auto-applied for gross ≤ ₹21,000 during Calculate. Challan export is planned.' },
+    { id: 'pf', label: 'PF / EPF + VPF', icon: '', built: true, href: '/dashboard/ess', desc: 'EPF @12% of capped wage is computed in the engine; VPF opt-in is available in the employee ESS portal.' },
+    { id: 'esic', label: 'ESIC', icon: '', built: true, desc: '0.75% employee / 3.25% employer, auto-applied for gross ≤ ₹21,000 during Calculate. Challan export is planned.' },
     // Same components the Configuration menu shows — one screen each, not copies:
     // two LWF or PT screens would eventually disagree, and whichever one HR happened to
     // open would decide what they believed.
-    { id: 'lwf', label: 'LWF', icon: '🏛️', built: true, render: () => <LwfConfig /> },
-    { id: 'ptlwf', label: 'Professional Tax', icon: '⚖️', built: true, render: () => <PtConfig /> },
+    { id: 'lwf', label: 'LWF', icon: '', built: true, render: () => <LwfConfig /> },
+    { id: 'ptlwf', label: 'Professional Tax', icon: '', built: true, render: () => <PtConfig /> },
     // Enrolment itself happens in ESS; this is the report side — who is in, who is not.
-    { id: 'nps', label: 'NPS', icon: '🏛️', built: true, render: () => <NpsReport fy={fy} /> },
-    { id: 'tds', label: 'TDS Calculation', icon: '🧮', built: true, desc: 'Monthly TDS from each employee’s investment declaration feeds directly into the payroll run.' },
-    { id: 'form16', label: 'Form 16 / 24Q', icon: '📄', desc: 'Quarterly 24Q returns and annual Form 16 generation for employees.' },
-    { id: 'perq', label: 'Perquisite Tax', icon: '🚗', built: true, render: () => <PerquisiteStatutoryPanel fy={fy} /> },
+    { id: 'nps', label: 'NPS', icon: '', built: true, render: () => <NpsReport fy={fy} /> },
+    { id: 'tds', label: 'TDS Calculation', icon: '', built: true, desc: 'Monthly TDS from each employee’s investment declaration feeds directly into the payroll run.' },
+    { id: 'form16', label: 'Form 16 / 24Q', icon: '', desc: 'Quarterly 24Q returns and annual Form 16 generation for employees.' },
+    { id: 'perq', label: 'Perquisite Tax', icon: '', built: true, render: () => <PerquisiteStatutoryPanel fy={fy} /> },
   ]
 }
 
 function benefitsSubs(): SubTab[] {
   return [
-    { id: 'flexi', label: 'Flexi Benefit Plan', icon: '🎛️', built: true, href: '/dashboard/flexi-policy', desc: 'FBP components, slabs and employee declarations (old vs new regime).' },
-    { id: 'flexiclaims', label: 'Flexi Claims', icon: '💳', built: true, href: '/dashboard/flexi-claims', desc: 'Review reimbursement bills, manage the monthly submission window and per-employee limits. Approved claims flow into payroll.' },
-    { id: 'flexiinvoices', label: 'Flexi Invoices & Vouchers', icon: '🧾', built: true, href: '/dashboard/flexi-invoices', desc: 'Generate reimbursement vouchers (PDF) for approved flexi claims — one per employee per month, with invoice number EZER-FLX-…' },
-    { id: 'nps', label: 'Corporate NPS', icon: '🏛️', built: true, href: '/dashboard/ess', desc: 'Employer NPS enrolment and monthly contribution.' },
-    { id: 'insurance', label: 'Insurance / Meal Cards', icon: '🍱', desc: 'GMC / GPA insurance, meal & fuel cards and other benefit heads.' },
-    { id: 'loan', label: 'Loan Disbursal & Schedule', icon: '💸', built: true, href: '/dashboard/loans', desc: 'Loan requests, approval workflow, disbursal and the EMI amortisation schedule.' },
-    { id: 'emi', label: 'EMI Auto-Deduct', icon: '🔁', built: true, desc: 'Pending EMIs for the month are pulled into the payroll run automatically during Calculate.' },
-    { id: 'foreclose', label: 'Part-payment / Foreclosure', icon: '✅', built: true, href: '/dashboard/loans', desc: 'Part-prepayment and foreclosure recalculate the outstanding schedule.' },
+    { id: 'flexi', label: 'Flexi Benefit Plan', icon: '', built: true, href: '/dashboard/flexi-policy', desc: 'FBP components, slabs and employee declarations (old vs new regime).' },
+    { id: 'flexiclaims', label: 'Flexi Claims', icon: '', built: true, href: '/dashboard/flexi-claims', desc: 'Review reimbursement bills, manage the monthly submission window and per-employee limits. Approved claims flow into payroll.' },
+    { id: 'flexiinvoices', label: 'Flexi Invoices & Vouchers', icon: '', built: true, href: '/dashboard/flexi-invoices', desc: 'Generate reimbursement vouchers (PDF) for approved flexi claims — one per employee per month, with invoice number EZER-FLX-…' },
+    { id: 'nps', label: 'Corporate NPS', icon: '', built: true, href: '/dashboard/ess', desc: 'Employer NPS enrolment and monthly contribution.' },
+    { id: 'insurance', label: 'Insurance / Meal Cards', icon: '', desc: 'GMC / GPA insurance, meal & fuel cards and other benefit heads.' },
+    { id: 'loan', label: 'Loan Disbursal & Schedule', icon: '', built: true, href: '/dashboard/loans', desc: 'Loan requests, approval workflow, disbursal and the EMI amortisation schedule.' },
+    { id: 'emi', label: 'EMI Auto-Deduct', icon: '', built: true, desc: 'Pending EMIs for the month are pulled into the payroll run automatically during Calculate.' },
+    { id: 'foreclose', label: 'Part-payment / Foreclosure', icon: '', built: true, href: '/dashboard/loans', desc: 'Part-prepayment and foreclosure recalculate the outstanding schedule.' },
   ]
 }
 
 function offcycleSubs(): SubTab[] {
   return [
-    { id: 'offcycle', label: 'Off-cycle Payments', icon: '💵', desc: 'Ad-hoc payments outside the monthly cycle — incentives, reimbursements, one-time payouts.' },
-    { id: 'bonuscalc', label: 'Bonus Calculation', icon: '🎯', desc: 'Statutory (8.33–20%) and performance bonus computation with eligibility rules.' },
-    { id: 'bonusreg', label: 'Bonus Register', icon: '📖', desc: 'Form C bonus register for statutory compliance.' },
-    { id: 'fnfcreate', label: 'FNF Creation', icon: '📝', desc: 'Initiate full & final settlement for exited / resigned employees.' },
-    { id: 'fnfprocess', label: 'FNF Process', icon: '📤', desc: 'Leave encashment, gratuity, notice recovery and the final settlement statement.' },
+    { id: 'offcycle', label: 'Off-cycle Payments', icon: '', desc: 'Ad-hoc payments outside the monthly cycle — incentives, reimbursements, one-time payouts.' },
+    { id: 'bonuscalc', label: 'Bonus Calculation', icon: '', desc: 'Statutory (8.33–20%) and performance bonus computation with eligibility rules.' },
+    { id: 'bonusreg', label: 'Bonus Register', icon: '', desc: 'Form C bonus register for statutory compliance.' },
+    { id: 'fnfcreate', label: 'FNF Creation', icon: '', desc: 'Initiate full & final settlement for exited / resigned employees.' },
+    { id: 'fnfprocess', label: 'FNF Process', icon: '', desc: 'Leave encashment, gratuity, notice recovery and the final settlement statement.' },
   ]
 }
 
 function reportsSubs(): SubTab[] {
   return [
-    { id: 'register', label: 'Payroll Register', icon: '📊', built: true, desc: 'The full computed register for a run — export from Payroll Run → 📥 Register (one row per employee with every earning & deduction).' },
-    { id: 'payslip', label: 'Salary Slip Generator', icon: '🧾', desc: 'Branded PDF payslips per employee on the Sharma Group letterhead, pushed to the ESS portal.' },
-    { id: 'annual', label: 'Annual Salary', icon: '📅', desc: 'Year-to-date earnings & deductions statement per employee.' },
-    { id: 'neft', label: 'Bank Transfer File (NEFT)', icon: '🏦', desc: 'Bank-ready NEFT / RTGS salary file with UTF-8 BOM (IFSC, account, amount, narration).' },
-    { id: 'challans', label: 'PF ECR · ESIC · PT Challans', icon: '📑', desc: 'Statutory challan and PF ECR text files for upload to government portals.' },
-    { id: 'dashboards', label: 'Month-end Dashboards', icon: '📈', desc: 'Headcount, pay summary, location-wise cost and month-on-month variance.' },
-    { id: 'mis', label: 'MIS / Variance', icon: '🔍', desc: 'Custom MIS and variance reports across runs.' },
+    { id: 'register', label: 'Payroll Register', icon: '', built: true, desc: 'The full computed register for a run — export from Payroll Run → 📥 Register (one row per employee with every earning & deduction).' },
+    { id: 'payslip', label: 'Salary Slip Generator', icon: '', desc: 'Branded PDF payslips per employee on the Sharma Group letterhead, pushed to the ESS portal.' },
+    { id: 'annual', label: 'Annual Salary', icon: '', desc: 'Year-to-date earnings & deductions statement per employee.' },
+    { id: 'neft', label: 'Bank Transfer File (NEFT)', icon: '', desc: 'Bank-ready NEFT / RTGS salary file with UTF-8 BOM (IFSC, account, amount, narration).' },
+    { id: 'challans', label: 'PF ECR · ESIC · PT Challans', icon: '', desc: 'Statutory challan and PF ECR text files for upload to government portals.' },
+    { id: 'dashboards', label: 'Month-end Dashboards', icon: '', desc: 'Headcount, pay summary, location-wise cost and month-on-month variance.' },
+    { id: 'mis', label: 'MIS / Variance', icon: '', desc: 'Custom MIS and variance reports across runs.' },
   ]
 }
 
 function adminSubs(companyId: string): SubTab[] {
   return [
-    { id: 'audit', label: 'Audit Trail', icon: '📜', built: true, render: () => <AuditCard companyId={companyId} refreshKey={0} /> },
-    { id: 'rbac', label: 'Role-based Access', icon: '🔑', built: true, href: '/dashboard/roles', desc: 'Payroll roles and permissions are managed in ESS & Role Management.' },
-    { id: 'approval', label: 'Approval Workflows', icon: '✅', desc: 'Maker-checker approval chains for payroll sign-off before disbursement.' },
-    { id: 'approvalmail', label: 'Approval Mail + Reports', icon: '✉️', desc: 'Automated approval emails with the run summary attached.' },
+    { id: 'audit', label: 'Audit Trail', icon: '', built: true, render: () => <AuditCard companyId={companyId} refreshKey={0} /> },
+    { id: 'rbac', label: 'Role-based Access', icon: '', built: true, href: '/dashboard/roles', desc: 'Payroll roles and permissions are managed in ESS & Role Management.' },
+    { id: 'approval', label: 'Approval Workflows', icon: '', desc: 'Maker-checker approval chains for payroll sign-off before disbursement.' },
+    { id: 'approvalmail', label: 'Approval Mail + Reports', icon: '', desc: 'Automated approval emails with the run summary attached.' },
   ]
 }
 
@@ -654,7 +677,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
   return (
     <div>
       <div style={S.card}>
-        <div style={S.cardTitle}>{mode === 'create' ? '📅 Create payroll month' : mode === 'freeze' ? '❄️ Freeze payroll month' : mode === 'unfreeze' ? '☀️ Unfreeze payroll month' : '🔒 Lock payroll month'} · FY {fy}</div>
+        <div style={S.cardTitle}>{mode === 'create' ? 'Create payroll month' : mode === 'freeze' ? 'Freeze payroll month' : mode === 'unfreeze' ? 'Unfreeze payroll month' : 'Lock payroll month'} · FY {fy}</div>
         <div style={{ fontSize: 12, color: C.muted }}>
           {mode === 'create' ? 'Open a new payroll month so it can be processed.'
             : mode === 'freeze' ? 'Freezing locks the attendance snapshot so it can’t change while payroll is calculated.'
@@ -663,7 +686,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
         </div>
         {mode === 'create' && (
           <>
-            {allCo && <div style={{ fontSize: 12, color: C.purpleD, marginTop: 10, background: '#EEEDFE', borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
+            {allCo && <div style={{ fontSize: 12, color: C.purpleDark, marginTop: 10, background: TK.brandTint, borderRadius: 7, padding: '7px 11px', display: 'inline-block' }}>Group Companies mode — this creates the month for <b>every company</b> at once (companies that already have it are skipped).</div>}
             <div style={{ marginTop: 12 }}>
               <button style={{ ...S.btnPrimary }} onClick={() => setShowCreate(true)}>➕ {allCo ? 'Create for all companies' : 'Create month'}</button>
             </div>
@@ -692,7 +715,7 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
                 return (
                   <div key={g[0].month} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
                     <div style={{ fontSize: 14, fontWeight: 700, color: C.navy, minWidth: 200 }}>🏛️ {groupName} · {g[0].period_label || `${g[0].fy} · M${g[0].month}`}</div>
-                    <Badge text={`${g.length} compan${g.length === 1 ? 'y' : 'ies'}`} bg="rgba(124,58,237,0.12)" color={C.purple} />
+                    <Badge text={`${g.length} compan${g.length === 1 ? 'y' : 'ies'}`} bg="rgba(37,99,235,0.12)" color={C.purple} />
                     <span style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700, background: pill.bg, color: pill.color }}>{single ? statuses[0] : statuses.join(' · ')}</span>
                     {mode === 'create' && <span style={{ fontSize: 11, color: C.muted }}>{totalEmp} employees across {g.length}</span>}
                     <div style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
@@ -701,14 +724,14 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
                         {dlKey === `g${g[0].month}` ? 'Preparing…' : '⬇ Month Master'}
                       </button>
                       {mode === 'freeze' && (freezable.length
-                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(freezable, 'ATTENDANCE_LOCKED')}>❄️ Freeze all</button>
-                        : <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>❄️ Frozen</span>)}
+                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(freezable, 'ATTENDANCE_LOCKED')}>Freeze all</button>
+                        : <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>Frozen</span>)}
                       {mode === 'unfreeze' && (unfreezable.length
-                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(unfreezable, 'OPEN')}>☀️ Unfreeze all</button>
+                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(unfreezable, 'OPEN')}>Unfreeze all</button>
                         : <span style={{ fontSize: 11, color: C.muted }}>nothing to unfreeze</span>)}
                       {mode === 'lock' && (lockable.length
-                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(lockable, 'LOCKED')}>🔒 Lock all</button>
-                        : <button style={S.btnOutline} disabled={busy} onClick={() => applyGroup(active, 'DISBURSED')}>🔓 Unlock all</button>)}
+                        ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => applyGroup(lockable, 'LOCKED')}>Lock all</button>
+                        : <button style={S.btnOutline} disabled={busy} onClick={() => applyGroup(active, 'DISBURSED')}>Unlock all</button>)}
                     </div>
                   </div>
                 )
@@ -730,18 +753,18 @@ function PayrollMonthTab({ companyId, fy, mode }: { companyId: string; fy: strin
                   </button>
                   {mode === 'freeze' && !cancelled && (
                     frozen
-                      ? <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>❄️ Frozen</span>
-                      : <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'ATTENDANCE_LOCKED')}>❄️ Freeze</button>
+                      ? <span style={{ fontSize: 11, color: C.success, fontWeight: 600 }}>Frozen</span>
+                      : <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'ATTENDANCE_LOCKED')}>Freeze</button>
                   )}
                   {mode === 'unfreeze' && !cancelled && (
                     run.status === 'ATTENDANCE_LOCKED'
-                      ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'OPEN')}>☀️ Unfreeze</button>
+                      ? <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'OPEN')}>Unfreeze</button>
                       : <span style={{ fontSize: 11, color: C.muted }}>{frozen ? 'processed — can’t unfreeze' : 'not frozen'}</span>
                   )}
                   {mode === 'lock' && !cancelled && (
                     locked
-                      ? <button style={S.btnOutline} disabled={busy} onClick={() => apply(run, 'DISBURSED')}>🔓 Unlock</button>
-                      : <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'LOCKED')}>🔒 Lock</button>
+                      ? <button style={S.btnOutline} disabled={busy} onClick={() => apply(run, 'DISBURSED')}>Unlock</button>
+                      : <button style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }} disabled={busy} onClick={() => apply(run, 'LOCKED')}>Lock</button>
                   )}
                 </div>
               </div>
@@ -815,24 +838,24 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
   }
 
   const overlay: React.CSSProperties = { position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }
-  const box: React.CSSProperties = { background: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 55px rgba(30,27,75,0.35)' }
-  const GREEN = '#059669'
+  const box: React.CSSProperties = { background: TK.surface, borderRadius: 14, padding: 24, width: '100%', maxWidth: 440, boxShadow: '0 20px 55px rgba(30,27,75,0.35)' }
+  const GREEN = TK.positive
 
   return (
     <div style={overlay}>
       <div style={box}>
         {step === 'pick' && (
           <>
-            <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, marginBottom: 4 }}>📅 Create payroll month</div>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, marginBottom: 4 }}>Create payroll month</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 16 }}>{allCo ? 'A month master will be built for every company.' : 'A month master will be built for the selected company.'} Months already created are not listed.</div>
             {availableMonths.length === 0 ? (
               <>
-                <div style={{ fontSize: 13, color: C.navy, background: '#EEEDFE', borderRadius: 8, padding: '12px 14px', marginBottom: 18 }}>All months for FY {fy} have already been created{allCo ? ' for every company' : ''}. 🎉</div>
+                <div style={{ fontSize: 13, color: C.navy, background: TK.brandTint, borderRadius: 10, padding: '12px 14px', marginBottom: 18 }}>All months for FY {fy} have already been created{allCo ? ' for every company' : ''}. 🎉</div>
                 <button style={{ ...S.btnOutline, width: '100%' }} onClick={onClose}>Close</button>
               </>
             ) : (
               <>
-                <label style={{ fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 6 }}>Month · FY {fy}</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: C.purpleDark, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 6 }}>Month · FY {fy}</label>
                 <select style={{ ...S.input, width: '100%', marginBottom: 20 }} value={month} onChange={e => setMonth(Number(e.target.value))}>
                   {availableMonths.map(m => <option key={m} value={m}>{MONTHS[m - 1]} {calYearOf(m - 1)}</option>)}
                 </select>
@@ -856,24 +879,24 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 
         {step === 'blocked' && (
           <>
-            <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}>🚫</div>
+            <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}></div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, textAlign: 'center', marginBottom: 6 }}>
               Can&apos;t create {monthLabel} yet
             </div>
-            <div style={{ fontSize: 11.5, color: C.muted, textAlign: 'center', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: C.muted, textAlign: 'center', marginBottom: 16 }}>
               {blockers[0]?.prevLabel} has to be closed off first — attendance processed, month frozen and payroll locked.
             </div>
             <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 18 }}>
               {blockers.map(b => (
-                <div key={b.companyId} style={{ border: '1px solid #FECACA', background: '#FEF2F2', borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
-                  <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 6 }}>{b.companyName} · {b.prevLabel}</div>
+                <div key={b.companyId} style={{ border: `1px solid ${TK.criticalTint}`, background: TK.criticalTint, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
+                  <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 6 }}>{b.companyName} · {b.prevLabel}</div>
                   {[
                     ['Attendance processed', b.attendanceDone, b.attendanceDetail],
                     ['Month frozen', b.frozen, b.frozenDetail],
                     ['Payroll locked', b.locked, b.lockedDetail],
                   ].map(([label, ok, detail]: any) => (
-                    <div key={label} style={{ fontSize: 11.5, color: ok ? C.success : C.red, padding: '2px 0' }}>
-                      {ok ? '✓' : '✕'} <b>{label}</b>{ok ? '' : ` — ${detail}`}
+                    <div key={label} style={{ fontSize: 12, color: ok ? C.success : C.red, padding: '2px 0' }}>
+                      {ok ? '' : ''} <b>{label}</b>{ok ? '' : ` — ${detail}`}
                     </div>
                   ))}
                 </div>
@@ -888,13 +911,13 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 
         {step === 'confirm' && (
           <>
-            <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}>🗓️</div>
+            <div style={{ fontSize: 40, textAlign: 'center', marginBottom: 8 }}></div>
             <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, textAlign: 'center', lineHeight: 1.5, marginBottom: 6 }}>
               Create the month master for<br /><span style={{ color: C.purple, fontSize: 18, fontWeight: 800 }}>{monthLabel}</span>{allCo ? <span style={{ color: C.muted, fontWeight: 600 }}> for all companies</span> : ''}?
             </div>
-            <div style={{ fontSize: 11.5, color: C.muted, textAlign: 'center', marginBottom: 20 }}>Each eligible employee&apos;s salary, statutory &amp; bank data will be frozen for this month.</div>
+            <div style={{ fontSize: 12, color: C.muted, textAlign: 'center', marginBottom: 20 }}>Each eligible employee&apos;s salary, statutory &amp; bank data will be frozen for this month.</div>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button style={{ ...S.btnPrimary, flex: 1, background: GREEN }} onClick={begin}>✓ Confirm</button>
+              <button style={{ ...S.btnPrimary, flex: 1, background: GREEN }} onClick={begin}>Confirm</button>
               <button style={{ ...S.btnOutline }} onClick={() => setStep('pick')}>Cancel</button>
             </div>
           </>
@@ -905,19 +928,19 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, marginBottom: 4 }}>Creating month master…</div>
             <div style={{ fontSize: 12, color: C.muted, marginBottom: 20 }}>{monthLabel}{allCo ? ' · all companies' : ''}</div>
             <div style={{ fontSize: 34, fontWeight: 800, color: GREEN, marginBottom: 12 }}>{pct}%</div>
-            <div style={{ height: 14, background: '#E7F6EF', borderRadius: 99, overflow: 'hidden', marginBottom: 14 }}>
-              <div style={{ width: `${pct}%`, height: '100%', background: 'linear-gradient(90deg,#10B981,#059669)', borderRadius: 99, transition: 'width .2s ease' }} />
+            <div style={{ height: 14, background: TK.sunken, borderRadius: 99, overflow: 'hidden', marginBottom: 14 }}>
+              <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${TK.positive},${TK.positive})`, borderRadius: 99, transition: 'width .2s ease' }} />
             </div>
-            <div style={{ fontSize: 12.5, color: C.navy, fontWeight: 600, minHeight: 18 }}>{stage}</div>
+            <div style={{ fontSize: 13, color: C.navy, fontWeight: 600, minHeight: 18 }}>{stage}</div>
           </div>
         )}
 
         {step === 'done' && (
           <div style={{ textAlign: 'center' }}>
-            <div style={{ width: 60, height: 60, borderRadius: 99, background: '#ECFDF5', border: `2px solid ${GREEN}`, color: GREEN, fontSize: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>✓</div>
+            <div style={{ width: 60, height: 60, borderRadius: 99, background: TK.positiveTint, border: `2px solid ${GREEN}`, color: GREEN, fontSize: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}></div>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.navy, marginBottom: 8 }}>Month master ready</div>
-            {summary && <div style={{ fontSize: 12.5, color: C.navy, marginBottom: err ? 10 : 18 }}>{summary}</div>}
-            {err && <div style={{ fontSize: 11.5, color: C.red, background: '#FEF2F2', borderRadius: 8, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
+            {summary && <div style={{ fontSize: 13, color: C.navy, marginBottom: err ? 10 : 18 }}>{summary}</div>}
+            {err && <div style={{ fontSize: 12, color: C.red, background: TK.criticalTint, borderRadius: 10, padding: '8px 10px', marginBottom: 18 }}>{err}</div>}
             <button style={{ ...S.btnPrimary, background: GREEN, width: '100%' }} onClick={onClose}>Done</button>
           </div>
         )}
@@ -930,10 +953,10 @@ function CreateMonthModal({ fy, allCo, onRun, disabledMonths, checkReady, onClos
 function statusPill(status: string) {
   const map: Record<string, { bg: string; color: string }> = {
     OPEN: { bg: 'rgba(107,107,123,0.14)', color: C.muted },
-    SYNCED: { bg: 'rgba(37,99,235,0.12)', color: '#2563EB' },
-    ATTENDANCE_LOCKED: { bg: 'rgba(37,99,235,0.12)', color: '#2563EB' },
-    CALCULATED: { bg: 'rgba(37,99,235,0.12)', color: '#2563EB' },
-    AI_CHECKED: { bg: 'rgba(37,99,235,0.12)', color: '#2563EB' },
+    SYNCED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
+    ATTENDANCE_LOCKED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
+    CALCULATED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
+    AI_CHECKED: { bg: 'rgba(37,99,235,0.12)', color: TK.info },
     APPROVED: { bg: 'rgba(5,150,105,0.12)', color: C.success },
     DISBURSED: { bg: 'rgba(5,150,105,0.12)', color: C.success },
     LOCKED: { bg: 'rgba(30,27,75,0.12)', color: C.navy },
@@ -977,7 +1000,7 @@ function BenefitsTab() {
         <div style={S.cardTitle}>Benefits &amp; Loans</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(240px,1fr))', gap: 12 }}>
           {items.map(it => (
-            <div key={it.title} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, background: '#FAFAF8' }}>
+            <div key={it.title} style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: 14, background: TK.sunken }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                 {it.href ? (
                   <a href={it.href} style={{ fontSize: 13, fontWeight: 700, color: C.purple, textDecoration: 'none' }}>{it.title} →</a>
@@ -1029,14 +1052,14 @@ function EmployeesTab({ companyId }: { companyId: string }) {
 
   return (
     <div>
-      <div style={{ ...S.card, position: 'sticky', top: 46, zIndex: 29, boxShadow: '0 2px 8px rgba(15,23,42,0.06)' }}>
+      <div style={{ ...S.card, position: 'sticky', top: 46, zIndex: 29, boxShadow: 'var(--ez-shadow-flat)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={S.cardTitle}>Employees &amp; CTC ({filtered.length})</div>
           <input style={{ ...S.input, width: 200 }} placeholder="Search code / name…" value={q} onChange={e => setQ(e.target.value)} />
           <select style={{ ...S.input, width: 180 }} value={dept} onChange={e => setDept(e.target.value)}>
             <option value="">All departments</option>{depts.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
-          <button style={{ ...S.btnPrimary, marginLeft: 'auto' }} onClick={exportExcel}>📥 Export Excel</button>
+          <button style={{ ...S.btnPrimary, marginLeft: 'auto' }} onClick={exportExcel}>Export Excel</button>
         </div>
         {missingCtc > 0 && <div style={{ fontSize: 12, color: C.amber, marginTop: 8 }}>⚠ {missingCtc} employee(s) have no CTC in ctc_master — CTC/Basic show ₹0. Seed ctc_master to populate.</div>}
       </div>
@@ -1109,7 +1132,7 @@ export default function PayrollPage() {
     <div style={S.page}>
       <div style={S.content}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div className="ez-page-head" style={{ display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 200 }}>
             <h1 style={S.h1}>Payroll</h1>
           </div>
@@ -1142,7 +1165,7 @@ export default function PayrollPage() {
 
         {/* Tab bar — each main tab is a dropdown of its sub-sections; pick one to enter it.
             Wraps onto multiple rows so every section is always visible without scrolling. */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, rowGap: 8, marginBottom: 16, paddingBottom: 8, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 8, boxShadow: '0 2px 8px rgba(15,23,42,0.06)' }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, rowGap: 8, marginBottom: 16, paddingBottom: 8, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 8, boxShadow: 'var(--ez-shadow-flat)' }}>
           {TABS.map(t => (
             <MainTabDropdown
               key={t.id}

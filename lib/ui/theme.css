@@ -1,0 +1,479 @@
+/* ============================================================================
+   EZER HRMS — theme
+   Trust blue on neutral grey. Light and dark.
+
+   WHY THIS FILE EXISTS, GIVEN THE APP USES INLINE STYLES
+
+   Every colour in the product comes from lib/ui/tokens.ts, and those tokens
+   resolve to the custom properties defined here rather than to literal hex.
+   So an inline style still reads `background: C.surface`, but what lands in
+   the DOM is `background: var(--ez-surface)` — which means one attribute on
+   <html> repaints all 88 files at once.
+
+   THE PALETTE
+
+   A clean, professional light theme: trust blue as the primary, neutral light
+   greys behind the cards, and high-contrast dark grey text.
+
+   Three things the previous emerald attempt got wrong, corrected here:
+
+     * the canvas was warm sand (#FAF8F4), which made white cards look dirty
+       rather than crisp. It is a neutral grey now, so white reads as white.
+     * body text was deep forest green (#0E2A22). Coloured text at that size
+       fights the interface. It is dark neutral grey now — #111827 for
+       headings, #374151 for body — which is where readability actually comes
+       from.
+     * the greys carried a warm bias, which muddied every surface. They are
+       true neutrals.
+
+   Semantic colour is kept clear of the brand: the brand is blue, so green
+   means only "done", amber only "waiting", red only "wrong". Nothing can be
+   confused with branding, which is the point of having a semantic set at all.
+   ============================================================================ */
+
+:root {
+  color-scheme: light;
+
+  /* Text.
+     Every value below clears WCAG AA (4.5:1) against BOTH white cards and the
+     canvas — measured, not eyeballed. The previous set did not: --ez-faint at
+     #9CA3AF was 2.54:1 on white, which is unreadable at the 10.5px the
+     uppercase card labels use, and it was the reason grey text was
+     disappearing. The whole scale moved one step darker.
+
+     ratios: white / canvas #F3F5F8 */
+  --ez-ink:           #111827;   /* 17.74 / 16.24 — headings, primary values  */
+  --ez-ink-soft:      #374151;   /* 10.31 /  9.44 — body text, table values   */
+  --ez-muted:         #4B5563;   /*  7.56 /  6.92 — labels, secondary lines   */
+  --ez-faint:         #626D80;   /*  5.23 /  4.78 — placeholders, metadata    */
+
+  /* Brand — trust blue */
+  --ez-brand:         #2563EB;   /* primary actions, active nav   */
+  --ez-brand-deep:    #1D4ED8;   /* pressed, gradient end         */
+  --ez-brand-tint:    #EFF6FF;   /* hover wash, selected rows     */
+  --ez-brand-edge:    #BFDBFE;   /* borders on tinted surfaces    */
+
+  /* PAGE HEADER BAND — DAY
+     The header is the DARKEST plane on the page, not the lightest. Cards are
+     white and sit above the canvas; the header sits below it. That gives three
+     distinct planes and a header that cannot be mistaken for a card.
+
+     Darkening the fill alone was not possible: --ez-faint and --ez-brand clear
+     AA on white by only 5.23 and 5.17, so any band deep enough to read as
+     highlighted pushed both under 4.5. The band carries its own darker text
+     tokens instead. Shadows read on a light ground, so elevation is a real
+     drop shadow here. */
+  --ez-head-from:   #E4EDFA;
+  --ez-head-to:     #CFDEF3;   /* 1.249 deeper than the canvas */
+  --ez-head-edge:   #B4CCEB;
+  --ez-head-muted:  #3D4757;   /* 6.88 on the deepest stop */
+  --ez-head-faint:  #4A5567;   /* 5.53 */
+  --ez-head-brand:  #1D4ED8;   /* 4.91 */
+  --ez-head-elev:   0 1px 2px rgba(15,23,42,.06);
+  /* Text that sits ON a saturated accent fill — a primary button, a filled
+     badge. White works in light because every accent is dark there. */
+  --ez-on-accent:     #FFFFFF;
+  /* Secondary text on an accent fill. There is very little room to dim text
+     on a saturated ground and stay legible — white at 66% on #2563EB is
+     3.14:1 — so these are the lowest opacities that still clear AA. */
+  --ez-on-accent-soft: rgba(255,255,255,.95);
+  --ez-on-accent-dim:  rgba(255,255,255,.94);
+
+  /* Avatar discs: dark initials on a pale tint of the person's own hue. */
+  --ez-avatar-tint-mix: 100%;
+  --ez-avatar-sat:      62%;
+  --ez-avatar-light:    28%;
+
+  /* Surfaces — neutral light greys, so white cards read as crisp */
+  --ez-surface:       #FFFFFF;
+  --ez-canvas:        #F3F5F8;   /* the page behind the cards     */
+  --ez-sunken:        #F3F4F6;   /* table heads, wells, disabled  */
+  --ez-line:          #E5E7EB;
+  --ez-line-strong:   #D1D5DB;
+
+  /* State — none of these is the brand colour.
+     #059669 was the other failure at 3.77:1; state text is often the smallest
+     text on a screen, so these are held to the same bar as body copy. */
+  --ez-positive:      #047857;   /*  5.48 / 5.02 */
+  --ez-positive-tint: #ECFDF5;
+  --ez-warning:       #B45309;   /*  5.02 / 4.60 */
+  --ez-warning-tint:  #FFFBEB;
+  --ez-critical:      #C0201F;   /*  5.44 / 4.98 */
+  --ez-critical-tint: #FEF2F2;
+  --ez-info:          #0369A1;   /*  5.93 / 5.43 */
+  --ez-info-tint:     #F0F9FF;
+
+  /* The navigation rail.
+     White, with a hairline separating it from the canvas — the lighter, more
+     open treatment most professional HR products use. The active item is a
+     tinted pill with a brand bar down its left edge rather than a solid slab:
+     on a white rail a filled block is heavier than one item deserves. */
+  --ez-rail:             #FFFFFF;
+  --ez-rail-text:        #111827;
+  /* Module names in the rail. railMuted (#4B5563 / #9CA3AF) is the ink for
+     secondary text, and reading it as "nav label" left twenty-seven module
+     names looking like captions next to their own coloured icons. These are
+     the primary thing on the rail and carry a primary ink.
+
+     Landed between two rejected extremes rather than picked from a scale.
+     #4B5563 (7.56:1) read as faded. #1F2937 (14.68:1) read as extremely
+     dark — twenty-seven near-black rows is a lot of mass for a column that
+     is meant to be glanced at. #414B5A is 8.83:1: a real step up from the
+     grey it replaced, nowhere near the weight of near-black.
+
+     Dark is deliberately NOT eased to match. #E5E7EB is bright text on a
+     dark ground, which is the opposite complaint, and dark mode carries
+     bright text without the same sense of mass. */
+  --ez-rail-item:        #414B5A;
+  --ez-rail-muted:       #4B5563;
+  --ez-rail-faint:       #626D80;
+  --ez-rail-line:        #E5E7EB;
+  --ez-rail-hover:       #F3F4F6;
+  --ez-rail-active-bg:   #EFF6FF;
+  --ez-rail-active-text: #1D4ED8;
+
+  /* Kept for anything still asking for an inverted surface. */
+  --ez-dark:          #111827;
+  --ez-dark-mid:      #16264A;   /* mid stop, so the sweep is visible across a wide block */
+  --ez-dark-accent:   #1F3A6B;   /* gradient end — as light as the 10px labels allow (4.74:1) */
+  --ez-dark-soft:     #1F2937;
+  --ez-on-dark:       #F9FAFB;
+  --ez-on-dark-muted: rgba(249,250,251,.78);
+  --ez-on-dark-faint: rgba(249,250,251,.58);
+  --ez-on-dark-line:  rgba(249,250,251,.10);
+  --ez-on-dark-hover: rgba(249,250,251,.08);
+
+  /* Elevation. Two layers throughout: a tight contact shadow plus a softer
+     cast one. A single blur reads as a glow; two read as height. */
+  --ez-shadow-flat:     0 1px 2px rgba(16,24,40,.05);
+  --ez-shadow-raised:   0 1px 2px rgba(16,24,40,.06), 0 4px 12px -4px rgba(16,24,40,.10);
+  --ez-shadow-floating: 0 2px 4px rgba(16,24,40,.06), 0 12px 28px -10px rgba(16,24,40,.16);
+  --ez-shadow-overlay:  0 4px 8px rgba(16,24,40,.08), 0 24px 56px -16px rgba(16,24,40,.22);
+  --ez-shadow-brand:    0 1px 2px rgba(29,78,216,.24), 0 8px 20px -6px rgba(37,99,235,.36);
+
+  /* Funnel ramp. A pipeline is ordered — Applied is not a different kind of
+     thing from Shortlisted, it is earlier — so the stages deepen rather than
+     each taking an unrelated hue. Six steps, then the semantic colours take
+     over for the outcomes. */
+  --ez-ramp-1: #BFDBFE;
+  --ez-ramp-2: #93C5FD;
+  --ez-ramp-3: #60A5FA;
+  --ez-ramp-4: #3B82F6;
+  --ez-ramp-5: #2563EB;
+  --ez-ramp-6: #1D4ED8;
+  --ez-ramp-1-fg: #1E3A8A;
+  --ez-ramp-2-fg: #1E40AF;
+  --ez-ramp-3-fg: #1D4ED8;
+  --ez-ramp-4-fg: #2054CE;
+  --ez-ramp-5-fg: #2563EB;
+  --ez-ramp-6-fg: #1D4ED8;
+
+  /* Grade pills. An ordered scale like the funnel, but it has to carry text,
+     so each step is a background/foreground PAIR that clears AA — the previous
+     violet ramp was unreadable in dark and marginal in light. */
+  --ez-grade-1-bg: #DBEAFE;  --ez-grade-1-fg: #1E3A8A;
+  --ez-grade-2-bg: #DFEDFE;  --ez-grade-2-fg: #1E40AF;
+  --ez-grade-3-bg: #E4F0FE;  --ez-grade-3-fg: #1D4ED8;
+  --ez-grade-4-bg: #E9F3FE;  --ez-grade-4-fg: #1F51CE;
+  --ez-grade-5-bg: #EEF6FF;  --ez-grade-5-fg: #2563EB;
+  --ez-grade-6-bg: #F1F5F9;  --ez-grade-6-fg: #475569;
+}
+
+/* ---------------------------------------------------------------------------
+   DARK
+
+   Neutral slate, not an inversion of the light theme. The brand lifts to
+   #60A5FA because #2563EB has too little contrast against a dark surface to
+   read as an action.
+
+   Applies when the user chose dark, or expressed no preference and the OS is
+   dark. An explicit light choice always wins.
+   --------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-ez-theme="light"]) {
+    color-scheme: dark;
+
+    --ez-ink:           #F3F4F6;
+    --ez-ink-soft:      #D1D5DB;
+    --ez-muted:         #9CA3AF;
+    --ez-faint:         #828C9B;   /* 4.75 on surface */
+
+    --ez-brand:         #60A5FA;
+    --ez-brand-deep:    #93C5FD;
+    --ez-brand-tint:    #172033;
+    --ez-brand-edge:    #24344F;
+
+    /* PAGE HEADER BAND — NIGHT
+       Not the day treatment inverted. In dark mode the cards are ALREADY
+       lighter than the canvas, so simply lightening the header makes it read
+       as one more card: at its lightest stop it is only 1.28 against a card,
+       which the eye does not reliably separate.
+
+       So night differentiates by HUE rather than brightness. The cards are
+       neutral grey at 30% saturation; this band is blue at 62%. That reads as
+       a distinct kind of surface at any size, where a brightness step alone
+       does not.
+
+       Elevation changes too: a drop shadow is invisible on a dark ground, so
+       the lift comes from an inset highlight along the top edge — the way a
+       raised surface actually catches light from above. */
+    --ez-head-from:   #1E2E4E;
+    --ez-head-to:     #141D31;
+    --ez-head-edge:   #2C4370;
+    --ez-head-muted:  #AAB4C2;   /* 6.44 on the lightest stop */
+    --ez-head-faint:  #99A4B4;   /* 5.35 */
+    --ez-head-brand:  #8CC0FC;   /* 7.11 */
+    --ez-head-elev:   inset 0 1px 0 rgba(255,255,255,.07);
+    /* In dark every accent LIGHTENS (#2563EB becomes #60A5FA), so white text
+       on a primary button drops to 2.54:1. It has to invert. */
+    --ez-on-accent:     #0D1117;
+    --ez-on-accent-soft: rgba(13,17,23,.92);
+    --ez-on-accent-dim:  rgba(13,17,23,.86);
+
+  /* Dark: a deep tint with lifted initials, not a bright disc punched into
+     a dark page. Verified at every hue — worst case 6.2:1. */
+  --ez-avatar-tint-mix: 14%;
+  --ez-avatar-sat:      58%;
+  --ez-avatar-light:    82%;
+
+    /* Dark: a deep tint with lifted initials, not a bright disc punched into
+       a dark page. Verified at every hue — worst case 6.2:1. */
+    --ez-avatar-tint-mix: 14%;
+    --ez-avatar-sat:      58%;
+    --ez-avatar-light:    82%;
+
+    --ez-surface:       #171B21;
+    --ez-canvas:        #0F1216;
+    --ez-sunken:        #14181E;
+    --ez-line:          #262C35;
+    --ez-line-strong:   #39414D;
+
+    --ez-positive:      #34D399;
+    --ez-positive-tint: #10241D;
+    --ez-warning:       #FBBF24;
+    --ez-warning-tint:  #251C0D;
+    --ez-critical:      #F87171;
+    --ez-critical-tint: #2A1414;
+    --ez-info:          #7DD3FC;
+    --ez-info-tint:     #10222B;
+
+    /* On dark the rail is the surface colour, one step above the canvas —
+       separation comes from that difference rather than from a border. */
+    --ez-rail:             #171B21;
+    --ez-rail-text:        #F3F4F6;
+    --ez-rail-item:        #E5E7EB;
+    --ez-rail-muted:       #9CA3AF;
+    --ez-rail-faint:       #828C9B;
+    --ez-rail-line:        #262C35;
+    --ez-rail-hover:       #1F242C;
+    --ez-rail-active-bg:   #172033;
+    --ez-rail-active-text: #93C5FD;
+
+    --ez-dark:          #0B0E12;
+    --ez-dark-mid:      #131F3A;
+    --ez-dark-accent:   #1B3157;
+    --ez-dark-soft:     #141920;
+
+    /* Depth on a dark ground comes from the surface being lighter than the
+       canvas, not from cast shadow — so these stay shallow and cards do not
+       sit in visible black halos. */
+    --ez-shadow-flat:     0 1px 2px rgba(0,0,0,.34);
+    --ez-shadow-raised:   0 1px 2px rgba(0,0,0,.38), 0 4px 12px -4px rgba(0,0,0,.44);
+    --ez-shadow-floating: 0 2px 4px rgba(0,0,0,.42), 0 12px 28px -10px rgba(0,0,0,.55);
+    --ez-shadow-overlay:  0 4px 8px rgba(0,0,0,.48), 0 24px 56px -16px rgba(0,0,0,.62);
+    --ez-shadow-brand:    0 1px 2px rgba(0,0,0,.4), 0 8px 20px -6px rgba(96,165,250,.30);
+
+    /* Reversed on dark: the early stages must stay visible against a dark
+       ground, so the ramp brightens as it advances instead of darkening. */
+    --ez-ramp-1: #6E9FD8;
+    --ez-ramp-2: #7DAAE0;
+    --ez-ramp-3: #8CB5E8;
+    --ez-ramp-4: #9BC0F0;
+    --ez-ramp-5: #AACBF7;
+    --ez-ramp-6: #B9D6FF;
+    --ez-ramp-1-fg: #6E9FD8;
+    --ez-ramp-2-fg: #7DAAE0;
+    --ez-ramp-3-fg: #8CB5E8;
+    --ez-ramp-4-fg: #9BC0F0;
+    --ez-ramp-5-fg: #AACBF7;
+    --ez-ramp-6-fg: #B9D6FF;
+
+    --ez-grade-1-bg: #1E3350;      --ez-grade-1-fg: #BFDBFE;
+    --ez-grade-2-bg: #1C3049;      --ez-grade-2-fg: #A9CEFC;
+    --ez-grade-3-bg: #1A2C43;      --ez-grade-3-fg: #93C5FD;
+    --ez-grade-4-bg: #19283C;      --ez-grade-4-fg: #86BAF8;
+    --ez-grade-5-bg: #172436;      --ez-grade-5-fg: #7BAFF4;
+    --ez-grade-6-bg: #1C2129;      --ez-grade-6-fg: #9AA6B5;
+  }
+}
+
+/* The toggle must win in both directions: dark on a light OS, light on a dark
+   OS. Redefining under the attribute selector does that. */
+:root[data-ez-theme="dark"] {
+  color-scheme: dark;
+
+  --ez-ink:           #F3F4F6;
+  --ez-ink-soft:      #D1D5DB;
+  --ez-muted:         #9CA3AF;
+  --ez-faint:         #828C9B;   /* 4.75 on surface */
+
+  --ez-brand:         #60A5FA;
+  --ez-brand-deep:    #93C5FD;
+  --ez-brand-tint:    #172033;
+  --ez-brand-edge:    #24344F;
+
+    /* PAGE HEADER BAND — NIGHT
+       Not the day treatment inverted. In dark mode the cards are ALREADY
+       lighter than the canvas, so simply lightening the header makes it read
+       as one more card: at its lightest stop it is only 1.28 against a card,
+       which the eye does not reliably separate.
+
+       So night differentiates by HUE rather than brightness. The cards are
+       neutral grey at 30% saturation; this band is blue at 62%. That reads as
+       a distinct kind of surface at any size, where a brightness step alone
+       does not.
+
+       Elevation changes too: a drop shadow is invisible on a dark ground, so
+       the lift comes from an inset highlight along the top edge — the way a
+       raised surface actually catches light from above. */
+    --ez-head-from:   #1E2E4E;
+    --ez-head-to:     #141D31;
+    --ez-head-edge:   #2C4370;
+    --ez-head-muted:  #AAB4C2;   /* 6.44 on the lightest stop */
+    --ez-head-faint:  #99A4B4;   /* 5.35 */
+    --ez-head-brand:  #8CC0FC;   /* 7.11 */
+    --ez-head-elev:   inset 0 1px 0 rgba(255,255,255,.07);
+  --ez-on-accent:     #0D1117;
+  --ez-on-accent-soft: rgba(13,17,23,.92);
+  --ez-on-accent-dim:  rgba(13,17,23,.86);
+
+  /* Dark: a deep tint with lifted initials, not a bright disc punched into
+     a dark page. Verified at every hue — worst case 6.2:1. */
+  --ez-avatar-tint-mix: 14%;
+  --ez-avatar-sat:      58%;
+  --ez-avatar-light:    82%;
+
+  --ez-surface:       #171B21;
+  --ez-canvas:        #0F1216;
+  --ez-sunken:        #14181E;
+  --ez-line:          #262C35;
+  --ez-line-strong:   #39414D;
+
+  --ez-positive:      #34D399;
+  --ez-positive-tint: #10241D;
+  --ez-warning:       #FBBF24;
+  --ez-warning-tint:  #251C0D;
+  --ez-critical:      #F87171;
+  --ez-critical-tint: #2A1414;
+  --ez-info:          #7DD3FC;
+  --ez-info-tint:     #10222B;
+
+  --ez-rail:             #171B21;
+  --ez-rail-text:        #F3F4F6;
+  --ez-rail-item:        #E5E7EB;
+  --ez-rail-muted:       #9CA3AF;
+  --ez-rail-faint:       #828C9B;
+  --ez-rail-line:        #262C35;
+  --ez-rail-hover:       #1F242C;
+  --ez-rail-active-bg:   #172033;
+  --ez-rail-active-text: #93C5FD;
+
+  --ez-dark:          #0B0E12;
+  --ez-dark-mid:      #131F3A;
+  --ez-dark-accent:   #1B3157;
+  --ez-dark-soft:     #141920;
+
+  --ez-shadow-flat:     0 1px 2px rgba(0,0,0,.34);
+  --ez-shadow-raised:   0 1px 2px rgba(0,0,0,.38), 0 4px 12px -4px rgba(0,0,0,.44);
+  --ez-shadow-floating: 0 2px 4px rgba(0,0,0,.42), 0 12px 28px -10px rgba(0,0,0,.55);
+  --ez-shadow-overlay:  0 4px 8px rgba(0,0,0,.48), 0 24px 56px -16px rgba(0,0,0,.62);
+  --ez-shadow-brand:    0 1px 2px rgba(0,0,0,.4), 0 8px 20px -6px rgba(96,165,250,.30);
+
+  --ez-ramp-1: #6E9FD8;
+  --ez-ramp-2: #7DAAE0;
+  --ez-ramp-3: #8CB5E8;
+  --ez-ramp-4: #9BC0F0;
+  --ez-ramp-5: #AACBF7;
+  --ez-ramp-6: #B9D6FF;
+  --ez-ramp-1-fg: #6E9FD8;
+  --ez-ramp-2-fg: #7DAAE0;
+  --ez-ramp-3-fg: #8CB5E8;
+  --ez-ramp-4-fg: #9BC0F0;
+  --ez-ramp-5-fg: #AACBF7;
+  --ez-ramp-6-fg: #B9D6FF;
+
+  --ez-grade-1-bg: #1E3350;    --ez-grade-1-fg: #BFDBFE;
+  --ez-grade-2-bg: #1C3049;    --ez-grade-2-fg: #A9CEFC;
+  --ez-grade-3-bg: #1A2C43;    --ez-grade-3-fg: #93C5FD;
+  --ez-grade-4-bg: #19283C;    --ez-grade-4-fg: #86BAF8;
+  --ez-grade-5-bg: #172436;    --ez-grade-5-fg: #7BAFF4;
+  --ez-grade-6-bg: #1C2129;    --ez-grade-6-fg: #9AA6B5;
+}
+
+/* The viewport paints its own ground behind the app; without this the body
+   borrows the browser default and the theme only half-applies. */
+html, body {
+  background: var(--ez-canvas);
+  color: var(--ez-ink);
+}
+
+/* THEME SWITCHING
+   ================================================================
+   This used to be a transition on `:root[data-ez-theme] *` — every element on
+   the page easing three colour properties at once. Measured on the employees
+   page that is 772 of 798 nodes animating simultaneously, and the frame times
+   show it: median 18ms, p95 60ms, worst 80ms, ten frames over 20ms in a
+   600ms window against a 16.7ms budget. That is the jitter.
+
+   It was also incomplete in a way you can see. background-image is not
+   interpolatable, so the header band's gradient jumped; fill, stroke and
+   box-shadow were not listed, so 36 SVG nodes and 62 shadowed elements
+   snapped while everything around them faded. The switch came apart into
+   two events instead of reading as one.
+
+   And it was scoped to [data-ez-theme], so choosing "System" — which removes
+   the attribute — had no transition at all.
+
+   A view transition replaces all of it. The browser snapshots the page before
+   and after and cross-fades two bitmaps on the compositor, so the cost is
+   independent of how many nodes changed, and gradients, SVG and shadows are
+   included for free because they are just pixels in the snapshot. */
+
+@keyframes ezThemeIn { from { opacity: 0 } to { opacity: 1 } }
+
+/* The old snapshot simply stays put while the new one fades in over it.
+   Chrome's default is fade-out then fade-in, which briefly shows the page
+   ground between the two and reads as a flash on a full-page colour change. */
+::view-transition-old(root) {
+  animation: none;
+  opacity: 1;
+}
+::view-transition-new(root) {
+  animation: ezThemeIn .3s cubic-bezier(.4, 0, .2, 1) both;
+}
+
+/* Fallback where view transitions are unavailable. Same properties, but the
+   class is added for the duration of the switch and taken off again — as a
+   permanent rule it would put a 280ms lag on every hover and selection in the
+   product, which is what the old rule did. */
+:root.ez-theming,
+:root.ez-theming *,
+:root.ez-theming *::before,
+:root.ez-theming *::after {
+  transition: background-color .28s ease, border-color .28s ease,
+              color .28s ease, box-shadow .28s ease,
+              fill .28s ease, stroke .28s ease !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) { animation: none }
+  :root.ez-theming,
+  :root.ez-theming * { transition: none !important }
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-ez-theme] *,
+  :root[data-ez-theme] *::before,
+  :root[data-ez-theme] *::after { transition: none !important; }
+}

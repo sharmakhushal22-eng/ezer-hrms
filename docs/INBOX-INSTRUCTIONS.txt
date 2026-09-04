@@ -1,0 +1,212 @@
+================================================================================
+ESS INBOX — DATABASE INSTRUCTIONS
+Prepared 4 September 2026 · for Nayan Ahuja
+Branch TusharPanwar
+================================================================================
+
+ONE FILE TO RUN.
+
+    migrations/088_broadcast_channel.sql        <-- the only one pending
+
+The rest of the inbox is already in the database. Copies are in applied/ so
+you can diff them against what is live, not because they need running.
+
+Nothing here has been run by me. Nobody but you applies schema changes to this
+project.
+
+
+--------------------------------------------------------------------------------
+1. WHAT IS ALREADY APPLIED — measured 4 September
+--------------------------------------------------------------------------------
+
+    075_ess_notification_catalogue   ess_notifications.priority, .read_at and
+                                     .actor_employee_id all selectable —
+                                     three columns only 075 adds
+
+    080_ess_inbox                    inbox_desks (5 rows), inbox_desk_agents
+                                     (16), inbox_policy (1), and the four
+                                     conversation tables
+
+Verified by probing, not assumed. The inbox has 5 staffed desks, a policy row
+set to GROUP reach, and 398 active employees who can use it.
+
+A NOTE ON 075. My 3 September handover listed it as pending. It is not. I had
+been probing for a table called ess_notification_catalogue, which no migration
+creates — the filename says catalogue, but the file adds four columns to
+ess_notifications and backfills them. Corrected in the 4 September bundle.
+
+
+--------------------------------------------------------------------------------
+2. NOT APPLIED
+--------------------------------------------------------------------------------
+
+    088_broadcast_channel            ess_broadcast_publishers,
+                                     ess_broadcast_responses,
+                                     ess_broadcast_reads, plus four columns
+                                     on ess_announcements
+
+    087_social_and_inbox             the Wall of Fame inbox group. It ships in
+                                     the WALL OF FAME bundle, not this one,
+                                     because it depends on 084 and belongs
+                                     with the rest of that module. Listed here
+                                     only so you know why the third inbox
+                                     group is dark until you run it.
+
+
+--------------------------------------------------------------------------------
+3. RUNNING 088
+--------------------------------------------------------------------------------
+
+It depends on ess_announcements (021) and ess_notifications (021 + 075), both
+applied, so it can go in on its own with nothing before it.
+
+Safe to run twice: ADD COLUMN IF NOT EXISTS, CREATE TABLE IF NOT EXISTS,
+CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS before each CREATE TRIGGER.
+
+It seeds nothing and needs no follow-up call. The channel is empty until
+somebody is given permission to publish and writes something — which is the
+correct empty, not a missing seed.
+
+AFTER IT RUNS, ONE THING HAS TO HAPPEN BEFORE THE CHANNEL WORKS:
+
+    -- nobody can publish until they are on the list, and the database
+    -- enforces that with a trigger, not just the UI
+    insert into ess_broadcast_publishers (company_id, employee_id, granted_by, grant_reason)
+    values ('<company_uuid>', '<employee_uuid>', '<your_employee_uuid>', 'Head of HR');
+
+An admin can then maintain the list from the inbox setup screen. Until at
+least one person is on it, the compose screen says so plainly rather than
+offering a button that fails.
+
+
+--------------------------------------------------------------------------------
+4. DO NOT GRANT anon ON THE INBOX TABLES
+--------------------------------------------------------------------------------
+
+This corrects something I sent you on 4 September.
+
+I reported that inbox_conversations and inbox_messages return
+
+    42501 -- permission denied for table inbox_conversations
+    hint: GRANT SELECT ON public.inbox_conversations TO anon;
+
+and offered three options, one of which was to grant it. IGNORE THAT. I have
+since checked the code: NO browser component reads those tables, and none
+should. Every path goes through /api/ess/inbox/* on the server with the
+service role.
+
+The missing grant is the correct posture. Granting anon SELECT would take
+tables that are currently unreachable from the browser and make every private
+conversation in the company readable by anyone who opened dev tools. The anon
+key ships in every page load.
+
+So: nothing to do here. The 42501 is the system working.
+
+
+--------------------------------------------------------------------------------
+5. THE THING THAT WAS ACTUALLY BROKEN, AND IT WAS NOT THE DATABASE
+--------------------------------------------------------------------------------
+
+Nobody could send a message. inbox_conversations, inbox_participants and
+inbox_messages all held ZERO rows — not one message had ever been sent.
+
+It was not a migration. Every layer of the database was healthy:
+inbox_can_message() returns true, ess_menu resolves, and a full insert
+(conversation, participants, message) succeeds end to end when driven
+directly.
+
+The fault was one line in lib/ess/session.ts — a ternary with null on both
+branches, left as a placeholder for reading the request body. Reads carry the
+employee id in the query string and writes carry it in the body; only the
+query was ever read. So EVERY write in the ESS product returned 400 while
+every screen loaded perfectly.
+
+Fixed on the branch. No migration, nothing for you to run. Mentioned because
+if you look at those tables and see zero rows, that is why — and because the
+fix means they will start filling up now.
+
+
+--------------------------------------------------------------------------------
+6. A DECISION I NEED FROM YOU — RLS ON 088
+--------------------------------------------------------------------------------
+
+088 creates three tables and I have NOT written policies for them.
+
+ess_broadcast_responses is the one that matters. A response is private to two
+people: the employee who wrote it and the publisher it was sent to. The EZER
+house default
+
+    FOR ALL TO anon, authenticated USING (true) WITH CHECK (true)
+
+would make every private response readable by all 400 employees, which is the
+exact opposite of what the feature promises the person typing it.
+
+What I would write, if you tell me to:
+
+    ess_broadcast_responses   SELECT where the current employee is author_id
+                              or recipient_id; INSERT where author_id is the
+                              current employee
+    ess_broadcast_publishers  SELECT to everybody — the list is not secret,
+                              it says who speaks for the company; writes to
+                              admins only
+    ess_broadcast_reads       the employee's own rows only
+
+That needs a reliable "who is the current employee" in this project's Supabase
+setup, and you know how that resolves here. Tell me and I will write it.
+
+Until then the tables have no policies. Depending on how the project is
+configured that means either no access or full access — which is exactly why
+it should not be guessed at from outside.
+
+
+--------------------------------------------------------------------------------
+7. HOW TO TELL IT WORKED
+--------------------------------------------------------------------------------
+
+In the database:
+
+    select count(*) from ess_broadcast_publishers;   -- 0 until you add one
+    select column_name from information_schema.columns
+     where table_name = 'ess_announcements'
+       and column_name in ('is_broadcast','priority','is_pinned',
+                           'source_department_id');   -- expect 4 rows
+
+In the app:
+
+    ESS portal -> Inbox     a third group, "Broadcasts", beside Messages and
+                            Wall of Fame. Empty until something is published,
+                            which is correct.
+
+    Compose                 refuses with a clear message until somebody is on
+                            the publisher list. That is the trigger, not a bug.
+
+If the group still shows "not switched on yet" after a clean run, PostgREST's
+schema cache has not caught up. It refreshes shortly, or reload it from the
+dashboard.
+
+
+--------------------------------------------------------------------------------
+8. IF SOMETHING GOES WRONG
+--------------------------------------------------------------------------------
+
+  "Employee X is not on the broadcast publisher list for this company"
+      The trigger doing its job. Add them — section 3.
+
+  "A broadcast must record who published it"
+      published_by was null. The UI always sets it; a manual INSERT must too.
+
+  "Announcement % has no publisher, so there is nobody to respond to"
+      Somebody responded to a row with a null published_by. Only reachable by
+      hand-inserting an announcement.
+
+  42501 on an inbox table
+      Expected, and correct. Section 4.
+
+  Anything you would rather not decide alone
+      Send it to me with the error text.
+
+================================================================================
+HOW-IT-WORKS.md explains the module — the three conversation kinds, why a desk
+is a first-class row, the reach modes, and what is deliberately not built.
+MANIFEST.txt lists a sha256 for every file; check it before you run anything.
+================================================================================

@@ -8,7 +8,7 @@
 // Anything not built yet renders a labelled placeholder naming the module it waits on,
 // rather than a screen that looks finished and does nothing.
 // All sub-components are defined OUTSIDE the parent (no focus-loss).
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import {
   loadEmployeeDetail, updateEmployeePhoto, loadDirectory, loadNotifications, markNotification, markAllNotifications,
   loadServiceRequests, createServiceRequest, loadLetterRequests, createLetterRequest,
@@ -18,27 +18,52 @@ import {
   type ServiceRequest, type LetterRequest, type Announcement, type Kudo,
 } from '@/lib/supabase-ess'
 import {
-  loadMonthlyAttendance, loadDayPunches, loadRegularisationRequests, submitRegularisation,
+  loadMonthlyAttendance, loadDayPunches, loadRegularisationRequests,
+  submitRegularisation, submitRegularisationBulk,
   resolveDay, computeSummary,
   type MonthlyData, type DayPunch, type RegularisationRequest,
 } from '@/lib/supabase-attendance'
 import * as HR from '@/lib/employees/hr-actions'
+import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
+import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
+import Inbox from './Inbox'
+import InboxTabs from './InboxTabs'
 import { supabase } from '@/lib/supabase'
+import { essAuthHeaders } from '@/lib/ess-session-client'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
 import FunZone from '@/components/ess/FunZone'
 import FlexiClaims from '@/components/ess/FlexiClaims'
 import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
 import InvestmentProofs from '@/components/ess/InvestmentProofs'
+import TravelClaims from '@/components/ess/TravelClaims'
+import Performance from '@/components/ess/Performance'
+import Celebrations from '@/components/ess/Celebrations'
+import WallOfFame from '@/components/ess/WallOfFame'
+import Profile360 from '@/components/profile/Profile360'
+import { ThemeToggle } from '@/lib/ui/ThemeToggle'
+import { Logo, LogoStyles } from '@/lib/ui/Logo'
+
+import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
+
+// The design system — see lib/ui/tokens.ts. This file has no colliding names,
+// so the tokens come in under their own.
+import {
+  C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle, UIKeyframes,
+  IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
+  IconLetters, IconReports, IconRecruitment, IconAi, IconBell,
+} from '@/lib/ui'
+import { useDismiss } from '@/lib/ui/useDismiss'
 
 // ── Styles ─────────────────────────────────────────────────────────
+// Bound to the design system. See lib/ui/tokens.ts.
 const T = {
-  card:  { background:'#FFFFFF', borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  label: { fontSize:11, fontWeight:600, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 },
-  input: { width:'100%', padding:'9px 11px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  btnP:  { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:'#7C3AED', color:'#fff' } as React.CSSProperties,
-  btnO:  { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#6D28D9' } as React.CSSProperties,
-  section: { fontSize:12, fontWeight:600, color:'#7C3AED', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
+  card:  { background:C.surface, borderRadius:R.lg, border:`1px solid ${C.line}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
+  label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
+  input: { ...inputStyle() } as React.CSSProperties,
+  btnP:  { height:36, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.brandDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, boxShadow:E.brand } as React.CSSProperties,
+  btnO:  { height:34, padding:'0 13px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat } as React.CSSProperties,
+  section: { ...eyebrow, marginBottom:S.md, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
 }
 const fmt = (s?: string|null) => s ? new Date(s).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
 const fmtDT = (s?: string|null) => s ? new Date(s).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : '—'
@@ -53,11 +78,11 @@ const QUOTES = [
 
 function StatusPill({ status }: { status: string }) {
   const map: Record<string,[string,string]> = {
-    PENDING:['#FFFBEB','#B45309'], IN_REVIEW:['#EFF6FF','#1D4ED8'], APPROVED:['#ECFDF5','#059669'],
-    REJECTED:['#FEF2F2','#DC2626'], COMPLETED:['#F0FDF4','#16A34A'], REQUESTED:['#FFFBEB','#B45309'],
-    GENERATED:['#ECFDF5','#059669'],
+    PENDING:[C.warningTint,C.warning], IN_REVIEW:[C.infoTint,C.info], APPROVED:[C.positiveTint,C.positive],
+    REJECTED:[C.criticalTint,C.critical], COMPLETED:[C.positiveTint,C.positive], REQUESTED:[C.warningTint,C.warning],
+    GENERATED:[C.positiveTint,C.positive],
   }
-  const [bg,c] = map[status] || ['#F3F0FF','#6D28D9']
+  const [bg,c] = map[status] || [C.brandTint,C.brandDeep]
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{status}</span>
 }
 
@@ -67,12 +92,12 @@ function TransferAckCard({ empId, onAck }: { empId: string; onAck: () => void })
   useEffect(() => { HR.getPendingTransfers(empId).then(setTransfers) }, [empId])
   if (!transfers.length) return null
   return (<>{transfers.map(tr => (
-    <div key={tr.id} style={{ background:'#FAEEDA', border:'1px solid #EF9F27', borderRadius:10, padding:'12px 16px', marginBottom:10 }}>
-      <div style={{ fontSize:13, fontWeight:600, color:'#633806' }}>🔄 Transfer Letter — action required</div>
-      <div style={{ fontSize:11, color:'#854F0B', marginTop:3 }}>You are being transferred, effective {tr.effective_date}.</div>
+    <div key={tr.id} style={{ background: C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10, padding:'12px 16px', marginBottom:10 }}>
+      <div style={{ fontSize:13, fontWeight:600, color: C.warning }}>Transfer Letter — action required</div>
+      <div style={{ fontSize:11, color: C.warning, marginTop:3 }}>You are being transferred, effective {tr.effective_date}.</div>
       <div style={{ display:'flex', gap:8, marginTop:10 }}>
-        {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:'#fff', border:'1px solid #EF9F27', borderRadius:7, fontSize:11, color:'#633806', textDecoration:'none' }}>📄 View Letter</a>}
-        <button onClick={async () => { await HR.acknowledgeTransfer(tr.id); setTransfers(t=>t.filter(x=>x.id!==tr.id)); onAck() }} style={{ padding:'7px 14px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:7, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>✓ Acknowledge & Accept</button>
+        {tr.letter_url && <a href={tr.letter_url} target="_blank" rel="noreferrer" style={{ padding:'7px 14px', background:C.surface, border: `1px solid ${C.warningTint}`, borderRadius:7, fontSize:11, color: C.warning, textDecoration:'none' }}>View Letter</a>}
+        <button onClick={async () => { await HR.acknowledgeTransfer(tr.id); setTransfers(t=>t.filter(x=>x.id!==tr.id)); onAck() }} style={{ padding:'7px 14px', background:C.brand, color:C.onAccent, border:'none', borderRadius:7, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Acknowledge & Accept</button>
       </div>
     </div>
   ))}</>)
@@ -120,14 +145,21 @@ function PunchButton({ employeeId }: { employeeId: string }) {
 
   const isOut = punchedToday === true
   return (
-    <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? '#DC2626' : '#059669'}` }}>
-      <div style={T.section}>🕐 Attendance</div>
+    // The accent tracks the button it frames. Left green, it would be the
+    // only green element on a card whose primary action is now brand blue.
+    <div style={{ ...T.card, borderLeft: `3px solid ${isOut ? C.critical : C.brand}` }}>
+      <div style={T.section}>Attendance</div>
+      {/* Punch In is the primary action of this page, so it takes the primary
+          colour the rest of the product uses. It was C.positive, the only green
+          primary button in the app. C.onAccent already flips per theme
+          (#FFFFFF light, #0D1117 dark), so the label stays legible on the
+          lighter dark-mode brand fill. */}
       <button onClick={punch} disabled={busy || punchedToday === null}
-        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: '#fff', background: isOut ? '#DC2626' : '#059669', opacity: (busy || punchedToday === null) ? .6 : 1 }}>
-        {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? '🔴 Punch Out' : '🟢 Punch In')}
+        style={{ width: '100%', padding: 14, borderRadius: 10, border: 'none', cursor: (busy || punchedToday === null) ? 'wait' : 'pointer', fontSize: 16, fontWeight: 700, color: C.onAccent, background: isOut ? C.critical : C.brand, opacity: (busy || punchedToday === null) ? .6 : 1 }}>
+        {punchedToday === null ? 'Loading…' : busy ? '…' : (isOut ? 'Punch Out' : 'Punch In')}
       </button>
-      {msg && <div style={{ fontSize: 12, color: msg.startsWith('✓') ? '#059669' : '#DC2626', marginTop: 8, textAlign: 'center' }}>{msg}</div>}
-      <div style={{ fontSize: 11, color: '#9CA3AF', marginTop: 6, textAlign: 'center' }}>{isOut ? 'Punched in today · resets to “Punch In” at 12 AM.' : 'Tap to punch in for the day.'}</div>
+      {msg && <div style={{ fontSize: 12, color: msg.startsWith('') ? C.positive : C.critical, marginTop: 8, textAlign: 'center' }}>{msg}</div>}
+      <div style={{ fontSize: 11, color: C.faint, marginTop: 6, textAlign: 'center' }}>{isOut ? 'Punched in today · resets to “Punch In” at 12 AM.' : 'Tap to punch in for the day.'}</div>
     </div>
   )
 }
@@ -171,19 +203,158 @@ function EditProfileModal({ emp, onClose, onSaved, notify }: { emp: EmployeeDeta
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div style={{ ...T.card, maxWidth:380, width:'100%', marginBottom:0 }} onClick={e => e.stopPropagation()}>
-        <div style={T.section}>✏️ Edit Profile Picture</div>
+        <div style={T.section}>Edit Profile Picture</div>
         <div style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:12 }}>
-          <div style={{ width:120, height:120, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, fontWeight:700 }}>
+          <div style={{ width:120, height:120, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:34, fontWeight:700 }}>
             {preview ? <img src={preview} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}
           </div>
-          <label style={{ ...T.btnO, cursor:'pointer' }}>📷 Choose photo<input type="file" accept="image/*" style={{ display:'none' }} onChange={onFile} /></label>
-          {preview && <button onClick={() => setPreview(null)} style={{ ...T.btnO, color:'#DC2626', borderColor:'#FCA5A5' }}>Remove photo</button>}
+          <label style={{ ...T.btnO, cursor:'pointer' }}>Choose photo<input type="file" accept="image/*" style={{ display:'none' }} onChange={onFile} /></label>
+          {preview && <button onClick={() => setPreview(null)} style={{ ...T.btnO, color:C.critical, borderColor: C.criticalTint }}>Remove photo</button>}
         </div>
         <div style={{ display:'flex', gap:10, marginTop:16 }}>
           <button onClick={onClose} style={{ ...T.btnO, flex:1 }}>Cancel</button>
           <button onClick={save} disabled={busy} style={{ ...T.btnP, flex:1, opacity: busy?.6:1 }}>{busy ? 'Saving…' : 'Save'}</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Where the employee's travel claims currently sit.
+ *
+ * A claim leaves the employee's hands and then goes quiet — the only way to
+ * find out where it had reached was to open Travel Claims and read a status
+ * word. This puts the chain on the dashboard as a stepper, so "who has it now"
+ * is answerable at a glance, and shows the wait in days, because that is the
+ * actual question behind asking.
+ *
+ * The steps are derived from each claim's own status rather than assumed, so
+ * this stays correct whether the company routes through a reporting manager,
+ * an HR head, both, or neither.
+ */
+const CLAIM_STEP: Record<string, { step: number; label: string; tone: string }> = {
+  DRAFT:           { step: 0, label: 'Draft',              tone: C.faint },
+  SUBMITTED:       { step: 1, label: 'Submitted',          tone: C.warning },
+  PENDING_RM:      { step: 1, label: 'With your manager',  tone: C.warning },
+  PENDING_HR:      { step: 2, label: 'With HR',            tone: C.warning },
+  PENDING_FINANCE: { step: 3, label: 'With Finance',       tone: C.brandDeep },
+  APPROVED:        { step: 4, label: 'Approved, awaiting payment', tone: C.positive },
+  PAID:            { step: 5, label: 'Paid',               tone: C.positive },
+  SENT_BACK:       { step: 1, label: 'Sent back to you',   tone: C.critical },
+  REJECTED:        { step: 0, label: 'Rejected',           tone: C.critical },
+}
+
+function ClaimStepper({ status }: { status: string }) {
+  const here = CLAIM_STEP[status]?.step ?? 0
+  const done = status === 'PAID'
+  const dead = status === 'REJECTED' || status === 'SENT_BACK'
+  const steps = ['Raised', 'Manager', 'Finance', 'Paid']
+  const reached = [1, 2, 4, 5]   // status step at which each label is satisfied
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginTop: 8 }}>
+      {steps.map((label, i) => {
+        const on = !dead && here >= reached[i]
+        const colour = dead ? C.criticalTint : on ? (done ? C.positive : C.brand) : C.line
+        return (
+          <div key={label} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : '0 0 auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+              <div style={{ width: 15, height: 15, borderRadius: '50%', background: on ? colour: C.surface,
+                            border: `2px solid ${colour}`, display: 'flex', alignItems: 'center',
+                            justifyContent: 'center', fontSize: 8, color: C.onAccent, fontWeight: 700 }}>
+                {on ? '' : ''}
+              </div>
+              <span style={{ fontSize: 9, fontWeight: 600, color: on ? colour: C.line,
+                             whiteSpace: 'nowrap' }}>{label}</span>
+            </div>
+            {i < steps.length - 1 && (
+              <div style={{ flex: 1, height: 2, margin: '0 4px', marginBottom: 13,
+                            background: !dead && here >= reached[i + 1] ? colour : C.line }} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function TravelClaimStatus({ emp, go }: { emp: EmployeeDetail; go: (k: string) => void }) {
+  const [claims, setClaims] = useState<any[] | null>(null)
+
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      try {
+        // No ESS token means this is the dashboard preview; fall back to the
+        // dashboard session so an admin previewing a portal still sees it.
+        let headers: Record<string, string> = essAuthHeaders()
+        if (!headers.Authorization) {
+          const { data } = await supabase.auth.getSession()
+          const t = data?.session?.access_token
+          headers = t ? { Authorization: `Bearer ${t}` } : {}
+        }
+        const r = await fetch(`/api/travel/claims?employee_id=${emp.id}`, { headers })
+        if (live) setClaims(r.ok ? ((await r.json()).claims ?? []) : [])
+      } catch { if (live) setClaims([]) }
+    })()
+    return () => { live = false }
+  }, [emp.id])
+
+  if (claims === null || claims.length === 0) return null
+
+  const open = claims.filter(c => !['PAID', 'REJECTED'].includes(c.status))
+  const show = (open.length ? open : claims).slice(0, 3)
+  const owed = open.reduce((s, c) => s + (Number(c.total_claimed) || 0), 0)
+  const daysSince = (d: string | null) =>
+    d ? Math.max(0, Math.round((Date.now() - new Date(d).getTime()) / 86400000)) : null
+
+  return (
+    <div style={T.card}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
+        <div style={T.section}>My Travel Claims</div>
+        <button onClick={() => go('claims')} style={{ ...T.btnO, padding: '5px 11px', fontSize: 12 }}>
+          Open
+        </button>
+      </div>
+      {open.length > 0 && (
+        <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>
+          ₹{Math.round(owed).toLocaleString('en-IN')} across {open.length} claim
+          {open.length === 1 ? '' : 's'} still moving through approval
+        </div>
+      )}
+
+      {show.map(c => {
+        const st = CLAIM_STEP[c.status] ?? { label: c.status, tone: C.muted }
+        const waited = daysSince(c.submitted_at)
+        return (
+          <div key={c.id} style={{ padding: '10px 0', borderTop: `1px solid ${C.brandEdge}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          gap: 8, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>{c.claim_no}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>
+                ₹{Math.round(Number(c.total_claimed) || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: st.tone }}>● {st.label}</span>
+              {waited != null && !['PAID', 'REJECTED'].includes(c.status) && (
+                <span style={{ fontSize: 11, color: waited > 5 ? C.warning : C.faint }}>
+                  {waited === 0 ? 'submitted today' : `waiting ${waited} day${waited === 1 ? '' : 's'}`}
+                </span>
+              )}
+            </div>
+            <ClaimStepper status={c.status} />
+          </div>
+        )
+      })}
+
+      {claims.length > show.length && (
+        <div style={{ fontSize: 11, color: C.faint, marginTop: 8 }}>
+          + {claims.length - show.length} more in Travel Claims
+        </div>
+      )}
     </div>
   )
 }
@@ -202,86 +373,98 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 
   const h = new Date().getHours()
   const greet = h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : h < 21 ? 'Good Evening' : 'Working late'
-  const emoji = h < 12 ? '☀️' : h < 17 ? '🌤️' : h < 21 ? '🌆' : '🌙'
+  const emoji = h < 12 ? '' : h < 17 ? '' : h < 21 ? '' : ''
   const quote = QUOTES[new Date().getDate() % QUOTES.length]
   const tenureYrs = emp.group_doj ? Math.floor((Date.now() - new Date(emp.group_doj).getTime()) / (365.25*24*3600*1000)) : 0
   const dob = emp.date_of_birth ? new Date(emp.date_of_birth) : null
   const bdaySoon = dob ? (() => { const n = new Date(); const t = new Date(n.getFullYear(), dob.getMonth(), dob.getDate()); const d = Math.ceil((t.getTime() - n.getTime())/86400000); return d >= -1 && d <= 30 ? d : null })() : null
 
   const Stat = ({ label, value, color }: { label: string; value: string; color?: string }) => (
-    <div style={T.card}><div style={{ fontSize:11, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' }}>{label}</div><div style={{ fontSize:18, fontWeight:700, marginTop:3, color: color || '#1E1B4B' }}>{value}</div></div>
+    <div style={T.card}><div style={{ fontSize:11, color:C.faint, fontWeight:600, textTransform:'uppercase' }}>{label}</div><div style={{ fontSize:18, fontWeight:700, marginTop:3, color: color || C.ink }}>{value}</div></div>
   )
 
   return (
     <div>
       <TransferAckCard empId={emp.id} onAck={()=>{}} />
-      <div style={{ ...T.card, borderLeft:'3px solid #7C3AED', display:'flex', alignItems:'center', gap:14 }}>
-        <div style={{ width:52, height:52, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
+      <div style={{ ...T.card, borderLeft: `3px solid ${C.brandEdge}`, display:'flex', alignItems:'center', gap:14 }}>
+        <div style={{ width:52, height:52, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
         <div>
           <div style={{ fontSize:17, fontWeight:700 }}>{greet}, {emp.first_name || emp.full_name.split(' ')[0]}! {emoji}</div>
-          <div style={{ fontSize:12, color:'#6B7280', marginTop:2 }}>{emp.designation || '—'} · {emp.emp_code}</div>
-          <div style={{ fontSize:12, color:'#7C3AED', marginTop:4, fontStyle:'italic' }}>“{quote}”</div>
+          <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{emp.designation || '—'} · {emp.emp_code}</div>
+          <div style={{ fontSize:12, color:C.brand, marginTop:4, fontStyle:'italic' }}>“{quote}”</div>
         </div>
       </div>
 
       <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'stretch' }}>
         <div style={{ flex:'3 1 280px' }}><PunchButton employeeId={emp.id} /></div>
         <button onClick={() => setEditOpen(true)} style={{ flex:'1 1 160px', ...T.card, marginBottom:10, cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:8, fontFamily:'inherit' }}>
-          <div style={{ width:46, height:46, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
-          <span style={{ fontSize:13, fontWeight:600, color:'#6D28D9' }}>✏️ Edit Profile</span>
+          <div style={{ width:46, height:46, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:16, fontWeight:700 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
+          <span style={{ fontSize:13, fontWeight:600, color:C.brandDeep }}>Edit Profile</span>
         </button>
       </div>
       {editOpen && <EditProfileModal emp={emp} onClose={() => setEditOpen(false)} onSaved={reload} notify={notify} />}
 
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:10 }}>
-        <Stat label="Leave Balance" value="—" color="#9CA3AF" />
-        <Stat label="Net Salary" value={salaryVisible ? '—' : '🔒 Hidden'} color="#9CA3AF" />
-        <Stat label="Attendance %" value="—" color="#9CA3AF" />
-        <Stat label="Pending Actions" value={String(pending)} color={pending ? '#D97706' : '#059669'} />
+        <Stat label="Leave Balance" value="—" color={C.faint} />
+        <Stat label="Net Salary" value={salaryVisible ? '—' : 'Hidden'} color={C.faint} />
+        <Stat label="Attendance %" value="—" color={C.faint} />
+        <Stat label="Pending Actions" value={String(pending)} color={pending ? C.warning : C.positive} />
       </div>
 
+      {/* Role-wise KPIs and "pending on you" — the same card for an employee, an RM
+          and an HR Head; only the data behind it differs (/api/ess/home). */}
+      <PendingOnYou employeeId={emp.id} go={go} notify={notify} />
+
+      {/* Today's birthdays and work anniversaries, with a Wish button. Renders
+          nothing when nobody is celebrating — an empty card every day is worse
+          than no card. This is where a peer-to-peer notification is created. */}
+      <Celebrations employeeId={emp.id} />
+
+      {/* where the employee's travel claims currently sit */}
+      <TravelClaimStatus emp={emp} go={go} />
+
       <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
-        <button onClick={() => go('leave')} style={T.btnO}>🌴 Apply Leave</button>
-        <button onClick={() => go('payslip')} style={T.btnO}>💰 Download Payslip</button>
-        <button onClick={() => go('requests')} style={T.btnO}>✉️ Raise Ticket</button>
-        <button onClick={() => go('directory')} style={T.btnO}>📒 View Team</button>
+        <button onClick={() => go('leave')} style={T.btnO}>Apply Leave</button>
+        <button onClick={() => go('payslip')} style={T.btnO}>Download Payslip</button>
+        <button onClick={() => go('requests')} style={T.btnO}>Raise Ticket</button>
+        <button onClick={() => go('directory')} style={T.btnO}>View Team</button>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:10 }}>
         {/* Birthday / Anniversary */}
         <div style={T.card}>
-          <div style={T.section}>🎉 Birthday & Anniversary</div>
+          <div style={T.section}>Birthday & Anniversary</div>
           {bdaySoon !== null
-            ? <div style={{ fontSize:13 }}>🎂 Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s)`} — wishing you ahead!</div>
-            : <div style={{ fontSize:12, color:'#9CA3AF' }}>No upcoming birthdays in the next 30 days.</div>}
-          {emp.group_doj && <div style={{ fontSize:12, color:'#6B7280', marginTop:6 }}>Joined {fmt(emp.group_doj)} · {tenureYrs} yr{tenureYrs===1?'':'s'} with us 🎊</div>}
+            ? <div style={{ fontSize:13 }}>Your birthday is {bdaySoon <= 0 ? 'today!' : `in ${bdaySoon} day(s)`} — wishing you ahead!</div>
+            : <div style={{ fontSize:12, color:C.faint }}>No upcoming birthdays in the next 30 days.</div>}
+          {emp.group_doj && <div style={{ fontSize:12, color:C.muted, marginTop:6 }}>Joined {fmt(emp.group_doj)} · {tenureYrs} yr{tenureYrs===1?'':'s'} with us 🎊</div>}
         </div>
 
         {/* My Journey */}
         <div style={T.card}>
-          <div style={T.section}>🚀 My Journey</div>
-          <div style={{ fontSize:12, color:'#374151', lineHeight:1.9 }}>
-            <div>📅 Joined: <b>{fmt(emp.group_doj)}</b></div>
-            <div>🏷️ Designation: <b>{emp.designation || '—'}</b></div>
-            <div>⏳ Tenure: <b>{tenureYrs} year{tenureYrs===1?'':'s'}</b></div>
+          <div style={T.section}>My Journey</div>
+          <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.9 }}>
+            <div>Joined: <b>{fmt(emp.group_doj)}</b></div>
+            <div>Designation: <b>{emp.designation || '—'}</b></div>
+            <div>Tenure: <b>{tenureYrs} year{tenureYrs===1?'':'s'}</b></div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' }}>
-              {[1,3,5].map(y => <span key={y} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, fontWeight:600, background: tenureYrs>=y?'#ECFDF5':'#F1F5F9', color: tenureYrs>=y?'#059669':'#9CA3AF' }}>{tenureYrs>=y?'🏅':'🔒'} {y}-yr</span>)}
+              {[1,3,5].map(y => <span key={y} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, fontWeight:600, background: tenureYrs>=y?C.positiveTint:C.sunken, color: tenureYrs>=y?C.positive:C.faint }}>{tenureYrs>=y?'':''} {y}-yr</span>)}
             </div>
           </div>
         </div>
 
         {/* Kudos */}
         <div style={T.card}>
-          <div style={T.section}>👏 Recognition & Kudos</div>
-          {kudos.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No kudos yet — appreciation from peers will show here.</div>}
-          {kudos.map(k => <div key={k.id} style={{ fontSize:12, padding:'6px 0', borderBottom:'1px solid #F3F0FF' }}>{k.badge ? `🏆 ${k.badge} — ` : ''}{k.message || 'Kudos!'}<span style={{ color:'#9CA3AF', fontSize:10, marginLeft:6 }}>{fmt(k.created_at)}</span></div>)}
+          <div style={T.section}>Recognition & Kudos</div>
+          {kudos.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No kudos yet — appreciation from peers will show here.</div>}
+          {kudos.map(k => <div key={k.id} style={{ fontSize:12, padding:'6px 0', borderBottom: `1px solid ${C.brandEdge}` }}>{k.badge ? `🏆 ${k.badge} — ` : ''}{k.message || 'Kudos!'}<span style={{ color:C.faint, fontSize:10, marginLeft:6 }}>{fmt(k.created_at)}</span></div>)}
         </div>
 
         {/* Announcements */}
         <div style={T.card}>
-          <div style={T.section}>📣 Announcements</div>
-          {ann.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No announcements right now.</div>}
-          {ann.map(a => <div key={a.id} style={{ padding:'7px 0', borderBottom:'1px solid #F3F0FF' }}><div style={{ fontSize:12.5, fontWeight:600 }}>{a.title}</div>{a.body && <div style={{ fontSize:11.5, color:'#6B7280', marginTop:2 }}>{a.body}</div>}<div style={{ fontSize:10, color:'#9CA3AF', marginTop:2 }}>{fmt(a.published_at)}</div></div>)}
+          <div style={T.section}>Announcements</div>
+          {ann.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No announcements right now.</div>}
+          {ann.map(a => <div key={a.id} style={{ padding:'7px 0', borderBottom: `1px solid ${C.brandEdge}` }}><div style={{ fontSize:13, fontWeight:600 }}>{a.title}</div>{a.body && <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{a.body}</div>}<div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{fmt(a.published_at)}</div></div>)}
         </div>
       </div>
     </div>
@@ -291,12 +474,287 @@ function Home({ emp, isMobile, go, salaryVisible, notify, reload }: { emp: Emplo
 // ════════════════════════════════════════════════════════════════
 // PROFILE & KYC (B4)
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+// PROFILE
+// Rebuilt from a flat list of 21 label/value rows into something an employee
+// can actually use. Three ideas drive it:
+//
+//   1. Identity first. A person opening their own profile wants to see
+//      themselves, not a table. The hero carries the photo, the name, and the
+//      four facts that place someone in a company.
+//   2. Completeness is a prompt, not a decoration. The ring is computed from
+//      fields that are genuinely missing, and names them — HR chases these,
+//      and the employee is the only one who can supply them.
+//   3. Sensitive values stay covered. PAN, Aadhaar and UAN are masked until
+//      asked for, and copy is one tap because the reason people reveal them is
+//      to paste them somewhere.
+//
+// Palette and inline-style convention follow T, as the rest of this file does.
+// ════════════════════════════════════════════════════════════════
+
+const P = {
+  navy: C.ink, navyDeep: C.dark, purple: C.brand, purpleD: C.brandDeep,
+  purpleLite: C.brandTint, line: C.brandEdge, muted: C.muted, dim: C.faint,
+  green: C.positive, greenBg: C.positiveTint, amber: C.warning, amberBg: C.warningTint,
+  red: C.critical, white: C.surface,
+}
+
+/** Years and months since a date, in words. */
+function tenureOf(doj?: string | null): string {
+  if (!doj) return '—'
+  const from = new Date(doj), now = new Date()
+  if (isNaN(from.getTime()) || from > now) return '—'
+  let months = (now.getFullYear() - from.getFullYear()) * 12 + (now.getMonth() - from.getMonth())
+  if (now.getDate() < from.getDate()) months--
+  const y = Math.floor(months / 12), m = months % 12
+  if (y <= 0 && m <= 0) return 'Joined this month'
+  return [y ? `${y} year${y > 1 ? 's' : ''}` : '', m ? `${m} month${m > 1 ? 's' : ''}` : ''].filter(Boolean).join(', ')
+}
+
+/** Days until the next occurrence of a day/month, ignoring the year. */
+function daysUntilAnniversary(d?: string | null): number | null {
+  if (!d) return null
+  const src = new Date(d)
+  if (isNaN(src.getTime())) return null
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let next = new Date(today.getFullYear(), src.getMonth(), src.getDate())
+  if (next < today) next = new Date(today.getFullYear() + 1, src.getMonth(), src.getDate())
+  return Math.round((next.getTime() - today.getTime()) / 86400000)
+}
+
+/** Which fields are missing, so the ring can name them rather than just score. */
+function completenessOf(emp: EmployeeDetail): { pct: number; missing: string[]; total: number } {
+  const checks: [string, unknown][] = [
+    ['Date of birth', emp.date_of_birth], ['Gender', emp.gender],
+    ['Blood group', emp.blood_group], ['Marital status', emp.marital_status],
+    ['Mobile number', emp.mobile], ['Personal email', emp.personal_email],
+    ['PAN', emp.pan_number], ['Aadhaar', emp.aadhar_last4],
+    ['UAN', emp.uan_number], ['Profile photo', emp.profile_photo],
+  ]
+  const missing = checks.filter(([, v]) => !v).map(([k]) => k)
+  return {
+    pct: Math.round(((checks.length - missing.length) / checks.length) * 100),
+    missing, total: checks.length,
+  }
+}
+
+// ── sub-components, defined outside Profile so they keep their state ──────────
+
+function Ring({ pct, size = 76 }: { pct: number; size?: number }) {
+  const r = (size - 9) / 2
+  const c = 2 * Math.PI * r
+  const tone = pct >= 90 ? P.green : pct >= 60 ? P.purple : P.amber
+  return (
+    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none"
+                stroke="rgba(255,255,255,0.18)" strokeWidth="6" />
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none"
+                stroke={tone} strokeWidth="6" strokeLinecap="round"
+                strokeDasharray={`${(c * pct) / 100} ${c}`}
+                style={{ transition: 'stroke-dasharray .7s cubic-bezier(.4,0,.2,1)' }} />
+      </svg>
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', justifyContent: 'center', color: C.onAccent }}>
+        <span style={{ fontSize: 17, fontWeight: 700, lineHeight: 1 }}>{pct}%</span>
+        <span style={{ fontSize: 9, opacity: .7, letterSpacing: '.05em', marginTop: 1 }}>DONE</span>
+      </div>
+    </div>
+  )
+}
+
+function Avatar({ emp, size = 84 }: { emp: EmployeeDetail; size?: number }) {
+  const [broken, setBroken] = useState(false)
+  const show = emp.profile_photo && !broken
+  return (
+    <div style={{ width: size, height: size, borderRadius: '50%', flexShrink: 0,
+                  background: show ? C.surface : 'linear-gradient(135deg,#2563EB,#93C5FD)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: C.onAccent, fontSize: Math.round(size * 0.34), fontWeight: 700, letterSpacing: '.02em',
+                  border: '3px solid rgba(255,255,255,0.25)',
+                  boxShadow: '0 6px 20px rgba(0,0,0,0.22)', overflow: 'hidden' }}>
+      {show
+        ? <img src={emp.profile_photo!} alt="" onError={() => setBroken(true)}
+               style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        : initials(emp.full_name || '?')}
+    </div>
+  )
+}
+
+function Chip({ icon, children }: { icon: string; children: React.ReactNode }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 11px',
+                   borderRadius: 99, background: 'rgba(255,255,255,0.12)',
+                   border: '1px solid rgba(255,255,255,0.16)', color: C.onAccent,
+                   fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap' }}>
+      <span style={{ opacity: .85 }}>{icon}</span>{children}
+    </span>
+  )
+}
+
+/**
+ * One field. Copy appears on hover because it is useful often but never the
+ * point; sensitive values stay masked until asked for.
+ */
+function Field({ label, value, icon, copyable, sensitive, notify }: {
+  label: string; value?: string | null; icon?: string
+  copyable?: boolean; sensitive?: boolean
+  notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const [hover, setHover] = useState(false)
+  const [shown, setShown] = useState(false)
+  const has = !!value && value !== '—'
+  const masked = sensitive && !shown && has
+  const display = !has ? '—' : masked ? '•'.repeat(Math.min(String(value).length, 12)) : String(value)
+
+  return (
+    <div onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px',
+                  borderRadius: 10, background: hover ? P.purpleLite : 'transparent',
+                  transition: 'background .15s' }}>
+      {icon && <span style={{ fontSize: 14, width: 18, textAlign: 'center', opacity: .8 }}>{icon}</span>}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 10, fontWeight: 600, color: P.dim,
+                      textTransform: 'uppercase', letterSpacing: '.06em' }}>{label}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, color: has ? P.navy : P.dim,
+                      marginTop: 2, fontVariantNumeric: 'tabular-nums',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {display}
+        </div>
+      </div>
+
+      {sensitive && has && (
+        <button onClick={() => setShown(v => !v)} title={shown ? 'Hide' : 'Reveal'}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3,
+                         fontSize: 13, opacity: hover || shown ? 1 : .35, transition: 'opacity .15s' }}>
+          {shown ? '' : ''}
+        </button>
+      )}
+      {copyable && has && (
+        <button title="Copy"
+                onClick={() => {
+                  navigator.clipboard?.writeText(String(value))
+                    .then(() => notify(`${label} copied`))
+                    .catch(() => notify('Could not copy', 'error'))
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 3,
+                         fontSize: 13, opacity: hover ? 1 : 0, transition: 'opacity .15s' }}>
+          📋
+        </button>
+      )}
+    </div>
+  )
+}
+
+function Panel({ title, icon, children, accent }: {
+  title: string; icon: string; children: React.ReactNode; accent?: string
+}) {
+  return (
+    <div style={{ background: P.white, borderRadius: 14, border: `1px solid ${P.line}`,
+                  padding: '15px 14px', boxShadow: 'var(--ez-shadow-flat)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8,
+                    paddingBottom: 9, borderBottom: `1px solid ${P.line}` }}>
+        <span style={{ width: 26, height: 26, borderRadius: 7, flexShrink: 0,
+                       background: accent || P.purpleLite, display: 'flex',
+                       alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>{icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: P.navy,
+                       letterSpacing: '.02em' }}>{title}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function ProfileHero({ emp, notify }: {
+  emp: EmployeeDetail; notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const c = completenessOf(emp)
+  const bday = daysUntilAnniversary(emp.date_of_birth)
+  const work = daysUntilAnniversary(emp.group_doj)
+
+  return (
+    <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 12,
+                  background: `linear-gradient(135deg, ${P.navy} 0%, #2A1F63 55%, #3C1E8C 100%)`,
+                  boxShadow: '0 8px 28px rgba(30,27,75,0.28)', position: 'relative' }}>
+      {/* soft light, so the band is not a flat rectangle */}
+      <div style={{ position: 'absolute', top: -90, right: -60, width: 260, height: 260,
+                    borderRadius: '50%', background: 'rgba(167,139,250,0.16)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: -110, left: -40, width: 220, height: 220,
+                    borderRadius: '50%', background: 'rgba(37,99,235,0.14)', pointerEvents: 'none' }} />
+
+      <div style={{ position: 'relative', padding: '22px 22px 20px',
+                    display: 'flex', gap: 18, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+        <Avatar emp={emp} />
+
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 26, fontWeight: 700, color: C.onAccent, lineHeight: 1.15,
+                        letterSpacing: '-.02em' }}>{emp.full_name || '—'}</div>
+          <div style={{ fontSize: 13, color: C.onAccentSoft, marginTop: 3 }}>
+            {emp.designation || 'Designation not set'}
+            {emp.dept_name ? ` · ${emp.dept_name}` : ''}
+          </div>
+
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 13 }}>
+            <Chip icon="🆔">{emp.emp_code || '—'}</Chip>
+            <Chip icon="🏢">{emp.company_name || '—'}</Chip>
+            {(emp.location_name || emp.city) && (
+              <Chip icon="📍">{[emp.location_name, emp.city].filter(Boolean).join(', ')}</Chip>
+            )}
+            <Chip icon="⏳">{tenureOf(emp.group_doj)}</Chip>
+          </div>
+
+          {/* Only worth the space when it is actually near. */}
+          {(bday !== null && bday <= 30) || (work !== null && work <= 30) ? (
+            <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginTop: 9 }}>
+              {bday !== null && bday <= 30 && (
+                <Chip icon="🎂">{bday === 0 ? 'Birthday today' : `Birthday in ${bday} day${bday > 1 ? 's' : ''}`}</Chip>
+              )}
+              {work !== null && work <= 30 && (
+                <Chip icon="🎉">{work === 0 ? 'Work anniversary today' : `Work anniversary in ${work} day${work > 1 ? 's' : ''}`}</Chip>
+              )}
+            </div>
+          ) : null}
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7,
+                      minWidth: 120 }}>
+          <Ring pct={c.pct} />
+          <div style={{ fontSize: 11, color: C.onAccentDim, textAlign: 'center' }}>
+            {c.missing.length === 0
+              ? 'Profile complete'
+              : `${c.missing.length} of ${c.total} still missing`}
+          </div>
+        </div>
+      </div>
+
+      {/* Naming what is missing turns a score into something actionable. */}
+      {c.missing.length > 0 && (
+        <div style={{ background: 'rgba(0,0,0,0.22)', padding: '10px 22px',
+                      display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 12, color: C.onAccentDim }}>Still needed:</span>
+          {c.missing.map(m => (
+            <span key={m} style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99,
+                                   background: 'rgba(255,255,255,0.1)', color: C.warning,
+                                   border: '1px solid rgba(251,191,36,0.28)' }}>{m}</span>
+          ))}
+          <span style={{ fontSize: 11, color: C.onAccentDim, marginLeft: 'auto' }}>
+            Request an update below
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
+  const [tab, setTab] = useState<'OVERVIEW' | 'PERSONAL' | 'UPDATE'>('OVERVIEW')
   const [field, setField] = useState('Personal Details')
   const [detail, setDetail] = useState('')
   const [busy, setBusy] = useState(false)
   const FIELDS = ['Personal Details','PAN Card','Aadhaar','Bank Account','Emergency Contact','Family / Dependents','Nominee','Education']
   const [bank, setBank] = useState({ account_number:'', confirm:'', ifsc:'', bank_name:'', branch:'', holder_name: emp.full_name || '', account_type:'Savings' })
+
   const lookupIfsc = async (ifsc: string) => {
     if (ifsc.length < 11) return
     try {
@@ -304,9 +762,7 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
       if (r.ok) { const d = await r.json(); setBank(b => ({ ...b, bank_name: d.BANK || b.bank_name, branch: d.BRANCH || b.branch })) }
     } catch { /* IFSC lookup is best-effort */ }
   }
-  const Row = ({ k, v }: { k: string; v: any }) => (
-    <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid #F3F0FF', fontSize:12.5 }}><span style={{ color:'#6B7280' }}>{k}</span><span style={{ fontWeight:600 }}>{v || '—'}</span></div>
-  )
+
   async function submit() {
     if (field === 'Bank Account') {
       if (!bank.ifsc.trim() || !bank.account_number.trim() || !bank.holder_name.trim()) { notify('Fill IFSC, account number and holder name', 'error'); return }
@@ -327,47 +783,126 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
     if (error) { notify('Failed: ' + error.message, 'error'); return }
     setDetail(''); notify('Update request sent to HR for approval.')
   }
-  return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:10 }}>
-      <div style={T.card}>
-        <div style={T.section}>👤 My Profile</div>
-        <Row k="Name" v={emp.full_name} /><Row k="Employee Code" v={emp.emp_code} />
-        <Row k="Designation" v={emp.designation} /><Row k="Department" v={emp.dept_name} />
-        <Row k="Company" v={emp.company_name} /><Row k="Location" v={[emp.location_name, emp.city].filter(Boolean).join(', ')} />
-        <Row k="Date of Joining" v={fmt(emp.group_doj)} /><Row k="Employment Type" v={emp.employment_type} />
-        <Row k="Reporting Manager" v={emp.l1_manager_name} /><Row k="HR" v={emp.hr_manager_name} />
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>🪪 KYC & Personal</div>
-        <Row k="Gender" v={emp.gender} /><Row k="Date of Birth" v={fmt(emp.date_of_birth)} />
-        <Row k="Blood Group" v={emp.blood_group} /><Row k="Marital Status" v={emp.marital_status} />
-        <Row k="Mobile" v={emp.mobile} /><Row k="Personal Email" v={emp.personal_email} /><Row k="Office Email" v={emp.office_email} />
-        <Row k="PAN" v={emp.pan_number} /><Row k="Aadhaar" v={emp.aadhar_last4 ? `XXXX XXXX ${emp.aadhar_last4}` : '—'} /><Row k="UAN" v={emp.uan_number} />
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>✏️ Request an Update (→ HR approval)</div>
-        <label style={T.label}>What to update</label>
-        <select style={{ ...T.input, marginBottom:10 }} value={field} onChange={e => setField(e.target.value)}>{FIELDS.map(f => <option key={f}>{f}</option>)}</select>
 
-        {field === 'Bank Account' ? (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-            <div><label style={T.label}>IFSC Code *</label><input style={T.input} value={bank.ifsc} maxLength={11} onChange={e => { const v = e.target.value.toUpperCase(); setBank(b => ({ ...b, ifsc: v })); lookupIfsc(v) }} placeholder="e.g. HDFC0001234" /></div>
-            <div><label style={T.label}>Account Type</label><select style={T.input} value={bank.account_type} onChange={e => setBank(b => ({ ...b, account_type: e.target.value }))}><option>Savings</option><option>Current</option></select></div>
-            <div><label style={T.label}>Account Number *</label><input style={T.input} value={bank.account_number} onChange={e => setBank(b => ({ ...b, account_number: e.target.value }))} /></div>
-            <div><label style={T.label}>Confirm Account Number *</label><input style={T.input} value={bank.confirm} onChange={e => setBank(b => ({ ...b, confirm: e.target.value }))} /></div>
-            <div><label style={T.label}>Bank Name (auto)</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.bank_name} onChange={e => setBank(b => ({ ...b, bank_name: e.target.value }))} placeholder="Auto-fills from IFSC" /></div>
-            <div><label style={T.label}>Branch (auto)</label><input style={{ ...T.input, background:'#F0FDF4', border:'1px solid #A7F3D0' }} value={bank.branch} onChange={e => setBank(b => ({ ...b, branch: e.target.value }))} placeholder="Auto-fills from IFSC" /></div>
-            <div style={{ gridColumn:'span 2' }}><label style={T.label}>Account Holder Name *</label><input style={T.input} value={bank.holder_name} onChange={e => setBank(b => ({ ...b, holder_name: e.target.value }))} placeholder="As per bank records" /></div>
-            {bank.confirm && bank.confirm !== bank.account_number && <div style={{ gridColumn:'span 2', color:'#DC2626', fontSize:12, marginTop:-4 }}>⚠️ Account numbers don't match</div>}
-          </div>
-        ) : (
-          <>
-            <label style={T.label}>Details</label>
-            <textarea style={{ ...T.input, minHeight:80, marginBottom:10, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="New value / what changed…" />
-          </>
-        )}
-        <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Sending…' : 'Submit update request'}</button>
+  const TABS: [typeof tab, string, string][] = [
+    ['OVERVIEW', 'Overview', ''],
+    ['PERSONAL', 'Personal & KYC', ''],
+    ['UPDATE', 'Request a change', ''],
+  ]
+
+  return (
+    <div>
+      <ProfileHero emp={emp} notify={notify} />
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {TABS.map(([k, label, icon]) => (
+          <button key={k} onClick={() => setTab(k)}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6,
+                           padding: '8px 15px', borderRadius: 10, cursor: 'pointer',
+                           fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                           border: tab === k ? 'none' : `1px solid ${P.line}`,
+                           background: tab === k ? P.purple : P.white,
+                           color: tab === k ? C.surface : P.purpleD,
+                           boxShadow: tab === k ? '0 3px 10px rgba(37,99,235,0.28)' : 'none',
+                           transition: 'all .18s' }}>
+            <span>{icon}</span>{label}
+          </button>
+        ))}
       </div>
+
+      {tab === 'OVERVIEW' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 11 }}>
+          <Panel title="Where you sit" icon="🏛️">
+            <Field label="Employee code" value={emp.emp_code} icon="🆔" copyable notify={notify} />
+            <Field label="Designation" value={emp.designation} icon="💼" notify={notify} />
+            <Field label="Department" value={emp.dept_name} icon="🗂️" notify={notify} />
+            <Field label="Company" value={emp.company_name} icon="🏢" notify={notify} />
+            <Field label="Location" value={[emp.location_name, emp.city].filter(Boolean).join(', ')} icon="📍" notify={notify} />
+          </Panel>
+
+          <Panel title="Your people" icon="👥" accent="#EEF2FF">
+            <MyReportingLine employeeId={emp.id} fallbackL1={emp.l1_manager_name} notify={notify} />
+            <Field label="HR contact" value={emp.hr_manager_name} icon="🧑‍💼" notify={notify} />
+            <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
+          </Panel>
+
+          <Panel title="Service" icon="⏳" accent={P.greenBg}>
+            <Field label="Date of joining" value={fmt(emp.group_doj)} icon="📅" notify={notify} />
+            <Field label="Time with the company" value={tenureOf(emp.group_doj)} icon="⏳" notify={notify} />
+            <Field label="Employment type" value={emp.employment_type} icon="📄" notify={notify} />
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'PERSONAL' && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 11 }}>
+          <Panel title="About you" icon="🙋">
+            <Field label="Date of birth" value={fmt(emp.date_of_birth)} icon="🎂" notify={notify} />
+            <Field label="Gender" value={emp.gender} icon="⚧" notify={notify} />
+            <Field label="Blood group" value={emp.blood_group} icon="🩸" notify={notify} />
+            <Field label="Marital status" value={emp.marital_status} icon="💍" notify={notify} />
+          </Panel>
+
+          <Panel title="How to reach you" icon="📇" accent="#EEF2FF">
+            <Field label="Mobile" value={emp.mobile} icon="📱" copyable notify={notify} />
+            <Field label="Personal email" value={emp.personal_email} icon="📧" copyable notify={notify} />
+            <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
+          </Panel>
+
+          <Panel title="Statutory IDs" icon="🔐" accent={P.amberBg}>
+            <Field label="PAN" value={emp.pan_number} icon="🪪" copyable sensitive notify={notify} />
+            <Field label="Aadhaar" value={emp.aadhar_last4 ? `XXXX XXXX ${emp.aadhar_last4}` : null} icon="🆔" notify={notify} />
+            <Field label="UAN" value={emp.uan_number} icon="🏦" copyable sensitive notify={notify} />
+            <div style={{ fontSize: 11, color: P.dim, marginTop: 7, lineHeight: 1.5 }}>
+              Hidden by default. Reveal only when you need to copy one.
+            </div>
+          </Panel>
+        </div>
+      )}
+
+      {tab === 'UPDATE' && (
+        <div style={{ background: P.white, borderRadius: 14, border: `1px solid ${P.line}`,
+                      padding: '18px 18px', maxWidth: 720 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: P.navy }}>Request a change</div>
+          <div style={{ fontSize: 12, color: P.muted, marginTop: 4, marginBottom: 15, lineHeight: 1.6 }}>
+            You cannot edit these directly — payroll and statutory filings depend on them, so every
+            change goes to HR for approval. You will see it under Raise a Request.
+          </div>
+
+          <label style={T.label}>What to update</label>
+          <select style={{ ...T.input, marginBottom: 13 }} value={field} onChange={e => setField(e.target.value)}>
+            {FIELDS.map(f => <option key={f}>{f}</option>)}
+          </select>
+
+          {field === 'Bank Account' ? (
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:11, marginBottom:12 }}>
+              <div><label style={T.label}>IFSC code *</label><input style={T.input} value={bank.ifsc} maxLength={11} onChange={e => { const v = e.target.value.toUpperCase(); setBank(b => ({ ...b, ifsc: v })); lookupIfsc(v) }} placeholder="e.g. HDFC0001234" /></div>
+              <div><label style={T.label}>Account type</label><select style={T.input} value={bank.account_type} onChange={e => setBank(b => ({ ...b, account_type: e.target.value }))}><option>Savings</option><option>Current</option></select></div>
+              <div><label style={T.label}>Account number *</label><input style={T.input} value={bank.account_number} onChange={e => setBank(b => ({ ...b, account_number: e.target.value }))} /></div>
+              <div><label style={T.label}>Confirm account number *</label><input style={{ ...T.input, borderColor: bank.confirm && bank.confirm !== bank.account_number ? P.red : undefined }} value={bank.confirm} onChange={e => setBank(b => ({ ...b, confirm: e.target.value }))} /></div>
+              <div><label style={T.label}>Bank name</label><input style={{ ...T.input, background:C.positiveTint, border: `1px solid ${C.positiveTint}` }} value={bank.bank_name} onChange={e => setBank(b => ({ ...b, bank_name: e.target.value }))} placeholder="Fills in from IFSC" /></div>
+              <div><label style={T.label}>Branch</label><input style={{ ...T.input, background:C.positiveTint, border: `1px solid ${C.positiveTint}` }} value={bank.branch} onChange={e => setBank(b => ({ ...b, branch: e.target.value }))} placeholder="Fills in from IFSC" /></div>
+              <div style={{ gridColumn:'span 2' }}><label style={T.label}>Account holder name *</label><input style={T.input} value={bank.holder_name} onChange={e => setBank(b => ({ ...b, holder_name: e.target.value }))} placeholder="Exactly as your bank has it" /></div>
+              {bank.confirm && bank.confirm !== bank.account_number && (
+                <div style={{ gridColumn:'span 2', color:P.red, fontSize:12, marginTop:-4 }}>
+                  The two account numbers do not match.
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <label style={T.label}>Details</label>
+              <textarea style={{ ...T.input, minHeight:90, marginBottom:12, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="What it should say instead…" />
+            </>
+          )}
+
+          <button onClick={submit} disabled={busy}
+                  style={{ ...T.btnP, opacity: busy ? .6 : 1,
+                           boxShadow: busy ? 'none' : '0 3px 12px rgba(37,99,235,0.3)' }}>
+            {busy ? 'Sending…' : 'Send to HR'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -393,7 +928,7 @@ function Documents({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t
   return (
     <div>
       <div style={T.card}>
-        <div style={T.section}>📄 Request a Letter (HR generates on approval)</div>
+        <div style={T.section}>Request a Letter (HR generates on approval)</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
           <div><label style={T.label}>Letter type</label><select style={T.input} value={type} onChange={e => setType(e.target.value)}>{LETTER_TYPES.map(l => <option key={l}>{l}</option>)}</select></div>
           <div><label style={T.label}>Purpose</label><input style={T.input} value={purpose} onChange={e => setPurpose(e.target.value)} placeholder="e.g. bank loan, visa…" /></div>
@@ -401,11 +936,11 @@ function Documents({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Sending…' : 'Request letter'}</button>
       </div>
       <div style={T.card}>
-        <div style={T.section}>🗂️ My Letter Requests</div>
-        {rows.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No requests yet.</div>}
+        <div style={T.section}>My Letter Requests</div>
+        {rows.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No requests yet.</div>}
         {rows.map(r => (
-          <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
-            <div><div style={{ fontSize:13, fontWeight:600 }}>{r.letter_type}</div><div style={{ fontSize:11, color:'#9CA3AF' }}>{r.purpose || '—'} · {fmt(r.requested_at)}</div></div>
+          <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
+            <div><div style={{ fontSize:13, fontWeight:600 }}>{r.letter_type}</div><div style={{ fontSize:11, color:C.faint }}>{r.purpose || '—'} · {fmt(r.requested_at)}</div></div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
               <StatusPill status={r.status} />
               {r.letter_url && <a href={r.letter_url} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration:'none' }}>Download</a>}
@@ -446,20 +981,20 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
   return (
     <div>
       <div style={T.card}>
-        <div style={T.section}>✉️ Raise a Request</div>
+        <div style={T.section}>Raise a Request</div>
         <label style={T.label}>Type</label>
         <select style={{ ...T.input, marginBottom:10 }} value={type} onChange={e => setType(e.target.value)}>{REQ_TYPES.map(r => <option key={r.k} value={r.k}>{r.label}</option>)}</select>
-        {def.confidential && <div style={{ background:'#FEF2F2', border:'1px solid #FECACA', borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:'#B91C1C' }}>🔒 This is confidential and routes only to the Internal Committee — not regular HR.</div>}
+        {def.confidential && <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'8px 11px', marginBottom:10, fontSize:12, color:C.critical }}>This is confidential and routes only to the Internal Committee — not regular HR.</div>}
         <label style={T.label}>Details</label>
         <textarea style={{ ...T.input, minHeight:90, marginBottom:10, resize:'vertical' }} value={detail} onChange={e => setDetail(e.target.value)} placeholder="Describe your request…" />
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, opacity: busy?.6:1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
       </div>
       <div style={T.card}>
-        <div style={T.section}>📋 My Requests</div>
-        {rows.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No requests yet.</div>}
+        <div style={T.section}>My Requests</div>
+        {rows.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No requests yet.</div>}
         {rows.map(r => (
-          <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
-            <div><div style={{ fontSize:13, fontWeight:600 }}>{REQ_TYPES.find(x => x.k === r.request_type)?.label || r.request_type}{r.is_confidential && ' 🔒'}</div><div style={{ fontSize:11, color:'#9CA3AF' }}>{r.request_data?.detail?.slice(0,60) || '—'} · {fmt(r.submitted_at)}</div></div>
+          <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
+            <div><div style={{ fontSize:13, fontWeight:600 }}>{REQ_TYPES.find(x => x.k === r.request_type)?.label || r.request_type}{r.is_confidential && ' 🔒'}</div><div style={{ fontSize:11, color:C.faint }}>{r.request_data?.detail?.slice(0,60) || '—'} · {fmt(r.submitted_at)}</div></div>
             <StatusPill status={r.status} />
           </div>
         ))}
@@ -473,23 +1008,23 @@ function Requests({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?
 // ════════════════════════════════════════════════════════════════
 function DirDetailRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
-      <span style={{ fontSize:11, color:'#6B7280', fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }}>{label}</span>
-      <span style={{ fontSize:13, color:'#1E1B4B', textAlign:'right', wordBreak:'break-word' }}>{value || '—'}</span>
+    <div style={{ display:'flex', justifyContent:'space-between', gap:12, padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
+      <span style={{ fontSize:11, color:C.muted, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', whiteSpace:'nowrap' }}>{label}</span>
+      <span style={{ fontSize:13, color:C.ink, textAlign:'right', wordBreak:'break-word' }}>{value || '—'}</span>
     </div>
   )
 }
 function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () => void }) {
   return (
     <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:4000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-      <div onClick={ev => ev.stopPropagation()} style={{ background:'#fff', borderRadius:14, width:'100%', maxWidth:440, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'18px 20px', borderBottom:'1px solid #EDE9FE' }}>
-          <div style={{ width:48, height:48, borderRadius:'50%', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:16, flexShrink:0 }}>{initials(e.full_name)}</div>
+      <div onClick={ev => ev.stopPropagation()} style={{ background:C.surface, borderRadius:14, width:'100%', maxWidth:440, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, padding:'18px 20px', borderBottom: `1px solid ${C.brandEdge}` }}>
+          <div style={{ width:48, height:48, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, fontSize:16, flexShrink:0 }}>{initials(e.full_name)}</div>
           <div style={{ minWidth:0, flex:1 }}>
             <div style={{ fontSize:16, fontWeight:700 }}>{e.full_name}</div>
-            <div style={{ fontSize:12, color:'#9CA3AF' }}>{e.designation || '—'}</div>
+            <div style={{ fontSize:12, color:C.faint }}>{e.designation || '—'}</div>
           </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, lineHeight:1, cursor:'pointer', color:'#9CA3AF' }}>×</button>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:24, lineHeight:1, cursor:'pointer', color:C.faint }}>×</button>
         </div>
         <div style={{ padding:'6px 20px 16px' }}>
           <DirDetailRow label="Employee Code" value={e.emp_code} />
@@ -500,8 +1035,8 @@ function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () =
           <DirDetailRow label="Company Name" value={e.company_name} />
         </div>
         <div style={{ padding:'0 20px 18px', display:'flex', gap:8, flexWrap:'wrap' }}>
-          {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} style={{ ...T.btnO, textDecoration:'none' }}>📧 Email</a>}
-          {e.mobile && <a href={`tel:${e.mobile}`} style={{ ...T.btnO, textDecoration:'none' }}>📱 Call</a>}
+          {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} style={{ ...T.btnO, textDecoration:'none' }}>Email</a>}
+          {e.mobile && <a href={`tel:${e.mobile}`} style={{ ...T.btnO, textDecoration:'none' }}>Call</a>}
           {e.mobile && <a href={`https://wa.me/91${(e.mobile||'').replace(/\D/g,'').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration:'none' }}>WhatsApp</a>}
           <button onClick={onClose} style={{ ...T.btnO, marginLeft:'auto' }}>Close</button>
         </div>
@@ -511,11 +1046,102 @@ function DirectoryDetailModal({ e, onClose }: { e: DirectoryEntry; onClose: () =
 }
 // A stable colour per person so the same face keeps the same avatar between visits.
 const DIR_TINTS = [
-  { bg: '#EDE9FE', fg: '#6D28D9' }, { bg: '#E6F1FB', fg: '#185FA5' }, { bg: '#ECFDF5', fg: '#059669' },
-  { bg: '#FFF7ED', fg: '#C2410C' }, { bg: '#FCE7F3', fg: '#BE185D' }, { bg: '#EEF2FF', fg: '#4338CA' },
-  { bg: '#F0FDFA', fg: '#0F766E' }, { bg: '#FEF3C7', fg: '#B45309' },
+  { bg: C.brandTint, fg: C.brandDeep }, { bg: C.brandTint, fg: C.brand }, { bg: C.positiveTint, fg: C.positive },
+  { bg: C.warningTint, fg: C.critical }, { bg: C.criticalTint, fg: C.critical }, { bg: C.brandTint, fg: C.brand },
+  { bg: C.infoTint, fg: C.info }, { bg: C.warningTint, fg: C.warning },
 ]
 const dirTint = (s: string) => DIR_TINTS[Array.from(s || '?').reduce((a, c) => a + c.charCodeAt(0), 0) % DIR_TINTS.length]
+
+function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
+  const { managers, reportCount, loading: chainLoading } = useManagerChain(emp.id)
+  // Scope-aware roster with status pills for an RM / HOD; renders nothing otherwise.
+  const { menu: essMenu } = useEssMenu(emp.id)
+  const [peers, setPeers] = useState<{ id: string; full_name: string; designation: string | null; department: string | null; isSelf: boolean; direct_reports: number }[]>([])
+  const [reports, setReports] = useState<{ id: string; emp_code: string | null; full_name: string | null; designation: string | null; department: string | null }[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let live = true
+    setLoading(true)
+    ;(async () => {
+      const token = await authToken()
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
+      const [peersRes, reportsRes] = await Promise.all([
+        fetch(`/api/rms/orgchart?view=peers&employee_id=${emp.id}`, { headers, cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
+        fetch(`/api/rms/hierarchy?employee_id=${emp.id}&view=reports`, { headers, cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
+      ])
+      if (!live) return
+      setPeers((peersRes.peers || []).map((p: any) => ({ id: p.employee_id, full_name: p.full_name, designation: p.designation, department: p.department, isSelf: p.is_self, direct_reports: p.direct_reports })))
+      setReports(reportsRes.reports || [])
+      setLoading(false)
+    })()
+    return () => { live = false }
+  }, [emp.id])
+
+  // The same screen for everyone — an individual contributor, a manager and the person
+  // at the top of a chain all see chain-above / peers / people-below. Only the contents
+  // move: the MD case is not special-cased, it just has an empty chain and no peers.
+  const CardRow = ({ id, name, sub, right }: { id: string; name: string | null; sub: string | null; right?: string }) => (
+    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: '1px solid #F3F0FF' }}>
+      <div style={{ width: 32, height: 32, borderRadius: 99, background: C.brandTint, color: C.brand, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        {(name || '?').split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase()}
+      </div>
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || '—'}</div>
+        <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '—'}</div>
+      </div>
+      {right && <span style={{ fontSize: 10.5, color: C.brand, fontWeight: 700, background: C.brandTint, borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{right}</span>}
+    </div>
+  )
+
+  const Section = ({ title, icon, empty, children }: { title: string; icon: string; empty: string; children: React.ReactNode }) => (
+    <div style={{ background: C.surface, borderRadius: 10, border: `1px solid ${C.brandEdge}`, padding: '14px 16px', marginBottom: 10, boxShadow: E.flat }}>
+      <div style={{ fontSize: 11, fontWeight: 600, color: C.brand, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>{icon} {title}</div>
+      {loading || chainLoading ? <div style={{ fontSize: 12, color: C.faint, padding: '6px 0' }}>Loading…</div> : children}
+    </div>
+  )
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, alignItems: 'start' }}>
+      {(essMenu.is_rm || essMenu.is_hod) && (
+        <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
+          <TeamRoster employeeId={emp.id} isRm={essMenu.is_rm} isHod={essMenu.is_hod} />
+        </div>
+      )}
+      <Section title="Reporting line above you" icon="🧭" empty="Nobody above you — you are at the top of your chain.">
+        {managers.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody above you — you are at the top of your chain.</div>
+        ) : managers.map(m => (
+          <CardRow key={m.relationship_type} id={m.relationship_type}
+            name={m.manager?.full_name ?? null}
+            sub={[m.relationship_type === 'HOD' ? 'Head of Department' : m.relationship_type, m.manager?.designation].filter(Boolean).join(' · ')} />
+        ))}
+      </Section>
+
+      <Section title="Your team" icon="👥" empty="Nobody reports to you yet.">
+        {reports.length === 0 ? (
+          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody reports to you directly.</div>
+        ) : reports.map(r => (
+          <CardRow key={r.id} id={r.id} name={r.full_name} sub={[r.designation, r.department].filter(Boolean).join(' · ')} />
+        ))}
+      </Section>
+
+      <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
+        <Section title={`Your team-mates${peers.length ? ' (' + peers.length + ')' : ''}`} icon="🤝" empty="Nobody else shares your reporting manager.">
+          {peers.filter(p => !p.isSelf).length === 0 ? (
+            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody else shares your reporting manager — or you have no manager on record.</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: '0 16px' }}>
+              {peers.filter(p => !p.isSelf).map(p => (
+                <CardRow key={p.id} id={p.id} name={p.full_name} sub={p.designation} right={p.direct_reports > 0 ? String(p.direct_reports) + ' reports' : undefined} />
+              ))}
+            </div>
+          )}
+        </Section>
+      </div>
+    </div>
+  )
+}
 
 function Directory({ isMobile }: { isMobile: boolean }) {
   const [rows, setRows] = useState<DirectoryEntry[]>([])
@@ -558,16 +1184,16 @@ function Directory({ isMobile }: { isMobile: boolean }) {
       {/* header + filters */}
       <div style={{ ...T.card, marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, flexWrap: 'wrap' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📇</div>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: `linear-gradient(135deg,${C.brand},${C.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1E1B4B' }}>Employee Directory</div>
-            <div style={{ fontSize: 11, color: '#9CA3AF' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: C.ink }}>Employee Directory</div>
+            <div style={{ fontSize: 11, color: C.faint }}>
               {loading ? 'Loading colleagues…' : `${filtered.length}${filtered.length !== rows.length ? ` of ${rows.length}` : ''} colleague${filtered.length === 1 ? '' : 's'}`}
             </div>
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <input style={{ ...T.input, flex: 1, minWidth: 200 }} placeholder="🔍 Search name, code, designation, department or email" value={q} onChange={e => setQ(e.target.value)} />
+          <input style={{ ...T.input, flex: 1, minWidth: 200 }} placeholder="Search name, code, designation, department or email" value={q} onChange={e => setQ(e.target.value)} />
           <select style={sel2} value={dept} onChange={e => setDept(e.target.value)}>
             <option value="">All departments</option>
             {depts.map(d => <option key={d} value={d}>{d}</option>)}
@@ -582,17 +1208,17 @@ function Directory({ isMobile }: { isMobile: boolean }) {
         </div>
       </div>
 
-      {err && <div style={{ ...T.card, color: '#A32D2D', background: '#FCEBEB', border: '1px solid #F5C6C6' }}>Could not load the directory — {err}</div>}
+      {err && <div style={{ ...T.card, color: C.critical, background: C.criticalTint, border: `1px solid ${C.criticalTint}` }}>Could not load the directory — {err}</div>}
 
       {loading ? (
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill,minmax(280px,1fr))', gap: 10 }}>
           {[0, 1, 2, 3, 4, 5].map(i => (
             <div key={i} style={{ ...T.card, opacity: .6 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#EEF' }} />
+                <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.brandTint }} />
                 <div style={{ flex: 1 }}>
-                  <div style={{ height: 11, background: '#EEF', borderRadius: 4, width: '65%', marginBottom: 7 }} />
-                  <div style={{ height: 9, background: '#F3F4F6', borderRadius: 4, width: '45%' }} />
+                  <div style={{ height: 11, background: C.brandTint, borderRadius: 7, width: '65%', marginBottom: 7 }} />
+                  <div style={{ height: 9, background: C.sunken, borderRadius: 7, width: '45%' }} />
                 </div>
               </div>
             </div>
@@ -608,28 +1234,28 @@ function Directory({ isMobile }: { isMobile: boolean }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 11 }}>
                   <div style={{ width: 44, height: 44, borderRadius: '50%', background: t.bg, color: t.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 14, flexShrink: 0 }}>{initials(e.full_name)}</div>
                   <div style={{ minWidth: 0, flex: 1 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1E1B4B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.full_name}</div>
-                    <div style={{ fontSize: 11, color: '#6B6B7B', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '—'}</div>
-                    <div style={{ fontSize: 10, color: '#9CA3AF', marginTop: 1 }}>{e.emp_code}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.full_name}</div>
+                    <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.designation || '—'}</div>
+                    <div style={{ fontSize: 10, color: C.faint, marginTop: 1 }}>{e.emp_code}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                  {e.dept_name && chip(e.dept_name, '#F5F3FF', '#6D28D9')}
-                  {e.location_name && chip('📍 ' + e.location_name, '#F8FAFC', '#475569')}
+                  {e.dept_name && chip(e.dept_name, C.canvas, C.brandDeep)}
+                  {e.location_name && chip('📍 ' + e.location_name, C.sunken, C.inkSoft)}
                 </div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: '1px solid #F1F5F9', paddingTop: 8 }} onClick={ev => ev.stopPropagation()}>
-                  {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} title={e.office_email || e.personal_email || ''} style={{ ...T.btnO, textDecoration: 'none' }}>📧 Email</a>}
-                  {e.mobile && <a href={`tel:${e.mobile}`} title={e.mobile} style={{ ...T.btnO, textDecoration: 'none' }}>📱 Call</a>}
-                  {e.mobile && <a href={`https://wa.me/91${(e.mobile || '').replace(/\D/g, '').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration: 'none' }}>💬 WhatsApp</a>}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', borderTop: `1px solid ${C.line}`, paddingTop: 8 }} onClick={ev => ev.stopPropagation()}>
+                  {(e.office_email || e.personal_email) && <a href={`mailto:${e.office_email || e.personal_email}`} title={e.office_email || e.personal_email || ''} style={{ ...T.btnO, textDecoration: 'none' }}>Email</a>}
+                  {e.mobile && <a href={`tel:${e.mobile}`} title={e.mobile} style={{ ...T.btnO, textDecoration: 'none' }}>Call</a>}
+                  {e.mobile && <a href={`https://wa.me/91${(e.mobile || '').replace(/\D/g, '').slice(-10)}`} target="_blank" rel="noreferrer" style={{ ...T.btnO, textDecoration: 'none' }}>WhatsApp</a>}
                 </div>
               </div>
             )
           })}
           {filtered.length === 0 && !err && (
             <div style={{ ...T.card, gridColumn: '1 / -1', textAlign: 'center', padding: '30px 16px' }}>
-              <div style={{ fontSize: 30, marginBottom: 6 }}>🔍</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#1E1B4B', marginBottom: 3 }}>No colleagues match that search</div>
-              <div style={{ fontSize: 11.5, color: '#9CA3AF' }}>Try a different name, code or department{(dept || loc) ? ', or clear the filters' : ''}.</div>
+              <div style={{ fontSize: 30, marginBottom: 6 }}></div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 3 }}>No colleagues match that search</div>
+              <div style={{ fontSize: 12, color: C.faint }}>Try a different name, code or department{(dept || loc) ? ', or clear the filters' : ''}.</div>
             </div>
           )}
         </div>
@@ -642,24 +1268,81 @@ function Directory({ isMobile }: { isMobile: boolean }) {
 // ════════════════════════════════════════════════════════════════
 // NOTIFICATIONS (B11)
 // ════════════════════════════════════════════════════════════════
+
 function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () => void }) {
-  const [rows, setRows] = useState<EssNotification[]>([])
-  const load = useCallback(() => loadNotifications(emp.id).then(r => { setRows(r); onChange?.() }), [emp.id, onChange])
+  const [personal, setPersonal] = useState<any[]>([])
+  const [role, setRole] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  // Reads through /api/ess/notifications rather than the table directly. That
+  // route syncs first, so work already sitting in a queue shows up on the first
+  // open instead of only after the next event fires.
+  const load = useCallback(async () => {
+    try {
+      const h = essAuthHeaders()
+      let headers: Record<string, string> = h
+      if (!h.Authorization) {
+        const { data } = await supabase.auth.getSession()
+        const t = data?.session?.access_token
+        headers = t ? { Authorization: `Bearer ${t}` } : {}
+      }
+      const r = await fetch(`/api/ess/notifications?employee_id=${emp.id}`, { headers })
+      if (!r.ok) { setPersonal([]); setRole([]); return }
+      const j = await r.json()
+      setPersonal(j.personal || []); setRole(j.role || [])
+    } catch { setPersonal([]); setRole([]) }
+    finally { setLoading(false); onChange?.() }
+  }, [emp.id, onChange])
+
   useEffect(() => { load() }, [load])
+
+  const act = async (body: any) => {
+    const h = essAuthHeaders()
+    let headers: Record<string, string> = { 'Content-Type': 'application/json', ...h }
+    if (!h.Authorization) {
+      const { data } = await supabase.auth.getSession()
+      const t = data?.session?.access_token
+      if (t) headers.Authorization = `Bearer ${t}`
+    }
+    await fetch('/api/ess/notifications', { method: 'POST', headers, body: JSON.stringify(body) })
+    load()
+  }
+
+  const Row = (n: any) => (
+    <div key={n.id} onClick={() => { if (!n.is_read) act({ action: 'read', id: n.id }) }}
+      style={{ padding:'9px 0 9px 10px', borderBottom:`1px solid ${C.brandEdge}`,
+        cursor: n.is_read ? 'default' : 'pointer', opacity: n.is_read ? .6 : 1,
+        // The catalogue's "In-app + Email" tier is time-sensitive, financial or
+        // a rejection. A stripe reads at a glance; a second channel does not
+        // help somebody already looking at the list.
+        borderLeft: n.high ? `3px solid ${C.critical}` : '3px solid transparent' }}>
+      <div style={{ fontSize:13, fontWeight:600 }}>{!n.is_read && <span style={{ color:C.brand }}>● </span>}{n.title}</div>
+      {n.body && <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{n.body}</div>}
+      <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>{n.label || ''} · {fmtDT(n.created_at)}</div>
+    </div>
+  )
+
+  const total = personal.length + role.length
+  const Head = ({ children }: { children: React.ReactNode }) => (
+    <div style={{ fontSize:10, fontWeight:700, color:C.faint, letterSpacing:.4,
+      textTransform:'uppercase', margin:'10px 0 2px' }}>{children}</div>
+  )
+
   return (
     <div style={{ ...T.card, marginBottom:0, border:'none', boxShadow:'none' }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
-        <div style={T.section}>🔔 Notifications</div>
-        <button onClick={async () => { await markAllNotifications(emp.id); load() }} style={T.btnO}>Mark all read</button>
+        <div style={T.section}>Notifications</div>
+        <button onClick={() => act({ action: 'read_all' })} style={T.btnO}>Mark all read</button>
       </div>
-      {rows.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF', padding:'8px 0' }}>You're all caught up. 🎉</div>}
-      {rows.map(n => (
-        <div key={n.id} onClick={async () => { if (!n.is_read) { await markNotification(n.id); load() } }} style={{ padding:'9px 0', borderBottom:'1px solid #F3F0FF', cursor: n.is_read ? 'default' : 'pointer', opacity: n.is_read ? .6 : 1 }}>
-          <div style={{ fontSize:13, fontWeight:600 }}>{!n.is_read && <span style={{ color:'#7C3AED' }}>● </span>}{n.title}</div>
-          {n.body && <div style={{ fontSize:12, color:'#6B7280', marginTop:2 }}>{n.body}</div>}
-          <div style={{ fontSize:10, color:'#9CA3AF', marginTop:2 }}>{n.category || ''} · {fmtDT(n.created_at)}</div>
-        </div>
-      ))}
+
+      {loading && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>Loading…</div>}
+      {!loading && total === 0 && <div style={{ fontSize:12, color:C.faint, padding:'8px 0' }}>You&apos;re all caught up. 🎉</div>}
+
+      {/* Two groups, because "your leave was approved" and "three people are
+          waiting on you" are different kinds of message. A flat list buries
+          the second under the first. */}
+      {role.length > 0 && <><Head>For you to action</Head>{role.map(Row)}</>}
+      {personal.length > 0 && <><Head>About you</Head>{personal.map(Row)}</>}
     </div>
   )
 }
@@ -685,7 +1368,7 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   // Balance lookup by leave_type_id → shows "(N left)" next to a type when seeded.
   const balByType = useMemo(() => { const m: Record<string, any> = {}; balances.forEach((b: any) => { m[b.leave_type_id] = b }); return m }, [balances])
   const avail = (b: any) => (Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)
-  const barColor = (pct: number) => pct > 60 ? '#059669' : pct > 30 ? '#F59E0B' : '#DC2626'
+  const barColor = (pct: number) => pct > 60 ? C.positive : pct > 30 ? C.warning : C.critical
   const submit = async () => {
     if (!form.leave_type_id || !form.from_date || !form.to_date) { notify('Select leave type and dates', 'error'); return }
     if (form.half_day && !form.half_session) { notify('Select 1st half or 2nd half', 'error'); return }
@@ -697,22 +1380,22 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
     notify('Leave request submitted ✓'); setForm({ leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' })
     loadLeaveApplications(emp.id).then(setApps)
   }
-  const STATUS: Record<string, [string, string]> = { PENDING: ['#FFFBEB', '#B45309'], APPROVED: ['#ECFDF5', '#059669'], REJECTED: ['#FEF2F2', '#DC2626'], CANCELLED: ['#F3F4F6', '#6B7280'] }
-  const HOL_STYLE: Record<string, [string, string]> = { NATIONAL: ['#EFF6FF', '#1E40AF'], FESTIVAL: ['#EDE9FE', '#534AB7'], OPTIONAL: ['#FFFBEB', '#B45309'], REGIONAL: ['#E0F2FE', '#0369A1'] }
+  const STATUS: Record<string, [string, string]> = { PENDING: [C.warningTint, C.warning], APPROVED: [C.positiveTint, C.positive], REJECTED: [C.criticalTint, C.critical], CANCELLED: [C.sunken, C.muted] }
+  const HOL_STYLE: Record<string, [string, string]> = { NATIONAL: [C.infoTint, C.brand], FESTIVAL: [C.brandTint, C.muted], OPTIONAL: [C.warningTint, C.warning], REGIONAL: [C.brandTint, C.brand] }
   const today = new Date().toISOString().slice(0, 10)
   const upcoming = hols.filter((h: any) => h.holiday_date >= today)
   return (
     <div>
       <div style={T.card}>
-        <div style={T.section}>🌴 Leave Balance · FY 2026-27</div>
-        {balances.length === 0 ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>No leave balances yet — contact HR.</div> :
+        <div style={T.section}>Leave Balance · FY 2026-27</div>
+        {balances.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No leave balances yet — contact HR.</div> :
           balances.map((b: any) => { const total = Number(b.opening || 0) + Number(b.accrued || 0); const av = avail(b); const pct = total > 0 ? Math.round(av / total * 100) : 0; return (
-            <div key={b.id} style={{ background: '#FAFAF8', borderRadius: 8, padding: '10px 12px', marginBottom: 8 }}>
+            <div key={b.id} style={{ background: C.sunken, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10, background: '#EDE9FE', color: '#6D28D9', padding: '2px 7px', borderRadius: 99, marginRight: 6 }}>{b.leave_types?.short_name}</span>{b.leave_types?.name}</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: barColor(pct) }}>{av}<span style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 400 }}> / {total}</span></span>
+                <span style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10, background: C.brandTint, color: C.brandDeep, padding: '2px 7px', borderRadius: 99, marginRight: 6 }}>{b.leave_types?.short_name}</span>{b.leave_types?.name}</span>
+                <span style={{ fontSize: 18, fontWeight: 700, color: barColor(pct) }}>{av}<span style={{ fontSize: 11, color: C.faint, fontWeight: 400 }}> / {total}</span></span>
               </div>
-              <div style={{ height: 5, borderRadius: 99, background: '#E2E8F0', overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: barColor(pct) }} /></div>
+              <div style={{ height: 5, borderRadius: 99, background: C.line, overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: barColor(pct) }} /></div>
             </div>
           )})}
       </div>
@@ -755,24 +1438,24 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
       </div>
       <div style={T.card}>
         <div style={T.section}>Recent Requests</div>
-        {apps.length === 0 ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>No leave applications yet.</div> :
-          apps.map((a: any) => { const [bg, c] = STATUS[a.status] || ['#F3F4F6', '#6B7280']; return (
-            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F3F0FF', fontSize: 12 }}>
-              <span style={{ fontSize: 10, background: '#EDE9FE', color: '#6D28D9', padding: '2px 7px', borderRadius: 99, fontWeight: 600 }}>{a.leave_types?.short_name}</span>
+        {apps.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No leave applications yet.</div> :
+          apps.map((a: any) => { const [bg, c] = STATUS[a.status] || [C.sunken, C.muted]; return (
+            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.brandEdge}`, fontSize: 12 }}>
+              <span style={{ fontSize: 10, background: C.brandTint, color: C.brandDeep, padding: '2px 7px', borderRadius: 99, fontWeight: 600 }}>{a.leave_types?.short_name}</span>
               <span style={{ flex: 1 }}>{a.from_date}{a.to_date !== a.from_date ? ` → ${a.to_date}` : ''}{a.half_day ? ' (½)' : ''}</span>
               <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: bg, color: c, fontWeight: 600 }}>{a.status}</span>
             </div>
           )})}
       </div>
       <div style={T.card}>
-        <div style={T.section}>📅 Upcoming Holidays</div>
-        {upcoming.length === 0 ? <div style={{ fontSize: 12, color: '#9CA3AF' }}>No upcoming holidays.</div> :
-          upcoming.map((h: any) => { const [bg, c] = HOL_STYLE[h.holiday_type] || ['#F3F4F6', '#6B7280']; return (
-            <div key={h.holiday_date + h.description} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #F3F0FF', fontSize: 12 }}>
+        <div style={T.section}>Upcoming Holidays</div>
+        {upcoming.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No upcoming holidays.</div> :
+          upcoming.map((h: any) => { const [bg, c] = HOL_STYLE[h.holiday_type] || [C.sunken, C.muted]; return (
+            <div key={h.holiday_date + h.description} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.brandEdge}`, fontSize: 12 }}>
               <span style={{ minWidth: 64, fontWeight: 600 }}>{new Date(h.holiday_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
               <span style={{ flex: 1 }}>{h.description}</span>
               <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: bg, color: c, fontWeight: 600 }}>{h.holiday_type}</span>
-              {h.is_optional && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: '#FEF3C7', color: '#92400E' }}>Optional</span>}
+              {h.is_optional && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: C.warningTint, color: C.warning }}>Optional</span>}
             </div>
           )})}
       </div>
@@ -783,10 +1466,22 @@ function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 // ════════════════════════════════════════════════════════════════
 // ATTENDANCE (B3)
 // ════════════════════════════════════════════════════════════════
+// Higher-contrast pairs than the originals, which sat around olive on pale
+// green and were hard to read at calendar-cell size. Each is [background, ink]
+// and every pair clears WCAG AA at 11px.
 const STATUS_STYLE: Record<string,[string,string]> = {
-  PRESENT:['#EAF3DE','#3B6D11'], ABSENT:['#FCEBEB','#A32D2D'], HALF_DAY:['#FAEEDA','#633806'],
-  MISS_PUNCH:['#FAEEDA','#854F0B'], LWP:['#FCEBEB','#A32D2D'], WEEKLY_OFF:['#F1F5F9','#94A3B8'],
-  HOLIDAY:['#E6F1FB','#0C447C'], ON_LEAVE:['#EEEDFE','#3C3489'], FUTURE:['transparent','#CBD5E1'], TODAY:['#F5F3FF','#7C3AED'],
+  PRESENT:[C.sunken,C.positive], ABSENT:[C.criticalTint,C.critical], HALF_DAY:[C.warningTint,C.warning],
+  MISS_PUNCH:[C.warningTint,C.critical], LWP:[C.criticalTint,C.critical], WEEKLY_OFF:[C.sunken,C.faint],
+  HOLIDAY:[C.brandTint,C.info], ON_LEAVE:[C.brandTint,C.brandDeep], FUTURE:['transparent',C.lineStrong], TODAY:[C.canvas,C.brand],
+}
+/** Accent bar colour per status — the saturated version of the ink. */
+const STATUS_BAR: Record<string,string> = {
+  PRESENT: C.positive, ABSENT:C.critical, HALF_DAY:C.warning, MISS_PUNCH: C.warning,
+  LWP:C.critical, WEEKLY_OFF:C.lineStrong, HOLIDAY:C.info, ON_LEAVE: C.brand,
+}
+const STATUS_FULL: Record<string,string> = {
+  PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half day', MISS_PUNCH:'Missing punch',
+  LWP:'Loss of pay', WEEKLY_OFF:'Weekly off', HOLIDAY:'Holiday', ON_LEAVE:'On leave', FUTURE:'—',
 }
 const STATUS_LABEL: Record<string,string> = { PRESENT:'P', ABSENT:'A', HALF_DAY:'½', MISS_PUNCH:'!', LWP:'LWP', WEEKLY_OFF:'W', HOLIDAY:'H', ON_LEAVE:'L', FUTURE:'', ABSENT_FULL:'Absent' }
 
@@ -797,90 +1492,531 @@ const WEEKDAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 const pad2 = (n: number) => String(n).padStart(2,'0')
 
 function StatusBadge({ status }: { status: string }) {
-  const [bg,c] = STATUS_STYLE[status] || ['#F3F0FF','#6D28D9']
+  const [bg,c] = STATUS_STYLE[status] || [C.brandTint,C.brandDeep]
   const lbl = ({ PRESENT:'Present', ABSENT:'Absent', HALF_DAY:'Half Day', MISS_PUNCH:'Miss Punch', LWP:'LWP', WEEKLY_OFF:'Weekly Off', HOLIDAY:'Holiday', ON_LEAVE:'On Leave', FUTURE:'—' } as Record<string,string>)[status] || status
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{lbl}</span>
 }
 
 // 1) Summary chips ──────────────────────────────────────────────
-function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typeof computeSummary>; isMobile: boolean }) {
-  const chips: { label: string; value: string; style: [string,string] }[] = [
-    { label:'Present',  value:String(summary.present),   style:STATUS_STYLE.PRESENT },
-    { label:'Absent',   value:String(summary.absent),    style:STATUS_STYLE.ABSENT },
-    { label:'Half Day', value:String(summary.halfDay),   style:STATUS_STYLE.HALF_DAY },
-    { label:'Late',     value:String(summary.lateCount), style:STATUS_STYLE.MISS_PUNCH },
-    { label:'OT',       value:summary.totalOTHours,      style:['#EEEDFE','#3C3489'] },
-    { label:'LOP',      value:String(summary.lopDays),   style:STATUS_STYLE.LWP },
-  ]
-  const wrap: React.CSSProperties = isMobile
-    ? { overflowX:'auto', display:'flex', whiteSpace:'nowrap', gap:8, marginBottom:10, paddingBottom:4 }
-    : { display:'flex', flexWrap:'wrap', gap:8, marginBottom:10 }
+/**
+ * Month statistics read off the calendar itself.
+ *
+ * computeSummary() counts attendance_records, and a day with no record at all
+ * produces no row — but resolveDay() shows that day as ABSENT on the grid,
+ * because a past working day with nothing recorded is an absence. So the two
+ * disagreed: with one PRESENT record and twelve blank days, the summary said
+ * 100% while the calendar showed twelve A's.
+ *
+ * This walks the month the same way the grid does, so the number above the
+ * calendar always describes the calendar below it. Weekly offs, holidays and
+ * approved leave are excluded from the denominator — being off on a Sunday is
+ * not an absence.
+ */
+function monthStats(year: number, month: number, md: MonthlyData | null, todayStr: string) {
+  const empty = { present:0, absent:0, halfDay:0, lateCount:0, lopDays:0, missPunch:0,
+                  onLeave:0, totalOTHours:'0h 0m', working:0, pct:null as number | null }
+  if (!md) return empty
+
+  const days = new Date(year, month, 0).getDate()
+  let present=0, absent=0, halfDay=0, late=0, lop=0, miss=0, leave=0, ot=0
+
+  for (let d = 1; d <= days; d++) {
+    const ds = `${year}-${pad2(month)}-${pad2(d)}`
+    if (ds > todayStr) continue                    // the future is not a result yet
+    const { status, rec } = resolveDay(ds, md, todayStr)
+
+    if (rec?.late_minutes) late++
+    if (rec?.overtime_minutes) ot += rec.overtime_minutes
+
+    switch (status) {
+      case 'PRESENT':    present++; break
+      case 'HALF_DAY':   halfDay++; break
+      case 'MISS_PUNCH': miss++; present++; break   // they were here; the punch is what is missing
+      case 'LWP':        lop++; break
+      case 'ABSENT':     absent++; break
+      case 'ON_LEAVE':   leave++; break
+      default: break                                 // weekly off, holiday — not working days
+    }
+  }
+
+  const working = present + absent + halfDay + lop
+  const earned = present + halfDay * 0.5
+  return {
+    present, absent, halfDay, lateCount: late, lopDays: lop, missPunch: miss, onLeave: leave,
+    totalOTHours: `${Math.floor(ot/60)}h ${ot%60}m`,
+    working,
+    pct: working > 0 ? Math.round((earned / working) * 100) : null,
+  }
+}
+
+/**
+ * The month, as one glance.
+ *
+ * The old header was a bare Prev / Next bar and six equal chips. Nothing said
+ * how the month was actually going, which is the only question an employee
+ * opens this page with. The ring answers it before anything is read.
+ *
+ * Attendance % counts half days as half and ignores weekly offs, holidays and
+ * approved leave — being off on a Sunday is not an absence, and scoring it as
+ * one would make the number meaningless.
+ */
+function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth, isMobile }: {
+  month: number; year: number; summary: ReturnType<typeof monthStats>
+  onPrev: () => void; onNext: () => void; onToday: () => void
+  isThisMonth: boolean; isMobile: boolean
+}) {
+  const { working, pct } = summary
+  const tone = pct == null ? C.faint : pct >= 95 ? C.positive : pct >= 85 ? C.warning : C.criticalTint
+
+  const size = isMobile ? 68 : 82
+  const r = (size - 10) / 2
+  const circ = 2 * Math.PI * r
+
+  const nav: React.CSSProperties = {
+    width: 32, height: 32, borderRadius: 10, cursor: 'pointer',
+    border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.10)',
+    color: C.onAccent, fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'background .15s ease, transform .12s ease',
+  }
+
   return (
-    <div style={wrap}>
-      {chips.map(ch => (
-        <div key={ch.label} style={{ background:ch.style[0], color:ch.style[1], borderRadius:9, padding:'8px 14px', flexShrink:0, display:'flex', flexDirection:'column', alignItems:'flex-start', minWidth:64 }}>
-          <span style={{ fontSize:20, fontWeight:700, lineHeight:1.1 }}>{ch.value}</span>
-          <span style={{ fontSize:10, fontWeight:600, textTransform:'uppercase', letterSpacing:'.04em', opacity:.85 }}>{ch.label}</span>
+    <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 11, position: 'relative',
+                  background: `linear-gradient(135deg,${C.ink} 0%,${C.inkSoft} 55%,${C.brand} 100%)`,
+                  boxShadow: '0 8px 26px rgba(30,27,75,0.26)' }}>
+      <div style={{ position: 'absolute', top: -80, right: -50, width: 220, height: 220,
+                    borderRadius: '50%', background: 'rgba(167,139,250,0.15)', pointerEvents: 'none' }} />
+
+      <div style={{ position: 'relative', padding: isMobile ? '16px 16px' : '18px 20px',
+                    display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 190 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 3 }}>
+            <button onClick={onPrev} className="ezer-nav" style={nav} title="Previous month">‹</button>
+            <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 700, color: C.onAccent, letterSpacing: '-.01em' }}>
+              {MONTH_NAMES[month - 1]} <span style={{ opacity: .55, fontWeight: 500 }}>{year}</span>
+            </div>
+            <button onClick={onNext} className="ezer-nav" style={nav} title="Next month">›</button>
+            {!isThisMonth && (
+              <button onClick={onToday} className="ezer-nav"
+                      style={{ ...nav, width: 'auto', padding: '0 11px', fontSize: 12, fontWeight: 600 }}>
+                Today
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize: 12, color: C.onAccentDim }}>
+            {working > 0
+              ? `${working} working day${working === 1 ? '' : 's'} · ${summary.present} present, ${summary.absent} absent`
+              : 'No working days recorded yet'}
+          </div>
+          {summary.totalOTHours && summary.totalOTHours !== '0h 0m' && (
+            <div style={{ fontSize: 12, color: C.positive, marginTop: 5 }}>
+              ⏱ {summary.totalOTHours} overtime this month
+            </div>
+          )}
         </div>
+
+        <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+          <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="7" />
+            {pct != null && (
+              <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tone} strokeWidth="7" strokeLinecap="round"
+                      strokeDasharray={`${(circ * pct) / 100} ${circ}`}
+                      style={{ transition: 'stroke-dasharray .9s cubic-bezier(.22,1,.36,1), stroke .4s ease',
+                               filter: `drop-shadow(0 0 5px ${tone}66)` }} />
+            )}
+          </svg>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', justifyContent: 'center', color: C.onAccent }}>
+            <span style={{ fontSize: isMobile ? 17 : 20, fontWeight: 700, lineHeight: 1 }}>
+              {pct == null ? '—' : `${pct}%`}
+            </span>
+            <span style={{ fontSize: 9, opacity: .65, letterSpacing: '.06em', marginTop: 2 }}>ATTENDANCE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** One statistic. Zero is greyed, so the eye lands on what actually happened. */
+function StatTile({ label, value, bg, fg, bar, wide }: {
+  label: string; value: string; bg: string; fg: string; bar: string; wide?: boolean
+}) {
+  const empty = value === '0' || value === '0h 0m'
+  return (
+    <div className="ezer-tile" style={{ background: empty ? C.sunken : bg, borderRadius: 10, padding: '10px 13px',
+                  border: `1px solid ${empty ? C.line : bg}`, position: 'relative',
+                  overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
+      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
+                    background: empty ? C.line : bar }} />
+      <div style={{ fontSize: 21, fontWeight: 700, lineHeight: 1.05, marginLeft: 4,
+                    color: empty ? C.line : fg }}>{value}</div>
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
+                    marginLeft: 4, marginTop: 3, color: empty ? C.line : fg, opacity: empty ? 1 : .8 }}>
+        {label}
+      </div>
+    </div>
+  )
+}
+
+function AttendanceSummaryChips({ summary, isMobile }: { summary: ReturnType<typeof monthStats>; isMobile: boolean }) {
+  const tiles: { label: string; value: string; k: string; wide?: boolean }[] = [
+    { label:'Present',   value:String(summary.present),   k:'PRESENT' },
+    { label:'Absent',    value:String(summary.absent),    k:'ABSENT' },
+    { label:'Half day',  value:String(summary.halfDay),   k:'HALF_DAY' },
+    { label:'Late',      value:String(summary.lateCount), k:'MISS_PUNCH' },
+    { label:'Overtime',  value:summary.totalOTHours,      k:'ON_LEAVE', wide:true },
+    { label:'Loss of pay', value:String(summary.lopDays), k:'LWP' },
+  ]
+  return (
+    <div style={{ display:'flex', flexWrap: isMobile ? 'nowrap' : 'wrap', gap:8, marginBottom:11,
+                  overflowX: isMobile ? 'auto' : 'visible', paddingBottom: isMobile ? 4 : 0 }}>
+      {tiles.map(t => {
+        const [bg, fg] = STATUS_STYLE[t.k]
+        return <StatTile key={t.label} label={t.label} value={t.value}
+                         bg={bg} fg={fg} bar={STATUS_BAR[t.k]} wide={t.wide} />
+      })}
+    </div>
+  )
+}
+
+/** What the colours mean. Without this the calendar is a puzzle on first visit. */
+function CalendarLegend() {
+  const items = ['PRESENT','ABSENT','HALF_DAY','MISS_PUNCH','ON_LEAVE','HOLIDAY','WEEKLY_OFF']
+  return (
+    <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 13px', marginTop:11, paddingTop:9,
+                  borderTop: `1px solid ${C.brandEdge}` }}>
+      {items.map(k => (
+        <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5,
+                               fontSize:10, color:C.faint }}>
+          <span style={{ width:6, height:6, borderRadius:'50%', background:STATUS_BAR[k] }} />
+          {STATUS_FULL[k]}
+        </span>
       ))}
     </div>
   )
 }
 
 // 2) Calendar ────────────────────────────────────────────────────
-function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayClick, selectedDate }: {
-  year: number; month: number; monthData: MonthlyData; todayStr: string; isMobile: boolean
-  onDayClick: (d: string) => void; selectedDate: string|null
-}) {
-  const cell = isMobile ? 38 : 58
-  const fs = isMobile ? 9 : 11
-  const gap = isMobile ? 2 : 3
-  const daysInMonth = new Date(year, month, 0).getDate()
-  const lead = new Date(year, month-1, 1).getDay()
-  const cells: React.ReactNode[] = []
-  for (let i = 0; i < lead; i++) cells.push(<div key={'b'+i} />)
-  for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
-    const { status, rec, leave } = resolveDay(dateStr, monthData, todayStr)
-    const [bg, c] = STATUS_STYLE[status] || ['#fff', '#1E1B4B']
-    const isToday = dateStr === todayStr
-    const isSel = dateStr === selectedDate
-    cells.push(
-      <button key={dateStr} onClick={() => onDayClick(dateStr)} style={{
-        minHeight:cell, background:bg, color:c, border: isToday ? '1.5px solid #7C3AED' : '1px solid rgba(124,58,237,0.10)',
-        borderRadius:7, padding:isMobile?'3px 2px':'4px 5px', cursor:'pointer', fontFamily:'inherit',
-        display:'flex', flexDirection:'column', alignItems:'flex-start', gap:1, overflow:'hidden',
-        outline: isSel ? '2px solid #7C3AED' : 'none', outlineOffset: isSel ? 1 : 0,
-      }}>
-        <span style={{ fontSize:fs, fontWeight:700, lineHeight:1 }}>{d}</span>
-        {!isMobile && rec && (rec.work_in || rec.work_out) && (
-          <span style={{ fontSize:8, opacity:.8, lineHeight:1.2 }}>{fmtT(rec.work_in)}–{fmtT(rec.work_out)}</span>
-        )}
-        {status === 'ON_LEAVE'
-          ? <span style={{ fontSize:isMobile?8:9, fontWeight:600 }}>{leave?.short_name || 'L'}</span>
-          : (STATUS_LABEL[status] ? <span style={{ fontSize:isMobile?8:9, fontWeight:600 }}>{STATUS_LABEL[status]}</span> : null)}
-      </button>
-    )
-  }
-  const legend: [string,string][] = [['PRESENT','Present'],['ABSENT','Absent'],['HALF_DAY','Half'],['MISS_PUNCH','Miss Punch'],['ON_LEAVE','Leave'],['HOLIDAY','Holiday'],['WEEKLY_OFF','Week Off'],['LWP','LOP']]
+/**
+ * The month grid.
+ *
+ * Changes from the original that matter:
+ *   · a real weekday header, so a date can be located without counting
+ *   · weekend columns tinted, which is how people actually scan a month
+ *   · status carried by a left accent bar as well as fill, so the grid stays
+ *     readable for the ~8% of men with colour vision deficiency
+ *   · today ringed and labelled; the selected day lifts rather than just
+ *     outlining, so the day detail below has a visible origin
+ *   · punch times shown when there is room, since "when did I leave" is the
+ *     second question after "was I present"
+ *   · future days rendered flat and unclickable — nothing to see, and a
+ *     clickable empty panel is a dead end
+ */
+/* Keyframes for the calendar. Injected once — this file uses inline styles,
+   which cannot express @keyframes or :active, and a media query for reduced
+   motion cannot be written inline either.
+
+   The last block is the important one. Motion here is decorative: it tells you
+   a month changed and which cell you are on. For anyone who has asked their OS
+   to reduce motion — vestibular disorders, migraine triggers — the same
+   information has to arrive without the movement, so every animation collapses
+   to a near-instant fade and the 3D tilt is dropped entirely. */
+function ShimmerKeyframes() {
+  return <style>{`
+    @keyframes ezerShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+    /* Cells arrive as a wave across the grid, so a month reads as one object
+       being dealt rather than 31 things appearing at once. */
+    @keyframes ezerCellIn{
+      from{opacity:0;transform:translateY(6px) scale(.94)}
+      to  {opacity:1;transform:none}
+    }
+    @keyframes ezerPanelIn{
+      from{opacity:0;transform:translateX(8px)}
+      to  {opacity:1;transform:none}
+    }
+    .ezer-cell{
+      animation:ezerCellIn .32s cubic-bezier(.22,1,.36,1) both;
+      transform-origin:center;
+      will-change:transform;
+    }
+    /* The lift is a real one — the cell rises toward the viewer and tips very
+       slightly, which is what makes it read as a tile rather than a rectangle
+       that changed colour. */
+    .ezer-cell:not(:disabled):hover{
+      transform:translateZ(16px) translateY(-2px) rotateX(6deg);
+      z-index:2;
+    }
+    .ezer-cell:not(:disabled):active{
+      transform:translateZ(2px) scale(.95);
+      transition-duration:.06s;
+    }
+    .ezer-day-panel{animation:ezerPanelIn .3s cubic-bezier(.22,1,.36,1) both}
+
+    /* Month navigation. Inline styles cannot express :hover or :active. */
+    .ezer-nav:hover{background:rgba(255,255,255,.2)!important}
+    .ezer-nav:active{transform:scale(.9)}
+
+    /* Stat tiles rise very slightly, enough to say they are a group of objects. */
+    .ezer-tile{transition:transform .16s cubic-bezier(.22,1,.36,1), box-shadow .16s ease}
+    .ezer-tile:hover{transform:translateY(-2px);box-shadow:0 6px 16px -6px rgba(30,27,75,.22)}
+
+    @media (prefers-reduced-motion: reduce){
+      .ezer-cell,.ezer-day-panel{animation-duration:.01ms!important;animation-delay:0ms!important}
+      .ezer-cell:not(:disabled):hover{transform:translateY(-1px);}
+      .ezer-cell:not(:disabled):active{transform:none}
+    }
+  `}</style>
+}
+
+/**
+ * The month grid.
+ *
+ * Sized deliberately. The previous version used `repeat(7, 1fr)` with 74px
+ * cells and no width cap, so on a wide screen the columns stretched to fill the
+ * content area and the calendar became a wall of oversized boxes. A month is a
+ * fixed shape — it should not grow just because the window did. The grid is
+ * capped at 476px (7 x 60 + gaps), which is about as wide as a month wants to
+ * be before the eye stops reading it as a unit.
+ *
+ * Density follows from that: the grid is for scanning, the panel below is for
+ * detail. Each cell carries the date, a status dot, and — only where it fits
+ * and matters — the punch times. Everything else moved to the day panel.
+ *
+ * Status is a coloured dot plus a tinted fill rather than a heavy accent bar,
+ * so the grid reads as a calendar instead of a bar chart, and still works
+ * without relying on colour alone.
+ */
+/** The right column before a day is picked. An empty panel reads as broken. */
+function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }) {
+  const rows: [string, string, string][] = [
+    ['Present',   String(summary.present),   STATUS_BAR.PRESENT],
+    ['Absent',    String(summary.absent),    STATUS_BAR.ABSENT],
+    ['Half day',  String(summary.halfDay),   STATUS_BAR.HALF_DAY],
+    ['On leave',  String(summary.onLeave),   STATUS_BAR.ON_LEAVE],
+  ]
   return (
-    <div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom:gap }}>
-        {WEEKDAYS.map(w => <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:600, color:'#9CA3AF', padding:'2px 0' }}>{w}</div>)}
+    <div style={{ ...T.card, height: '100%', display: 'flex', flexDirection: 'column',
+                  justifyContent: 'center', marginBottom: 0 }}>
+      <div style={{ textAlign: 'center', padding: '6px 0 16px' }}>
+        <div style={{ fontSize: 26, marginBottom: 6 }}></div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.ink }}>Pick a day</div>
+        <div style={{ fontSize: 12, color: C.faint, marginTop: 3, lineHeight: 1.55 }}>
+          Its punches, hours and status appear here.
+        </div>
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap }}>{cells}</div>
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'6px 12px', marginTop:12 }}>
-        {legend.map(([k,lbl]) => { const [bg,c] = STATUS_STYLE[k]; return (
-          <span key={k} style={{ display:'inline-flex', alignItems:'center', gap:5, fontSize:10, color:'#6B7280' }}>
-            <span style={{ width:11, height:11, borderRadius:3, background:bg, border:'1px solid '+c, display:'inline-block' }} />{lbl}
-          </span>
-        )})}
+      <div style={{ borderTop: `1px solid ${C.brandEdge}`, paddingTop: 12 }}>
+        <div style={{ fontSize: 10, fontWeight: 700, color: C.faint, letterSpacing: '.06em',
+                      textTransform: 'uppercase', marginBottom: 8 }}>This month so far</div>
+        {rows.map(([k, v, c]) => (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0' }}>
+            <span style={{ width: 7, height: 7, borderRadius: '50%', background: c }} />
+            <span style={{ fontSize: 12, color: C.muted, flex: 1 }}>{k}</span>
+            <span style={{ fontSize: 13, fontWeight: 700,
+                           color: v === '0' ? C.line : C.ink }}>{v}</span>
+          </div>
+        ))}
       </div>
     </div>
   )
 }
 
-// 3) Day detail panel ────────────────────────────────────────────
+// The calendar card as a physical object: it sits above the page at rest and
+// turns to face the cursor. The tilt is written straight to the node on a
+// rAF — routing it through useState would re-render all 31 cells per pointer
+// move, which is exactly what made the per-cell tilt stutter.
+const TILT_MAX = 7          // degrees; past ~9 the type starts to smear
+const LIFT_REST = 8         // px off the page when idle
+const LIFT_HOVER = 26
+
+function TiltCard({ children, disabled, style }: {
+  children: React.ReactNode; disabled?: boolean; style?: React.CSSProperties
+}) {
+  const wrap  = useRef<HTMLDivElement | null>(null)
+  const card  = useRef<HTMLDivElement | null>(null)
+  const sheen = useRef<HTMLDivElement | null>(null)
+  const frame = useRef<number | null>(null)
+
+  useEffect(() => () => { if (frame.current !== null) cancelAnimationFrame(frame.current) }, [])
+
+  // Someone who has asked for less motion gets the depth (shadow, lift) but
+  // not the movement.
+  const still = () => typeof window !== 'undefined'
+    && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+  const rest = () => {
+    const el = card.current
+    if (!el) return
+    el.style.transform = `translateZ(${LIFT_REST}px)`
+    el.style.boxShadow = '0 2px 6px rgba(30,27,75,.07), 0 14px 34px -18px rgba(30,27,75,.30)'
+    if (sheen.current) sheen.current.style.opacity = '0'
+  }
+
+  const track = (e: React.MouseEvent) => {
+    if (disabled || still()) return
+    const w = wrap.current, el = card.current
+    if (!w || !el) return
+    const r = w.getBoundingClientRect()
+    const px = (e.clientX - r.left) / r.width      // 0..1 across the card
+    const py = (e.clientY - r.top) / r.height
+    const rx = (0.5 - py) * 2 * TILT_MAX           // cursor high -> top leans back
+    const ry = (px - 0.5) * 2 * TILT_MAX
+    if (frame.current !== null) cancelAnimationFrame(frame.current)
+    frame.current = requestAnimationFrame(() => {
+      el.style.transform = `rotateX(${rx.toFixed(2)}deg) rotateY(${ry.toFixed(2)}deg) translateZ(${LIFT_HOVER}px)`
+      // The shadow is cast by a light above and behind the viewer, so it slides
+      // opposite the tilt. A shadow that does not move gives the trick away.
+      el.style.boxShadow = `${(-ry * 1.7).toFixed(1)}px ${(20 + rx * 1.7).toFixed(1)}px 46px -20px rgba(30,27,75,.42), 0 2px 6px rgba(30,27,75,.10)`
+      if (sheen.current) {
+        sheen.current.style.opacity = '1'
+        sheen.current.style.background =
+          `radial-gradient(340px circle at ${(px * 100).toFixed(1)}% ${(py * 100).toFixed(1)}%, rgba(167,139,250,.16), rgba(37,99,235,.05) 45%, rgba(37,99,235,0) 70%)`
+      }
+    })
+  }
+
+  if (disabled) return <div style={style}>{children}</div>
+
+  return (
+    <div ref={wrap}
+         onMouseMove={track}
+         onMouseLeave={rest}
+         style={{ perspective: 1300, perspectiveOrigin: '50% 45%', flex: '0 0 auto' }}>
+      <div ref={card}
+           style={{
+             ...style,
+             position: 'relative',
+             transformStyle: 'preserve-3d',
+             transform: `translateZ(${LIFT_REST}px)`,
+             boxShadow: '0 2px 6px rgba(30,27,75,.07), 0 14px 34px -18px rgba(30,27,75,.30)',
+             transition: 'transform .34s cubic-bezier(.22,1,.36,1), box-shadow .34s cubic-bezier(.22,1,.36,1)',
+           }}>
+        {children}
+        {/* Specular highlight. Sits above the content but takes no clicks. */}
+        <div ref={sheen} aria-hidden
+             style={{ position: 'absolute', inset: 0, borderRadius: 10, opacity: 0,
+                      pointerEvents: 'none', transition: 'opacity .28s ease' }} />
+      </div>
+    </div>
+  )
+}
+
+function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayClick, selectedDate }: {
+  year: number; month: number; monthData: MonthlyData; todayStr: string; isMobile: boolean
+  onDayClick: (d: string) => void; selectedDate: string|null
+}) {
+  const cell = isMobile ? 40 : 56
+  const gap = 4
+  const maxW = isMobile ? '100%' : 7 * 60 + gap * 6   // a month, not a banner
+  const daysInMonth = new Date(year, month, 0).getDate()
+  const lead = new Date(year, month-1, 1).getDay()
+
+  const cells: React.ReactNode[] = []
+  for (let i = 0; i < lead; i++) cells.push(<div key={'b'+i} />)
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${year}-${pad2(month)}-${pad2(d)}`
+    const { status, rec, leave } = resolveDay(dateStr, monthData, todayStr)
+    const [bg, ink] = STATUS_STYLE[status] || [C.surface, C.ink]
+    const dot = STATUS_BAR[status]
+    const isToday = dateStr === todayStr
+    const isSel = dateStr === selectedDate
+    const isFuture = status === 'FUTURE'
+    const hasTimes = !isMobile && !isFuture && rec && (rec.work_in || rec.work_out)
+    // Wave across the grid rather than a uniform fade. Capped so the last cell
+    // of a 31-day month is not still arriving half a second later.
+    const delay = Math.min((lead + d - 1) * 9, 260)
+
+    cells.push(
+      <button key={dateStr}
+        className="ezer-cell"
+        onClick={() => !isFuture && onDayClick(dateStr)}
+        disabled={isFuture}
+        title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}`}
+        style={{
+          height: cell, position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
+          background: isSel ? 'linear-gradient(145deg,#3B82F6,#1D4ED8)'
+                    : isFuture ? 'transparent' : bg,
+          color: isSel ? C.surface : ink,
+          border: isSel ? '1px solid #1D4ED8'
+                : isToday ? '2px solid #93C5FD'
+                : '1px solid rgba(37,99,235,0.09)',
+          borderRadius: 10, padding: 0,
+          cursor: isFuture ? 'default' : 'pointer',
+          opacity: isFuture ? .45 : 1,
+          animationDelay: `${delay}ms`,
+          // Two-layer shadow: a tight contact shadow plus a softer cast one.
+          // A single blur reads as a glow; two read as height.
+          boxShadow: isSel
+            ? '0 1px 2px rgba(76,29,149,.4), 0 8px 20px -4px rgba(37,99,235,.45)'
+            : isToday ? '0 1px 2px rgba(37,99,235,.12)' : 'none',
+          transition: 'box-shadow .18s ease, background .18s ease, transform .18s cubic-bezier(.22,1,.36,1)',
+          transformStyle: 'preserve-3d',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center', gap: 1,
+        }}>
+
+        <span style={{ fontSize: isMobile ? 12 : 13, fontWeight: isToday ? 800 : 600, lineHeight: 1 }}>
+          {d}
+        </span>
+
+        {/* the status, as a dot — small, and never the only signal */}
+        {!isFuture && dot && (
+          <span style={{ width: 5, height: 5, borderRadius: '50%', marginTop: 1,
+                         background: isSel ? 'rgba(255,255,255,0.9)' : dot }} />
+        )}
+
+        {hasTimes && (
+          <span style={{ fontSize: 8, lineHeight: 1, opacity: .75, marginTop: 1,
+                         fontVariantNumeric: 'tabular-nums' }}>
+            {fmtT(rec!.work_in)}
+          </span>
+        )}
+
+        {!isFuture && status === 'ON_LEAVE' && leave?.short_name && (
+          <span style={{ fontSize: 8, fontWeight: 700, lineHeight: 1, marginTop: 1 }}>
+            {leave.short_name}
+          </span>
+        )}
+
+        {isToday && !isSel && (
+          <span style={{ position: 'absolute', top: 3, right: 4, width: 4, height: 4,
+                         borderRadius: '50%', background: C.brand }} />
+        )}
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ maxWidth: maxW }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom: 3,
+                    transform: 'translateZ(14px)' }}>
+        {WEEKDAYS.map((w, n) => (
+          <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:700,
+                                letterSpacing:'.05em', padding:'3px 0',
+                                color: n % 6 === 0 ? C.brand : C.line }}>
+            {w[0]}{isMobile ? '' : w[1]}
+          </div>
+        ))}
+      </div>
+      {/* The perspective lives on the container, so a hovered cell tilts within
+          a shared vanishing point instead of each one having its own. Re-keyed
+          on the month so changing it replays the entrance. */}
+      <div key={`${year}-${month}`}
+           style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap,
+                    perspective: 700, perspectiveOrigin: '50% 40%',
+                    // Lifted off the card face. Combined with the card's own
+                    // tilt this is what parallaxes — the grid moves further
+                    // than the legend beneath it.
+                    transform: 'translateZ(26px)' }}>
+        {cells}
+      </div>
+      <div style={{ transform: 'translateZ(6px)' }}><CalendarLegend /></div>
+    </div>
+  )
+}
+
 function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
   emp: EmployeeDetail; date: string; dayInfo: ReturnType<typeof resolveDay>; isMobile: boolean; onRaise: (d: string) => void
 }) {
@@ -904,41 +2040,235 @@ function DayDetailPanel({ emp, date, dayInfo, isMobile, onRaise }: {
         <StatusBadge status={status} />
       </div>
 
-      {holiday && <div style={{ fontSize:13, color:'#0C447C', background:'#E6F1FB', borderRadius:7, padding:'8px 11px', marginBottom:10 }}>🎌 {holiday.description}{holiday.is_optional ? ' (Optional)' : ''}</div>}
-      {status === 'WEEKLY_OFF' && <div style={{ fontSize:13, color:'#94A3B8', background:'#F1F5F9', borderRadius:7, padding:'8px 11px', marginBottom:10 }}>Weekly Off</div>}
-      {leave && <div style={{ fontSize:13, color:'#3C3489', background:'#EEEDFE', borderRadius:7, padding:'8px 11px', marginBottom:10 }}>On Leave — {leave.name}{leave.half_day ? ' (Half day)' : ''}</div>}
+      {holiday && <div style={{ fontSize:13, color: C.brand, background: C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>🎌 {holiday.description}{holiday.is_optional ? ' (Optional)' : ''}</div>}
+      {status === 'WEEKLY_OFF' && <div style={{ fontSize:13, color:C.faint, background:C.sunken, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>Weekly Off</div>}
+      {leave && <div style={{ fontSize:13, color:C.brandDeep, background:C.brandTint, borderRadius:7, padding:'8px 11px', marginBottom:10 }}>On Leave — {leave.name}{leave.half_day ? ' (Half day)' : ''}</div>}
 
       {rec && (
         <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4,1fr)', gap:8, marginBottom:10 }}>
           {([['In', fmtT(rec.work_in)],['Out', fmtT(rec.work_out)],['Worked', worked],['Late', `${rec.late_minutes||0}m`],['OT', `${rec.overtime_minutes||0}m`]] as [string,string][]).map(([k,v]) => (
-            <div key={k} style={{ background:'#FAFAF8', borderRadius:7, padding:'7px 10px' }}>
-              <div style={{ fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase' }}>{k}</div>
+            <div key={k} style={{ background:C.sunken, borderRadius:7, padding:'7px 10px' }}>
+              <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' }}>{k}</div>
               <div style={{ fontSize:13, fontWeight:600, marginTop:2 }}>{v}</div>
             </div>
           ))}
         </div>
       )}
 
-      <div style={{ fontSize:11, fontWeight:600, color:'#6D28D9', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:6 }}>Punch Timeline</div>
-      {loading ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Loading punches…</div>
-        : punches.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No raw punches recorded.</div>
+      <div style={{ fontSize:11, fontWeight:600, color:C.brandDeep, textTransform:'uppercase', letterSpacing:'.05em', marginBottom:6 }}>Punch Timeline</div>
+      {loading ? <div style={{ fontSize:12, color:C.faint }}>Loading punches…</div>
+        : punches.length === 0 ? <div style={{ fontSize:12, color:C.faint }}>No raw punches recorded.</div>
         : punches.map((p, i) => (
-          <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
+          <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 0', borderBottom: `1px solid ${C.brandEdge}`, fontSize:12 }}>
             <span style={{ fontWeight:600, minWidth:52 }}>{fmtT(p.punch_time)}</span>
-            <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: p.punch_type==='IN' ? '#ECFDF5' : '#FEF2F2', color: p.punch_type==='IN' ? '#059669' : '#DC2626' }}>{p.punch_type}</span>
-            <span style={{ color:'#6B7280' }}>{p.source || '—'}</span>
-            {p.geofence_status && <span style={{ marginLeft:'auto', fontSize:10, color:'#9CA3AF' }}>{p.geofence_status}</span>}
+            <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, fontWeight:600, background: p.punch_type==='IN' ? C.positiveTint : C.criticalTint, color: p.punch_type==='IN' ? C.positive : C.critical }}>{p.punch_type}</span>
+            <span style={{ color:C.muted }}>{p.source || '—'}</span>
+            {p.geofence_status && <span style={{ marginLeft:'auto', fontSize:10, color:C.faint }}>{p.geofence_status}</span>}
           </div>
         ))}
 
       {status === 'MISS_PUNCH' && (
-        <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:'#D97706' }}>⚠ Raise regularisation</button>
+        <button onClick={() => onRaise(date)} style={{ ...T.btnP, marginTop:12, background:C.warning }}>Raise regularisation</button>
       )}
     </div>
   )
 }
 
 // 4) Regularisation form ─────────────────────────────────────────
+/**
+ * Regularise a range of days in one submission.
+ *
+ * The single-day form is right when one punch was missed. It is the wrong shape
+ * for "I was on site all last week and the biometric never picked me up" —
+ * that was seven identical forms.
+ *
+ * The preview is the important half. A date range will always contain days that
+ * must not be regularised: weekly offs, holidays, approved leave, and days
+ * already recorded properly. Submitting those would put work on HR that should
+ * never have reached them, and could overwrite a correct record with a guess.
+ * So the range is filtered against the same rules resolveDay() uses, and every
+ * skipped day says why before anything is sent.
+ */
+function BulkRegularisationForm({ emp, onDone, onCancel }: {
+  emp: EmployeeDetail; onDone: () => void; onCancel: () => void
+}) {
+  const localYMD = (d: Date) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const todayStr = localYMD(new Date())
+  const yesterday = (() => { const d = new Date(); d.setDate(d.getDate()-1); return localYMD(d) })()
+  const weekAgo   = (() => { const d = new Date(); d.setDate(d.getDate()-7); return localYMD(d) })()
+
+  const [from, setFrom] = useState(weekAgo)
+  const [to, setTo] = useState(yesterday)
+  const [actualIn, setActualIn] = useState('09:00')
+  const [actualOut, setActualOut] = useState('18:00')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [scanning, setScanning] = useState(false)
+  const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
+  const [preview, setPreview] = useState<{
+    eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[]
+    skipped: { date: string; why: string }[]
+  } | null>(null)
+
+  const MAX_DAYS = 62   // two months: enough for a real backlog, not a whole year
+
+  // Walk the range, pulling each month's attendance once, and decide day by day.
+  const scan = useCallback(async () => {
+    setPreview(null); setMsg(null)
+    if (!from || !to) return
+    if (from > to) { setMsg({ text: 'The start date is after the end date.', ok: false }); return }
+    if (to >= todayStr) { setMsg({ text: 'Regularisation is for past days only — the end date must be before today.', ok: false }); return }
+
+    const days: string[] = []
+    for (const d = new Date(from + 'T00:00:00'); localYMD(d) <= to; d.setDate(d.getDate() + 1)) {
+      days.push(localYMD(d))
+      if (days.length > MAX_DAYS) break
+    }
+    if (days.length > MAX_DAYS) {
+      setMsg({ text: `That range is longer than ${MAX_DAYS} days. Split it into smaller periods.`, ok: false }); return
+    }
+
+    setScanning(true)
+    const months = Array.from(new Set(days.map(d => d.slice(0, 7))))
+    const data = new Map<string, MonthlyData>()
+    for (const ym of months) {
+      const [y, mo] = ym.split('-').map(Number)
+      data.set(ym, await loadMonthlyAttendance(emp.id, y, mo))
+    }
+
+    const eligible: { date: string; recordedIn: string | null; recordedOut: string | null; why: string }[] = []
+    const skipped: { date: string; why: string }[] = []
+
+    for (const date of days) {
+      const md = data.get(date.slice(0, 7))
+      if (!md) { skipped.push({ date, why: 'could not load that month' }); continue }
+      const info = resolveDay(date, md, todayStr)
+
+      if (info.status === 'HOLIDAY')      { skipped.push({ date, why: info.holiday?.description ? `holiday — ${info.holiday.description}` : 'holiday' }); continue }
+      if (info.status === 'WEEKLY_OFF')   { skipped.push({ date, why: 'weekly off' }); continue }
+      if (info.status === 'ON_LEAVE')     { skipped.push({ date, why: 'on approved leave' }); continue }
+      if (info.status === 'PRESENT' && info.rec?.work_in && info.rec?.work_out) {
+        skipped.push({ date, why: 'already recorded in full' }); continue
+      }
+      eligible.push({
+        date,
+        recordedIn: info.rec?.work_in || null,
+        recordedOut: info.rec?.work_out || null,
+        why: info.status === 'MISS_PUNCH' ? 'missing a punch'
+           : info.status === 'ABSENT' ? 'marked absent'
+           : info.status.toLowerCase().replace(/_/g, ' '),
+      })
+    }
+
+    setScanning(false)
+    setPreview({ eligible, skipped })
+  }, [from, to, emp.id, todayStr])
+
+  useEffect(() => { scan() }, [scan])
+
+  const submit = async () => {
+    if (!preview || preview.eligible.length === 0) { setMsg({ text: 'Nothing in that range needs regularising.', ok: false }); return }
+    if (!actualIn || !actualOut) { setMsg({ text: 'Enter both actual IN and OUT times', ok: false }); return }
+    if (actualIn >= actualOut) { setMsg({ text: 'Actual IN must be before Actual OUT', ok: false }); return }
+    if (!reason.trim()) { setMsg({ text: 'Reason is required', ok: false }); return }
+
+    setBusy(true); setMsg(null)
+    const { inserted, error } = await submitRegularisationBulk(emp.id, preview.eligible, actualIn, actualOut, reason.trim())
+    setBusy(false)
+    if (error) { setMsg({ text: error, ok: false }); return }
+    setMsg({ text: `✓ ${inserted} day${inserted === 1 ? '' : 's'} sent to HR for approval`, ok: true })
+    onDone()
+  }
+
+  const short = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })
+
+  return (
+    <div style={T.card}>
+      <div style={T.section}>Regularise a date range</div>
+      <div style={{ fontSize: 12, color: C.muted, marginTop: -4, marginBottom: 12, lineHeight: 1.6 }}>
+        For a stretch of days with the same story — biometric down, on site, working from home.
+        Weekly offs, holidays, leave and days already recorded are left out automatically.
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+        <div><label style={T.label}>From *</label>
+          <input type="date" max={yesterday} style={T.input} value={from} onChange={e => setFrom(e.target.value)} /></div>
+        <div><label style={T.label}>To *</label>
+          <input type="date" max={yesterday} style={T.input} value={to} onChange={e => setTo(e.target.value)} /></div>
+        <div><label style={T.label}>Actual IN *</label>
+          <input type="time" style={T.input} value={actualIn} onChange={e => setActualIn(e.target.value)} /></div>
+        <div><label style={T.label}>Actual OUT *</label>
+          <input type="time" style={T.input} value={actualOut} onChange={e => setActualOut(e.target.value)} /></div>
+        <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason * <span style={{ fontWeight: 400, color: C.faint }}>(applies to every day)</span></label>
+          <input style={T.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="e.g. Biometric device was down all week" /></div>
+      </div>
+
+      {scanning && <div style={{ fontSize: 12, color: C.faint, marginBottom: 10 }}>Checking those dates…</div>}
+
+      {preview && !scanning && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 9 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, padding: '5px 12px', borderRadius: 99,
+                           background: preview.eligible.length ? C.positiveTint : C.criticalTint,
+                           color: preview.eligible.length ? C.positive : C.critical }}>
+              {preview.eligible.length} day{preview.eligible.length === 1 ? '' : 's'} will be sent
+            </span>
+            {preview.skipped.length > 0 && (
+              <span style={{ fontSize: 12, fontWeight: 600, padding: '5px 12px', borderRadius: 99,
+                             background: C.brandTint, color: C.brandDeep }}>
+                {preview.skipped.length} skipped
+              </span>
+            )}
+          </div>
+
+          {preview.eligible.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 9 }}>
+              {preview.eligible.map(d => (
+                <span key={d.date} title={d.why}
+                      style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
+                               background: C.positiveTint, color: C.positive,
+                               border: `1px solid ${C.positiveTint}`, fontWeight: 600 }}>
+                  {short(d.date)} <span style={{ fontWeight: 400, opacity: .8 }}>· {d.why}</span>
+                </span>
+              ))}
+            </div>
+          )}
+
+          {preview.skipped.length > 0 && (
+            <details>
+              <summary style={{ fontSize: 12, color: C.muted, cursor: 'pointer', marginBottom: 6 }}>
+                Why {preview.skipped.length} day{preview.skipped.length === 1 ? ' was' : 's were'} left out
+              </summary>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {preview.skipped.map(d => (
+                  <span key={d.date} style={{ fontSize: 11, padding: '4px 9px', borderRadius: 7,
+                                              background: C.sunken, color: C.faint,
+                                              border: `1px solid ${C.line}` }}>
+                    {short(d.date)} · {d.why}
+                  </span>
+                ))}
+              </div>
+            </details>
+          )}
+        </div>
+      )}
+
+      {msg && <div style={{ fontSize: 12, marginBottom: 10, color: msg.ok ? C.positive : C.critical }}>{msg.text}</div>}
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={onCancel} style={{ ...T.btnO, flex: 1 }}>Cancel</button>
+        <button onClick={submit} disabled={busy || scanning || !preview?.eligible.length}
+                style={{ ...T.btnP, flex: 2, opacity: busy || scanning || !preview?.eligible.length ? .5 : 1 }}>
+          {busy ? 'Sending…'
+            : preview?.eligible.length
+              ? `Send ${preview.eligible.length} day${preview.eligible.length === 1 ? '' : 's'} to HR`
+              : 'Nothing to send'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
   emp: EmployeeDetail; date: string; rec: MonthlyData['records'][number] | null; editable?: boolean
   onDone: () => void; onCancel: () => void
@@ -965,24 +2295,24 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
     const { error } = await submitRegularisation(emp.id, dateVal, rec?.work_in || null, rec?.work_out || null, actualIn, actualOut, reason.trim())
     setBusy(false)
     if (error) { setMsg({ text: error, ok:false }); return }
-    setMsg({ text:'✓ Regularisation request submitted', ok:true })
+    setMsg({ text:'Regularisation request submitted', ok:true })
     onDone()
   }
   const dateLbl = new Date(date + 'T00:00:00').toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })
   return (
     <div style={T.card}>
-      <div style={T.section}>⚠ Raise Regularisation</div>
+      <div style={T.section}>Raise Regularisation</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-        <div style={{ gridColumn:'1/-1' }}><label style={T.label}>Attendance date * <span style={{ fontWeight:400, color:'#9CA3AF' }}>(past dates only)</span></label>{editable
+        <div style={{ gridColumn:'1/-1' }}><label style={T.label}>Attendance date * <span style={{ fontWeight:400, color:C.faint }}>(past dates only)</span></label>{editable
           ? <input type="date" max={yesterdayStr} style={T.input} value={dateVal} onChange={e => setDateVal(e.target.value)} />
-          : <input style={{ ...T.input, background:'#F1F5F9' }} value={dateLbl} readOnly />}</div>
-        <div><label style={T.label}>Recorded IN</label><input style={{ ...T.input, background:'#F1F5F9' }} value={rec?.work_in ? fmtT(rec.work_in) : 'Not recorded'} readOnly /></div>
-        <div><label style={T.label}>Recorded OUT</label><input style={{ ...T.input, background:'#F1F5F9' }} value={rec?.work_out ? fmtT(rec.work_out) : 'Not recorded'} readOnly /></div>
+          : <input style={{ ...T.input, background:C.sunken }} value={dateLbl} readOnly />}</div>
+        <div><label style={T.label}>Recorded IN</label><input style={{ ...T.input, background:C.sunken }} value={rec?.work_in ? fmtT(rec.work_in) : 'Not recorded'} readOnly /></div>
+        <div><label style={T.label}>Recorded OUT</label><input style={{ ...T.input, background:C.sunken }} value={rec?.work_out ? fmtT(rec.work_out) : 'Not recorded'} readOnly /></div>
         <div><label style={T.label}>Actual IN *</label><input type="time" style={T.input} value={actualIn} onChange={e => setActualIn(e.target.value)} /></div>
         <div><label style={T.label}>Actual OUT *</label><input type="time" style={T.input} value={actualOut} onChange={e => setActualOut(e.target.value)} /></div>
         <div style={{ gridColumn:'1/-1' }}><label style={T.label}>Reason *</label><input style={T.input} value={reason} onChange={e => setReason(e.target.value)} placeholder="Why was the punch missed?" /></div>
       </div>
-      {msg && <div style={{ fontSize:12, marginBottom:10, color: msg.ok ? '#059669' : '#DC2626' }}>{msg.text}</div>}
+      {msg && <div style={{ fontSize:12, marginBottom:10, color: msg.ok ? C.positive : C.critical }}>{msg.text}</div>}
       <div style={{ display:'flex', gap:10 }}>
         <button onClick={onCancel} style={{ ...T.btnO, flex:1 }}>Cancel</button>
         <button onClick={submit} disabled={busy} style={{ ...T.btnP, flex:1, opacity: busy?.6:1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
@@ -993,21 +2323,21 @@ function RegularisationForm({ emp, date, rec, editable, onDone, onCancel }: {
 
 // 5) Regularisation list ─────────────────────────────────────────
 function RegularisationList({ requests }: { requests: RegularisationRequest[] }) {
-  const STY: Record<string,[string,string]> = { PENDING:['#FEF3C7','#D97706'], APPROVED:['#ECFDF5','#059669'], REJECTED:['#FEF2F2','#DC2626'] }
+  const STY: Record<string,[string,string]> = { PENDING:[C.warningTint,C.warning], APPROVED:[C.positiveTint,C.positive], REJECTED:[C.criticalTint,C.critical] }
   return (
     <div style={T.card}>
-      <div style={T.section}>🗂️ My Regularisation Requests</div>
-      {requests.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No regularisation requests yet.</div>}
-      {requests.map(r => { const [bg,c] = STY[r.status] || ['#F3F0FF','#6D28D9']; return (
-        <div key={r.id} style={{ padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
+      <div style={T.section}>My Regularisation Requests</div>
+      {requests.length === 0 && <div style={{ fontSize:12, color:C.faint }}>No regularisation requests yet.</div>}
+      {requests.map(r => { const [bg,c] = STY[r.status] || [C.brandTint,C.brandDeep]; return (
+        <div key={r.id} style={{ padding:'9px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8 }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{fmt(r.attendance_date)}</div>
             <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{r.status}</span>
           </div>
-          <div style={{ fontSize:11, color:'#6B7280', marginTop:3 }}>Recorded: IN {r.recorded_in ? fmtT(r.recorded_in) : '—'} · OUT {r.recorded_out ? fmtT(r.recorded_out) : '—'}</div>
-          <div style={{ fontSize:11, color:'#374151', marginTop:1 }}>Requested: {r.requested_in} → {r.requested_out}</div>
-          {r.reason && <div style={{ fontSize:12, color:'#374151', marginTop:3 }}>{r.reason}</div>}
-          <div style={{ fontSize:10, color:'#9CA3AF', marginTop:3 }}>Submitted {fmtDT(r.created_at)}</div>
+          <div style={{ fontSize:11, color:C.muted, marginTop:3 }}>Recorded: IN {r.recorded_in ? fmtT(r.recorded_in) : '—'} · OUT {r.recorded_out ? fmtT(r.recorded_out) : '—'}</div>
+          <div style={{ fontSize:11, color:C.inkSoft, marginTop:1 }}>Requested: {r.requested_in} → {r.requested_out}</div>
+          {r.reason && <div style={{ fontSize:12, color:C.inkSoft, marginTop:3 }}>{r.reason}</div>}
+          <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>Submitted {fmtDT(r.created_at)}</div>
         </div>
       )})}
     </div>
@@ -1024,6 +2354,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [raiseDate, setRaiseDate] = useState<string | null>(null)
   const [manualRaise, setManualRaise] = useState(false)
+  const [bulkRaise, setBulkRaise] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
   const [loading, setLoading] = useState(true)
   const todayStr = new Date().toISOString().slice(0, 10)
@@ -1045,43 +2376,72 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
   const prevMonth = () => { if (month === 1) { setMonth(12); setYear(y => y - 1) } else setMonth(m => m - 1); setSelectedDate(null); setRaiseDate(null) }
   const nextMonth = () => { if (month === 12) { setMonth(1); setYear(y => y + 1) } else setMonth(m => m + 1); setSelectedDate(null); setRaiseDate(null) }
 
+  // One walk, shared by the ring and the tiles, so both agree with the grid.
+  const stats = monthStats(year, month, monthData, todayStr)
   const dayInfo = selectedDate && monthData ? resolveDay(selectedDate, monthData, todayStr) : null
   const raiseRec = raiseDate && monthData ? (monthData.recMap.get(raiseDate) || null) : null
 
   return (
     <div>
-      {/* (A) month nav */}
-      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <button onClick={prevMonth} style={T.btnO}>‹ Prev</button>
-        <div style={{ fontSize:15, fontWeight:700 }}>{MONTH_NAMES[month-1]} {year}</div>
-        <button onClick={nextMonth} style={T.btnO}>Next ›</button>
+      <ShimmerKeyframes />
+      {/* (A) the month, as one glance */}
+      <MonthHero
+        month={month} year={year}
+        summary={stats}
+        onPrev={prevMonth} onNext={nextMonth}
+        onToday={() => { const n = new Date(); setMonth(n.getMonth()+1); setYear(n.getFullYear()); setSelectedDate(null); setRaiseDate(null) }}
+        isThisMonth={month === new Date().getMonth()+1 && year === new Date().getFullYear()}
+        isMobile={isMobile} />
+
+      {/* (B) the month in numbers */}
+      <AttendanceSummaryChips summary={stats} isMobile={isMobile} />
+
+      {/* (C+D) calendar and the selected day, side by side.
+           The month is a fixed shape, so it keeps its width and the detail
+           takes the rest — clicking a day fills the right column instead of
+           pushing the grid down the page. */}
+      <div style={{ display:'flex', gap:11, alignItems:'stretch',
+                    flexWrap: isMobile ? 'wrap' : 'nowrap', marginBottom:10 }}>
+        <TiltCard disabled={isMobile}
+                  style={{ ...T.card, marginBottom:0,
+                           width: isMobile ? '100%' : 'auto' }}>
+          {loading || !monthData
+            ? <div style={{ display:'grid', gridTemplateColumns:'repeat(7,60px)', gap:4 }}>
+                {Array.from({ length: 35 }).map((_, i) => (
+                  <div key={i} style={{ height: isMobile ? 40 : 56, borderRadius:10,
+                                        background: `linear-gradient(90deg,${C.brandTint} 25%,${C.brandTint} 50%,${C.brandTint} 75%)`,
+                                        backgroundSize:'200% 100%', animation:'ezerShimmer 1.2s infinite' }} />
+                ))}
+              </div>
+            : <AttendanceCalendar year={year} month={month} monthData={monthData} todayStr={todayStr} isMobile={isMobile} onDayClick={d => { setSelectedDate(d); setRaiseDate(null) }} selectedDate={selectedDate} />}
+        </TiltCard>
+
+        <div key={selectedDate || 'resting'} className="ezer-day-panel"
+             style={{ flex:'1 1 300px', minWidth: isMobile ? '100%' : 280 }}>
+          {selectedDate && dayInfo
+            ? <DayDetailPanel emp={emp} date={selectedDate} dayInfo={dayInfo} isMobile={isMobile} onRaise={d => setRaiseDate(d)} />
+            : <DayPanelResting summary={stats} />}
+        </div>
       </div>
-
-      {/* (B) summary chips */}
-      <AttendanceSummaryChips summary={computeSummary(monthData?.records || [])} isMobile={isMobile} />
-
-      {/* (C) calendar */}
-      <div style={T.card}>
-        {loading || !monthData
-          ? <div style={{ fontSize:12, color:'#9CA3AF', padding:'20px 0', textAlign:'center' }}>Loading attendance…</div>
-          : <AttendanceCalendar year={year} month={month} monthData={monthData} todayStr={todayStr} isMobile={isMobile} onDayClick={d => { setSelectedDate(d); setRaiseDate(null) }} selectedDate={selectedDate} />}
-      </div>
-
-      {/* (D) day detail */}
-      {selectedDate && dayInfo && <DayDetailPanel emp={emp} date={selectedDate} dayInfo={dayInfo} isMobile={isMobile} onRaise={d => setRaiseDate(d)} />}
 
       {/* (E) regularisation form */}
       {raiseDate && <RegularisationForm emp={emp} date={raiseDate} rec={raiseRec} onDone={() => { loadRegs(); loadMonth(); setRaiseDate(null) }} onCancel={() => setRaiseDate(null)} />}
 
       {/* (F) raise regularisation + list */}
-      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: (manualRaise && !raiseDate) ? 0 : undefined }}>
+      <div style={{ ...T.card, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:8, marginBottom: ((manualRaise || bulkRaise) && !raiseDate) ? 0 : undefined }}>
         <div>
           <div style={{ fontSize:13, fontWeight:600 }}>Attendance Regularisation</div>
-          <div style={{ fontSize:11, color:'#9CA3AF', marginTop:2 }}>Forgot to punch or wrong time? Raise a correction for any day → HR approval.</div>
+          <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Forgot to punch or wrong time? Raise a correction → HR approval. Use a range when several days share the same reason.</div>
         </div>
-        {!manualRaise && !raiseDate && <button onClick={() => setManualRaise(true)} style={T.btnP}>+ Raise Regularisation</button>}
+        {!manualRaise && !bulkRaise && !raiseDate && (
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            <button onClick={() => setManualRaise(true)} style={T.btnO}>+ Single day</button>
+            <button onClick={() => setBulkRaise(true)} style={T.btnP}>Date range</button>
+          </div>
+        )}
       </div>
       {manualRaise && !raiseDate && <RegularisationForm emp={emp} date={todayStr} rec={null} editable onDone={() => { loadRegs(); loadMonth(); setManualRaise(false) }} onCancel={() => setManualRaise(false)} />}
+      {bulkRaise && !raiseDate && <BulkRegularisationForm emp={emp} onDone={() => { loadRegs(); loadMonth(); setBulkRaise(false) }} onCancel={() => setBulkRaise(false)} />}
       <RegularisationList requests={regs} />
     </div>
   )
@@ -1089,7 +2449,7 @@ function AttendanceModule({ emp }: { emp: EmployeeDetail }) {
 
 // ── Voluntary PF (VPF) — EPF wage base × percent ──
 function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', red:'#A32D2D', redBg:'#FCEBEB', amber:'#854F0B', amberBg:'#FAEEDA', teal:'#0F6E56' }
+  const V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint, teal: C.positive }
   const MAX_PCT = 88, HIGH_ALERT = 50
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -1131,33 +2491,33 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     const res = await fetch('/api/ess/vpf', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, stopped_reason: 'Employee requested', stopped_from_month: 4 }) })
     if (res.ok) { notify('VPF stopped'); load() } else notify('Failed to stop', 'error')
   }
-  const card: React.CSSProperties = { background: '#fff', border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }
   const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', padding: '5px 0' }
 
   return (
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Voluntary PF (VPF)</div>
-        <div style={{ fontSize: 12.5, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages — set your own percentage.</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Extra PF deducted from your EPF wages — set your own percentage.</div>
       </div>
 
       {!e.has_ctc && (
-        <div style={{ ...card, background: V.amberBg, border: '1px solid #EFD9A8' }}>
-          <span style={{ fontSize: 12, color: '#633806' }}>ⓘ Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master) — then VPF will calculate correctly.</span>
+        <div style={{ ...card, background: V.amberBg, border: `1px solid ${C.warningTint}` }}>
+          <span style={{ fontSize: 12, color: C.warning }}>Your CTC is not configured yet, so the EPF wage base shows ₹0. Ask HR to set your CTC (ctc_master) — then VPF will calculate correctly.</span>
         </div>
       )}
 
       {current && (
-        <div style={{ ...card, background: '#EEF7F3', border: '1px solid #C5E8DB', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ ...card, background: C.sunken, border: `1px solid ${C.line}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: V.teal }}>Active VPF: {current.vpf_percent}% ({inr(current.monthly_vpf_amount)}/mo) — modify below</span>
-          <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: '#fff', color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop VPF</button>
+          <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: C.surface, color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop VPF</button>
         </div>
       )}
 
-      <div style={{ ...card, background: '#FBFAFF' }}>
+      <div style={{ ...card, background: C.brandTint }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
           <span style={{ fontSize: 12, color: V.muted }}>Your EPF wages (from database)</span>
-          <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: e.is_capped ? '#EEEDFE' : '#E1F5EE', color: e.is_capped ? V.purpleDark : V.teal }}>{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</span>
+          <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 20, background: e.is_capped ? C.brandTint: C.sunken, color: e.is_capped ? V.purpleDark : V.teal }}>{e.is_capped ? 'Capped ₹15,000' : 'Actual (Gross − HRA)'}</span>
         </div>
         <div style={{ fontSize: 24, fontWeight: 600, color: V.purpleDark }}>{inr(base)}</div>
         <div style={{ ...row, borderTop: `1px solid ${V.border}`, marginTop: 10, paddingTop: 8 }}>
@@ -1169,43 +2529,43 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
       <div style={{ marginBottom: 14 }}>
         <label style={{ fontSize: 12, color: V.muted, display: 'block', marginBottom: 6 }}>VPF percentage</label>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <input type="number" value={pctInput} min={1} step={1} onChange={e2 => setPctInput(e2.target.value)} style={{ flex: 1, padding: 10, borderRadius: 8, border: `1px solid ${V.border}`, fontSize: 15, fontFamily: 'inherit' }} placeholder="e.g. 25" />
+          <input type="number" value={pctInput} min={1} step={1} onChange={e2 => setPctInput(e2.target.value)} style={{ flex: 1, padding: 10, borderRadius: 10, border: `1px solid ${V.border}`, fontSize: 15, fontFamily: 'inherit' }} placeholder="e.g. 25" />
           <span style={{ fontSize: 16, fontWeight: 500, color: V.purpleDark }}>%</span>
         </div>
-        <div style={{ fontSize: 11, color: '#9B9BA8', marginTop: 4 }}>Percentage of your EPF wages.</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 4 }}>Percentage of your EPF wages.</div>
       </div>
 
       {showHighAlert && (
-        <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
-          <span style={{ color: V.red }}>⚠</span>
-          <span style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.6 }}><strong>That high?</strong> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.</span>
+        <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+          <span style={{ color: V.red }}></span>
+          <span style={{ fontSize: 12, color: C.critical, lineHeight: 1.6 }}><strong>That high?</strong> {Math.round(rawPct)}% ({inr(vpfMonthly)}/mo) VPF will cut your net in-hand a lot. Please confirm.</span>
         </div>
       )}
       {capHit && (
-        <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 8, padding: '10px 12px', marginBottom: 14 }}>
-          <span style={{ color: V.amber }}>ⓘ</span>
-          <span style={{ fontSize: 12, color: '#633806', lineHeight: 1.6 }}>Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.</span>
+        <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 10, padding: '10px 12px', marginBottom: 14 }}>
+          <span style={{ color: V.amber }}></span>
+          <span style={{ fontSize: 12, color: C.warning, lineHeight: 1.6 }}>Max {MAX_PCT}% allowed (12% mandatory + {MAX_PCT}% = 100%). Set to {MAX_PCT}%.</span>
         </div>
       )}
 
-      <div style={{ ...card, background: '#FBFAFF' }}>
+      <div style={{ ...card, background: C.brandTint }}>
         <div style={row}><span style={{ fontSize: 13, color: V.muted }}>VPF deduction (monthly)</span><span style={{ fontSize: 15, fontWeight: 500, color: V.purpleDark }}>{inr(vpfMonthly)}</span></div>
         <div style={{ ...row, borderTop: `1px solid ${V.border}` }}><span style={{ fontSize: 13, color: V.muted }}>VPF (annual)</span><span style={{ fontSize: 13, color: V.navy }}>{inr(vpfAnnual)}</span></div>
         <div style={{ ...row, borderTop: `1px solid ${V.border}` }}><span style={{ fontSize: 13, color: V.red }}>Net in-hand impact</span><span style={{ fontSize: 13, fontWeight: 500, color: V.red }}>−{inr(vpfMonthly)}/mo</span></div>
       </div>
 
-      <div style={{ ...card, background: '#FBFAFF' }}>
+      <div style={{ ...card, background: C.brandTint }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: 13, color: V.muted }}>80C usage (₹1.5L max)</span>
           <span style={{ fontSize: 12, fontWeight: 500, color: V.navy }}>{inr(Math.min(total80c, e.c80_limit))} / ₹1.5L</span>
         </div>
-        <div style={{ height: 8, background: '#E9E7F5', borderRadius: 20, overflow: 'hidden' }}><div style={{ height: '100%', width: `${barPct}%`, background: over80c ? '#EF9F27' : V.purple, borderRadius: 20 }} /></div>
-        <div style={{ fontSize: 11, color: '#9B9BA8', marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` — no 80C benefit on ${inr(total80c - e.c80_limit)}` : ''}</div>
+        <div style={{ height: 8, background: C.line, borderRadius: 20, overflow: 'hidden' }}><div style={{ height: '100%', width: `${barPct}%`, background: over80c ? '#EF9F27' : V.purple, borderRadius: 20 }} /></div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>EPF ({inr(e.epf_annual)}) + VPF ({inr(vpfAnnual)}) = {inr(total80c)}{over80c ? ` — no 80C benefit on ${inr(total80c - e.c80_limit)}` : ''}</div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
-        <span style={{ color: V.red }}>ⓘ</span>
-        <div style={{ fontSize: 12, color: '#791F1F', lineHeight: 1.7 }}><strong>Choose carefully:</strong><br />• VPF will <strong>reduce your net in-hand salary</strong><br />• The 80C exemption only goes <strong>up to ₹1.5 lakh</strong> (EPF + VPF + your other 80C)<br />• It is deducted every month until you stop it</div>
+      <div style={{ display: 'flex', gap: 8, background: V.redBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+        <span style={{ color: V.red }}></span>
+        <div style={{ fontSize: 12, color: C.critical, lineHeight: 1.7 }}><strong>Choose carefully:</strong><br />• VPF will <strong>reduce your net in-hand salary</strong><br />• The 80C exemption only goes <strong>up to ₹1.5 lakh</strong> (EPF + VPF + your other 80C)<br />• It is deducted every month until you stop it</div>
       </div>
 
       <label style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: 'pointer' }}>
@@ -1213,14 +2573,14 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I understand this will reduce my net in-hand salary and that the 80C exemption is capped at ₹1.5L. I request this VPF deduction.</span>
       </label>
 
-      <button disabled={!ack || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: ack ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: ack ? V.purple : '#F5F3FF', color: ack ? '#fff' : '#9B9BA8', cursor: ack ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>
+      <button disabled={!ack || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 10, fontWeight: 500, fontFamily: 'inherit', border: ack ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: ack ? V.purple : C.canvas, color: ack ? C.surface : C.muted, cursor: ack ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving…' : 'Acknowledge & submit'}</button>
     </div>
   )
 }
 
 // ── Corporate NPS enrolment (80CCD(2)) — % of Basic by regime ──
 function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', red:'#A32D2D', amber:'#854F0B', amberBg:'#FAEEDA', blue:'#185FA5', blueBg:'#E6F1FB', teal:'#0F6E56', bg:'#F5F3FF' }
+  const V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, red: C.critical, amber: C.warning, amberBg: C.warningTint, blue: C.brand, blueBg: C.brandTint, teal: C.positive, bg:C.canvas }
   const [data, setData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [hasPran, setHasPran] = useState(true)
@@ -1247,9 +2607,9 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
   const pranClean = pran.replace(/\D/g, '')
   const pranValid = pranClean.length === e.pran_length
   const canSubmit = ack && (!hasPran || pranValid)
-  const card: React.CSSProperties = { background: '#fff', border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }
   const label: React.CSSProperties = { fontSize: 12, color: V.muted, display: 'block', marginBottom: 6 }
-  const input: React.CSSProperties = { width: '100%', padding: 10, borderRadius: 8, border: `1px solid ${V.border}`, fontSize: 14, boxSizing: 'border-box', fontFamily: 'inherit' }
+  const input: React.CSSProperties = { width: '100%', padding: 10, borderRadius: 10, border: `1px solid ${V.border}`, fontSize: 14, boxSizing: 'border-box', fontFamily: 'inherit' }
 
   const submit = async () => {
     setSaving(true)
@@ -1273,35 +2633,35 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
     <div>
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 18, fontWeight: 600, color: V.navy }}>Corporate NPS enrolment</div>
-        <div style={{ fontSize: 12.5, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I) — extra tax benefit under Section 80CCD(2).</div>
+        <div style={{ fontSize: 13, color: V.muted, marginTop: 2 }}>Employer contributes to your NPS (Tier I) — extra tax benefit under Section 80CCD(2).</div>
       </div>
 
       {!e.has_ctc && (
-        <div style={{ ...card, background: V.amberBg, border: '1px solid #EFD9A8' }}>
-          <span style={{ fontSize: 12, color: '#633806' }}>ⓘ Your CTC (Basic) isn't configured yet, so NPS shows ₹0. Ask HR to set your CTC (ctc_master).</span>
+        <div style={{ ...card, background: V.amberBg, border: `1px solid ${C.warningTint}` }}>
+          <span style={{ fontSize: 12, color: C.warning }}>Your CTC (Basic) isn't configured yet, so NPS shows ₹0. Ask HR to set your CTC (ctc_master).</span>
         </div>
       )}
 
       {current && (
-        <div style={{ ...card, background: current.status === 'PENDING_PRAN' ? V.blueBg : '#EEF7F3', border: `1px solid ${current.status === 'PENDING_PRAN' ? '#B5D4F4' : '#C5E8DB'}` }}>
+        <div style={{ ...card, background: current.status === 'PENDING_PRAN' ? V.blueBg: C.sunken, border: `1px solid ${current.status === 'PENDING_PRAN' ? '#B5D4F4' : '#C5E8DB'}` }}>
           {current.status === 'PENDING_PRAN' ? (
             <div>
               <div style={{ fontSize: 12, color: V.blue, marginBottom: 8 }}>PRAN pending — generate & submit by {current.pran_deadline ? new Date(current.pran_deadline).toLocaleDateString('en-IN') : '—'}.</div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <input value={submitPran} onChange={e2 => setSubmitPran(e2.target.value.replace(/\D/g, ''))} maxLength={e.pran_length} placeholder={`Enter ${e.pran_length}-digit PRAN`} style={{ ...input, letterSpacing: 2 }} />
-                <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 8, border: 'none', background: V.purple, color: '#fff', fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
+                <button onClick={doSubmitPran} disabled={submitPran.replace(/\D/g, '').length !== e.pran_length} style={{ padding: '8px 14px', borderRadius: 10, border: 'none', background: V.purple, color: C.onAccent, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>Submit PRAN</button>
               </div>
             </div>
           ) : (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: V.teal }}>Active NPS: {current.contribution_percent}% of Basic ({inr(current.monthly_nps_amount)}/mo)</span>
-              <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: '#fff', color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop NPS</button>
+              <button onClick={stop} style={{ fontSize: 11, padding: '5px 12px', borderRadius: 7, border: `1px solid ${V.red}`, background: C.surface, color: V.red, cursor: 'pointer', fontFamily: 'inherit' }}>Stop NPS</button>
             </div>
           )}
         </div>
       )}
 
-      <div style={{ ...card, background: '#FBFAFF' }}>
+      <div style={{ ...card, background: C.brandTint }}>
         <div style={{ fontSize: 12, color: V.muted, marginBottom: 8 }}>Your contribution (from salary structure)</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
           <div><div style={{ fontSize: 11, color: V.muted }}>Monthly Basic</div><div style={{ fontSize: 15, fontWeight: 500, color: V.navy }}>{inr(e.basic_monthly)}</div></div>
@@ -1314,14 +2674,14 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 4 }}>
           <span style={{ fontSize: 12, color: V.muted }}>Effective from</span><span style={{ fontSize: 13, color: V.navy }}>{effFmt}</span>
         </div>
-        <div style={{ fontSize: 11, color: '#9B9BA8', marginTop: 6 }}>Old regime = 10% of Basic · New regime = 14% of Basic</div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 6 }}>Old regime = 10% of Basic · New regime = 14% of Basic</div>
       </div>
 
       <div style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: V.muted, marginBottom: 8 }}>Do you already have an NPS account (PRAN)?</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setHasPran(true)} style={{ flex: 1, padding: 10, borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: hasPran ? V.bg : '#fff', color: hasPran ? V.purpleDark : V.navy }}>Yes, I have a PRAN</button>
-          <button onClick={() => setHasPran(false)} style={{ flex: 1, padding: 10, borderRadius: 8, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: !hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: !hasPran ? V.bg : '#fff', color: !hasPran ? V.purpleDark : V.navy }}>No, I need one</button>
+          <button onClick={() => setHasPran(true)} style={{ flex: 1, padding: 10, borderRadius: 10, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: hasPran ? V.bg: C.surface, color: hasPran ? V.purpleDark : V.navy }}>Yes, I have a PRAN</button>
+          <button onClick={() => setHasPran(false)} style={{ flex: 1, padding: 10, borderRadius: 10, cursor: 'pointer', fontWeight: 500, fontFamily: 'inherit', border: !hasPran ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: !hasPran ? V.bg: C.surface, color: !hasPran ? V.purpleDark : V.navy }}>No, I need one</button>
         </div>
       </div>
 
@@ -1338,17 +2698,17 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
           </div>
         </>
       ) : (
-        <div style={{ background: V.blueBg, borderRadius: 12, padding: 16, marginBottom: 12 }}>
+        <div style={{ background: V.blueBg, borderRadius: 14, padding: 16, marginBottom: 12 }}>
           <div style={{ display: 'flex', gap: 8 }}>
-            <span style={{ color: V.blue }}>✉</span>
-            <div style={{ fontSize: 12, color: '#0C447C', lineHeight: 1.7 }}><strong>A new PRAN will be created for you.</strong><br />On submit, we'll email you the PRAN creation form. Generate your PRAN <strong>within 3 days</strong>, then resubmit here. For help, contact the <strong>Payroll team</strong>.</div>
+            <span style={{ color: V.blue }}></span>
+            <div style={{ fontSize: 12, color: C.brand, lineHeight: 1.7 }}><strong>A new PRAN will be created for you.</strong><br />On submit, we'll email you the PRAN creation form. Generate your PRAN <strong>within 3 days</strong>, then resubmit here. For help, contact the <strong>Payroll team</strong>.</div>
           </div>
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 8, padding: '12px 14px', marginBottom: 14 }}>
-        <span style={{ color: V.amber }}>ⓘ</span>
-        <div style={{ fontSize: 12, color: '#633806', lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product — locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
+      <div style={{ display: 'flex', gap: 8, background: V.amberBg, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
+        <span style={{ color: V.amber }}></span>
+        <div style={{ fontSize: 12, color: C.warning, lineHeight: 1.7 }}><strong>Please read carefully:</strong><br />• NPS is a long-term retirement product — locked in until age 60 (limited early withdrawal)<br />• Employer contribution is over & above your ₹1.5L 80C limit (Section 80CCD(2))<br />• Recurring monthly contribution, reflects in your salary structure<br />• Rate follows your tax regime (10% old / 14% new of Basic)</div>
       </div>
 
       <label style={{ display: 'flex', gap: 10, marginBottom: 14, cursor: 'pointer' }}>
@@ -1356,7 +2716,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
         <span style={{ fontSize: 12, color: V.muted, lineHeight: 1.6 }}>I confirm I want to enrol in the corporate NPS. I understand the contribution will be a percentage of my Basic as per my tax regime, effective from the 1st of next month, and that NPS is a long-term retirement product with lock-in until age 60.</span>
       </label>
 
-      <button disabled={!canSubmit || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 8, fontWeight: 500, fontFamily: 'inherit', border: canSubmit ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: canSubmit ? V.purple : '#F5F3FF', color: canSubmit ? '#fff' : '#9B9BA8', cursor: canSubmit ? 'pointer' : 'not-allowed' }}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</button>
+      <button disabled={!canSubmit || saving} onClick={submit} style={{ width: '100%', padding: 12, borderRadius: 10, fontWeight: 500, fontFamily: 'inherit', border: canSubmit ? `1px solid ${V.purple}` : `1px solid ${V.border}`, background: canSubmit ? V.purple : C.canvas, color: canSubmit ? C.surface : C.muted, cursor: canSubmit ? 'pointer' : 'not-allowed' }}>{saving ? 'Submitting…' : hasPran ? 'Acknowledge & submit' : 'Submit & email me the PRAN form'}</button>
     </div>
   )
 }
@@ -1364,7 +2724,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 // ════════════════════════════════════════════════════════════════
 // LOANS (ESS) — apply, track requests, sign agreement, manage loans
 // ════════════════════════════════════════════════════════════════
-const LOAN_V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', red:'#A32D2D', redBg:'#FCEBEB', amber:'#854F0B', amberBg:'#FAEEDA', teal:'#0F6E56', tealBg:'#EEF7F3', bg:'#F5F3FF' }
+const LOAN_V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, red: C.critical, redBg: C.criticalTint, amber: C.warning, amberBg: C.warningTint, teal: C.positive, tealBg: C.sunken, bg:C.canvas }
 const loanInr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 // reducing-balance EMI
 function loanEmi(P: number, ratePct: number, n: number): number {
@@ -1377,12 +2737,12 @@ function loanEmi(P: number, ratePct: number, n: number): number {
 function LoanStatusBadge({ status }: { status: string }) {
   const s = (status || '').toUpperCase()
   const map: Record<string, [string, string]> = {
-    SUBMITTED:['#FAEEDA','#854F0B'], IN_APPROVAL:['#FAEEDA','#854F0B'], REQUESTED:['#FAEEDA','#854F0B'], GENERATED:['#FAEEDA','#854F0B'], UNDER_REVIEW:['#E6F1FB','#185FA5'], PENDING_PRAN:['#E6F1FB','#185FA5'],
-    APPROVED:['#EEF7F3','#0F6E56'], RECOVERING:['#EEF7F3','#0F6E56'], DISBURSED:['#EEF7F3','#0F6E56'], SIGNED:['#EEF7F3','#0F6E56'],
-    REJECTED:['#FCEBEB','#A32D2D'], CANCELLED:['#FCEBEB','#A32D2D'], EXIT_RECOVERY:['#FCEBEB','#A32D2D'],
-    CLOSED:['#F1F5F9','#64748B'], FORECLOSED:['#F1F5F9','#64748B'],
+    SUBMITTED:[C.warningTint,C.warning], IN_APPROVAL:[C.warningTint,C.warning], REQUESTED:[C.warningTint,C.warning], GENERATED:[C.warningTint,C.warning], UNDER_REVIEW:[C.brandTint,C.brand], PENDING_PRAN:[C.brandTint,C.brand],
+    APPROVED:[C.sunken,C.positive], RECOVERING:[C.sunken,C.positive], DISBURSED:[C.sunken,C.positive], SIGNED:[C.sunken,C.positive],
+    REJECTED:[C.criticalTint,C.critical], CANCELLED:[C.criticalTint,C.critical], EXIT_RECOVERY:[C.criticalTint,C.critical],
+    CLOSED:[C.sunken,C.muted], FORECLOSED:[C.sunken,C.muted],
   }
-  const [bg, c] = map[s] || ['#F3F0FF','#6D28D9']
+  const [bg, c] = map[s] || [C.brandTint,C.brandDeep]
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{s.replace(/_/g,' ')}</span>
 }
 
@@ -1401,8 +2761,8 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
       setAgr(d?.agreement || null); setLoading(false)
     }).catch(() => setLoading(false))
   }, [requestId])
-  const card: React.CSSProperties = { background:'#fff', border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
-  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:8, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
+  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:14, padding:16, marginBottom:14 }
+  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:10, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
 
   const submit = async () => {
     if (!agr) return
@@ -1423,7 +2783,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
   if (!agr) return (
     <div style={card}>
       <div style={{ fontSize:13, color:V.red, marginBottom:8 }}>No agreement found yet — please check back shortly.</div>
-      <button onClick={onClose} style={{ padding:'7px 13px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:12 }}>Close</button>
+      <button onClick={onClose} style={{ padding:'7px 13px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:12 }}>Close</button>
     </div>
   )
   const schedule: any[] = Array.isArray(agr.schedule_snapshot) ? agr.schedule_snapshot : (typeof agr.schedule_snapshot === 'string' ? (() => { try { return JSON.parse(agr.schedule_snapshot) } catch { return [] } })() : [])
@@ -1434,13 +2794,13 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
         <div style={{ fontSize:14, fontWeight:600, color:V.navy }}>Sign agreement — {agr.agreement_number}</div>
         <div style={{ display:'flex', gap:8 }}>
-          <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, textDecoration:'none', fontSize:11 }}>📄 View / print</a>
-          <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:'#fff', color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
+          <a href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, textDecoration:'none', fontSize:11 }}>View / print</a>
+          <button onClick={onClose} style={{ padding:'5px 11px', borderRadius:7, border:`1px solid ${V.border}`, background:C.surface, color:V.purpleDark, cursor:'pointer', fontFamily:'inherit', fontSize:11 }}>Close</button>
         </div>
       </div>
-      <div style={{ overflowX:'auto', border:`1px solid ${V.border}`, borderRadius:8, marginBottom:14 }}>
+      <div style={{ overflowX:'auto', border:`1px solid ${V.border}`, borderRadius:10, marginBottom:14 }}>
         <table style={{ borderCollapse:'collapse', width:'100%', minWidth:520 }}>
-          <thead><tr style={{ background:'#FBFAFF' }}>
+          <thead><tr style={{ background: C.brandTint }}>
             <th style={{ ...th, textAlign:'left' }}>#</th><th style={th}>Due</th><th style={th}>EMI</th><th style={th}>Principal</th><th style={th}>Interest</th><th style={th}>Closing</th>
           </tr></thead>
           <tbody>
@@ -1459,14 +2819,14 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
         </table>
       </div>
       <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-        <button onClick={() => setMode('ESIGN')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='ESIGN' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='ESIGN' ? V.bg : '#fff', color: mode==='ESIGN' ? V.purpleDark : V.navy }}>✍️ E-sign</button>
-        <button onClick={() => setMode('UPLOAD')} style={{ flex:1, padding:9, borderRadius:8, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='UPLOAD' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='UPLOAD' ? V.bg : '#fff', color: mode==='UPLOAD' ? V.purpleDark : V.navy }}>📎 Upload signed PDF</button>
+        <button onClick={() => setMode('ESIGN')} style={{ flex:1, padding:9, borderRadius:10, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='ESIGN' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='ESIGN' ? V.bg: C.surface, color: mode==='ESIGN' ? V.purpleDark : V.navy }}>E-sign</button>
+        <button onClick={() => setMode('UPLOAD')} style={{ flex:1, padding:9, borderRadius:10, cursor:'pointer', fontWeight:500, fontFamily:'inherit', fontSize:12, border: mode==='UPLOAD' ? `2px solid ${V.purple}` : `1px solid ${V.border}`, background: mode==='UPLOAD' ? V.bg: C.surface, color: mode==='UPLOAD' ? V.purpleDark : V.navy }}>Upload signed PDF</button>
       </div>
       {mode === 'ESIGN' ? (
         <div style={{ marginBottom:12 }}>
           <label style={{ fontSize:12, color:V.muted, display:'block', marginBottom:6 }}>Type your full legal name to sign</label>
           <input value={esignName} onChange={e => setEsignName(e.target.value)} placeholder="e.g. Rahul Sharma" style={input} />
-          {esignName.trim() && <div style={{ marginTop:8, padding:'10px 14px', border:`1px dashed ${V.purple}`, borderRadius:8, fontFamily:'"Segoe Script","Brush Script MT",cursive', fontSize:22, color:V.purpleDark }}>{esignName}</div>}
+          {esignName.trim() && <div style={{ marginTop:8, padding:'10px 14px', border:`1px dashed ${V.purple}`, borderRadius:10, fontFamily:'"Segoe Script","Brush Script MT",cursive', fontSize:22, color:V.purpleDark }}>{esignName}</div>}
         </div>
       ) : (
         <div style={{ marginBottom:12 }}>
@@ -1474,7 +2834,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
           <input value={pdfUrl} onChange={e => setPdfUrl(e.target.value)} placeholder="https://…/signed-agreement.pdf" style={input} />
         </div>
       )}
-      <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:'#fff', cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit signed agreement'}</button>
+      <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:10, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit signed agreement'}</button>
     </div>
   )
 }
@@ -1499,9 +2859,9 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   }, [emp.id]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
 
-  const card: React.CSSProperties = { background:'#fff', border:`1px solid ${V.border}`, borderRadius:12, padding:16, marginBottom:14 }
+  const card: React.CSSProperties = { background:C.surface, border:`1px solid ${V.border}`, borderRadius:14, padding:16, marginBottom:14 }
   const label: React.CSSProperties = { fontSize:12, color:V.muted, display:'block', marginBottom:6 }
-  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:8, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
+  const input: React.CSSProperties = { width:'100%', padding:10, borderRadius:10, border:`1px solid ${V.border}`, fontSize:14, boxSizing:'border-box', fontFamily:'inherit' }
 
   if (loading) return <div style={{ padding:20, color:V.muted, fontSize:13 }}>Loading…</div>
 
@@ -1543,18 +2903,18 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
     else notify(d.error || 'Failed', 'error')
   }
 
-  const row: React.CSSProperties = { display:'flex', justifyContent:'space-between', gap:10, padding:'8px 0', borderBottom:`1px solid ${V.border}`, fontSize:12.5, alignItems:'center', flexWrap:'wrap' }
+  const row: React.CSSProperties = { display:'flex', justifyContent:'space-between', gap:10, padding:'8px 0', borderBottom:`1px solid ${V.border}`, fontSize:13, alignItems:'center', flexWrap:'wrap' }
 
   return (
     <div>
       <div style={{ marginBottom:14 }}>
         <div style={{ fontSize:18, fontWeight:600, color:V.navy }}>Loans</div>
-        <div style={{ fontSize:12.5, color:V.muted, marginTop:2 }}>Apply for a company loan, track approvals, sign your agreement, and manage repayments.</div>
+        <div style={{ fontSize:13, color:V.muted, marginTop:2 }}>Apply for a company loan, track approvals, sign your agreement, and manage repayments.</div>
       </div>
 
       {!hasCtc && (
-        <div style={{ ...card, background:V.amberBg, border:'1px solid #EFD9A8' }}>
-          <span style={{ fontSize:12, color:'#633806' }}>ⓘ CTC not configured — eligibility shows ₹0; ask HR to set CTC.</span>
+        <div style={{ ...card, background:V.amberBg, border: `1px solid ${C.warningTint}` }}>
+          <span style={{ fontSize:12, color: C.warning }}>CTC not configured — eligibility shows ₹0; ask HR to set CTC.</span>
         </div>
       )}
 
@@ -1586,13 +2946,13 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
               <label style={label}>Reason</label>
               <textarea value={reason} onChange={e => setReason(e.target.value)} placeholder="Purpose of the loan…" style={{ ...input, minHeight:70, resize:'vertical' }} />
             </div>
-            <div style={{ ...card, background:'#FBFAFF', marginBottom:12 }}>
+            <div style={{ ...card, background: C.brandTint, marginBottom:12 }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <span style={{ fontSize:12, color:V.muted }}>Indicative EMI (reducing balance)</span>
                 <span style={{ fontSize:18, fontWeight:600, color:V.purpleDark }}>{loanInr(indicativeEmi)}<span style={{ fontSize:11, color:V.muted, fontWeight:400 }}>/mo</span></span>
               </div>
             </div>
-            <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:8, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:'#fff', cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
+            <button disabled={saving} onClick={submit} style={{ width:'100%', padding:12, borderRadius:10, fontWeight:500, fontFamily:'inherit', border:`1px solid ${V.purple}`, background:V.purple, color:C.onAccent, cursor: saving ? 'wait' : 'pointer' }}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
           </>
         )}
       </div>
@@ -1613,7 +2973,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
               </div>
               <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                 <LoanStatusBadge status={p.status} />
-                {(p.status || '').toUpperCase() === 'APPROVED' && <button onClick={() => setSigningReq(p.id)} style={{ padding:'6px 12px', borderRadius:7, border:'none', background:V.purple, color:'#fff', fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Sign agreement</button>}
+                {(p.status || '').toUpperCase() === 'APPROVED' && <button onClick={() => setSigningReq(p.id)} style={{ padding:'6px 12px', borderRadius:7, border:'none', background:V.purple, color:C.onAccent, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Sign agreement</button>}
               </div>
             </div>
           )
@@ -1631,15 +2991,15 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
                 <div style={{ fontSize:13, fontWeight:600, color:V.navy }}>{l.loan_number}</div>
                 <LoanStatusBadge status={l.status} />
               </div>
-              <div style={{ fontSize:11.5, color:V.muted, marginTop:4, lineHeight:1.7 }}>
+              <div style={{ fontSize:12, color:V.muted, marginTop:4, lineHeight:1.7 }}>
                 Principal {loanInr(l.principal)} · EMI {loanInr(l.emi_amount)}/mo · Outstanding <b style={{ color:V.navy }}>{loanInr(l.outstanding_principal)}</b><br />
                 Paid {l.paid_installments ?? 0} / {(l.paid_installments ?? 0) + (l.remaining_installments ?? 0)} installments · {l.remaining_installments ?? 0} remaining
                 {l.disbursement_date ? ` · disbursed ${fmt(l.disbursement_date)}` : ''}
               </div>
               {isRecovering && (
                 <div style={{ display:'flex', gap:8, marginTop:8 }}>
-                  <button onClick={() => manage(l, 'CLOSURE')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.red}`, background:'#fff', color:V.red, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Foreclose</button>
-                  <button onClick={() => manage(l, 'PART_PAYMENT')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.purple}`, background:'#fff', color:V.purpleDark, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Part-payment</button>
+                  <button onClick={() => manage(l, 'CLOSURE')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.red}`, background:C.surface, color:V.red, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Foreclose</button>
+                  <button onClick={() => manage(l, 'PART_PAYMENT')} style={{ padding:'6px 12px', borderRadius:7, border:`1px solid ${V.purple}`, background:C.surface, color:V.purpleDark, fontSize:11, fontWeight:600, cursor:'pointer', fontFamily:'inherit' }}>Part-payment</button>
                 </div>
               )}
             </div>
@@ -1654,16 +3014,16 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
 function Placeholder({ title, phase, needs }: { title: string; phase: number; needs: string }) {
   return (
     <div style={{ ...T.card, textAlign:'center', padding:40 }}>
-      <div style={{ fontSize:38, marginBottom:8 }}>🚧</div>
+      <div style={{ fontSize:38, marginBottom:8 }}></div>
       <div style={{ fontSize:16, fontWeight:600 }}>{title}</div>
-      <div style={{ fontSize:13, color:'#6B7280', marginTop:6, lineHeight:1.7 }}>Coming in Phase {phase}. This module needs the <b>{needs}</b> module's data, which isn't built yet.</div>
+      <div style={{ fontSize:13, color:C.muted, marginTop:6, lineHeight:1.7 }}>Coming in Phase {phase}. This module needs the <b>{needs}</b> module's data, which isn't built yet.</div>
     </div>
   )
 }
 
 // ── Flexi Benefit Plan (FBP) — the employee's company policy for their salary slab ──
 function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const V = { navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489', border:'#E9E7F5', muted:'#6B6B7B', purpleBg:'#F5F3FF' }
+  const V = { navy:C.ink, purple:C.brand, purpleDark:C.brandDeep, border:C.line, muted:C.muted, purpleBg:C.canvas }
   const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
   const num = (v: any) => (v == null || v === '' ? 0 : Number(v) || 0)
   const [status, setStatus] = useState<'loading' | 'ready' | 'nopolicy'>('loading')
@@ -1677,7 +3037,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
     let live = true
     ;(async () => {
       setStatus('loading')
-      const { data: e } = await supabase.from('employees').select('company_id, tds_regime, companies(company_name)').eq('id', emp.id).maybeSingle()
+      const { data: e } = await supabase.from('employees').select('company_id, tds_regime, companies!employees_company_id_fkey(company_name)').eq('id', emp.id).maybeSingle()
       const companyId = (e as any)?.company_id
       if ((e as any)?.companies?.company_name) setCompanyName((e as any).companies.company_name)
       if ((e as any)?.tds_regime) setRegime(String((e as any).tds_regime).toLowerCase().includes('new') ? 'new' : 'old')
@@ -1712,13 +3072,13 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
     return () => { live = false }
   }, [emp.id])
 
-  const card: React.CSSProperties = { background: '#fff', border: `1px solid ${V.border}`, borderRadius: 12, padding: 16, marginBottom: 14 }
+  const card: React.CSSProperties = { background: C.surface, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }
 
   if (status === 'loading') return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading flexi policy…</div>
   if (status === 'nopolicy') return (
     <div style={card}>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>🎛️ Flexi Benefit Plan</div>
-      <div style={{ fontSize: 12.5, color: V.muted }}>No flexi (FBP) policy is configured for {companyName || 'your company'}{annualFixed ? ` at your salary band (${inr(annualFixed)} annual fixed)` : ''} yet. Please check with HR / Payroll.</div>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 6 }}>Flexi Benefit Plan</div>
+      <div style={{ fontSize: 13, color: V.muted }}>No flexi (FBP) policy is configured for {companyName || 'your company'}{annualFixed ? ` at your salary band (${inr(annualFixed)} annual fixed)` : ''} yet. Please check with HR / Payroll.</div>
     </div>
   )
 
@@ -1736,10 +3096,10 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
 
   return (
     <div>
-      <div style={{ ...card, background: V.purpleBg, borderColor: '#DDD6FE' }}>
+      <div style={{ ...card, background: V.purpleBg, borderColor: C.brandEdge }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 15, fontWeight: 700 }}>🎛️ Flexi Benefit Plan (FBP)</div>
-          <span style={{ fontSize: 11, background: '#EEEDFE', color: V.purpleDark, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>{companyName}</span>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Flexi Benefit Plan (FBP)</div>
+          <span style={{ fontSize: 11, background: C.brandTint, color: V.purpleDark, padding: '2px 9px', borderRadius: 99, fontWeight: 600 }}>{companyName}</span>
         </div>
         <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', marginTop: 10, fontSize: 12 }}>
           <div><span style={{ color: V.muted }}>Your annual fixed</span><div style={{ fontWeight: 700, fontSize: 15 }}>{inr(annualFixed)}</div></div>
@@ -1750,19 +3110,19 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         {(['old', 'new'] as const).map(rg => (
-          <button key={rg} onClick={() => setRegime(rg)} style={{ padding: '7px 16px', borderRadius: 99, border: `1px solid ${regime === rg ? V.purple : V.border}`, background: regime === rg ? V.purple : '#fff', color: regime === rg ? '#fff' : V.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{rg === 'old' ? 'Old Regime' : 'New Regime'}</button>
+          <button key={rg} onClick={() => setRegime(rg)} style={{ padding: '7px 16px', borderRadius: 99, border: `1px solid ${regime === rg ? V.purple : V.border}`, background: regime === rg ? V.purple: C.surface, color: regime === rg ? C.surface : V.navy, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{rg === 'old' ? 'Old Regime' : 'New Regime'}</button>
         ))}
       </div>
 
       <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '10px 14px', background: V.navy, color: '#fff', fontSize: 11, fontWeight: 700 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '10px 14px', background: V.navy, color: C.onAccent, fontSize: 11, fontWeight: 700 }}>
           <span>COMPONENT</span><span style={{ textAlign: 'right' }}>{regime === 'old' ? 'OLD REGIME' : 'NEW REGIME'}</span><span style={{ textAlign: 'right' }}>PERQUISITE / EXTRA</span>
         </div>
         {rows.map((r, i) => {
           const a = amt(r)
           const perq = num(r.perquisite_monthly) > 0 ? `${inr(num(r.perquisite_monthly))}/mo perq` : (r.comp.is_children_linked && r.children_count ? `${r.children_count} child` : '—')
           return (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '9px 14px', borderBottom: `1px solid ${V.border}`, fontSize: 12.5, background: a.muted ? '#FAFAFE' : '#fff' }}>
+            <div key={i} style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1fr', padding: '9px 14px', borderBottom: `1px solid ${V.border}`, fontSize: 13, background: a.muted ? '#FAFAFE' : '#fff' }}>
               <span style={{ color: V.navy }}>{r.comp.name}</span>
               <span style={{ textAlign: 'right', fontWeight: 600, color: a.muted ? V.muted : V.navy }}>{a.text}</span>
               <span style={{ textAlign: 'right', color: V.muted }}>{perq}</span>
@@ -1770,7 +3130,7 @@ function FlexiSection({ emp }: { emp: EmployeeDetail; notify: (m: string, t?: 's
           )
         })}
       </div>
-      <div style={{ fontSize: 10.5, color: V.muted, padding: '0 4px' }}>FBP entitlements for your company &amp; salary band. Declaration &amp; bill submission open during the flexi window — raise via HR / Payroll.</div>
+      <div style={{ fontSize: 11, color: V.muted, padding: '0 4px' }}>FBP entitlements for your company &amp; salary band. Declaration &amp; bill submission open during the flexi window — raise via HR / Payroll.</div>
     </div>
   )
 }
@@ -1794,15 +3154,15 @@ function MyLetters({ emp }: { emp: EmployeeDetail }) {
   }
   return (
     <div style={T.card}>
-      <div style={T.section}>🖋️ My Letters</div>
-      {loading ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Loading…</div> :
-        rows.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No letters have been shared with you yet. HR-issued letters (offer, confirmation, etc.) will appear here.</div> :
+      <div style={T.section}>My Letters</div>
+      {loading ? <div style={{ fontSize:12, color:C.faint }}>Loading…</div> :
+        rows.length === 0 ? <div style={{ fontSize:12, color:C.faint }}>No letters have been shared with you yet. HR-issued letters (offer, confirmation, etc.) will appear here.</div> :
         rows.map(r => (
-          <div key={r.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 0', borderBottom:'1px solid #F3F0FF' }}>
-            <span style={{ fontSize:20 }}>📄</span>
+          <div key={r.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 0', borderBottom: `1px solid ${C.brandEdge}` }}>
+            <span style={{ fontSize:20 }}></span>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:13, fontWeight:600 }}>{r.letter_name}</div>
-              <div style={{ fontSize:11, color:'#9CA3AF' }}>{new Date(r.letter_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</div>
+              <div style={{ fontSize:11, color:C.faint }}>{new Date(r.letter_date).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' })}</div>
             </div>
             <button onClick={() => download(r.file_url)} style={{ ...T.btnO }}>⬇ Download</button>
           </div>
@@ -1836,12 +3196,32 @@ interface NavSection {
   features?: Feature[]        // shown instead of the module when status is 'soon'
 }
 
+/**
+ * Section key → interface icon.
+ *
+ * The ESS rail used the same emoji the dashboard rail did, for the same
+ * reasons it should not: they render differently per OS, sit off the text
+ * baseline, and cannot take the colour of the state they are in. The emoji
+ * remain in SECTIONS.features, where they illustrate a not-yet-built feature
+ * rather than label a control.
+ */
+const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => React.ReactElement> = {
+  home: IconHome, profile: IconEmployees, team: IconEmployees, payroll: IconPayroll,
+  inbox: IconBell,
+  attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
+  wall: IconRecruitment, rnr: IconAi, funzone: IconAi,
+}
+function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
+  const I = ESS_ICON[k]
+  return I ? <I size={size} strokeWidth={strokeWidth} /> : null
+}
+
 const SECTIONS: NavSection[] = [
-  { k:'home', label:'Home', short:'Home', icon:'🏠', status:'ready',
+  { k:'home', label:'Home', short:'Home', icon:'', status:'ready',
     desc:'The landing dashboard — everything at a glance',
     items:[{ k:'home', label:'Dashboard' }] },
 
-  { k:'profile', label:'Profile', short:'Profile', icon:'👤', status:'ready',
+  { k:'profile', label:'Profile', short:'Profile', icon:'', status:'ready',
     desc:'Your personal details, documents and letters',
     items:[
       { k:'profile',     label:'My Details' },
@@ -1849,16 +3229,11 @@ const SECTIONS: NavSection[] = [
       { k:'letters',     label:'My Letters' },
     ]},
 
-  { k:'team', label:'Team', short:'Team', icon:'👥', status:'soon',
-    desc:'For managers — see and manage your team',
-    items:[{ k:'team', label:'Team' }],
-    features:[
-      { icon:'📋', name:'Team List',          note:'Non-salary details visible' },
-      { icon:'✅', name:'Task Assign',        note:'Give tasks to team members' },
-      { icon:'📝', name:'TODO / Deliverables',note:'Track what is owed' },
-    ]},
+  { k:'team', label:'Team', short:'Team', icon:'', status:'ready',
+    desc:'Who is above you, who is beside you, who reports to you — read from the same reporting lines HR maintains',
+    items:[{ k:'team', label:'Team' }]},
 
-  { k:'payroll', label:'Payroll', short:'Payroll', icon:'💰', status:'partial',
+  { k:'payroll', label:'Payroll', short:'Payroll', icon:'', status:'partial',
     desc:'Salary, benefits, declarations and claims — all in one place',
     items:[
       { k:'payslip',     label:'Salary Slip',            phase:3, needs:'Payslip generation' },
@@ -1871,55 +3246,76 @@ const SECTIONS: NavSection[] = [
       { k:'vpf',         label:'Voluntary PF' },
       { k:'nps',         label:'Corporate NPS' },
       { k:'loans',       label:'Loans' },
-      { k:'claims',      label:'Travel Claims',          phase:3, needs:'Claims/Payroll' },
+      { k:'claims',      label:'Travel Claims' },
       { k:'statutory',   label:'Statutory',              phase:3, needs:'Payroll' },
     ]},
 
-  { k:'attendance', label:'Attendance', short:'Attend', icon:'🕐', status:'ready',
+  { k:'attendance', label:'Attendance', short:'Attend', icon:'', status:'ready',
     desc:'Your own attendance, self-service',
     items:[{ k:'attendance', label:'Attendance' }] },
 
-  { k:'leave', label:'Leave', short:'Leave', icon:'🌴', status:'ready',
+  { k:'leave', label:'Leave', short:'Leave', icon:'', status:'ready',
     desc:'Apply, track and plan leave',
     items:[{ k:'leave', label:'Leave' }] },
 
-  { k:'hris', label:'HRIS', short:'HRIS', icon:'🗂️', status:'partial',
+  // Below Leave, as asked. One section rather than a sub-tab of HRIS: it is
+  // opened many times a day, and burying it a level down would make it the
+  // one thing people go back to the bell for.
+  { k:'inbox', label:'Inbox', short:'Inbox', icon:'', status:'ready',
+    desc:'Messages from colleagues and departments, and every notification in full',
+    items:[{ k:'inbox', label:'Inbox' }] },
+
+  { k:'hris', label:'HRIS', short:'HRIS', icon:'', status:'partial',
     desc:'Directory, requests, approvals and the exit process',
     items:[
       { k:'directory',   label:'Team Directory' },
       { k:'requests',    label:'Raise a Request' },
-      { k:'approvals',   label:'Tasks & Approvals',      phase:4, needs:'Approval workflow' },
-      { k:'exit',        label:'Exit Process',           phase:4, needs:'Exit & FnF' },
+      // Approvals appears only for a login the menu says can approve (RM, HOD, or a
+      // functional approver) — decided from /api/ess/menu, not from a role name here.
+      { k:'approvals',   label:'Tasks & Approvals' },
+      { k:'exit',        label:'Exit Process' },
     ]},
 
-  { k:'performance', label:'Performance', short:'PMS', icon:'⭐', status:'soon',
-    desc:'Review and rating submission',
-    items:[{ k:'performance', label:'Performance' }],
-    features:[
-      { icon:'📝', name:'Self Review',    note:'Employee assessment' },
-      { icon:'👔', name:'Manager Review', note:'Rating submission' },
-    ]},
+  // ── Role-wise tabs (071) — shown only when /api/ess/menu says so ──
+  { k:'company', label:'Company', short:'Company', icon:'', status:'ready',
+    desc:'Headcount, why people are leaving, regime election — company-wide',
+    items:[{ k:'company', label:'Company' }] },
 
-  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'🏆', status:'soon',
-    desc:'Peer-to-peer appreciation, casual and public',
+  { k:'reports', label:'Reports', short:'Reports', icon:'', status:'ready',
+    desc:'Attrition, regime comparison, declaration status, TDS register, span of control',
+    items:[{ k:'reports', label:'Reports' }] },
+
+  // Which tabs a person sees inside this is decided by the component from org
+  // data — everyone gets My KRAs, managers additionally get My Team, HODs get
+  // Department. One section, three audiences.
+  { k:'performance', label:'Performance', short:'PMS', icon:'', status:'ready',
+    desc:'Your KRAs, and the reviews you owe',
+    items:[{ k:'performance', label:'Performance' }] },
+
+  // Was a 'soon' placeholder. Promoted rather than duplicated — adding a
+  // second entry with the same key is what produced React's "two children
+  // with the same key" warning, and duplicate keys let React drop or swap
+  // siblings silently.
+  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'ready',
+    desc:'What your colleagues have noticed — shoutouts, awards, badges and service milestones. Thanks, never pay.',
     items:[{ k:'wall', label:'Wall of Fame' }],
     features:[
-      { icon:'💬', name:'Give a Shoutout', note:'Quick appreciation post' },
-      { icon:'📰', name:'Company Feed',    note:'See everyone’s shoutouts' },
+      { icon:'', name:'Give a Shoutout', note:'Quick appreciation post' },
+      { icon:'', name:'Company Feed',    note:'See everyone’s shoutouts' },
     ]},
 
-  { k:'rnr', label:'RNR', short:'RNR', icon:'🎖️', status:'soon',
+  { k:'rnr', label:'RNR', short:'RNR', icon:'', status:'soon',
     desc:'Structured Reward & Recognition, points-based',
     items:[{ k:'rnr', label:'RNR' }],
     features:[
-      { icon:'📝', name:'Nominate',    note:'Pick a category, write why' },
-      { icon:'✅', name:'Approval',    note:'Manager / HR reviews' },
-      { icon:'💎', name:'Points',      note:'Credited on approval' },
-      { icon:'🎁', name:'Redeem',      note:'Vouchers, leave, merch' },
-      { icon:'🏅', name:'Leaderboard', note:'Top recognized employees' },
+      { icon:'', name:'Nominate',    note:'Pick a category, write why' },
+      { icon:'', name:'Approval',    note:'Manager / HR reviews' },
+      { icon:'', name:'Points',      note:'Credited on approval' },
+      { icon:'', name:'Redeem',      note:'Vouchers, leave, merch' },
+      { icon:'', name:'Leaderboard', note:'Top recognized employees' },
     ]},
 
-  { k:'funzone', label:'Fun Zone', short:'Fun', icon:'🎉', status:'ready',
+  { k:'funzone', label:'Fun Zone', short:'Fun', icon:'', status:'ready',
     desc:'Take a break — play a quick game with your team',
     items:[{ k:'funzone', label:'Fun Zone' }] },
 ]
@@ -1929,37 +3325,124 @@ const viewMeta = (k: string) => VIEWS.find(v => v.k === k) || VIEWS[0]
 /** The four an employee opens daily — these get the mobile thumb bar, rest go under More. */
 const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
 
-const DOT: Record<Ready, string> = { ready:'#059669', partial:'#B45309', soon:'#DC2626' }
+const DOT: Record<Ready, string> = { ready:C.positive, partial:C.warning, soon:C.critical }
 const BADGE: Record<Ready, [string, string, string]> = {
-  ready:   ['Available',        '#ECFDF5', '#059669'],
-  partial: ['Partly available', '#FFFBEB', '#B45309'],
-  soon:    ['Coming soon',      '#FEF2F2', '#DC2626'],
+  ready:   ['Available',        C.positiveTint, C.positive],
+  partial: ['Partly available', C.warningTint, C.warning],
+  soon:    ['Coming soon',      C.criticalTint, C.critical],
 }
 
 // ── Sidebar / sub-tab / feature-grid bits (outside the parent — no focus loss) ──
 function SectionButton({ s, active, onClick }: { s: NavSection; active: boolean; onClick: () => void }) {
   // The mock's `.tab-link:hover` can't be an inline style, so the hover tint is state.
   const [hover, setHover] = useState(false)
-  const bg = active ? 'rgba(124,58,237,0.25)' : hover ? 'rgba(255,255,255,0.05)' : 'transparent'
+  const bg = active ? C.railActiveBg : hover ? C.railHover : 'transparent'
   return (
     <button onClick={onClick} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? '#fff' : '#C4BFEE', cursor:'pointer', fontSize:12.5, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? '#7C3AED' : 'transparent'}` }}>
-      <span>{s.icon}</span>
+        // The rail follows the theme now — white in day, #171B21 in night —
+        // so its text comes from the rail family, which is defined for both.
+        // It must NOT use the onDark family: those are fixed near-white and
+        // would be invisible on a white rail in day mode. That was the
+        // original complaint. The earlier onDark fix was right for a rail
+        // that stayed dark; this replaces the premise, not the reasoning.
+      style={{ width:'100%', textAlign:'left', display:'flex', alignItems:'center', gap:10, padding:'10px 18px', color: active ? C.railActiveText : C.railMuted, cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:bg, border:'none', borderLeft:`3px solid ${active ? C.railActiveText : 'transparent'}` }}>
+      <EssIcon k={s.k} size={16} />
       <span style={{ whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
       <span style={{ width:6, height:6, borderRadius:'50%', marginLeft:'auto', background:DOT[s.status], flexShrink:0 }} />
     </button>
   )
 }
 
+/** The way into the admin dashboard, and the only one. It appears for somebody whose
+ *  roles open at least one admin module and stays invisible for everyone else, so an
+ *  ordinary employee never sees a door that will not open. Rendered apart from the
+ *  section list because it leaves ESS rather than switching a tab. */
+function AdminEntry({ isMobile }: { isMobile?: boolean }) {
+  const { grant, loading } = useGrant()
+  const [hover, setHover] = useState(false)
+  // An unresolved grant hides the button rather than showing it: a door that might not
+  // open is worse than no door, and the dashboard's own guard is the authority anyway.
+  if (loading || !grant.resolved || !hasAdminAccess(grant)) return null
+
+  const roleLine = grant.isSuperAdmin ? 'Super Admin'
+    : grant.roles.length ? grant.roles.map(r => r.role_name).join(', ')
+    : 'Admin access'
+
+  if (isMobile) {
+    return (
+      <button onClick={() => { window.location.href = '/dashboard' }}
+        style={{ gridColumn: '1 / -1', padding: '12px 10px', borderRadius: 9, border: `1px solid ${C.brand}`, background: C.brand, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8, color: C.onAccent, fontWeight: 600 }}>
+        <span style={{ fontSize: 16 }}>🛠️</span>
+        <span style={{ flex: 1, minWidth: 0 }}>Admin</span>
+        <span style={{ fontSize: 10, opacity: .75, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 130 }}>{roleLine}</span>
+      </button>
+    )
+  }
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.railLine}` }}>
+      <button onClick={() => { window.location.href = '/dashboard' }}
+        onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+        // A translucent brand wash worked on a permanently dark rail. Over the
+        // day-mode white rail it resolves to pale lavender, and C.onAccent is
+        // white there — white on near-white. A solid fill keeps onAccent
+        // meaning what it says, and matches the mobile variant above.
+        style={{ width: '100%', textAlign: 'left', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', color: C.onAccent, cursor: 'pointer', fontSize: 12.5, fontWeight: 600, fontFamily: 'inherit', background: hover ? C.brandDeep : C.brand, border: 'none', borderLeft: `3px solid ${C.brandDeep}` }}>
+        <span>🛠️</span>
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>Admin</span>
+        <span style={{ marginLeft: 'auto', fontSize: 14, opacity: .7 }}>→</span>
+      </button>
+      <div style={{ padding: '4px 18px 0', fontSize: 10, color: C.railFaint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{roleLine}</div>
+    </div>
+  )
+}
+
+/** The employee's own reporting line, from employee_relationships rather than from the
+ *  single joined manager name the panel used to show. Somebody with an L2 and a head of
+ *  department can now see them, and a change made by HR shows up here without anybody
+ *  editing a field. */
+function MyReportingLine({ employeeId, fallbackL1, notify }: {
+  employeeId: string
+  fallbackL1: string | null
+  notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const { managers, reportCount, loading } = useManagerChain(employeeId)
+  const LABEL: Record<string, string> = { L1: 'Reporting manager', L2: 'L2 manager', L3: 'L3 manager', L4: 'L4 manager', HOD: 'Head of department' }
+
+  if (loading) return <Field label="Reporting manager" value="…" icon="👔" notify={notify} />
+  if (!managers.length) {
+    // Nothing in the relationship table yet — fall back to the joined name so the panel
+    // is never emptier than it was before.
+    return <Field label="Reporting manager" value={fallbackL1} icon="👔" notify={notify} />
+  }
+  return (
+    <>
+      {managers.map(m => (
+        <Field key={m.relationship_type}
+          label={LABEL[m.relationship_type] || m.relationship_type}
+          value={m.manager ? [m.manager.full_name, m.manager.designation].filter(Boolean).join(' · ') : null}
+          icon={m.relationship_type === 'HOD' ? '🏛️' : '👔'} notify={notify} />
+      ))}
+      {reportCount > 0 && (
+        <Field label="Reports to you" value={`${reportCount} ${reportCount === 1 ? 'person' : 'people'}`} icon="👥" notify={notify} />
+      )}
+    </>
+  )
+}
+
 function TabHeader({ s }: { s: NavSection }) {
   const [label, bg, fg] = BADGE[s.status]
+  // Same header band as the 32 dashboard routes. This sat directly on the
+  // canvas, so ESS read as a different product from the admin side.
   return (
-    <div style={{ marginBottom:16 }}>
+    <div className="ez-page-head">
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap', marginBottom:4 }}>
-        <div style={{ fontSize:22, fontWeight:700 }}>{s.icon} {s.label}</div>
-        <span style={{ fontSize:10.5, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
+        <div style={{ fontSize:F.page, fontWeight:W.bold, letterSpacing:'-.02em',
+                      display:'flex', alignItems:'center', gap:9 }}>
+          <EssIcon k={s.k} size={20} strokeWidth={1.8} />{s.label}
+        </div>
+        <span style={{ fontSize:11, fontWeight:700, padding:'4px 12px', borderRadius:999, background:bg, color:fg }}>{label}</span>
       </div>
-      <div style={{ fontSize:12.5, color:'#6B7280' }}>{s.desc}</div>
+      <div style={{ fontSize:13, color:C.muted }}>{s.desc}</div>
     </div>
   )
 }
@@ -1971,7 +3454,7 @@ function SubTabs({ items, view, go }: { items: NavItem[]; view: string; go: (k: 
       {items.map(i => {
         const on = i.k === view
         return (
-          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:12.5, fontWeight: on ? 600 : 500, border:`1px solid ${on ? '#7C3AED' : '#E9E7F5'}`, background: on ? '#7C3AED' : '#fff', color: on ? '#fff' : '#4B5563', whiteSpace:'nowrap' }}>
+          <button key={i.k} onClick={() => go(i.k)} style={{ padding:'6px 14px', borderRadius:99, cursor:'pointer', fontFamily:'inherit', fontSize:13, fontWeight: on ? 600 : 500, border:`1px solid ${on ? C.brand : C.line}`, background: on ? C.brand: C.surface, color: on ? C.onAccent : C.inkSoft, whiteSpace:'nowrap' }}>
             {i.label}{i.phase ? <span style={{ marginLeft:5, fontSize:9, opacity:.7 }}>soon</span> : null}
           </button>
         )
@@ -1986,14 +3469,14 @@ function FeatureGrid({ features }: { features: Feature[] }) {
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:12 }}>
         {features.map(f => (
-          <div key={f.name} style={{ background:'#fff', border:'1px solid #ECEAFB', borderRadius:12, padding:16 }}>
+          <div key={f.name} style={{ background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, padding:16 }}>
             <div style={{ fontSize:22, marginBottom:6 }}>{f.icon}</div>
             <div style={{ fontWeight:700, fontSize:13, marginBottom:3 }}>{f.name}</div>
-            <div style={{ fontSize:11, color:'#6B7280' }}>{f.note}</div>
+            <div style={{ fontSize:11, color:C.muted }}>{f.note}</div>
           </div>
         ))}
       </div>
-      <div style={{ background:'#F3EEFF', borderRadius:10, padding:'12px 16px', marginTop:20, fontSize:12, color:'#6D28D9' }}>
+      <div style={{ background: C.brandTint, borderRadius:10, padding:'12px 16px', marginTop:20, fontSize:12, color:C.brandDeep }}>
         This tab isn’t live yet. Everything above is what it will hold — nothing here is clickable so far.
       </div>
     </div>
@@ -2002,10 +3485,10 @@ function FeatureGrid({ features }: { features: Feature[] }) {
 
 function NotificationBell({ unread, open, onToggle }: { unread: number; open: boolean; onToggle: () => void }) {
   return (
-    <button onClick={onToggle} title="Notifications" style={{ position:'relative', width:34, height:34, borderRadius:8, border:`1px solid ${open ? '#7C3AED' : '#E9E7F5'}`, background: open ? '#F5F3FF' : '#fff', cursor:'pointer', fontSize:16, lineHeight:1, fontFamily:'inherit', flexShrink:0 }}>
-      🔔
+    <button onClick={onToggle} title="Notifications" style={{ position:'relative', width:34, height:34, borderRadius:R.md, border:`1px solid ${open ? C.brand : C.line}`, background: open ? C.brandTint : C.surface, color: open ? C.brandDeep : C.muted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'inherit', flexShrink:0 }}>
+      <IconBell size={16} />
       {unread > 0 && (
-        <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:99, background:'#DC2626', color:'#fff', fontSize:9.5, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
+        <span style={{ position:'absolute', top:-5, right:-5, minWidth:17, height:17, padding:'0 4px', borderRadius:R.pill, background:C.critical, color:C.onAccent, fontSize:10, fontWeight:W.bold, display:'flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box' }}>
           {unread > 9 ? '9+' : unread}
         </span>
       )}
@@ -2019,6 +3502,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   const [view, setView] = useState('home')
   const [isMobile, setIsMobile] = useState(false)
   const [bellOpen, setBellOpen] = useState(false)
+  // The bell sits in the header and the panel hangs off the viewport, so they
+  // are not in one wrapper — the trigger is exempted by selector instead.
+  // Without that, clicking the bell to close would dismiss on pointerdown and
+  // re-open on the click, and the panel could never be shut from its own button.
+  const bellPop = useDismiss<HTMLDivElement>(bellOpen, () => setBellOpen(false), '[data-ez-bell]')
   const [moreOpen, setMoreOpen] = useState(false)
   const [unread, setUnread] = useState(0)
   const [toast, setToast] = useState<{ msg: string; type: 'success'|'error' } | null>(null)
@@ -2033,8 +3521,40 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   // Unread count for the bell. Refreshed on mount and whenever the open panel
   // marks something read, so the badge never disagrees with the list behind it.
+  // Goes through the API, not the table, so opening the portal SYNCS: work
+  // already sitting in a queue produces its notification now rather than
+  // waiting for the next event. Reading the table directly would leave the
+  // badge on 0 until somebody happened to open the panel.
   const refreshUnread = useCallback(() => {
-    loadNotifications(employeeId).then(r => setUnread(r.filter(n => !n.is_read).length)).catch(() => {})
+    (async () => {
+      try {
+        const h = essAuthHeaders()
+        let headers: Record<string, string> = h
+        if (!h.Authorization) {
+          const { data } = await supabase.auth.getSession()
+          const t = data?.session?.access_token
+          headers = t ? { Authorization: `Bearer ${t}` } : {}
+        }
+        // Two sources, added rather than one replacing the other: the bell
+        // counts NOTIFICATIONS, the inbox counts MESSAGES FROM PEOPLE. They
+        // deliberately do not overlap — inbox_unread_count excludes the
+        // notification threads precisely so one leave approval is not counted
+        // twice. A failing inbox call leaves the notification count standing
+        // rather than blanking the badge.
+        const [rn, ri] = await Promise.all([
+          fetch(`/api/ess/notifications?employee_id=${employeeId}`, { headers }),
+          fetch(`/api/ess/inbox?employee_id=${employeeId}`, { headers }).catch(() => null),
+        ])
+        if (!rn.ok) return
+        const j = await rn.json()
+        let total = Number(j.unread) || 0
+        if (ri && ri.ok) {
+          const ji = await ri.json().catch(() => null)
+          if (ji?.installed) total += Number(ji.unread) || 0
+        }
+        setUnread(total)
+      } catch { /* the badge is not worth an error state */ }
+    })()
   }, [employeeId])
   useEffect(() => { refreshUnread() }, [refreshUnread])
 
@@ -2044,8 +3564,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   const goSection = (s: NavSection) => go(s.items.some(i => i.k === view) ? view : s.items[0].k)
   const salaryVisible = false // role-based salary visibility wired with auth in a later pass
 
+  // The nav as data (guide §5). Company / Reports appear only when the menu says
+  // so; Approvals only for a login that can approve. Nothing here names a role.
+  const { menu: essMenu } = useEssMenu(emp?.id)
+  const sections = SECTIONS.filter(s => s.k === 'company' ? essMenu.can.company : s.k === 'reports' ? essMenu.can.reports : true)
+
   const meta = viewMeta(view)
   const section = SECTIONS.find(s => s.k === meta.section)!
+  const sectionItems = section.k === 'hris' && !essMenu.can.approvals ? section.items.filter(i => i.k !== 'approvals') : section.items
 
   const renderView = () => {
     if (!emp) return null
@@ -2054,8 +3580,15 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     if (section.status === 'soon' && section.features) return <FeatureGrid features={section.features} />
     switch (view) {
       case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
-      case 'profile':       return <Profile emp={emp} notify={notify} />
+      // Profile 360. The portal owner's code is passed, not the viewer's —
+      // the route resolves WHO IS LOOKING from the session and masks
+      // accordingly, so an admin opening a colleague's portal sees that
+      // colleague's profile with a colleague's visibility, not their own.
+      case 'profile':       return <Profile360 code={emp.emp_code} />
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
+      // The inbox reports its own unread straight into the bell's state, so
+      // the badge and the screen can never show two different numbers.
+      case 'inbox':         return <InboxTabs employeeId={emp.id} onUnread={setUnread} />
       case 'vpf':           return <VpfSection emp={emp} notify={notify} />
       case 'nps':           return <NpsSection emp={emp} notify={notify} />
       case 'loans':         return <LoansSection emp={emp} notify={notify} />
@@ -2063,48 +3596,78 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'declaration':   return <InvestmentDeclaration employeeId={emp.id} empName={emp.full_name} empCode={emp.emp_code} />
       case 'proofs':        return <InvestmentProofs employeeId={emp.id} />
       case 'flexiclaims':   return <FlexiClaims employeeId={emp.id} />
+      case 'claims':        return <TravelClaims employeeId={emp.id} />
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
       case 'requests':      return <Requests emp={emp} notify={notify} />
+      case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
       case 'directory':     return <Directory isMobile={isMobile} />
-      case 'funzone':       return <FunZone />
+      case 'approvals':     return <ApprovalsSection employeeId={emp.id} go={go} notify={notify} />
+      case 'exit':          return <ExitSection employeeId={emp.id} notify={notify} />
+      case 'company':       return <CompanySection employeeId={emp.id} />
+      case 'reports':       return <ReportsSection employeeId={emp.id} />
+          case 'performance':   return <Performance employeeId={emp.id} />
+      case 'wall':          return <WallOfFame employeeId={emp.id} />
+      case 'funzone':       return <FunZone employeeId={emp.id} />
       default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
     }
   }
 
-  if (loading) return <div style={{ padding:40, textAlign:'center', color:'#7C3AED', fontFamily:'"DM Sans",sans-serif' }}>Loading portal…</div>
-  if (!emp) return <div style={{ padding:40, textAlign:'center', color:'#DC2626', fontFamily:'"DM Sans",sans-serif' }}>Employee not found.</div>
+  if (loading) return <div style={{ padding:40, textAlign:'center', color:C.brand, fontFamily:'"DM Sans",sans-serif' }}>Loading portal…</div>
+  if (!emp) return <div style={{ padding:40, textAlign:'center', color:C.critical, fontFamily:'"DM Sans",sans-serif' }}>Employee not found.</div>
 
   return (
-    <div style={{ minHeight:'100vh', background:'#F5F3FF', fontFamily:'"DM Sans","Segoe UI",sans-serif', color:'#1E1B4B', display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+    <div style={{ minHeight:'100vh', background:C.canvas, fontFamily:'"DM Sans","Segoe UI",sans-serif', color:C.ink, display:'flex', flexDirection: isMobile ? 'column' : 'row' }}>
+      <LogoStyles />
+      {/* The shared stylesheet. It was imported here but never rendered, so
+          ESS was running without the header band, the tab and press classes,
+          the global button baseline, the page-enter animation and the text
+          sharpness rules — the whole design system the dashboard uses. That
+          one missing element is most of why the two halves looked unrelated. */}
+      <UIKeyframes />
       {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
       {!isMobile && (
-        <div style={{ width:220, background:'#1E1B4B', padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0 }}>
-          <div style={{ padding:'0 18px 16px', color:'#fff', fontWeight:700, fontSize:16, borderBottom:'1px solid rgba(255,255,255,0.1)', marginBottom:10 }}>EZER ESS</div>
-          {SECTIONS.map(s => (
+        <div style={{ width:220, background: C.rail, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0, borderRight:`1px solid ${C.railLine}` }}>
+          {/* The mark carries the wordmark, so "EZER" is not repeated as text.
+              "ESS" stays, because which of the two products you are in is the
+              one thing the logo does not tell you. */}
+          <div style={{ padding:'0 18px 16px', borderBottom:`1px solid ${C.railLine}`, marginBottom:10, display:'flex', alignItems:'center', gap:8 }}>
+            <Logo height={24} />
+            <span style={{ color:C.railMuted, fontWeight:700, fontSize:12, letterSpacing:'.08em' }}>ESS</span>
+          </div>
+          {sections.map(s => (
             <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
           ))}
+          <AdminEntry />
         </div>
       )}
 
       <div style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 70 : 0 }}>
         {/* Top bar */}
-        <div style={{ background:'#fff', borderBottom:'1px solid #EDE9FE', padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:25 }}>
+        <div style={{ background:C.surface, borderBottom: `1px solid ${C.brandEdge}`, padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:25 }}>
           {/* The tab's own name and badge live in TabHeader below, so this bar carries
               only what that header can't: the sub-tab you're on, and who you are. */}
           <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-            {isMobile ? 'EZER ESS' : (section.items.length > 1 ? meta.label : '')}
+            {isMobile ? 'EZER ESS' : (sectionItems.length > 1 ? meta.label : '')}
           </div>
-          {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'#FEF3C7', color:'#92400E', fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
+          {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
           <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9 }}>
-            <NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} />
-            <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:'#EDE9FE', color:'#7C3AED', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
+            {/* Light / dark / system. Three states rather than two, because
+                "follow my system" is a real preference and a two-way switch
+                silently overrides it. The dashboard has had this control all
+                along; ESS never rendered it, so an employee who never opens
+                the dashboard had no way to choose. On mobile it collapses to
+                one cycling button — three segments plus the bell, avatar and
+                name do not fit a phone header. */}
+            <ThemeToggle compact={isMobile} />
+            <span data-ez-bell><NotificationBell unread={unread} open={bellOpen} onToggle={() => setBellOpen(o => !o)} /></span>
+            <div style={{ width: isMobile ? 30 : 34, height: isMobile ? 30 : 34, borderRadius:'50%', overflow:'hidden', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobile ? 12 : 13, fontWeight:700, flexShrink:0 }}>{emp.profile_photo ? <img src={emp.profile_photo} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : initials(emp.full_name)}</div>
             {!isMobile && (
               <div style={{ lineHeight:1.2, textAlign:'right' }}>
                 <div style={{ fontSize:13, fontWeight:700, whiteSpace:'nowrap', maxWidth:220, overflow:'hidden', textOverflow:'ellipsis' }}>{emp.full_name}</div>
-                <div style={{ fontSize:11, color:'#6B7280', fontFamily:'monospace' }}>{emp.emp_code}</div>
+                <div style={{ fontSize:11, color:C.muted, fontFamily:'monospace' }}>{emp.emp_code}</div>
               </div>
             )}
           </div>
@@ -2113,30 +3676,33 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
         <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
           <TabHeader s={section} />
-          <SubTabs items={section.items} view={view} go={go} />
+          <SubTabs items={sectionItems} view={view} go={go} />
           {renderView()}
         </div>
       </div>
 
       {/* Notification panel — anchored to the bell, not a sidebar entry */}
       {bellOpen && (
-        <div onClick={() => setBellOpen(false)} style={{ position:'fixed', inset:0, zIndex:40 }}>
-          <div onClick={e => e.stopPropagation()} style={{ position:'absolute', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', background:'#fff', border:'1px solid #EDE9FE', borderRadius:12, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
-            <Notifications emp={emp} onChange={refreshUnread} />
-          </div>
+        // No full-screen catcher: it used to swallow the next click, so
+        // dismissing this panel and pressing anything else took two clicks.
+        // The panel was absolutely positioned inside that catcher, which
+        // covered the viewport — so `fixed` with the same offsets puts it in
+        // exactly the same place, now that the catcher is gone.
+        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:41, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
+          <Notifications emp={emp} onChange={refreshUnread} />
         </div>
       )}
 
       {/* Mobile bottom bar — eleven tabs don't fit a thumb bar, so the four an employee
           opens daily sit here and the rest are one tap away under More. */}
       {isMobile && (
-        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'#fff', borderTop:'1px solid #EDE9FE', display:'flex', zIndex:20 }}>
+        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:C.surface, borderTop: `1px solid ${C.brandEdge}`, display:'flex', zIndex:20 }}>
           {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
-            <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? '#7C3AED' : '#9CA3AF', fontWeight: on ? 600 : 500 }}>
-              <div style={{ fontSize:17, lineHeight:1.3 }}>{s.icon}</div>{s.short}
+            <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? C.brand : C.faint, fontWeight: on ? 600 : 500 }}>
+              <EssIcon k={s.k} size={16} />{s.short}
             </button>
           )})}
-          <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? '#7C3AED' : '#9CA3AF', fontWeight: moreOpen ? 600 : 500 }}>
+          <button onClick={() => setMoreOpen(o => !o)} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: moreOpen ? C.brand : C.faint, fontWeight: moreOpen ? 600 : 500 }}>
             <div style={{ fontSize:17, lineHeight:1.3 }}>⋯</div>More
           </button>
         </div>
@@ -2146,22 +3712,23 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           is reachable from only one place. */}
       {isMobile && moreOpen && (
         <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:30, display:'flex', alignItems:'flex-end' }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:'#fff', width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
+          <div onClick={e => e.stopPropagation()} style={{ background:C.surface, width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
             <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-              {SECTIONS.map(s => (
-                <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:9, border:`1px solid ${section.k === s.k ? '#7C3AED' : '#EDE9FE'}`, background: section.k === s.k ? '#F5F3FF' : '#FAFAF8', cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:'#1E1B4B' }}>
-                  <span style={{ fontSize:16 }}>{s.icon}</span>
+              {sections.map(s => (
+                <button key={s.k} onClick={() => goSection(s)} style={{ padding:'12px 10px', borderRadius:10, border:`1px solid ${section.k === s.k ? C.brand : C.brandTint}`, background: section.k === s.k ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit', fontSize:12, textAlign:'left', display:'flex', alignItems:'center', gap:8, color:C.ink }}>
+                  <span style={{ display:'flex' }}><EssIcon k={s.k} size={16} /></span>
                   <span style={{ flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
                   <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
                 </button>
               ))}
+              <AdminEntry isMobile />
             </div>
           </div>
         </div>
       )}
 
-      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'✓':'✗'} {toast.msg}</div>}
+      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
     </div>
   )
 }

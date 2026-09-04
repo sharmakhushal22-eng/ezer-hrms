@@ -5,6 +5,15 @@ import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
+import EmployeeOrgFlow from '@/components/rms/EmployeeOrgFlow'
+// This page keeps its own local Badge / Field / Section, so the system's
+// equivalents are aliased where the names would clash.
+import {
+  Page as UIPage, PageHeader, Button, Person, Th, Td, Tr, Empty, SkeletonRows,
+  Badge as Chip, inputStyle, tone,
+  C, F, W, S, R, E, M, numeric, eyebrow,
+  IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees, IconChevronDown,
+} from '@/lib/ui'
 
 // ─── Types ────────────────────────────────────────────────────
 interface Employee {
@@ -28,47 +37,66 @@ interface Employee {
 }
 
 // ─── Palette ──────────────────────────────────────────────────
+// Bound to the design system rather than restated. Every style helper below
+// reads from here, so the whole page follows lib/ui/tokens.ts.
 const P = {
-  navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489',
-  purpleBg:'#EEEDFE', purpleLight:'#F5F3FF',
-  border:'#E9E7F5', card:'#FFFFFF', page:'#F5F3FF',
-  text:'#1E1B4B', muted:'#6B6B7B', green:'#059669', greenBg:'#ECFDF5',
-  red:'#DC2626', redBg:'#FEF2F2', amber:'#D97706', amberBg:'#FFFBEB',
+  navy:C.ink, purple:C.brand, purpleDark:C.brandDeep,
+  purpleBg:C.brandTint, purpleLight:C.sunken,
+  border:C.line, card:C.surface, page:C.canvas,
+  text:C.ink, muted:C.muted, green:C.positive, greenBg:tone('positive').bg,
+  red:C.critical, redBg:tone('critical').bg, amber:C.warning, amberBg:tone('warning').bg,
 }
 
+/**
+ * Grade is an ordered scale — L1 is not "a different kind of thing" from M3,
+ * it is further along. The old map gave each grade an unrelated hue, which
+ * made a ranked axis look categorical. These are one violet ramp, dark at the
+ * senior end, so a column of them reads as a gradient rather than confetti.
+ */
+// Grade is an ordered scale, so the colour deepens with seniority rather than
+// each grade taking an unrelated hue. Held in theme variables as bg/fg PAIRS
+// so both halves flip together and stay readable in dark — the previous
+// hardcoded violet ramp measured 2.19:1 on dark, which is invisible.
+const g = (n: number) => ({ bg: `var(--ez-grade-${n}-bg)`, color: `var(--ez-grade-${n}-fg)` })
 const GRADE_COLORS: Record<string,{bg:string;color:string}> = {
-  L2:{bg:'#EDE9FE',color:'#7C3AED'}, L1:{bg:'#DDD6FE',color:'#6D28D9'},
-  M3:{bg:'#DBEAFE',color:'#1D4ED8'}, M2:{bg:'#E0F2FE',color:'#0369A1'},
-  M1:{bg:'#CCFBF1',color:'#0D9488'}, E3:{bg:'#DCFCE7',color:'#16A34A'},
-  E2:{bg:'#ECFCCB',color:'#65A30D'}, E1:{bg:'#FEF3C7',color:'#D97706'},
-  W2:{bg:'#FEE2E2',color:'#DC2626'}, W1:{bg:'#FFE4E6',color:'#BE123C'},
+  L1: g(1), L2: g(1),
+  M1: g(2), M2: g(3), M3: g(3),
+  E1: g(4), E2: g(5), E3: g(5),
+  W1: g(6), W2: g(6),
 }
+// Employment type IS categorical, so these stay distinct — but drawn from the
+// token palette so they belong to the same world as everything else.
 const TYPE_COLORS: Record<string,{bg:string;color:string}> = {
-  Employee:{bg:'#EDE9FE',color:'#7C3AED'}, Intern:{bg:'#DBEAFE',color:'#1D4ED8'},
-  NAPS:{bg:'#DCFCE7',color:'#16A34A'}, NATS:{bg:'#FEF3C7',color:'#D97706'},
-  Consultant:{bg:'#FEE2E2',color:'#DC2626'}, Contract:{bg:'#F1F5F9',color:'#374151'},
+  Employee:{bg:C.brandTint,color:C.brandDeep},
+  Intern:{bg:C.infoTint,color:C.info},
+  NAPS:{bg:C.positiveTint,color:C.positive},
+  NATS:{bg:C.warningTint,color:C.warning},
+  Consultant:{bg:C.criticalTint,color:C.critical},
+  Contract:{bg:C.sunken,color:C.muted},
 }
 const STATUS_COLORS: Record<string,{bg:string;color:string}> = {
-  Active:{bg:'#DCFCE7',color:'#16A34A'}, Resigned:{bg:'#FEE2E2',color:'#DC2626'},
-  Terminated:{bg:'#FEE2E2',color:'#991B1B'}, Absconding:{bg:'#FEF3C7',color:'#D97706'},
+  Active:{bg:C.positiveTint,color:C.positive},
+  Resigned:{bg:C.criticalTint,color:C.critical},
+  Terminated:{bg:C.criticalTint,color: C.critical},
+  Absconding:{bg:C.warningTint,color:C.warning},
 }
 
 // ─── Inline style helpers ─────────────────────────────────────
 const s = {
-  page:   { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:P.page, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' },
+  page:   { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:P.page, fontFamily:F.family, fontSize:F.body },
   topbar: { background:P.card, padding:'11px 20px', borderBottom:`1px solid ${P.border}`, display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const, position:'sticky' as const, top:0, zIndex:40 },
-  body:   { flex:1, padding:'16px 20px' },
-  card:   { background:P.card, borderRadius:'12px', border:`1px solid ${P.border}`, marginBottom:'12px' } as React.CSSProperties,
-  inp:    { padding:'8px 10px', border:`1.5px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', outline:'none', background:'#F8F7FF', color:P.text, width:'100%', boxSizing:'border-box' as const },
-  sel:    { padding:'8px 10px', border:`1.5px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', outline:'none', background:'#F8F7FF', color:P.text, cursor:'pointer', width:'100%' } as React.CSSProperties,
-  priBtn: { padding:'8px 16px', background:P.purple, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer', display:'flex' as const, alignItems:'center' as const, gap:'5px' },
-  secBtn: { padding:'8px 14px', background:P.card, color:P.text, border:`1px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
-  saveBtn:{ padding:'8px 16px', background:P.green, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer', display:'flex' as const, alignItems:'center' as const, gap:'5px' },
+  body:   { flex:1, padding:`${S.lg}px ${S.xl}px ${S.huge}px` },
+  card:   { background:P.card, borderRadius:R.lg, border:`1px solid ${P.border}`, marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
+  inp:    { ...inputStyle(), height:34, fontSize:F.small },
+  sel:    { ...inputStyle(), height:34, fontSize:F.small, cursor:'pointer' } as React.CSSProperties,
+  priBtn: { padding:'0 14px', height:34, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.brand, fontFamily:'inherit' },
+  secBtn: { padding:'0 13px', height:34, background:P.card, color:P.text, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.flat, fontFamily:'inherit' },
+  saveBtn:{ padding:'0 14px', height:34, background:C.positive, color:C.onAccent, border:'none', borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, fontFamily:'inherit' },
 }
 
 const initials = (n: string) => n?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || 'NA'
 const fmt = (v: any) => !v || v === '' ? '—' : String(v)
-const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) }
+const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,' ') }
 
 // ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
 const EMP_TYPES = ['Employee', 'Intern', 'NAPS', 'NATS', 'Consultant', 'Contract']
@@ -94,10 +122,10 @@ const EXPORT_EMP_COLS = [
 ]
 const EXPORT_NAME_COLS = ['company_name','company_code','department_name','location_name','location_city']
 const mc = {
-  inp:   { width:'100%', padding:'8px 10px', background:'#F8FAFC', border:'1px solid #CBD5E1', borderRadius:'7px', fontSize:'13px', color:'#0F172A', outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  lbl:   { fontSize:'10px', fontWeight:600 as const, color:'#64748B', textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:'3px' },
-  pri:   { padding:'9px 16px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:'8px', fontSize:'13px', fontWeight:600 as const, cursor:'pointer', fontFamily:'inherit' },
-  out:   { padding:'9px 14px', background:'#fff', color:'#475569', border:'1px solid #CBD5E1', borderRadius:'8px', fontSize:'13px', cursor:'pointer', fontFamily:'inherit' },
+  inp:   { ...inputStyle() },
+  lbl:   { ...eyebrow, display:'block', marginBottom:4 } as React.CSSProperties,
+  pri:   { padding:'0 16px', height:36, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', fontFamily:'inherit', boxShadow:E.brand },
+  out:   { padding:'0 14px', height:36, background:C.surface, color:C.ink, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', fontFamily:'inherit' },
 }
 
 // Next type-wise code from existing employees (no migration dependency, atomic-ish).
@@ -129,7 +157,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
     if (f.company_id && f.employment_type) {
       nextEmpCode(company?.company_code || 'EZ', f.company_id, f.employment_type).then(c => { if (live) setF((p: any) => ({ ...p, emp_code: c })) })
     }
-    return () => { live = false }
+  return () => { live = false }
   }, [f.company_id, f.employment_type]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const ready = f.full_name.trim() && f.company_id && f.emp_code.trim()
@@ -158,8 +186,8 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={onClose}>
-      <div style={{ background:'#fff', borderRadius:'12px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'14px', color:'#0F172A' }}>Add Employee</div>
+      <div style={{ background:C.surface, borderRadius:'14px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'14px', color:C.ink }}>Add Employee</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'12px' }}>
           <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Rahul Sharma" /></div>
           <div><label style={mc.lbl}>Employment type</label><select style={mc.inp} value={f.employment_type} onChange={e => set('employment_type', e.target.value)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
@@ -172,7 +200,7 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
           <div><label style={mc.lbl}>Date of joining</label><input type="date" style={mc.inp} value={f.company_doj} onChange={e => set('company_doj', e.target.value)} /></div>
           <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Employee code (auto)</label><input style={mc.inp} value={f.emp_code} onChange={e => set('emp_code', e.target.value.toUpperCase())} placeholder="auto" /></div>
         </div>
-        {err && <div style={{ background:'#FEF2F2', color:'#B91C1C', fontSize:'12px', padding:'8px 12px', borderRadius:'7px', marginBottom:'12px' }}>{err}</div>}
+        {err && <div style={{ background:C.criticalTint, color:C.critical, fontSize:'12px', padding:'8px 12px', borderRadius:'7px', marginBottom:'12px' }}>{err}</div>}
         <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
           <button style={mc.out} onClick={onClose}>Cancel</button>
           <button style={{ ...mc.pri, opacity: ready && !busy ? 1 : 0.5 }} disabled={!ready || busy} onClick={save}>{busy ? 'Saving…' : 'Add employee'}</button>
@@ -194,13 +222,13 @@ function StatCard({ label, value, color, onClick, active }: any) {
 }
 
 function Badge({ val, map }: { val: string; map: Record<string,{bg:string;color:string}> }) {
-  const c = map[val] || {bg:'#F1F5F9',color:'#374151'}
+  const c = map[val] || {bg:C.sunken,color:C.inkSoft}
   return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '—'}</span>
 }
 
 // Profile header strip
 function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any) {
-  const gc = GRADE_COLORS[emp.grade] || {bg:'#F1F5F9',color:'#374151'}
+  const gc = GRADE_COLORS[emp.grade] || {bg:C.sunken,color:C.inkSoft}
   return (
     <div style={{ background:P.navy, padding:'18px 24px 0', borderRadius:'14px 14px 0 0' }}>
       <div style={{ display:'flex', alignItems:'flex-start', gap:'16px', paddingBottom:'14px' }}>
@@ -210,8 +238,8 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
         </div>
         {/* Info */}
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:'17px', fontWeight:600, color:'#fff', marginBottom:'3px' }}>{emp.full_name}</div>
-          <div style={{ fontSize:'12px', color:'rgba(255,255,255,.6)', marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
+          <div style={{ fontSize:'17px', fontWeight:600, color:C.onAccent, marginBottom:'3px' }}>{emp.full_name}</div>
+          <div style={{ fontSize:'12px', color:C.onAccentDim, marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
             <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...TYPE_COLORS[emp.employment_type] }}>{emp.employment_type}</span>
             <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...STATUS_COLORS[emp.employment_status] }}>{emp.employment_status}</span>
@@ -222,14 +250,14 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
         <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
           {editMode ? (
             <>
-              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:'#fff', border:'1px solid rgba(255,255,255,.25)', borderRadius:'8px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
+              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:C.onAccent, border:'1px solid rgba(255,255,255,.25)', borderRadius:'10px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
               <button onClick={onSave} disabled={saving} style={{ ...s.saveBtn, opacity: saving ? .7 : 1 }}>
-                <span>{saving ? '⏳' : '💾'}</span>{saving ? 'Saving…' : 'Save changes'}
+                <span>{saving ? '' : ''}</span>{saving ? 'Saving…' : 'Save changes'}
               </button>
             </>
           ) : (
             <button onClick={onEdit} style={{ ...s.priBtn }}>
-              <span>✏️</span> Edit profile
+              <span></span> Edit profile
             </button>
           )}
         </div>
@@ -244,8 +272,8 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
           { l:'Location', v: (emp as any).locations?.location_name || '—' },
           { l:'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '—' },
         ].map(x => (
-          <div key={x.l} style={{ fontSize:'11px', color:'rgba(255,255,255,.55)' }}>
-            {x.l}: <span style={{ color:'#fff', fontWeight:500 }}>{x.v}</span>
+          <div key={x.l} style={{ fontSize:'11px', color:C.onAccentDim }}>
+            {x.l}: <span style={{ color:C.onAccent, fontWeight:500 }}>{x.v}</span>
           </div>
         ))}
       </div>
@@ -294,13 +322,13 @@ function Grid2({ children }: { children: React.ReactNode }) {
 // Tab bar
 function TabBar({ tabs, active, onChange }: any) {
   return (
-    <div style={{ display:'flex', background:'#F8F7FF', borderBottom:`1px solid ${P.border}`, overflowX:'auto' }}>
+    <div style={{ display:'flex', background:C.sunken, borderBottom:`1px solid ${P.border}`, overflowX:'auto' }}>
       {tabs.map((t: any) => (
         <button key={t.id} onClick={() => onChange(t.id)} style={{
           padding:'11px 16px', border:'none', background:'transparent', cursor:'pointer',
           fontSize:'12px', fontWeight: active===t.id ? 600 : 400,
           color: active===t.id ? P.purple : P.muted, whiteSpace:'nowrap',
-          borderBottom: active===t.id ? `2.5px solid ${P.purple}` : '2.5px solid transparent',
+          borderBottom: active===t.id ? `3px solid ${P.purple}` : '3px solid transparent',
           transition:'all .12s'
         }}>
           {t.icon} {t.label}
@@ -315,7 +343,7 @@ function StatChip({ label, value }: { label: string; value: boolean }) {
   return (
     <div style={{ flex:1, padding:'10px 8px', borderRadius:'10px', background:value?P.greenBg:P.page, border:`1px solid ${value?'#BBF7D0':P.border}`, textAlign:'center' }}>
       <div style={{ fontSize:'11px', fontWeight:600, color:P.text }}>{label}</div>
-      <div style={{ fontSize:'10px', color:value?P.green:P.muted, marginTop:'4px', fontWeight:500 }}>{value ? '✓ Yes' : '✗ No'}</div>
+      <div style={{ fontSize:'10px', color:value?P.green:P.muted, marginTop:'4px', fontWeight:500 }}>{value ? 'Yes' : 'No'}</div>
     </div>
   )
 }
@@ -336,6 +364,10 @@ export default function EmployeeMaster() {
   const [filterType, setFType]    = useState('')
   const [filterStatus, setFStatus]= useState('Active')
   const [filterGrade, setFGrade]  = useState('')
+
+  // Shown on the Filters toggle, so a filter that is still applied is never
+  // invisible just because the panel is closed.
+  const activeFilterCount = [filterDept, filterType, filterGrade].filter(Boolean).length
   const [page, setPage]           = useState(1)
   const [selected, setSelected]   = useState<Employee|null>(null)
   const [profileTab, setProfileTab] = useState('personal')
@@ -345,6 +377,9 @@ export default function EmployeeMaster() {
   const [saving, setSaving]       = useState(false)
   const [showAdd, setShowAdd]     = useState(false)
   const [showBulk, setShowBulk]   = useState(false)
+  // The secondary filters start closed. A count on the toggle means a filter
+  // that is still applied is never invisible just because the panel is shut.
+  const [moreFilters, setMoreFilters] = useState(false)
   const [addMsg, setAddMsg]       = useState('')
   const [exporting, setExporting] = useState(false)
   const [stats, setStats] = useState({ total:0,active:0,resigned:0,employee:0,intern:0,naps:0,nats:0,consultant:0,contract:0 })
@@ -387,7 +422,7 @@ export default function EmployeeMaster() {
       // locations!location_id — employees has two FKs to locations (location_id +
       // actual_posted_location_id); disambiguate or the embed 400s.
       let q = supabase.from('employees').select(
-        `*, companies(company_name,company_code), locations!location_id(location_name,city), departments(dept_name)`,
+        `*, companies!employees_company_id_fkey(company_name,company_code), locations!location_id(location_name,city), departments!employees_department_id_fkey(dept_name)`,
         { count: 'exact' }
       ).neq('is_test', true).order('emp_code')
 
@@ -414,7 +449,7 @@ export default function EmployeeMaster() {
     setExporting(true)
     try {
       let q = supabase.from('employees')
-        .select('*, companies(company_name, company_code), departments(dept_name), locations!location_id(location_name, city)')
+        .select('*, companies!employees_company_id_fkey(company_name, company_code), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, city)')
         .neq('is_test', true).order('emp_code')
       if (filterCompany)  q = q.eq('company_id', filterCompany)
       if (filterLocation) q = q.eq('location_id', filterLocation)
@@ -549,15 +584,15 @@ export default function EmployeeMaster() {
   }
 
   const TABS = [
-    { id:'personal',   label:'Personal',   icon:'👤' },
-    { id:'employment', label:'Employment',  icon:'💼' },
-    { id:'statutory',  label:'Statutory',   icon:'🏛️' },
-    { id:'bank',       label:'Bank',        icon:'🏦' },
-    { id:'documents',  label:'Documents',   icon:'📄' },
-    { id:'salary',     label:'Salary',      icon:'💰' },
-    { id:'onboarding', label:'Onboarding',  icon:'📋' },
-    { id:'actions',    label:'HR Actions',  icon:'⚡' },
-    { id:'history',    label:'History',     icon:'📜' },
+    { id:'personal',   label:'Personal',   icon:'' },
+    { id:'employment', label:'Employment',  icon:'' },
+    { id:'statutory',  label:'Statutory',   icon:'' },
+    { id:'bank',       label:'Bank',        icon:'' },
+    { id:'documents',  label:'Documents',   icon:'' },
+    { id:'salary',     label:'Salary',      icon:'' },
+    { id:'onboarding', label:'Onboarding',  icon:'' },
+    { id:'actions',    label:'HR Actions',  icon:'' },
+    { id:'history',    label:'History',     icon:'' },
   ]
 
   // ─── Render profile tab content ───────────────────────────────
@@ -660,6 +695,9 @@ export default function EmployeeMaster() {
             </div>
           </Grid2>
         </Section>
+        <Section title="Manager Information" icon="🧭">
+          <EmployeeOrgFlow employeeId={emp.id} companyId={emp.company_id} employeeName={emp.full_name} />
+        </Section>
         {emp.employment_status === 'Resigned' && (
           <Section title="Exit Details" icon="🚪">
             <Grid2>
@@ -667,8 +705,8 @@ export default function EmployeeMaster() {
               {F('Last Working Date','last_working_date','date')}
             </Grid2>
             <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
-              <div style={{ padding:'6px 12px', borderRadius:'8px', background:emp.rehire_eligible?P.greenBg:P.page, border:`1px solid ${emp.rehire_eligible?'#BBF7D0':P.border}`, fontSize:'11px', color:emp.rehire_eligible?P.green:P.muted }}>{emp.rehire_eligible?'✓ Rehire Eligible':'✗ Not Rehire Eligible'}</div>
-              {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'8px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>🚫 Blacklisted</div>}
+              <div style={{ padding:'6px 12px', borderRadius:'10px', background:emp.rehire_eligible?P.greenBg:P.page, border:`1px solid ${emp.rehire_eligible?'#BBF7D0':P.border}`, fontSize:'11px', color:emp.rehire_eligible?P.green:P.muted }}>{emp.rehire_eligible?'Rehire Eligible':'Not Rehire Eligible'}</div>
+              {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'10px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>Blacklisted</div>}
             </div>
           </Section>
         )}
@@ -699,7 +737,7 @@ export default function EmployeeMaster() {
     if (profileTab === 'bank') return (
       <Section title="Salary Account" icon="🏦">
         <div style={{ background:P.greenBg, border:`1px solid #BBF7D0`, borderRadius:'10px', padding:'16px', marginBottom:'12px' }}>
-          <div style={{ fontSize:'12px', fontWeight:600, color:'#15803D', marginBottom:'12px' }}>Primary Account</div>
+          <div style={{ fontSize:'12px', fontWeight:600, color:C.positive, marginBottom:'12px' }}>Primary Account</div>
           <Grid2>
             {[
               ['Bank Name', emp.bank_name],
@@ -708,7 +746,7 @@ export default function EmployeeMaster() {
               ['IFSC Code', emp.ifsc_code],
             ].map(([l,v]) => (
               <div key={l} style={{padding:'6px 0',borderBottom:`1px solid #DCFCE7`}}>
-                <div style={{fontSize:'10px',color:'#16A34A',marginBottom:'3px',fontWeight:500,textTransform:'uppercase',letterSpacing:'.4px'}}>{l}</div>
+                <div style={{fontSize:'10px',color:C.positive,marginBottom:'3px',fontWeight:500,textTransform:'uppercase',letterSpacing:'.4px'}}>{l}</div>
                 <div style={{fontSize:'13px',color:P.text,fontFamily:l==='Account No.'||l==='IFSC Code'?'monospace':'inherit'}}>{v||'—'}</div>
               </div>
             ))}
@@ -729,38 +767,71 @@ export default function EmployeeMaster() {
   return (
     <div style={s.page}>
 
-      {/* Topbar */}
-      <div style={s.topbar}>
-        <div style={{ fontSize:'12px', color:P.muted }}>
-          <span style={{ color:P.purple, fontWeight:500 }}>Employee Master</span>
-          <span style={{ marginLeft:'8px', padding:'2px 8px', background:P.purpleBg, color:P.purple, borderRadius:'10px', fontSize:'11px' }}>
-            {stats.total} Total
-          </span>
-        </div>
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button style={{ ...s.secBtn, opacity: exporting ? 0.6 : 1 }} disabled={exporting} onClick={exportExcel}>📥 {exporting ? 'Exporting…' : 'Export Excel'}</button>
-          <button style={s.secBtn} onClick={() => setShowBulk(true)}>⬆ Bulk Upload</button>
-          <button style={s.priBtn} onClick={() => setShowAdd(true)}><span>+</span> Add Employee</button>
-        </div>
-      </div>
-
       <div style={s.body}>
+        <PageHeader
+          title="Employee Master"
+          context={loading
+            ? 'Loading…'
+            : `${stats.total.toLocaleString('en-IN')} on record · ${stats.active.toLocaleString('en-IN')} active · showing ${employees.length.toLocaleString('en-IN')}`}
+          actions={<>
+            <Button icon={<IconDownload size={16} />} disabled={exporting} onClick={exportExcel}>
+              {exporting ? 'Exporting…' : 'Export Excel'}
+            </Button>
+            <Button icon={<IconUpload size={16} />} onClick={() => setShowBulk(true)}>Bulk Upload</Button>
+            <Button variant="primary" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>Add Employee</Button>
+          </>}
+        />
 
-        {/* Stat Cards */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(8,1fr)', gap:'8px', marginBottom:'14px' }}>
-          <StatCard label="Total"      value={loading?'—':stats.total}      color={P.navy}    active={!filterStatus&&!filterType} onClick={()=>{setFType('');setFStatus('')}} />
-          <StatCard label="Active"     value={loading?'—':stats.active}     color={P.green}   active={filterStatus==='Active'&&!filterType}   onClick={()=>{setFType('');setFStatus('Active')}} />
-          <StatCard label="Resigned"   value={loading?'—':stats.resigned}   color={P.red}     active={filterStatus==='Resigned'&&!filterType}  onClick={()=>{setFType('');setFStatus('Resigned')}} />
-          <StatCard label="Employee"   value={loading?'—':stats.employee}   color={P.purple}  active={filterType==='Employee'}   onClick={()=>setFType('Employee')} />
-          <StatCard label="Intern"     value={loading?'—':stats.intern}     color='#1D4ED8'   active={filterType==='Intern'}     onClick={()=>setFType('Intern')} />
-          <StatCard label="NAPS"       value={loading?'—':stats.naps}       color='#0D9488'   active={filterType==='NAPS'}       onClick={()=>setFType('NAPS')} />
-          <StatCard label="Consultant" value={loading?'—':stats.consultant} color={P.amber}   active={filterType==='Consultant'} onClick={()=>setFType('Consultant')} />
-          <StatCard label="Contract"   value={loading?'—':stats.contract}   color='#374151'   active={filterType==='Contract'}   onClick={()=>setFType('Contract')} />
+        {/* These were eight equal stat cards. They are not statistics — they
+            are filters, and exactly one is active at a time. A segmented bar
+            says that; eight identical cards did not. */}
+        <div className="ez-scroll" style={{
+          display:'flex', gap:6, marginBottom:S.lg, overflowX:'auto', paddingBottom:2,
+        }}>
+          {[
+            { label:'Total',      n:stats.total,      on:!filterStatus && !filterType,               go:()=>{setFType('');setFStatus('')} },
+            { label:'Active',     n:stats.active,     on:filterStatus==='Active' && !filterType,     go:()=>{setFType('');setFStatus('Active')} },
+            { label:'Resigned',   n:stats.resigned,   on:filterStatus==='Resigned' && !filterType,   go:()=>{setFType('');setFStatus('Resigned')} },
+            { label:'Employee',   n:stats.employee,   on:filterType==='Employee',   go:()=>setFType('Employee') },
+            { label:'Intern',     n:stats.intern,     on:filterType==='Intern',     go:()=>setFType('Intern') },
+            { label:'NAPS',       n:stats.naps,       on:filterType==='NAPS',       go:()=>setFType('NAPS') },
+            { label:'Consultant', n:stats.consultant, on:filterType==='Consultant', go:()=>setFType('Consultant') },
+            { label:'Contract',   n:stats.contract,   on:filterType==='Contract',   go:()=>setFType('Contract') },
+          ].map(f => (
+            <button key={f.label} onClick={f.go} className="ez-press" style={{
+              display:'inline-flex', alignItems:'center', gap:7, flexShrink:0,
+              height:34, padding:'0 13px', borderRadius:R.pill, cursor:'pointer',
+              fontFamily:'inherit', fontSize:F.small, fontWeight:f.on ? W.semi : W.medium,
+              background: f.on ? C.brand : C.surface,
+              color: f.on ? C.surface : C.muted,
+              border:`1px solid ${f.on ? C.brandDeep : C.line}`,
+              boxShadow: f.on ? E.brand : E.flat,
+            }}>
+              {f.label}
+              <span style={{
+                fontSize:F.micro, fontWeight:W.bold, padding:'1px 6px', borderRadius:R.pill,
+                // A 22% white wash left the digits at 3.49:1 on the active
+                // pill. A solid deeper fill of the brand carries them.
+                background: f.on ? C.brandDeep : C.sunken,
+                color: f.on ? C.surface : C.faint, ...numeric,
+              }}>{loading ? '—' : f.n}</span>
+            </button>
+          ))}
         </div>
 
         {/* Filters — sticky so they stay visible while the list scrolls */}
-        <div style={{ ...s.card, display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', padding:'12px 16px', position:'sticky', top:'58px', zIndex:30, boxShadow:'0 2px 8px rgba(124,58,237,0.06)' }}>
-          <input style={{ ...s.inp, flex:1, minWidth:'200px', width:'auto' }} placeholder="🔍  Name, Code, Designation, Mobile…" value={search} onChange={e=>setSearch(e.target.value)} />
+        {/* Sticky to the top of the viewport now — the old offset was clearing
+            a topbar that the page header replaced. */}
+        <div style={{ ...s.card, display:'flex', gap:S.sm, alignItems:'center', flexWrap:'wrap',
+                      padding:`${S.sm}px ${S.md}px`, marginBottom:S.sm,
+                      position:'sticky', top:0, zIndex:30, boxShadow:E.raised }}>
+          <div style={{ position:'relative', flex:1, minWidth:220 }}>
+            <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:C.faint, display:'flex', pointerEvents:'none' }}>
+              <IconSearch size={16} />
+            </span>
+            <input style={{ ...s.inp, paddingLeft:30 }} placeholder="Name, code, designation, mobile…"
+                   value={search} onChange={e=>setSearch(e.target.value)} />
+          </div>
           <select style={{ ...s.sel, width:'auto', minWidth:'140px' }} value={filterCompany} onChange={e=>{setFCo(e.target.value);setFLoc('');setFDept('')}}>
             <option value="">All Companies</option>
             {companies.map(c=><option key={c.id} value={c.id}>{c.company_code} — {c.company_name}</option>)}
@@ -769,6 +840,25 @@ export default function EmployeeMaster() {
             <option value="">All Locations</option>
             {filteredLocs.map(l=><option key={l.id} value={l.id}>{l.location_name}</option>)}
           </select>
+          <button onClick={()=>setMoreFilters(v=>!v)} style={{ ...s.secBtn, gap:5 }}
+                  title={moreFilters ? 'Fewer filters' : 'Department, type, status and grade'}>
+            Filters
+            {activeFilterCount > 0 && (
+              <span style={{ fontSize:F.micro, fontWeight:W.bold, padding:'1px 6px',
+                             borderRadius:R.pill, background:C.brand, color:C.onAccent, ...numeric }}>
+                {activeFilterCount}
+              </span>
+            )}
+            <span style={{ display:'flex', transform:moreFilters?'rotate(180deg)':'none',
+                           transition:`transform ${M.quick}` }}><IconChevronDown size={12} /></span>
+          </button>
+        </div>
+
+        {/* The long tail of filters. Set once, then left alone — so they do not
+            hold 90px of the viewport open on every visit. */}
+        {moreFilters && (
+        <div className="ez-rise" style={{ ...s.card, display:'flex', gap:S.sm, alignItems:'center', flexWrap:'wrap',
+                      padding:`${S.sm}px ${S.md}px`, marginBottom:S.md }}>
           <select style={{ ...s.sel, width:'auto', minWidth:'130px' }} value={filterDept} onChange={e=>setFDept(e.target.value)}>
             <option value="">All Depts</option>
             {filteredDepts.map(d=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
@@ -785,66 +875,124 @@ export default function EmployeeMaster() {
             <option value="">All Grades</option>
             {['L1','L2','M1','M2','M3','E1','E2','E3','W1','W2'].map(g=><option key={g}>{g}</option>)}
           </select>
-          <button style={s.secBtn} onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus('Active'); setFGrade('') }}>✕ Clear</button>
+          <button style={s.secBtn} onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus('Active'); setFGrade('') }}>
+            <IconClose size={12} /> Clear
+          </button>
         </div>
+        )}
 
-        {/* Error */}
-        {error && <div style={{ background:P.redBg, border:`1px solid #FCA5A5`, borderRadius:'8px', padding:'10px 14px', color:P.red, fontSize:'12px', marginBottom:'12px' }}>⚠ {error}</div>}
+        {error && (
+          <div style={{
+            background:tone('critical').bg, border:`1px solid ${tone('critical').edge}`,
+            borderRadius:R.md, padding:`${S.md}px ${S.lg}px`, color:C.inkSoft,
+            fontSize:F.small, marginBottom:S.md,
+          }}>
+            <strong style={{ color:C.critical }}>Could not load employees. </strong>{error}
+          </div>
+        )}
 
         {/* Table */}
         <div style={s.card}>
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+          <div className="ez-scroll" style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:F.small }}>
               <thead>
-                <tr style={{ borderBottom:`1.5px solid ${P.border}`, background:P.purpleLight }}>
-                  {['Emp Code','Name & Designation','Type','Location','Grade','Status','DOJ','Mobile','Actions'].map(h=>(
-                    <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:600, color:P.purpleDark, fontSize:'11px', letterSpacing:'.3px', whiteSpace:'nowrap' }}>{h}</th>
-                  ))}
+                <tr>
+                  {/* Widths are sized for the app's 130% auto-zoom, which is
+                      what the layout actually gets — at that zoom the content
+                      column is ~900px, not the ~1200 the viewport suggests. */}
+                  <Th width={78}>Emp Code</Th>
+                  <Th>Employee</Th>
+                  <Th width={70}>Type</Th>
+                  <Th width={108}>Location</Th>
+                  <Th width={50}>Grade</Th>
+                  <Th width={74}>Status</Th>
+                  <Th width={68}>Joined</Th>
+                  <Th width={84}>Mobile</Th>
+                  {/* Pinned. Nine columns at the app's 130% zoom will not fit
+                      a laptop, so the table scrolls — but the one action on a
+                      row must not be the thing that scrolls out of reach. */}
+                  <Th width={54} align="right" style={{
+                    position:'sticky', right:0, zIndex:2, background:C.sunken,
+                    boxShadow:`inset 1px 0 0 ${C.line}`,
+                  }} />
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={9} style={{ padding:'32px', textAlign:'center', color:P.muted }}>Loading employees…</td></tr>
+                  <tr><td colSpan={9} style={{ padding:0 }}><SkeletonRows rows={8} /></td></tr>
                 )}
                 {!loading && employees.length === 0 && (
-                  <tr><td colSpan={9} style={{ padding:'32px', textAlign:'center', color:P.muted }}>No employees found</td></tr>
+                  <tr><td colSpan={9}>
+                    <Empty
+                      icon={<IconEmployees size={20} />}
+                      title="No employees match these filters"
+                      hint="Try clearing the search or widening the company, location and status filters."
+                      action={<Button size="sm" onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus(''); setFGrade('') }}>Clear all filters</Button>}
+                    />
+                  </td></tr>
                 )}
                 {employees.map(emp => {
-                  const gc = GRADE_COLORS[emp.grade] || {bg:'#F1F5F9',color:'#374151'}
-                  const sc = STATUS_COLORS[emp.employment_status] || {bg:'#F1F5F9',color:'#374151'}
+                  const gc = GRADE_COLORS[emp.grade] || { bg:C.sunken, color:C.muted }
+                  const sc = STATUS_COLORS[emp.employment_status] || { bg:C.sunken, color:C.muted }
                   return (
-                    <tr key={emp.id} onClick={()=>openProfile(emp)} style={{ borderBottom:`1px solid ${P.border}`, cursor:'pointer', transition:'background .1s' }}
-                      onMouseEnter={e=>(e.currentTarget.style.background='#FAFAFE')}
-                      onMouseLeave={e=>(e.currentTarget.style.background='')}>
-                      <td style={{ padding:'10px 12px', fontWeight:600, color:P.purple, fontFamily:'monospace', fontSize:'11px' }}>{emp.emp_code}</td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <div style={{ fontWeight:500, color:P.text }}>{emp.full_name}</div>
-                        <div style={{ fontSize:'10px', color:P.muted, marginTop:'2px' }}>{emp.designation || '—'}</div>
-                      </td>
-                      <td style={{ padding:'10px 12px' }}><Badge val={emp.employment_type} map={TYPE_COLORS} /></td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <div style={{ fontSize:'12px', color:P.text }}>{(emp as any).locations?.location_name || '—'}</div>
-                        <div style={{ fontSize:'10px', color:P.muted }}>{(emp as any).companies?.company_code || '—'}</div>
-                      </td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'11px', fontWeight:500, ...gc }}>{emp.grade || '—'}</span>
-                      </td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...sc }}>{emp.employment_status}</span>
-                        {emp.employment_status==='Resigned'&&emp.last_working_date&&(
-                          <div style={{ fontSize:'9px', color:P.red, marginTop:'2px' }}>LWD: {fmtDate(emp.last_working_date)}</div>
+                    <Tr key={emp.id} onClick={()=>openProfile(emp)}>
+                      <Td mono strong style={{ color:C.brandDeep, fontSize:F.tiny, letterSpacing:'.02em' }}>
+                        {emp.emp_code}
+                      </Td>
+                      <Td>
+                        {/* Avatar + name + designation. The face makes a long
+                            list scannable in a way a column of text does not. */}
+                        <Person name={emp.full_name} meta={emp.designation || '—'} />
+                      </Td>
+                      <Td><Badge val={emp.employment_type} map={TYPE_COLORS} /></Td>
+                      <Td style={{ maxWidth:108 }}>
+                        {/* When there is no location, the company code becomes the
+                            primary line rather than sitting under a dash. Two
+                            lines to say one thing is worse than one line. */}
+                        {(() => {
+                          const loc = (emp as any).locations?.location_name
+                          const co  = (emp as any).companies?.company_code
+                          return (
+                            <>
+                              <div title={loc || co || ''} style={{
+                                color: loc ? C.ink : C.muted, whiteSpace:'nowrap',
+                                overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.3,
+                              }}>{loc || co || '—'}</div>
+                              {loc && co && (
+                                <div style={{ fontSize:F.micro, color:C.faint, lineHeight:1.3 }}>{co}</div>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </Td>
+                      <Td>
+                        <span style={{
+                          padding:'2px 9px', borderRadius:R.pill, fontSize:F.tiny,
+                          fontWeight:W.semi, whiteSpace:'nowrap', ...gc,
+                        }}>{emp.grade || '—'}</span>
+                      </Td>
+                      <Td>
+                        <span style={{
+                          padding:'2px 9px', borderRadius:R.pill, fontSize:F.tiny,
+                          fontWeight:W.semi, whiteSpace:'nowrap', ...sc,
+                        }}>{emp.employment_status}</span>
+                        {emp.employment_status==='Resigned' && emp.last_working_date && (
+                          <div style={{ fontSize:F.micro, color:C.critical, marginTop:3, ...numeric }}>
+                            LWD {fmtDate(emp.last_working_date)}
+                          </div>
                         )}
-                      </td>
-                      <td style={{ padding:'10px 12px', fontSize:'11px', color:P.muted }}>{fmtDate(emp.company_doj)}</td>
-                      <td style={{ padding:'10px 12px', fontSize:'11px', color:P.text }}>{emp.mobile||'—'}</td>
-                      {/* View + Edit — both wired */}
-                      <td style={{ padding:'10px 12px' }} onClick={e=>e.stopPropagation()}>
-                        <div style={{ display:'flex', gap:'4px' }}>
-                          <button onClick={()=>openProfile(emp)} style={{ padding:'4px 10px', background:P.purpleBg, border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'10px', color:P.purple, fontWeight:500 }}>View</button>
-                          <button onClick={()=>openEdit(emp)} style={{ padding:'4px 10px', background:'#F0FDF4', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'10px', color:P.green, fontWeight:500 }}>Edit</button>
-                        </div>
-                      </td>
-                    </tr>
+                      </Td>
+                      <Td mono style={{ color:C.muted, fontSize:F.tiny, whiteSpace:'nowrap' }}>{fmtDate(emp.company_doj)}</Td>
+                      <Td mono style={{ fontSize:F.tiny, whiteSpace:'nowrap' }}>{emp.mobile||'—'}</Td>
+                      <Td align="right" style={{
+                        whiteSpace:'nowrap', position:'sticky', right:0,
+                        background:C.surface, boxShadow:`inset 1px 0 0 ${C.line}`,
+                      }}>
+                        <span onClick={e=>e.stopPropagation()}>
+                          <Button size="sm" onClick={()=>openEdit(emp)}>Edit</Button>
+                        </span>
+                      </Td>
+                    </Tr>
                   )
                 })}
               </tbody>
@@ -854,11 +1002,11 @@ export default function EmployeeMaster() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:'6px', padding:'12px', borderTop:`1px solid ${P.border}` }}>
-              <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===1?.4:1 }} onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>← Prev</button>
+              <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===1?.4:1 }} onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Prev</button>
               {Array.from({length:Math.min(totalPages,7)},(_,i)=>{
                 const p = page<=4 ? i+1 : page-3+i
                 if(p<1||p>totalPages) return null
-                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`1.5px solid ${p===page?P.purple:P.border}`,borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple:'#fff',color:p===page?'#fff':P.text }}>{p}</button>
+                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`2px solid ${p===page?P.purple:P.border}`,borderRadius:'7px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple: C.surface,color:p===page?C.surface:P.text }}>{p}</button>
               })}
               <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===totalPages?.4:1 }} onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}>Next →</button>
             </div>
@@ -873,10 +1021,10 @@ export default function EmployeeMaster() {
 
             {/* Nav breadcrumb */}
             <div style={{ padding:'10px 20px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:P.muted }}>
-              <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>← Employee list</button>
+              <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>Employee list</button>
               <span>›</span>
               <span style={{ color:P.text, fontWeight:500 }}>{selected.full_name}</span>
-              {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'6px', fontSize:'10px', fontWeight:500 }}>Editing</span>}
+              {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'7px', fontSize:'10px', fontWeight:500 }}>Editing</span>}
             </div>
 
             {/* Profile header (with edit/save/cancel) */}
@@ -899,7 +1047,7 @@ export default function EmployeeMaster() {
       {/* ── Modals + toast ── */}
       {showAdd && <AddEmployeeModal companies={companies} locations={locations} departments={departments} onClose={() => setShowAdd(false)} onSaved={(msg) => { setShowAdd(false); setAddMsg(msg); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 3500) }} />}
       {showBulk && <BulkUploadModal companies={companies} departments={departments} locations={locations} onClose={() => setShowBulk(false)} onDone={(r) => { setAddMsg(`Bulk: ${r.added} added, ${r.skipped} skipped, ${r.errors} errors`); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 4000) }} />}
-      {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:'#059669', color:'#fff', borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
+      {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:C.positive, color:C.onAccent, borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
     </div>
   )
 }

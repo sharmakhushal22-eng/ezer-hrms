@@ -51,6 +51,9 @@ interface MonthRow {
   voluntary_pf_applicable: any; vpf_percent: any
   days_in_month: any; total_days: any; paid_days: any
   attendance_uploaded_at: any; arrear_days: any; ot_hours: any
+  tds_monthly: any; tds_additional: any; tds_annual_liability: any; tds_regime_used: any; tds_reason: any
+  pay_incentive: any; pay_variable: any; pay_bonus: any; pay_buyout: any
+  ded_parking: any; ded_insurance: any; ded_canteen: any
 }
 
 // Voucher money for one employee this month, split the way payroll needs it.
@@ -106,7 +109,15 @@ function calcLineFromMonth(
   const arrear = Math.max(0, num(row.arrear_total))
   const arrearEpf = Math.max(0, num(row.arrear_employee_pf))
 
-  const gross = basic + hra + conveyance + special + statBonus + flexiUnclaimed + v.additions + arrear
+  // One-off payments posted by the Bulk Uploader — incentive, variable, bonus, buyout.
+  // The TDS engine has taxed these all along (they drive Additional TDS) but this
+  // line never PAID them: they sat in the snapshot's own net_pay and nowhere else,
+  // so the bank file and the payslip were short by exactly the amount that was being
+  // taxed. Never prorated — a one-off is the amount it is.
+  const oneOff = Math.max(0, num(row.pay_incentive)) + Math.max(0, num(row.pay_variable))
+               + Math.max(0, num(row.pay_bonus)) + Math.max(0, num(row.pay_buyout))
+
+  const gross = basic + hra + conveyance + special + statBonus + flexiUnclaimed + v.additions + arrear + oneOff
 
   // Statutory flags and limits come from the frozen row, so a flag flipped in HRMS next
   // month cannot change a payslip that was already issued.
@@ -152,9 +163,21 @@ function calcLineFromMonth(
 
   const dedNPS = num(npsMonthly)
   const dedLoan = v.loan
-  const dedTDS = num(tdsMonthly)
+  // sql125/126's engine, wired through Data Sync → TDS (sync_month_tds), recomputes this
+  // every run from the month's own actual + projected income, arrear, professional tax
+  // and regime — replacing tds_declarations.monthly_tds, a single figure typed once by
+  // the flexi calculator in April and then frozen regardless of an appraisal, unpaid
+  // leave, a resignation or an incentive. tds_monthly is null only for a month that has
+  // never been through that sync (or ran before sql125 existed), so the frozen figure
+  // stays the fallback rather than silently becoming zero.
+  const tdsSynced = row.tds_monthly != null
+  // Regular and Additional TDS are two lines on the payslip and two fields on Form
+  // 24Q, so they are two columns here. ded_tds is the regular monthly figure;
+  // ded_additional_tax the one-off's tax taken in full this month.
+  const dedTDS = tdsSynced ? round(num(row.tds_monthly)) : num(tdsMonthly)
+  const dedAddlTax = tdsSynced ? round(num(row.tds_additional)) : 0
 
-  const totalDed = dedEPF + dedVPF + dedESIC + dedPT + dedLWF + dedTDS + dedNPS + dedLoan + v.otherDeductions
+  const totalDed = dedEPF + dedVPF + dedESIC + dedPT + dedLWF + dedTDS + dedAddlTax + dedNPS + dedLoan + v.otherDeductions
   // Approved flexi reimbursement is paid on top of gross, tax-exempt within the declared limit.
   const grossWithFlexi = gross + flexi
   const netPay = grossWithFlexi - totalDed
@@ -162,10 +185,14 @@ function calcLineFromMonth(
   return {
     run_id: runId, employee_id: row.employee_id,
     basic, hra, conveyance, special_allow: special, statutory_bonus: statBonus,
-    other_earnings: flexiUnclaimed + v.additions + arrear,
+    other_earnings: flexiUnclaimed + v.additions + arrear + oneOff,
     gross_earning: grossWithFlexi, flexi_reimbursement: flexi,
     ded_epf: dedEPF, ded_vpf: dedVPF, ded_esic: dedESIC, ded_pt: dedPT, ded_lwf: dedLWF,
-    ded_tds: dedTDS, ded_nps: dedNPS, ded_loan_emi: dedLoan,
+    ded_tds: dedTDS, ded_additional_tax: dedAddlTax, ded_nps: dedNPS, ded_loan_emi: dedLoan,
+    // Informational — these are ALREADY inside v.otherDeductions (the uploader posts
+    // them as vouchers, which is where the money is taken from). Written by name so the
+    // register and the payslip can label them without re-deriving from the voucher list.
+    ded_parking: num(row.ded_parking), ded_insurance: num(row.ded_insurance), ded_canteen: num(row.ded_canteen),
     total_deductions: totalDed, net_pay: netPay,
     employer_pf: erPF, employer_esic: erESIC, gratuity,
     // payroll_lines has no column for the attendance basis, so it is kept in the JSON —
@@ -176,11 +203,24 @@ function calcLineFromMonth(
       basic, hra, conveyance, special_allowance: special, statutory_bonus: statBonus,
       flexi_unclaimed_taxable: flexiUnclaimed, flexi_reimbursement: flexi,
       voucher_additions: v.additions, voucher_heads: v.heads,
+      one_off: { incentive: num(row.pay_incentive), variable: num(row.pay_variable), bonus: num(row.pay_bonus), buyout: num(row.pay_buyout) },
       arrear_total: arrear, arrear_months: row.arrear_months || null, arrear_epf: arrearEpf,
     },
     deductions_json: {
       epf: dedEPF, vpf: dedVPF, esic: dedESIC, pt: dedPT, lwf: dedLWF,
-      tds: dedTDS, nps: dedNPS, loan_emi: dedLoan, voucher_deductions: v.otherDeductions,
+      tds: dedTDS, additional_tax: dedAddlTax, nps: dedNPS, loan_emi: dedLoan, voucher_deductions: v.otherDeductions,
+      // When THIS line was computed. payroll_lines is upserted, so created_at is the
+      // first-ever calculation and says nothing about re-runs; the payslip stale
+      // guard compares this against the snapshot's synced_at.
+      calculated_at: new Date().toISOString(),
+      // Kept even when tdsSynced is false — the frozen declaration figure still deserves
+      // a "why", and false is itself the answer to "was this month's own engine used".
+      tds_synced: tdsSynced,
+      tds_monthly: tdsSynced ? num(row.tds_monthly) : null,
+      tds_additional: tdsSynced ? num(row.tds_additional) : null,
+      tds_annual_liability: tdsSynced ? num(row.tds_annual_liability) : null,
+      tds_regime_used: tdsSynced ? row.tds_regime_used : null,
+      tds_reason: tdsSynced ? row.tds_reason : null,
     },
   }
 }
@@ -199,6 +239,9 @@ const MONTH_COLS = [
   'lwf_employee', 'lwf_rate_found',
   'arrear_total', 'arrear_employee_pf', 'arrear_months',
   'days_in_month', 'total_days', 'paid_days', 'attendance_uploaded_at', 'arrear_days', 'ot_hours',
+  'tds_monthly', 'tds_additional', 'tds_annual_liability', 'tds_regime_used', 'tds_reason',
+  'pay_incentive', 'pay_variable', 'pay_bonus', 'pay_buyout',
+  'ded_parking', 'ded_insurance', 'ded_canteen',
 ].join(', ')
 
 // Manual vouchers for the run, split per employee. Loan EMI is separated out because
@@ -237,7 +280,12 @@ export async function processPayrollRun(runId: string, codes: string[] | null = 
   const all: MonthRow[] = []
   for (let from = 0; ; from += 1000) {
     const { data, error } = await supabase.from('payroll_employee_snapshot')
-      .select(MONTH_COLS).eq('run_id', runId).order('employee_code').range(from, from + 999)
+      // '*', not MONTH_COLS: the arrear family (arrear_employee_pf and friends) is
+      // added by a migration some databases have not run, and naming one absent
+      // column here made the whole engine refuse to run — "Month Master read
+      // failed: column … does not exist" — on every Run Payroll. Absent columns
+      // simply read as undefined → 0 below. MONTH_COLS stays as the documented contract.
+      .select('*').eq('run_id', runId).order('employee_code').range(from, from + 999)
     if (error) return { ...empty, errors: ['Month Master read failed: ' + error.message] }
     const batch = (data || []) as any as MonthRow[]
     all.push(...batch)

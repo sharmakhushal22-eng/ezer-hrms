@@ -222,6 +222,29 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     rpc: 'sync_month_investment_proof', countKey: 'with_decl',
     columns: ['employee_code', 'full_name'],
   },
+  {
+    // Last of all: the monthly figure depends on everything above it having already
+    // settled — this FY's arrear (now taxed as actual income), professional tax for the
+    // year, and which regime the investment declaration put the employee on. sql125/126
+    // built this to replace tds_declarations.monthly_tds, a single number typed once by
+    // the flexi calculator and then frozen for the whole year regardless of an appraisal,
+    // unpaid leave, a resignation or an incentive. Every step of the calculation is its
+    // own column here, on purpose — see the Payroll Run sheet's TDS block.
+    key: 'tds', label: 'TDS', icon: '🧾', status: 'ready',
+    note: 'Monthly TDS recomputed from this month’s own numbers — actual income so far this FY, this month, and projected to March (or the date of leaving), less HRA / LTA / professional tax / Chapter VI-A and whatever has already been deducted this FY, divided by the months left. Incentive, variable, bonus and buyout are never projected and instead drive Additional TDS — their tax is taken in full this month, not spread.',
+    rpc: 'sync_month_tds', countKey: 'eligible',
+    columns: [
+      'employee_code', 'full_name',
+      'tds_regime_used', 'tds_age_category', 'tds_actual_ytd', 'tds_current_gross', 'tds_arrear', 'tds_projected',
+      'tds_perquisites', 'tds_employer_contrib_excess', 'tds_house_property', 'tds_other_income',
+      'tds_prev_employer_income', 'tds_prev_employer_tds', 'tds_annual_gross',
+      'tds_hra_exempt', 'tds_lta_exempt', 'tds_pt_deduction', 'tds_std_deduction', 'tds_chapter_via',
+      'tds_taxable_income', 'tds_slab_tax', 'tds_rebate_87a', 'tds_marginal_relief_87a',
+      'tds_surcharge', 'tds_marginal_relief_surcharge', 'tds_cess',
+      'tds_annual_liability', 'tds_paid_ytd', 'tds_months_remaining',
+      'tds_monthly', 'tds_additional', 'tds_reason',
+    ],
+  },
 ]
 
 export interface SyncStatus {
@@ -351,4 +374,16 @@ export async function loadCategoryRows(cat: SyncCategory, runs: { id: string; co
   if (!codes) return out
   const want = new Set(codes)
   return out.filter(r => want.has(String(r.employee_code)))
+}
+
+/**
+ * "No election by the 4th ⇒ New Regime" (072). Called by Run Payroll just before the
+ * TDS sync so a run on or after the 5th taxes an undecided employee on the New
+ * Regime; the database function itself does nothing on the 1st–4th. Errors are
+ * returned, not thrown — a missing migration must not stop payroll.
+ */
+export async function defaultRegimesForFy(fy: string): Promise<{ error: string | null; defaulted: number }> {
+  const { data, error } = await supabase.rpc('fn_default_regime_new', { p_fy: fy, p_force: false })
+  if (error) return { error: error.message, defaulted: 0 }
+  return { error: null, defaulted: Number((data as any)?.defaulted || 0) }
 }

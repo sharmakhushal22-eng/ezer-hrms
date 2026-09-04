@@ -1,0 +1,216 @@
+================================================================================
+WALL OF FAME — DATABASE INSTRUCTIONS
+Prepared 4 September 2026 · for Nayan Ahuja
+Branch TusharPanwar
+================================================================================
+
+SIX FILES, IN THIS ORDER. None of them has been run — nobody but you applies
+schema changes to this project.
+
+    migrations/082_access_foundation.sql       <-- 084 will not work without it
+    migrations/084_wall_of_fame.sql            <-- 085-087 all depend on it
+    migrations/085_wall_of_fame_seed.sql
+    migrations/086_shoutouts_and_feed.sql
+    migrations/087_social_and_inbox.sql
+    migrations/089_recognition_catalogue.sql   <-- new: 30 badges, 44 tags
+
+Every file is safe to run twice: CREATE TABLE IF NOT EXISTS, ADD COLUMN IF NOT
+EXISTS, CREATE OR REPLACE FUNCTION, ON CONFLICT. If a run half-fails, fix the
+cause and run the whole file again rather than unpicking it.
+
+I verified on 4 September that none of these is applied — each returns
+PGRST205 on a table it creates.
+
+
+--------------------------------------------------------------------------------
+WHY THE ORDER MATTERS
+--------------------------------------------------------------------------------
+
+  082 BEFORE 084     084 calls can() at five sites and 082 creates it. Run 084
+                     first and every access check in the module fails closed —
+                     it will look installed and permit nothing.
+
+  084 BEFORE 085-087 Those three ALTER tables that 084 creates and seed
+                     catalogues it defines.
+
+  089 AFTER 084      It adds columns to `recognitions`, which 084 creates. It
+                     does not depend on 085, 086 or 087, so it can go in
+                     immediately after 084 if you prefer.
+
+There is no 083, and no 088 in this bundle. 083 is a deliberately skipped
+number. 088 is the ESS broadcast channel — a separate feature, handed over
+separately.
+
+
+--------------------------------------------------------------------------------
+!!  THE STEP THAT IS EASY TO MISS  !!
+--------------------------------------------------------------------------------
+
+RUNNING THE SIX FILES DOES NOT POPULATE THE WALL.
+
+085 and 086 define seeding FUNCTIONS. They insert nothing by themselves. Every
+badge, award, recognition value, shoutout category and wall_config row comes
+from calling them, once per company — and there are three companies.
+
+Run all six, open the Wall of Fame, and it is empty. Not broken. Never seeded.
+Indistinguishable from a migration that failed.
+
+For each company:
+
+    select seed_wall_defaults('<company_uuid>', '<hr_head_employee_uuid>');
+    select seed_shoutout_categories('<company_uuid>');
+    select generate_service_milestones('<company_uuid>');
+
+then, in the same admin session, flip the master switch:
+
+    update wall_config set module_enabled = true
+    where company_id = '<company_uuid>';
+
+Get the UUIDs with:
+
+    select id, company_name from companies order by company_name;
+
+    select id, full_name, emp_code from employees
+    where company_id = '<company_uuid>' and date_of_leaving is null
+    order by full_name;
+
+seed_wall_defaults returns jsonb describing what it created, so you can read
+the result rather than guess. All three are ON CONFLICT DO NOTHING internally,
+so calling them twice is harmless.
+
+089 IS THE EXCEPTION. Its catalogue seeds itself when the file runs — 74 rows,
+company-independent, no call needed. That is deliberate: a catalogue that
+arrives empty looks exactly like one that failed to install.
+
+
+--------------------------------------------------------------------------------
+WHAT EACH FILE DOES
+--------------------------------------------------------------------------------
+
+  082  The access foundation: can(), access_level_of(), is_ezer_staff() and
+       the access_permission_map catalogue (20 rows, seeded on apply).
+
+       It also creates explain_access(). Nothing in 084-089 calls that one —
+       wof_explain_access(), which 084 defines itself, is the one in use.
+       Said plainly so you know which of the two is load-bearing.
+
+  084  The module proper. 14 tables (wall_config, wall_admins, recognitions,
+       badge_master, recognition_awards, employee_badges, board_screens,
+       wall_audit_log and others), 13 functions, 10 triggers, 2 views.
+       Seeds the wall_permissions catalogue (15 rows) on apply.
+
+       payout_linkage is pinned false by a CHECK here. Leave it.
+
+  085  seed_wall_defaults() and generate_service_milestones(). Functions only
+       — see the section above.
+
+  086  Shoutouts and the company feed. create_shoutout(), thank_back(),
+       get_company_feed(), plus seed_shoutout_categories() which, again, has
+       to be called.
+
+  087  Comments, mentions, the direct appreciation channel and the wall inbox.
+       10 functions, 4 tables, and 4 more wall_permissions rows.
+
+  089  NEW. recognition_catalogue: 30 badges and 44 tags from the Employee
+       Applause Recognition Master, across 11 categories. Adds badge_ref and
+       tag_refs to recognitions, with a trigger that refuses a tag filed as a
+       badge, and set_recognition_marks() for attaching them.
+
+       Seeds itself. Upserts by ref, so re-running picks up wording changes
+       rather than duplicating rows.
+
+
+--------------------------------------------------------------------------------
+AFTER YOU RUN THEM — how to tell it worked
+--------------------------------------------------------------------------------
+
+Check the database first:
+
+    select count(*) from recognition_catalogue;          -- expect 74
+    select kind, count(*) from recognition_catalogue group by kind;
+                                                          -- BADGE 30, TAG 44
+    select count(*) from wall_permissions;               -- expect 19
+                                                          -- 15 from 084 + 4 from 087
+    select company_id, module_enabled from wall_config;  -- one row per company
+                                                          -- you seeded
+
+Then the app:
+
+    ESS portal -> Wall of Fame     badges and the feed, instead of a
+                                   "not switched on yet" panel
+    ESS portal -> Inbox            a Wall of Fame group beside Messages
+
+If a screen still shows the pending state after a clean run, the usual cause
+is PostgREST's schema cache rather than the migration. It refreshes shortly on
+its own, or you can reload it from the Supabase dashboard.
+
+IF THE WALL IS EMPTY BUT NOT BROKEN, you have not called the seed functions.
+That is the section above, and it is the single most likely outcome of running
+these six files and stopping.
+
+
+--------------------------------------------------------------------------------
+A DECISION I NEED FROM YOU — RLS
+--------------------------------------------------------------------------------
+
+089's recognition_catalogue has no RLS policies, and I did not write them.
+
+It is the least sensitive table in this bundle — it holds badge names,
+categories and descriptions, and every employee needs to read them in order to
+pick one. SELECT to everybody is almost certainly right, with writes limited
+to wall admins.
+
+I have not written it because I do not know how "is a wall admin" resolves in
+this project's Supabase setup, and 084's wall_admins table is not applied yet
+either. Tell me and I will write the policies.
+
+The same question is open on 088 (the ESS broadcast channel), where it matters
+considerably more — those rows are private messages.
+
+
+--------------------------------------------------------------------------------
+THE RULE THAT MUST NOT MOVE
+--------------------------------------------------------------------------------
+
+    payout_linkage boolean not null default false
+                   check (payout_linkage = false)
+
+Recognition never drives pay. Points rank a leaderboard and nothing else —
+there is no rate, no conversion and no rupee total anywhere in the module, and
+a test asserts that none appears. This mirrors the same decision in PMS v2.
+
+Enabling it would take a migration that drops the constraint, which is a
+product decision rather than a config one.
+
+
+--------------------------------------------------------------------------------
+IF SOMETHING GOES WRONG
+--------------------------------------------------------------------------------
+
+  PGRST205 in the app after a clean run
+      PostgREST's schema cache has not caught up. Wait, or reload it.
+
+  42P01 relation does not exist, mid-file
+      Run order. Check 082-before-084 and 084-before-085/086/087/089.
+
+  Every access check refuses, but the tables exist
+      084 went in without 082. Run 082, then 084 again — both are idempotent.
+
+  The wall is installed and completely empty
+      The seed functions have not been called. See the section above.
+
+  "is not an active badge" / "is not an active tag" on a recognition
+      089's trigger doing its job: a badge ref was filed as a tag or the other
+      way round. The catalogue's refs are B001-B030 for badges and T001-T044
+      for tags.
+
+  Anything you would rather not decide alone
+      Send it to me with the error text. Do not work around a constraint to
+      make a file run — the constraints are load-bearing, and one of them is a
+      product commitment.
+
+================================================================================
+HOW-IT-WORKS.md explains the module itself — the five things a person can do,
+the access levels, the board, and what is deliberately not built.
+MANIFEST.txt lists a sha256 for every file; check it before you run anything.
+================================================================================

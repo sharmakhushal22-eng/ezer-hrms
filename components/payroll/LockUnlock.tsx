@@ -15,13 +15,16 @@ import {
   loadLockList, lockFilterOptions, unlockEmployees, lockEmployees, loadLockAudit,
   EMPTY_LOCK_FILTER, type LockRow, type LockFilter, type LockAudit,
 } from '@/lib/payroll/lock'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#6D28D9', purpleSoft: '#F3EEFF',
-  card: '#FFFFFF', border: '#ECEAFB', muted: '#6B7280',
-  green: '#059669', greenBg: '#ECFDF5', greenBd: '#A7F3D0',
-  amber: '#B45309', amberBg: '#FFFBEB',
-  red: '#DC2626', redBg: '#FEF2F2', redBd: '#FECACA',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, purpleSoft: TK.brandTint,
+  card: TK.surface, border: TK.brandEdge, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, redBd: TK.criticalTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
@@ -40,15 +43,15 @@ const ago = (iso: string) => {
 }
 
 const card: React.CSSProperties = {
-  background: C.card, borderRadius: 16, padding: '20px 22px', marginBottom: 16,
-  boxShadow: '0 1px 4px rgba(124,58,237,0.06)', border: `1px solid ${C.border}`,
+  background: C.card, borderRadius: 14, padding: '20px 22px', marginBottom: 16,
+  boxShadow: 'var(--ez-shadow-flat)', border: `1px solid ${C.border}`,
 }
 const inp: React.CSSProperties = {
-  fontFamily: font, fontSize: 12.5, color: C.navy, width: '100%',
-  border: `1px solid ${C.border}`, borderRadius: 8, padding: '8px 10px', background: '#fff', outline: 'none',
+  fontFamily: font, fontSize: 13, color: C.navy, width: '100%',
+  border: `1px solid ${C.border}`, borderRadius: 10, padding: '8px 10px', background: TK.surface, outline: 'none',
 }
 const fieldLbl: React.CSSProperties = {
-  fontSize: 10.5, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase',
+  fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase',
   letterSpacing: '0.03em', display: 'block', marginBottom: 4,
 }
 
@@ -77,18 +80,18 @@ function EmpRow({ r, checked, onToggle, isGroup }: {
           }}>{initialsOf(r.full_name)}</div>
           <div>
             <div style={{ fontWeight: 600 }}>{r.full_name || '—'}</div>
-            <div style={{ fontSize: 10.5, color: C.muted }}>{r.employee_code}</div>
+            <div style={{ fontSize: 11, color: C.muted }}>{r.employee_code}</div>
           </div>
         </div>
       </td>
       <td style={{ ...td, color: C.muted }}>{r.department || '—'}</td>
-      {isGroup && <td style={{ ...td, color: C.muted, fontSize: 11.5 }}>{r.company || '—'}</td>}
+      {isGroup && <td style={{ ...td, color: C.muted, fontSize: 12 }}>{r.company || '—'}</td>}
       <td style={td}>
         <span style={{
-          fontSize: 10.5, fontWeight: 700, padding: '4px 11px', borderRadius: 999,
+          fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 999,
           display: 'inline-flex', alignItems: 'center', gap: 5,
           background: r.is_locked ? C.redBg : C.greenBg, color: r.is_locked ? C.red : C.green,
-        }}>{r.is_locked ? '🔒 Locked' : '🔓 Unlocked'}</span>
+        }}>{r.is_locked ? 'Locked' : 'Unlocked'}</span>
         {/* Why it was reopened, on the row itself — the audit trail below scrolls away,
             this does not. */}
         {!r.is_locked && r.unlock_reason && (
@@ -116,6 +119,9 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [msg, setMsg] = useState('')
+  // The employee list is not fetched on arrival — HR asked for it only after "View".
+  // Until then the screen shows the month, the filters and the audit trail.
+  const [viewed, setViewed] = useState(false)
 
   const isGroup = !companyId
 
@@ -142,6 +148,12 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
       const list = await loadRunsForPeriod(companyId, fy, Number(monthVal))
       setMonthRuns(list)
       const thin = list.map(r => ({ id: r.id, company_name: r.company_name }))
+      if (!viewed) {
+        // Audit trail only; the list waits for the View button.
+        setAudit(await loadLockAudit(list.map(r => r.id)))
+        setRows([]); setOptionRows([])
+        return
+      }
       const [data, log] = await Promise.all([loadLockList(thin, applied), loadLockAudit(list.map(r => r.id))])
       setRows(data)
       // Snapshot of the full month, kept for the dropdowns. Only refreshed when nothing
@@ -162,7 +174,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         : (e?.message || String(e)))
       setRows([])
     } finally { setLoading(false) }
-  }, [companyId, fy, monthVal, applied])
+  }, [companyId, fy, monthVal, applied, viewed])
   useEffect(() => { refresh() }, [refresh])
 
   // Dropdown choices come from the UNFILTERED list. Building them from the visible rows
@@ -255,7 +267,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         </div>
         <select value={monthVal} onChange={e => { setMonthVal(e.target.value); setSel(new Set()); setMsg('') }}
           style={{ ...inp, width: 'auto', borderRadius: 999, padding: '7px 16px', fontWeight: 600, color: C.purpleD, cursor: 'pointer' }}>
-          {monthOpts.length === 0 && <option value="">📅 No month created</option>}
+          {monthOpts.length === 0 && <option value="">No month created</option>}
           {monthOpts.map(r => <option key={r.month} value={String(r.month)}>📅 {periodLabel(r)}</option>)}
         </select>
       </div>
@@ -308,12 +320,12 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => setApplied({ ...filter })} disabled={busy}
-            style={{ fontFamily: font, fontSize: 12.5, fontWeight: 700, color: '#fff', background: C.purple, border: 'none', borderRadius: 8, padding: '9px 20px', cursor: 'pointer' }}>
-            Search
+          <button onClick={() => { setViewed(true); setApplied({ ...filter }) }} disabled={busy || !monthVal}
+            style={{ fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: C.purple, border: 'none', borderRadius: 10, padding: '9px 20px', cursor: 'pointer' }}>
+            {viewed ? 'Search' : '👁 View employees'}
           </button>
           <button onClick={() => { setFilter(EMPTY_LOCK_FILTER); setApplied(EMPTY_LOCK_FILTER) }} disabled={busy}
-            style={{ fontFamily: font, fontSize: 12.5, fontWeight: 600, color: C.muted, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '9px 16px', cursor: 'pointer' }}>
+            style={{ fontFamily: font, fontSize: 13, fontWeight: 600, color: C.muted, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 16px', cursor: 'pointer' }}>
             Clear
           </button>
         </div>
@@ -321,15 +333,15 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
 
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 14, fontWeight: 700 }}>Employees ({rows.length})</div>
-          <div style={{ fontSize: 11.5, color: C.muted }}>
-            🔒 {lockedCount} locked · 🔓 {rows.length - lockedCount} unlocked
+          <div style={{ fontSize: 14, fontWeight: 700 }}>Employees{viewed ? ` (${rows.length})` : ''}</div>
+          <div style={{ fontSize: 12, color: C.muted }}>
+            {viewed ? <>🔒 {lockedCount} locked · 🔓 {rows.length - lockedCount} unlocked</> : 'Set your filters, then press View employees to load the list.'}
           </div>
           {/* Works on every row now, not just the locked ones — otherwise a company with
               nothing locked yet had no way to select anything at all. */}
           {rows.length > 0 && (
             <button onClick={toggleAll}
-              style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11.5, fontWeight: 600, color: C.purpleD, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 12px', cursor: 'pointer' }}>
+              style={{ marginLeft: 'auto', fontFamily: font, fontSize: 12, fontWeight: 600, color: C.purpleD, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '6px 12px', cursor: 'pointer' }}>
               {rows.length > 0 && rows.every(r => sel.has(r.employee_code)) ? 'Clear selection' : `Select all ${rows.length}`}
             </button>
           )}
@@ -346,11 +358,11 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           </div>
         ) : (
           <div style={{ overflowX: 'auto', maxHeight: 460, overflowY: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr>
                   {['', 'Employee', 'Department', ...(isGroup ? ['Company'] : []), 'Status'].map((h, i) => (
-                    <th key={i} style={{ textAlign: 'left', fontSize: 10.5, color: C.muted, textTransform: 'uppercase', padding: 8, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, background: C.card }}>{h}</th>
+                    <th key={i} style={{ textAlign: 'left', fontSize: 11, color: C.muted, textTransform: 'uppercase', padding: 8, borderBottom: `1px solid ${C.border}`, position: 'sticky', top: 0, background: C.card }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -380,10 +392,10 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
           <button onClick={unlock} disabled={busy || toUnlock.length === 0}
             style={{
-              fontFamily: font, fontSize: 13.5, fontWeight: 700, color: '#fff',
-              background: toUnlock.length && !busy ? C.purple : '#D8D3F5', border: 'none', borderRadius: 10,
+              fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
+              background: toUnlock.length && !busy ? C.purple: TK.brandTint, border: 'none', borderRadius: 10,
               padding: '12px 22px', cursor: toUnlock.length && !busy ? 'pointer' : 'not-allowed',
-              boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(124,58,237,0.2)' : 'none',
+              boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(37,99,235,0.2)' : 'none',
             }}>
             {busy ? 'Working…' : `🔓 Unlock Selected (${toUnlock.length})`}
           </button>
@@ -391,21 +403,20 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               anyone. Reopening one does, which is why only that side demands a reason. */}
           <button onClick={lockSelected} disabled={busy || toLock.length === 0}
             style={{
-              fontFamily: font, fontSize: 13.5, fontWeight: 700,
-              color: toLock.length && !busy ? C.red : '#9CA3AF',
-              background: '#fff', border: `1px solid ${toLock.length && !busy ? C.redBd : C.border}`,
+              fontFamily: font, fontSize: 14, fontWeight: 700,
+              color: toLock.length && !busy ? C.red : TK.faint,
+              background: TK.surface, border: `1px solid ${toLock.length && !busy ? C.redBd : C.border}`,
               borderRadius: 10, padding: '12px 22px',
               cursor: toLock.length && !busy ? 'pointer' : 'not-allowed',
-            }}>
-            🔒 Lock Selected ({toLock.length})
+            }}>Lock Selected ({toLock.length})
           </button>
           {picked.length === 0 && (
-            <span style={{ fontSize: 11.5, color: C.muted }}>Tick a row above to enable these.</span>
+            <span style={{ fontSize: 12, color: C.muted }}>Tick a row above to enable these.</span>
           )}
         </div>
 
-        {msg && <div style={{ background: C.greenBg, border: `1px solid ${C.greenBd}`, color: C.green, borderRadius: 10, padding: '12px 16px', fontSize: 12.5, fontWeight: 600, marginTop: 12 }}>{msg}</div>}
-        {err && <div style={{ background: C.redBg, border: `1px solid ${C.redBd}`, color: C.red, borderRadius: 10, padding: '12px 16px', fontSize: 12.5, marginTop: 12 }}>{err}</div>}
+        {msg && <div style={{ background: C.greenBg, border: `1px solid ${C.greenBd}`, color: C.green, borderRadius: 10, padding: '12px 16px', fontSize: 13, fontWeight: 600, marginTop: 12 }}>{msg}</div>}
+        {err && <div style={{ background: C.redBg, border: `1px solid ${C.redBd}`, color: C.red, borderRadius: 10, padding: '12px 16px', fontSize: 13, marginTop: 12 }}>{err}</div>}
       </div>
 
       {unlockedRows.length > 0 && (
@@ -420,8 +431,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               <span style={{ color: C.muted }}>{r.full_name}</span>
               {r.unlock_reason && <span style={{ color: C.muted, fontSize: 11 }}>— “{r.unlock_reason}”</span>}
               <button onClick={() => relock(r)} disabled={busy}
-                style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11, fontWeight: 700, color: C.red, background: '#fff', border: `1px solid ${C.redBd}`, borderRadius: 8, padding: '5px 12px', cursor: busy ? 'not-allowed' : 'pointer' }}>
-                🔒 Lock again
+                style={{ marginLeft: 'auto', fontFamily: font, fontSize: 11, fontWeight: 700, color: C.red, background: TK.surface, border: `1px solid ${C.redBd}`, borderRadius: 10, padding: '5px 12px', cursor: busy ? 'not-allowed' : 'pointer' }}>Lock again
               </button>
             </div>
           ))}
@@ -433,7 +443,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         {audit.length === 0 ? (
           <div style={{ fontSize: 12, color: C.muted }}>Nothing locked or unlocked in this month yet.</div>
         ) : audit.map((a, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i === audit.length - 1 ? 'none' : `1px solid ${C.border}`, fontSize: 11.5, flexWrap: 'wrap' }}>
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: i === audit.length - 1 ? 'none' : `1px solid ${C.border}`, fontSize: 12, flexWrap: 'wrap' }}>
             <span style={{
               fontWeight: 700, padding: '2px 9px', borderRadius: 999, fontSize: 10,
               background: a.action === 'EMPLOYEES_LOCKED' ? C.redBg : C.greenBg,

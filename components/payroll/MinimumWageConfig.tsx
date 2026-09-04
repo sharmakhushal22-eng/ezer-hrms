@@ -8,14 +8,18 @@ import { useState, useEffect, useCallback } from 'react'
 import { getZoneRates, reviseZoneRates } from '@/lib/minimum-wage/zoneActions'
 import type { ZoneRatesPivot } from '@/lib/minimum-wage/zoneActions'
 import { INDIAN_STATES } from '@/lib/geo/india-states-districts'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
+import { useDismiss } from '@/lib/ui/useDismiss'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', amber: '#D97706', amberBg: '#FFFBEB',
-  purpleBg: '#EEEDFE', gray: '#F8F7FF', red: '#DC2626', redBg: '#FEF2F2',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, amber: TK.warning, amberBg: TK.warningTint,
+  purpleBg: TK.brandTint, gray: TK.sunken, red: TK.critical, redBg: TK.criticalTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: '#FAFAF8', color: C.navy }
+const inputStyle: React.CSSProperties = { width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none', background: TK.sunken, color: C.navy }
 const labelStyle: React.CSSProperties = { fontSize: 10, color: C.muted, display: 'block', marginBottom: 4 }
 
 // ── Searchable dropdown (type to filter) ────────────────────────────
@@ -23,28 +27,30 @@ function SearchSelect({ value, options, placeholder, onChange }: {
   value: string; options: string[]; placeholder: string; onChange: (v: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  // One click, not two: a document listener lets the click through to whatever
+  // is under it, so moving straight to another trigger opens that one.
+  const pop = useDismiss<HTMLDivElement>(open, () => setOpen(false))
   const [q, setQ] = useState('')
   const filtered = (q.trim() ? options.filter(o => o.toLowerCase().includes(q.toLowerCase())) : options).slice(0, 100)
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={pop} style={{ position: 'relative' }}>
       <div onClick={() => { setOpen(o => !o); setQ('') }}
-        style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, color: value ? C.navy : '#94A3B8' }}>
+        style={{ ...inputStyle, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, color: value ? C.navy : TK.faint }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value || placeholder}</span>
-        <span style={{ color: '#94A3B8', fontSize: 11 }}>▾</span>
+        <span style={{ color: TK.faint, fontSize: 11 }}></span>
       </div>
       {open && (
         <>
-          <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 210 }} />
-          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: '#fff', border: '1px solid #DDD6FE', borderRadius: 8, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', top: 'calc(100% + 3px)', left: 0, width: '100%', minWidth: 200, background: TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius: 10, boxShadow: '0 8px 24px rgba(30,27,75,0.16)', zIndex: 211, overflow: 'hidden' }}>
             <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search…"
-              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: '1px solid #EEF', fontSize: 12.5, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
+              style={{ width: '100%', padding: '8px 10px', border: 'none', borderBottom: `1px solid ${TK.brandEdge}`, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
             <div style={{ maxHeight: 200, overflowY: 'auto' }}>
-              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: '#94A3B8' }}>No matches</div>}
+              {filtered.length === 0 && <div style={{ padding: '8px 10px', fontSize: 12, color: TK.faint }}>No matches</div>}
               {filtered.map(o => (
                 <div key={o} onClick={() => { onChange(o); setOpen(false) }}
-                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = '#F5F3FF'}
-                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? '#EEF2FF' : '#fff'}
-                  style={{ padding: '7px 10px', fontSize: 12.5, cursor: 'pointer', background: o === value ? '#EEF2FF' : '#fff', color: C.navy }}>
+                  onMouseEnter={e => (e.currentTarget as HTMLDivElement).style.background = TK.canvas}
+                  onMouseLeave={e => (e.currentTarget as HTMLDivElement).style.background = o === value ? TK.brandTint : TK.surface}
+                  style={{ padding: '7px 10px', fontSize: 13, cursor: 'pointer', background: o === value ? TK.brandTint : TK.surface, color: C.navy }}>
                   {o}
                 </div>
               ))}
@@ -92,12 +98,12 @@ function ZoneFormModal({ preset, onClose, onSaved }: {
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: font }}>
-      <div style={{ background: '#fff', borderRadius: 14, padding: 22, width: '100%', maxWidth: 540, boxShadow: '0 20px 50px rgba(30,27,75,0.3)' }}>
+      <div style={{ background: TK.surface, borderRadius: 14, padding: 22, width: '100%', maxWidth: 540, boxShadow: '0 20px 50px rgba(30,27,75,0.3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📊</div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}></div>
           <div>
             <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{preset ? 'Revise zone rates' : 'Add zone rates'}</div>
-            <div style={{ fontSize: 10.5, color: C.muted }}>All 4 categories, one w.e.f date</div>
+            <div style={{ fontSize: 11, color: C.muted }}>All 4 categories, one w.e.f date</div>
           </div>
         </div>
 
@@ -119,18 +125,18 @@ function ZoneFormModal({ preset, onClose, onSaved }: {
           <div><label style={labelStyle}>Notification reference</label><input value={notificationRef} onChange={e => setNotificationRef(e.target.value)} placeholder="HR/Labour/2026/078" style={inputStyle} /></div>
         </div>
 
-        <div style={{ fontSize: 11, color: C.muted, background: C.gray, padding: '9px 11px', borderRadius: 8, marginBottom: 10, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11, color: C.muted, background: C.gray, padding: '9px 11px', borderRadius: 10, marginBottom: 10, lineHeight: 1.5 }}>
           All 4 categories for this state + zone update together with this one w.e.f date — the previous rates are automatically closed off the day before. Overlapping validity is rejected by the database itself.
         </div>
 
-        {err && <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 6, marginBottom: 10 }}>{err}</div>}
+        {err && <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '8px 10px', borderRadius: 7, marginBottom: 10 }}>{err}</div>}
 
         <div style={{ display: 'flex', gap: 8 }}>
           <button disabled={!valid || saving} onClick={handleSave}
-            style={{ flex: 1, padding: '11px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
-            {saving ? 'Saving…' : '💾 Save all 4 rates'}
+            style={{ flex: 1, padding: '11px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: (!valid || saving) ? 'not-allowed' : 'pointer', opacity: (!valid || saving) ? 0.5 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
+            {saving ? 'Saving…' : 'Save all 4 rates'}
           </button>
-          <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 9, border: `1px solid ${C.border}`, background: '#fff', cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13, color: C.muted, fontWeight: 600 }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -157,28 +163,28 @@ export default function MinimumWageConfig() {
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 860 }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>📊</div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>Minimum Wages</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>State &amp; zone-wise statutory floor · one state can have multiple zones, each tracked independently</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>State &amp; zone-wise statutory floor · one state can have multiple zones, each tracked independently</div>
         </div>
         <button onClick={() => setModal({ open: true, preset: null })}
           onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.filter = 'brightness(1.08)'}
           onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.filter = 'none'}
-          style={{ padding: '10px 16px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', boxShadow: '0 3px 10px rgba(124,58,237,0.22)', transition: 'filter .12s', whiteSpace: 'nowrap' }}>
+          style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brand})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', boxShadow: '0 3px 10px rgba(37,99,235,0.22)', transition: 'filter .12s', whiteSpace: 'nowrap' }}>
           + Add / revise zone
         </button>
       </div>
 
-      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>{error}</div>}
+      {error && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>{error}</div>}
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 6px rgba(124,58,237,0.07)' }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', boxShadow: 'var(--ez-shadow-flat)' }}>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 640 }}>
             <thead>
               <tr style={{ background: C.navy }}>
                 {['State', 'Zone', 'Unskilled', 'Semi-skilled', 'Skilled', 'Highly skilled', 'W.e.f', ''].map((h, i) => (
-                  <th key={i} style={{ padding: '10px 12px', textAlign: i >= 2 && i <= 5 ? 'right' : 'left', fontSize: 9.5, color: '#A5B4FC', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>
+                  <th key={i} style={{ padding: '10px 12px', textAlign: i >= 2 && i <= 5 ? 'right' : 'left', fontSize: 10, color: TK.brand, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -199,7 +205,7 @@ export default function MinimumWageConfig() {
                   </td>
                   <td style={{ padding: '9px 12px', textAlign: 'right' }}>
                     <button onClick={() => setModal({ open: true, preset: r })} title="Revise this zone"
-                      style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 7, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, cursor: 'pointer' }}>Revise</button>
+                      style={{ fontSize: 11, fontWeight: 700, padding: '4px 11px', borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer' }}>Revise</button>
                   </td>
                 </tr>
               ))}

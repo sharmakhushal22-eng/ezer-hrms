@@ -14,11 +14,14 @@
 import { useState, useEffect } from 'react'
 import { getEmployeePerquisites, getTaxableIncomeWithPerquisites, computeTaxSTUB } from '@/lib/perquisites/employeeActions'
 import type { TaxableIncomeResult, TaxBreakdown } from '@/lib/perquisites/employeeActions'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280',
-  green: '#059669', greenBg: '#ECFDF5', purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 
 function Row({ label, value, bold, indent }: { label: string; value: string; bold?: boolean; indent?: boolean }) {
@@ -54,7 +57,7 @@ export default function PerquisiteTaxSummary({ employeeId, fy, baseTaxableSalary
   }
 
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 18px', maxWidth: 420 }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', maxWidth: 420 }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 12 }}>
         Perquisite tax impact — FY {fy}
       </div>
@@ -63,7 +66,7 @@ export default function PerquisiteTaxSummary({ employeeId, fy, baseTaxableSalary
       <Row label="+ Perquisite amount" value={inr(income.total_perquisite_amount)} />
 
       {Object.keys(income.breakdown_by_type).length > 0 && (
-        <div style={{ background: C.gray, borderRadius: 8, padding: '8px 10px', margin: '6px 0 10px' }}>
+        <div style={{ background: C.gray, borderRadius: 10, padding: '8px 10px', margin: '6px 0 10px' }}>
           {Object.entries(income.breakdown_by_type).map(([name, amt]) => (
             <Row key={name} label={name} value={inr(amt)} indent />
           ))}
@@ -80,12 +83,12 @@ export default function PerquisiteTaxSummary({ employeeId, fy, baseTaxableSalary
       <Row label="+ Cess (4%)" value={inr(tax.cess)} />
       <Row label="+ Surcharge" value={inr(tax.surcharge)} />
 
-      <div style={{ background: C.purpleBg, borderRadius: 8, padding: '10px 12px', marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ background: C.purpleBg, borderRadius: 10, padding: '10px 12px', marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: 13, fontWeight: 700, color: C.purpleD }}>TOTAL</span>
         <span style={{ fontSize: 17, fontWeight: 700, color: C.purpleD }}>{inr(tax.total)}</span>
       </div>
 
-      <div style={{ fontSize: 9.5, color: C.muted, marginTop: 8 }}>
+      <div style={{ fontSize: 10, color: C.muted, marginTop: 8 }}>
         TDS/Cess/Surcharge shown here use a placeholder calculation — wired to EZER's existing tax engine at integration time.
       </div>
     </div>

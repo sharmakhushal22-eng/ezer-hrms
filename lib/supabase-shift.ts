@@ -26,7 +26,7 @@ export async function loadCompanies(): Promise<CompanyLite[]> {
 }
 export async function loadEmployees(): Promise<EmpLite[]> {
   const { data } = await supabase.from('employees')
-    .select('id, emp_code, full_name, company_id, departments(dept_name), locations!location_id(location_name)')
+    .select('id, emp_code, full_name, company_id, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
     .neq('is_test', true).order('full_name')
   return (data || []).map((e: any) => ({
     id: e.id, emp_code: e.emp_code, full_name: e.full_name, company_id: e.company_id,
