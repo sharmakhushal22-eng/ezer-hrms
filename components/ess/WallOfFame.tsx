@@ -29,6 +29,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { wallRpc } from '@/lib/wall/rpc'
 import Badge, { BADGE_KEYFRAMES, type BadgeTier, type BadgeShape } from '@/components/wall/Badge'
 import ShoutoutComposer from '@/components/wall/ShoutoutComposer'
 import AppreciationComposer from '@/components/wall/AppreciationComposer'
@@ -236,7 +237,7 @@ export default function WallOfFame({ employeeId }: { employeeId: string }) {
     const cfg = (probe.data ?? [])[0] as { leaderboard_enabled?: boolean } | undefined
     setBoardOn(cfg?.leaderboard_enabled !== false)
 
-    const f = await supabase.rpc('get_company_feed', { p_scope: 'company', p_limit: 20 })
+    const f = await wallRpc('get_company_feed', { p_scope: 'company', p_limit: 20 }, employeeId)
     if (!f.error) setFeed((f.data ?? []) as unknown as FeedRow[])
 
     // employee_badges holds what you have earned; badge_master holds what a

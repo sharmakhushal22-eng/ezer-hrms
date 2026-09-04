@@ -83,7 +83,7 @@ export default function InboxTabs({ employeeId, onUnread }: {
                onUnread={n => { setMsgUnread(n); onUnread?.(n) }} />
       </div>
       <div hidden={group !== 'wall'}>
-        <WallInbox onUnread={setWallUnread} />
+        <WallInbox employeeId={employeeId} onUnread={setWallUnread} />
       </div>
       <div hidden={group !== 'broadcast'}>
         <BroadcastInbox employeeId={employeeId} onUnread={setBcUnread} />

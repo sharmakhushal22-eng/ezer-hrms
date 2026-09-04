@@ -190,11 +190,16 @@ test('the composer does not add arguments to create_shoutout', () => {
   // go on through their own function afterwards.
   const src = readFileSync(
     new URL('../../../components/wall/ShoutoutComposer.tsx', import.meta.url), 'utf8')
-  const call = src.slice(src.indexOf("rpc('create_shoutout'"),
-                         src.indexOf("rpc('create_shoutout'") + 400)
+  // Matches both the old supabase.rpc( and the wallRpc( the components moved
+  // to. Asserted rather than assumed: indexOf returning -1 would make the
+  // slice below a one-character string that passes every check vacuously,
+  // which is how a guard stops guarding without ever failing.
+  const at = src.search(/\b(?:wallRpc|supabase\.rpc)\('create_shoutout'/)
+  assert.notStrictEqual(at, -1, 'no create_shoutout call found in the composer')
+  const call = src.slice(at, at + 400)
   assert.doesNotMatch(call, /p_badge_ref|p_tag_refs/,
     'create_shoutout takes five arguments; the marks belong in set_recognition_marks')
-  assert.match(src, /rpc\('set_recognition_marks'/,
+  assert.match(src, /\b(?:wallRpc|supabase\.rpc)\('set_recognition_marks'/,
     'the badge and tags have to be attached somehow')
 })
 

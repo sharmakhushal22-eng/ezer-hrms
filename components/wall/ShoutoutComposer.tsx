@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import RecognitionPicker from '@/components/wall/RecognitionPicker'
 import { MAX_TAGS } from '@/lib/wall/catalogue'
 import { supabase } from '@/lib/supabase'
+import { wallRpc } from '@/lib/wall/rpc'
 import {
   problems, problemFor, remainingToday, messageLength, visibilityNote,
   VISIBILITIES, DEFAULT_RULES, EMPTY_DRAFT,
@@ -235,13 +236,13 @@ export default function ShoutoutComposer({
     setTried(true); setServerErr(null)
     if (probs.length) return
     setSending(true)
-    const r = await supabase.rpc('create_shoutout', {
+    const r = await wallRpc('create_shoutout', {
       p_receivers: draft.receiverIds,
       p_category: draft.categoryCode,
       p_message: draft.message.trim(),
       p_value_ids: draft.valueIds,
       p_visibility: draft.visibility,
-    })
+    }, actorId)
     // The badge and tags go on afterwards, through their own function.
     // create_shoutout's signature is 086's and adding arguments to it would
     // either make every existing call ambiguous or mean copying its whole
@@ -250,11 +251,11 @@ export default function ShoutoutComposer({
     if (!r.error && (draft.badgeRef || (draft.tagRefs ?? []).length)) {
       const id = (r.data as { id?: string } | null)?.id
       if (id) {
-        const m = await supabase.rpc('set_recognition_marks', {
+        const m = await wallRpc('set_recognition_marks', {
           p_recognition: id,
           p_badge_ref: draft.badgeRef ?? null,
           p_tag_refs: draft.tagRefs ?? [],
-        })
+        }, actorId)
         if (m.error) setServerErr(`Posted, but the badge did not attach — ${m.error.message}`)
       }
     }

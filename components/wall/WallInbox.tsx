@@ -20,7 +20,7 @@
 // Sub-components at module scope. See the note in ShoutoutComposer.
 
 import { useCallback, useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
+import { wallRpc } from '@/lib/wall/rpc'
 import {
   STREAMS, STREAM_OF, headlineFor, glyphFor, countFor, countsReconcile,
   type Stream, type WallEvent, type Counts,
@@ -35,6 +35,9 @@ import { C, F, W, S, R } from '@/lib/ui'
 
 const MISSING = 'PGRST205'
 const missing = (e: unknown) =>
+  // The wall route reports a missing migration explicitly. Checked first
+  // because its message is written for a person and matches no error code.
+  (e as { installed?: boolean } | null)?.installed === false ||
   (e as { code?: string } | null)?.code === MISSING ||
   /PGRST205|does not exist|could not find/i.test(String((e as { message?: string } | null)?.message ?? ''))
 
@@ -144,7 +147,10 @@ function Note({ children }: { children: React.ReactNode }) {
 
 // ── the inbox ────────────────────────────────────────────────────────────
 
-export default function WallInbox({ onUnread }: { onUnread?: (n: number) => void }) {
+export default function WallInbox({ employeeId, onUnread }: {
+  employeeId: string
+  onUnread?: (n: number) => void
+}) {
   const [stream, setStream] = useState<Stream>('all')
   const [rows, setRows] = useState<InboxRow[]>([])
   const [counts, setCounts] = useState<Counts>({})
@@ -152,7 +158,7 @@ export default function WallInbox({ onUnread }: { onUnread?: (n: number) => void
   const [err, setErr] = useState<string | null>(null)
 
   const load = useCallback(async () => {
-    const c = await supabase.rpc('get_inbox_counts')
+    const c = await wallRpc('get_inbox_counts', {}, employeeId)
     if (c.error) {
       if (missing(c.error)) { setReady(false); return }
       setErr(c.error.message); setReady(false); return
@@ -163,21 +169,21 @@ export default function WallInbox({ onUnread }: { onUnread?: (n: number) => void
     // Reported to the host SEPARATELY. Never added to the approvals count.
     onUnread?.(got.total_unread ?? 0)
 
-    const r = await supabase.rpc('get_wall_inbox', { p_filter: stream, p_limit: 30 })
+    const r = await wallRpc('get_wall_inbox', { p_filter: stream, p_limit: 30 }, employeeId)
     if (!r.error) setRows((r.data ?? []) as unknown as InboxRow[])
-  }, [stream, onUnread])
+  }, [stream, onUnread, employeeId])
 
   useEffect(() => { load() }, [load])
 
   async function open(r: InboxRow) {
     if (r.is_read) return
     setRows(cur => cur.map(x => x.id === r.id ? { ...x, is_read: true } : x))
-    const res = await supabase.rpc('mark_inbox_read', { p_ids: [r.id] })
+    const res = await wallRpc('mark_inbox_read', { p_ids: [r.id] }, employeeId)
     if (res.error) load(); else load()
   }
 
   async function thank(messageId: string) {
-    const r = await supabase.rpc('thank_for_appreciation', { p_message: messageId })
+    const r = await wallRpc('thank_for_appreciation', { p_message: messageId }, employeeId)
     if (r.error) { setErr(r.error.message); return }
     load()
   }

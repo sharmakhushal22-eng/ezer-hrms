@@ -17,6 +17,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { wallRpc } from '@/lib/wall/rpc'
 // WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
 //
 // tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
@@ -106,9 +107,11 @@ function One({ c, names, reacts, onReact, onReply, canReply }: {
 // ── the thread ───────────────────────────────────────────────────────────
 
 export default function CommentThread({
-  recognitionId, names, repliesEnabled = true, onPosted,
+  recognitionId, names, actorId, repliesEnabled = true, onPosted,
 }: {
   recognitionId: string
+  /** Whose portal this is. Only needed for a dashboard admin viewing ESS. */
+  actorId?: string
   /** employee id -> display name, supplied by the feed that already loaded them. */
   names: Map<string, string>
   repliesEnabled?: boolean
@@ -152,10 +155,10 @@ export default function CommentThread({
     // becomes plain text rather than a broken chip pointing at nobody.
     const mentioned = [...names.entries()]
       .filter(([, n]) => body.includes('@' + n)).map(([id]) => id)
-    const r = await supabase.rpc('add_comment', {
+    const r = await wallRpc('add_comment', {
       p_recognition: recognitionId, p_body: body,
       p_parent: replyTo, p_mentions: mentioned,
-    })
+    }, actorId)
     setBusy(false)
     if (r.error) { setErr(r.error.message); return }
     setDraft(''); setReplyTo(null); load(); onPosted?.()

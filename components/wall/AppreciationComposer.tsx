@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { wallRpc } from '@/lib/wall/rpc'
 import {
   directProblems, directProblemFor, notesLeftToday, modeNote, REPLY_RULE,
   DEFAULT_DIRECT, EMPTY_DIRECT,
@@ -185,13 +186,13 @@ export default function AppreciationComposer({
     setTried(true); setServerErr(null); setSent(null)
     if (probs.length) return
     setBusy(true)
-    const r = await supabase.rpc('send_appreciation', {
+    const r = await wallRpc('send_appreciation', {
       p_receivers: draft.receiverIds,
       p_category: draft.categoryCode,
       p_body: draft.body.trim(),
       p_also_post: draft.mode === 'also_post',
       p_visibility: draft.visibility,
-    })
+    }, actorId)
     setBusy(false)
     if (r.error) { setServerErr(r.error.message); return }
     setDraft(EMPTY_DIRECT); setPicked([]); setTried(false)
