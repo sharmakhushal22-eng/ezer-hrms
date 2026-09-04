@@ -39,6 +39,8 @@ export default function PlayTogether({ meId }: { meId: string }) {
    *  invite was not sent to you", which is true and unhelpful. One source of
    *  truth: the session. */
   const [serverMe, setServerMe] = useState<string | null>(null)
+  /** The name behind serverMe, for the mismatch banner. */
+  const [serverName, setServerName] = useState<string | null>(null)
   /** Held separately from the search results, which are cleared on pick —
    *  otherwise the field would forget who it is addressed to. */
   const [chosen, setChosen] = useState<Colleague | null>(null)
@@ -72,7 +74,15 @@ export default function PlayTogether({ meId }: { meId: string }) {
     if (r.error) { setReady(false); return }
     setReady(r.data?.installed !== false)
     setInvites(r.data?.invites ?? [])
-    if (r.data?.me) setServerMe(r.data.me)
+    if (r.data?.me) {
+      setServerMe(r.data.me)
+      // The session person's own name, taken from whichever invite mentions
+      // them — cheaper than another round trip, and there is almost always one.
+      const rows = r.data.invites ?? []
+      const mine = rows.find(i => i.fromId === r.data!.me)?.fromName
+                ?? rows.find(i => i.toId === r.data!.me)?.toName ?? null
+      setServerName(mine)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -174,6 +184,23 @@ export default function PlayTogether({ meId }: { meId: string }) {
 
   return (
     <div style={{ display: 'grid', gap: S.md }}>
+      {/* The session and the page can be different people. Two tabs in one
+          browser share localStorage, so signing in as somebody else in the
+          second tab silently re-owns the first tab's session — and then this
+          screen was judging invites as one person while the header named
+          another. Say it plainly instead of letting somebody act on it. */}
+      {serverMe && serverMe !== meId && (
+        <div style={{ border: `1px solid ${C.critical}`, borderRadius: R.sm,
+                      padding: '11px 13px', background: C.criticalTint,
+                      fontSize: F.small, color: C.ink }}>
+          <b>This is not your Fun Zone.</b> You are signed in as{' '}
+          {serverName ?? 'a different employee'}, but you are looking at somebody
+          else&rsquo;s portal. The invites below are yours, not theirs, so anything you
+          send or accept here happens as you. Open your own portal, or sign in again in
+          this tab.
+        </div>
+      )}
+
       <section style={{ background: C.surface, border: `1px solid ${C.line}`,
                         borderRadius: R.lg, padding: '16px 18px' }}>
         <h3 style={{ margin: 0, fontSize: F.body, fontWeight: W.bold, color: C.ink }}>
