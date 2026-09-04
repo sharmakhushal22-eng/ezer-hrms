@@ -210,6 +210,24 @@ export async function POST(req: NextRequest) {
       const { rows } = await invitesFor(me)
       const inv = rows.find(i => i.id === id)
       if (!inv) return bad('That invite is not yours.', 403)
+
+      // "This invite was not sent to you" is true and useless on its own,
+      // because the interesting question is WHO THE SERVER THINKS YOU ARE.
+      // The list is drawn from the session identity now, so reaching this at
+      // all means the two disagree — say so, and name both people, rather
+      // than leaving somebody staring at an invite with their own name on it.
+      if (inv.toId !== me) {
+        const { data: who } = await sb.from('employees')
+          .select('id, full_name').in('id', [me, inv.toId])
+        const nameOf = (id: string) =>
+          ((who ?? []) as { id: string; full_name: string }[]).find(e => e.id === id)?.full_name
+        return bad(
+          `This invite was sent to ${nameOf(inv.toId) ?? 'somebody else'}, `
+          + `and you are signed in as ${nameOf(me) ?? 'another employee'}. `
+          + `If that is not who you expected, you are looking at a colleague's portal — `
+          + `open your own to accept invites addressed to you.`, 403)
+      }
+
       const v = canAccept(inv, me, new Date().toISOString())
       if (!v.ok) return bad(v.because)
 
