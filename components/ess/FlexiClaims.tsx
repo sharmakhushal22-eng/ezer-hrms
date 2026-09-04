@@ -1,7 +1,9 @@
 'use client'
 // components/ess/FlexiClaims.tsx — ESS employee flexi reimbursement (bill submission).
 // Entitlements derived from the company's flexi policy slab for the employee's band
-// (lib/flexi/claims). Submit bills per component while the window is open.
+// (lib/flexi/claims). Bills are submitted through a multi-frame uploader: each frame is
+// one bill — pick its type, enter the amount, attach the files (photos or documents) —
+// and "+ Add another bill" appends a fresh frame, so a month's bills go in together.
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { loadEntitlements, loadWindow, ComponentLimit, NO_INVOICE, ACCEPTED_TYPES, FY } from '@/lib/flexi/claims'
@@ -14,10 +16,13 @@ const V = {
   card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, redBg: TK.criticalTint,
   amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint,
 }
+const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
+const uid = () => Math.random().toString(36).slice(2, 9)
 
-interface Draft { amount: string; billDate: string; billNo: string; vendor: string; remark: string; supportingRemark: string; bills: File[]; supporting: File[] }
-const blankDraft = (): Draft => ({ amount: '', billDate: '', billNo: '', vendor: '', remark: '', supportingRemark: '', bills: [], supporting: [] })
+// One bill being drafted in the uploader. `code` picks the flexi component (bill type).
+interface Frame { id: string; code: string; amount: string; billNo: string; billDate: string; vendor: string; files: File[] }
+const blankFrame = (code = ''): Frame => ({ id: uid(), code, amount: '', billNo: '', billDate: '', vendor: '', files: [] })
 
 // A single submitted claim (for the History drawer).
 interface HistItem { id: string; component_code: string; claim_amount: number; bill_date: string | null; bill_no: string | null; agency_name: string | null; vendor_desc: string | null; remark: string | null; status: string; rejection_reason: string | null; submitted_at: string }
@@ -62,36 +67,115 @@ function HistoryDrawer({ label, items, onClose }: { label: string; items: HistIt
   )
 }
 
-function FileChip({ file, onRemove }: { file: File; onRemove: () => void }) {
-  const ext = file.name.split('.').pop()?.toUpperCase() || ''
-  const cols: Record<string, string> = { PDF: V.red, JPG: V.amber, JPEG: V.amber, PNG: V.green, ZIP: V.purple, DOC: TK.info, DOCX: TK.info, XLS: V.green, XLSX: V.green }
+// A file thumbnail: a real image preview for photos, a coloured extension tile for docs.
+const EXT_COL: Record<string, string> = { PDF: V.red, JPG: V.amber, JPEG: V.amber, PNG: V.green, ZIP: V.purple, DOC: TK.info, DOCX: TK.info, XLS: V.green, XLSX: V.green }
+function FileThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => {
+    if (!file.type.startsWith('image/')) return
+    const u = URL.createObjectURL(file); setUrl(u)
+    return () => URL.revokeObjectURL(u)
+  }, [file])
+  const ext = file.name.split('.').pop()?.toUpperCase() || '?'
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 10, color: V.muted, margin: 2, background: TK.sunken }}>
-      <span style={{ color: cols[ext] || V.muted, fontWeight: 700 }}>{ext}</span>
-      {file.name.length > 20 ? file.name.slice(0, 18) + '…' : file.name}
-      <span style={{ cursor: 'pointer', color: V.red, marginLeft: 2 }} onClick={onRemove}>×</span>
-    </span>
-  )
-}
-function UploadZone({ onFiles, label, sub }: { onFiles: (f: File[]) => void; label: string; sub?: string }) {
-  const ref = useRef<HTMLInputElement>(null)
-  return (
-    <div style={{ border: `1px dashed ${V.border}`, borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 6 }} onClick={() => ref.current?.click()}>
-      <span style={{ fontSize: 14, color: V.muted }}></span>
-      <div><div style={{ fontSize: 12, color: V.muted }}>{label}</div>{sub && <div style={{ fontSize: 10, color: V.muted }}>{sub}</div>}</div>
-      <input ref={ref} type="file" accept={ACCEPTED_TYPES} multiple style={{ display: 'none' }} onChange={e => { if (e.target.files) onFiles(Array.from(e.target.files)); e.target.value = '' }} />
+    <div style={{ position: 'relative', width: 64, height: 64, borderRadius: 10, overflow: 'hidden', border: `1px solid ${V.border}`, background: TK.sunken, flexShrink: 0 }}
+      title={file.name}>
+      {url ? (
+        <img src={url} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3 }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: EXT_COL[ext] || V.muted }}>{ext}</span>
+          <span style={{ fontSize: 7.5, color: V.muted, padding: '0 4px', textAlign: 'center', lineHeight: 1.2, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</span>
+        </div>
+      )}
+      <button onClick={onRemove} title="Remove"
+        style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', border: 'none', background: 'rgba(15,23,42,0.72)', color: '#fff', fontSize: 12, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
     </div>
   )
 }
-function AIAssist({ files, amount, setAmount }: { files: File[]; amount: string; setAmount: (v: string) => void }) {
-  if (!files.length) return null
-  const aiAmt = files.length * 1400
+
+// One bill frame in the uploader. Defined OUTSIDE the parent so typing in a field
+// does not remount the frame and steal focus.
+function BillFrame({ frame, index, options, remaining, canRemove, onChange, onFiles, onRemoveFile, onRemove }: {
+  frame: Frame
+  index: number
+  options: { code: string; name: string; remaining: number }[]
+  remaining: number
+  canRemove: boolean
+  onChange: (patch: Partial<Frame>) => void
+  onFiles: (f: File[]) => void
+  onRemoveFile: (i: number) => void
+  onRemove: () => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  const over = frame.amount !== '' && remaining >= 0 && Number(frame.amount) > remaining
+  const inp: React.CSSProperties = {
+    padding: '9px 11px', border: `1px solid ${V.border}`, borderRadius: 9, fontSize: 13,
+    background: TK.sunken, color: V.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box', width: '100%',
+  }
+  const lbl: React.CSSProperties = { fontSize: 10, fontWeight: 600, color: V.muted, textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 4 }
   return (
-    <div style={{ background: V.purpleBg, border: `1px solid #C4B5FD`, borderRadius: 10, padding: '8px 10px', display: 'flex', gap: 8, alignItems: 'flex-start', marginTop: 6 }}>
-      <span style={{ fontSize: 13 }}></span>
-      <div style={{ flex: 1, fontSize: 11, color: V.purpleDark }}>
-        AI detected <b>{files.length} receipt{files.length > 1 ? 's' : ''}</b> · Suggested total <b>{inr(aiAmt)}</b>
-        {!amount && <button onClick={() => setAmount(String(aiAmt))} style={{ marginLeft: 8, fontSize: 10, padding: '2px 8px', border: `1px solid #C4B5FD`, borderRadius: 7, background: TK.surface, cursor: 'pointer', color: V.purpleDark }}>Auto-fill {inr(aiAmt)}</button>}
+    <div style={{ border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, background: V.card, position: 'relative', boxShadow: '0 1px 3px rgba(30,27,75,0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <span style={{ width: 22, height: 22, borderRadius: '50%', background: V.purpleBg, color: V.purpleDark, fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{index + 1}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: V.navy }}>Bill {index + 1}</span>
+        {frame.code && remaining >= 0 && <span style={{ marginLeft: 'auto', fontSize: 10, color: V.muted }}>Remaining limit <b style={{ color: V.navy }}>{inr(remaining)}</b></span>}
+        {canRemove && (
+          <button onClick={onRemove} title="Remove this bill"
+            style={{ marginLeft: frame.code ? 8 : 'auto', width: 24, height: 24, borderRadius: 7, border: `1px solid ${V.border}`, background: TK.surface, color: V.red, fontSize: 15, lineHeight: 1, cursor: 'pointer', flexShrink: 0 }}>×</button>
+        )}
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 10, marginBottom: 10 }}>
+        <div>
+          <label style={lbl}>Bill type</label>
+          <select style={{ ...inp, cursor: 'pointer' }} value={frame.code} onChange={e => onChange({ code: e.target.value })}>
+            <option value="">Select a bill type…</option>
+            {options.map(o => <option key={o.code} value={o.code}>{o.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={lbl}>Amount (₹)</label>
+          <input type="number" min={0} placeholder="0" style={{ ...inp, borderColor: over ? V.red : V.border }} value={frame.amount} onChange={e => onChange({ amount: e.target.value })} />
+        </div>
+      </div>
+      {over && <div style={{ fontSize: 10.5, color: V.red, marginTop: -4, marginBottom: 8 }}>⚠ Exceeds the remaining limit ({inr(remaining)})</div>}
+
+      {/* Upload area — multiple files or photos */}
+      <div
+        onClick={() => fileRef.current?.click()}
+        onDragOver={e => e.preventDefault()}
+        onDrop={e => { e.preventDefault(); if (e.dataTransfer.files?.length) onFiles(Array.from(e.dataTransfer.files)) }}
+        style={{
+          border: `1.5px dashed ${frame.files.length ? V.purple : V.border}`, borderRadius: 12,
+          padding: frame.files.length ? '12px' : '20px 12px', cursor: 'pointer',
+          background: frame.files.length ? V.purpleBg : TK.sunken, transition: 'all .15s',
+        }}>
+        {frame.files.length === 0 ? (
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 22, marginBottom: 4 }}>📎</div>
+            <div style={{ fontSize: 12.5, fontWeight: 600, color: V.purpleDark }}>Upload bills — tap to choose photos or files</div>
+            <div style={{ fontSize: 10.5, color: V.muted, marginTop: 2 }}>Multiple allowed · JPG PNG PDF WORD EXCEL ZIP</div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }} onClick={e => e.stopPropagation()}>
+              {frame.files.map((f, i) => <FileThumb key={i} file={f} onRemove={() => onRemoveFile(i)} />)}
+              <div style={{ width: 64, height: 64, borderRadius: 10, border: `1.5px dashed ${V.purple}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: V.purple, fontSize: 22, cursor: 'pointer', flexShrink: 0 }}
+                onClick={() => fileRef.current?.click()} title="Add more files">+</div>
+            </div>
+            <div style={{ fontSize: 10.5, color: V.purpleDark, marginTop: 8, fontWeight: 600 }}>{frame.files.length} file{frame.files.length > 1 ? 's' : ''} attached</div>
+          </div>
+        )}
+        <input ref={fileRef} type="file" accept={ACCEPTED_TYPES} multiple style={{ display: 'none' }}
+          onChange={e => { if (e.target.files) onFiles(Array.from(e.target.files)); e.target.value = '' }} />
+      </div>
+
+      {/* Optional details — kept light so the frame stays about "type + files" */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 8, marginTop: 10 }}>
+        <div><label style={lbl}>Bill no. <span style={{ textTransform: 'none', fontWeight: 400 }}>(optional)</span></label><input type="text" placeholder="INV-2026-001" style={{ ...inp, fontSize: 12, padding: '7px 9px' }} value={frame.billNo} onChange={e => onChange({ billNo: e.target.value })} /></div>
+        <div><label style={lbl}>Bill date</label><input type="date" max={new Date().toISOString().slice(0, 10)} style={{ ...inp, fontSize: 12, padding: '7px 9px' }} value={frame.billDate} onChange={e => onChange({ billDate: e.target.value })} /></div>
+        <div><label style={lbl}>Vendor</label><input type="text" placeholder="HPCL, Airtel…" style={{ ...inp, fontSize: 12, padding: '7px 9px' }} value={frame.vendor} onChange={e => onChange({ vendor: e.target.value })} /></div>
       </div>
     </div>
   )
@@ -104,8 +188,8 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
   const [slabLabel, setSlabLabel] = useState<string | null>(null)
   const [limits, setLimits] = useState<ComponentLimit[]>([])
   const [win, setWin] = useState<any>(null)
-  const [drafts, setDrafts] = useState<Record<string, Draft>>({})
-  const [submitting, setSubmitting] = useState<string | null>(null)
+  const [frames, setFrames] = useState<Frame[]>([blankFrame()])
+  const [submitting, setSubmitting] = useState(false)
   const [reqComp, setReqComp] = useState<string | null>(null)
   const [reqAmt, setReqAmt] = useState(''); const [reqReason, setReqReason] = useState('')
   const [toast, setToast] = useState('')
@@ -127,33 +211,58 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
   }, [employeeId])
   useEffect(() => { load() }, [load])
 
-  const setD = (code: string, patch: Partial<Draft>) => setDrafts(p => ({ ...p, [code]: { ...(p[code] || blankDraft()), ...patch } }))
-  const addFiles = (code: string, key: 'bills' | 'supporting', files: File[]) => setDrafts(p => { const prev = p[code] || blankDraft(); return { ...p, [code]: { ...prev, [key]: [...prev[key], ...files] } } })
-  const rmFile = (code: string, key: 'bills' | 'supporting', i: number) => setDrafts(p => { const prev = p[code]; if (!prev) return p; const arr = [...prev[key]]; arr.splice(i, 1); return { ...p, [code]: { ...prev, [key]: arr } } })
+  const remainingOf = (code: string) => {
+    const l = limits.find(x => x.code === code)
+    return l ? l.annual_limit - l.approved - l.pending : -1
+  }
+  // The bill types the uploader offers: everything that needs a bill and still has room.
+  const billTypeOptions = limits
+    .filter(l => !NO_INVOICE.includes(l.code) && (l.annual_limit - l.approved - l.pending) > 0)
+    .map(l => ({ code: l.code, name: l.name, remaining: l.annual_limit - l.approved - l.pending }))
 
-  async function submit(lim: ComponentLimit) {
-    const d = drafts[lim.code] || blankDraft()
-    const remaining = lim.annual_limit - lim.approved - lim.pending
-    if (!d.amount || Number(d.amount) <= 0) return showToast('Enter a claim amount')
-    if (Number(d.amount) > remaining) return showToast(`Amount exceeds remaining limit (${inr(remaining)})`)
-    if (!NO_INVOICE.includes(lim.code) && d.bills.length === 0) return showToast('At least one bill file is required')
-    if (!win || win.status !== 'OPEN') return showToast('Submission window is closed')
-    setSubmitting(lim.code)
-    const res = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-      action: 'SUBMIT', window_id: win.id, employee_id: employeeId, company_id: companyId,
-      component_code: lim.code, claim_amount: Number(d.amount), bill_date: d.billDate || null,
-      bill_no: d.billNo || null, agency_name: d.vendor || null,
-      vendor_desc: d.vendor || null, remark: d.remark || null, supporting_remark: d.supportingRemark || null,
-    }) }).then(r => r.json())
-    if (res.error || !res.claim_id) { setSubmitting(null); return showToast('Submit failed: ' + (res.error || 'unknown')) }
-    // Upload files (best-effort — needs the flexi-bills storage bucket).
-    for (const file of [...d.bills, ...d.supporting]) {
-      const path = `flexi-claims/${employeeId}/${res.claim_id}/${Date.now()}_${file.name}`
-      const { data: up } = await supabase.storage.from('flexi-bills').upload(path, file)
-      if (up) await supabase.from('flexi_claim_files').insert({ claim_id: res.claim_id, employee_id: employeeId, file_type: d.bills.includes(file) ? 'BILL' : 'SUPPORTING', file_name: file.name, file_url: path, file_size: file.size, mime_type: file.type })
+  const setFrame = (id: string, patch: Partial<Frame>) => setFrames(p => p.map(f => f.id === id ? { ...f, ...patch } : f))
+  const addFrameFiles = (id: string, files: File[]) => setFrames(p => p.map(f => f.id === id ? { ...f, files: [...f.files, ...files] } : f))
+  const removeFrameFile = (id: string, i: number) => setFrames(p => p.map(f => f.id === id ? { ...f, files: f.files.filter((_, j) => j !== i) } : f))
+  const addFrame = () => setFrames(p => [...p, blankFrame()])
+  const removeFrame = (id: string) => setFrames(p => p.length > 1 ? p.filter(f => f.id !== id) : p)
+
+  const isOpen = win?.status === 'OPEN'
+
+  async function submitAll() {
+    if (!isOpen) return showToast('Submission window is closed')
+    // Validate every frame the employee actually started.
+    const active = frames.filter(f => f.code || f.amount || f.files.length)
+    if (!active.length) return showToast('Add at least one bill')
+    for (const f of active) {
+      if (!f.code) return showToast(`Bill ${frames.indexOf(f) + 1}: choose a bill type`)
+      if (!f.amount || Number(f.amount) <= 0) return showToast(`Bill ${frames.indexOf(f) + 1}: enter an amount`)
+      const rem = remainingOf(f.code)
+      if (rem >= 0 && Number(f.amount) > rem) return showToast(`Bill ${frames.indexOf(f) + 1}: amount exceeds the remaining limit (${inr(rem)})`)
+      if (f.files.length === 0) return showToast(`Bill ${frames.indexOf(f) + 1}: attach at least one file`)
     }
-    setSubmitting(null); setD(lim.code, blankDraft()); load()
-    showToast(`${lim.name} claim submitted · pending HR approval`)
+
+    setSubmitting(true)
+    let ok = 0
+    const fails: string[] = []
+    for (const f of active) {
+      const res = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+        action: 'SUBMIT', window_id: win.id, employee_id: employeeId, company_id: companyId,
+        component_code: f.code, claim_amount: Number(f.amount), bill_date: f.billDate || null,
+        bill_no: f.billNo || null, agency_name: f.vendor || null, vendor_desc: f.vendor || null,
+      }) }).then(r => r.json()).catch(e => ({ error: e.message }))
+      if (res.error || !res.claim_id) { fails.push(`${f.code}: ${res.error || 'failed'}`); continue }
+      for (const file of f.files) {
+        const path = `flexi-claims/${employeeId}/${res.claim_id}/${Date.now()}_${file.name}`
+        const { data: up } = await supabase.storage.from('flexi-bills').upload(path, file)
+        if (up) await supabase.from('flexi_claim_files').insert({ claim_id: res.claim_id, employee_id: employeeId, file_type: 'BILL', file_name: file.name, file_url: path, file_size: file.size, mime_type: file.type })
+      }
+      ok++
+    }
+    setSubmitting(false)
+    setFrames([blankFrame()])
+    load()
+    if (fails.length) showToast(`${ok} submitted · ${fails.length} failed (${fails[0]})`)
+    else showToast(`${ok} bill${ok > 1 ? 's' : ''} submitted · pending HR approval`)
   }
 
   async function sendLimitRequest() {
@@ -166,7 +275,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
 
   const card: React.CSSProperties = { background: V.card, border: `1px solid ${V.border}`, borderRadius: 14, padding: 16, marginBottom: 12 }
   const totals = limits.reduce((a, l) => ({ limit: a.limit + l.annual_limit, approved: a.approved + l.approved, pending: a.pending + l.pending, balance: a.balance + (l.annual_limit - l.approved) }), { limit: 0, approved: 0, pending: 0, balance: 0 })
-  const isOpen = win?.status === 'OPEN'
+  const activeCount = frames.filter(f => f.code && f.amount && f.files.length).length
 
   if (status === 'loading') return <div style={{ padding: 20, color: V.muted, fontSize: 13 }}>Loading flexi claims…</div>
   if (status === 'nopolicy') return (
@@ -177,14 +286,14 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
   )
 
   return (
-    <div>
+    <div style={{ fontFamily: font }}>
       <div style={{ fontSize: 17, fontWeight: 700, color: V.navy, marginBottom: 2 }}>Flexi Reimbursement</div>
       <div style={{ fontSize: 12, color: V.muted, marginBottom: 12 }}>Submit monthly bills for your declared flexi components · {regime === 'old' ? 'Old' : 'New'} regime{slabLabel ? ` · Slab ${slabLabel}` : ''}</div>
 
       {/* Window banner */}
       {win ? (
         <div style={{ background: isOpen ? V.greenBg : V.redBg, border: `1px solid ${isOpen ? '#BBF7D0' : '#FCA5A5'}`, borderRadius: 10, padding: '10px 14px', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 16 }}>{isOpen ? '' : ''}</span>
+          <span style={{ fontSize: 16 }}>{isOpen ? '🟢' : '🔴'}</span>
           <div style={{ flex: 1, fontSize: 12, color: isOpen ? '#065F46' : '#991B1B' }}>
             {isOpen ? <>Window open · submit bills by <b>{new Date(win.closes_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</b> · {Math.max(0, Math.ceil((new Date(win.closes_at).getTime() - Date.now()) / 86400000))} days left</> : 'Window closed · bills cannot be submitted right now'}
           </div>
@@ -198,8 +307,55 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
         ))}
       </div>
 
+      {/* ── Bill uploader ─────────────────────────────────────────────── */}
+      {isOpen && billTypeOptions.length > 0 && (
+        <div style={{ borderRadius: 16, marginBottom: 16, overflow: 'hidden', border: `1px solid ${V.border}`, boxShadow: '0 2px 10px rgba(124,58,237,0.08)' }}>
+          <div style={{ background: `linear-gradient(120deg, ${V.purple}, ${V.purpleDark})`, padding: '14px 18px', color: TK.onAccent }}>
+            <div style={{ fontSize: 15, fontWeight: 800 }}>Upload your bills</div>
+            <div style={{ fontSize: 11.5, opacity: 0.9, marginTop: 1 }}>Pick a bill type, enter the amount, attach photos or files. Add as many bills as you like.</div>
+          </div>
+          <div style={{ padding: 16, background: TK.canvas, display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {frames.map((f, i) => (
+              <BillFrame
+                key={f.id}
+                frame={f}
+                index={i}
+                options={billTypeOptions}
+                remaining={f.code ? remainingOf(f.code) : -1}
+                canRemove={frames.length > 1}
+                onChange={patch => setFrame(f.id, patch)}
+                onFiles={files => addFrameFiles(f.id, files)}
+                onRemoveFile={idx => removeFrameFile(f.id, idx)}
+                onRemove={() => removeFrame(f.id)}
+              />
+            ))}
+
+            {/* Add another frame */}
+            <button onClick={addFrame}
+              style={{ border: `1.5px dashed ${V.purple}`, borderRadius: 12, padding: '12px', background: V.purpleBg, color: V.purpleDark, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: font, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+              <span style={{ fontSize: 17 }}>＋</span> Add another bill
+            </button>
+
+            {/* Submit all */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: `1px solid ${V.border}`, paddingTop: 12 }}>
+              <div style={{ flex: 1, fontSize: 11.5, color: V.muted }}>
+                {activeCount > 0 ? <><b style={{ color: V.navy }}>{activeCount}</b> bill{activeCount > 1 ? 's' : ''} ready to submit</> : 'Fill a bill type, amount and file to submit'}
+              </div>
+              <button disabled={submitting || activeCount === 0} onClick={submitAll}
+                style={{ padding: '11px 22px', borderRadius: 11, border: 'none', fontSize: 13, fontWeight: 700, fontFamily: font,
+                  background: submitting || activeCount === 0 ? TK.brandTint : V.purple, color: TK.onAccent,
+                  cursor: submitting || activeCount === 0 ? 'not-allowed' : 'pointer',
+                  boxShadow: submitting || activeCount === 0 ? 'none' : '0 3px 10px rgba(124,58,237,0.3)' }}>
+                {submitting ? 'Submitting…' : `Submit ${activeCount || ''} bill${activeCount === 1 ? '' : 's'}`.replace('  ', ' ')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Your entitlements (limits + history) ──────────────────────── */}
+      <div style={{ fontSize: 12, fontWeight: 700, color: V.muted, textTransform: 'uppercase', letterSpacing: '.05em', margin: '4px 0 8px' }}>Your entitlements</div>
       {limits.map(lim => {
-        const d = drafts[lim.code] || blankDraft()
         const noInv = NO_INVOICE.includes(lim.code)
         const remaining = lim.annual_limit - lim.approved - lim.pending
         const usedPct = lim.annual_limit > 0 ? Math.min(100, Math.round((lim.approved / lim.annual_limit) * 100)) : 0
@@ -226,36 +382,14 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
 
             {noInv && <div style={{ marginTop: 10, fontSize: 11, color: V.muted, background: TK.sunken, borderRadius: 7, padding: '8px 10px' }}>Auto-claimed monthly — no bill submission required. Payroll processes this automatically.</div>}
 
-            {!exhausted && isOpen && !noInv && (
-              <div style={{ marginTop: 12, borderTop: `1px solid ${V.border}`, paddingTop: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 8 }}>Submit bill</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Amount (₹)</label><input type="number" min={0} style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, width: '100%', boxSizing: 'border-box' }} value={d.amount} onChange={e => setD(lim.code, { amount: e.target.value })} /></div>
-                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Bill date</label><input type="date" max={new Date().toISOString().slice(0, 10)} style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, width: '100%', boxSizing: 'border-box' }} value={d.billDate} onChange={e => setD(lim.code, { billDate: e.target.value })} /></div>
-                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Bill / Invoice no.</label><input type="text" placeholder="INV-2026-001" style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, width: '100%', boxSizing: 'border-box' }} value={d.billNo} onChange={e => setD(lim.code, { billNo: e.target.value })} /></div>
-                  <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Agency / Vendor name</label><input type="text" placeholder="HPCL, Airtel…" style={{ padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, width: '100%', boxSizing: 'border-box' }} value={d.vendor} onChange={e => setD(lim.code, { vendor: e.target.value })} /></div>
-                </div>
-                <UploadZone label="Upload bills" sub="ZIP PNG JPG PDF WORD EXCEL · max 10 files" onFiles={f => addFiles(lim.code, 'bills', f)} />
-                <div>{d.bills.map((f, i) => <FileChip key={i} file={f} onRemove={() => rmFile(lim.code, 'bills', i)} />)}</div>
-                <AIAssist files={d.bills} amount={d.amount} setAmount={v => setD(lim.code, { amount: v })} />
-                <div style={{ marginTop: 10, background: TK.sunken, borderRadius: 10, padding: '10px 12px' }}>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: V.muted, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '.04em' }}>Other supporting docs</div>
-                  <textarea placeholder="Remark (log book, lease copy…)" rows={2} style={{ width: '100%', fontSize: 11, padding: '6px 8px', border: `1px solid ${V.border}`, borderRadius: 7, resize: 'none', boxSizing: 'border-box', background: TK.surface, marginBottom: 6, fontFamily: 'inherit' }} value={d.supportingRemark} onChange={e => setD(lim.code, { supportingRemark: e.target.value })} />
-                  <UploadZone label="Attach supporting documents" sub="Any format" onFiles={f => addFiles(lim.code, 'supporting', f)} />
-                  <div>{d.supporting.map((f, i) => <FileChip key={i} file={f} onRemove={() => rmFile(lim.code, 'supporting', i)} />)}</div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                  <button disabled={!!submitting} onClick={() => submit(lim)} style={{ padding: '8px 16px', background: V.purple, color: TK.onAccent, border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 12, fontWeight: 600, opacity: submitting === lim.code ? .7 : 1 }}>{submitting === lim.code ? 'Submitting…' : 'Submit bill'}</button>
-                  <button onClick={() => setReqComp(lim.code)} style={{ padding: '7px 12px', background: TK.surface, color: V.navy, border: `1px solid ${V.border}`, borderRadius: 10, cursor: 'pointer', fontSize: 12 }}>Request limit increase</button>
-                </div>
-              </div>
-            )}
-
             {exhausted && !noInv && (
               <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center', background: V.amberBg, border: `1px solid #FDE68A`, borderRadius: 10, padding: '8px 12px' }}>
                 <span style={{ fontSize: 12, color: V.amber, flex: 1 }}>Annual limit reached. You can request an increase from Payroll.</span>
                 <button onClick={() => setReqComp(lim.code)} style={{ padding: '5px 12px', background: V.amber, color: TK.onAccent, border: 'none', borderRadius: 7, cursor: 'pointer', fontSize: 11 }}>Request increase</button>
               </div>
+            )}
+            {!exhausted && !noInv && (
+              <button onClick={() => setReqComp(lim.code)} style={{ marginTop: 10, padding: '6px 12px', background: TK.surface, color: V.navy, border: `1px solid ${V.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 11.5, fontFamily: font }}>Request limit increase</button>
             )}
           </div>
         )
@@ -263,7 +397,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
 
       {reqComp && (
         <div style={{ background: V.amberBg, border: `1px solid #FDE68A`, borderRadius: 14, padding: 16, marginTop: 8 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: V.amber, marginBottom: 10 }}>Request limit increase — {reqComp}</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: V.amber, marginBottom: 10 }}>Request limit increase — {limits.find(l => l.code === reqComp)?.name || reqComp}</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
             <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Requested annual limit (₹)</label><input type="number" style={{ padding: '7px 8px', border: `1px solid #FDE68A`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqAmt} onChange={e => setReqAmt(e.target.value)} /></div>
             <div><label style={{ fontSize: 10, color: V.muted, display: 'block', marginBottom: 3 }}>Reason (mandatory)</label><input type="text" placeholder="Official travel increased…" style={{ padding: '7px 8px', border: `1px solid #FDE68A`, borderRadius: 7, fontSize: 12, width: '100%', boxSizing: 'border-box', background: TK.surface }} value={reqReason} onChange={e => setReqReason(e.target.value)} /></div>
