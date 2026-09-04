@@ -18,6 +18,7 @@ import PlayTogether from '@/components/funzone/PlayTogether'
 // One copy of the questions and the card faces, shared with the live modes.
 // Both were duplicated here and both drifted — see the notes in games.ts.
 import { QUIZ, MEM_FACES } from '@/lib/funzone/games'
+import { TicTacToeVsBot, MemoryVsBot, TriviaVsBot } from '@/components/funzone/VsComputer'
 
 const F = {
   navy:TK.ink, purple:TK.brand, purpleDark:TK.brandDeep, purpleSoft: TK.brandTint,
@@ -30,9 +31,9 @@ const gameTitle: React.CSSProperties = { fontSize:18, fontWeight:700, marginBott
 const gameSub: React.CSSProperties = { fontSize:12, color:F.muted, marginBottom:18 }
 
 const GAMES = [
-  { k:'ttt',   icon:'⭕', name:'Tic-Tac-Toe',    desc:'Classic 2-player, take turns on this screen', badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
-  { k:'mem',   icon:'🧩', name:'Memory Match',   desc:'Flip cards, find all the pairs',              badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
-  { k:'quiz',  icon:'💡', name:'EZER Trivia',    desc:'How well do you know company policy?',        badge:'Quiz',   bg:F.blueBg,     fg:F.blue },
+  { k:'ttt',   icon:'⭕', name:'Tic-Tac-Toe',    desc:'Against the computer, or a colleague', badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
+  { k:'mem',   icon:'🧩', name:'Memory Match',   desc:'Find the pairs — alone or head to head',              badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
+  { k:'quiz',  icon:'💡', name:'EZER Trivia',    desc:'Company policy, solo or against somebody',        badge:'Quiz',   bg:F.blueBg,     fg:F.blue },
   { k:'wheel', icon:'🎡', name:'Spin the Wheel', desc:'Daily spin — win a fun shoutout or a treat',  badge:'Social', bg:F.pinkBg,     fg:F.pink },
 ]
 
@@ -236,51 +237,125 @@ function SpinWheel({ onBack }: { onBack: () => void }) {
  * any caller that has not got one — playing together is what needs to know
  * who you are, not Memory Match.
  */
+/**
+ * The hub, and the mode each game is played in.
+ *
+ * Every game now asks HOW before it starts, rather than one card meaning
+ * "solo" and a separate card meaning "with somebody". Which modes exist
+ * differs per game and the screen says so: the wheel is a solo spin and
+ * there is nothing for a second player or a bot to do, so it opens straight
+ * into the game instead of offering a choice it cannot honour.
+ *
+ * `employeeId` is optional so the solo and bot modes still work for a caller
+ * that has not got one — only inviting a colleague needs to know who you are.
+ */
+type Mode = 'solo' | 'bot' | 'live'
+
+interface ModeDef { k: Mode; label: string; hint: string }
+
+const MODES: Record<string, ModeDef[]> = {
+  ttt: [
+    { k: 'bot',  label: 'Against the computer', hint: 'Three difficulties. Hard is unbeatable — a draw is the best there is.' },
+    { k: 'solo', label: 'Two players, one screen', hint: 'Pass the device back and forth.' },
+    { k: 'live', label: 'With a colleague', hint: 'Invite somebody and play on two screens.' },
+  ],
+  mem: [
+    { k: 'bot',  label: 'Against the computer', hint: 'It remembers what it has seen — more of it on harder settings.' },
+    { k: 'solo', label: 'On your own', hint: 'Find all eight pairs. Nothing is timed.' },
+    { k: 'live', label: 'With a colleague', hint: 'Take turns on two screens.' },
+  ],
+  quiz: [
+    { k: 'bot',  label: 'Against the computer', hint: 'It answers too, and it does not always know.' },
+    { k: 'solo', label: 'On your own', hint: 'Four questions, no opponent.' },
+    { k: 'live', label: 'With a colleague', hint: 'Head to head on the same questions.' },
+  ],
+  wheel: [],
+}
+
 export default function FunZone({ employeeId }: { employeeId?: string }) {
   const [game, setGame] = useState<string | null>(null)
-  const back = () => setGame(null)
+  const [mode, setMode] = useState<Mode | null>(null)
+  const back = () => { setGame(null); setMode(null) }
+  const backToModes = () => setMode(null)
 
-  if (game === 'together' && employeeId) return (
-    <div>
-      <BackBtn onClick={back} />
-      <div style={gameTitle}>Play together</div>
-      <div style={gameSub}>Invite a colleague and play on two screens, live.</div>
-      <PlayTogether meId={employeeId} />
-    </div>
-  )
-  if (game === 'ttt')   return <TicTacToe onBack={back} />
-  if (game === 'mem')   return <MemoryMatch onBack={back} />
-  if (game === 'quiz')  return <Trivia onBack={back} />
+  // The wheel has no modes — opening it opens the game.
   if (game === 'wheel') return <SpinWheel onBack={back} />
+
+  if (game && !mode) {
+    const g = GAMES.find(x => x.k === game)
+    const opts = (MODES[game] ?? []).filter(m => m.k !== 'live' || employeeId)
+    return (
+      <div style={panel}>
+        <BackBtn onClick={back} />
+        <div style={gameTitle}>{g?.icon} {g?.name}</div>
+        <div style={gameSub}>How do you want to play?</div>
+        <div style={{ display: 'grid', gap: 10 }}>
+          {opts.map(m => (
+            <button key={m.k} onClick={() => setMode(m.k)}
+              style={{ textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer',
+                       border: `1px solid ${TK.line}`, background: TK.surface,
+                       borderRadius: 12, padding: '13px 16px', color: F.navy }}>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{m.label}</div>
+              <div style={{ fontSize: 12, color: F.muted, marginTop: 3, lineHeight: 1.5 }}>
+                {m.hint}
+              </div>
+            </button>
+          ))}
+          {!employeeId && (
+            <div style={{ fontSize: 11, color: F.muted, lineHeight: 1.6 }}>
+              Playing with a colleague needs you to be signed in to ESS.
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (game && mode) {
+    const wrap = (node: React.ReactNode) => (
+      <div>
+        <BackBtn onClick={backToModes} />
+        {node}
+      </div>
+    )
+    if (mode === 'live' && employeeId) {
+      return wrap(
+        <div>
+          <div style={gameTitle}>Play together</div>
+          <div style={gameSub}>Invite a colleague and play on two screens, live.</div>
+          <PlayTogether meId={employeeId} />
+        </div>
+      )
+    }
+    if (mode === 'bot') {
+      if (game === 'ttt')  return wrap(<TicTacToeVsBot />)
+      if (game === 'mem')  return wrap(<MemoryVsBot />)
+      if (game === 'quiz') return wrap(<TriviaVsBot />)
+    }
+    if (game === 'ttt')  return <TicTacToe onBack={backToModes} />
+    if (game === 'mem')  return <MemoryMatch onBack={backToModes} />
+    if (game === 'quiz') return <Trivia onBack={backToModes} />
+  }
 
   return (
     <div>
-      <div style={{ fontSize:13, color:F.muted, marginBottom:16 }}>
-        Take a break. The four games below are yours alone and nothing is saved
-        — play together keeps a record of who played whom, and nothing else.
+      <div style={{ fontSize: 13, color: F.muted, marginBottom: 16 }}>
+        Take a break. Play on your own, against the computer, or with a colleague
+        on two screens — nothing here is scored towards anything.
       </div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:14 }}>
-        {employeeId && (
-          <button onClick={() => setGame('together')}
-            style={{ ...panel, padding:20, cursor:'pointer', textAlign:'left',
-                     fontFamily:'inherit', color:F.navy,
-                     border:`2px solid ${TK.brand}` }}>
-            <div style={{ fontSize:32, marginBottom:8 }}>&#127918;</div>
-            <div style={{ fontWeight:700, fontSize:15, marginBottom:3 }}>Play together</div>
-            <div style={{ fontSize:12, color:F.muted }}>
-              Invite a colleague and play live, on two screens
-            </div>
-            <span style={{ display:'inline-block', fontSize:10, fontWeight:700,
-                           padding:'2px 8px', borderRadius:999, marginTop:8,
-                           background:TK.brandTint, color:TK.brandDeep }}>Live</span>
-          </button>
-        )}
+      <div style={{ display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14 }}>
         {GAMES.map(g => (
-          <button key={g.k} onClick={() => setGame(g.k)} style={{ ...panel, padding:20, cursor:'pointer', border:`2px solid ${F.border}`, textAlign:'left', fontFamily:'inherit', color:F.navy }}>
-            <div style={{ fontSize:32, marginBottom:8 }}>{g.icon}</div>
-            <div style={{ fontWeight:700, fontSize:15, marginBottom:3 }}>{g.name}</div>
-            <div style={{ fontSize:12, color:F.muted }}>{g.desc}</div>
-            <span style={{ display:'inline-block', fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:999, marginTop:8, background:g.bg, color:g.fg }}>{g.badge}</span>
+          <button key={g.k} onClick={() => setGame(g.k)}
+            style={{ ...panel, padding: 20, cursor: 'pointer',
+                     border: `2px solid ${F.border}`, textAlign: 'left',
+                     fontFamily: 'inherit', color: F.navy }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>{g.icon}</div>
+            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 3 }}>{g.name}</div>
+            <div style={{ fontSize: 12, color: F.muted }}>{g.desc}</div>
+            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700,
+                           padding: '2px 8px', borderRadius: 999, marginTop: 8,
+                           background: g.bg, color: g.fg }}>{g.badge}</span>
           </button>
         ))}
       </div>

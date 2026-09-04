@@ -103,13 +103,27 @@ def click_text(label):
       return 'ok';
     }})()""")
 
-def open_game(name):
-    """Back to the hub, then open the card whose text contains `name`."""
+def open_game(name, mode=None):
+    """Hub -> the game card -> (if asked) the mode.
+
+       Every game except the wheel now shows a mode screen first, so a test
+       that clicked the card and started asserting on a board found a list of
+       modes instead."""
     goto()
-    return js(f"""(() => {{
+    r = js(f"""(() => {{
       const b = [...document.querySelectorAll('button')]
         .find(x => x.innerText.includes({json.dumps(name)}));
       if (!b) return 'not found';
+      b.dispatchEvent(new MouseEvent('click', {{bubbles:true}}));
+      return 'ok';
+    }})()""")
+    if r != 'ok' or mode is None:
+        return r
+    time.sleep(.6)
+    return js(f"""(() => {{
+      const b = [...document.querySelectorAll('button')]
+        .find(x => x.innerText.includes({json.dumps(mode)}));
+      if (!b) return 'no mode';
       b.dispatchEvent(new MouseEvent('click', {{bubbles:true}}));
       return 'ok';
     }})()""")
@@ -122,16 +136,63 @@ body = text() or ''
 check('the harness rendered', 'Fun Zone' in body or 'Take a break' in body, body[:40])
 for name in ['Tic-Tac-Toe', 'Memory Match', 'EZER Trivia', 'Spin the Wheel']:
     check(f'card present: {name}', name in body)
-check('play together is offered when an employee id is known',
-      'Play together' in body)
+# Playing together used to be its own hub card. It is now a MODE inside each
+# game, which is the point of the mode screen — so the hub no longer mentions
+# it and this checks it is reachable where it actually lives.
+check('the hub lists games, not modes', 'Play together' not in body)
 icons = js("""[...document.querySelectorAll('button')]
   .map(b => (b.innerText||'').trim().split('\\n')[0]).filter(s => s.length && s.length <= 3)""")
 check('the hub cards carry an icon, not an empty span',
       isinstance(icons, list) and len(icons) >= 4, f'{len(icons or [])} icons')
 
+# ── the mode screen ──────────────────────────────────────────────────────
+sec('Choosing a mode')
+open_game('Tic-Tac-Toe'); time.sleep(.8)
+body = text() or ''
+check('a game asks how you want to play', 'How do you want to play' in body)
+for label in ['Against the computer', 'Two players, one screen', 'With a colleague']:
+    check(f'mode offered: {label}', label in body)
+check('the modes explain themselves', 'unbeatable' in body.lower(), '')
+
+live = open_game('Memory Match', 'With a colleague'); time.sleep(1.2)
+check('the live mode is reachable from inside a game',
+      'Ask somebody to play' in (text() or '') or 'not switched on yet' in (text() or ''),
+      str(live))
+
+open_game('Spin the Wheel'); time.sleep(.8)
+body = text() or ''
+check('the wheel skips the mode screen (it has only one)',
+      'How do you want to play' not in body and 'Spin' in body)
+
+# ── against the computer ─────────────────────────────────────────────────
+sec('Against the computer')
+open_game('Tic-Tac-Toe', 'Against the computer'); time.sleep(1)
+body = text() or ''
+check('the bot game opened', 'You are X' in body, body[:40])
+check('a difficulty can be chosen',
+      all(d in body for d in ['Easy', 'Medium', 'Hard']))
+n = board_count(9)
+check('nine squares', n == 9, f'{n}')
+board_click(9, 0); time.sleep(2.6)     # my move, then the bot's pause
+marks = board_texts(9) or []
+check('my mark is placed', marks and marks[0] == 'X', str(marks[:3]))
+check('THE COMPUTER REPLIES', marks.count('O') == 1,
+      f"{marks.count('O')} O on the board")
+check('and it played a legal square', marks.count('X') == 1)
+
+open_game('EZER Trivia', 'Against the computer'); time.sleep(1)
+body = text() or ''
+check('trivia against the computer opened', 'Computer' in body, body[:40])
+first = js('''(() => { const b=[...document.querySelectorAll('button')]
+  .find(x => x.style.display === 'block');
+  if(!b) return 'none'; b.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+  return 'ok'; })()''')
+time.sleep(3.2)
+check('the computer answers too', 'computer' in (text() or '').lower(), str(first))
+
 # ── tic-tac-toe ──────────────────────────────────────────────────────────
-sec('Tic-Tac-Toe')
-open_game('Tic-Tac-Toe'); time.sleep(1)
+sec('Tic-Tac-Toe (two players)')
+open_game('Tic-Tac-Toe', 'Two players, one screen'); time.sleep(1)
 check('the board opened', 'Tic-Tac-Toe' in (text() or ''))
 n = board_count(9)
 check('nine squares', n == 9, f'{n}')
@@ -166,7 +227,7 @@ check('New Game clears the board',
 
 # ── memory match ─────────────────────────────────────────────────────────
 sec('Memory Match')
-open_game('Memory Match'); time.sleep(1.2)
+open_game('Memory Match', 'On your own'); time.sleep(1.2)
 n = board_count(16)
 check('sixteen cards', n == 16, f'{n}')
 faces = board_texts(16)
@@ -240,7 +301,7 @@ else:
 
 # ── trivia ───────────────────────────────────────────────────────────────
 sec('EZER Trivia')
-open_game('EZER Trivia'); time.sleep(1)
+open_game('EZER Trivia', 'On your own'); time.sleep(1)
 body = text() or ''
 check('the first question shows', 'Q1.' in body, body.split('\n')[3][:44] if body else '')
 check('the score starts at zero', 'Score: 0 / 4' in body)
