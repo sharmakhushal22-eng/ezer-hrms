@@ -40,6 +40,7 @@ import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
 import WallOfFame from '@/components/ess/WallOfFame'
+import Profile360 from '@/components/profile/Profile360'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
@@ -3579,7 +3580,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     if (section.status === 'soon' && section.features) return <FeatureGrid features={section.features} />
     switch (view) {
       case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
-      case 'profile':       return <Profile emp={emp} notify={notify} />
+      // Profile 360. The portal owner's code is passed, not the viewer's —
+      // the route resolves WHO IS LOOKING from the session and masks
+      // accordingly, so an admin opening a colleague's portal sees that
+      // colleague's profile with a colleague's visibility, not their own.
+      case 'profile':       return <Profile360 code={emp.emp_code} />
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
       // The inbox reports its own unread straight into the bell's state, so
       // the badge and the screen can never show two different numbers.
