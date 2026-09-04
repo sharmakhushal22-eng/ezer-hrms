@@ -15,6 +15,9 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 import PlayTogether from '@/components/funzone/PlayTogether'
+// One copy of the questions and the card faces, shared with the live modes.
+// Both were duplicated here and both drifted — see the notes in games.ts.
+import { QUIZ, MEM_FACES } from '@/lib/funzone/games'
 
 const F = {
   navy:TK.ink, purple:TK.brand, purpleDark:TK.brandDeep, purpleSoft: TK.brandTint,
@@ -81,14 +84,10 @@ function TicTacToe({ onBack }: { onBack: () => void }) {
 
 // ── Memory Match ────────────────────────────────────────────────
 // Eight DISTINCT faces. They were eight empty strings, which meant
-// cards[a] === cards[b] was '' === '' for any two cards: every first pair
-// matched and the game was won in eight flips. A blank deck also renders as
-// sixteen blank tiles, so it looked broken as well as being broken.
-const MEM_EMOJIS = ['🍕', '🎧', '🚀', '🌵', '🎲', '⚓', '🧩', '🎸']
 // Fisher–Yates. sort(() => Math.random() - 0.5) — what the prototype used — is not a
 // uniform shuffle; some layouts come up far more often than others.
 function shuffleDeck(): string[] {
-  const d = [...MEM_EMOJIS, ...MEM_EMOJIS]
+  const d = [...MEM_FACES, ...MEM_FACES]
   for (let i = d.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [d[i], d[j]] = [d[j], d[i]] }
   return d
 }
@@ -124,7 +123,7 @@ function MemoryMatch({ onBack }: { onBack: () => void }) {
     <div style={panel}>
       <BackBtn onClick={onBack} />
       <div style={gameTitle}>Memory Match</div>
-      <div style={gameSub}>{pairs === MEM_EMOJIS.length ? 'You found them all!' : `Find all 8 pairs — ${pairs} found`}</div>
+      <div style={gameSub}>{pairs === MEM_FACES.length ? 'You found them all!' : `Find all 8 pairs — ${pairs} found`}</div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(4,70px)', gap:8, margin:'0 auto 16px', justifyContent:'center' }}>
         {cards.map((emoji, i) => {
           const isUp = flipped.includes(i), isDone = matched.includes(i)
@@ -143,12 +142,6 @@ function MemoryMatch({ onBack }: { onBack: () => void }) {
 // ── EZER Trivia ─────────────────────────────────────────────────
 // Questions are hardcoded (brief §5). Making them HR-editable is an open question —
 // it would need a table and a config screen.
-const QUIZ: { q: string; opts: string[]; correct: number }[] = [
-  { q: "EZER's mission stands for Empower, Zero Risk, Efficient, and…?", opts:['Retain Top Talent','Reduce Turnover','Report Automation'], correct:0 },
-  { q: 'Which financial year runs April to March in India?',             opts:['Calendar Year','Financial Year','Fiscal Quarter'],       correct:1 },
-  { q: 'What does PT stand for in Indian payroll?',                      opts:['Personal Tax','Professional Tax','Provident Trust'],     correct:1 },
-  { q: 'LWF stands for Labour ___ Fund?',                                opts:['Welfare','Wages','Work'],                                correct:0 },
-]
 function Trivia({ onBack }: { onBack: () => void }) {
   const [idx, setIdx] = useState(0)
   const [score, setScore] = useState(0)

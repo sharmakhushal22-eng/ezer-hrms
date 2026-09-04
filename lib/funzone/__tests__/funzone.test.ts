@@ -10,7 +10,7 @@ import {
   boardFrom, outcome, canApply, apply, resultOf, other, EMPTY_BOARD,
   GAMES, LIVE_GAMES, gameByCode, type Move, type Cell,
   memDeck, memReplay, memCanApply, memApply, memResult, MEM_FACES, MEM_CARDS,
-  quizFor, quizReplay, quizCanApply, quizResult, shuffled, type MemTurn,
+  quizFor, quizReplay, quizCanApply, quizResult, shuffled, QUIZ, type MemTurn,
 } from '../games.ts'
 import {
   isPacket, reconcile, markFor, channelFor, isMine, reconcileList, sideFor,
@@ -519,4 +519,34 @@ test('sides are fixed by the session for these games too', () => {
 test('reconcileList follows the same longer-wins rule as reconcile', () => {
   assert.deepEqual(reconcileList([1], [1, 2]), [1, 2])
   assert.deepEqual(reconcileList([1, 2], [1]), [1, 2])
+})
+
+// ── one copy, not two ────────────────────────────────────────────────────
+
+test('the solo games use the SAME questions and faces as the live ones', () => {
+  // Both were duplicated in components/ess/FunZone.tsx, and within one
+  // sitting they drifted: the live quiz offered "Reward Teams" and
+  // "Provident Transfer" where the solo quiz offered "Report Automation" and
+  // "Provident Trust". Same questions, different wrong answers — the kind of
+  // difference nobody notices until two colleagues compare screens mid-game.
+  const src = readFileSync(
+    new URL('../../../components/ess/FunZone.tsx', import.meta.url), 'utf8')
+
+  assert.doesNotMatch(src, /^const QUIZ\b/m,
+    'FunZone must import QUIZ, not declare its own')
+  assert.doesNotMatch(src, /^const MEM_EMOJIS\b/m,
+    'FunZone must import the card faces, not declare its own')
+  assert.match(src, /import \{[^}]*QUIZ[^}]*\} from '@\/lib\/funzone\/games'/,
+    'the shared copy has to be the one it uses')
+})
+
+test('the quiz is answerable — every question has a correct option', () => {
+  for (const q of QUIZ) {
+    assert.ok(q.opts.length >= 2, `"${q.q}" needs at least two options`)
+    assert.ok(q.correct >= 0 && q.correct < q.opts.length,
+      `"${q.q}" has correct=${q.correct} but only ${q.opts.length} options`)
+    assert.equal(new Set(q.opts).size, q.opts.length,
+      `"${q.q}" repeats an option`)
+    for (const o of q.opts) assert.match(o, /\S/, `"${q.q}" has a blank option`)
+  }
 })

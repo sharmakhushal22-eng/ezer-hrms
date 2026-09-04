@@ -277,15 +277,23 @@ export function memResult(deck: string[], turns: MemTurn[]):
 
 export interface Question { q: string; opts: string[]; correct: number }
 
-/** The same four questions the solo game asks. Kept in one place so the two
- *  modes cannot drift into asking different things. */
+/**
+ * The four questions, for BOTH modes.
+ *
+ * components/ess/FunZone.tsx imports these rather than holding its own copy.
+ * It did hold one, and within a single sitting the two had drifted: the live
+ * quiz offered "Reward Teams" and "Provident Transfer" where the solo quiz
+ * offered "Report Automation" and "Provident Trust". Same questions, different
+ * wrong answers — which is the sort of difference nobody notices until two
+ * colleagues compare screens mid-game.
+ */
 export const QUIZ: Question[] = [
   { q: "EZER's mission stands for Empower, Zero Risk, Efficient, and…?",
-    opts: ['Retain Top Talent', 'Reduce Turnover', 'Reward Teams'], correct: 0 },
+    opts: ['Retain Top Talent', 'Reduce Turnover', 'Report Automation'], correct: 0 },
   { q: 'Which financial year runs April to March in India?',
     opts: ['Calendar Year', 'Financial Year', 'Fiscal Quarter'], correct: 1 },
   { q: 'What does PT stand for in Indian payroll?',
-    opts: ['Personal Tax', 'Professional Tax', 'Provident Transfer'], correct: 1 },
+    opts: ['Personal Tax', 'Professional Tax', 'Provident Trust'], correct: 1 },
   { q: 'LWF stands for Labour ___ Fund?',
     opts: ['Welfare', 'Wages', 'Work'], correct: 0 },
 ]
