@@ -51,6 +51,10 @@
 }
 .ezp .pcard > h3 { margin: 0 0 2px; font-size: 14px; font-weight: 700; color: var(--ez-ink); }
 .ezp .pcard > .sub { font-size: 12px; color: var(--ez-muted); margin-bottom: 14px; }
+/* .sub is also used deeper than a card's first child — under the nomination
+   meters and the movement note — so it needs a rule that does not depend on
+   position. The two above stay for the top-of-card spacing. */
+.ezp .sub { font-size: 12px; color: var(--ez-muted); }
 
 .ezp .grid { display: grid; gap: 10px; }
 .ezp .g3 { grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); }
@@ -187,4 +191,82 @@
 @media (max-width: 560px) {
   .ezp .pcard { padding: 14px; }
   .ezp .st { position: static; display: inline-block; margin-bottom: 5px; }
+}
+
+/* ══ blocks from the design file ═══════════════════════════════════════ */
+
+.ezp .cardhd {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; margin-bottom: 12px;
+}
+.ezp .cardhd h3 { margin: 0 0 2px; font-size: 14px; font-weight: 700; }
+.ezp .cardhd .sub { margin: 0; }
+
+/* A person row — used for family, the chain, and anywhere a human is the
+   subject rather than a value. The circle carries initials rather than a
+   photo: photo_path is a private-bucket key, not a URL, so rendering it
+   would need a signed URL per row and would silently break without one. */
+.ezp .pc {
+  display: flex; gap: 11px; align-items: center;
+  border: 1px solid var(--ez-line); border-radius: 12px;
+  padding: 11px 12px; background: var(--ez-surface); min-width: 0;
+}
+.ezp .ph {
+  width: 36px; height: 36px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 13px; font-weight: 700;
+  background: var(--ez-brand-tint); color: var(--ez-brand);
+}
+.ezp .pc .n { font-size: 13px; font-weight: 600; color: var(--ez-ink);
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ezp .pc .s { font-size: 11.5px; color: var(--ez-muted); margin-top: 1px; }
+.ezp .pl { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+
+/* The reporting chain, drawn as a ladder with the person at the bottom. */
+.ezp .chain { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.ezp .chain li {
+  display: flex; gap: 10px; align-items: center; position: relative;
+  padding-left: 4px;
+}
+.ezp .chain li + li::before {
+  content: ''; position: absolute; left: 21px; top: -8px; height: 8px;
+  width: 1px; background: var(--ez-line);
+}
+.ezp .chain .p {
+  width: 34px; height: 34px; border-radius: 50%; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  background: var(--ez-sunken); color: var(--ez-muted);
+}
+.ezp .chain li.self .p { background: var(--ez-brand); color: var(--ez-on-accent); }
+.ezp .chain .n { font-size: 13px; font-weight: 600; }
+.ezp .chain .r { font-size: 11.5px; color: var(--ez-muted); }
+
+/* Upcoming things. Emoji as the marker is the design's choice and it earns
+   its place here — four different kinds of event, told apart at a glance. */
+.ezp .feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ezp .feed li { display: flex; gap: 10px; align-items: flex-start; }
+.ezp .feed .i { font-size: 16px; line-height: 1.2; flex: 0 0 auto; }
+.ezp .feed .t { font-size: 12.5px; font-weight: 600; }
+.ezp .feed .s { font-size: 11.5px; color: var(--ez-muted); }
+
+/* Movement history. */
+.ezp .tl { position: relative; padding-left: 16px; }
+.ezp .tl::before {
+  content: ''; position: absolute; left: 4px; top: 4px; bottom: 4px;
+  width: 1px; background: var(--ez-line);
+}
+.ezp .tl .it { position: relative; padding-bottom: 14px; }
+.ezp .tl .it:last-child { padding-bottom: 0; }
+.ezp .tl .it::before {
+  content: ''; position: absolute; left: -15px; top: 4px;
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ez-surface); border: 2px solid var(--ez-brand);
+}
+.ezp .tl .w { font-size: 11px; color: var(--ez-muted); }
+.ezp .tl .t { font-size: 13px; font-weight: 600; margin-top: 1px; }
+.ezp .tl .s { font-size: 11.5px; color: var(--ez-muted); }
+
+/* A label with a value pushed to the right — used above the share meters. */
+.ezp .mrow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; font-size: 12.5px; margin-bottom: 6px;
 }
