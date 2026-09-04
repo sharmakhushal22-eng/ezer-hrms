@@ -178,6 +178,29 @@ create table if not exists employee_documents (
   remarks       text,
   created_at    timestamptz default now()
 );
+
+-- ─── RECONCILE: this table ALREADY EXISTS with a narrower shape ──────────
+-- `create table if not exists` skips it silently, so every later statement
+-- that names a new column would fail with 42703 and abort the migration.
+-- Verified against the live database on 4 Sep. Every column is added
+-- NULLABLE: `not null` cannot be added to a populated table, and
+-- employee_education already holds 8 rows.
+
+alter table employee_documents
+  add column if not exists company_id    uuid references companies(id) on delete cascade,
+  add column if not exists file_path     text,
+  add column if not exists file_size_kb  int,
+  add column if not exists mime_type     text,
+  add column if not exists status        doc_status default 'pending',
+  add column if not exists is_mandatory  boolean default false,
+  add column if not exists expiry_date   date,
+  add column if not exists version       int default 1,
+  add column if not exists superseded_by uuid references employee_documents(id),
+  add column if not exists created_at    timestamptz default now();
+
+update employee_documents d set company_id = e.company_id from employees e
+ where e.id = d.employee_id and d.company_id is null;
+
 create index if not exists idx_docs_emp on employee_documents (employee_id, status);
 
 
@@ -288,7 +311,7 @@ create table if not exists employee_education (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
   employee_id uuid not null references employees(id) on delete cascade,
-  qualification text not null, institution text, specialisation text,
+  qualification text not null, institute text, specialisation text,
   from_year int, to_year int, score text, is_verified boolean default false,
   created_at timestamptz default now()
 );
@@ -296,10 +319,59 @@ create table if not exists employee_experience (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
   employee_id uuid not null references employees(id) on delete cascade,
-  organisation text not null, designation text, from_date date, to_date date,
+  company text, designation text, from_date date, to_date date,
   is_current boolean default false, location text, is_verified boolean default false,
   created_at timestamptz default now()
 );
+
+-- ─── RECONCILE: this table ALREADY EXISTS with a narrower shape ──────────
+-- `create table if not exists` skips it silently, so every later statement
+-- that names a new column would fail with 42703 and abort the migration.
+-- Verified against the live database on 4 Sep. Every column is added
+-- NULLABLE: `not null` cannot be added to a populated table, and
+-- employee_education already holds 8 rows.
+
+-- NAMING: this migration first said `institution` and `organisation`. The live
+-- tables say `institute` and `company`, and lib/onboarding/to-employee.ts
+-- WRITES those names on every new hire. Renaming breaks onboarding silently;
+-- adding synonyms splits one person's history across two columns. The existing
+-- names win, and the genuinely new fields are added alongside them.
+
+alter table employee_education
+  add column if not exists company_id     uuid references companies(id) on delete cascade,
+  add column if not exists institute      text,
+  add column if not exists specialisation text,
+  add column if not exists from_year      int,
+  add column if not exists to_year        int,
+  add column if not exists score          text,
+  add column if not exists is_verified    boolean default false;
+
+alter table employee_experience
+  add column if not exists company_id  uuid references companies(id) on delete cascade,
+  add column if not exists company     text,
+  add column if not exists is_current  boolean default false,
+  add column if not exists location    text,
+  add column if not exists is_verified boolean default false;
+
+update employee_education  d set company_id = e.company_id from employees e
+ where e.id = d.employee_id and d.company_id is null;
+update employee_experience d set company_id = e.company_id from employees e
+ where e.id = d.employee_id and d.company_id is null;
+
+-- The old rows record a single `year_of_passing` as TEXT. Carry it into
+-- to_year only where it is a plain four-digit year; anything else is left null
+-- for the employee to correct, rather than guessed at. The regex is tested
+-- BEFORE the cast, so a stray value cannot abort the migration.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+              where table_name = 'employee_education' and column_name = 'year_of_passing') then
+    update employee_education
+       set to_year = year_of_passing::int
+     where to_year is null and year_of_passing ~ '^[0-9]{4}$';
+  end if;
+end $$;
+
 create table if not exists employee_certifications (
   id uuid primary key default gen_random_uuid(),
   company_id uuid not null references companies(id) on delete cascade,
