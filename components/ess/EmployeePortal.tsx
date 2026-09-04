@@ -3604,7 +3604,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'reports':       return <ReportsSection employeeId={emp.id} />
           case 'performance':   return <Performance employeeId={emp.id} />
       case 'wall':          return <WallOfFame employeeId={emp.id} />
-      case 'funzone':       return <FunZone />
+      case 'funzone':       return <FunZone employeeId={emp.id} />
       default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
     }
   }

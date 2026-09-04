@@ -14,6 +14,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import PlayTogether from '@/components/funzone/PlayTogether'
 
 const F = {
   navy:TK.ink, purple:TK.brand, purpleDark:TK.brandDeep, purpleSoft: TK.brandTint,
@@ -233,10 +234,23 @@ function SpinWheel({ onBack }: { onBack: () => void }) {
 }
 
 // ── Hub ─────────────────────────────────────────────────────────
-export default function FunZone() {
+/**
+ * The hub. `employeeId` is optional so the four solo games still render for
+ * any caller that has not got one — playing together is what needs to know
+ * who you are, not Memory Match.
+ */
+export default function FunZone({ employeeId }: { employeeId?: string }) {
   const [game, setGame] = useState<string | null>(null)
   const back = () => setGame(null)
 
+  if (game === 'together' && employeeId) return (
+    <div>
+      <BackBtn onClick={back} />
+      <div style={gameTitle}>Play together</div>
+      <div style={gameSub}>Invite a colleague and play on two screens, live.</div>
+      <PlayTogether meId={employeeId} />
+    </div>
+  )
   if (game === 'ttt')   return <TicTacToe onBack={back} />
   if (game === 'mem')   return <MemoryMatch onBack={back} />
   if (game === 'quiz')  return <Trivia onBack={back} />
@@ -244,8 +258,26 @@ export default function FunZone() {
 
   return (
     <div>
-      <div style={{ fontSize:13, color:F.muted, marginBottom:16 }}>Take a break — play a quick game with your team. Nothing here is scored or saved.</div>
+      <div style={{ fontSize:13, color:F.muted, marginBottom:16 }}>
+        Take a break. The four games below are yours alone and nothing is saved
+        — play together keeps a record of who played whom, and nothing else.
+      </div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:14 }}>
+        {employeeId && (
+          <button onClick={() => setGame('together')}
+            style={{ ...panel, padding:20, cursor:'pointer', textAlign:'left',
+                     fontFamily:'inherit', color:F.navy,
+                     border:`2px solid ${TK.brand}` }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>&#127918;</div>
+            <div style={{ fontWeight:700, fontSize:15, marginBottom:3 }}>Play together</div>
+            <div style={{ fontSize:12, color:F.muted }}>
+              Invite a colleague and play live, on two screens
+            </div>
+            <span style={{ display:'inline-block', fontSize:10, fontWeight:700,
+                           padding:'2px 8px', borderRadius:999, marginTop:8,
+                           background:TK.brandTint, color:TK.brandDeep }}>Live</span>
+          </button>
+        )}
         {GAMES.map(g => (
           <button key={g.k} onClick={() => setGame(g.k)} style={{ ...panel, padding:20, cursor:'pointer', border:`2px solid ${F.border}`, textAlign:'left', fontFamily:'inherit', color:F.navy }}>
             <div style={{ fontSize:32, marginBottom:8 }}>{g.icon}</div>
