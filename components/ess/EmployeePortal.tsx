@@ -48,6 +48,7 @@ import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
 import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/components/employees/EmployeeProfileView'
+import EssProfile360 from '@/components/profile/EssProfile360'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -3706,7 +3707,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     if (section.status === 'soon' && section.features) return <FeatureGrid features={section.features} />
     switch (view) {
       case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
-      case 'profile':       return <Profile emp={emp} notify={notify} />
+      case 'profile':       return <EssProfile360 />
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
       // The inbox reports its own unread straight into the bell's state, so
       // the badge and the screen can never show two different numbers.
