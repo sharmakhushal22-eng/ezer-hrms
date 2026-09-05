@@ -33,6 +33,16 @@ export default function EssProfile360({ employeeId, code = 'me' }: { employeeId?
   if (state.loading) return <div style={{ padding: 40, textAlign: 'center', color: TK.muted, fontSize: 13 }}>Loading profile…</div>
   if (state.error) return <div style={{ padding: 20, fontSize: 13, color: TK.critical, background: TK.criticalTint, borderRadius: 10 }}>{state.error}</div>
 
-  const { photoUrl, isSelf, ...data } = state.data
+  const { photoUrl, isSelf, ...rest } = state.data
+  // get_employee_profile returns completeness as { score, pending }; ProfileShell
+  // expects a flat number `completeness` and an array `pending`. Normalise here so
+  // the vendor component is untouched — reading data.pending.length on the nested
+  // shape was undefined.length, which crashed the whole render to a blank page.
+  const comp = rest.completeness && typeof rest.completeness === 'object' ? rest.completeness : null
+  const data = {
+    ...rest,
+    completeness: comp ? (comp.score ?? 0) : (rest.completeness ?? 0),
+    pending: comp ? (comp.pending ?? []) : (rest.pending ?? []),
+  }
   return <ProfileShell data={data} photoUrl={photoUrl ?? null} isSelf={!!isSelf} />
 }
