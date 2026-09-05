@@ -237,8 +237,13 @@ export function buildTabs(p: ProfilePayload): ProfileTab[] {
 // used. Every route resolves the viewer through here so masking cannot be bypassed
 // by forging a header.
 import type { NextRequest } from 'next/server'
-import { requireDashboardUser } from '@/lib/api-auth'
+import { essCaller } from '@/lib/ess/session'
 export async function essViewerId(req: NextRequest): Promise<string | null> {
-  const { user } = await requireDashboardUser(req)
-  return user?.employeeId ?? null
+  // essCaller resolves both an ESS employee (from their bearer token) and a
+  // dashboard admin viewing an employee's portal (from ?employee_id=). Using it
+  // — rather than a bare token check — is why the ESS inbox works for both, and
+  // is what fixes "not_authenticated" when the profile is opened from an admin
+  // session instead of an ESS login.
+  const { caller } = await essCaller(req)
+  return caller?.employeeId ?? null
 }

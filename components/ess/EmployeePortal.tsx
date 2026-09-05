@@ -3707,7 +3707,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     if (section.status === 'soon' && section.features) return <FeatureGrid features={section.features} />
     switch (view) {
       case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
-      case 'profile':       return <EssProfile360 />
+      case 'profile':       return <EssProfile360 employeeId={emp.id} />
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
       // The inbox reports its own unread straight into the bell's state, so
       // the badge and the screen can never show two different numbers.
