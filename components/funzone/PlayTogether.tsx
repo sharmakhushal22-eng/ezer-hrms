@@ -36,6 +36,7 @@ export default function PlayTogether({ meId }: { meId: string }) {
   const [chosen, setChosen] = useState<Colleague | null>(null)
   const [searching, setSearching] = useState(false)
   const [ready, setReady] = useState<boolean | null>(null)
+  const [loadErr, setLoadErr] = useState<{ auth: boolean; msg: string } | null>(null)
   const [game, setGame] = useState(LIVE_GAMES[0].code)
   const [who, setWho] = useState('')
   const [note, setNote] = useState('')
@@ -61,7 +62,14 @@ export default function PlayTogether({ meId }: { meId: string }) {
     // One call. The route resolves who I am, reads both sides of the invite
     // list and resolves the names, so there is no second trip to employees.
     const r = await listInvites()
-    if (r.error) { setReady(false); return }
+    if (r.error) {
+      // A failed request is NOT "the migration is missing" — most often it is an
+      // expired ESS session. Say the true thing so the fix (sign in again) is clear.
+      setLoadErr({ auth: r.error.status === 401, msg: r.error.message })
+      setReady(null)
+      return
+    }
+    setLoadErr(null)
     setReady(r.data?.installed !== false)
     setInvites(r.data?.invites ?? [])
   }, [])
@@ -96,6 +104,22 @@ export default function PlayTogether({ meId }: { meId: string }) {
     if (live.gameCode === 'quiz') return <LiveTrivia {...shared} />
     return <LiveTicTacToe sessionId={shared.sessionId} meId={meId} hostId={live.hostId}
              opponentName={live.opponent} onExit={shared.onExit} />
+  }
+
+  if (loadErr) {
+    return (
+      <div style={{ background: C.warningTint, border: `1px solid ${C.warning}`,
+                    borderRadius: R.lg, padding: '16px 18px' }}>
+        <div style={{ fontSize: F.body, fontWeight: W.bold, color: C.ink }}>
+          {loadErr.auth ? 'Please sign in again' : 'Could not load Fun Zone'}
+        </div>
+        <div style={{ fontSize: F.small, color: C.muted, marginTop: 8, lineHeight: 1.7 }}>
+          {loadErr.auth
+            ? 'Your session has expired. Sign out and back in, then reopen Fun Zone.'
+            : loadErr.msg}
+        </div>
+      </div>
+    )
   }
 
   if (ready === false) {
