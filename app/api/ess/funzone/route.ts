@@ -186,7 +186,15 @@ export async function POST(req: NextRequest) {
         game_code: game, from_employee: me, to_employee: to,
         message: str('message'),
       }).select('id, created_at').single()
-      if (ins.error) return bad(ins.error.message)
+      if (ins.error) {
+        // uq_game_invites_open: one PENDING invite per (from, to, game). The
+        // client's canInvite catches most of these, but a stale invite list or a
+        // second tab can still race to the insert — answer with the reason, not
+        // the raw constraint name.
+        if (ins.error.code === '23505')
+          return bad('You already have a pending invite to this colleague for this game. Wait for their reply, or cancel it under Invites first.')
+        return bad(ins.error.message)
+      }
 
       // THE PART THAT WAS MISSING. Worded by inviteLine so the notification
       // and the Fun Zone card say the same thing, which is what it was
