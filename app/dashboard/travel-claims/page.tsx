@@ -663,24 +663,31 @@ export default function TravelClaimsAdmin() {
 
   // ---- policy + the people who can approve for this company ----------------
   useEffect(() => {
-    if (!companyId) return
     let live = true
     ;(async () => {
-      const { data: pol } = await supabase.from('travel_policies')
-        .select('rm_stage_enabled, hr_stage_enabled, hr_fallback_only').eq('company_id', companyId).eq('is_active', true)
-        .order('effective_from', { ascending: false }).limit(1)
+      // '' = All companies: the latest active policy of EVERY company, and a stage's
+      // tab is shown if any of them runs that stage — an approver in a company with
+      // the RM stage on must not lose the tab because another company switched it off.
+      let pq = supabase.from('travel_policies')
+        .select('company_id, rm_stage_enabled, hr_stage_enabled, hr_fallback_only').eq('is_active', true)
+        .order('effective_from', { ascending: false })
+      if (companyId) pq = pq.eq('company_id', companyId).limit(1)
+      const { data: pol } = await pq
       if (!live) return
-      setRmEnabled(!!(pol?.[0] as any)?.rm_stage_enabled)
+      // Ordered latest-first, so the first row seen per company IS its current policy.
+      const latest = Array.from(new Map((pol ?? []).map((r: any) => [r.company_id, r])).values()) as any[]
+      setRmEnabled(latest.some(r => !!r.rm_stage_enabled))
       // Defaults to true so a policy row missing the column does not read as
       // "HR is out of the chain" before migration 052 is applied.
-      setHrEnabled((pol?.[0] as any)?.hr_stage_enabled ?? true)
+      setHrEnabled(latest.length === 0 ? true : latest.some(r => r.hr_stage_enabled ?? true))
 
       // Anyone named as an hr_head_id (or l1_manager_id) for this company is a
       // possible approver. Derived rather than hardcoded, so it tracks the
       // employee master.
       const column = tab === 'RM' ? 'l1_manager_id' : 'hr_head_id'
-      const { data: emps } = await supabase.from('employees')
-        .select(column).eq('company_id', companyId).not(column, 'is', null)
+      let aq = supabase.from('employees').select(column).not(column, 'is', null)
+      if (companyId) aq = aq.eq('company_id', companyId)
+      const { data: emps } = await aq
       const ids = Array.from(new Set((emps ?? []).map((e: any) => e[column]).filter(Boolean)))
       if (!live) return
       if (ids.length === 0) { setApprovers([]); setActingId(''); return }
@@ -704,9 +711,11 @@ export default function TravelClaimsAdmin() {
 
   // ---- inbox ---------------------------------------------------------------
   const load = useCallback(async () => {
-    if (!companyId) return
     setLoading(true)
     try {
+      // The rate card and the expense months EDIT per-company records; on All there
+      // is no record to edit, so those two tabs keep asking for a company.
+      if (!companyId && (tab === 'PERIODS' || tab === 'RATES')) { setPeriods([]); setRates([]); setTypes([]); return }
       if (tab === 'PERIODS') {
         const r = await fetch(`/api/travel/periods?company_id=${companyId}`,
           { headers: await authHeaders() }).then(x => x.json())
@@ -746,9 +755,11 @@ export default function TravelClaimsAdmin() {
 
       // Finance also owns the payout step, so approved-unpaid claims belong here.
       if (tab === 'FINANCE') {
-        const { data } = await supabase.from('v_travel_claim_summary')
-          .select('*').eq('company_id', companyId).eq('status', 'APPROVED')
+        let vq = supabase.from('v_travel_claim_summary')
+          .select('*').eq('status', 'APPROVED')
           .order('submitted_at', { ascending: true })
+        if (companyId) vq = vq.eq('company_id', companyId)
+        const { data } = await vq
         setPayouts((data ?? []) as Claim[])
       }
     } finally {
@@ -885,7 +896,7 @@ export default function TravelClaimsAdmin() {
           <label style={S.lbl}>Company</label>
           <select value={companyId} onChange={e => setCompanyId(e.target.value)}
                   style={{ ...S.inp, minWidth: 220 }}>
-            {companies.length === 0 && <option value="">No companies</option>}
+            <option value="">All companies</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
         </div>
@@ -925,7 +936,11 @@ export default function TravelClaimsAdmin() {
       {note && <Note tone={note.tone}>{note.text}</Note>}
 
       {/* ---- body ---- */}
-      {tab === 'RATES' ? (
+      {!companyId && (tab === 'RATES' || tab === 'PERIODS') ? (
+        <div style={S.card}><div style={{ fontSize: 12, color: V.muted }}>
+          {tab === 'RATES' ? 'The rate card' : 'Expense months'} are set per company — pick one above to view or edit them.
+        </div></div>
+      ) : tab === 'RATES' ? (
         <>
           <div style={S.card}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>
@@ -1004,7 +1019,7 @@ export default function TravelClaimsAdmin() {
             </div>
             {loading ? <Empty text="Loading…" />
               : (tab !== 'FINANCE' && approvers.length === 0)
-                ? <Empty text="Nobody in this company is mapped as an approver, so no claims can route here." />
+                ? <Empty text={companyId ? 'Nobody in this company is mapped as an approver, so no claims can route here.' : 'Nobody in any company is mapped as an approver, so no claims can route here.'} />
               : claims.length === 0 ? <Empty text="Nothing waiting. You are all caught up." />
               : claims.map(c => (
                   <ClaimCard key={c.id} claim={c} stage={tab as 'HR' | 'FINANCE' | 'RM'}

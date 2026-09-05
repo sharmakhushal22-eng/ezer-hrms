@@ -1,9 +1,9 @@
 -- =====================================================================
 -- EZER HRMS — 074: PMS "not found" guards
 --
--- Renumbered from 071: Nayan independently used 071 for
--- 071_ess_access_reconciliation.sql. 074 is the next free number after
--- his 073. Contents unchanged.
+-- RENUMBERED from 071: that number was taken by 071_ess_access_reconciliation.sql
+-- on this repo. Contents are unchanged from the handover file
+-- (EZER-PMS-for-Nayan-2026-08-29.zip / 01_PENDING_071_pms_not_found_guards.sql).
 --
 -- Found by smoke-testing 066/067 against the live database on 29-Aug-2026.
 -- Two functions load a row with SELECT ... INTO and never check whether

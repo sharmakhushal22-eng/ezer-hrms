@@ -9,7 +9,7 @@
 // Locking is never a button here. It happens because payroll ran for that employee, so
 // the screen can only ever loosen the freeze, never apply one by hand — except to undo
 // an unlock, which is the one case where a fixed record has to be re-closed.
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { loadRuns, loadRunsForPeriod, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import {
   loadLockList, lockFilterOptions, unlockEmployees, lockEmployees, loadLockAudit,
@@ -113,6 +113,10 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
   const [filter, setFilter] = useState<LockFilter>(EMPTY_LOCK_FILTER)
   const [applied, setApplied] = useState<LockFilter>(EMPTY_LOCK_FILTER)
   const [sel, setSel] = useState<Set<string>>(new Set())
+  // Unlock now sits at the top of the list, but the reason it requires still lives in
+  // the card below it. Pressing Unlock without one has to take you to the thing that is
+  // missing — otherwise the button just refuses and the explanation is off-screen.
+  const reasonRef = useRef<HTMLTextAreaElement>(null)
   const [reason, setReason] = useState('')
   const [reasonErr, setReasonErr] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -209,7 +213,12 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
 
   async function unlock() {
     if (!toUnlock.length) return
-    if (!reason.trim()) { setReasonErr(true); return }
+    if (!reason.trim()) {
+      setReasonErr(true)
+      reasonRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      reasonRef.current?.focus()
+      return
+    }
     setReasonErr(false); setBusy(true); setErr(''); setMsg('')
     let count = 0
     const fails: string[] = []
@@ -332,7 +341,9 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
       </div>
 
       <div style={card}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+        {/* Centre, not baseline: the row now carries a full-size button, and a baseline
+            row hangs tall children off the first line of text inside them. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <div style={{ fontSize: 14, fontWeight: 700 }}>Employees{viewed ? ` (${rows.length})` : ''}</div>
           <div style={{ fontSize: 12, color: C.muted }}>
             {viewed ? <>🔒 {lockedCount} locked · 🔓 {rows.length - lockedCount} unlocked</> : 'Set your filters, then press View employees to load the list.'}
@@ -340,10 +351,26 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
           {/* Works on every row now, not just the locked ones — otherwise a company with
               nothing locked yet had no way to select anything at all. */}
           {rows.length > 0 && (
-            <button onClick={toggleAll}
-              style={{ marginLeft: 'auto', fontFamily: font, fontSize: 12, fontWeight: 600, color: C.purpleD, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '6px 12px', cursor: 'pointer' }}>
-              {rows.length > 0 && rows.every(r => sel.has(r.employee_code)) ? 'Clear selection' : `Select all ${rows.length}`}
-            </button>
+            // Unlock rides next to Select all because that is where the selection is
+            // made. It used to sit under the list with the reason box, so the sequence
+            // was tick rows → scroll past the whole table → press. On a 300-row month
+            // the button you needed was several screens away from the rows you had
+            // just ticked.
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <button onClick={toggleAll}
+                style={{ fontFamily: font, fontSize: 12, fontWeight: 600, color: C.purpleD, background: TK.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '6px 12px', cursor: 'pointer' }}>
+                {rows.every(r => sel.has(r.employee_code)) ? 'Clear selection' : `Select all ${rows.length}`}
+              </button>
+              <button onClick={unlock} disabled={busy || toUnlock.length === 0}
+                style={{
+                  fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
+                  background: toUnlock.length && !busy ? C.purple : TK.brandTint, border: 'none', borderRadius: 10,
+                  padding: '12px 22px', cursor: toUnlock.length && !busy ? 'pointer' : 'not-allowed',
+                  boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(37,99,235,0.2)' : 'none',
+                }}>
+                {busy ? 'Working…' : `🔓 Unlock Selected (${toUnlock.length})`}
+              </button>
+            </div>
           )}
         </div>
         <div style={{ fontSize: 12, color: C.muted, margin: '3px 0 14px' }}>
@@ -384,21 +411,15 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
         <div style={{ fontSize: 12, color: C.muted, marginBottom: 14 }}>
           Required — recorded in the audit log against every employee you unlock.
         </div>
-        <textarea value={reason} onChange={e => { setReason(e.target.value); if (e.target.value.trim()) setReasonErr(false) }}
+        <textarea ref={reasonRef} value={reason} onChange={e => { setReason(e.target.value); if (e.target.value.trim()) setReasonErr(false) }}
           placeholder="e.g. Correcting bank detail after employee update"
           style={{ ...inp, minHeight: 54, resize: 'vertical', borderColor: reasonErr ? C.red : C.border }} />
         {reasonErr && <div style={{ fontSize: 11, color: C.red, marginTop: 4 }}>A reason is required before you can unlock any employee.</div>}
 
         <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap', alignItems: 'center' }}>
-          <button onClick={unlock} disabled={busy || toUnlock.length === 0}
-            style={{
-              fontFamily: font, fontSize: 14, fontWeight: 700, color: TK.onAccent,
-              background: toUnlock.length && !busy ? C.purple: TK.brandTint, border: 'none', borderRadius: 10,
-              padding: '12px 22px', cursor: toUnlock.length && !busy ? 'pointer' : 'not-allowed',
-              boxShadow: toUnlock.length && !busy ? '0 3px 10px rgba(37,99,235,0.2)' : 'none',
-            }}>
-            {busy ? 'Working…' : `🔓 Unlock Selected (${toUnlock.length})`}
-          </button>
+          {/* Unlock itself now lives beside Select all, at the top of the list. Only the
+              reason it needs stayed here — a textarea is not something to squeeze into a
+              header row. */}
           {/* No reason needed to lock: closing a record back up takes nothing away from
               anyone. Reopening one does, which is why only that side demands a reason. */}
           <button onClick={lockSelected} disabled={busy || toLock.length === 0}
@@ -410,8 +431,8 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
               cursor: toLock.length && !busy ? 'pointer' : 'not-allowed',
             }}>Lock Selected ({toLock.length})
           </button>
-          {picked.length === 0 && (
-            <span style={{ fontSize: 12, color: C.muted }}>Tick a row above to enable these.</span>
+          {toLock.length === 0 && (
+            <span style={{ fontSize: 12, color: C.muted }}>Tick an unlocked row above to enable Lock. Unlock is at the top of the list.</span>
           )}
         </div>
 

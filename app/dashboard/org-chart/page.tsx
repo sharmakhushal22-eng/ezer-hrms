@@ -12,6 +12,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant, authToken } from '@/lib/rms/client'
+import { canSee } from '@/lib/rms/resolve'
 import { buildForest, flatten, pathTo, countNodes, type TreeNode } from '@/lib/rms/tree'
 import type { OrgTreeNode } from '@/lib/rms/server'
 
@@ -253,16 +254,28 @@ export default function OrgChartPage() {
   const wrapRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
-      .then(({ data }) => { setCompanies(data || []); if (data?.length && !companyId) setCompanyId(data[0].id) })
+    // Open on the viewer's OWN company. This page now also lives inside every
+    // employee's ESS portal, and an STC employee landing on SRS's chart (the
+    // alphabetical first) reads as the wrong chart, not as a default.
+    ;(async () => {
+      const { data } = await supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
+      const list = data || []
+      setCompanies(list)
+      let own: string | null = null
+      if (grant.employeeId) {
+        const { data: me } = await supabase.from('employees').select('company_id').eq('id', grant.employeeId).maybeSingle()
+        own = me?.company_id ?? null
+      }
+      setCompanyId(prev => prev || (list.some(c => c.id === own) ? own! : list[0]?.id ?? ''))
+    })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [grant.employeeId])
 
   const load = useCallback(async () => {
-    if (!companyId) return
     setLoading(true)
     const token = await authToken()
-    const res = await fetch(`/api/rms/orgchart?company_id=${companyId}`, {
+    // '' = All companies → the API's explicit ALL token; the forest gets one tree per company.
+    const res = await fetch(`/api/rms/orgchart?company_id=${companyId || 'ALL'}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {}, cache: 'no-store',
     }).then(r => r.json()).catch(() => ({ tree: [] }))
     const tree: OrgTreeNode[] = res.tree || []
@@ -315,7 +328,7 @@ export default function OrgChartPage() {
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
       const { default: html2canvas } = await import('html2canvas')
       const canvas = await html2canvas(wrap, { backgroundColor: P.page, scale: 2, useCORS: true })
-      const companyName = companies.find(c => c.id === companyId)?.company_name || 'company'
+      const companyName = companies.find(c => c.id === companyId)?.company_name || 'All_companies'
       const safeName = companyName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
       const link = document.createElement('a')
       link.download = `org-chart-${safeName}.jpg`
@@ -328,7 +341,9 @@ export default function OrgChartPage() {
   }, [companies, companyId, downloading])
 
   useEffect(() => {
-    if (!showDiag || !companyId) return
+    if (!showDiag) return
+    // On All companies the params go up empty, which both diagnostic RPCs already
+    // read as "no company filter" — so the panels cover the whole group.
     setDiagLoading(true)
     authToken().then(token => Promise.all([
       fetch(`/api/rms/orgchart?view=orphans&company_id=${companyId}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} }).then(r => r.json()),
@@ -381,6 +396,7 @@ export default function OrgChartPage() {
       <div style={{ background: P.card, border: `1px solid ${P.border}`, borderRadius: 12, padding: '10px 14px', marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 1px 4px rgba(124,58,237,0.05)' }}>
         <select value={companyId} onChange={e => setCompanyId(e.target.value)}
           style={{ padding: '7px 10px', borderRadius: 7, border: `1px solid ${P.border}`, fontSize: 12, background: '#FAFAFE', color: P.text, fontFamily: font }}>
+          <option value="">All companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
         </select>
 
@@ -405,9 +421,11 @@ export default function OrgChartPage() {
 
         <button onClick={() => setCollapsedIds(new Set())} style={btn}>⤢ Expand all</button>
         <button onClick={resetToDefault} style={btn}>⤡ Collapse to my level</button>
-        <button onClick={() => setShowDiag(s => !s)} style={{ ...btn, background: showDiag ? P.purple : '#fff', color: showDiag ? '#fff' : P.purpleDark, borderColor: showDiag ? P.purple : P.border }}>
-          ⚠ Diagnostics
-        </button>
+        {canSee(grant, 'Employees') && (
+          <button onClick={() => setShowDiag(s => !s)} style={{ ...btn, background: showDiag ? P.purple : '#fff', color: showDiag ? '#fff' : P.purpleDark, borderColor: showDiag ? P.purple : P.border }}>
+            ⚠ Diagnostics
+          </button>
+        )}
         <button onClick={downloadJpeg} disabled={downloading || forest.length === 0}
           style={{
             ...btn, marginLeft: 'auto', color: '#fff', border: 'none',

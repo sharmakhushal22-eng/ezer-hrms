@@ -26,6 +26,26 @@ export interface SyncCategory {
   countKey?: 'eligible' | 'with_statutory' | 'with_bank' | 'with_salary' | 'with_flexi' | 'with_reject' | 'with_loan' | 'with_decl' | 'with_earnings'
   /** snapshot columns this category owns — the Excel export for the category */
   columns?: string[]
+  /**
+   * False = no Sync button on the Data Sync screen; the row keeps only its Download.
+   *
+   * These are the categories Run Payroll computes itself, in order, every time it runs
+   * (see components/payroll/RunCycle.tsx): earned salary, then EPF/EPS/EDLI, ESIC,
+   * professional tax and LWF off the back of it. Offering them as buttons here invited
+   * a hand-sync that the next Run Payroll would overwrite anyway, and a hand-sync run
+   * out of order — ESIC before earnings, say — reads earned columns that are not there
+   * yet and writes a wrong number that looks like a right one.
+   *
+   * The Download stays, because that is where the EPF, ESIC, PT and LWF registers come
+   * from and those are filed monthly.
+   */
+  syncable?: boolean
+  /**
+   * True = payroll_sync_pending() (086) can say who actually changed, because the
+   * category COPIES a source into the snapshot. Computed categories have no
+   * source-vs-snapshot diff, so their picker shows the whole month.
+   */
+  diffable?: boolean
 }
 
 // The four Ready categories are the ones with a live source table AND columns frozen
@@ -33,7 +53,7 @@ export interface SyncCategory {
 // feeds flexi_car…flexi_total today — so it is a real category, not a planned one.
 export const SYNC_CATEGORIES: SyncCategory[] = [
   {
-    key: 'employee', label: 'Employee info', icon: '👤', status: 'ready',
+    key: 'employee', label: 'Employee info', icon: '👤', status: 'ready', diffable: true,
     note: 'Department, designation, DOJ/DOL, cost centre and address. Statutory sits in its own category below.',
     rpc: 'sync_month_employee_info', countKey: 'eligible',
     columns: [
@@ -49,7 +69,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'statutory', label: 'Statutory', icon: '⚖️', status: 'ready',
+    key: 'statutory', label: 'Statutory', icon: '⚖️', status: 'ready', diffable: true,
     note: 'PAN, UAN, ESIC and PF account numbers, plus the PF · ESIC · PT · LWF flags and limits. Its own category because a flag changes the payout, a designation does not.',
     rpc: 'sync_month_statutory', countKey: 'with_statutory',
     columns: [
@@ -65,13 +85,13 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'bank', label: 'Bank', icon: '🏦', status: 'ready',
+    key: 'bank', label: 'Bank', icon: '🏦', status: 'ready', diffable: true,
     note: 'Bank name, account number, IFSC and account type. A new joiner arriving through any category comes in with their full row; removals happen only in Employee info.',
     rpc: 'sync_month_bank', countKey: 'with_bank',
     columns: ['employee_code', 'full_name', 'bank_name', 'bank_account_number', 'bank_account_last4', 'ifsc_code', 'account_type'],
   },
   {
-    key: 'salary', label: 'Salary', icon: '💰', status: 'ready',
+    key: 'salary', label: 'Salary', icon: '💰', status: 'ready', diffable: true,
     note: 'CTC, basic, HRA, conveyance, special allowance, gross, employer & employee PF/ESIC — from CTC Master and Salary Structures.',
     rpc: 'sync_month_salary', countKey: 'with_salary',
     columns: [
@@ -83,7 +103,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'flexi', label: 'Flexi (allowances)', icon: '🎛️', status: 'ready',
+    key: 'flexi', label: 'Flexi (allowances)', icon: '🎛️', status: 'ready', diffable: true,
     note: 'Car lease, driver, fuel, telephone, meal, LTA and the rest — from the employee’s flexi declaration for this financial year.',
     rpc: 'sync_month_flexi', countKey: 'with_flexi',
     columns: [
@@ -97,7 +117,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // HRMS; this one multiplies what those already froze — structure × paid_days — and
     // adds whatever the Bulk Uploader posted. So it runs LAST, and running it again
     // after an attendance correction is the normal way to refresh the month's numbers.
-    key: 'earnings', label: 'Earned salary', icon: '🧮', status: 'ready',
+    key: 'earnings', label: 'Earned salary', icon: '🧮', status: 'ready', syncable: false,
     note: 'Earned amount for the month = frozen structure × paid days, plus Incentive / Variable / Bonus / Buyout and the Parking · Insurance · Canteen deductions from the Bulk Uploader. Employees whose attendance has not arrived keep a blank earned amount — not zero, or somebody would process salary on it.',
     rpc: 'sync_month_earnings', countKey: 'with_earnings',
     columns: [
@@ -117,7 +137,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     // Runs after Earned salary and reads its output, so it is second-last in the
     // chain: EPF wages are Earn_Gross − Earn_HRA, which do not exist until the
     // earned columns have been written.
-    key: 'epf', label: 'EPF · EPS · EDLI · Admin', icon: '🏛️', status: 'ready',
+    key: 'epf', label: 'EPF · EPS · EDLI · Admin', icon: '🏛️', status: 'ready', syncable: false,
     note: 'Code of Wages 50% basic floor, then EPF wages (Earn Gross − Earn HRA), the ceiling from each employee’s own pf_gross_limit, EPS capped at ₹1,250, EDLI at ₹75, and admin charges with the establishment’s ₹500 minimum. Every rate comes from epf_config and wage_rules_config — nothing is hardcoded.',
     rpc: 'sync_month_epf', countKey: 'with_earnings',
     columns: [
@@ -135,7 +155,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
   },
   {
     // Reads the earned columns like EPF does, so it runs in the same pass, after them.
-    key: 'esic', label: 'ESIC', icon: '🩺', status: 'ready',
+    key: 'esic', label: 'ESIC', icon: '🩺', status: 'ready', syncable: false,
     note: 'Employee 0.75% and employer 3.25%, rounded up to the next rupee as ESIC requires. ESIC Wages = MAX(earned basic, 50% of earned gross) is always shown; whether the ₹21,000 ceiling is tested on that or on plain gross is set by esic_config.esic_threshold_basis — on this data the two differ by 135 employees, so the row records which basis judged it. The ceiling is tested on the full-month rate rather than the month’s earnings, so leave cannot push somebody in and out; and once covered at any point in a contribution period (Apr–Sep, Oct–Mar) an employee stays covered for the rest of it.',
     rpc: 'sync_month_esic', countKey: 'with_earnings',
     columns: [
@@ -149,7 +169,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'pt', label: 'Professional Tax', icon: '⚖️', status: 'ready',
+    key: 'pt', label: 'Professional Tax', icon: '⚖️', status: 'ready', syncable: false,
     note: 'Each employee’s PT from pt_config — their state, that month’s column, their gross. A month column per month because PT is not flat across the year: Maharashtra charges ₹300 in February, Tamil Nadu bills twice a year and nothing in the other ten months. PT is a fixed monthly amount, so leave never reduces it. States that levy no PT at all carry an explicit ₹0 row, which is why pt_rate_found matters — a zero and an unconfigured state are different answers.',
     rpc: 'sync_month_pt', countKey: 'eligible',
     columns: [
@@ -158,7 +178,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     ],
   },
   {
-    key: 'lwf', label: 'Labour Welfare Fund', icon: '🏛️', status: 'ready',
+    key: 'lwf', label: 'Labour Welfare Fund', icon: '🏛️', status: 'ready', syncable: false,
     note: 'Each employee’s LWF from lwf_config — read off their lwf_state, NOT their PT state: the two differ for 300 of 302 employees here. Most states deduct only in June and December, some only in December, so a ₹0 in April is normal rather than missing. Where the state allows it, someone who left mid-period is exempt. LWF is a flat monthly amount — gross and paid days never affect it.',
     rpc: 'sync_month_lwf', countKey: 'eligible',
     columns: [
@@ -207,7 +227,7 @@ export const SYNC_CATEGORIES: SyncCategory[] = [
     columns: ['employee_code', 'full_name'],
   },
   {
-    key: 'inv_decl', label: 'Investment declaration', icon: '📄', status: 'ready',
+    key: 'inv_decl', label: 'Investment declaration', icon: '📄', status: 'ready', diffable: true,
     // The declaration itself stays FY-global. What this sync does is apply its ONE
     // month-level consequence: the regime the employee chose lands in this month's
     // snapshot. That column used to come from employees.tds_regime via Statutory,
@@ -321,6 +341,23 @@ export async function loadSyncStatus(runIds: string[], codes: string[] | null = 
     })
   }
   return { status: total, missing: false, detail: null }
+}
+
+/**
+ * Who actually changed, per category — live HRMS vs the frozen snapshot, from
+ * payroll_sync_pending() (086). Returns code → "which fields", or null when the
+ * category has no diff (computed), the migration is not applied yet, or the call
+ * failed — null tells the picker to fall back to the full month.
+ */
+export async function loadPendingChanges(cat: SyncCategory, runIds: string[]): Promise<Map<string, string> | null> {
+  if (!cat.diffable) return null
+  const out = new Map<string, string>()
+  for (const id of runIds) {
+    const { data, error } = await supabase.rpc('payroll_sync_pending', { p_run_id: id, p_category: cat.key })
+    if (error) return null
+    ;((data as any[]) || []).forEach(r => out.set(String(r.employee_code), String(r.changes || '')))
+  }
+  return out
 }
 
 /** Run one category's sync across the month's runs. Returns rows touched. */

@@ -45,6 +45,10 @@ import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
 import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
+import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
+import { atLeast, type AccessLevel } from '@/lib/rms/modules'
+import { AdminModuleHost } from '@/components/ess/AdminModules'
+import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/components/employees/EmployeeProfileView'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -748,7 +752,9 @@ function ProfileHero({ emp, notify }: {
 }
 
 function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const [tab, setTab] = useState<'OVERVIEW' | 'PERSONAL' | 'UPDATE'>('OVERVIEW')
+  const [tab, setTab] = useState<'OVERVIEW' | 'RECORD' | 'UPDATE'>('RECORD')
+  // Sub-tab inside My Record, the same four the Employee Master drawer uses.
+  const [recordTab, setRecordTab] = useState('personal')
   const [field, setField] = useState('Personal Details')
   const [detail, setDetail] = useState('')
   const [busy, setBusy] = useState(false)
@@ -785,8 +791,8 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
   }
 
   const TABS: [typeof tab, string, string][] = [
-    ['OVERVIEW', 'Overview', ''],
-    ['PERSONAL', 'Personal & KYC', ''],
+    ['RECORD', 'My Record', ''],
+    ['OVERVIEW', 'At a glance', ''],
     ['UPDATE', 'Request a change', ''],
   ]
 
@@ -834,29 +840,27 @@ function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?:
         </div>
       )}
 
-      {tab === 'PERSONAL' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(290px,1fr))', gap: 11 }}>
-          <Panel title="About you" icon="🙋">
-            <Field label="Date of birth" value={fmt(emp.date_of_birth)} icon="🎂" notify={notify} />
-            <Field label="Gender" value={emp.gender} icon="⚧" notify={notify} />
-            <Field label="Blood group" value={emp.blood_group} icon="🩸" notify={notify} />
-            <Field label="Marital status" value={emp.marital_status} icon="💍" notify={notify} />
-          </Panel>
-
-          <Panel title="How to reach you" icon="📇" accent="#EEF2FF">
-            <Field label="Mobile" value={emp.mobile} icon="📱" copyable notify={notify} />
-            <Field label="Personal email" value={emp.personal_email} icon="📧" copyable notify={notify} />
-            <Field label="Office email" value={emp.office_email} icon="✉️" copyable notify={notify} />
-          </Panel>
-
-          <Panel title="Statutory IDs" icon="🔐" accent={P.amberBg}>
-            <Field label="PAN" value={emp.pan_number} icon="🪪" copyable sensitive notify={notify} />
-            <Field label="Aadhaar" value={emp.aadhar_last4 ? `XXXX XXXX ${emp.aadhar_last4}` : null} icon="🆔" notify={notify} />
-            <Field label="UAN" value={emp.uan_number} icon="🏦" copyable sensitive notify={notify} />
-            <div style={{ fontSize: 11, color: P.dim, marginTop: 7, lineHeight: 1.5 }}>
-              Hidden by default. Reveal only when you need to copy one.
-            </div>
-          </Panel>
+      {tab === 'RECORD' && (
+        <div style={{ background: C.surface, border: `1px solid ${C.brandEdge}`, borderRadius: 14, overflow: 'hidden' }}>
+          {/* The Employee Master drawer, rendered read-only: the same quick-stat strip,
+              the same tabs, the same sections. One record, one way of reading it — an
+              employee sees exactly what HR sees about them. */}
+          <RecordQuickStats emp={emp} />
+          <div style={{ display: 'flex', background: C.sunken, borderBottom: `1px solid ${C.brandEdge}`, overflowX: 'auto' }}>
+            {ESS_RECORD_TABS.map(t => (
+              <button key={t.id} onClick={() => setRecordTab(t.id)}
+                style={{ padding: '11px 16px', border: 'none', background: 'transparent', cursor: 'pointer',
+                         fontSize: 12, fontWeight: recordTab === t.id ? 600 : 400, fontFamily: 'inherit',
+                         color: recordTab === t.id ? C.brand : C.muted, whiteSpace: 'nowrap',
+                         borderBottom: recordTab === t.id ? `3px solid ${C.brand}` : '3px solid transparent' }}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <EmployeeProfileSections emp={emp} profileTab={recordTab} showManagerChain={false} />
+          <div style={{ padding: '12px 20px', fontSize: 11.5, color: C.muted, background: C.sunken }}>
+            Something wrong here? Use <b>Request a change</b> — HR approves edits to your record.
+          </div>
         </div>
       )}
 
@@ -3233,6 +3237,10 @@ const SECTIONS: NavSection[] = [
     desc:'Who is above you, who is beside you, who reports to you — read from the same reporting lines HR maintains',
     items:[{ k:'team', label:'Team' }]},
 
+  { k:'orgchart', label:'Org Chart', short:'Org', icon:'', status:'ready',
+    desc:'The whole company as one tree — the same chart HR sees, read from the same reporting lines',
+    items:[{ k:'orgchart', label:'Org Chart' }]},
+
   { k:'payroll', label:'Payroll', short:'Payroll', icon:'', status:'partial',
     desc:'Salary, benefits, declarations and claims — all in one place',
     items:[
@@ -3429,6 +3437,106 @@ function MyReportingLine({ employeeId, fallbackL1, notify }: {
   )
 }
 
+// ── "What you manage" — the menu band across the top ────────────────────────
+//
+// The modules a person administers are a different kind of thing from their own
+// tabs, and they were competing for the same vertical rail: thirteen personal
+// entries plus up to twenty-five module entries is a scrolling problem, not a
+// menu. Groups become top-level menus here; the sidebar keeps only what belongs
+// to the employee themself.
+//
+// The dropdown is position:fixed, measured off the button, rather than absolute
+// inside the strip — the strip scrolls horizontally when the menus do not fit,
+// and an absolutely positioned panel inside a scroll container gets clipped by it.
+
+/** One group: the trigger, and the panel it opens.
+ *
+ *  The panel is absolutely positioned inside its own relatively-positioned wrapper —
+ *  it is simply under its button, with no coordinates to compute. An earlier version
+ *  measured the button and used position:fixed, which put the panel far from the
+ *  button as soon as anything in the tree established a containing block; anchoring
+ *  it to the trigger removes the whole class of problem. The band wraps rather than
+ *  scrolls so nothing clips the panel either. */
+function ManageMenu({ group, items, open, activeKey, alignRight, onToggle, onClose, onPick }: {
+  group: string; items: NavEntry[]; open: boolean; activeKey: string | null; alignRight: boolean
+  onToggle: () => void; onClose: () => void; onPick: (k: string) => void
+}) {
+  const pop = useDismiss<HTMLDivElement>(open, onClose, `[data-ez-menu="${group}"]`)
+  const holdsActive = !!activeKey && items.some(i => i.key === activeKey)
+
+  return (
+    <div style={{ position:'relative', flexShrink:0 }}>
+      <button data-ez-menu={group} onClick={onToggle}
+        aria-expanded={open} aria-haspopup="true"
+        style={{ display:'flex', alignItems:'center', gap:5, padding:'6px 11px', borderRadius:R.md,
+                 border:`1px solid ${open || holdsActive ? C.brand : 'transparent'}`,
+                 background: open || holdsActive ? C.brandTint : 'transparent',
+                 color: open || holdsActive ? C.brandDeep : C.inkSoft,
+                 fontFamily:'inherit', fontSize:12.5, fontWeight: holdsActive ? 700 : 600,
+                 cursor:'pointer', whiteSpace:'nowrap' }}>
+        {group}
+        <span aria-hidden style={{ fontSize:9, opacity:.75, transform: open ? 'rotate(180deg)' : 'none', transition:'transform .12s' }}>▼</span>
+      </button>
+      {open && (
+        <div ref={pop} role="menu"
+          style={{ position:'absolute', top:'calc(100% + 4px)', ...(alignRight ? { right:0 } : { left:0 }),
+                   minWidth:220, zIndex:40,
+                   background:C.surface, border:`1px solid ${C.brandEdge}`, borderRadius:R.lg,
+                   boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:6 }}>
+          {items.map(i => {
+            const on = activeKey === i.key
+            return (
+              <button key={i.key} role="menuitem" onClick={() => { onPick(i.key); onClose() }}
+                style={{ display:'flex', alignItems:'center', gap:8, width:'100%', textAlign:'left',
+                         padding:'8px 10px', borderRadius:R.md, border:'none', cursor:'pointer',
+                         fontFamily:'inherit', fontSize:12.5, fontWeight: on ? 700 : 500,
+                         background: on ? C.brandTint : 'transparent', color: on ? C.brandDeep : C.ink }}
+                onMouseEnter={e => { if (!on) e.currentTarget.style.background = C.canvas }}
+                onMouseLeave={e => { if (!on) e.currentTarget.style.background = 'transparent' }}>
+                <span aria-hidden style={{ width:5, height:5, borderRadius:'50%', flexShrink:0,
+                                           background: on ? C.brand : 'transparent' }} />
+                <span style={{ whiteSpace:'nowrap' }}>{i.label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The strip. Renders nothing for an employee who administers nothing, so their
+ *  top bar is exactly what it was before any of this existed. */
+function ManageBand({ groups, activeKey, onPick }: {
+  groups: { group: string; items: NavEntry[] }[]; activeKey: string | null; onPick: (k: string) => void
+}) {
+  const [openGroup, setOpenGroup] = useState<string | null>(null)
+  const close = useCallback(() => setOpenGroup(null), [])
+  useEffect(() => {
+    if (!openGroup) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openGroup, close])
+  if (!groups.length) return null
+  // Wraps rather than scrolls: a horizontal scrollbar inside a header is awkward to
+  // reach, and an overflow container would clip the dropdowns hanging out of it.
+  // On a narrow window the bar gains a second row, which is the honest trade.
+  return (
+    <nav aria-label="What you manage"
+      style={{ display:'flex', alignItems:'center', flexWrap:'wrap', gap:3, minWidth:0, flexShrink:1 }}>
+      {groups.map((g, i) => (
+        <ManageMenu key={g.group} group={g.group} items={g.items} activeKey={activeKey}
+          open={openGroup === g.group}
+          // The last two open leftward so they do not run off the right edge.
+          alignRight={i >= groups.length - 2 && groups.length > 2}
+          onToggle={() => setOpenGroup(o => (o === g.group ? null : g.group))}
+          onClose={close} onPick={onPick} />
+      ))}
+    </nav>
+  )
+}
+
 function TabHeader({ s }: { s: NavSection }) {
   const [label, bg, fg] = BADGE[s.status]
   // Same header band as the 32 dashboard routes. This sat directly on the
@@ -3558,7 +3666,13 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   }, [employeeId])
   useEffect(() => { refreshUnread() }, [refreshUnread])
 
-  const go = (k: string) => { setView(k); setBellOpen(false); setMoreOpen(false) }
+  // Which admin module is open in the ESS content area, or null for ESS's own tabs.
+  // Everything an HR / payroll person administers is reachable here, so they never
+  // have to cross into /dashboard — the Admin button stays as the door for those
+  // who prefer the old shell.
+  const [adminKey, setAdminKey] = useState<string | null>(null)
+  const go = (k: string) => { setAdminKey(null); setView(k); setBellOpen(false); setMoreOpen(false) }
+  const goAdmin = (k: string) => { setAdminKey(k); setBellOpen(false); setMoreOpen(false); window.scrollTo({ top: 0 }) }
   // Clicking a section lands on its first item — the section itself is never a
   // destination, so there is no empty "section landing page" to design or maintain.
   const goSection = (s: NavSection) => go(s.items.some(i => i.k === view) ? view : s.items[0].k)
@@ -3566,8 +3680,21 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   // The nav as data (guide §5). Company / Reports appear only when the menu says
   // so; Approvals only for a login that can approve. Nothing here names a role.
-  const { menu: essMenu } = useEssMenu(emp?.id)
+  const { menu: essMenu, error: essMenuError } = useEssMenu(emp?.id)
   const sections = SECTIONS.filter(s => s.k === 'company' ? essMenu.can.company : s.k === 'reports' ? essMenu.can.reports : true)
+
+  // The admin modules THIS EMPLOYEE holds — from /api/ess/menu, which resolves the
+  // grant for the portal being rendered.
+  //
+  // Two traps this avoids. useGrant() answers for whoever is signed in, so an admin
+  // opening somebody's portal from Access Control saw their OWN modules inside the
+  // employee's sidebar — a payroll manager's portal showed Recruitment. And canSee()
+  // returns true for everything while rms_config.enforce_module_access is off, which
+  // is right for the dashboard's roll-out and wrong here: a portal must never offer
+  // a module its owner was not granted.
+  const adminGroups = ADMIN_NAV_GROUPS
+    .map(g => ({ group: g.group, items: g.items.filter(i => essMenu.super_admin || (!!i.module && atLeast(essMenu.modules[i.module] as AccessLevel, 'VIEW'))) }))
+    .filter(g => g.items.length > 0)
 
   const meta = viewMeta(view)
   const section = SECTIONS.find(s => s.k === meta.section)!
@@ -3602,6 +3729,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'letters':       return <MyLetters emp={emp} />
       case 'requests':      return <Requests emp={emp} notify={notify} />
       case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
+      case 'orgchart':      return <AdminModuleHost moduleKey="org-chart" />
       case 'directory':     return <Directory isMobile={isMobile} />
       case 'approvals':     return <ApprovalsSection employeeId={emp.id} go={go} notify={notify} />
       case 'exit':          return <ExitSection employeeId={emp.id} notify={notify} />
@@ -3629,6 +3757,10 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {/* Desktop sidebar — navy, eleven tabs, per ESS_Portal_New_Structure.html */}
       {!isMobile && (
         <div style={{ width:220, background: C.rail, padding:'20px 0', position:'sticky', top:0, height:'100vh', overflowY:'auto', flexShrink:0, borderRight:`1px solid ${C.railLine}` }}>
+          {/* Only the employee's own tabs live here now. What they administer moved to
+              the menu band at the top of the page — the two are different kinds of
+              thing, and thirteen personal entries plus up to twenty-five modules in
+              one vertical rail was a scrolling problem rather than a menu. */}
           {/* The mark carries the wordmark, so "EZER" is not repeated as text.
               "ESS" stays, because which of the two products you are in is the
               one thing the logo does not tell you. */}
@@ -3637,9 +3769,20 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
             <span style={{ color:C.railMuted, fontWeight:700, fontSize:12, letterSpacing:'.08em' }}>ESS</span>
           </div>
           {sections.map(s => (
-            <SectionButton key={s.k} s={s} active={s.k === section.k} onClick={() => goSection(s)} />
+            <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} onClick={() => goSection(s)} />
           ))}
-          <AdminEntry />
+          {/* A silent empty sidebar is indistinguishable from "you hold nothing", so
+              say when the answer could not be fetched rather than implying it. */}
+          {essMenuError && (
+            <div style={{ margin:'10px 12px', padding:'8px 10px', borderRadius:8, background:'rgba(220,38,38,0.18)',
+                          color:'#FCA5A5', fontSize:10.5, lineHeight:1.5 }}>
+              Could not load your access: {essMenuError}
+            </div>
+          )}
+          {/* Reads the signed-in user's own grant, so it is hidden while viewing
+              somebody else's portal — otherwise the admin's door shows up in an
+              employee's sidebar. */}
+          {!adminMode && <AdminEntry />}
         </div>
       )}
 
@@ -3648,12 +3791,19 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         <div style={{ background:C.surface, borderBottom: `1px solid ${C.brandEdge}`, padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:25 }}>
           {/* The tab's own name and badge live in TabHeader below, so this bar carries
               only what that header can't: the sub-tab you're on, and who you are. */}
-          <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
-            {isMobile ? 'EZER ESS' : (sectionItems.length > 1 ? meta.label : '')}
+          <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flexShrink:0 }}>
+            {adminKey ? NAV_ENTRY_BY_KEY[adminKey]?.label : isMobile ? 'EZER ESS' : (sectionItems.length > 1 ? meta.label : '')}
           </div>
+          {/* The modules this person administers, as menus. Desktop only: on a phone
+              the bottom bar and the "More" sheet already carry navigation, and a row
+              of dropdowns at 360px is worse than the sheet. */}
+          {!isMobile && <ManageBand groups={adminGroups} activeKey={adminKey} onPick={goAdmin} />}
+          {adminKey && (
+            <button onClick={() => go('home')} style={{ ...T.btnO, whiteSpace:'nowrap', flexShrink:0 }}>← My portal</button>
+          )}
           {adminMode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:C.warningTint, color:C.warning, fontWeight:600, whiteSpace:'nowrap' }}>Admin viewing {emp.first_name || emp.full_name}</span>}
           {/* Employee identity — always visible at the top */}
-          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9 }}>
+          <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap: isMobile ? 7 : 9, flexShrink:0 }}>
             {/* Light / dark / system. Three states rather than two, because
                 "follow my system" is a real preference and a two-way switch
                 silently overrides it. The dashboard has had this control all
@@ -3674,11 +3824,18 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           {onExit && <button onClick={onExit} style={{ ...T.btnO, whiteSpace:'nowrap' }}>{adminMode ? 'Exit Admin' : 'Close'}</button>}
         </div>
 
-        <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
-          <TabHeader s={section} />
-          <SubTabs items={sectionItems} view={view} go={go} />
-          {renderView()}
-        </div>
+        {adminKey ? (
+          // The dashboard page renders exactly as it does at /dashboard/<module> —
+          // same component, no wrapper of ours around it, because those pages bring
+          // their own <Page> padding and expect the full width.
+          <AdminModuleHost moduleKey={adminKey} />
+        ) : (
+          <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
+            <TabHeader s={section} />
+            <SubTabs items={sectionItems} view={view} go={go} />
+            {renderView()}
+          </div>
+        )}
       </div>
 
       {/* Notification panel — anchored to the bell, not a sidebar entry */}
@@ -3722,8 +3879,28 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
                   <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
                 </button>
               ))}
-              <AdminEntry isMobile />
+              {!adminMode && <AdminEntry isMobile />}
             </div>
+            {adminGroups.length > 0 && (
+              <>
+                <div style={{ fontSize:13, fontWeight:700, margin:'16px 0 10px' }}>What you manage</div>
+                {adminGroups.map(g => (
+                  <div key={g.group} style={{ marginBottom:10 }}>
+                    <div style={{ fontSize:10, fontWeight:700, letterSpacing:'.08em', textTransform:'uppercase', color:C.faint, marginBottom:6 }}>{g.group}</div>
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                      {g.items.map(i => (
+                        <button key={i.key} onClick={() => goAdmin(i.key)}
+                          style={{ padding:'12px 10px', borderRadius:10, border:`1px solid ${adminKey === i.key ? C.brand : C.brandTint}`,
+                                   background: adminKey === i.key ? C.canvas : C.sunken, cursor:'pointer', fontFamily:'inherit',
+                                   fontSize:12, textAlign:'left', color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          {i.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         </div>
       )}

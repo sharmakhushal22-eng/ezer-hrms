@@ -65,10 +65,12 @@ export interface EssMenuData {
   is_rm: boolean; direct_reports: number; is_hod: boolean; hod_departments: string[]
   roles: { code: string; name: string; scope: string | null }[]
   approval_types: string[]
+  /** Module name → NONE | VIEW | EDIT | FULL, for the employee whose portal this is. */
+  modules: Record<string, string>
   can: { approvals: boolean; company: boolean; reports: boolean }
   super_admin: boolean; view_as: boolean
 }
-const EMPTY_MENU: EssMenuData = { tabs: [{ id: 'home', label: 'Home' }], is_rm: false, direct_reports: 0, is_hod: false, hod_departments: [], roles: [], approval_types: [], can: { approvals: false, company: false, reports: false }, super_admin: false, view_as: false }
+const EMPTY_MENU: EssMenuData = { tabs: [{ id: 'home', label: 'Home' }], is_rm: false, direct_reports: 0, is_hod: false, hod_departments: [], roles: [], approval_types: [], modules: {}, can: { approvals: false, company: false, reports: false }, super_admin: false, view_as: false }
 
 export function useEssMenu(employeeId: string | null | undefined) {
   const [menu, setMenu] = useState<EssMenuData>(EMPTY_MENU)

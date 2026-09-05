@@ -11,6 +11,7 @@
 // Both entry tabs call saveVoucher(), the one write path, so re-entering the same
 // head for the same employee replaces the value identically either way.
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { loadRuns, MONTHS, type PayrollRun } from '@/lib/payroll/core'
@@ -31,6 +32,60 @@ const ACTION_TONE: Record<string, { bg: string; fg: string }> = {
   DELETED: { bg: TK.criticalTint, fg: TK.critical },
 }
 
+// ── Delete confirmation ────────────────────────────────────────────────────
+// One press used to delete the entry on the spot. A voucher row is money on
+// somebody's payslip, and the Delete button sits a few pixels from the table —
+// so the row now has to be confirmed in a dialog that shows exactly what is
+// about to go. Portaled to body: the payroll page sits under transform-animated
+// wrappers, and a transformed ancestor captures position:fixed.
+function ConfirmDelete({ entry, company, busy, onCancel, onConfirm }: {
+  entry: VoucherEntry; company: string; busy: boolean
+  onCancel: () => void; onConfirm: () => void
+}) {
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+  if (!mounted) return null
+  return createPortal(
+    <div onClick={onCancel} style={{
+      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.52)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+      fontFamily: '"DM Sans","Segoe UI",sans-serif',
+    }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{
+        background: TK.surface, borderRadius: 16, width: 'min(420px, 100%)', padding: '20px 22px',
+        boxShadow: '0 24px 64px rgba(15,23,42,0.32)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: C.redBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, flexShrink: 0 }}>🗑</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>Delete this entry?</div>
+        </div>
+        <div style={{ background: C.gray, border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 13px', fontSize: 12.5, lineHeight: 1.7, marginBottom: 8 }}>
+          <div><b>{entry.employee_code}</b>{company ? <span style={{ color: C.muted }}> · {company}</span> : null}</div>
+          <div>{entry.head_name} <span style={{ color: entry.head_type === 'Addition' ? C.green : C.red, fontWeight: 700 }}>({entry.head_type})</span> — <b>{inr(entry.amount)}</b></div>
+          {entry.remark && <div style={{ color: C.muted }}>“{entry.remark}”</div>}
+        </div>
+        <div style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.55, marginBottom: 16 }}>
+          The amount leaves this month's payroll for this employee. The removal is recorded in Tracking, but the entry itself cannot be brought back — it would have to be typed in again.
+        </div>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onCancel} style={{ padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.navy, fontWeight: 600, fontSize: 12.5, fontFamily: 'inherit', cursor: 'pointer' }}>Cancel</button>
+          <button onClick={onConfirm} disabled={busy} style={{
+            padding: '9px 18px', borderRadius: 10, border: 'none', background: busy ? TK.criticalTint : C.red,
+            color: TK.onAccent, fontWeight: 700, fontSize: 12.5, fontFamily: 'inherit',
+            cursor: busy ? 'not-allowed' : 'pointer',
+          }}>{busy ? 'Deleting…' : 'Delete entry'}</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  )
+}
+
 export default function ManualVoucher({ companyId, fy }: { companyId: string; fy: string }) {
   const [tab, setTab] = useState<Tab>('individual')
   const [runs, setRuns] = useState<PayrollRun[]>([])
@@ -49,6 +104,11 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
   const [remark, setRemark] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(''); const [err, setErr] = useState('')
+  // The entries table renders only after View — a month can carry hundreds of rows,
+  // and they pushed the add-entry form's feedback out of sight.
+  const [viewList, setViewList] = useState(false)
+  const [confirmDel, setConfirmDel] = useState<VoucherEntry | null>(null)
+  const [delBusy, setDelBusy] = useState(false)
 
   // bulk
   const [picked, setPicked] = useState<string[]>([])
@@ -67,6 +127,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
 
   // In Group Companies mode one calendar month spans several runs — one per company.
   // Everything below works off that set, so the month appears once rather than three times.
+  useEffect(() => { setViewList(false) }, [monthVal])
   const monthRuns = runs.filter(r => String(r.month) === monthVal)
   const runIds = monthRuns.map(r => r.id)
   const isGroup = !companyId
@@ -107,9 +168,11 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
     setAmount(''); setRemark(''); refresh()
   }
 
+  // Runs only from the dialog's Delete button — the row button just opens it.
   async function removeEntry(e: VoucherEntry) {
-    setErr(''); setMsg('')
+    setErr(''); setMsg(''); setDelBusy(true)
     const { error } = await deleteVoucher(e.id)
+    setDelBusy(false); setConfirmDel(null)
     if (error) { setErr(error); return }
     setMsg(`Deleted — ${e.head_name} for ${e.employee_code}.`); refresh()
   }
@@ -264,7 +327,14 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
             {fileHead(fileNames([...entries].sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')))))}
             {entries.length === 0
               ? <div style={{ fontSize: 12, color: C.muted, padding: '14px 0', textAlign: 'center' }}>Nothing added for this month yet.</div>
-              : (
+              : !viewList ? (
+                <div style={{ padding: '10px 0' }}>
+                  <button onClick={() => setViewList(true)}
+                    style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: TK.brand, color: TK.onAccent, fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    View list ({entries.length})
+                  </button>
+                </div>
+              ) : (
                 <div style={{ overflowX: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
                     <thead><tr style={{ background: C.navy }}>{[...(isGroup ? ['Company'] : []), 'Emp Code', 'Head', 'Type', 'Amount', 'Remark', 'Via', ''].map(h => <th key={h} style={th}>{h}</th>)}</tr></thead>
@@ -279,7 +349,7 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
                           <td style={{ ...td, color: C.muted }}>{e.remark || '—'}</td>
                           <td style={{ ...td, color: C.muted, fontSize: 11 }}>{e.uploaded_via}</td>
                           <td style={td}>
-                            <button onClick={() => removeEntry(e)} style={{ padding: '4px 10px', borderRadius: 99, border: `1px solid ${C.red}`, background: C.redBg, color: C.red, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
+                            <button onClick={() => setConfirmDel(e)} style={{ padding: '4px 10px', borderRadius: 99, border: `1px solid ${C.red}`, background: C.redBg, color: C.red, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>Delete</button>
                           </td>
                         </tr>
                       ))}
@@ -289,6 +359,11 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
               )}
           </div>
         </>
+      )}
+
+      {confirmDel && (
+        <ConfirmDelete entry={confirmDel} company={coByRun[confirmDel.run_id] || ''} busy={delBusy}
+          onCancel={() => setConfirmDel(null)} onConfirm={() => removeEntry(confirmDel)} />
       )}
 
       {/* ── Bulk ── */}

@@ -21,6 +21,9 @@ const sec: React.CSSProperties = { padding: '7px 13px', background: TK.surface, 
 
 interface EmpVoucher {
   employee_id: string; emp_code: string; full_name: string; department: string; designation: string
+  /** The employee's own company — stamped on the voucher and in its invoice number,
+   *  so the All-companies view still prints every voucher on the right letterhead. */
+  company_name: string; company_code: string
   components: { code: string; amount: number }[]; total: number; approvedOn: string | null; anyProcessed: boolean
 }
 
@@ -28,15 +31,15 @@ function esc(s: any) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&
 const fmtDate = (s: string | null) => s ? new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
 
 // Build the printable HTML for one or more vouchers.
-function voucherHtml(companyName: string, companyCode: string, ym: string, vouchers: EmpVoucher[]): string {
+function voucherHtml(ym: string, vouchers: EmpVoucher[]): string {
   const [yr, mo] = ym.split('-')
   const period = new Date(Number(yr), Number(mo) - 1, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })
   const page = (v: EmpVoucher) => {
-    const invNo = `EZER-FLX-${companyCode || 'EZ'}-${yr}${mo}-${v.emp_code}`
+    const invNo = `EZER-FLX-${v.company_code || 'EZ'}-${yr}${mo}-${v.emp_code}`
     const rows = v.components.map(c => `<tr><td>${esc(COMP_NAMES[c.code] || c.code)}</td><td class="r">${inr(c.amount)}</td></tr>`).join('')
     return `<section class="voucher">
       <div class="hd">
-        <div><div class="brand">EZER HRMS</div><div class="co">${esc(companyName)}</div></div>
+        <div><div class="brand">EZER HRMS</div><div class="co">${esc(v.company_name)}</div></div>
         <div class="title"><div>FLEXI REIMBURSEMENT</div><div class="sub">VOUCHER</div></div>
       </div>
       <div class="meta">
@@ -101,23 +104,26 @@ export default function FlexiInvoicesPage() {
       .then(({ data }) => { setCompanies(data || []); if (data?.length) setCompanyId(data[0].id) })
   }, [])
 
-  const company = companies.find(c => c.id === companyId)
 
   const load = useCallback(async () => {
-    if (!companyId) { setRows([]); return }
     setLoading(true)
     const [yr, mo] = ym.split('-').map(Number)
     const from = `${yr}-${String(mo).padStart(2, '0')}-01`
     const to = mo >= 12 ? `${yr + 1}-01-01` : `${yr}-${String(mo + 1).padStart(2, '0')}-01`
-    const { data } = await supabase.from('flexi_claims')
-      .select('employee_id, component_code, claim_amount, status, reviewed_at, employees(emp_code, full_name, designation, departments!employees_department_id_fkey(dept_name))')
-      .eq('company_id', companyId).in('status', ['APPROVED', 'PAYROLL_PROCESSED'])
+    let q = supabase.from('flexi_claims')
+      .select('employee_id, company_id, component_code, claim_amount, status, reviewed_at, employees(emp_code, full_name, designation, departments!employees_department_id_fkey(dept_name))')
+      .in('status', ['APPROVED', 'PAYROLL_PROCESSED'])
       .gte('submitted_at', from).lt('submitted_at', to)
+    if (companyId) q = q.eq('company_id', companyId)   // '' = All companies
+    const { data } = await q
+    const coById = new Map(companies.map(c => [c.id, c]))
     const byEmp = new Map<string, EmpVoucher>()
     ;(data || []).forEach((c: any) => {
+      const co = coById.get(c.company_id)
       const e = byEmp.get(c.employee_id) || {
         employee_id: c.employee_id, emp_code: c.employees?.emp_code || '', full_name: c.employees?.full_name || '',
         department: c.employees?.departments?.dept_name || '', designation: c.employees?.designation || '',
+        company_name: co?.company_name || '', company_code: co?.company_code || '',
         components: [], total: 0, approvedOn: null, anyProcessed: false,
       }
       e.components.push({ code: c.component_code, amount: Number(c.claim_amount) || 0 })
@@ -128,12 +134,12 @@ export default function FlexiInvoicesPage() {
     })
     setRows(Array.from(byEmp.values()).sort((a, b) => a.emp_code.localeCompare(b.emp_code)))
     setLoading(false)
-  }, [companyId, ym])
+  }, [companyId, ym, companies])
   useEffect(() => { load() }, [load])
 
   function print(vouchers: EmpVoucher[]) {
     if (!vouchers.length) return
-    const html = voucherHtml(company?.company_name || '', company?.company_code || '', ym, vouchers)
+    const html = voucherHtml(ym, vouchers)
     const w = window.open('', '_blank')
     if (w) { w.document.write(html); w.document.close() }
   }
@@ -148,7 +154,7 @@ export default function FlexiInvoicesPage() {
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Generate reimbursement vouchers for approved flexi claims · one voucher per employee per month</div>
         </div>
         <div><label style={{ fontSize: 10, color: C.purpleDark, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Company</label>
-          <select style={{ ...inp, minWidth: 200 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select></div>
+          <select style={{ ...inp, minWidth: 200 }} value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select></div>
         <div><label style={{ fontSize: 10, color: C.purpleDark, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Period</label>
           <input type="month" style={inp} value={ym} onChange={e => setYm(e.target.value)} /></div>
       </div>

@@ -4,11 +4,13 @@
 // bank / CTC / salary + days_in_month) via sync_payroll_month — WITHOUT touching the
 // attendance columns. Useful after CTC revisions / master edits once a month already exists.
 import { useState, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import * as XLSX from 'xlsx'
 import { loadRuns, loadRunsForPeriod, prevPeriod, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { loadMonthDiff, buildChangeSheets, type MonthDiff } from '@/lib/payroll/monthDiff'
 import {
   SYNC_CATEGORIES, loadSyncStatus, runCategorySync, runFullSync, loadCategoryRows, loadFilterCandidates,
+  loadPendingChanges,
   type SyncCategory, type SyncStatus, type SyncEmployee,
 } from '@/lib/payroll/sync'
 // Design tokens, aliased as TK — many of these files already declare
@@ -160,9 +162,9 @@ function ChangeTable({ companyId, run }: { companyId: string; run: PayrollRun | 
 // ── One category row ───────────────────────────────────────────────────────
 // Defined outside the parent so a re-render (every sync, every counter refresh)
 // doesn't remount the row and lose the button's busy state.
-function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: {
+function CategoryRow({ cat, count, extra, busy, busyText, disabled, onSync, onDownload }: {
   cat: SyncCategory; count: number | null; extra?: React.ReactNode
-  busy: boolean; disabled: boolean
+  busy: boolean; busyText?: string; disabled: boolean
   onSync: () => void; onDownload: () => void
 }) {
   const ready = cat.status === 'ready'
@@ -183,10 +185,21 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
           <span style={{ fontSize: 12, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>
             {count == null ? '—' : count}
           </span>
-          <button onClick={onSync} disabled={busy || disabled}
-            style={{ padding: '7px 15px', borderRadius: 10, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-            {busy ? 'Syncing…' : 'Sync'}
-          </button>
+          {/* Run Payroll owns these five and recomputes them every run, in an order that
+              matters. A Sync button here could only produce a figure the next run
+              overwrites — or, pressed out of order, a wrong one. The Download stays:
+              this is where the EPF, ESIC, PT and LWF registers come from. */}
+          {cat.syncable === false ? (
+            <span title="Run Payroll computes this every time it runs — it is not synced by hand"
+              style={{ fontSize: 11, fontWeight: 700, color: C.muted, background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>
+              Run Payroll
+            </span>
+          ) : (
+            <button onClick={onSync} disabled={busy || disabled}
+              style={{ padding: '7px 15px', borderRadius: 10, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+              {busy ? (busyText || 'Syncing…') : 'Sync'}
+            </button>
+          )}
           <button onClick={onDownload} disabled={disabled} title={`Download ${cat.label} as frozen in this month`}
             style={{ padding: '7px 10px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontSize: 12, fontFamily: font, cursor: disabled ? 'not-allowed' : 'pointer' }}></button>
         </>
@@ -203,63 +216,254 @@ function CategoryRow({ cat, count, extra, busy, disabled, onSync, onDownload }: 
 }
 
 
-// ── Sync filter ────────────────────────────────────────────────────────────
-// There are 300 employees, but HR rarely wants to sync the whole month. Narrow by
-// company, location, emp code or name — whichever Sync is then pressed pulls in data
-// for ONLY those employees. Opening the filter also narrows the counters, so the badge
-// shows exactly what the button will do.
-// Defined OUTSIDE the parent — otherwise every keystroke remounts it and the search
-// box loses focus.
-function FilterBar({ pool, company, location, search, onCompany, onLocation, onSearch, onClear, matched }: {
+// ── Employee picker ────────────────────────────────────────────────────────
+// Pressing a category's Sync opens this: the month's employees, one checkbox each,
+// with the count of what is about to be written shown on the button itself.
+//
+// Rendered through a PORTAL onto document.body, not in place. The payroll page sits
+// under transform-animated wrappers (PageTransition, the sidebar's motion CSS), and a
+// transformed ancestor becomes the containing block for position:fixed — so drawn in
+// place, this overlay anchored itself to the page instead of the viewport and ran off
+// the screen. On body there is no transformed ancestor to catch it.
+//
+// Everyone starts ticked, because syncing the whole month is the normal case and
+// hand-picking 300 boxes to get there is not a choice anyone would make. Untick the
+// few you want to leave alone.
+//
+// Defined OUTSIDE the parent — a modal remounted on every keystroke loses the search
+// box's focus after one character.
+function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
+  cat: SyncCategory
   pool: SyncEmployee[]
-  company: string; location: string; search: string
-  onCompany: (v: string) => void; onLocation: (v: string) => void; onSearch: (v: string) => void
-  onClear: () => void
-  matched: string[] | null
+  /** code → which fields changed (086). null = no diff for this category → whole month. */
+  pending: Map<string, string> | null
+  busy: boolean
+  onCancel: () => void
+  onConfirm: (codes: string[] | null) => void
 }) {
+  const [company, setCompany] = useState('')
+  const [location, setLocation] = useState('')
+  const [search, setSearch] = useState('')
+  // When the database can say who changed, the list opens on exactly those people
+  // and only they start ticked — that IS the answer to "who needs this sync".
+  // "Show all" stays one click away for the deliberate re-sync of somebody clean.
+  const diffMode = pending !== null
+  const [showAll, setShowAll] = useState(!diffMode)
+  const [sel, setSel] = useState<Set<string>>(() =>
+    diffMode ? new Set(pending!.keys()) : new Set(pool.map(e => e.code)))
+  // Portals need the DOM; render nothing during SSR/first paint.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
+  // The page behind must not scroll while the dialog is up — half the "broken UI"
+  // reading was the list and the page scrolling as one.
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onCancel() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onCancel])
+
   const companies = Array.from(new Set(pool.map(e => e.company).filter(Boolean))).sort()
   const locations = Array.from(new Set(pool.map(e => e.location).filter(Boolean))).sort()
+
+  // The search box takes a pasted list as readily as a single name — HR arrives with
+  // emp codes in a column from Excel far more often than they arrive with one name.
+  const tokens = search.split(/[,\n;\t]+/).map(t => t.trim()).filter(Boolean)
+  const base = diffMode && !showAll ? pool.filter(e => pending!.has(e.code)) : pool
+  const visible = base.filter(e => {
+    if (company && e.company !== company) return false
+    if (location && e.location !== location) return false
+    if (!tokens.length) return true
+    return tokens.some(t => {
+      const q = t.toLowerCase()
+      return e.code.toLowerCase() === q || e.code.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)
+    })
+  })
+  const visibleCodes = visible.map(e => e.code)
+  const allVisibleOn = visibleCodes.length > 0 && visibleCodes.every(c => sel.has(c))
+
+  const toggle = (code: string) => setSel(prev => {
+    const next = new Set(prev)
+    if (next.has(code)) next.delete(code); else next.add(code)
+    return next
+  })
+  const setMany = (codes: string[], on: boolean) => setSel(prev => {
+    const next = new Set(prev)
+    codes.forEach(c => (on ? next.add(c) : next.delete(c)))
+    return next
+  })
+
+  const chosen = pool.filter(e => sel.has(e.code)).map(e => e.code)
+  // Everyone ticked means "the whole month", which is what p_codes NULL already says
+  // to every sync function.
+  const codesForRpc = chosen.length === pool.length ? null : chosen
+
   const inp: React.CSSProperties = {
-    padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12,
-    background: TK.surface, color: C.navy, fontFamily: font, outline: 'none',
+    padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12.5,
+    background: TK.sunken, color: C.navy, fontFamily: font, outline: 'none', boxSizing: 'border-box',
   }
-  const on = matched !== null
-  return (
-    <div style={{ background: on ? C.purpleBg : C.gray, border: `1px solid ${on ? TK.brandEdge : C.border}`, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'end', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', paddingBottom: 8 }}>Filter</div>
-        {companies.length > 1 && (
-          <div>
-            <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Company</label>
-            <select style={{ ...inp, minWidth: 170 }} value={company} onChange={e => onCompany(e.target.value)}>
-              <option value="">All companies</option>
-              {companies.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+  const initials = (n: string) => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?'
+
+  if (!mounted) return null
+  return createPortal(
+    <div onClick={onCancel} style={{
+      position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.52)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 18,
+      backdropFilter: 'blur(2px)', fontFamily: font,
+    }}>
+      <div onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" style={{
+        background: TK.surface, borderRadius: 18, width: 'min(680px, 100%)',
+        height: 'min(640px, calc(100vh - 48px))',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 24px 64px rgba(15,23,42,0.32), 0 4px 16px rgba(15,23,42,0.14)',
+      }}>
+
+        {/* ── header ── */}
+        <div style={{ padding: '16px 20px 14px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>{cat.icon}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: C.navy }}>Sync {cat.label}</div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 1 }}>
+                {diffMode
+                  ? <>Only people whose {cat.label.toLowerCase()} changed in HRMS since this month was frozen.</>
+                  : <>Choose whose {cat.label.toLowerCase()} to refresh from HRMS into this month.</>}
+              </div>
+            </div>
+            <button onClick={onCancel} aria-label="Close" style={{
+              width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.border}`, background: TK.surface,
+              color: C.muted, fontSize: 15, cursor: 'pointer', lineHeight: 1, flexShrink: 0,
+            }}>✕</button>
           </div>
-        )}
-        <div>
-          <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Location</label>
-          <select style={{ ...inp, minWidth: 150 }} value={location} onChange={e => onLocation(e.target.value)}>
-            <option value="">All locations</option>
-            {locations.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
+            {companies.length > 1 && (
+              <select style={{ ...inp, flex: '0 1 170px' }} value={company} onChange={e => setCompany(e.target.value)}>
+                <option value="">All companies</option>
+                {companies.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            )}
+            {locations.length > 1 && (
+              <select style={{ ...inp, flex: '0 1 150px' }} value={location} onChange={e => setLocation(e.target.value)}>
+                <option value="">All locations</option>
+                {locations.map(l => <option key={l} value={l}>{l}</option>)}
+              </select>
+            )}
+            <input style={{ ...inp, flex: '1 1 180px', minWidth: 150 }} value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="🔍  Name, emp code — or paste a list" />
+          </div>
         </div>
-        <div style={{ flex: 1, minWidth: 230 }}>
-          <label style={{ fontSize: 10, color: C.muted, display: 'block', marginBottom: 3 }}>Emp code / name — paste a list too</label>
-          <input style={{ ...inp, width: '100%' }} value={search} onChange={e => onSearch(e.target.value)}
-            placeholder="OXYZO680, OXYZO741, OXYZO1013   ya   umesh" />
+
+        {/* ── select-all bar ── */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12, padding: '8px 20px',
+          background: TK.sunken, borderBottom: `1px solid ${C.border}`, fontSize: 12, flexShrink: 0,
+        }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 7, cursor: 'pointer', fontWeight: 700, color: C.purpleD, userSelect: 'none' }}>
+            <input type="checkbox" checked={allVisibleOn} onChange={e => setMany(visibleCodes, e.target.checked)}
+              style={{ width: 15, height: 15, accentColor: C.purple, cursor: 'pointer' }} />
+            {allVisibleOn ? 'Unselect' : 'Select'} {visible.length === pool.length ? 'all' : `these ${visible.length}`}
+          </label>
+          <button onClick={() => setSel(new Set())}
+            style={{ border: 'none', background: 'none', color: TK.critical, fontSize: 11.5, fontWeight: 700, fontFamily: font, cursor: 'pointer', padding: 0 }}>
+            Clear all
+          </button>
+          {diffMode && (
+            <button onClick={() => setShowAll(v => !v)}
+              style={{ border: 'none', background: 'none', color: C.purpleD, fontSize: 11.5, fontWeight: 700, fontFamily: font, cursor: 'pointer', padding: 0 }}>
+              {showAll ? `← Only changed (${pending!.size})` : `Show all ${pool.length}`}
+            </button>
+          )}
+          <span style={{ marginLeft: 'auto', color: C.muted }}>
+            {diffMode && !showAll
+              ? `${pending!.size} changed of ${pool.length}`
+              : visible.length === base.length ? `${base.length} employees` : `${visible.length} of ${base.length} shown`}
+          </span>
         </div>
-        {on && <button onClick={onClear} style={{ padding: '7px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: TK.critical, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: 'pointer' }}>Clear</button>}
+
+        {/* ── list — the ONLY thing that scrolls ── */}
+        <div style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain', padding: '6px 10px' }}>
+          {visible.length === 0 ? (
+            <div style={{ padding: '48px 20px', textAlign: 'center', fontSize: 12.5, color: C.muted }}>
+              {diffMode && !showAll && !tokens.length && !company && !location ? (
+                <>
+                  <div style={{ fontSize: 26, marginBottom: 8 }}>✅</div>
+                  <div style={{ fontWeight: 700, color: C.green, marginBottom: 4 }}>Nothing to sync — everyone's {cat.label.toLowerCase()} matches HRMS.</div>
+                  <button onClick={() => setShowAll(true)}
+                    style={{ marginTop: 8, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontSize: 11.5, fontWeight: 700, fontFamily: font, cursor: 'pointer', borderRadius: 8, padding: '6px 12px' }}>
+                    Show all {pool.length} anyway
+                  </button>
+                </>
+              ) : (
+                <><div style={{ fontSize: 26, marginBottom: 8 }}>🔍</div>Nobody matches this search.</>
+              )}
+            </div>
+          ) : visible.map(e => {
+            const on = sel.has(e.code)
+            return (
+              <label key={e.code} style={{
+                display: 'flex', alignItems: 'center', gap: 11, padding: '7px 10px', borderRadius: 10,
+                cursor: 'pointer', background: on ? C.purpleBg : 'transparent', marginBottom: 1, userSelect: 'none',
+              }}>
+                <input type="checkbox" checked={on} onChange={() => toggle(e.code)}
+                  style={{ width: 15, height: 15, accentColor: C.purple, cursor: 'pointer', flexShrink: 0 }} />
+                <span style={{
+                  width: 28, height: 28, borderRadius: '50%', background: on ? C.purple : TK.sunken,
+                  color: on ? TK.onAccent : C.purpleD, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 10, fontWeight: 700, flexShrink: 0,
+                }}>{initials(e.name)}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: 'block', fontSize: 12.5, fontWeight: 600, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.name || '—'}</span>
+                  <span style={{ display: 'block', fontSize: 10.5, color: C.muted, fontFamily: 'ui-monospace, monospace' }}>{e.code}</span>
+                  {pending?.get(e.code) && (
+                    <span style={{ display: 'block', fontSize: 10.5, color: C.amber, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      title={pending.get(e.code)}>
+                      ↻ {pending.get(e.code)}
+                    </span>
+                  )}
+                </span>
+                {e.location && <span style={{ fontSize: 10.5, color: C.muted, whiteSpace: 'nowrap', flexShrink: 0 }}>{e.location}</span>}
+                {e.company && <span style={{ fontSize: 10, fontWeight: 600, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '2px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>{e.company}</span>}
+              </label>
+            )
+          })}
+        </div>
+
+        {/* ── footer ── */}
+        <div style={{
+          padding: '13px 20px', borderTop: `1px solid ${C.border}`, background: TK.surface,
+          display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+        }}>
+          <div style={{ flex: 1, fontSize: 11.5, color: C.muted, lineHeight: 1.5, minWidth: 0 }}>
+            {chosen.length === 0
+              ? <b style={{ color: TK.critical }}>Nobody selected — nothing to sync.</b>
+              : <>Writing <b style={{ color: C.navy }}>{chosen.length}</b> of {pool.length}. Only <b>{cat.label}</b> changes; the rest stays frozen.</>}
+          </div>
+          <button onClick={onCancel} style={{
+            padding: '9px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface,
+            color: C.navy, fontWeight: 600, fontSize: 12.5, fontFamily: font, cursor: 'pointer', flexShrink: 0,
+          }}>Cancel</button>
+          <button onClick={() => onConfirm(codesForRpc)} disabled={busy || chosen.length === 0}
+            style={{
+              padding: '9px 20px', borderRadius: 10, border: 'none', fontWeight: 700, fontSize: 12.5, fontFamily: font,
+              background: busy || chosen.length === 0 ? TK.brandTint : C.purple, color: TK.onAccent,
+              cursor: busy || chosen.length === 0 ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+              boxShadow: busy || chosen.length === 0 ? 'none' : '0 3px 10px rgba(37,99,235,0.25)',
+            }}>
+            {busy ? 'Syncing…' : `Sync ${chosen.length} employee${chosen.length === 1 ? '' : 's'}`}
+          </button>
+        </div>
       </div>
-      <div style={{ fontSize: 11, marginTop: 8, color: on ? C.purpleD : C.muted, lineHeight: 1.5 }}>
-        {!on ? <>No filter — Sync will run on the <b>whole month</b> ({pool.length} employees).</>
-          : matched.length === 0
-            ? <b style={{ color: TK.critical }}>This filter matches no employees — Sync is disabled.</b>
-            : <>Filter on — <b>{matched.length}</b> of {pool.length} employees. Any Sync you press now runs on <b>these only</b>, and the counters below refer to them too.</>}
-      </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
+
 
 export default function MonthSync({ companyId, fy }: { companyId: string; fy: string }) {
   const [runs, setRuns] = useState<PayrollRun[]>([])
@@ -269,9 +473,13 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   const [migrationDetail, setMigrationDetail] = useState<string | null>(null)
   const [busyKey, setBusyKey] = useState('')
   const [pool, setPool] = useState<SyncEmployee[]>([])
-  const [fCompany, setFCompany] = useState('')
-  const [fLocation, setFLocation] = useState('')
-  const [fSearch, setFSearch] = useState('')
+  // Which category's employee picker is open. Selection is per-press and is thrown away
+  // afterwards, so no sync can inherit a choice made for a different one.
+  const [pickerCat, setPickerCat] = useState<SyncCategory | null>(null)
+  // What payroll_sync_pending() said for the open picker's category — fetched at the
+  // moment Sync is pressed, so the list is what changed as of NOW, not page load.
+  const [pendingMap, setPendingMap] = useState<Map<string, string> | null>(null)
+  const [checkingKey, setCheckingKey] = useState('')
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
 
@@ -288,32 +496,16 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   const runIds = monthRuns.map(r => r.id)
   const sel = monthRuns[0] || null
 
-  // Emp codes the filter resolves to — null when no filter is set at all, which the
-  // RPCs read as "the whole month" (p_codes NULL) exactly as before.
-  const matched: string[] | null = (() => {
-    const tokens = fSearch.split(/[,\n;]+/).map(t => t.trim()).filter(Boolean)
-    if (!fCompany && !fLocation && !tokens.length) return null
-    const hit = (e: SyncEmployee) => {
-      if (fCompany && e.company !== fCompany) return false
-      if (fLocation && e.location !== fLocation) return false
-      if (!tokens.length) return true
-      // A pasted list matches emp codes exactly; a single word also matches names.
-      return tokens.some(t => {
-        const q = t.toLowerCase()
-        return e.code.toLowerCase() === q || e.code.toLowerCase().includes(q) || e.name.toLowerCase().includes(q)
-      })
-    }
-    return pool.filter(hit).map(e => e.code)
-  })()
-  const filterKey = matched === null ? '' : matched.join(',')
-
   const refresh = useCallback(async () => {
     if (!runIds.length) { setStatus(null); setNeedsMigration(false); setMigrationDetail(null); return }
     try {
-      const { status: s, missing, detail } = await loadSyncStatus(runIds, matched)
+      // Whole month, always. The badge answers "how many are in this month", and the
+      // picker answers "how many am I about to write" — two different questions, and
+      // making one counter try to say both is what made the old filter confusing.
+      const { status: s, missing, detail } = await loadSyncStatus(runIds, null)
       setStatus(missing ? null : s); setNeedsMigration(missing); setMigrationDetail(detail)
     } catch (e: any) { setErr(e.message || String(e)) }
-  }, [runIds.join(','), filterKey])   // eslint-disable-line react-hooks/exhaustive-deps
+  }, [runIds.join(',')])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { refresh() }, [refresh])
 
   useEffect(() => {
@@ -322,15 +514,26 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
       .then(setPool).catch(e => setErr(e.message || String(e)))
   }, [runIds.join(',')])   // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function syncCategory(cat: SyncCategory) {
+  async function openPicker(cat: SyncCategory) {
+    if (!runIds.length || checkingKey) return
+    setCheckingKey(cat.key); setMsg(''); setErr('')
+    // null = category has no diff, or 086 is not applied yet — the picker then
+    // shows the whole month exactly as before, so nothing breaks either way.
+    const m = await loadPendingChanges(cat, runIds).catch(() => null)
+    setCheckingKey('')
+    setPendingMap(m)
+    setPickerCat(cat)
+  }
+
+  async function syncCategory(cat: SyncCategory, codes: string[] | null) {
     if (!runIds.length) return
     setBusyKey(cat.key); setMsg(''); setErr('')
-    const { error, count } = await runCategorySync(cat, runIds, matched)
-    setBusyKey('')
+    const { error, count } = await runCategorySync(cat, runIds, codes)
+    setBusyKey(''); setPickerCat(null)
     if (error) { setErr(error); return }
     setMsg(`${cat.label} synced — ${count} employee${count === 1 ? '' : 's'} refreshed from HRMS`
-      + (matched ? ` (from the ${matched.length} inside the filter)` : '')
-      + '. Every other category is untouched.')
+      + (codes ? ` (the ${codes.length} you selected)` : ' (the whole month)')
+      + `, into ${label}. Every other category is untouched.`)
     refresh()
   }
 
@@ -347,7 +550,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   async function download(cat: SyncCategory) {
     setErr('')
     try {
-      const rows = await loadCategoryRows(cat, monthRuns.map(r => ({ id: r.id, company_name: r.company_name })), matched)
+      const rows = await loadCategoryRows(cat, monthRuns.map(r => ({ id: r.id, company_name: r.company_name })), null)
       if (!rows.length) { setErr(`No ${cat.label} rows for this month yet.`); return }
       const header: string[] = []
       rows.forEach(r => Object.keys(r).forEach(k => { if (!header.includes(k)) header.push(k) }))
@@ -368,9 +571,10 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   // to overwrite anyway. Run Payroll calls sync_month_tds() itself, last, and the figure
   // shows up on the downloaded sheet from there.
   const DATA_SYNC_CATEGORIES = SYNC_CATEGORIES.filter(c => c.key !== 'tds')
-  const readyCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready').length
+  const readyCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready' && c.syncable !== false).length
+  const runOwnedCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready' && c.syncable === false).length
   const globalCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'global').length
-  const plannedCount = DATA_SYNC_CATEGORIES.length - readyCount - globalCount
+  const plannedCount = DATA_SYNC_CATEGORIES.length - readyCount - runOwnedCount - globalCount
   const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const monthOpts = Array.from(new Map(runs.map(r => [r.month, r])).values()).sort((a, b) => (a.month || 0) - (b.month || 0))
 
@@ -386,6 +590,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         </div>
         <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', paddingTop: 4 }}>
           <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: C.green, marginRight: 5 }} />{readyCount} ready
+          {runOwnedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.line, margin: '0 5px 0 12px' }} />{runOwnedCount} run by payroll</>}
           <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.positiveTint, margin: '0 5px 0 12px' }} />{globalCount} whole-year
           {plannedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.line, margin: '0 5px 0 12px' }} />{plannedCount} planned</>}
         </div>
@@ -425,17 +630,13 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
           </div>
         )}
 
-        <FilterBar pool={pool} company={fCompany} location={fLocation} search={fSearch}
-          onCompany={setFCompany} onLocation={setFLocation} onSearch={setFSearch}
-          onClear={() => { setFCompany(''); setFLocation(''); setFSearch('') }}
-          matched={matched} />
-
         {DATA_SYNC_CATEGORIES.map(cat => (
           <CategoryRow key={cat.key} cat={cat}
             count={status && cat.countKey ? status[cat.countKey] : null}
-            busy={busyKey === cat.key}
-            disabled={!runIds.length || needsMigration || !!status?.is_locked || (matched !== null && matched.length === 0) || (!!busyKey && busyKey !== cat.key)}
-            onSync={() => syncCategory(cat)}
+            busy={busyKey === cat.key || checkingKey === cat.key}
+            busyText={checkingKey === cat.key ? 'Checking…' : 'Syncing…'}
+            disabled={!runIds.length || needsMigration || !!status?.is_locked || (!!busyKey && busyKey !== cat.key) || (!!checkingKey && checkingKey !== cat.key)}
+            onSync={() => openPicker(cat)}
             onDownload={() => download(cat)}
             extra={cat.key === 'employee' && status && (status.new_joiners > 0 || status.leavers > 0) ? (
               <div style={{ fontSize: 11, marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -453,6 +654,18 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
         {err && <div style={{ fontSize: 12, color: TK.critical, background: TK.criticalTint, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
       </div>
+
+      {pickerCat && pool.length > 0 && (
+        <EmployeePicker
+          key={pickerCat.key}
+          cat={pickerCat}
+          pool={pool}
+          pending={pendingMap}
+          busy={busyKey === pickerCat.key}
+          onCancel={() => setPickerCat(null)}
+          onConfirm={codes => syncCategory(pickerCat, codes)}
+        />
+      )}
 
       <ChangeTable companyId={companyId} run={sel} />
     </div>

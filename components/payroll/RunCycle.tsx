@@ -98,7 +98,15 @@ function Tab({ check, active, onPick }: { check: ReadinessCheck; active: boolean
 }
 
 // ── The selected check's employee list ─────────────────────────────────────
+// The list is behind a View button. Every one of these tabs can hold three hundred
+// names, and rendering them the moment a tab is touched pushed the Run Payroll button
+// itself off the bottom of the screen — the count on the tab is what HR is reading at
+// this stage, and the names only matter once they decide to go fix them.
+//
+// The panel is remounted per tab (see `key` at the call site), so switching tabs starts
+// closed again rather than carrying the previous tab's decision across.
 function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolean }) {
+  const [shown, setShown] = useState(false)
   const th: React.CSSProperties = {
     textAlign: 'left', fontSize: 11, color: C.muted, textTransform: 'uppercase',
     letterSpacing: '0.03em', padding: 8, borderBottom: `1px solid ${C.border}`, fontWeight: 600,
@@ -112,12 +120,29 @@ function CheckPanel({ check, isGroup }: { check: ReadinessCheck; isGroup: boolea
       </div>
       <div style={{ fontSize: 12, color: C.muted, marginBottom: 16, marginLeft: 27 }}>{check.desc}</div>
 
+      {/* No button when there is nothing behind it — a View that reveals an empty state
+          is one more click for no answer. */}
+      {check.rows.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <button onClick={() => setShown(v => !v)}
+            style={{
+              fontFamily: font, fontSize: 12.5, fontWeight: 700,
+              color: shown ? C.purpleD : TK.onAccent,
+              background: shown ? TK.surface : C.purple,
+              border: shown ? `1px solid ${C.border}` : 'none',
+              borderRadius: 10, padding: '8px 16px', cursor: 'pointer',
+            }}>
+            {shown ? 'Hide list' : `View list (${check.rows.length})`}
+          </button>
+        </div>
+      )}
+
       {check.rows.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '40px 20px', color: C.green }}>
           <div style={{ fontSize: 32, marginBottom: 8 }}></div>
           <div style={{ fontSize: 13, fontWeight: 600 }}>Nobody in this month has this problem.</div>
         </div>
-      ) : (
+      ) : !shown ? null : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
@@ -585,7 +610,7 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
             background: C.card, borderRadius: 14, padding: '22px 24px', marginBottom: 18,
             boxShadow: 'var(--ez-shadow-flat)', border: `1px solid ${C.border}`,
           }}>
-            {active && <CheckPanel check={active} isGroup={isGroup} />}
+            {active && <CheckPanel key={active.key} check={active} isGroup={isGroup} />}
           </div>
         </>
       )}

@@ -640,7 +640,7 @@ export default function ESSPage() {
             <span style={{ fontSize:11, color:TK.onDarkFaint }}>{imp.u.emp_code} · {imp.u.designation || '—'}</span>
             <button onClick={exitImpersonate} style={{ marginLeft:'auto', ...T.btnOutline, background:'transparent', color:TK.onDark, borderColor:'rgba(255,255,255,.3)' }}>Exit Admin Mode</button>
           </div>
-          <EmployeePortal employeeId={imp.u.employee_id} />
+          <EmployeePortal employeeId={imp.u.employee_id} adminMode />
         </div>
       )}
 

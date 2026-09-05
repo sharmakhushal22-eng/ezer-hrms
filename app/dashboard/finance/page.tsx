@@ -236,16 +236,16 @@ export default function FinanceDepartment() {
   }, [])
 
   const load = useCallback(async () => {
-    if (!companyId) return
     setLoading(true)
     try {
       const h = await authHeaders()
-      const qs = new URLSearchParams({ company_id: companyId, status: statusFilter })
+      // '' = All companies → the APIs' explicit ALL token.
+      const qs = new URLSearchParams({ company_id: companyId || 'ALL', status: statusFilter })
       if (moduleFilter !== 'ALL') qs.set('module', moduleFilter)
 
       const [qr, tr] = await Promise.all([
         fetch(`/api/finance/queue?${qs}`, { headers: h }),
-        fetch(`/api/finance/team?company_id=${companyId}`, { headers: h }),
+        fetch(`/api/finance/team?company_id=${companyId || 'ALL'}`, { headers: h }),
       ])
 
       if (!qr.ok) {
@@ -344,7 +344,7 @@ export default function FinanceDepartment() {
           <label style={S.lbl}>Company</label>
           <select value={companyId} onChange={e => setCompanyId(e.target.value)}
                   style={{ ...S.inp, minWidth: 210 }}>
-            {companies.length === 0 && <option value="">No companies</option>}
+            <option value="">All companies</option>
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
         </div>
@@ -455,7 +455,12 @@ export default function FinanceDepartment() {
         </>
       )}
 
-      {!pending && tab === 'TEAM' && (
+      {!pending && tab === 'TEAM' && !companyId ? (
+        <div style={S.card}><div style={{ fontSize: 12, color: V.muted }}>
+          The finance team is kept per company — pick one above to add or edit members. (The queue works across all companies.)
+        </div></div>
+      ) : null}
+      {!pending && tab === 'TEAM' && !!companyId && (
         <div style={S.card}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Finance team</div>
           <div style={{ fontSize: 12, color: V.muted, marginBottom: 14, lineHeight: 1.6 }}>

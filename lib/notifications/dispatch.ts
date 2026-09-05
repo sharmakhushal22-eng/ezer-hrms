@@ -25,9 +25,11 @@
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { def, type Audience } from './catalogue'
 
-/** Flipped to true once 075 is applied. Until then the extra columns are not
- *  written, because inserting an unknown column fails the whole row. */
-const NOTIF_HAS_CODE = false
+/** True since 075 was applied (02-Sep-2026). All four columns it adds —
+ *  notification_code, priority, read_at, actor_employee_id — were confirmed present
+ *  on ess_notifications before this was flipped; inserting an unknown column fails
+ *  the whole row, so this must never lead the migration. */
+const NOTIF_HAS_CODE = true
 
 export interface NotifyOptions {
   /** The employee the event is ABOUT. Recipients are resolved relative to them. */
