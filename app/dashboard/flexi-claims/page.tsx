@@ -5,7 +5,8 @@
 // Real company / department / location data from the DB.
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { COMP_NAMES, NO_INVOICE } from '@/lib/flexi/claims'
+import { COMP_NAMES, NO_INVOICE, ACCEPTED_TYPES, loadEntitlements, loadWindow, type ComponentLimit } from '@/lib/flexi/claims'
+import { useRef } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -453,12 +454,182 @@ function LimitsTab({ companyId, notify }: { companyId: string; notify: (m: strin
 }
 
 // ─────────────────────────────────────────────────────────────
+// SUBMIT BILL TAB — HR files a bill on an employee's behalf
+// ─────────────────────────────────────────────────────────────
+interface Emp { id: string; emp_code: string; full_name: string }
+interface Frame { id: string; code: string; amount: string; billNo: string; billDate: string; vendor: string; files: File[] }
+const blankFrame = (): Frame => ({ id: Math.random().toString(36).slice(2, 9), code: '', amount: '', billNo: '', billDate: '', vendor: '', files: [] })
+
+function FileThumb({ file, onRemove }: { file: File; onRemove: () => void }) {
+  const [url, setUrl] = useState<string | null>(null)
+  useEffect(() => { if (!file.type.startsWith('image/')) return; const u = URL.createObjectURL(file); setUrl(u); return () => URL.revokeObjectURL(u) }, [file])
+  const ext = file.name.split('.').pop()?.toUpperCase() || '?'
+  return (
+    <div style={{ position: 'relative', width: 58, height: 58, borderRadius: 9, overflow: 'hidden', border: `1px solid ${C.border}`, background: TK.sunken, flexShrink: 0 }} title={file.name}>
+      {url ? <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+           : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: C.purpleDark }}>{ext}</div>}
+      <button onClick={onRemove} style={{ position: 'absolute', top: 1, right: 1, width: 16, height: 16, borderRadius: '50%', border: 'none', background: 'rgba(15,23,42,.72)', color: '#fff', fontSize: 11, lineHeight: 1, cursor: 'pointer' }}>×</button>
+    </div>
+  )
+}
+
+function BillFrameRow({ frame, index, options, canRemove, onChange, onFiles, onRemoveFile, onRemove }: {
+  frame: Frame; index: number; options: { code: string; name: string; remaining: number }[]; canRemove: boolean
+  onChange: (p: Partial<Frame>) => void; onFiles: (f: File[]) => void; onRemoveFile: (i: number) => void; onRemove: () => void
+}) {
+  const fileRef = useRef<HTMLInputElement>(null)
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 12, padding: 14, marginBottom: 10, background: C.card }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <span style={{ width: 20, height: 20, borderRadius: '50%', background: C.purpleBg, color: C.purpleDark, fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{index + 1}</span>
+        <span style={{ fontSize: 12, fontWeight: 700 }}>Bill {index + 1}</span>
+        {canRemove && <button onClick={onRemove} style={{ marginLeft: 'auto', width: 22, height: 22, borderRadius: 6, border: `1px solid ${C.border}`, background: TK.surface, color: C.red, fontSize: 14, cursor: 'pointer' }}>×</button>}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr', gap: 8, marginBottom: 8 }}>
+        <div><label style={S.label}>Bill type</label>
+          <select style={{ ...S.inp, cursor: 'pointer' }} value={frame.code} onChange={e => onChange({ code: e.target.value })}>
+            <option value="">Select…</option>{options.map(o => <option key={o.code} value={o.code}>{o.name} (₹{Math.round(o.remaining).toLocaleString('en-IN')} left)</option>)}
+          </select></div>
+        <div><label style={S.label}>Amount (₹)</label><input type="number" min={0} style={S.inp} value={frame.amount} onChange={e => onChange({ amount: e.target.value })} /></div>
+      </div>
+      <div onClick={() => fileRef.current?.click()}
+        onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (e.dataTransfer.files?.length) onFiles(Array.from(e.dataTransfer.files)) }}
+        style={{ border: `1.5px dashed ${frame.files.length ? C.purple : C.border}`, borderRadius: 10, padding: frame.files.length ? 10 : '16px 10px', cursor: 'pointer', background: frame.files.length ? C.purpleBg : TK.sunken }}>
+        {frame.files.length === 0
+          ? <div style={{ textAlign: 'center', fontSize: 12, color: C.purpleDark, fontWeight: 600 }}>📎 Upload bills — photos or files (multiple)</div>
+          : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }} onClick={e => e.stopPropagation()}>
+              {frame.files.map((f, i) => <FileThumb key={i} file={f} onRemove={() => onRemoveFile(i)} />)}
+              <div onClick={() => fileRef.current?.click()} style={{ width: 58, height: 58, borderRadius: 9, border: `1.5px dashed ${C.purple}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.purple, fontSize: 20, cursor: 'pointer' }}>+</div>
+            </div>}
+        <input ref={fileRef} type="file" accept={ACCEPTED_TYPES} multiple style={{ display: 'none' }} onChange={e => { if (e.target.files) onFiles(Array.from(e.target.files)); e.target.value = '' }} />
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: 8, marginTop: 8 }}>
+        <div><label style={S.label}>Bill no.</label><input style={{ ...S.inp, fontSize: 12 }} placeholder="INV-…" value={frame.billNo} onChange={e => onChange({ billNo: e.target.value })} /></div>
+        <div><label style={S.label}>Bill date</label><input type="date" max={new Date().toISOString().slice(0, 10)} style={{ ...S.inp, fontSize: 12 }} value={frame.billDate} onChange={e => onChange({ billDate: e.target.value })} /></div>
+        <div><label style={S.label}>Vendor</label><input style={{ ...S.inp, fontSize: 12 }} placeholder="HPCL…" value={frame.vendor} onChange={e => onChange({ vendor: e.target.value })} /></div>
+      </div>
+    </div>
+  )
+}
+
+function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: string) => void }) {
+  const [q, setQ] = useState('')
+  const [emps, setEmps] = useState<Emp[]>([])
+  const [emp, setEmp] = useState<Emp | null>(null)
+  const [limits, setLimits] = useState<ComponentLimit[]>([])
+  const [win, setWin] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
+  const [frames, setFrames] = useState<Frame[]>([blankFrame()])
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    const term = q.trim()
+    if (term.length < 2) { setEmps([]); return }
+    const t = setTimeout(async () => {
+      let query = supabase.from('employees').select('id, emp_code, full_name').eq('employment_type', 'Employee').or(`emp_code.ilike.%${term}%,full_name.ilike.%${term}%`).limit(10)
+      if (companyId) query = query.eq('company_id', companyId)
+      const { data } = await query
+      setEmps((data || []) as Emp[])
+    }, 250)
+    return () => clearTimeout(t)
+  }, [q, companyId])
+
+  const pick = async (e: Emp) => {
+    setEmp(e); setEmps([]); setQ(''); setLoading(true); setFrames([blankFrame()])
+    const ent = await loadEntitlements(e.id)
+    setLimits(ent.limits)
+    if (ent.companyId) { const n = new Date(); setWin(await loadWindow(ent.companyId, n.getFullYear(), n.getMonth() + 1)) }
+    setLoading(false)
+  }
+
+  const isOpen = win?.status === 'OPEN'
+  const remainingOf = (code: string) => { const l = limits.find(x => x.code === code); return l ? l.annual_limit - l.approved - l.pending : -1 }
+  const options = limits.filter(l => !NO_INVOICE.includes(l.code) && (l.annual_limit - l.approved - l.pending) > 0).map(l => ({ code: l.code, name: l.name, remaining: l.annual_limit - l.approved - l.pending }))
+  const setF = (id: string, p: Partial<Frame>) => setFrames(fs => fs.map(f => f.id === id ? { ...f, ...p } : f))
+  const addFiles = (id: string, files: File[]) => setFrames(fs => fs.map(f => f.id === id ? { ...f, files: [...f.files, ...files] } : f))
+  const rmFile = (id: string, i: number) => setFrames(fs => fs.map(f => f.id === id ? { ...f, files: f.files.filter((_, j) => j !== i) } : f))
+  const active = frames.filter(f => f.code && f.amount && f.files.length)
+
+  async function submitAll() {
+    if (!emp) return
+    if (!isOpen) return notify('The flexi submission window is closed for this month — open it in the Window tab first.')
+    for (const f of frames.filter(x => x.code || x.amount || x.files.length)) {
+      if (!f.code) return notify(`Bill ${frames.indexOf(f) + 1}: choose a bill type`)
+      if (!f.amount || Number(f.amount) <= 0) return notify(`Bill ${frames.indexOf(f) + 1}: enter an amount`)
+      const rem = remainingOf(f.code); if (rem >= 0 && Number(f.amount) > rem) return notify(`Bill ${frames.indexOf(f) + 1}: exceeds remaining limit (${inr(rem)})`)
+      if (!f.files.length) return notify(`Bill ${frames.indexOf(f) + 1}: attach a file`)
+    }
+    if (!active.length) return notify('Add at least one bill')
+    setBusy(true); let ok = 0
+    for (const f of active) {
+      const res = await post({ action: 'SUBMIT', window_id: win.id, employee_id: emp.id, company_id: companyId, component_code: f.code, claim_amount: Number(f.amount), bill_date: f.billDate || null, bill_no: f.billNo || null, agency_name: f.vendor || null, vendor_desc: f.vendor || null })
+      if (res.error || !res.claim_id) continue
+      for (const file of f.files) {
+        const path = `flexi-claims/${emp.id}/${res.claim_id}/${Date.now()}_${file.name}`
+        const { data: up } = await supabase.storage.from('flexi-bills').upload(path, file)
+        if (up) await supabase.from('flexi_claim_files').insert({ claim_id: res.claim_id, employee_id: emp.id, file_type: 'BILL', file_name: file.name, file_url: path, file_size: file.size, mime_type: file.type })
+      }
+      ok++
+    }
+    setBusy(false); setFrames([blankFrame()])
+    notify(`${ok} bill${ok === 1 ? '' : 's'} submitted for ${emp.full_name} · pending approval`)
+  }
+
+  return (
+    <div style={S.card}>
+      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Submit a bill on an employee's behalf</div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Pick the employee, choose the bill type, enter the amount and attach the bills. It files exactly as if they had submitted it — pending approval.</div>
+
+      {!emp ? (
+        <div style={{ position: 'relative', maxWidth: 420 }}>
+          <input style={S.inp} placeholder="Search employee by code or name…" value={q} onChange={e => setQ(e.target.value)} />
+          {emps.length > 0 && (
+            <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, marginTop: 4, zIndex: 20, maxHeight: 260, overflowY: 'auto', boxShadow: '0 6px 20px rgba(0,0,0,.12)' }}>
+              {emps.map(e => (
+                <div key={e.id} onClick={() => pick(e)} style={{ padding: '9px 12px', cursor: 'pointer', borderBottom: `1px solid ${C.border}` }}>
+                  <span style={{ fontFamily: 'monospace', color: C.purpleDark, fontWeight: 700, fontSize: 12 }}>{e.emp_code}</span> <span style={{ fontSize: 13 }}>{e.full_name}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, padding: '10px 12px', background: TK.sunken, borderRadius: 10 }}>
+            <div><b>{emp.full_name}</b> <span style={{ fontFamily: 'monospace', color: C.muted, fontSize: 12 }}>{emp.emp_code}</span></div>
+            <button onClick={() => { setEmp(null); setLimits([]); setWin(null) }} style={{ ...S.sec, marginLeft: 'auto' }}>Change employee</button>
+          </div>
+
+          {loading ? <div style={{ color: C.muted, fontSize: 13, padding: 20 }}>Loading entitlements…</div>
+          : win && !isOpen ? <div style={{ background: C.redBg, border: `1px solid #FCA5A5`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#991B1B' }}>The submission window is closed this month. Open it in the <b>Window</b> tab before filing bills.</div>
+          : !win ? <div style={{ background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.amber }}>No submission window exists for this month. Create/open one in the <b>Window</b> tab.</div>
+          : options.length === 0 ? <div style={{ background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.amber }}>This employee has no claimable flexi components with limit remaining.</div>
+          : (
+            <>
+              {frames.map((f, i) => (
+                <BillFrameRow key={f.id} frame={f} index={i} options={options} canRemove={frames.length > 1}
+                  onChange={p => setF(f.id, p)} onFiles={files => addFiles(f.id, files)} onRemoveFile={idx => rmFile(f.id, idx)} onRemove={() => setFrames(fs => fs.filter(x => x.id !== f.id))} />
+              ))}
+              <button onClick={() => setFrames(fs => [...fs, blankFrame()])} style={{ border: `1.5px dashed ${C.purple}`, borderRadius: 12, padding: 12, width: '100%', background: C.purpleBg, color: C.purpleDark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', marginBottom: 12 }}>＋ Add another bill</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ flex: 1, fontSize: 12, color: C.muted }}>{active.length ? `${active.length} bill${active.length === 1 ? '' : 's'} ready` : 'Fill bill type, amount and a file'}</div>
+                <button disabled={busy || !active.length} onClick={submitAll} style={{ ...S.pri, padding: '11px 20px', opacity: busy || !active.length ? .6 : 1, cursor: busy || !active.length ? 'not-allowed' : 'pointer' }}>{busy ? 'Submitting…' : `Submit ${active.length || ''} bill${active.length === 1 ? '' : 's'}`.replace('  ', ' ')}</button>
+              </div>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
 // PAGE
 // ─────────────────────────────────────────────────────────────
 export default function FlexiClaimsAdmin() {
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([])
   const [companyId, setCompanyId] = useState('')
-  const [tab, setTab] = useState<'approvals' | 'window' | 'limits'>('approvals')
+  const [tab, setTab] = useState<'approvals' | 'submit' | 'window' | 'limits'>('approvals')
   const [toast, setToast] = useState('')
   const notify = (m: string) => setToast(m)
 
@@ -467,7 +638,7 @@ export default function FlexiClaimsAdmin() {
       .then(({ data }) => { setCompanies(data || []); if (data?.length) setCompanyId(data[0].id) })
   }, [])
 
-  const TABS: [typeof tab, string][] = [['approvals', 'Approvals'], ['window', 'Window'], ['limits', 'Limits & Requests']]
+  const TABS: [typeof tab, string][] = [['approvals', 'Approvals'], ['submit', 'Submit Bill'], ['window', 'Window'], ['limits', 'Limits & Requests']]
 
   return (
     <div style={S.page}>
@@ -491,7 +662,8 @@ export default function FlexiClaimsAdmin() {
         ))}
       </div>
 
-      {tab === 'approvals' ? <ApprovalsTab companyId={companyId} notify={notify} />
+      {tab === 'submit' ? (companyId ? <SubmitBillTab companyId={companyId} notify={notify} /> : <div style={S.card}><div style={{ color: C.muted }}>Pick a company above to file a bill.</div></div>)
+        : tab === 'approvals' ? <ApprovalsTab companyId={companyId} notify={notify} />
         : !companyId ? <div style={S.card}><div style={{ color: C.muted }}>The submission window and limits are set per company — pick one above.</div></div>
           : tab === 'window' ? <WindowTab companyId={companyId} notify={notify} />
             : <LimitsTab companyId={companyId} notify={notify} />}
