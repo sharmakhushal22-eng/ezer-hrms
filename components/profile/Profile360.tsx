@@ -33,6 +33,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { TABS, MODEL, RECORD_CARDS, CARD_COLUMNS } from '@/lib/profile/model'
 import { maySee, type ProfileField, type ProfilePayload, type Row, type TabId } from '@/lib/profile/types'
 import { loadProfile, editField, requestChange, setProfileOwner } from '@/lib/profile/client'
+import IdCard from '@/components/profile/IdCard'
 import '@/components/profile/profile.css'
 
 const val = (v: unknown): string => {
@@ -386,26 +387,28 @@ export default function Profile360({ code, employeeId, initial }: {
             )}
           </Card>
 
-          <div className="dig">
-            <div className="brandline"><span className="mark">EZ</span>{val(emp.company_name)}</div>
-            <div className="top">
-              <div className="ph">{ini(emp.full_name)}</div>
-              <div style={{ minWidth: 0 }}>
-                <div className="nm">{val(emp.full_name)}</div>
-                <div className="ds">{val(emp.designation)}</div>
+          {self ? (
+            <IdCard
+              name={val(emp.full_name)} designation={val(emp.designation)}
+              company={val(emp.company_name)} code={val(emp.employee_code)}
+              doj={emp.date_of_joining as string | null}
+              blood={emp.blood_group as string | null}
+              emergency={emp.emergency_contact_1 as string | null} />
+          ) : (
+            /* A colleague's gate code is not yours to mint, so their card is
+               shown as a face and nothing more. */
+            <div className="dig">
+              <div className="brandline"><span className="mark">EZ</span>{val(emp.company_name)}</div>
+              <div className="top">
+                <div className="ph">{ini(emp.full_name)}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div className="nm">{val(emp.full_name)}</div>
+                  <div className="ds">{val(emp.designation)}</div>
+                </div>
               </div>
+              <div className="note">A gate code can only be issued for your own card.</div>
             </div>
-            <div className="grid2">
-              <div><div className="lb">Employee code</div><div className="vv">{val(emp.employee_code)}</div></div>
-              <div><div className="lb">Date of joining</div><div className="vv">{pretty(emp.date_of_joining)}</div></div>
-              <div><div className="lb">Blood group</div><div className="vv">{val(emp.blood_group)}</div></div>
-              <div><div className="lb">Emergency</div>
-                   <div className="vv">{String(emp.emergency_contact_1 ?? '—').split('·').pop()?.trim() || '—'}</div></div>
-            </div>
-            {/* The rotating QR needs ID_CARD_PEPPER, which is not set. Saying so
-                beats printing a card that looks scannable and is not. */}
-            <div className="note">Scannable QR is switched off until ID_CARD_PEPPER is configured.</div>
-          </div>
+          )}
         </aside>
 
         <div className="main">
