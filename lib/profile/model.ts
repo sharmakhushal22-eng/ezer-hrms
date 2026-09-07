@@ -122,6 +122,19 @@ export const MODEL: Partial<Record<TabId, FieldGroup[]>> = {
       { label: 'Notice period',     key: 'notice_period_days', state: 'locked', source: 'employees.notice_period_days' },
       { label: 'Employment status', key: 'status',             state: 'locked', source: 'employees.employment_status' },
     ]},
+    // The design puts the chain in the Employment tab as fields, as well as
+    // in the rail. Both, because they answer different questions: the rail is
+    // "who is above me", these are "what is recorded".
+    { title: 'Reporting', fields: [
+      { label: 'Reporting Manager L1', key: 'rm_l1_name', state: 'locked', source: 'employees.l1_manager_id' },
+      { label: 'Reporting Manager L2', key: 'rm_l2_name', state: 'locked', source: 'employees.l2_manager_id' },
+      { label: 'HOD',                  key: 'hod_name',   state: 'locked', source: 'employees.hod_id' },
+      { label: 'Managing Director',    key: 'md_name',    state: 'locked', source: 'companies.md_employee_id' },
+      { label: 'Dotted line',          key: 'dotted_line_manager_id', state: 'locked',
+        source: 'employees.dotted_line_manager_id' },
+      { label: 'Reportees',            key: 'reportee_count', state: 'locked', source: 'derived' },
+    ]},
+
     { title: 'Working pattern', fields: [
       { label: 'Weekly off',      key: 'weekly_off',      state: 'locked', source: 'employees.weekly_off' },
       { label: 'Attendance mode', key: 'attendance_mode', state: 'locked', source: 'employees.attendance_mode' },

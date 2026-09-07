@@ -86,6 +86,11 @@ export interface ProfilePayload {
   certifications: Row[]
   trainings: Row[]
   app_access: Row[]
+  /** Fetched alongside by the route, not by get_employee_profile — see the
+   *  note there. Null when the employee has none. */
+  performance?: Row | null
+  salary?: Row | null
+  recognition?: Row[]
   error?: string
 }
 

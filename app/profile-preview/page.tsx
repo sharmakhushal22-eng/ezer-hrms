@@ -100,7 +100,26 @@ const PAYLOAD: ProfilePayload = {
   ],
   trainings: [],
   app_access: [
-    { id: 'a1', app_name: 'Fleet Console', access_role: 'Editor', granted_on: '2024-02-01' },
+    { id: 'a1', app_name: 'EZER HRMS',        access_role: 'Employee', granted_on: '2019-06-03' },
+    { id: 'a2', app_name: 'Tally Prime',      access_role: 'Read only', granted_on: '2021-04-12' },
+    { id: 'a3', app_name: 'Google Workspace', access_role: 'Standard',  granted_on: '2019-06-03' },
+    { id: 'a4', app_name: 'Bank portal',      access_role: 'Maker',     granted_on: '2022-09-01' },
+  ],
+  // Fetched by the route alongside get_employee_profile — see sideBlocks().
+  performance: {
+    final_rating: 4, final_rating_code: 'EE', final_score: 4.1,
+    finalised_at: '2026-04-12', employee_ack: true,
+    period: { period_name: 'Q4 2025-26', status: 'CLOSED' },
+    kra_count: 6, one_to_one_count: 2,
+  },
+  salary: {
+    gross_monthly: 95000, gross_annual: 1140000, basic_monthly: 47500,
+    hra_monthly: 19000, conveyance: 1600, employee_pf: 1800, employer_pf: 1800,
+    gratuity_monthly: 2284, effective_date: '2026-04-01', fy: '2026-27',
+  },
+  recognition: [
+    { id: 'r1', kind: 'SHOUTOUT', message: 'Closed the Gurugram fleet audit a week early.',
+      cycle_label: 'Q1 2026-27', created_at: '2026-08-14', badge_ref: 'B008' },
   ],
 }
 

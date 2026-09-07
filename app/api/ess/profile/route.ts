@@ -92,7 +92,62 @@ export async function GET(req: NextRequest) {
   if (payload?.error === 'viewer_not_found')   return bad('Your employee record could not be found.', 403)
   if (payload?.error === 'viewer_inactive')    return bad('Your record is marked as having left.', 403)
 
-  return NextResponse.json(payload)
+  // Three blocks the design shows that get_employee_profile does not carry.
+  // They live in modules that DO exist here, so they are fetched rather than
+  // omitted. Attendance, leave, shifts and holidays have no tables in this
+  // database at all — those stay named but unbuilt.
+  const extras = await sideBlocks(subject)
+  return NextResponse.json({ ...(payload as object), ...extras })
+}
+
+interface Extras {
+  performance: Record<string, unknown> | null
+  salary: Record<string, unknown> | null
+  recognition: Record<string, unknown>[]
+}
+
+async function sideBlocks(employeeId: string): Promise<Extras> {
+  const [rating, salary, recog] = await Promise.all([
+    // The most recently finalised appraisal, with its period named.
+    sb.from('pms_overall_rating')
+      .select('final_rating, final_rating_code, final_score, finalised_at, employee_ack, period_id')
+      .eq('employee_id', employeeId)
+      .order('finalised_at', { ascending: false, nullsFirst: false }).limit(1).maybeSingle(),
+    sb.from('salary_structures')
+      .select('gross_monthly, gross_annual, basic_monthly, hra_monthly, conveyance, '
+            + 'employee_pf, employer_pf, gratuity_monthly, effective_date, fy')
+      .eq('employee_id', employeeId)
+      .order('effective_date', { ascending: false }).limit(1).maybeSingle(),
+    sb.from('recognitions')
+      .select('id, message, kind, cycle_label, created_at, badge_ref, giver_employee_id')
+      .eq('is_archived', false)
+      .order('created_at', { ascending: false }).limit(6),
+  ])
+
+  // KRA and one-to-one counts, which the design shows beside the rating.
+  const [kras, ones] = await Promise.all([
+    sb.from('pms_employee_goals').select('id', { count: 'exact', head: true }).eq('employee_id', employeeId),
+    sb.from('pms_one_to_one').select('id', { count: 'exact', head: true }).eq('employee_id', employeeId),
+  ])
+
+  let performance: Record<string, unknown> | null = null
+  if (rating.data) {
+    const r = rating.data as unknown as Record<string, unknown>
+    let period: Record<string, unknown> | null = null
+    if (r.period_id) {
+      const p = await sb.from('pms_periods')
+        .select('period_name, status, period_start, period_end')
+        .eq('id', r.period_id).maybeSingle()
+      period = (p.data as unknown as Record<string, unknown>) ?? null
+    }
+    performance = { ...r, period, kra_count: kras.count ?? 0, one_to_one_count: ones.count ?? 0 }
+  }
+
+  return {
+    performance,
+    salary: (salary.data as unknown as Record<string, unknown>) ?? null,
+    recognition: (recog.data as unknown as Record<string, unknown>[]) ?? [],
+  }
 }
 
 export async function POST(req: NextRequest) {

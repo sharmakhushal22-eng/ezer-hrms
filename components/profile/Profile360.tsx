@@ -584,10 +584,105 @@ export default function Profile360({ code, employeeId, initial }: {
             </div>
           )}
 
-          {tab === 'payroll' && <Elsewhere title="Salary structure and payslips" owner="the Payroll section of ESS" />}
+          {tab === 'payroll' && (
+            payload.salary ? (
+              <Section title="Salary structure"
+                       sub={`Head wise, effective ${pretty(payload.salary.effective_date)}${payload.salary.fy ? ` · FY ${val(payload.salary.fy)}` : ''}.`}>
+                <div className="card">
+                  <div className="tbl"><table>
+                    <thead><tr><th>Head</th><th style={{ textAlign: 'right' }}>Monthly</th>
+                               <th style={{ textAlign: 'right' }}>Annual</th></tr></thead>
+                    <tbody>
+                      {([['Basic', 'basic_monthly'], ['House rent allowance', 'hra_monthly'],
+                         ['Conveyance', 'conveyance'], ['Gratuity', 'gratuity_monthly'],
+                         ['Provident fund — employee', 'employee_pf'],
+                         ['Provident fund — employer', 'employer_pf']] as const)
+                        .filter(([, k]) => payload.salary?.[k] !== null && payload.salary?.[k] !== undefined)
+                        .map(([label, k]) => (
+                          <tr key={k}>
+                            <td>{label}</td>
+                            <td style={{ textAlign: 'right' }}>{money(payload.salary?.[k])}</td>
+                            <td style={{ textAlign: 'right' }}>{money(Number(payload.salary?.[k]) * 12)}</td>
+                          </tr>
+                        ))}
+                      <tr>
+                        <td><b>Gross</b></td>
+                        <td style={{ textAlign: 'right' }}><b>{money(payload.salary.gross_monthly)}</b></td>
+                        <td style={{ textAlign: 'right' }}><b>{money(payload.salary.gross_annual)}</b></td>
+                      </tr>
+                    </tbody>
+                  </table></div>
+                </div>
+              </Section>
+            ) : <Elsewhere title="Salary structure" owner="the Payroll section of ESS" />
+          )}
           {tab === 'time' && <Elsewhere title="Attendance, punches and leave" owner="Time & Attendance" />}
 
-          {cardsFor(tab).map(c => (
+          {tab === 'growth' && (
+            <>
+              <Section title="Performance" sub="From the PMS cycle, not entered here.">
+                <div className="card">
+                  {!payload.performance ? <div className="empty">No appraisal recorded yet.</div> : (
+                    <div className="g3">
+                      {([['Cycle', val((payload.performance.period as Row | null)?.period_name)],
+                         ['Stage', val((payload.performance.period as Row | null)?.status)],
+                         ['Rating', payload.performance.final_rating_code
+                                      ? `${val(payload.performance.final_rating_code)} · ${val(payload.performance.final_rating)}`
+                                      : 'Not finalised'],
+                         ['Score', val(payload.performance.final_score)],
+                         ['KRAs', val(payload.performance.kra_count)],
+                         ['One to one', val(payload.performance.one_to_one_count)],
+                         ['Acknowledged', payload.performance.employee_ack ? 'Yes' : 'Not yet'],
+                         ['Finalised', pretty(payload.performance.finalised_at)]] as const)
+                        .map(([k, v]) => (
+                          <div className="fld" key={k}><div className="k">{k}</div><div className="v">{v}</div></div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </Section>
+
+              <Section title="Recognition" sub="Shoutouts and awards from the Wall of Fame.">
+                {!(payload.recognition ?? []).length
+                  ? <div className="card"><div className="empty">Nothing on the wall yet.</div></div>
+                  : (
+                    <div className="g2">
+                      {(payload.recognition ?? []).map((r, i) => (
+                        <div className="pc" key={String(r.id ?? i)}>
+                          <div className="ph">🏆</div>
+                          <div style={{ minWidth: 0 }}>
+                            <div className="n">{val(r.kind)}{r.cycle_label ? ` · ${val(r.cycle_label)}` : ''}</div>
+                            <div className="s">{String(r.message ?? '').slice(0, 110) || '—'}</div>
+                            <div className="pl">
+                              <span className="pill">{pretty(r.created_at)}</span>
+                              {r.badge_ref ? <span className="pill brand">{val(r.badge_ref)}</span> : null}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+              </Section>
+            </>
+          )}
+
+          {tab === 'records' && (payload.app_access ?? []).length > 0 && (
+            <Section title="Application access" sub="What this person can sign in to.">
+              <div className="g3">
+                {(payload.app_access ?? []).map((a, i) => (
+                  <div className="fld" key={String(a.id ?? i)}>
+                    <span className="st locked">Locked</span>
+                    <div className="k">{val(a.app_name)}</div>
+                    <div className="v">{val(a.access_role)}</div>
+                    {a.granted_on ? <div className="hint" style={{ color: 'var(--ez-muted)' }}>
+                      Since {pretty(a.granted_on)}</div> : null}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {cardsFor(tab).filter(c => c.key !== 'app_access').map(c => (
             <RecordTable key={c.key as string} title={c.title}
                          rows={(payload[c.key as keyof ProfilePayload] as Row[]) ?? []}
                          columns={CARD_COLUMNS[c.key as string] ?? []} empty={c.empty} />
