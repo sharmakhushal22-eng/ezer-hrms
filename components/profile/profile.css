@@ -276,3 +276,69 @@
   .ezp .fld .st { position: static; display: block; margin-bottom: 4px; }
   .ezp .fld .k { padding-right: 0; }
 }
+
+/* ── change requests (105) ────────────────────────────────────────────────
+ *
+ * Same card as everything else on the page — these are not a separate module
+ * with its own look, they are the other half of the field cards above. The
+ * only new idea is the before/after pair, which reads left to right so the
+ * approver sees what is being replaced without hunting for it.
+ */
+.ezp .reqs { margin-top: 14px; }
+.ezp .reqlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.ezp .reqlist li {
+  border: 1px solid var(--ez-line); border-radius: 12px;
+  padding: 12px 13px; background: var(--ez-sunken); min-width: 0;
+}
+.ezp .reqtop { display: flex; align-items: flex-start; justify-content: space-between;
+               gap: 10px; margin-bottom: 8px; }
+.ezp .reqtop b { font-size: 13px; }
+.ezp .reqtop .code { font-size: 11px; color: var(--ez-muted); margin-left: 6px; }
+.ezp .fldname { font-size: 12px; color: var(--ez-ink-soft); font-weight: 600; margin-top: 2px; }
+
+/* Before and after. The old value is quiet, the new one carries the weight —
+ * an approver is deciding about the right-hand side. */
+.ezp .reqval { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+               font-size: 12.5px; margin-bottom: 6px; }
+.ezp .reqval .was { color: var(--ez-muted); text-decoration: line-through;
+                    text-decoration-color: var(--ez-line); overflow-wrap: anywhere; }
+.ezp .reqval .was i { text-decoration: none; opacity: .8; }
+.ezp .reqval .arw { color: var(--ez-muted); }
+.ezp .reqval .now { font-weight: 600; overflow-wrap: anywhere; }
+
+.ezp .reqs .why { margin: 6px 0 0; font-size: 12px; color: var(--ez-ink-soft);
+                  overflow-wrap: anywhere; }
+.ezp .reqs .meta { font-size: 11.5px; color: var(--ez-muted); margin-top: 6px; }
+
+/* Age earns emphasis only once it is genuinely stale, so the colour still
+ * means something on a queue that is mostly fresh. */
+.ezp .reqage { font-size: 11.5px; color: var(--ez-muted); white-space: nowrap; }
+.ezp .reqage.old { color: var(--ez-warning); font-weight: 600; }
+
+.ezp .reqs .st { font-size: 11.5px; font-weight: 600; white-space: nowrap; }
+.ezp .reqs .st.wait { color: var(--ez-warning); }
+.ezp .reqs .st.ok   { color: var(--ez-positive); }
+.ezp .reqs .st.no   { color: var(--ez-critical); }
+.ezp .reqs .st.off  { color: var(--ez-muted); }
+
+.ezp .reqs .acts { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; }
+.ezp .btn.no { background: var(--ez-critical); border-color: var(--ez-critical);
+               color: var(--ez-on-accent); }
+
+.ezp .rejbox { margin-top: 10px; display: grid; gap: 6px; }
+.ezp .rejbox label { font-size: 11.5px; color: var(--ez-ink-soft); }
+.ezp .rejbox textarea {
+  width: 100%; resize: vertical; font: inherit; font-size: 12.5px;
+  color: var(--ez-ink); background: var(--ez-surface);
+  border: 1px solid var(--ez-line); border-radius: 10px; padding: 8px 10px;
+}
+
+.ezp .reqmsg { font-size: 12px; border-radius: 10px; padding: 9px 12px; margin-bottom: 10px; }
+.ezp .reqmsg.ok { color: var(--ez-positive); background: var(--ez-positive-tint); }
+.ezp .reqmsg.no { color: var(--ez-critical); background: var(--ez-critical-tint); }
+
+@media (max-width: 560px) {
+  .ezp .reqtop { flex-direction: column; gap: 4px; }
+  .ezp .reqs .acts { justify-content: stretch; }
+  .ezp .reqs .acts .btn { flex: 1; }
+}

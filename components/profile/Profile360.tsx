@@ -31,6 +31,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { TABS, MODEL, RECORD_CARDS, CARD_COLUMNS } from '@/lib/profile/model'
+import ChangeRequests from '@/components/profile/ChangeRequests'
 import { maySee, type ProfileField, type ProfilePayload, type Row, type TabId } from '@/lib/profile/types'
 import { loadProfile, editField, requestChange, setProfileOwner } from '@/lib/profile/client'
 import IdCard from '@/components/profile/IdCard'
@@ -689,6 +690,12 @@ export default function Profile360({ code, employeeId, initial }: {
           ))}
         </div>
       </div>
+
+      {/* Below the shell rather than inside a panel: the 360 layout above is
+          measured off the design and stays exactly as it is. Own profile only
+          — a colleague's requests are not yours to read, and the queue that
+          matters to an approver is on their own page. */}
+      <ChangeRequests canSee={self} />
 
       {editing && (
         <ChangeModal field={editing} onClose={() => setEditing(null)}
