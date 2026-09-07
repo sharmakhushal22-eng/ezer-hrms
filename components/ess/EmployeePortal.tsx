@@ -751,6 +751,36 @@ function ProfileHero({ emp, notify }: {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// NOT WIRED. Kept deliberately; do not delete without reading this.
+//
+// Two ESS profiles were built in parallel on two branches. This one — Nayan's
+// — renders the Employee Master record through EmployeeProfileSections, the
+// same four sections app/dashboard/employees uses, so an employee sees
+// exactly what HR sees. The other is components/profile/Profile360.tsx, built
+// against EZER-ESS-Profile-360.html: eight tabs, per-field edit states
+// (locked / direct / request / event), masking, role gating, and change
+// requests routed through raise_profile_change_request.
+//
+// The merge of NayanAhuja into TusharPanwar produced no conflict — the two
+// changes touched different lines — so git silently kept the Profile360
+// wiring. Tushar has since confirmed that is the one he wants on the Profile
+// tab, so `case 'profile'` renders Profile360 and this function is
+// unreachable.
+//
+// It is left here rather than removed because it is a colleague's work, it
+// still compiles, and EmployeeProfileView.tsx is in active use by
+// app/dashboard/employees regardless. If it is to go, that is Nayan's call.
+//
+// ONE THING IT HAS THAT PROFILE360 DOES NOT, and which is a real gap rather
+// than a preference: the bank-change form below does an IFSC lookup against
+// ifsc.razorpay.com and makes the employee type the account number twice.
+// Profile360 sends bank changes through the generic request modal, which
+// asks for a new value and a reason and validates neither. If bank details
+// start moving through the new screen, that confirmation and lookup should
+// be ported across — a mistyped account number is not a UI inconvenience, it
+// is a salary paid to a stranger.
+// ─────────────────────────────────────────────────────────────────────────
 function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
   const [tab, setTab] = useState<'OVERVIEW' | 'RECORD' | 'UPDATE'>('RECORD')
   // Sub-tab inside My Record, the same four the Employee Master drawer uses.
