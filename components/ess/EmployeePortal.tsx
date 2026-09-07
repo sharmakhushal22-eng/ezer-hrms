@@ -3741,7 +3741,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       // the route resolves WHO IS LOOKING from the session and masks
       // accordingly, so an admin opening a colleague's portal sees that
       // colleague's profile with a colleague's visibility, not their own.
-      case 'profile':       return <Profile360 code={emp.emp_code} />
+      case 'profile':       return <Profile360 code={emp.emp_code} employeeId={emp.id} />
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
       // The inbox reports its own unread straight into the bell's state, so
       // the badge and the screen can never show two different numbers.

@@ -109,6 +109,19 @@ export async function POST(req: NextRequest) {
   const str = (k: string) => typeof body[k] === 'string' && (body[k] as string).trim()
     ? (body[k] as string).trim() : null
 
+  // Reads are fine while viewing another portal. Writes are not: an invite,
+  // an acceptance and a score all carry a person's name, and the shared
+  // dashboard login is not attached to an employee at all. The wall refuses
+  // on the same grounds.
+  const WRITES = new Set(['send', 'accept', 'answer', 'finish', 'share'])
+  if (WRITES.has(action) && ctx.caller.viewAs) {
+    return bad(ctx.caller.actorEmployeeId === null
+      ? 'This session is the shared dashboard login, which is not attached to an '
+        + 'employee record. Sign in with your own ESS account to play.'
+      : 'You are looking at somebody else\'s portal, so this would be recorded as '
+        + 'them. Open your own portal to send or accept a game invite.', 403)
+  }
+
   switch (action) {
 
     // Search, never browse. The picker used to load up to 300 colleagues into

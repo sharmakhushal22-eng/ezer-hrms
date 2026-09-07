@@ -23,7 +23,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { TABS, MODEL, RECORD_CARDS, CARD_COLUMNS } from '@/lib/profile/model'
 import { maySee, type ProfileField, type ProfilePayload, type Row, type TabId } from '@/lib/profile/types'
-import { loadProfile, editField, requestChange } from '@/lib/profile/client'
+import { loadProfile, editField, requestChange, setProfileOwner } from '@/lib/profile/client'
 import '@/components/profile/profile.css'
 
 const val = (v: unknown): string => {
@@ -226,8 +226,11 @@ function ChangeModal({ field, onClose, onDone }: {
 }
 
 // ── page ─────────────────────────────────────────────────────────────────
-export default function Profile360({ code, initial }: {
+export default function Profile360({ code, employeeId, initial }: {
   code?: string
+  /** The portal owner's id. Needed only so the shared dashboard login can
+   *  resolve whose profile to serve — an ESS session ignores it. */
+  employeeId?: string
   /** Preloaded payload. Only the dev harness passes this; in the product the
    *  component always fetches, so there is no path where a caller can inject
    *  a profile the server did not authorise. */
@@ -241,10 +244,11 @@ export default function Profile360({ code, initial }: {
 
   const load = useCallback(async () => {
     if (initial) return                    // harness: nothing to fetch
+    setProfileOwner(employeeId ?? null)
     const r = await loadProfile(code)
     if (r.error) { setErr(r.error.message); setPayload(null); return }
     setErr(null); setPayload(r.data)
-  }, [code, initial])
+  }, [code, employeeId, initial])
   useEffect(() => { load() }, [load])
 
   const cardsFor = useMemo(() => (t: TabId) => RECORD_CARDS.filter(c => c.tab === t), [])

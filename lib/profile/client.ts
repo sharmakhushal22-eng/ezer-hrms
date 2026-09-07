@@ -13,9 +13,18 @@ export interface Result<T> {
   error: { message: string; status?: number } | null
 }
 
+/** Whose portal this is. An ESS session already identifies the person and
+ *  ignores it; the shared dashboard login has no employee of its own, and
+ *  essCaller answers 400 "employee_id is required for the dashboard login"
+ *  without it. Omitting it is why the Profile tab broke on that login. */
+let portalOwner: string | null = null
+export const setProfileOwner = (id: string | null) => { portalOwner = id }
+
 async function call<T>(init: RequestInit, qs = ''): Promise<Result<T>> {
   try {
-    const res = await fetch(`/api/ess/profile${qs}`, { ...init, headers: await authHeaders() })
+    const sep = qs.includes('?') ? '&' : '?'
+    const owner = portalOwner ? `${sep}employee_id=${encodeURIComponent(portalOwner)}` : ''
+    const res = await fetch(`/api/ess/profile${qs}${owner}`, { ...init, headers: await authHeaders() })
     const body = await res.json().catch(() => null) as (Record<string, unknown> | null)
     if (!res.ok) {
       return { data: null, error: { message: String(body?.error ?? `Request failed (${res.status}).`), status: res.status } }

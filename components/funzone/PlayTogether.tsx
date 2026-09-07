@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { listInvites, funzone } from '@/lib/funzone/client'
+import { listInvites, funzone, setFunzoneOwner } from '@/lib/funzone/client'
 import { C, F, W, S, R } from '@/lib/ui'
 import { LIVE_GAMES, gameByCode } from '@/lib/funzone/games'
 import { canInvite, canAccept, canDecline, canCancel, effectiveStatus,
@@ -68,6 +68,7 @@ export default function PlayTogether({ meId }: { meId: string }) {
   }, [])
 
   const load = useCallback(async () => {
+    setFunzoneOwner(meId)
     // One call. The route resolves who I am, reads both sides of the invite
     // list and resolves the names, so there is no second trip to employees.
     const r = await listInvites()
