@@ -47,6 +47,24 @@ const ACTIONS: Record<string, { fn: string; params: readonly string[]; write: bo
   request_share_to_feed:  { fn: 'request_share_to_feed_as',  params: ['p_message'] , write: true },
   approve_share_to_feed:  { fn: 'approve_share_to_feed_as',  params: ['p_message', 'p_visibility'] , write: true },
   set_recognition_marks:  { fn: 'set_recognition_marks_as',  params: ['p_recognition', 'p_badge_ref', 'p_tag_refs'] , write: true },
+
+  // ── Screens and administrators (106) ──────────────────────────────────
+  //
+  // These were SQL-editor errands until 106 wrapped them, for the same reason
+  // the thirteen above needed 094: grant_wall_admin and the board_screens
+  // trigger read the actor from app.current_employee_id, which PostgREST
+  // cannot set. The wrapper sets it and calls in one transaction.
+  //
+  // list_board_screens deliberately returns no pair_code. A screen list is a
+  // reasonable thing to show; handing out every board URL is not. Rotate to
+  // get a fresh code if one is lost.
+  pair_board_screen:      { fn: 'pair_board_screen_as',      params: ['p_company', 'p_location', 'p_screen_name', 'p_rotate_secs', 'p_language', 'p_scope', 'p_max_slides'] , write: true },
+  rotate_screen_pair_code:{ fn: 'rotate_screen_pair_code_as',params: ['p_screen'] , write: true },
+  set_screen_active:      { fn: 'set_screen_active_as',      params: ['p_screen', 'p_active'] , write: true },
+  list_board_screens:     { fn: 'list_board_screens_as',     params: ['p_company'] , write: false },
+  grant_wall_admin:       { fn: 'grant_wall_admin_as',       params: ['p_employee', 'p_level', 'p_reason', 'p_branch', 'p_valid_until'] , write: true },
+  revoke_wall_admin:      { fn: 'revoke_wall_admin_as',      params: ['p_grant_id', 'p_reason'] , write: true },
+  list_wall_admins:       { fn: 'list_wall_admins_as',       params: ['p_company'] , write: false },
 }
 
 /** PostgREST's "no such function". Means 094 has not been run — a deployment

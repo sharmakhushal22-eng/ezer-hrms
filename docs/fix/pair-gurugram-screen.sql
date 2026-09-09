@@ -60,8 +60,12 @@ begin
 
   -- URL-safe, 16 characters of real entropy. base64 uses + and / which do not
   -- survive a URL path, so both are replaced, and the = padding trimmed.
-  v_code := rtrim(replace(replace(encode(gen_random_bytes(12), 'base64'),
-                                  '+', '-'), '/', '_'), '=');
+  -- gen_random_bytes is pgcrypto, which on Supabase lives in the `extensions`
+  -- schema. It resolves here only because the SQL editor's role usually has
+  -- that schema on its search_path — it failed outright from a function
+  -- pinned to search_path = public (see migration 107). gen_random_uuid() is
+  -- core Postgres and needs no extension at all.
+  v_code := replace(gen_random_uuid()::text, '-', '');
 
   -- Transaction-scoped, so the guard sees somebody entitled to add a screen
   -- and the audit trail records a person rather than nobody.
