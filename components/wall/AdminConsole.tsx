@@ -184,10 +184,24 @@ export default function AdminConsole({ employeeId }: { employeeId: string }) {
                   r.created_at ? new Date(r.created_at as string).toLocaleString('en-IN') : '—']],
     }[area] as [string, string, (r: Record<string, unknown>) => (string | number | null)[]]
 
-    const res = await supabase.from(q[0]).select(q[1]).limit(100)
+    // SCOPED TO THE VIEWER'S COMPANY. Every table behind these panels carries
+    // company_id and holds one row per company: awards, values, badges,
+    // screens, admins and the audit log. Reading them unfiltered listed all
+    // three companies at once, so Values showed six entries as eighteen and
+    // Badges fourteen as forty-two — three identical rows with nothing on
+    // screen to tell them apart, and no way to know which one an edit touched.
+    const meRow = await supabase.from('employees')
+      .select('company_id').eq('id', employeeId).maybeSingle()
+    const companyId = (meRow.data as { company_id?: string } | null)?.company_id ?? null
+
+    let query = supabase.from(q[0]).select(q[1]).limit(100)
+    // Without a company there is nothing safe to show, so show nothing rather
+    // than another company's configuration.
+    query = companyId ? query.eq('company_id', companyId) : query.limit(0)
+    const res = await query
     if (res.error) { setRows([]); return }
     setRows(((res.data ?? []) as unknown as Record<string, unknown>[]).map(q[2]))
-  }, [area, may])
+  }, [area, may, employeeId])
 
   useEffect(() => { loadArea() }, [loadArea])
 
