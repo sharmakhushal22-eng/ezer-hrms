@@ -477,3 +477,136 @@ html, body {
   :root[data-ez-theme] *::before,
   :root[data-ez-theme] *::after { transition: none !important; }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   EXPLICIT DARK — the same tokens, chosen rather than inherited from the OS.
+   
+   Everything above sets the dark palette only inside
+   @media (prefers-color-scheme: dark). That means picking "Dark" while the
+   operating system is light changed nothing: the toggle wrote its attribute,
+   no rule matched it, and the page stayed light. It has never worked on a
+   light OS.
+   
+   Two attributes are honoured because the app grew two controls. The existing
+   ThemeToggle writes data-ez-theme; the ESS Today preference writes
+   data-theme. Rather than pick a winner and break the other, both select this
+   block, and the Today preference writes both attributes so the two controls
+   agree instead of fighting.
+   ═══════════════════════════════════════════════════════════════════════════ */
+:root[data-ez-theme="dark"],
+:root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --ez-ink:           #F3F4F6;
+    --ez-ink-soft:      #D1D5DB;
+    --ez-muted:         #9CA3AF;
+    --ez-faint:         #828C9B;   /* 4.75 on surface */
+
+    --ez-brand:         #60A5FA;
+    --ez-brand-deep:    #93C5FD;
+    --ez-brand-tint:    #172033;
+    --ez-brand-edge:    #24344F;
+
+    /* PAGE HEADER BAND — NIGHT
+       Not the day treatment inverted. In dark mode the cards are ALREADY
+       lighter than the canvas, so simply lightening the header makes it read
+       as one more card: at its lightest stop it is only 1.28 against a card,
+       which the eye does not reliably separate.
+
+       So night differentiates by HUE rather than brightness. The cards are
+       neutral grey at 30% saturation; this band is blue at 62%. That reads as
+       a distinct kind of surface at any size, where a brightness step alone
+       does not.
+
+       Elevation changes too: a drop shadow is invisible on a dark ground, so
+       the lift comes from an inset highlight along the top edge — the way a
+       raised surface actually catches light from above. */
+    --ez-head-from:   #1E2E4E;
+    --ez-head-to:     #141D31;
+    --ez-head-edge:   #2C4370;
+    --ez-head-muted:  #AAB4C2;   /* 6.44 on the lightest stop */
+    --ez-head-faint:  #99A4B4;   /* 5.35 */
+    --ez-head-brand:  #8CC0FC;   /* 7.11 */
+    --ez-head-elev:   inset 0 1px 0 rgba(255,255,255,.07);
+    /* In dark every accent LIGHTENS (#2563EB becomes #60A5FA), so white text
+       on a primary button drops to 2.54:1. It has to invert. */
+    --ez-on-accent:     #0D1117;
+    --ez-on-accent-soft: rgba(13,17,23,.92);
+    --ez-on-accent-dim:  rgba(13,17,23,.86);
+
+  /* Dark: a deep tint with lifted initials, not a bright disc punched into
+     a dark page. Verified at every hue — worst case 6.2:1. */
+  --ez-avatar-tint-mix: 14%;
+  --ez-avatar-sat:      58%;
+  --ez-avatar-light:    82%;
+
+    /* Dark: a deep tint with lifted initials, not a bright disc punched into
+       a dark page. Verified at every hue — worst case 6.2:1. */
+    --ez-avatar-tint-mix: 14%;
+    --ez-avatar-sat:      58%;
+    --ez-avatar-light:    82%;
+
+    --ez-surface:       #171B21;
+    --ez-canvas:        #0F1216;
+    --ez-sunken:        #14181E;
+    --ez-line:          #262C35;
+    --ez-line-strong:   #39414D;
+
+    --ez-positive:      #34D399;
+    --ez-positive-tint: #10241D;
+    --ez-warning:       #FBBF24;
+    --ez-warning-tint:  #251C0D;
+    --ez-critical:      #F87171;
+    --ez-critical-tint: #2A1414;
+    --ez-info:          #7DD3FC;
+    --ez-info-tint:     #10222B;
+
+    /* On dark the rail is the surface colour, one step above the canvas —
+       separation comes from that difference rather than from a border. */
+    --ez-rail:             #171B21;
+    --ez-rail-text:        #F3F4F6;
+    --ez-rail-item:        #E5E7EB;
+    --ez-rail-muted:       #9CA3AF;
+    --ez-rail-faint:       #828C9B;
+    --ez-rail-line:        #262C35;
+    --ez-rail-hover:       #1F242C;
+    --ez-rail-active-bg:   #172033;
+    --ez-rail-active-text: #93C5FD;
+
+    --ez-dark:          #0B0E12;
+    --ez-dark-mid:      #131F3A;
+    --ez-dark-accent:   #1B3157;
+    --ez-dark-soft:     #141920;
+
+    /* Depth on a dark ground comes from the surface being lighter than the
+       canvas, not from cast shadow — so these stay shallow and cards do not
+       sit in visible black halos. */
+    --ez-shadow-flat:     0 1px 2px rgba(0,0,0,.34);
+    --ez-shadow-raised:   0 1px 2px rgba(0,0,0,.38), 0 4px 12px -4px rgba(0,0,0,.44);
+    --ez-shadow-floating: 0 2px 4px rgba(0,0,0,.42), 0 12px 28px -10px rgba(0,0,0,.55);
+    --ez-shadow-overlay:  0 4px 8px rgba(0,0,0,.48), 0 24px 56px -16px rgba(0,0,0,.62);
+    --ez-shadow-brand:    0 1px 2px rgba(0,0,0,.4), 0 8px 20px -6px rgba(96,165,250,.30);
+
+    /* Reversed on dark: the early stages must stay visible against a dark
+       ground, so the ramp brightens as it advances instead of darkening. */
+    --ez-ramp-1: #6E9FD8;
+    --ez-ramp-2: #7DAAE0;
+    --ez-ramp-3: #8CB5E8;
+    --ez-ramp-4: #9BC0F0;
+    --ez-ramp-5: #AACBF7;
+    --ez-ramp-6: #B9D6FF;
+    --ez-ramp-1-fg: #6E9FD8;
+    --ez-ramp-2-fg: #7DAAE0;
+    --ez-ramp-3-fg: #8CB5E8;
+    --ez-ramp-4-fg: #9BC0F0;
+    --ez-ramp-5-fg: #AACBF7;
+    --ez-ramp-6-fg: #B9D6FF;
+
+    --ez-grade-1-bg: #1E3350;      --ez-grade-1-fg: #BFDBFE;
+    --ez-grade-2-bg: #1C3049;      --ez-grade-2-fg: #A9CEFC;
+    --ez-grade-3-bg: #1A2C43;      --ez-grade-3-fg: #93C5FD;
+    --ez-grade-4-bg: #19283C;      --ez-grade-4-fg: #86BAF8;
+    --ez-grade-5-bg: #172436;      --ez-grade-5-fg: #7BAFF4;
+    --ez-grade-6-bg: #1C2129;      --ez-grade-6-fg: #9AA6B5;
+  }
