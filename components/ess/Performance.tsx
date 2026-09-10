@@ -35,6 +35,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import '@/components/pms/pms.css'
 import CycleHeader from '@/components/pms/CycleHeader'
+import type { ActionTab } from '@/lib/pms/cycle'
 import {
   EMP_TABS, DashboardTab, KraTab, OneToOneTab, SelfRatingTab, ResultTab,
   AnalyticsTab, type EmpTab, type Who, type SelfRow,
@@ -177,12 +178,48 @@ export default function Performance({ employeeId }: { employeeId: string }) {
     else setHodTab(k as HodTab)
   }
 
+  /** Where each next-action CTA actually goes.
+   *
+   *  nextAction() names its destinations in its own vocabulary — 'mine',
+   *  'oneone', 'dept', 'fill' — while the tab strips use theirs: 'kras',
+   *  'oneToOne', 'finalise', 'deptAnalytics'. Nothing matched, and because
+   *  Action.tab was typed `string` the compiler had nothing to say about it.
+   *
+   *  The old handler was `onGo={() => setScope('me')}`: it discarded the
+   *  destination and set the scope to the one already selected, so EVERY
+   *  call-to-action on the cycle header did nothing. "Add your first KRA" was
+   *  the most visible, being the first thing a new employee is asked to do.
+   *
+   *  A CTA has to move both dials: the scope (Me / My team / My department)
+   *  and the tab within it. */
+  const GO_TO: Record<ActionTab, { scope: Scope; tab: string }> = {
+    mine:   { scope: 'me',   tab: 'kras' },        // Write your KRAs
+    self:   { scope: 'me',   tab: 'self' },        // Rate yourself
+    oneone: { scope: 'me',   tab: 'oneToOne' },    // Confirm your one-to-one
+    team:   { scope: 'team', tab: 'approve' },     // Open the approval queue
+    dept:   { scope: 'dept', tab: 'finalise' },    // Open the finalisation queue
+    // "See who is missing" — the HR admin's list of people with no KRAs yet.
+    // Department analytics is the only surface that shows completion.
+    fill:   { scope: 'dept', tab: 'deptAnalytics' },
+  }
+
+  const goToAction = (destination: string) => {
+    const to = GO_TO[destination as ActionTab]
+    // An unmapped destination must not silently do nothing — that is the bug
+    // being replaced. Falling back to the person's own dashboard at least moves.
+    const { scope: s, tab } = to ?? { scope: 'me' as Scope, tab: 'dashboard' }
+    setScope(s)
+    if (s === 'me') setEmpTab(tab as EmpTab)
+    else if (s === 'team') setMgrTab(tab as MgrTab)
+    else setHodTab(tab as HodTab)
+  }
+
   return (
     <div className="pms">
       <CycleHeader
         employeeId={employeeId}
         roles={{ isEmployee: true, isRM: roles.isRM, isHOD: roles.isHOD }}
-        onGo={() => setScope('me')}
+        onGo={goToAction}
       />
 
       {scopes.length > 1 && (
