@@ -3252,9 +3252,9 @@ function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number
 }
 
 const SECTIONS: NavSection[] = [
-  { k:'home', label:'Today', short:'Today', icon:'', status:'ready',
+  { k:'home', label:'Home', short:'Home', icon:'', status:'ready',
     desc:'The landing dashboard — everything at a glance',
-    items:[{ k:'home', label:'Today' }] },
+    items:[{ k:'home', label:'Home' }] },
 
   { k:'profile', label:'Profile', short:'Profile', icon:'', status:'ready',
     desc:'Your personal details, documents and letters',
@@ -3737,9 +3737,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     // A tab with nothing behind it shows what it will hold, not an empty screen.
     if (section.status === 'soon' && section.features) return <FeatureGrid features={section.features} />
     switch (view) {
-      // The Today tab (migration 111). The tab KEY stays 'home' — MOBILE_PRIMARY,
-      // the default view and the "← My portal" button all reference it, and a
-      // deep link should not break for a nav word. Only the label changed.
+      // The landing tab (migration 111), labelled "Home". The KEY stays 'home' —
+      // MOBILE_PRIMARY, the default view and the "← My portal" button all
+      // reference it, and a deep link should not break for a nav word. The
+      // component and its files keep the Today name: that is what the drop, the
+      // payload function and lib/today are all called.
       case 'home':          return <Today onOpenTab={setView} />
       // Profile 360. The portal owner's code is passed, not the viewer's —
       // the route resolves WHO IS LOOKING from the session and masks
