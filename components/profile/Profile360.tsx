@@ -149,7 +149,7 @@ const Elsewhere = ({ title, owner }: { title: string; owner: string }) => (
 function Ring({ pc }: { pc: number }) {
   const r = 32, c = 2 * Math.PI * r
   return (
-    <div className="ring">
+    <div className="ez-ring">
       <svg width="76" height="76" viewBox="0 0 76 76" aria-hidden="true">
         <circle cx="38" cy="38" r={r} fill="none" strokeWidth="8" stroke="var(--ez-sunken)" />
         <circle cx="38" cy="38" r={r} fill="none" strokeWidth="8" stroke="var(--ez-brand)"

@@ -104,14 +104,20 @@
 .ezp .card .sub { font-size: 11.5px; color: var(--ez-muted); }
 
 /* ── completeness ring ────────────────────────────────────────────────── */
-.ezp .ringrow { display: flex; gap: 14px; align-items: center; }
-.ezp .ring { position: relative; width: 76px; height: 76px; flex: 0 0 auto; }
-.ezp .ring svg { transform: rotate(-90deg); display: block; }
-.ezp .ring .mid { position: absolute; inset: 0; display: grid; place-items: center;
+.ezp .ez-ringrow { display: flex; gap: 14px; align-items: center; }
+/* Named ez-ring, not ring. "ring" is a Tailwind utility — it emits
+     --tw-ring-shadow: ... 0 0 0 calc(1px + ...) var(--tw-ring-color, currentcolor),
+     and this app imports tailwindcss in globals.css, so the class on the element
+     matched it and painted a 1px box-shadow ring in the ink colour. The div has
+     no radius, so it drew a hard SQUARE around every progress circle. Our
+     stylesheet never sets box-shadow here, so there was nothing to win with. */
+.ezp .ez-ring { position: relative; width: 76px; height: 76px; flex: 0 0 auto; }
+.ezp .ez-ring svg { transform: rotate(-90deg); display: block; }
+.ezp .ez-ring .mid { position: absolute; inset: 0; display: grid; place-items: center;
                   text-align: center; line-height: 1.1; }
-.ezp .ring .num { font-size: 17px; font-weight: 700; }
-.ezp .ring .cap { font-size: 9px; color: var(--ez-muted); }
-.ezp .ringrow p { margin: 0; font-size: 11.5px; color: var(--ez-muted); }
+.ezp .ez-ring .num { font-size: 17px; font-weight: 700; }
+.ezp .ez-ring .cap { font-size: 9px; color: var(--ez-muted); }
+.ezp .ez-ringrow p { margin: 0; font-size: 11.5px; color: var(--ez-muted); }
 
 .ezp .todo { list-style: none; margin: 13px 0 0; padding: 0; display: grid; gap: 9px; }
 .ezp .todo li { display: flex; gap: 8px; align-items: flex-start;

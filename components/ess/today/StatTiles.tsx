@@ -28,7 +28,7 @@ export default function StatTiles({ data }: { data: TodayPayload }) {
   const untilt = (e: PointerEvent<HTMLDivElement>) => { e.currentTarget.style.transform = ''; };
   const T = ({ i, children }: { i: number; children: React.ReactNode }) => <div className="tile reveal tilt" style={{ ['--i' as string]: i }} onPointerMove={tilt} onPointerLeave={untilt}>{children}</div>;
   const Ring = ({ to, cls, label }: { to: number; cls?: string; label: string }) => (
-    <div className="ring"><svg viewBox="0 0 54 54"><circle className="bg" cx="27" cy="27" r="23" /><circle className={'fg ' + (cls ?? '')} pathLength={1} cx="27" cy="27" r="23" style={{ strokeDashoffset: ready ? 1 - to : 1 }} /></svg><i>{label}</i></div>
+    <div className="ez-ring"><svg viewBox="0 0 54 54"><circle className="bg" cx="27" cy="27" r="23" /><circle className={'fg ' + (cls ?? '')} pathLength={1} cx="27" cy="27" r="23" style={{ strokeDashoffset: ready ? 1 - to : 1 }} /></svg><i>{label}</i></div>
   );
 
   return (

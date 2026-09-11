@@ -178,12 +178,18 @@
   .ezt .delta { display:inline-flex; align-items:center; gap:3px; font-weight:700; font-size:11px; padding:1px 6px; border-radius:99px; }
   .ezt .delta.up { background:var(--ez-positive-tint); color:var(--ez-positive); }
   .ezt .delta.warn { background:var(--ez-warning-tint); color:var(--ez-warning); }
-  .ezt .ring { width:54px; height:54px; flex:none; position:relative; }
-  .ezt .ring svg { width:100%; height:100%; rotate:-90deg; }
-  .ezt .ring .bg { fill:none; stroke:var(--ez-sunken); stroke-width:6; }
-  .ezt .ring .fg { fill:none; stroke:var(--ez-brand); stroke-width:6; stroke-linecap:round; stroke-dasharray:1 1; stroke-dashoffset:1; transition:stroke-dashoffset 1.3s cubic-bezier(.2,.8,.2,1) .4s; }
-  .ezt .ring .fg.pos { stroke:var(--ez-positive); }
-  .ezt .ring i { position:absolute; inset:0; display:grid; place-items:center; font-style:normal; font-size:11px; font-weight:700; color:var(--ez-ink); }
+  /* Named ez-ring, not ring. "ring" is a Tailwind utility — it emits
+     --tw-ring-shadow: ... 0 0 0 calc(1px + ...) var(--tw-ring-color, currentcolor),
+     and this app imports tailwindcss in globals.css, so the class on the element
+     matched it and painted a 1px box-shadow ring in the ink colour. The div has
+     no radius, so it drew a hard SQUARE around every progress circle. Our
+     stylesheet never sets box-shadow here, so there was nothing to win with. */
+  .ezt .ez-ring { width:54px; height:54px; flex:none; position:relative; }
+  .ezt .ez-ring svg { width:100%; height:100%; rotate:-90deg; }
+  .ezt .ez-ring .bg { fill:none; stroke:var(--ez-sunken); stroke-width:6; }
+  .ezt .ez-ring .fg { fill:none; stroke:var(--ez-brand); stroke-width:6; stroke-linecap:round; stroke-dasharray:1 1; stroke-dashoffset:1; transition:stroke-dashoffset 1.3s cubic-bezier(.2,.8,.2,1) .4s; }
+  .ezt .ez-ring .fg.pos { stroke:var(--ez-positive); }
+  .ezt .ez-ring i { position:absolute; inset:0; display:grid; place-items:center; font-style:normal; font-size:11px; font-weight:700; color:var(--ez-ink); }
   .ezt .spark { width:64px; height:30px; flex:none; margin-left:auto; }
   .ezt .spark path { fill:none; stroke:var(--ez-brand); stroke-width:2; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:1; stroke-dashoffset:1; animation: draw 1.4s ease-out .5s forwards; --animation-reduced: draw .01ms forwards; }
   .ezt .spark .area { fill:var(--ez-brand-tint); stroke:none; opacity:.9; }
@@ -355,3 +361,23 @@
     .ezt .clock b { font-size:22px; }
     .ezt .mgrid { font-size:10px; }
   }
+
+/* ── Corner radii, re-asserted ───────────────────────────────────────────────
+   lib/ui/index.tsx gives every <button> in the product one corner with
+   !important: 693 raw buttons carrying 7 different radii, harmonised in a
+   single rule. Its only escape hatch matches an INLINE `border-radius: 99…`,
+   and this tab's shapes are declared here in a stylesheet — so they lost. The
+   punch dial rendered as a 10px rounded square inside its own perfectly round
+   ring, which is what "the punch button is square" was.
+
+   These restore the design's shapes. Same !important, higher specificity, so
+   the global rule still governs every button this file does not name. Anything
+   added here later that is not a rectangle needs a line in this block. */
+.ezt .punch      { border-radius:50%  !important; }
+.ezt .pillbtn    { border-radius:10px !important; }
+.ezt .seg button { border-radius:9px  !important; }
+.ezt .qa button  { border-radius:15px !important; }
+.ezt .go,
+.ezt .wish       { border-radius:9px  !important; }
+.ezt .give       { border-radius:11px !important; }
+.ezt .eye        { border-radius:8px  !important; }
