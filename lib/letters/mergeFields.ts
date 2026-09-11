@@ -171,8 +171,8 @@ export async function resolveMergeFieldsForEmployee(employeeId: string): Promise
       res_address1, res_address2, res_city, res_state, res_pin,
       personal_email, office_email,
       company_id, location_id,
-      department:departments(dept_name),
-      company:companies(company_name),
+      department:departments!employees_department_id_fkey(dept_name),
+      company:companies!employees_company_id_fkey(company_name),
       location:locations!location_id(location_name)
     `)
     .eq('id', employeeId)

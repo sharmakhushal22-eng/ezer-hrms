@@ -1,0 +1,345 @@
+================================================================================
+EZER HRMS — DATABASE HANDOVER
+Prepared 4 September 2026 · for Nayan Ahuja
+Branch TusharPanwar @ 154928f
+================================================================================
+
+WHAT THIS IS
+
+SEVEN migrations to run. The 3 September handover said eight; 075 turns out to
+be applied already and I had checked it wrongly. See section 2.
+
+Nothing new has been added to the pile — everything I have built since then
+runs on tables you already have.
+
+READ SECTION 6 BEFORE YOU FINISH. Running these seven does NOT populate the
+Wall of Fame. The seed files define functions you have to CALL, once per
+company, and without that step every Wall screen comes up empty and looks
+broken.
+
+What HAS changed is that I probed the live database this time instead of
+working from the previous list, so section 2 is measured rather than
+remembered. There is also one new question for you, in section 5.
+
+Nothing here has been run against the database. Nobody but you applies schema
+changes to this project.
+
+
+--------------------------------------------------------------------------------
+1. RUN THESE, IN THIS ORDER
+--------------------------------------------------------------------------------
+
+    migrations/074_pms_not_found_guards.sql
+    migrations/079_group_profile.sql
+    migrations/082_access_foundation.sql        <-- 084 will not work without it
+    migrations/084_wall_of_fame.sql
+    migrations/085_wall_of_fame_seed.sql
+    migrations/086_shoutouts_and_feed.sql
+    migrations/087_social_and_inbox.sql
+
+Order matters in exactly two places:
+
+  * 082 BEFORE 084. 084 calls can() at five sites and 082 creates it. Run 084
+    first and every access check in the Wall of Fame fails closed.
+
+    082 also creates explain_access(). Nothing in 084-087 calls that one —
+    wof_explain_access(), which 084 defines itself, is the one in use.
+    explain_access() is there because the bundle's brief named it and a future
+    route may expect it. Said plainly so you know which of the two is
+    load-bearing.
+
+  * 084 BEFORE 085, 086 and 087. Those three ALTER tables that 084 creates and
+    seed a catalogue 084 defines.
+
+Every file is safe to run twice: CREATE TABLE IF NOT EXISTS, ADD COLUMN IF NOT
+EXISTS, CREATE OR REPLACE FUNCTION, ON CONFLICT DO NOTHING. If a run
+half-fails, fix the cause and run the whole file again.
+
+There is no 083. The number is deliberately skipped.
+
+
+--------------------------------------------------------------------------------
+2. WHAT IS ALREADY IN THE DATABASE — measured 4 September
+--------------------------------------------------------------------------------
+
+I probed rather than assumed. These came back present, with the evidence I
+used:
+
+    066_pms_module          all 15 pms_* tables readable
+                            3 policies · 12 periods · 15 rating bands
+                            120 KRA library rows · 395 enrolment rows
+    067_pms_org_chain       departments.hod_employee_id selectable
+    068_pms_setup_data      pms_rating_scale has 15 rows
+    076_pms_persist_scores  pms_overall_rating.self_score selectable
+    077_company_profile     company_contacts readable
+    078_company_documents   company_documents readable
+    075_ess_notification    ess_notifications.priority, .read_at and
+                            .actor_employee_id all selectable -- three columns
+                            that ONLY 075 adds
+    080_ess_inbox           tables exist -- BUT SEE SECTION 5
+    081_registration_docs   registrations.document_path selectable
+
+And these came back absent, each with PGRST205 on a table the file creates:
+
+    079 · 082 · 084 · 085 · 086 · 087       (074: see below)
+
+A SECOND CORRECTION, ON 075. The 3 September handover listed it as pending and
+so did my first draft of this one. I had been probing for a table called
+ess_notification_catalogue -- which NO migration creates. The file's name says
+catalogue; what it actually does is add four columns to ess_notifications,
+backfill them, and add three indexes. Probing for the columns instead shows
+all four present, three of them added by nothing else. So 075 is done, and the
+run list is seven files rather than eight.
+
+WHAT IS IN THE BUNDLE
+
+  migrations/       the 7 files above, the ones to run now
+  all-migrations/   EVERY migration in the project — all 85, 0001 to 087 —
+                    so you have the complete history in one place and can
+                    diff any of them against what is live
+  previous/         the 3 September changes document, for continuity
+
+  Numbering: there is no 003 and no 083. Both gaps are real and deliberate;
+  nothing is missing from all-migrations/.
+
+Everything already applied is idempotent, so re-running any of it is
+harmless.
+
+A CAVEAT I OWE YOU. My first probe reported six of those eight as APPLIED. It
+used head:true together with .limit(0), and that combination swallowed the
+error and returned a clean empty result. The second probe -- a real SELECT
+alongside the count -- returned PGRST205 on all six. The list above comes from
+the second method, cross-checked two ways. I am telling you because if I had
+not re-run it this file would have confidently told you the opposite.
+
+ONE THING I COULD NOT DETERMINE, and I am not going to guess:
+
+  Is 074 applied? It creates three functions and no tables. PostgREST answers
+  PGRST202 both for "no such function" and for "function exists, wrong
+  arguments", so a probe cannot separate them. 074 is CREATE OR REPLACE
+  throughout, so run it regardless -- that costs nothing and settles it.
+
+
+--------------------------------------------------------------------------------
+3. WHAT EACH FILE SWITCHES ON
+--------------------------------------------------------------------------------
+
+  074  Guard functions for the PMS: pms_open_period, pms_validate_kras,
+       pms_lock_kras. pms_lock_kras is the one that enforces the rule the
+       whole appraisal hangs on -- weightage cannot lock until BOTH the
+       employee and the manager have acknowledged the KRA one-to-one.
+
+  079  group_profile. The group-level company record above the individual
+       companies.
+
+  082  can(), explain_access() and access_permission_map. The access
+       foundation the Wall of Fame is built on.
+
+  084  Wall of Fame: badge master, employee badges, recognition values.
+
+  085  Does NOT seed anything by itself, despite the name. It defines two
+       functions -- seed_wall_defaults() and generate_service_milestones() --
+       which you call per company. Section 6.
+
+  086  Shoutouts and the feed. Its category list is also behind a function,
+       seed_shoutout_categories(), not seeded on apply.
+
+  087  Comments, mentions and the inbox wiring. Adds 5 more rows to the
+       wall_permissions catalogue on apply.
+
+
+--------------------------------------------------------------------------------
+4. AFTER YOU RUN THEM — how to tell it worked
+--------------------------------------------------------------------------------
+
+Open the app and check three screens rather than trusting the SQL to have
+meant what it said:
+
+  ESS portal -> Wall of Fame     should render badges and the feed instead of
+                                 a "not switched on yet" panel
+
+  ESS portal -> Inbox            see section 5 first; this one has a separate
+                                 problem that these seven files do not fix
+
+  Performance (main menu)        already works today -- it has real data. If
+                                 the Policies tab is
+                                 empty that means nothing is CONFIGURED, not
+                                 that anything is missing -- 066 is applied and
+                                 the screen says so correctly now.
+
+If a Wall screen still shows the pending state after 084-087, the usual cause
+is PostgREST's schema cache rather than the migration. It refreshes on its own
+shortly, or you can force it from the Supabase dashboard.
+
+
+--------------------------------------------------------------------------------
+5. A DECISION I NEED FROM YOU — the ESS inbox
+--------------------------------------------------------------------------------
+
+inbox_conversations and inbox_messages EXIST, but reading them as anon gives:
+
+    42501 -- permission denied for table inbox_conversations
+    hint: Grant the required privileges to the current role with:
+          GRANT SELECT ON public.inbox_conversations TO anon;
+
+I read 080_ess_inbox.sql: it issues no GRANT and creates no RLS policy. So the
+tables were created without either and PostgREST cannot reach them. Every
+other table in the project is readable, so something grants by default and
+these two missed it -- I cannot tell from outside which.
+
+I have NOT written a migration for this, on purpose. The house rule is that a
+new table's RLS policy is your decision rather than something copied from an
+older file, and an inbox is exactly the wrong place for an allow-all default:
+these rows are private messages between named employees.
+
+Three options, worst to best as I see it:
+
+  1. GRANT SELECT ... TO anon, no RLS.
+     Every employee can read every conversation in the company. Please do not.
+
+  2. Grants plus RLS scoped to participants -- a row is visible when the
+     reader is its sender or its recipient. This is what the feature assumes,
+     and what I would write if you tell me to.
+
+  3. All inbox reads through a SECURITY DEFINER function, nothing granted
+     directly. Tightest, and the most work.
+
+Tell me which and I will write the file. Until then the ESS inbox stays dark,
+which is the correct failure -- it fails closed, not open.
+
+
+--------------------------------------------------------------------------------
+6. WHAT DATA IS AND IS NOT IN THESE FILES
+--------------------------------------------------------------------------------
+
+Worth being exact about, because "run the migrations" and "the feature works"
+are not the same sentence here.
+
+SEEDED AUTOMATICALLY, the moment you run the file:
+
+    082   access_permission_map      ~21 rows   the permission catalogue
+    084   wall_permissions           ~18 rows   Wall of Fame permission codes
+    087   wall_permissions           ~5 rows    the social/inbox additions
+
+    Those are catalogue rows -- codes and labels the app looks up. They are
+    not company data and they are the same for everybody.
+
+NOT SEEDED. You have to call something:
+
+    085   seed_wall_defaults(company, owner)
+          generate_service_milestones(company)
+    086   seed_shoutout_categories(company)
+
+    Running 085 and 086 creates the FUNCTIONS. It inserts nothing. Every
+    badge, award, recognition value, shoutout category and wall_config row
+    comes from calling them, once per company.
+
+    THIS IS THE STEP THAT IS EASY TO MISS. Run all seven files, open the Wall
+    of Fame, and it is empty -- not broken, just never seeded -- and it looks
+    exactly like a migration that failed.
+
+    Per 085's own usage note, for each company:
+
+        select seed_wall_defaults('<company_uuid>', '<hr_head_employee_uuid>');
+        select seed_shoutout_categories('<company_uuid>');
+        select generate_service_milestones('<company_uuid>');
+
+    then, in the same admin session, flip the master switch:
+
+        update wall_config set module_enabled = true
+        where company_id = '<company_uuid>';
+
+    There are three companies in this database, so that is three passes. Get
+    the UUIDs with:
+
+        select id, company_name from companies order by company_name;
+
+    and the HR head's employee id with:
+
+        select id, full_name, emp_code from employees
+        where company_id = '<company_uuid>' and date_of_leaving is null
+        order by full_name;
+
+    seed_wall_defaults returns jsonb saying what it created, so you can read
+    the result rather than guess. It is safe to call twice -- everything
+    inside is ON CONFLICT DO NOTHING.
+
+ALREADY IN THE DATABASE, nothing for you to do:
+
+    PMS      3 policies, 12 periods, 15 rating bands, 120 KRA library rows
+             and 395 enrolment rows. All of it arrived with 066 and 068,
+             which are applied. The all-migrations/ copies are for diffing.
+
+             pms_employee_goals, pms_one_to_one and pms_reviews are all at
+             ZERO -- nobody has written a KRA yet. That is expected, and
+             partly my fault: the INSERT was missing period_id, so saves
+             silently went nowhere. Fixed on the branch. Do not read those
+             zeroes as a migration problem.
+
+    INBOX    Tables exist, no rows readable, and that is the grant problem in
+             section 5 -- not missing data. Nothing in this bundle seeds the
+             inbox, and nothing should: those rows are real messages between
+             real people, created by people using the product.
+
+
+--------------------------------------------------------------------------------
+7. DO NOT RUN THESE
+--------------------------------------------------------------------------------
+
+  055, 056, 057   An old, already-rolled-back RMS attempt occupies those
+                  numbers on this branch. The PMS module was renumbered
+                  055->066, 056->067, 057->068. Running the 055-057 files
+                  would apply a superseded schema on top of a live one.
+
+  079_pms_module_v2.sql from the PMS spec folder
+                  It carries the same 15 tables as 066, which is already
+                  applied. On this branch 079 is group_profile, an unrelated
+                  file. Adding the spec's copy as 079 would collide with it.
+
+
+--------------------------------------------------------------------------------
+8. THE RULE THAT MUST NOT MOVE
+--------------------------------------------------------------------------------
+
+pms_policies.payout_linkage_enabled is pinned false by a CHECK constraint:
+
+    payout_linkage_enabled boolean NOT NULL DEFAULT false
+                           CHECK (payout_linkage_enabled = false)
+
+The PMS is developmental. The rating has no link to increment, variable pay,
+bonus, or CTC, and additional benefits are recognition only -- certificate,
+nomination, award, no cash component. Enabling linkage would take a migration
+that drops the constraint, which is a product decision rather than a config
+one. Leave the constraint where it is.
+
+
+--------------------------------------------------------------------------------
+9. IF SOMETHING GOES WRONG
+--------------------------------------------------------------------------------
+
+Every file is idempotent, so the first move is almost always to fix the cause
+and run the whole file again rather than to unpick a partial run.
+
+  PGRST205 in the app after a migration ran cleanly
+      PostgREST's schema cache has not caught up. Wait, or reload it from the
+      dashboard.
+
+  42501 permission denied
+      A grant is missing, not a policy. See section 5 -- the error text names
+      the exact statement that fixes it.
+
+  42P01 relation does not exist, mid-file
+      Run order. Check 082-before-084 and 084-before-085/086/087.
+
+  Wall of Fame empty after everything ran cleanly
+      You have not called the seed functions yet. Section 6.
+
+  Anything you would rather not decide alone
+      Send it to me with the error text and I will look. Do not work around a
+      constraint to make a file run -- the constraints are load-bearing, and
+      one of them (section 8) is a product commitment.
+
+================================================================================
+MANIFEST.txt lists a sha256 for every file, so a truncated or altered transfer
+is detectable. Check it before you run anything.
+================================================================================

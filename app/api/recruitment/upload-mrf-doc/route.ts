@@ -4,7 +4,7 @@
 // `attachments` JSONB. Mirrors app/api/recruitment/upload-doc/route.ts.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireDashboardUser } from '@/lib/api-auth'
+import { requireModule } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
@@ -18,7 +18,7 @@ const MAX_BYTES = 10 * 1024 * 1024
 
 export async function POST(req: NextRequest) {
   // Same hole as share-report had: a service-role upload with nothing guarding it.
-  const gate = await requireDashboardUser(req)
+  const gate = await requireModule(req, 'Recruitment')
   if (gate.error) return gate.error
 
   try {
@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   // A signed URL for any path is a read of any file in the bucket — guessing a path
   // should not be enough.
-  const gate = await requireDashboardUser(req)
+  const gate = await requireModule(req, 'Recruitment')
   if (gate.error) return gate.error
 
   const path = req.nextUrl.searchParams.get('path')
@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
 // Remove an attachment from both storage and the requisition's JSONB.
 export async function DELETE(req: NextRequest) {
   // Deleting somebody's document is the one that cannot be undone.
-  const gate = await requireDashboardUser(req)
+  const gate = await requireModule(req, 'Recruitment')
   if (gate.error) return gate.error
 
   const mrfId = req.nextUrl.searchParams.get('mrf_id')

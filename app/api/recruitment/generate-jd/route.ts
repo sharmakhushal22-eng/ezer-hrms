@@ -24,21 +24,55 @@ Keep it professional, concise, and India-market appropriate.
 Do NOT include salary range or company name. 
 Format with clear headings.`
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': process.env.ANTHROPIC_API_KEY!,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1500,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  })
+  // Without a key the upstream call returns an auth error whose body has no
+  // `content`, which used to collapse to an empty string and read as success.
+  // Fail loudly instead, so the UI can say what is actually wrong.
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return NextResponse.json(
+      { error: 'NO_API_KEY', message: 'API key not exist, please connect LLM key' },
+      { status: 503 },
+    )
+  }
 
-  const data = await res.json()
-  const jd = data.content?.[0]?.text || ''
-  return NextResponse.json({ jd })
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    })
+
+    const data = await res.json()
+
+    if (!res.ok) {
+      const upstream = data?.error?.message || `AI service returned ${res.status}`
+      const badKey = res.status === 401 || res.status === 403
+      return NextResponse.json(
+        { error: badKey ? 'NO_API_KEY' : 'AI_ERROR',
+          message: badKey ? 'API key not exist, please connect LLM key' : upstream },
+        { status: res.status },
+      )
+    }
+
+    const jd = data.content?.[0]?.text || ''
+    if (!jd) {
+      return NextResponse.json(
+        { error: 'EMPTY', message: 'The AI service returned no text. Please try again.' },
+        { status: 502 },
+      )
+    }
+    return NextResponse.json({ jd })
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: 'AI_ERROR', message: e?.message || 'Could not reach the AI service' },
+      { status: 502 },
+    )
+  }
 }

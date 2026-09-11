@@ -72,7 +72,7 @@ async function loadEmployees(f: ReportFilters): Promise<{ emps: EmpRow[]; mgr: (
     id, emp_code, full_name, father_name, employment_status,
     group_doj, company_doj, date_of_leaving, last_working_date, relieving_date,
     sub_department, l1_manager_id, reporting_manager,
-    companies(company_name), departments(dept_name), locations!location_id(location_name)
+    companies!employees_company_id_fkey(company_name), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)
   `).neq('is_test', true)
   if (f.companyId) q = q.eq('company_id', f.companyId)   // empty = all companies
   if (f.departmentId) q = q.eq('department_id', f.departmentId)

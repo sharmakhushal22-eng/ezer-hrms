@@ -14,22 +14,25 @@ import {
   type WeeklyOff, type CompanyLite, type BranchLite, type DeptLite, type EmployeeLite,
   type HolidayType, type WeeklyMode, type ResolvedHoliday,
 } from '@/lib/supabase-holidays'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 // ── Style constant (project palette) ────────────────────────────────
 const C = {
-  page:    { background:'#F5F3FF', minHeight:'100vh', color:'#1E1B4B', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:    { background:'#FFFFFF', borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  lbl:     { fontSize:11, fontWeight:600, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
-  sec:     { fontSize:12, fontWeight:600, color:'#7C3AED', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
-  input:   { width:'100%', padding:'9px 11px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-  pri:     { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:'#7C3AED', color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:     { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#6D28D9', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  danger:  { padding:'5px 10px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#DC2626' } as React.CSSProperties,
-  tab:     (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? '#7C3AED' : '#fff', color: on ? '#fff' : '#6D28D9', boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
+  page:    { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
+  card:    { background:TK.surface, borderRadius:10, border:'1px solid var(--ez-line)', padding:'14px 16px', marginBottom:10, boxShadow:'var(--ez-shadow-flat)' } as React.CSSProperties,
+  lbl:     { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
+  sec:     { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:8 } as React.CSSProperties,
+  input:   { width:'100%', padding:'9px 11px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
+  pri:     { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  out:     { padding:'7px 13px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  danger:  { padding:'5px 10px', borderRadius:7, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
+  tab:     (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
 }
 const TYPE_COLOR: Record<HolidayType, [string, string]> = {
-  NATIONAL:['#E0E7FF','#3730A3'], FESTIVAL:['#FCE7F3','#9D174D'], DISCRETIONARY:['#FEF3C7','#92400E'],
-  REGIONAL:['#DBEAFE','#1E40AF'], OPTIONAL:['#D1FAE5','#065F46'],
+  NATIONAL:[TK.brandTint,TK.inkSoft], FESTIVAL:[TK.criticalTint,TK.critical], DISCRETIONARY:[TK.warningTint,TK.warning],
+  REGIONAL:[TK.infoTint,TK.brand], OPTIONAL:[TK.positiveTint,TK.positive],
 }
 const fmt = (s?: string | null) => s ? new Date(s + (s.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '—'
 const ym = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
@@ -37,7 +40,7 @@ const ym = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
 // ── Toast ───────────────────────────────────────────────────────────
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
-  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'✓':'✗'} {msg}</div>
+  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'':''} {msg}</div>
 }
 function Badge({ text, bg, color }: { text: string; bg: string; color: string }) {
   return <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99, background:bg, color }}>{text}</span>
@@ -77,15 +80,15 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
 
       <div style={C.card}>
         <div style={C.sec}>Calendars ({calendars.length})</div>
-        {calendars.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No calendars yet. Create one above.</div>}
+        {calendars.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No calendars yet. Create one above.</div>}
         {calendars.map(c => (
-          <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
+          <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
             <span style={{ fontSize:13, fontWeight:600 }}>{c.name}</span>
-            <Badge text={c.calendar_type} bg="#EDE9FE" color="#7C3AED" />
+            <Badge text={c.calendar_type} bg={TK.brandTint} color={TK.brand} />
             {c.status === 'PUBLISHED'
-              ? <Badge text="PUBLISHED" bg="#D1FAE5" color="#065F46" />
-              : <Badge text="DRAFT" bg="#F3F4F6" color="#6B7280" />}
-            <span style={{ fontSize:11, color:'#9CA3AF' }}>{fmt(c.from_date)} – {fmt(c.to_date)}</span>
+              ? <Badge text="PUBLISHED" bg={TK.positiveTint} color={TK.positive} />
+              : <Badge text="DRAFT" bg={TK.sunken} color={TK.muted} />}
+            <span style={{ fontSize:11, color:TK.faint }}>{fmt(c.from_date)} – {fmt(c.to_date)}</span>
             <span style={{ marginLeft:'auto', display:'flex', gap:6 }}>
               {c.status === 'DRAFT'
                 ? <button style={C.out} onClick={() => onStatus(c.id, 'PUBLISHED')}>Publish</button>
@@ -98,13 +101,13 @@ function CalendarsTab({ calendars, companies, maps, onCreate, onStatus, onDelete
 
       <div style={C.card}>
         <div style={C.sec}>Company → calendar mapping</div>
-        <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:10 }}>Which holiday + leave calendar each company follows. (The holiday resolver runs off this mapping.)</div>
-        {companies.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No company found.</div>}
+        <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>Which holiday + leave calendar each company follows. (The holiday resolver runs off this mapping.)</div>
+        {companies.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No company found.</div>}
         {companies.map(co => {
           const m = maps.find(x => x.company_id === co.id)
           return (
-            <div key={co.id} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1fr', gap:10, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #F3F0FF' }}>
-              <div style={{ fontSize:13, fontWeight:600 }}>{co.company_name} <span style={{ fontSize:11, color:'#9CA3AF' }}>{co.company_code}</span></div>
+            <div key={co.id} style={{ display:'grid', gridTemplateColumns:'1.5fr 1fr 1fr', gap:10, alignItems:'center', padding:'8px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
+              <div style={{ fontSize:13, fontWeight:600 }}>{co.company_name} <span style={{ fontSize:11, color:TK.faint }}>{co.company_code}</span></div>
               <select style={C.input} value={m?.holiday_calendar_id || ''} onChange={e => onMap(co.id, e.target.value || null, m?.leave_calendar_id || null)}>
                 <option value="">— Holiday calendar —</option>
                 {holCals.map(hc => <option key={hc.id} value={hc.id}>{hc.name}</option>)}
@@ -134,7 +137,7 @@ function HolidaysTab({ calendars, companies, branches, weeklyOffs, selCal, setSe
 
   return (
     <>
-      <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+      <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
         <label style={C.lbl}>Calendar</label>
         <select style={{ ...C.input, maxWidth:420 }} value={selCal} onChange={e => setSelCal(e.target.value)}>
           <option value="">— Select a holiday calendar —</option>
@@ -147,21 +150,21 @@ function HolidaysTab({ calendars, companies, branches, weeklyOffs, selCal, setSe
       {selCal && (
         <div style={C.card}>
           <div style={C.sec}>Holidays ({holidays.length})</div>
-          {holidays.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No holidays in this calendar yet.</div>}
+          {holidays.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No holidays in this calendar yet.</div>}
           {holidays.map(h => {
             const rows = appl.filter(a => a.holiday_id === h.id)
             const [bg, col] = TYPE_COLOR[h.holiday_type]
             return (
-              <div key={h.id} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'9px 0', borderBottom:'1px solid #F3F0FF' }}>
+              <div key={h.id} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'9px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
                 <div style={{ width:120, fontSize:12, fontWeight:600 }}>{fmt(h.holiday_date)}</div>
                 <div style={{ flex:1 }}>
                   <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
                     <span style={{ fontSize:13, fontWeight:600 }}>{h.description}</span>
                     <Badge text={h.holiday_type} bg={bg} color={col} />
-                    {h.is_optional && <Badge text="OPTIONAL" bg="#FFEDD5" color="#9A3412" />}
-                    {h.on_weekly_off && <Badge text="ON WEEKLY-OFF" bg="#FEE2E2" color="#991B1B" />}
+                    {h.is_optional && <Badge text="OPTIONAL" bg={TK.warningTint} color={TK.critical} />}
+                    {h.on_weekly_off && <Badge text="ON WEEKLY-OFF" bg={TK.criticalTint} color={TK.critical} />}
                   </div>
-                  <div style={{ fontSize:11, color:'#9CA3AF', marginTop:3 }}>
+                  <div style={{ fontSize:11, color:TK.faint, marginTop:3 }}>
                     {rows.length === 0 ? 'No applicability' : rows.map(r => `${coName(r.company_id)} · ${brName(r.branch_id)}`).join('  |  ')}
                   </div>
                 </div>
@@ -244,7 +247,7 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
       <div style={{ display:'grid', gridTemplateColumns:'1.4fr 1.4fr auto', gap:8, marginBottom:8 }}>
         <select style={C.input} value={pickCo} onChange={e => { setPickCo(e.target.value); setPickBr('') }}>
           <option value="">— Company —</option>
-          <option value="ALL">🌐 All companies</option>
+          <option value="ALL">All companies</option>
           {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
         </select>
         <select style={C.input} value={pickBr} onChange={e => setPickBr(e.target.value)} disabled={!pickCo}>
@@ -255,16 +258,16 @@ function AddHolidayForm({ calendar_id, companies, branches, weeklyOffs, onAdd }:
       </div>
       <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>
         {scopes.map((s, i) => (
-          <span key={i} style={{ fontSize:11, background:'#F5F3FF', border:'1px solid #DDD6FE', borderRadius:99, padding:'3px 10px', display:'inline-flex', gap:6, alignItems:'center' }}>
+          <span key={i} style={{ fontSize:11, background:TK.canvas, border: `1px solid ${TK.brandEdge}`, borderRadius:99, padding:'3px 10px', display:'inline-flex', gap:6, alignItems:'center' }}>
             {coName(s.company_id)} · {brName(s.branch_id)}
-            <span style={{ cursor:'pointer', color:'#DC2626', fontWeight:700 }} onClick={() => setScopes(scopes.filter((_, j) => j !== i))}>×</span>
+            <span style={{ cursor:'pointer', color:TK.critical, fontWeight:700 }} onClick={() => setScopes(scopes.filter((_, j) => j !== i))}>×</span>
           </span>
         ))}
-        {scopes.length === 0 && <span style={{ fontSize:11, color:'#9CA3AF' }}>No scope — add at least one company.</span>}
+        {scopes.length === 0 && <span style={{ fontSize:11, color:TK.faint }}>No scope — add at least one company.</span>}
       </div>
 
       {conflict.conflict && (
-        <div style={{ background:'#FEF2F2', border:'1px solid #FCA5A5', borderRadius:8, padding:'10px 12px', marginBottom:10, fontSize:12, color:'#991B1B' }}>
+        <div style={{ background:TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius:10, padding:'10px 12px', marginBottom:10, fontSize:12, color: TK.critical }}>
           ⚠️ {fmt(date)} is a {conflict.weekday} — a weekly off in this scope. Add it anyway?
           <label style={{ display:'flex', alignItems:'center', gap:7, marginTop:7, cursor:'pointer', fontWeight:600 }}>
             <input type="checkbox" checked={confirmWeekend} onChange={e => setConfirmWeekend(e.target.checked)} /> Yes, confirm the weekend override (it goes into the audit log)
@@ -330,7 +333,7 @@ function WeeklyOffTab({ calendars, companies, branches, departments, weeklyOffs,
             <label style={C.lbl}>Which occurrences</label>
             <div style={{ display:'flex', gap:8 }}>
               {[1, 2, 3, 4, 5].map(n => (
-                <label key={n} style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', border:'1px solid #DDD6FE', borderRadius:7, padding:'5px 10px', background: nth.includes(n) ? '#EDE9FE' : '#fff' }}>
+                <label key={n} style={{ display:'flex', alignItems:'center', gap:5, fontSize:12, cursor:'pointer', border: `1px solid ${TK.brandEdge}`, borderRadius:7, padding:'5px 10px', background: nth.includes(n) ? TK.brandTint: TK.surface }}>
                   <input type="checkbox" checked={nth.includes(n)} onChange={() => toggleNth(n)} /> {n}{n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'}
                 </label>
               ))}
@@ -350,13 +353,13 @@ function WeeklyOffTab({ calendars, companies, branches, departments, weeklyOffs,
 
       <div style={C.card}>
         <div style={C.sec}>Weekly-off rules ({weeklyOffs.length})</div>
-        {weeklyOffs.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>No rules.</div>}
+        {weeklyOffs.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>No rules.</div>}
         {weeklyOffs.map(w => (
-          <div key={w.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:'1px solid #F3F0FF', fontSize:12 }}>
+          <div key={w.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
             <span style={{ fontWeight:600, width:90 }}>{WEEKDAYS[w.weekday]}</span>
-            <Badge text={w.mode === 'EVERY' ? 'EVERY WEEK' : `WEEKS ${(w.nth_occurrences || []).join(',')}`} bg="#EDE9FE" color="#7C3AED" />
-            {w.is_primary && <Badge text="PRIMARY" bg="#D1FAE5" color="#065F46" />}
-            <span style={{ color:'#9CA3AF' }}>{coName(w.company_id)} · {brName(w.branch_id)} · {deptName(w.department_id)}{w.employment_type ? ` · ${w.employment_type}` : ''}</span>
+            <Badge text={w.mode === 'EVERY' ? 'EVERY WEEK' : `WEEKS ${(w.nth_occurrences || []).join(',')}`} bg={TK.brandTint} color={TK.brand} />
+            {w.is_primary && <Badge text="PRIMARY" bg={TK.positiveTint} color={TK.positive} />}
+            <span style={{ color:TK.faint }}>{coName(w.company_id)} · {brName(w.branch_id)} · {deptName(w.department_id)}{w.employment_type ? ` · ${w.employment_type}` : ''}</span>
             <button style={{ ...C.danger, marginLeft:'auto' }} onClick={() => onDelete(w.id)}>Delete</button>
           </div>
         ))}
@@ -408,41 +411,41 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
           <div><label style={C.lbl}>Month</label><input type="month" style={C.input} value={month} onChange={e => setMonth(e.target.value)} /></div>
           <button disabled={!empId || loading} style={{ ...C.pri, opacity: empId ? 1 : 0.5 }} onClick={run}>{loading ? '…' : 'Resolve'}</button>
         </div>
-        <div style={{ fontSize:11, color:'#9CA3AF', marginTop:8 }}>Live from the resolver functions — for this company + branch, only PUBLISHED calendar holidays plus scoped weekly offs.</div>
+        <div style={{ fontSize:11, color:TK.faint, marginTop:8 }}>Live from the resolver functions — for this company + branch, only PUBLISHED calendar holidays plus scoped weekly offs.</div>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'1.3fr 1fr', gap:10 }}>
         <div style={C.card}>
           <div style={C.sec}>Weekly off — {new Date(y, m - 1, 1).toLocaleDateString('en-IN', { month:'long', year:'numeric' })}</div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
-            {WEEKDAYS.map(d => <div key={d} style={{ fontSize:10, fontWeight:600, color:'#9CA3AF', textAlign:'center', padding:'4px 0' }}>{d.slice(0, 3)}</div>)}
+            {WEEKDAYS.map(d => <div key={d} style={{ fontSize:10, fontWeight:600, color:TK.faint, textAlign:'center', padding:'4px 0' }}>{d.slice(0, 3)}</div>)}
             {cells.map((day, i) => {
               if (day === null) return <div key={i} />
               const ds = `${month}-${String(day).padStart(2, '0')}`
               const isOff = offSet.has(ds)
               const isHol = holMap.has(ds)
               return (
-                <div key={i} title={isHol ? holMap.get(ds)!.description : ''} style={{ textAlign:'center', padding:'8px 0', borderRadius:6, fontSize:12, fontWeight: (isOff || isHol) ? 600 : 400, background: isHol ? '#FCE7F3' : isOff ? '#F3F4F6' : '#fff', color: isHol ? '#9D174D' : isOff ? '#9CA3AF' : '#1E1B4B', border:'1px solid #F3F0FF' }}>{day}</div>
+                <div key={i} title={isHol ? holMap.get(ds)!.description : ''} style={{ textAlign:'center', padding:'8px 0', borderRadius:7, fontSize:12, fontWeight: (isOff || isHol) ? 600 : 400, background: isHol ? '#FCE7F3' : isOff ? '#F3F4F6' : '#fff', color: isHol ? '#9D174D' : isOff ? TK.faint : TK.ink, border: `1px solid ${TK.brandEdge}` }}>{day}</div>
               )
             })}
           </div>
-          <div style={{ display:'flex', gap:14, marginTop:10, fontSize:11, color:'#6B7280' }}>
-            <span><span style={{ display:'inline-block', width:10, height:10, background:'#F3F4F6', borderRadius:3, marginRight:4 }} />Weekly off</span>
-            <span><span style={{ display:'inline-block', width:10, height:10, background:'#FCE7F3', borderRadius:3, marginRight:4 }} />Holiday</span>
+          <div style={{ display:'flex', gap:14, marginTop:10, fontSize:11, color:TK.muted }}>
+            <span><span style={{ display:'inline-block', width:10, height:10, background: TK.sunken, borderRadius:3, marginRight:4 }} />Weekly off</span>
+            <span><span style={{ display:'inline-block', width:10, height:10, background: TK.criticalTint, borderRadius:3, marginRight:4 }} />Holiday</span>
           </div>
         </div>
 
         <div style={C.card}>
           <div style={C.sec}>Holidays ({hols.length})</div>
-          {hols.length === 0 && <div style={{ fontSize:12, color:'#9CA3AF' }}>{empId ? 'Press Resolve, or there is no mapped holiday.' : 'Select an employee.'}</div>}
+          {hols.length === 0 && <div style={{ fontSize:12, color:TK.faint }}>{empId ? 'Press Resolve, or there is no mapped holiday.' : 'Select an employee.'}</div>}
           {hols.map((h, i) => {
             const [bg, col] = TYPE_COLOR[h.holiday_type]
             return (
-              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom:'1px solid #F3F0FF' }}>
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
                 <span style={{ width:110, fontSize:12, fontWeight:600 }}>{fmt(h.holiday_date)}</span>
                 <span style={{ flex:1, fontSize:13 }}>{h.description}</span>
                 <Badge text={h.holiday_type} bg={bg} color={col} />
-                {h.is_optional ? <Badge text="OPTIONAL" bg="#FFEDD5" color="#9A3412" /> : <Badge text="FIXED" bg="#F3F4F6" color="#6B7280" />}
+                {h.is_optional ? <Badge text="OPTIONAL" bg={TK.warningTint} color={TK.critical} /> : <Badge text="FIXED" bg={TK.sunken} color={TK.muted} />}
               </div>
             )
           })}
@@ -505,14 +508,16 @@ export function HolidaysSection() {
 
   return (
     <>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Holiday &amp; Weekly-off Configuration</div>
-        <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Attendance &amp; Leave config layer — calendars, holidays (branch-wise), weekly offs. Only a PUBLISHED calendar reaches ESS.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Attendance &amp; Leave config layer — calendars, holidays (branch-wise), weekly offs. Only a PUBLISHED calendar reaches ESS.</div>
+        </div>
 
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
           {tabs.map(([k, label]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{label}</button>)}
         </div>
 
-        {loading ? <div style={{ ...C.card, textAlign:'center', color:'#7C3AED', padding:40 }}>Loading…</div> : (
+        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <>
             {tab === 'cal' && <CalendarsTab calendars={calendars} companies={companies} maps={maps} onCreate={hCreateCal} onStatus={hStatus} onDelete={hDeleteCal} onMap={hMap} />}
             {tab === 'hol' && <HolidaysTab calendars={calendars} companies={companies} branches={branches} weeklyOffs={weeklyOffs} selCal={selCal} setSelCal={setSelCal} holidays={holidays} appl={appl} onAdd={hAddHoliday} onDelete={hDeleteHoliday} />}

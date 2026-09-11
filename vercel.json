@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/offer-followup",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/regime-default",
+      "schedule": "30 3 5 * *"
     }
   ]
 }

@@ -1,0 +1,376 @@
+/* components/pms/pms.css — the PMS design language.
+ *
+ * WHAT THIS IS
+ *
+ * A faithful port of EZER-PMS-Mockup-v2.html's layout, drawn in EZER's own
+ * colours. The mockup's structure is kept to the pixel — 14px card radius,
+ * 18px card padding, uppercase tracked labels, two-weight table rules, 20px
+ * pills, the 26px stepper dot. What is NOT kept is the mockup's violet
+ * palette (#7C3AED on #F5F3FF): every colour here resolves through --ez-*,
+ * so PMS looks like the rest of the HRMS and follows the theme toggle.
+ *
+ * That mapping, so a future edit does not have to re-derive it:
+ *
+ *   mockup            here                       role
+ *   #7C3AED  violet   --ez-brand      #2563EB    accent, active tab, primary
+ *   #3C3489  deep     --ez-brand-deep #1D4ED8    label ink, emphasis
+ *   #1E1B4B  ink      --ez-ink                   headings, values
+ *   #6B6796  muted    --ez-muted / --ez-faint    sub-lines, metadata
+ *   #F5F3FF  ground   --ez-canvas / --ez-sunken  page, table heads, wells
+ *   #E9E7F5  line     --ez-line                  card and control borders
+ *   #F1EFFA  hairline --ez-line                  the softer of the two rules
+ *   #16A34A  green    --ez-positive              done
+ *   #F59E0B  amber    --ez-warning               waiting
+ *   #DC2626  red      --ez-critical              wrong, and the payout lock
+ *   #1D4ED8  blue     --ez-info                  scheduled, informational
+ *
+ * TYPE SIZES ARE ROUNDED ON PURPOSE. The mockup sets 10.5 / 11.5 / 12.5px.
+ * lib/ui/tokens.ts explains why this app does not: the UiScale zoom multiplies
+ * every size, and a half-pixel lands on a quarter-pixel twice over. These use
+ * the app scale — 11 / 12 / 13 / 14 — which survives zoom crisply.
+ *
+ * Everything is scoped under .pms so none of these very generic class names
+ * (.card, .stat, .pill, .btn) can leak into another module.
+ */
+
+.pms {
+  /* Two row washes the state tokens do not cover. §8 wants exited and notice
+   * period to be distinguishable at a glance across three different screens,
+   * so amber-for-both would defeat the point: exited leans red, notice leans
+   * yellow, and both stay light enough for --ez-ink to clear AA on them. */
+  --pms-row-exit:        #FFF4ED;
+  --pms-row-exit-hover:  #FFE8D8;
+  --pms-row-notice:      #FEFCE8;
+  --pms-row-notice-hover:#FDF6C3;
+  --pms-exit-fg:         #9A3412;
+  --pms-exit-bg:         #FFEDD5;
+
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ez-ink);
+
+  /* This is a flex item on the dashboard, and a flex item's min-width is auto
+   * — it refuses to shrink below its own min-content width. With a wide table
+   * inside, that pushed the whole page sideways at every width under 900px,
+   * and no amount of overflow-x:auto on the table wrapper could help: the
+   * wrapper was already being handed more width than the viewport had. */
+  /* width:100% matters as much as min-width:0 here. The page container uses
+   * `margin: 0 auto` to centre itself, and an auto cross-axis margin on a flex
+   * item switches OFF the stretch that would otherwise size it to the
+   * container — leaving it fit-content sized, which is min-content when the
+   * viewport is narrower than the content. So it grew to 806px inside a 352px
+   * viewport and took the whole page sideways with it. */
+  width: 100%;
+  min-width: 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-ez-theme="light"]) .pms {
+    --pms-row-exit:        rgba(249,115,22,.10);
+    --pms-row-exit-hover:  rgba(249,115,22,.16);
+    --pms-row-notice:      rgba(234,179,8,.10);
+    --pms-row-notice-hover:rgba(234,179,8,.16);
+    --pms-exit-fg:         #FDBA74;
+    --pms-exit-bg:         rgba(249,115,22,.18);
+  }
+}
+:root[data-ez-theme="dark"] .pms {
+  --pms-row-exit:        rgba(249,115,22,.10);
+  --pms-row-exit-hover:  rgba(249,115,22,.16);
+  --pms-row-notice:      rgba(234,179,8,.10);
+  --pms-row-notice-hover:rgba(234,179,8,.16);
+  --pms-exit-fg:         #FDBA74;
+  --pms-exit-bg:         rgba(249,115,22,.18);
+}
+
+/* ── tabs ─────────────────────────────────────────────────────────────── */
+
+.pms .tabs {
+  display: flex; gap: 4px; overflow-x: auto;
+  border-bottom: 1px solid var(--ez-line);
+  margin: 16px 0 18px;
+}
+.pms .tabs button {
+  background: transparent; border: 0; border-bottom: 2px solid transparent;
+  padding: 10px 13px; font: inherit; font-size: 13px; font-weight: 600;
+  color: var(--ez-muted); cursor: pointer; white-space: nowrap;
+}
+.pms .tabs button:hover { color: var(--ez-ink); }
+.pms .tabs button.on { color: var(--ez-brand); border-bottom-color: var(--ez-brand); }
+
+/* ── card ─────────────────────────────────────────────────────────────── */
+
+.pms .card {
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 14px; padding: 18px; margin-bottom: 16px; min-width: 0;
+}
+.pms .card h3 { font-size: 14px; font-weight: 700; margin: 0 0 4px; }
+.pms .card .sub { font-size: 12px; color: var(--ez-muted); margin-bottom: 14px; }
+.pms .divider { height: 1px; background: var(--ez-line); margin: 14px 0; }
+.pms .k { font-size: 11px; color: var(--ez-muted); }
+
+/* ── grid ─────────────────────────────────────────────────────────────── */
+
+.pms .grid { display: grid; gap: 12px; }
+.pms .g6 { grid-template-columns: repeat(6, minmax(0,1fr)); }
+.pms .g5 { grid-template-columns: repeat(5, minmax(0,1fr)); }
+.pms .g4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+.pms .g3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.pms .g2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+@media (max-width: 1180px) {
+  .pms .g6 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+}
+@media (max-width: 900px) {
+  .pms .g6, .pms .g5, .pms .g4, .pms .g3, .pms .g2 { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .pms .g6, .pms .g5, .pms .g4, .pms .g3, .pms .g2 { grid-template-columns: 1fr; }
+}
+
+/* ── stat ─────────────────────────────────────────────────────────────── */
+
+.pms .stat {
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 12px; padding: 14px; min-width: 0;
+}
+.pms .stat .lbl {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
+  color: var(--ez-muted); font-weight: 700;
+}
+.pms .stat .val {
+  font-size: 21px; font-weight: 800; margin-top: 6px; color: var(--ez-ink);
+  font-variant-numeric: tabular-nums;
+}
+.pms .stat .note { font-size: 11px; color: var(--ez-muted); margin-top: 3px; }
+.pms .stat.accent { background: var(--ez-brand); border-color: var(--ez-brand); }
+.pms .stat.accent .lbl { color: var(--ez-on-accent-soft); }
+.pms .stat.accent .val, .pms .stat.accent .note { color: var(--ez-on-accent); }
+.pms .stat.warn { background: var(--ez-warning-tint); border-color: var(--ez-warning); }
+.pms .val.good { color: var(--ez-positive); }
+.pms .val.wait { color: var(--ez-warning); }
+.pms .val.bad  { color: var(--ez-critical); }
+.pms .val.brand{ color: var(--ez-brand); }
+
+/* ── stepper ──────────────────────────────────────────────────────────── */
+
+.pms .stepper { display: flex; overflow-x: auto; padding: 6px 0; }
+.pms .step { flex: 1; min-width: 100px; text-align: center; position: relative; }
+/* The connector is trimmed to the gap BETWEEN dots rather than run under
+ * them. Full width means later siblings paint over earlier dots and the line
+ * strikes through the numerals — 84 crossings, and z-index cannot fix it
+ * because the overlap is between separate stacking siblings. */
+.pms .step::after {
+  content: ''; position: absolute; top: 13px; height: 2px;
+  left: calc(50% + 18px); right: calc(-50% + 18px);
+  background: var(--ez-line); z-index: 0;
+}
+.pms .step:last-child::after { display: none; }
+.pms .dot {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--ez-sunken); color: var(--ez-muted);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 7px; font-size: 11px; font-weight: 800;
+  position: relative; z-index: 1; border: 2px solid var(--ez-canvas);
+}
+.pms .step.done .dot { background: var(--ez-positive); color: var(--ez-on-accent); }
+.pms .step.done::after { background: var(--ez-positive); }
+.pms .step.now .dot {
+  background: var(--ez-brand); color: var(--ez-on-accent);
+  box-shadow: 0 0 0 4px var(--ez-brand-tint);
+}
+.pms .step .t { font-size: 11px; font-weight: 700; line-height: 1.3; }
+.pms .step .d { font-size: 10px; color: var(--ez-muted); margin-top: 2px; }
+
+/* ── table ────────────────────────────────────────────────────────────── */
+
+.pms .tblwrap {
+  overflow-x: auto; border: 1px solid var(--ez-line); border-radius: 12px;
+  min-width: 0; max-width: 100%;
+}
+.pms table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pms th {
+  background: var(--ez-sunken); color: var(--ez-ink-soft); text-align: left;
+  padding: 9px 10px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .5px; border-bottom: 1px solid var(--ez-line-strong);
+  font-weight: 800; white-space: nowrap;
+}
+.pms td {
+  padding: 8px 10px; border-bottom: 1px solid var(--ez-line);
+  vertical-align: middle; color: var(--ez-ink-soft);
+}
+.pms tbody tr:last-child td { border-bottom: 0; }
+.pms tbody tr:hover { background: var(--ez-brand-tint); }
+.pms tr.currentrow { background: var(--ez-brand-tint); }
+.pms tr.exitrow { background: var(--pms-row-exit); }
+.pms tr.exitrow:hover { background: var(--pms-row-exit-hover); }
+.pms tr.noticerow { background: var(--pms-row-notice); }
+.pms tr.noticerow:hover { background: var(--pms-row-notice-hover); }
+.pms .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── pill ─────────────────────────────────────────────────────────────── */
+
+.pms .pill {
+  display: inline-block; padding: 3px 9px; border-radius: 20px;
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+.pms .p-green  { background: var(--ez-positive-tint); color: var(--ez-positive); }
+.pms .p-brand  { background: var(--ez-brand-tint);    color: var(--ez-brand-deep); }
+.pms .p-amber  { background: var(--ez-warning-tint);  color: var(--ez-warning); }
+.pms .p-red    { background: var(--ez-critical-tint); color: var(--ez-critical); }
+.pms .p-grey   { background: var(--ez-sunken);        color: var(--ez-muted); }
+.pms .p-blue   { background: var(--ez-info-tint);     color: var(--ez-info); }
+.pms .p-orange { background: var(--pms-exit-bg);      color: var(--pms-exit-fg); }
+
+.pms .rbadge {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 8px;
+  font-weight: 800; font-size: 12px; color: var(--ez-on-accent);
+}
+.pms .r5 { background: var(--ez-positive); }
+.pms .r4 { background: var(--ez-brand); }
+.pms .r3 { background: var(--ez-brand-deep); }
+.pms .r2 { background: var(--ez-warning); }
+.pms .r1 { background: var(--ez-critical); }
+
+/* ── form ─────────────────────────────────────────────────────────────── */
+
+.pms label {
+  display: block; font-size: 11px; font-weight: 700; color: var(--ez-ink-soft);
+  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px;
+}
+.pms input, .pms select, .pms textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--ez-line);
+  border-radius: 9px; font-size: 13px; font-family: inherit;
+  background: var(--ez-surface); color: var(--ez-ink);
+}
+.pms input:focus-visible, .pms select:focus-visible, .pms textarea:focus-visible,
+.pms button:focus-visible {
+  outline: 2px solid var(--ez-brand); outline-offset: 2px;
+}
+.pms textarea { resize: vertical; min-height: 62px; }
+
+/* A value that cannot be edited yet.
+ *
+ * Rendering these as <input readOnly> was the first attempt and it was wrong:
+ * a bordered white box with a caret is a promise that you can type in it. An
+ * admin clicks, types, nothing happens, and nothing on screen explains why.
+ * This reads as a value — sunken, no field border — so the eye files it with
+ * the label above it rather than with the controls beside it. */
+.pms .ro {
+  padding: 8px 10px; border-radius: 9px;
+  background: var(--ez-sunken); border: 1px solid transparent;
+  font-size: 13px; color: var(--ez-ink); min-height: 35px;
+}
+.pms .fld.locked .ro {
+  background: var(--ez-critical-tint);
+  border-color: var(--ez-critical);
+  color: var(--ez-critical); font-weight: 600;
+}
+.pms .fld { margin-bottom: 12px; min-width: 0; }
+.pms .fld.locked label { color: var(--ez-critical); }
+.pms .fld.locked select, .pms .fld.locked input { border-color: var(--ez-critical); }
+.pms .fld.locked .k { color: var(--ez-critical); margin-top: 5px; }
+
+/* ── button ───────────────────────────────────────────────────────────── */
+
+.pms .btn {
+  background: var(--ez-brand); color: var(--ez-on-accent); border: 0;
+  padding: 9px 16px; border-radius: 9px; font-size: 12px; font-weight: 700;
+  font-family: inherit; cursor: pointer;
+}
+.pms .btn:hover { background: var(--ez-brand-deep); }
+.pms .btn.ghost {
+  background: var(--ez-surface); color: var(--ez-brand);
+  border: 1px solid var(--ez-brand);
+}
+.pms .btn.ghost:hover { background: var(--ez-brand-tint); }
+.pms .btn.dark { background: var(--ez-dark); color: var(--ez-on-dark); }
+.pms .btn.red  { background: var(--ez-critical); }
+.pms .btn.sm   { padding: 5px 11px; font-size: 11px; }
+.pms .btn:disabled {
+  background: var(--ez-sunken); color: var(--ez-faint);
+  cursor: not-allowed; border: 0;
+}
+.pms .btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+.pms .chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.pms .chip {
+  min-width: 27px; height: 27px; border-radius: 8px;
+  border: 1px solid var(--ez-line); background: var(--ez-surface);
+  font-weight: 800; font-size: 12px; color: var(--ez-muted);
+  font-family: inherit; cursor: pointer; padding: 0 8px;
+}
+.pms .chip.sel {
+  background: var(--ez-brand); border-color: var(--ez-brand);
+  color: var(--ez-on-accent);
+}
+
+/* ── meters ───────────────────────────────────────────────────────────── */
+
+.pms .bar {
+  height: 8px; background: var(--ez-sunken); border-radius: 20px;
+  overflow: hidden;
+}
+.pms .bar span {
+  display: block; height: 100%; background: var(--ez-brand); border-radius: 20px;
+}
+.pms .bar.green span { background: var(--ez-positive); }
+.pms .bar.amber span { background: var(--ez-warning); }
+.pms .bar.red   span { background: var(--ez-critical); }
+
+.pms .wmeter {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; flex-wrap: wrap;
+}
+.pms .wmeter .big {
+  font-size: 26px; font-weight: 800; min-width: 74px;
+  font-variant-numeric: tabular-nums;
+}
+.pms .ok  { color: var(--ez-positive); }
+.pms .bad { color: var(--ez-critical); }
+
+/* ── banner ───────────────────────────────────────────────────────────── */
+
+.pms .banner {
+  border-radius: 11px; padding: 11px 14px; font-size: 12px;
+  margin-bottom: 14px; display: flex; gap: 9px; align-items: flex-start;
+}
+.pms .banner b { font-weight: 700; }
+.pms .b-amber { background: var(--ez-warning-tint);  border: 1px solid var(--ez-warning);  color: var(--ez-warning); }
+.pms .b-brand { background: var(--ez-brand-tint);    border: 1px solid var(--ez-brand-edge); color: var(--ez-brand-deep); }
+.pms .b-green { background: var(--ez-positive-tint); border: 1px solid var(--ez-positive); color: var(--ez-positive); }
+.pms .b-red   { background: var(--ez-critical-tint); border: 1px solid var(--ez-critical); color: var(--ez-critical); }
+.pms .b-blue  { background: var(--ez-info-tint);     border: 1px solid var(--ez-info);     color: var(--ez-info); }
+
+.pms .flowbox {
+  background: var(--ez-sunken); border: 1px dashed var(--ez-brand-edge);
+  border-radius: 11px; padding: 12px 14px; font-size: 12px;
+  color: var(--ez-ink-soft); font-family: ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre; overflow-x: auto; line-height: 1.7;
+}
+
+/* ── analytics bars ───────────────────────────────────────────────────── */
+
+.pms .abar { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
+.pms .abar .nm { width: 150px; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.pms .abar .tr {
+  flex: 1; height: 16px; background: var(--ez-sunken);
+  border-radius: 5px; position: relative; overflow: hidden;
+}
+.pms .abar .s {
+  position: absolute; left: 0; top: 0; height: 8px;
+  background: var(--ez-brand-edge); border-radius: 5px 5px 0 0;
+}
+.pms .abar .m {
+  position: absolute; left: 0; bottom: 0; height: 8px;
+  background: var(--ez-brand); border-radius: 0 0 5px 5px;
+}
+.pms .abar .vv {
+  width: 76px; text-align: right; font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pms * { transition: none !important; animation: none !important; }
+}

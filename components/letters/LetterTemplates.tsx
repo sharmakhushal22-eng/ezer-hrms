@@ -18,14 +18,17 @@ import { MERGE_FIELDS, sampleMergeFields } from '@/lib/letters/mergeFields'
 import { renderTemplate, extractTokens } from '@/lib/letters/renderTemplate'
 import { getGeneratedLetterDownloadUrl, publishLetterToEss } from '@/lib/letters/actions'
 import type { MergeField } from '@/lib/letters/mergeFields'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489',
-  card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280',
-  green: '#059669', greenBg: '#ECFDF5', greenBd: '#BBF7D0',
-  amber: '#D97706', amberBg: '#FFFBEB', amberBd: '#FDE68A',
-  red: '#DC2626', redBg: '#FEF2F2', redBd: '#FCA5A5',
-  purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep,
+  card: TK.surface, border: TK.line, muted: TK.muted,
+  green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, redBd: TK.criticalTint,
+  purpleBg: TK.brandTint, gray: TK.sunken,
 }
 
 interface Template {
@@ -41,7 +44,7 @@ interface GenResult {
 
 function TabBar({ active, onChange }: { active: 'templates' | 'generate'; onChange: (t: 'templates' | 'generate') => void }) {
   const tabs: ['templates', 'generate'] = ['templates', 'generate']
-  const labels = { templates: '📝 Letter Templates', generate: '⚡ Generate Letters' }
+  const labels = { templates: 'Letter Templates', generate: 'Generate Letters' }
   return (
     <div style={{ display: 'flex', gap: 4, marginBottom: 18, borderBottom: `1px solid ${C.border}` }}>
       {tabs.map(t => (
@@ -61,7 +64,7 @@ function TabBar({ active, onChange }: { active: 'templates' | 'generate'; onChan
 function TemplateListRow({ tpl, selected, onSelect }: { tpl: Template; selected: boolean; onSelect: () => void }) {
   return (
     <div onClick={onSelect} style={{
-      padding: '10px 12px', borderRadius: 8, cursor: 'pointer', marginBottom: 4,
+      padding: '10px 12px', borderRadius: 10, cursor: 'pointer', marginBottom: 4,
       background: selected ? C.purpleBg : C.card, border: `1px solid ${selected ? C.purple : C.border}`,
     }}>
       <div style={{ fontSize: 13, fontWeight: 600, color: C.navy }}>{tpl.name}</div>
@@ -73,7 +76,7 @@ function TemplateListRow({ tpl, selected, onSelect }: { tpl: Template; selected:
 function FieldPickerButton({ field, onInsert }: { field: MergeField; onInsert: (token: string) => void }) {
   return (
     <button onClick={() => onInsert(field.token)}
-      style={{ padding: '4px 10px', fontSize: 11, borderRadius: 6, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+      style={{ padding: '4px 10px', fontSize: 11, borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, cursor: 'pointer', whiteSpace: 'nowrap' }}>
       + {field.label}
     </button>
   )
@@ -84,20 +87,20 @@ function NewTemplateModal({ onClose, onCreate }: { onClose: () => void; onCreate
   const [description, setDescription] = useState('')
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div style={{ background: '#fff', borderRadius: 14, padding: 22, width: '100%', maxWidth: 420 }}>
+      <div style={{ background: TK.surface, borderRadius: 14, padding: 22, width: '100%', maxWidth: 420 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: C.navy, marginBottom: 14 }}>Add new letter</div>
         <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Name of letter *</label>
         <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Offer Letter"
-          style={{ width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, marginBottom: 10, boxSizing: 'border-box' }} />
         <label style={{ fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Description</label>
         <input value={description} onChange={e => setDescription(e.target.value)} placeholder="Optional — what this letter is for"
-          style={{ width: '100%', padding: '9px 11px', border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }} />
+          style={{ width: '100%', padding: '9px 11px', border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, marginBottom: 16, boxSizing: 'border-box' }} />
         <div style={{ display: 'flex', gap: 8 }}>
           <button disabled={!name.trim()} onClick={() => onCreate(name.trim(), description.trim())}
-            style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: !name.trim() ? 0.5 : 1 }}>
+            style={{ flex: 1, padding: '10px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: !name.trim() ? 0.5 : 1 }}>
             Create & design
           </button>
-          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', cursor: 'pointer', fontSize: 13 }}>Cancel</button>
+          <button onClick={onClose} style={{ padding: '10px 16px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer', fontSize: 13 }}>Cancel</button>
         </div>
       </div>
     </div>
@@ -111,11 +114,11 @@ function ResultRow({ r }: { r: GenResult }) {
   const [published, setPublished] = useState(false)
 
   const statusMeta: Record<string, [string, string, string]> = {
-    GENERATED: [C.greenBg, C.green, '✓ Generated'],
-    SKIPPED_NOT_FOUND: [C.redBg, C.red, '✗ Code not found'],
-    SKIPPED_NO_LETTERHEAD: [C.amberBg, C.amber, '⚠ No letterhead configured for branch'],
-    SKIPPED_UNKNOWN_TOKENS: [C.amberBg, C.amber, '⚠ Template has unknown fields'],
-    ERROR: [C.redBg, C.red, '✗ Error'],
+    GENERATED: [C.greenBg, C.green, 'Generated'],
+    SKIPPED_NOT_FOUND: [C.redBg, C.red, 'Code not found'],
+    SKIPPED_NO_LETTERHEAD: [C.amberBg, C.amber, 'No letterhead configured for branch'],
+    SKIPPED_UNKNOWN_TOKENS: [C.amberBg, C.amber, 'Template has unknown fields'],
+    ERROR: [C.redBg, C.red, 'Error'],
   }
   const [bg, fg, label] = statusMeta[r.status] ?? [C.gray, C.muted, r.status]
 
@@ -151,23 +154,23 @@ function ResultRow({ r }: { r: GenResult }) {
       <td style={{ padding: '9px 8px', fontSize: 12, color: C.navy }}>{r.employee_name ?? '—'}</td>
       <td style={{ padding: '9px 8px' }}>
         <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 999, background: bg, color: fg, fontWeight: 700 }}>{label}</span>
-        {r.unknown_tokens && <div style={{ fontSize: 9.5, color: C.amber, marginTop: 3 }}>{r.unknown_tokens.map(t => `{{${t}}}`).join(', ')}</div>}
-        {r.error && <div style={{ fontSize: 9.5, color: C.red, marginTop: 3 }}>{r.error}</div>}
+        {r.unknown_tokens && <div style={{ fontSize: 10, color: C.amber, marginTop: 3 }}>{r.unknown_tokens.map(t => `{{${t}}}`).join(', ')}</div>}
+        {r.error && <div style={{ fontSize: 10, color: C.red, marginTop: 3 }}>{r.error}</div>}
       </td>
       <td style={{ padding: '9px 8px' }}>
         {r.status === 'GENERATED' && (
           <div style={{ display: 'flex', gap: 5 }}>
             <button onClick={handleDownload} disabled={downloading}
-              style={{ padding: '4px 9px', fontSize: 10, borderRadius: 6, border: `1px solid ${C.border}`, background: '#fff', cursor: 'pointer' }}>
+              style={{ padding: '4px 9px', fontSize: 10, borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer' }}>
               {downloading ? '…' : '⬇ Download'}
             </button>
             <button onClick={handleEmail} disabled={emailing}
-              style={{ padding: '4px 9px', fontSize: 10, borderRadius: 6, border: `1px solid ${C.border}`, background: '#fff', cursor: 'pointer' }}>
-              {emailing ? '…' : '✉ Email'}
+              style={{ padding: '4px 9px', fontSize: 10, borderRadius: 7, border: `1px solid ${C.border}`, background: TK.surface, cursor: 'pointer' }}>
+              {emailing ? '…' : 'Email'}
             </button>
             <button onClick={handlePublish} disabled={publishing || published}
-              style={{ padding: '4px 9px', fontSize: 10, borderRadius: 6, border: `1px solid ${published ? C.greenBd : C.border}`, background: published ? C.greenBg : '#fff', color: published ? C.green : C.navy, cursor: published ? 'default' : 'pointer' }}>
-              {published ? '✓ Published to ESS' : publishing ? '…' : '📤 Publish to ESS'}
+              style={{ padding: '4px 9px', fontSize: 10, borderRadius: 7, border: `1px solid ${published ? C.greenBd : C.border}`, background: published ? C.greenBg: TK.surface, color: published ? C.green : C.navy, cursor: published ? 'default' : 'pointer' }}>
+              {published ? 'Published to ESS' : publishing ? '…' : 'Publish to ESS'}
             </button>
           </div>
         )}
@@ -263,7 +266,7 @@ export default function LetterTemplates() {
     setGenerating(false)
   }
 
-  const selStyle: React.CSSProperties = { padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 12, background: '#F8F7FF', color: C.navy, outline: 'none', width: '100%', boxSizing: 'border-box' }
+  const selStyle: React.CSSProperties = { padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 12, background: TK.sunken, color: C.navy, outline: 'none', width: '100%', boxSizing: 'border-box' }
 
   return (
     <div style={{ padding: '16px 24px 24px', fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13 }}>
@@ -274,7 +277,7 @@ export default function LetterTemplates() {
           {/* Template list */}
           <div style={{ width: 260, flexShrink: 0 }}>
             <button onClick={() => setShowNewModal(true)}
-              style={{ width: '100%', padding: '9px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 12 }}>
+              style={{ width: '100%', padding: '9px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: 'pointer', marginBottom: 12 }}>
               + Add new letter
             </button>
             {templates.map(t => (
@@ -302,24 +305,22 @@ export default function LetterTemplates() {
                   style={{ width: '100%', height: 280, padding: '14px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, lineHeight: 1.6, fontFamily: 'Georgia, serif', boxSizing: 'border-box', resize: 'vertical' }} />
 
                 {unknownInEditor.length > 0 && (
-                  <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '6px 10px', borderRadius: 6, marginTop: 6 }}>
-                    ⚠ Unknown field{unknownInEditor.length > 1 ? 's' : ''}: {unknownInEditor.map(t => `{{${t}}}`).join(', ')} — these will print literally on the letter.
+                  <div style={{ fontSize: 11, color: C.red, background: C.redBg, padding: '6px 10px', borderRadius: 7, marginTop: 6 }}>Unknown field{unknownInEditor.length > 1 ? 's' : ''}: {unknownInEditor.map(t => `{{${t}}}`).join(', ')} — these will print literally on the letter.
                   </div>
                 )}
 
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button onClick={saveContent} disabled={saving}
-                    style={{ padding: '9px 18px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
+                    style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: 'pointer', opacity: saving ? 0.6 : 1 }}>
                     {saving ? 'Saving…' : 'Save'}
                   </button>
                   <button onClick={previewSample} disabled={previewing}
-                    style={{ padding: '9px 18px', borderRadius: 8, border: `1px solid ${C.purple}`, background: '#fff', color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-                    {previewing ? 'Rendering…' : '👁 Preview sample'}
+                    style={{ padding: '9px 18px', borderRadius: 10, border: `1px solid ${C.purple}`, background: TK.surface, color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    {previewing ? 'Rendering…' : 'Preview sample'}
                   </button>
                   {previewUrl && (
                     <a href={previewUrl} target="_blank" rel="noreferrer"
-                      style={{ padding: '9px 18px', borderRadius: 8, border: `1px solid ${C.greenBd}`, background: C.greenBg, color: C.green, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>
-                      ↗ Open preview PDF
+                      style={{ padding: '9px 18px', borderRadius: 10, border: `1px solid ${C.greenBd}`, background: C.greenBg, color: C.green, fontWeight: 700, fontSize: 12, textDecoration: 'none' }}>Open preview PDF
                     </a>
                   )}
                 </div>
@@ -331,7 +332,7 @@ export default function LetterTemplates() {
 
       {tab === 'generate' && (
         <div style={{ maxWidth: 640 }}>
-          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px', marginBottom: 14 }}>
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px', marginBottom: 14 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
               <div>
                 <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Company</div>
@@ -351,20 +352,20 @@ export default function LetterTemplates() {
             <div style={{ fontSize: 10, color: C.muted, marginBottom: 4 }}>Employee codes — one per line or comma-separated</div>
             <textarea value={codesText} onChange={e => setCodesText(e.target.value)}
               placeholder={'SRS0001\nSRS0002\nSRS0007'}
-              style={{ width: '100%', height: 110, padding: '10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, fontFamily: 'monospace', boxSizing: 'border-box', resize: 'vertical' }} />
+              style={{ width: '100%', height: 110, padding: '10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, fontFamily: 'monospace', boxSizing: 'border-box', resize: 'vertical' }} />
             <button onClick={handleGenerate} disabled={generating || !genCompanyId || !genTemplateId || !codesText.trim()}
-              style={{ marginTop: 10, padding: '10px 20px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: (generating || !genCompanyId || !genTemplateId || !codesText.trim()) ? 0.5 : 1 }}>
-              {generating ? 'Generating…' : '⚡ Generate letters'}
+              style={{ marginTop: 10, padding: '10px 20px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', opacity: (generating || !genCompanyId || !genTemplateId || !codesText.trim()) ? 0.5 : 1 }}>
+              {generating ? 'Generating…' : 'Generate letters'}
             </button>
           </div>
 
           {genResults && (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: C.navy }}>
                     {['Emp code', 'Name', 'Status', 'Actions'].map(h => (
-                      <th key={h} style={{ padding: '9px 8px', textAlign: 'left', fontSize: 10, color: '#A5B4FC', fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
+                      <th key={h} style={{ padding: '9px 8px', textAlign: 'left', fontSize: 10, color: TK.brand, fontWeight: 600, textTransform: 'uppercase' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>

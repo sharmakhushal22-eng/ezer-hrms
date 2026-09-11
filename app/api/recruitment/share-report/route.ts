@@ -5,7 +5,7 @@
 // pattern in app/api/recruitment/upload-mrf-doc/route.ts.
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { requireDashboardUser } from '@/lib/api-auth'
+import { requireModule } from '@/lib/api-auth'
 
 export const runtime = 'nodejs'
 
@@ -23,7 +23,7 @@ const ALLOWED_EXT = ['xlsx', 'xls', 'csv']
 
 export async function POST(req: NextRequest) {
   // Service-role writes with no check of their own are open to the whole internet.
-  const gate = await requireDashboardUser(req)
+  const gate = await requireModule(req, 'Recruitment')
   if (gate.error) return gate.error
 
   try {

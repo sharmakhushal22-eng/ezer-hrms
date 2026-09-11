@@ -11,19 +11,22 @@ import {
   PERM_MODULES, APPROVAL_TYPES,
   type EssRole, type EssUser, type OrgUnit, type RolePermission, type ApprovalRight, type PendingItem, type AccessLevel, type Recruiter,
 } from '@/lib/supabase-ess'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  page:  { background:'#F5F3FF', minHeight:'100vh', color:'#1E1B4B', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:  { background:'#FFFFFF', borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:10, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  lbl:   { fontSize:11, fontWeight:600, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
-  sec:   { fontSize:12, fontWeight:600, color:'#7C3AED', textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
-  input: { width:'100%', padding:'8px 10px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-  pri:   { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:'#7C3AED', color:'#fff' } as React.CSSProperties,
-  out:   { padding:'7px 13px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#6D28D9' } as React.CSSProperties,
-  tab:   (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? '#7C3AED' : '#fff', color: on ? '#fff' : '#6D28D9', boxShadow: on ? 'none' : '0 1px 3px rgba(124,58,237,0.08)' }) as React.CSSProperties,
+  page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border:'1px solid var(--ez-line)', padding:'14px 16px', marginBottom:10, boxShadow:'var(--ez-shadow-flat)' } as React.CSSProperties,
+  lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em', display:'block', marginBottom:4 } as React.CSSProperties,
+  sec:   { fontSize:12, fontWeight:600, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:10 } as React.CSSProperties,
+  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
+  pri:   { padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:12, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent } as React.CSSProperties,
+  out:   { padding:'7px 13px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep } as React.CSSProperties,
+  tab:   (on: boolean) => ({ padding:'8px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background: on ? TK.brand: TK.surface, color: on ? TK.surface : TK.brandDeep, boxShadow: on ? 'none' : '0 1px 3px rgba(37,99,235,0.08)' }) as React.CSSProperties,
 }
 const ACCESS_COLOR: Record<AccessLevel, [string, string]> = {
-  NONE:['#F3F4F6','#9CA3AF'], VIEW:['#DBEAFE','#1E40AF'], EDIT:['#FEF3C7','#92400E'], FULL:['#D1FAE5','#065F46'],
+  NONE:[TK.sunken,TK.faint], VIEW:[TK.infoTint,TK.brand], EDIT:[TK.warningTint,TK.warning], FULL:[TK.positiveTint,TK.positive],
 }
 const ACCESS_RANK: AccessLevel[] = ['NONE', 'VIEW', 'EDIT', 'FULL']
 const highestAccess = (levels: AccessLevel[]): AccessLevel =>
@@ -35,7 +38,7 @@ const typeLabel = (k: string) => APPROVAL_TYPES.find(t => t.key === k)?.label ||
 
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
-  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'✓':'✗'} {msg}</div>
+  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'':''} {msg}</div>
 }
 function Pill({ text, bg, color }: { text: string; bg: string; color: string }) {
   return <span style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:99, background:bg, color }}>{text}</span>
@@ -44,9 +47,9 @@ function RoleList({ roles, selId, onSelect, rightCount }: { roles: EssRole[]; se
   return (
     <div style={{ ...C.card, maxHeight:'70vh', overflowY:'auto' }}>
       {roles.map(r => (
-        <div key={r.id} onClick={() => onSelect(r.id)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:3, background: selId === r.id ? '#F3F0FF' : 'transparent', border: selId === r.id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
-          <div><div style={{ fontSize:13, fontWeight:600 }}>{r.role_name}</div><div style={{ fontSize:10, color:'#9CA3AF' }}>{r.role_code}</div></div>
-          {rightCount && <span style={{ fontSize:10, color:'#9CA3AF' }}>{rightCount(r)}</span>}
+        <div key={r.id} onClick={() => onSelect(r.id)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:3, background: selId === r.id ? TK.brandTint : 'transparent', border: selId === r.id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
+          <div><div style={{ fontSize:13, fontWeight:600 }}>{r.role_name}</div><div style={{ fontSize:10, color:TK.faint }}>{r.role_code}</div></div>
+          {rightCount && <span style={{ fontSize:10, color:TK.faint }}>{rightCount(r)}</span>}
         </div>
       ))}
     </div>
@@ -64,14 +67,14 @@ function OverviewTab({ roles, perms, rights }: { roles: EssRole[]; perms: RolePe
           <div key={r.id} style={C.card}>
             <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:6 }}>
               <span style={{ fontSize:14, fontWeight:600 }}>{r.role_name}</span>
-              <Pill text={r.role_code} bg="#EDE9FE" color="#7C3AED" />
+              <Pill text={r.role_code} bg={TK.brandTint} color={TK.brand} />
             </div>
-            <div style={{ fontSize:11, color:'#6B7280', marginBottom:8 }}>Salary: <b>{r.salary_visibility}</b> · Scope: <b>{r.scope}</b></div>
-            <div style={{ fontSize:11, color:'#6B7280', marginBottom:4 }}>Can approve ({apprv.length}):</div>
+            <div style={{ fontSize:11, color:TK.muted, marginBottom:8 }}>Salary: <b>{r.salary_visibility}</b> · Scope: <b>{r.scope}</b></div>
+            <div style={{ fontSize:11, color:TK.muted, marginBottom:4 }}>Can approve ({apprv.length}):</div>
             <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:8 }}>
-              {apprv.length === 0 ? <span style={{ fontSize:10, color:'#9CA3AF' }}>—</span> : apprv.map(t => <Pill key={t} text={typeLabel(t)} bg="#ECFDF5" color="#059669" />)}
+              {apprv.length === 0 ? <span style={{ fontSize:10, color:TK.faint }}>—</span> : apprv.map(t => <Pill key={t} text={typeLabel(t)} bg={TK.positiveTint} color={TK.positive} />)}
             </div>
-            <div style={{ fontSize:11, color:'#6B7280' }}>Module access set: <b>{mods.length}</b> / {PERM_MODULES.length}</div>
+            <div style={{ fontSize:11, color:TK.muted }}>Module access set: <b>{mods.length}</b> / {PERM_MODULES.length}</div>
           </div>
         )
       })}
@@ -90,15 +93,15 @@ function ModuleAccessTab({ roles, perms, selId, onSelect, onSet }: {
     <div style={{ display:'grid', gridTemplateColumns:'260px 1fr', gap:10, alignItems:'start' }}>
       <RoleList roles={roles} selId={selId} onSelect={onSelect} rightCount={r => `${perms.filter(p => p.role_id === r.id && p.access_level !== 'NONE').length}`} />
       <div style={C.card}>
-        {!sel ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Pick a role.</div> : (
+        {!sel ? <div style={{ fontSize:12, color:TK.faint }}>Pick a role.</div> : (
           <>
             <div style={C.sec}>{sel.role_name} — module access</div>
-            <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:10 }}>This controls which modules appear in the ESS portal. Changes save immediately.</div>
+            <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>This controls which modules appear in the ESS portal. Changes save immediately.</div>
             {PERM_MODULES.map(m => {
               const lvl = levelOf(m)
               const [bg, col] = ACCESS_COLOR[lvl]
               return (
-                <div key={m} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 0', borderBottom:'1px solid #F3F0FF' }}>
+                <div key={m} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
                   <span style={{ flex:1, fontSize:13 }}>{m}</span>
                   <Pill text={lvl} bg={bg} color={col} />
                   <select style={{ ...C.input, width:120 }} value={lvl} onChange={e => onSet(sel.id, m, e.target.value as AccessLevel)}>
@@ -125,10 +128,10 @@ function ApprovalRightsTab({ roles, rights, selId, onSelect, onSet }: {
     <div style={{ display:'grid', gridTemplateColumns:'260px 1fr', gap:10, alignItems:'start' }}>
       <RoleList roles={roles} selId={selId} onSelect={onSelect} rightCount={r => `${rights.filter(x => x.role_id === r.id && x.can_approve).length}`} />
       <div style={C.card}>
-        {!sel ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Pick a role.</div> : (
+        {!sel ? <div style={{ fontSize:12, color:TK.faint }}>Pick a role.</div> : (
           <>
             <div style={C.sec}>{sel.role_name} — approval rights</div>
-            <div style={{ display:'grid', gridTemplateColumns:'2fr repeat(3,70px)', gap:6, alignItems:'center', fontSize:10, color:'#9CA3AF', fontWeight:600, textTransform:'uppercase', padding:'4px 0', borderBottom:'1px solid #EDE9FE' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'2fr repeat(3,70px)', gap:6, alignItems:'center', fontSize:10, color:TK.faint, fontWeight:600, textTransform:'uppercase', padding:'4px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
               <span>Workflow</span><span style={{ textAlign:'center' }}>Initiate</span><span style={{ textAlign:'center' }}>Approve</span><span style={{ textAlign:'center' }}>Reject</span>
             </div>
             {APPROVAL_TYPES.map(t => {
@@ -138,8 +141,8 @@ function ApprovalRightsTab({ roles, rights, selId, onSelect, onSet }: {
                 <input type="checkbox" checked={cur[k]} onChange={() => onSet(sel.id, t.key, { ...cur, [k]: !cur[k] })} style={{ display:'block', margin:'0 auto', cursor:'pointer' }} />
               )
               return (
-                <div key={t.key} style={{ display:'grid', gridTemplateColumns:'2fr repeat(3,70px)', gap:6, alignItems:'center', padding:'8px 0', borderBottom:'1px solid #F3F0FF' }}>
-                  <span style={{ fontSize:13 }}>{t.label} {!t.live && <span style={{ fontSize:9, color:'#B45309' }} title="No live request source yet — handled in its own module">·future</span>}</span>
+                <div key={t.key} style={{ display:'grid', gridTemplateColumns:'2fr repeat(3,70px)', gap:6, alignItems:'center', padding:'8px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
+                  <span style={{ fontSize:13 }}>{t.label} {!t.live && <span style={{ fontSize:9, color:TK.warning }} title="No live request source yet — handled in its own module">·future</span>}</span>
                   <Cell k="can_initiate" /><Cell k="can_approve" /><Cell k="can_reject" />
                 </div>
               )
@@ -153,9 +156,9 @@ function ApprovalRightsTab({ roles, rights, selId, onSelect, onSet }: {
 
 // ══ TAB 4 · Approval / Rejection ════════════════════════════════════
 const SRC_BADGE: Record<string, [string, string, string]> = {
-  mrf:   ['#DBEAFE', '#1E40AF', 'MRF'],
-  offer: ['#FCE7F3', '#9D174D', 'OFFER'],
-  ess:   ['#EDE9FE', '#7C3AED', 'ESS'],
+  mrf:   [TK.infoTint, TK.brand, 'MRF'],
+  offer: [TK.criticalTint, TK.critical, 'OFFER'],
+  ess:   [TK.brandTint, TK.brand, 'ESS'],
 }
 function RequestCard({ item, recruiters, onResolve }: { item: PendingItem; recruiters: Recruiter[]; onResolve: (action: 'APPROVED' | 'REJECTED', remark: string, recruiters?: Recruiter[]) => Promise<void> }) {
   const [remark, setRemark] = useState('')
@@ -177,47 +180,47 @@ function RequestCard({ item, recruiters, onResolve }: { item: PendingItem; recru
     <div style={{ ...C.card, marginBottom:8 }}>
       <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4, flexWrap:'wrap' }}>
         <Pill text={sl} bg={sb} color={sc} />
-        <Pill text={typeLabel(item.approval_type)} bg="#EDE9FE" color="#7C3AED" />
+        <Pill text={typeLabel(item.approval_type)} bg={TK.brandTint} color={TK.brand} />
         <span style={{ fontSize:13, fontWeight:600 }}>{item.title}</span>
-        {item.confidential && <Pill text="CONFIDENTIAL" bg="#FEE2E2" color="#991B1B" />}
-        <span style={{ marginLeft:'auto', fontSize:10, color:'#9CA3AF' }}>{fmtDT(item.submitted_at)}</span>
+        {item.confidential && <Pill text="CONFIDENTIAL" bg={TK.criticalTint} color={TK.critical} />}
+        <span style={{ marginLeft:'auto', fontSize:10, color:TK.faint }}>{fmtDT(item.submitted_at)}</span>
       </div>
-      <div style={{ fontSize:12, color:'#374151' }}>{item.subtitle}</div>
-      <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:8 }}>{item.meta}</div>
+      <div style={{ fontSize:12, color:TK.inkSoft }}>{item.subtitle}</div>
+      <div style={{ fontSize:11, color:TK.faint, marginBottom:8 }}>{item.meta}</div>
 
       {isMrf && (
         <div style={{ marginBottom:8 }}>
-          <div style={{ ...C.lbl, marginBottom:4 }}>Assign HR recruiter(s) <span style={{ color:'#9CA3AF', fontWeight:400 }}>(optional)</span></div>
+          <div style={{ ...C.lbl, marginBottom:4 }}>Assign HR recruiter(s) <span style={{ color:TK.faint, fontWeight:400 }}>(optional)</span></div>
           {selRec.length > 0 && (
             <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:6 }}>
               {selRec.map(r => (
-                <span key={r.id} style={{ fontSize:11, background:'#EDE9FE', border:'1px solid #DDD6FE', borderRadius:99, padding:'3px 10px', display:'inline-flex', gap:6, alignItems:'center' }}>
-                  {r.full_name} <span style={{ color:'#7C3AED', fontWeight:600 }}>{r.emp_code}</span>
-                  <span style={{ cursor:'pointer', color:'#DC2626', fontWeight:700 }} onClick={() => setSelRec(selRec.filter(x => x.id !== r.id))}>×</span>
+                <span key={r.id} style={{ fontSize:11, background:TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius:99, padding:'3px 10px', display:'inline-flex', gap:6, alignItems:'center' }}>
+                  {r.full_name} <span style={{ color:TK.brand, fontWeight:600 }}>{r.emp_code}</span>
+                  <span style={{ cursor:'pointer', color:TK.critical, fontWeight:700 }} onClick={() => setSelRec(selRec.filter(x => x.id !== r.id))}>×</span>
                 </span>
               ))}
             </div>
           )}
           <div style={{ position:'relative' }}>
-            <input style={{ ...C.input, maxWidth:360 }} placeholder="🔍 Search recruiter — name or emp code" value={recQ} onChange={e => setRecQ(e.target.value)} />
+            <input style={{ ...C.input, maxWidth:360 }} placeholder="Search recruiter — name or emp code" value={recQ} onChange={e => setRecQ(e.target.value)} />
             {matches.length > 0 && (
-              <div style={{ position:'absolute', top:'100%', left:0, right:0, maxWidth:360, background:'#fff', border:'1px solid #DDD6FE', borderRadius:7, marginTop:2, zIndex:30, boxShadow:'0 6px 18px rgba(0,0,0,.1)', maxHeight:200, overflowY:'auto' }}>
+              <div style={{ position:'absolute', top:'100%', left:0, right:0, maxWidth:360, background:TK.surface, border: `1px solid ${TK.brandEdge}`, borderRadius:7, marginTop:2, zIndex:30, boxShadow:'0 6px 18px rgba(0,0,0,.1)', maxHeight:200, overflowY:'auto' }}>
                 {matches.map(r => (
-                  <div key={r.id} onClick={() => { setSelRec([...selRec, r]); setRecQ('') }} style={{ padding:'7px 10px', cursor:'pointer', borderBottom:'1px solid #F3F0FF', display:'flex', justifyContent:'space-between', gap:8 }}>
-                    <span style={{ fontSize:13, fontWeight:600 }}>{r.full_name}</span><span style={{ fontSize:11, color:'#7C3AED' }}>{r.emp_code}</span>
+                  <div key={r.id} onClick={() => { setSelRec([...selRec, r]); setRecQ('') }} style={{ padding:'7px 10px', cursor:'pointer', borderBottom: `1px solid ${TK.brandEdge}`, display:'flex', justifyContent:'space-between', gap:8 }}>
+                    <span style={{ fontSize:13, fontWeight:600 }}>{r.full_name}</span><span style={{ fontSize:11, color:TK.brand }}>{r.emp_code}</span>
                   </div>
                 ))}
               </div>
             )}
-            {recQ.trim() && matches.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:4 }}>No recruiter found (only people with the RECRUITER role appear here).</div>}
+            {recQ.trim() && matches.length === 0 && <div style={{ fontSize:11, color:TK.faint, marginTop:4 }}>No recruiter found (only people with the RECRUITER role appear here).</div>}
           </div>
         </div>
       )}
 
       <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
         <input style={{ ...C.input, flex:1, minWidth:180 }} placeholder="Remark (required to reject)" value={remark} onChange={e => setRemark(e.target.value)} />
-        <button disabled={busy} style={{ ...C.pri, background:'#059669' }} onClick={() => run('APPROVED')}>✓ Approve</button>
-        <button disabled={busy || !remark.trim()} style={{ ...C.pri, background:'#DC2626', opacity: remark.trim() ? 1 : 0.5 }} onClick={() => run('REJECTED')}>✗ Reject</button>
+        <button disabled={busy} style={{ ...C.pri, background:TK.positive }} onClick={() => run('APPROVED')}>Approve</button>
+        <button disabled={busy || !remark.trim()} style={{ ...C.pri, background:TK.critical, opacity: remark.trim() ? 1 : 0.5 }} onClick={() => run('REJECTED')}>Reject</button>
       </div>
     </div>
   )
@@ -240,8 +243,8 @@ function ApprovalTab({ roles, selId, onSelect, pending, recruiters, onResolve }:
         {sel && (
           <div style={{ marginTop:10 }}>
             {pending.types.length === 0
-              ? <div style={{ background:'#FFFBEB', border:'1px solid #FDE68A', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#92400E' }}>⚠️ <b>{sel.role_name}</b> has no approval rights.</div>
-              : <div style={{ fontSize:11, color:'#6B7280' }}>Can approve: {pending.types.map(t => <Pill key={t} text={typeLabel(t)} bg="#ECFDF5" color="#059669" />)}<span style={{ display:'inline-block', width:6 }} /></div>}
+              ? <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:10, padding:'10px 12px', fontSize:12, color:TK.warning }}>⚠️ <b>{sel.role_name}</b> has no approval rights.</div>
+              : <div style={{ fontSize:11, color:TK.muted }}>Can approve: {pending.types.map(t => <Pill key={t} text={typeLabel(t)} bg={TK.positiveTint} color={TK.positive} />)}<span style={{ display:'inline-block', width:6 }} /></div>}
           </div>
         )}
       </div>
@@ -250,7 +253,7 @@ function ApprovalTab({ roles, selId, onSelect, pending, recruiters, onResolve }:
         <div style={C.card}>
           <div style={C.sec}>Pending approvals ({pending.items.length})</div>
           {pending.items.length === 0
-            ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No pending approvals for this role. (MRF, Offer and Loan/Resignation/Profile-update land here; Leave/Expense/Salary/PIP are still inside their own modules.)</div>
+            ? <div style={{ fontSize:12, color:TK.faint }}>No pending approvals for this role. (MRF, Offer and Loan/Resignation/Profile-update land here; Leave/Expense/Salary/PIP are still inside their own modules.)</div>
             : pending.items.map(item => <RequestCard key={`${item.source}:${item.id}`} item={item} recruiters={recruiters} onResolve={(a, r, rec) => onResolve(item, a, r, rec)} />)}
         </div>
       )}
@@ -290,11 +293,11 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
   const apprv = sel ? rights.filter(x => x.role_id === sel.id && x.can_approve).map(x => x.approval_type) : []
 
   const Row = ({ u, add }: { u: EssUser; add: boolean }) => (
-    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'7px 8px', borderBottom:'1px solid #F3F0FF' }}>
-      <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:'#9CA3AF' }}>{u.emp_code} · {u.location_name || '—'} · {u.dept_name || '—'}</div></div>
+    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'7px 8px', borderBottom: `1px solid ${TK.brandEdge}` }}>
+      <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.location_name || '—'} · {u.dept_name || '—'}</div></div>
       {sel && (add
-        ? <button style={{ ...C.out, border:'1px solid #A7F3D0', color:'#059669' }} onClick={() => onToggle(u, sel, true)}>Assign →</button>
-        : <button style={{ ...C.out, border:'1px solid #FCA5A5', color:'#DC2626' }} onClick={() => onToggle(u, sel, false)}>✕ Remove</button>)}
+        ? <button style={{ ...C.out, border: `1px solid ${TK.positiveTint}`, color:TK.positive }} onClick={() => onToggle(u, sel, true)}>Assign →</button>
+        : <button style={{ ...C.out, border: `1px solid ${TK.criticalTint}`, color:TK.critical }} onClick={() => onToggle(u, sel, false)}>Remove</button>)}
     </div>
   )
 
@@ -302,17 +305,17 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
     <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '240px 1fr', gap:10, alignItems:'start' }}>
       <RoleList roles={assignable} selId={selId} onSelect={onSelect} rightCount={r => `${users.filter(u => u.roles.some(x => x.id === r.id)).length}`} />
       <div>
-        {!sel ? <div style={C.card}><span style={{ fontSize:12, color:'#9CA3AF' }}>Pick a role — then filter employees by company, location/branch and department, and assign.</span></div> : (
+        {!sel ? <div style={C.card}><span style={{ fontSize:12, color:TK.faint }}>Pick a role — then filter employees by company, location/branch and department, and assign.</span></div> : (
           <>
-            <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'0 2px 8px rgba(15,23,42,0.06)' }}>
+            <div style={{ ...C.card, position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
               <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:8 }}>
                 <span style={{ fontSize:14, fontWeight:600 }}>{sel.role_name}</span>
-                <Pill text={sel.role_code} bg="#EDE9FE" color="#7C3AED" />
-                <span style={{ fontSize:11, color:'#6B7280' }}>Salary: {sel.salary_visibility} · Scope: {sel.scope}</span>
+                <Pill text={sel.role_code} bg={TK.brandTint} color={TK.brand} />
+                <span style={{ fontSize:11, color:TK.muted }}>Salary: {sel.salary_visibility} · Scope: {sel.scope}</span>
               </div>
-              <div style={{ fontSize:11, color:'#6B7280', marginBottom:4 }}>Can approve:</div>
+              <div style={{ fontSize:11, color:TK.muted, marginBottom:4 }}>Can approve:</div>
               <div style={{ display:'flex', gap:4, flexWrap:'wrap', marginBottom:10 }}>
-                {apprv.length === 0 ? <span style={{ fontSize:10, color:'#9CA3AF' }}>—</span> : apprv.map(t => <Pill key={t} text={typeLabel(t)} bg="#ECFDF5" color="#059669" />)}
+                {apprv.length === 0 ? <span style={{ fontSize:10, color:TK.faint }}>—</span> : apprv.map(t => <Pill key={t} text={typeLabel(t)} bg={TK.positiveTint} color={TK.positive} />)}
               </div>
               {/* Step 1 — narrow by company → location/branch → department */}
               <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1fr', gap:8 }}>
@@ -339,20 +342,20 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
                 </div>
               </div>
               {/* Step 2 — search the employee */}
-              <input style={{ ...C.input, marginTop:10 }} placeholder="🔍 Search employee name / code" value={q} onChange={e => setQ(e.target.value)} />
+              <input style={{ ...C.input, marginTop:10 }} placeholder="Search employee name / code" value={q} onChange={e => setQ(e.target.value)} />
             </div>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:10 }}>
               <div style={C.card}>
                 <div style={C.sec}>Assigned ({assigned.length})</div>
                 <div style={{ maxHeight:'46vh', overflowY:'auto' }}>
-                  {assigned.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>Not assigned to anyone yet.</div> : assigned.map(u => <Row key={u.employee_id} u={u} add={false} />)}
+                  {assigned.length === 0 ? <div style={{ fontSize:12, color:TK.faint }}>Not assigned to anyone yet.</div> : assigned.map(u => <Row key={u.employee_id} u={u} add={false} />)}
                 </div>
               </div>
               <div style={C.card}>
                 <div style={C.sec}>Not assigned ({unassigned.length})</div>
                 <div style={{ maxHeight:'46vh', overflowY:'auto' }}>
                   {unassigned.slice(0, 100).map(u => <Row key={u.employee_id} u={u} add={true} />)}
-                  {unassigned.length > 100 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>+{unassigned.length - 100} more — search to narrow.</div>}
+                  {unassigned.length > 100 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>+{unassigned.length - 100} more — search to narrow.</div>}
                 </div>
               </div>
             </div>
@@ -380,47 +383,47 @@ function ESSPortalTab({ users, perms, rights, selId, onSelect, isMobile }: {
   return (
     <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '260px 1fr', gap:10, alignItems:'start' }}>
       <div style={{ ...C.card, maxHeight:'70vh', overflowY:'auto' }}>
-        <input style={{ ...C.input, marginBottom:8 }} placeholder="🔍 Search employee" value={q} onChange={e => setQ(e.target.value)} />
+        <input style={{ ...C.input, marginBottom:8 }} placeholder="Search employee" value={q} onChange={e => setQ(e.target.value)} />
         {filtered.slice(0, 150).map(u => (
-          <div key={u.employee_id} onClick={() => onSelect(u.employee_id)} style={{ padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:3, background: selId === u.employee_id ? '#F3F0FF' : 'transparent', border: selId === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
+          <div key={u.employee_id} onClick={() => onSelect(u.employee_id)} style={{ padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:3, background: selId === u.employee_id ? TK.brandTint : 'transparent', border: selId === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
             <div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div>
-            <div style={{ fontSize:10, color:'#9CA3AF' }}>{u.emp_code} · {u.roles.length ? u.roles.map(r => r.role_name).join(', ') : 'no role'}</div>
+            <div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.roles.length ? u.roles.map(r => r.role_name).join(', ') : 'no role'}</div>
           </div>
         ))}
       </div>
       <div>
-        {!emp ? <div style={C.card}><span style={{ fontSize:12, color:'#9CA3AF' }}>Pick an employee — a preview of their ESS portal appears.</span></div> : (
+        {!emp ? <div style={C.card}><span style={{ fontSize:12, color:TK.faint }}>Pick an employee — a preview of their ESS portal appears.</span></div> : (
           <>
             <div style={C.card}>
               <div style={{ fontSize:15, fontWeight:600 }}>{emp.full_name}</div>
-              <div style={{ fontSize:11, color:'#9CA3AF', marginBottom:8 }}>{emp.emp_code} · {emp.designation || '—'} · {emp.dept_name || '—'}</div>
+              <div style={{ fontSize:11, color:TK.faint, marginBottom:8 }}>{emp.emp_code} · {emp.designation || '—'} · {emp.dept_name || '—'}</div>
               <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                {emp.roles.length === 0 ? <Pill text="NO ROLE" bg="#F3F4F6" color="#9CA3AF" /> : emp.roles.map(r => <Pill key={r.id} text={r.role_name} bg="#EDE9FE" color="#7C3AED" />)}
+                {emp.roles.length === 0 ? <Pill text="NO ROLE" bg={TK.sunken} color={TK.faint} /> : emp.roles.map(r => <Pill key={r.id} text={r.role_name} bg={TK.brandTint} color={TK.brand} />)}
               </div>
             </div>
             <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap:10 }}>
               <div style={C.card}>
                 <div style={C.sec}>Visible modules</div>
                 {BASELINE_MODULES.map(m => (
-                  <div key={m} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:'1px solid #F3F0FF' }}>
-                    <span style={{ fontSize:13 }}>{m}</span><Pill text="ALWAYS" bg="#F3F4F6" color="#6B7280" />
+                  <div key={m} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
+                    <span style={{ fontSize:13 }}>{m}</span><Pill text="ALWAYS" bg={TK.sunken} color={TK.muted} />
                   </div>
                 ))}
                 {modules.map(({ module, level }) => {
                   const [bg, col] = ACCESS_COLOR[level]
                   return (
-                    <div key={module} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom:'1px solid #F3F0FF' }}>
+                    <div key={module} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
                       <span style={{ fontSize:13 }}>{module}</span><Pill text={level} bg={bg} color={col} />
                     </div>
                   )
                 })}
-                {modules.length === 0 && <div style={{ fontSize:11, color:'#9CA3AF', marginTop:6 }}>Role-based module access is not set — configure it in the Module Access tab.</div>}
+                {modules.length === 0 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>Role-based module access is not set — configure it in the Module Access tab.</div>}
               </div>
               <div style={C.card}>
                 <div style={C.sec}>Approval rights</div>
-                {approvals.length === 0 ? <div style={{ fontSize:12, color:'#9CA3AF' }}>No approval right is active.</div> : (
+                {approvals.length === 0 ? <div style={{ fontSize:12, color:TK.faint }}>No approval right is active.</div> : (
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                    {approvals.map(t => <Pill key={t} text={typeLabel(t)} bg="#ECFDF5" color="#059669" />)}
+                    {approvals.map(t => <Pill key={t} text={typeLabel(t)} bg={TK.positiveTint} color={TK.positive} />)}
                   </div>
                 )}
               </div>
@@ -515,18 +518,20 @@ export function RolesPermissionsSection() {
     reloadQueue(queueRole)
   }
 
-  const tabs: [typeof tab, string][] = [['assign', '🔐 Role Assignment'], ['ess', '📱 ESS Portal View'], ['overview', 'Overview'], ['modules', 'Module Access'], ['approvals', 'Approval Rights'], ['queue', '✅ Approval / Rejection']]
+  const tabs: [typeof tab, string][] = [['assign', 'Role Assignment'], ['ess', 'ESS Portal View'], ['overview', 'Overview'], ['modules', 'Module Access'], ['approvals', 'Approval Rights'], ['queue', 'Approval / Rejection']]
 
   return (
     <>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Roles &amp; Permissions</div>
-        <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Module access &amp; approval rights per role, plus a role-as-tester approval queue. (Employee→role assignment lives in the ESS 🧭 Assign Roles tab.)</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Module access &amp; approval rights per role, plus a role-as-tester approval queue. (Employee→role assignment lives in the ESS 🧭 Assign Roles tab.)</div>
+        </div>
 
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
           {tabs.map(([k, l]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}
         </div>
 
-        {loading ? <div style={{ ...C.card, textAlign:'center', color:'#7C3AED', padding:40 }}>Loading…</div> : (
+        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (
           <>
             {tab === 'assign' && <AssignRoleTab roles={roles} users={users} rights={rights} org={org} selId={assignRole} onSelect={setAssignRole} onToggle={doAssignToggle} isMobile={isMobile} />}
             {tab === 'ess' && <ESSPortalTab users={users} perms={perms} rights={rights} selId={essEmp} onSelect={setEssEmp} isMobile={isMobile} />}

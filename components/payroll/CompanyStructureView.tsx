@@ -4,15 +4,18 @@
 // (or all companies in Group mode). Not employee-level.
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
-const C = { navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF', border: '#E9E7F5', muted: '#6B7280', purpleBg: '#EEEDFE', teal: '#0F6E56', amber: '#B45309' }
+const C = { navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface, border: TK.line, muted: TK.muted, purpleBg: TK.brandTint, teal: TK.positive, amber: TK.warning }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
 function SectionCard({ icon, title, count, children }: { icon: string; title: string; count: number; children: React.ReactNode }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 4px rgba(124,58,237,0.06)', minWidth: 260, flex: 1 }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '14px 16px', boxShadow: 'var(--ez-shadow-flat)', minWidth: 260, flex: 1 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-        <div style={{ width: 30, height: 30, borderRadius: 8, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{icon}</div>
+        <div style={{ width: 30, height: 30, borderRadius: 10, background: C.purpleBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15 }}>{icon}</div>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.navy }}>{title}</div>
         <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '2px 9px' }}>{count}</span>
       </div>
@@ -48,14 +51,14 @@ export default function CompanyStructureView({ companyId }: { companyId: string 
   }, [companyId])
 
   const deptName: Record<string, string> = {}; depts.forEach(d => { deptName[d.id] = d.dept_name })
-  const co = (id: string) => allCo ? <span style={{ fontSize: 9.5, color: C.muted }}> · {comps[id] || '—'}</span> : null
+  const co = (id: string) => allCo ? <span style={{ fontSize: 10, color: C.muted }}> · {comps[id] || '—'}</span> : null
   const item = (main: React.ReactNode, sub: React.ReactNode) => (
-    <div style={{ padding: '7px 0', borderBottom: '1px solid #F3F0FF' }}>
-      <div style={{ fontSize: 12.5, fontWeight: 600, color: C.navy }}>{main}</div>
-      {sub && <div style={{ fontSize: 10.5, color: C.muted, marginTop: 1 }}>{sub}</div>}
+    <div style={{ padding: '7px 0', borderBottom: `1px solid ${TK.brandEdge}` }}>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.navy }}>{main}</div>
+      {sub && <div style={{ fontSize: 11, color: C.muted, marginTop: 1 }}>{sub}</div>}
     </div>
   )
-  const empty = (t: string) => <div style={{ fontSize: 11.5, color: '#9CA3AF' }}>{t}</div>
+  const empty = (t: string) => <div style={{ fontSize: 12, color: TK.faint }}>{t}</div>
 
   return (
     <div style={{ fontFamily: font }}>

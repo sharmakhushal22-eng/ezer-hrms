@@ -10,12 +10,15 @@
 // an employee who does not know that only finds out in their final settlement.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#6D28D9', card: '#FFFFFF',
-  border: 'rgba(124,58,237,0.12)', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A', red: '#DC2626', redBg: '#FEF2F2',
-  soft: '#FAFAF8', purpleBg: '#F3EEFF',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
+  border: 'rgba(37,99,235,0.12)', muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, red: TK.critical, redBg: TK.criticalTint,
+  soft: TK.sunken, purpleBg: TK.brandTint,
 }
 const FY = '2026-27'
 const inr = (n: any) => '₹' + Math.round(Number(n) || 0).toLocaleString('en-IN')
@@ -33,10 +36,10 @@ interface Proof {
 }
 
 const TONE: Record<string, { bg: string; fg: string; label: string }> = {
-  PENDING:   { bg: '#F3F4F6', fg: '#6B7280', label: 'Proof pending' },
-  SUBMITTED: { bg: '#FFFBEB', fg: '#B45309', label: 'Under review' },
-  APPROVED:  { bg: '#ECFDF5', fg: '#059669', label: 'Approved' },
-  REJECTED:  { bg: '#FEF2F2', fg: '#DC2626', label: 'Rejected' },
+  PENDING:   { bg: TK.sunken, fg: TK.muted, label: 'Proof pending' },
+  SUBMITTED: { bg: TK.warningTint, fg: TK.warning, label: 'Under review' },
+  APPROVED:  { bg: TK.positiveTint, fg: TK.positive, label: 'Approved' },
+  REJECTED:  { bg: TK.criticalTint, fg: TK.critical, label: 'Rejected' },
 }
 
 // Outside the parent so typing in an amount box never remounts the row.
@@ -48,27 +51,27 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
   const locked = p.status === 'APPROVED'
   const shortfall = Math.max(0, num(p.declared_amount) - num(draftAmt || p.submitted_amount))
   return (
-    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: '#fff' }}>
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, padding: '13px 15px', marginBottom: 10, background: TK.surface }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 8 }}>
-        <span style={{ fontSize: 10.5, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 6, padding: '3px 8px' }}>{p.section}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: C.purpleD, background: C.purpleBg, borderRadius: 7, padding: '3px 8px' }}>{p.section}</span>
         <div style={{ flex: 1, minWidth: 160, fontSize: 13, fontWeight: 600 }}>{p.declared_item}</div>
-        <span style={{ fontSize: 10.5, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '3px 10px' }}>{t.label}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: t.fg, background: t.bg, borderRadius: 99, padding: '3px 10px' }}>{t.label}</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12, alignItems: 'end' }}>
         <div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 3 }}>Declared</div>
+          <div style={{ fontSize: 11, color: C.muted, marginBottom: 3 }}>Declared</div>
           <div style={{ fontSize: 15, fontWeight: 700 }}>{inr(p.declared_amount)}</div>
         </div>
         <div>
-          <label style={{ fontSize: 10.5, color: C.muted, display: 'block', marginBottom: 3 }}>Proof amount</label>
-          <input style={{ width: '100%', padding: '8px 10px', background: locked ? '#F3F4F6' : C.soft, border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+          <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>Proof amount</label>
+          <input style={{ width: '100%', padding: '8px 10px', background: locked ? TK.sunken : C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
             value={draftAmt} readOnly={locked} inputMode="numeric"
             onChange={e => onAmt(e.target.value.replace(/[^0-9]/g, ''))} />
         </div>
         <div style={{ gridColumn: 'span 2' }}>
-          <label style={{ fontSize: 10.5, color: C.muted, display: 'block', marginBottom: 3 }}>Bill / policy reference</label>
-          <input style={{ width: '100%', padding: '8px 10px', background: locked ? '#F3F4F6' : C.soft, border: '1px solid #DDD6FE', borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
+          <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 3 }}>Bill / policy reference</label>
+          <input style={{ width: '100%', padding: '8px 10px', background: locked ? TK.sunken : C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, fontSize: 13, color: C.navy, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }}
             value={draftRef} readOnly={locked} placeholder="Policy no. / receipt no. / drive link"
             onChange={e => onRef(e.target.value)} />
         </div>
@@ -80,14 +83,14 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
         </div>
       )}
       {p.status === 'REJECTED' && p.rejection_reason && (
-        <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 8 }}>
+        <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '8px 10px', marginTop: 8 }}>
           Rejected: {p.rejection_reason}
         </div>
       )}
       {!locked && (
         <div style={{ marginTop: 10 }}>
           <button onClick={onSave} disabled={busy}
-            style={{ padding: '7px 15px', borderRadius: 7, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, fontFamily: 'inherit' }}>
+            style={{ padding: '7px 15px', borderRadius: 7, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, cursor: busy ? 'not-allowed' : 'pointer', opacity: busy ? 0.6 : 1, fontFamily: 'inherit' }}>
             {p.status === 'PENDING' ? 'Submit proof' : 'Update proof'}
           </button>
         </div>
@@ -168,8 +171,8 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
 
       {leaving && (
         <div style={{ background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '12px 14px', marginBottom: 14 }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: C.amber }}>Your proof window is open now</div>
-          <div style={{ fontSize: 11.5, color: C.amber, marginTop: 3, lineHeight: 1.55 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: C.amber }}>Your proof window is open now</div>
+          <div style={{ fontSize: 12, color: C.amber, marginTop: 3, lineHeight: 1.55 }}>
             Your last working day is <b>{fmtDate(leaving)}</b>, so the deadline is not the end of the year — it is <b>that day</b>.
             Anything not proved by then will not stay exempt and will be taxed in the final settlement.
           </div>
@@ -177,37 +180,37 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
       )}
 
       {!hasDecl ? (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20, fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20, fontSize: 13, color: C.muted, lineHeight: 1.6 }}>
           No <b>Investment Declaration</b> found for this FY. Proofs are submitted against it — fill in and submit the declaration first.
         </div>
       ) : regime === 'NEW' ? (
-        <div style={{ background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: 12, padding: 20, fontSize: 12.5, color: C.green, lineHeight: 1.6 }}>
+        <div style={{ background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 14, padding: 20, fontSize: 13, color: C.green, lineHeight: 1.6 }}>
           You are on the <b>New regime</b> — the 80C/80D/HRA exemptions do not apply, so no proof is needed.
         </div>
       ) : (
         <>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 14 }}>
             {[['Declared', inr(declared), C.navy], ['Proven', inr(proven), C.green], ['Not yet proven', inr(Math.max(0, declared - proven)), declared - proven > 0 ? C.amber : C.muted]].map(([l, v, col]) => (
-              <div key={l} style={{ background: '#F8F7FF', border: `1px solid ${C.border}`, borderRadius: 9, padding: '9px 14px', minWidth: 120 }}>
-                <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{l}</div>
+              <div key={l} style={{ background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 10, padding: '9px 14px', minWidth: 120 }}>
+                <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>{l}</div>
                 <div style={{ fontSize: 17, fontWeight: 800, color: col as string }}>{v}</div>
               </div>
             ))}
             {deadline && (
-              <div style={{ background: overdue ? C.redBg : '#F8F7FF', border: `1px solid ${overdue ? '#FECACA' : C.border}`, borderRadius: 9, padding: '9px 14px' }}>
-                <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Deadline</div>
+              <div style={{ background: overdue ? C.redBg : TK.sunken, border: `1px solid ${overdue ? '#FECACA' : C.border}`, borderRadius: 10, padding: '9px 14px' }}>
+                <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700 }}>Deadline</div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: overdue ? C.red : C.navy }}>{fmtDate(deadline)}</div>
               </div>
             )}
           </div>
 
           {rows.length === 0 ? (
-            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 20 }}>
-              <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 20 }}>
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 12 }}>
                 The proof window is not open yet. Use the button below to open a window for each line of your declaration.
               </div>
               <button onClick={openWindow} disabled={busy === 'open'}
-                style={{ padding: '10px 18px', borderRadius: 8, border: 'none', background: C.purple, color: '#fff', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '10px 18px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
                 {busy === 'open' ? 'Opening…' : 'Proof window kholein'}
               </button>
             </div>
@@ -223,8 +226,8 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
         </>
       )}
 
-      {msg && <div style={{ fontSize: 12.5, fontWeight: 700, color: C.green, background: C.greenBg, border: '1px solid #BBF7D0', borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
+      {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>✓ {msg}</div>}
+      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 14px', marginTop: 12 }}>{err}</div>}
     </div>
   )
 }

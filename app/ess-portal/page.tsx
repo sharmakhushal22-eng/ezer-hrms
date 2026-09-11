@@ -6,6 +6,9 @@
 import { useState, useEffect } from 'react'
 import EmployeePortal from '@/components/ess/EmployeePortal'
 import { loadAccessScope, AccessScope, ScopeEmployee } from '@/lib/ess-scope'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 type Session = { employee_id: string; name?: string; email?: string }
 
@@ -29,7 +32,7 @@ export default function ESSPortalPage() {
   const onExit = () => { localStorage.removeItem('ezer_ess_session'); window.location.href = '/ess-login' }
 
   if (!mounted || !session) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#F5F3FF', fontFamily: '"DM Sans","Segoe UI",sans-serif', color: '#6B7280', fontSize: 14 }}>Loading your portal…</div>
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: TK.canvas, fontFamily: '"DM Sans","Segoe UI",sans-serif', color: TK.muted, fontSize: 14 }}>Loading your portal…</div>
   }
 
   const canViewOthers = !!scope?.canViewOthers
@@ -39,10 +42,10 @@ export default function ESSPortalPage() {
   if (viewing) {
     return (
       <div>
-        <div style={{ background: '#1E1B4B', color: '#fff', padding: '9px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13 }}>
-          <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: '#F59E0B', color: '#1E1B4B', fontWeight: 700 }}>{scope?.scope} VIEW</span>
+        <div style={{ background: TK.dark, color: TK.onDark, padding: '9px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13 }}>
+          <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: TK.warning, color: TK.ink, fontWeight: 700 }}>{scope?.scope} VIEW</span>
           <span>Viewing <b>{viewing.full_name}</b> · {viewing.emp_code}{viewing.designation ? ` · ${viewing.designation}` : ''}</span>
-          <button onClick={() => setViewing(null)} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: '1px solid rgba(255,255,255,.3)', background: 'transparent', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>← Back to my portal</button>
+          <button onClick={() => setViewing(null)} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: '1px solid rgba(255,255,255,.3)', background: 'transparent', color: TK.onDark, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>Back to my portal</button>
         </div>
         <EmployeePortal employeeId={viewing.id} adminMode onExit={() => setViewing(null)} />
       </div>
@@ -52,9 +55,9 @@ export default function ESSPortalPage() {
   return (
     <div>
       {canViewOthers && (
-        <div style={{ background: '#EEEDFE', borderBottom: '1px solid #E9E7F5', padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 12.5, color: '#3C3489' }}>
-          <span>🧭 You have <b>{scope?.roleNames.join(', ')}</b> access ({scope?.scope.toLowerCase()}) — you can open {scope?.employees.length} team member{scope?.employees.length === 1 ? '' : 's'}&apos; portals.</span>
-          <button onClick={() => { setPickerOpen(true); setQ('') }} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: 'none', background: '#7C3AED', color: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>View a team member →</button>
+        <div style={{ background: TK.brandTint, borderBottom: `1px solid ${TK.line}`, padding: '8px 18px', display: 'flex', alignItems: 'center', gap: 10, fontFamily: '"DM Sans","Segoe UI",sans-serif', fontSize: 13, color: TK.brandDeep }}>
+          <span>You have <b>{scope?.roleNames.join(', ')}</b> access ({scope?.scope.toLowerCase()}) — you can open {scope?.employees.length} team member{scope?.employees.length === 1 ? '' : 's'}&apos; portals.</span>
+          <button onClick={() => { setPickerOpen(true); setQ('') }} style={{ marginLeft: 'auto', padding: '6px 14px', borderRadius: 7, border: 'none', background: TK.brand, color: TK.onAccent, cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit' }}>View a team member →</button>
         </div>
       )}
 
@@ -62,19 +65,19 @@ export default function ESSPortalPage() {
 
       {pickerOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 4000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16, fontFamily: '"DM Sans","Segoe UI",sans-serif' }} onClick={() => setPickerOpen(false)}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 18, maxWidth: 480, width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#1E1B4B', marginBottom: 8 }}>Open a team member&apos;s portal</div>
-            <input autoFocus placeholder="Search name or code…" value={q} onChange={e => setQ(e.target.value)} style={{ padding: '9px 12px', border: '1px solid #E9E7F5', borderRadius: 8, fontSize: 13, background: '#FAFAF8', outline: 'none', marginBottom: 10, fontFamily: 'inherit' }} />
+          <div style={{ background: TK.surface, borderRadius: 14, padding: 18, maxWidth: 480, width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: TK.ink, marginBottom: 8 }}>Open a team member&apos;s portal</div>
+            <input autoFocus placeholder="Search name or code…" value={q} onChange={e => setQ(e.target.value)} style={{ padding: '9px 12px', border: `1px solid ${TK.line}`, borderRadius: 10, fontSize: 13, background: TK.sunken, outline: 'none', marginBottom: 10, fontFamily: 'inherit' }} />
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {list.map(e => (
-                <div key={e.id} onClick={() => { setViewing(e); setPickerOpen(false) }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 8, cursor: 'pointer', borderBottom: '1px solid #F1F0FA' }} onMouseEnter={ev => (ev.currentTarget.style.background = '#F5F3FF')} onMouseLeave={ev => (ev.currentTarget.style.background = '')}>
-                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: '#EDE9FE', color: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{e.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
-                  <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600, color: '#1E1B4B' }}>{e.full_name}</div><div style={{ fontSize: 11, color: '#6B7280' }}>{e.emp_code}{e.designation ? ` · ${e.designation}` : ''}{e.dept_name ? ` · ${e.dept_name}` : ''}</div></div>
+                <div key={e.id} onClick={() => { setViewing(e); setPickerOpen(false) }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 10, cursor: 'pointer', borderBottom: `1px solid ${TK.line}` }} onMouseEnter={ev => (ev.currentTarget.style.background = TK.canvas)} onMouseLeave={ev => (ev.currentTarget.style.background = '')}>
+                  <div style={{ width: 34, height: 34, borderRadius: '50%', background: TK.brandTint, color: TK.brand, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, flexShrink: 0 }}>{e.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</div>
+                  <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600, color: TK.ink }}>{e.full_name}</div><div style={{ fontSize: 11, color: TK.muted }}>{e.emp_code}{e.designation ? ` · ${e.designation}` : ''}{e.dept_name ? ` · ${e.dept_name}` : ''}</div></div>
                 </div>
               ))}
-              {!list.length && <div style={{ padding: 20, textAlign: 'center', color: '#6B7280', fontSize: 13 }}>No matching employees.</div>}
+              {!list.length && <div style={{ padding: 20, textAlign: 'center', color: TK.muted, fontSize: 13 }}>No matching employees.</div>}
             </div>
-            <div style={{ textAlign: 'right', marginTop: 10 }}><button onClick={() => setPickerOpen(false)} style={{ padding: '8px 14px', background: '#fff', color: '#1E1B4B', border: '1px solid #E9E7F5', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>Close</button></div>
+            <div style={{ textAlign: 'right', marginTop: 10 }}><button onClick={() => setPickerOpen(false)} style={{ padding: '8px 14px', background: TK.surface, color: TK.ink, border: `1px solid ${TK.line}`, borderRadius: 10, cursor: 'pointer', fontSize: 13, fontFamily: 'inherit' }}>Close</button></div>
           </div>
         </div>
       )}

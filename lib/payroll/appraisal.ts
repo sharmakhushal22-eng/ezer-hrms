@@ -79,7 +79,7 @@ export interface EmployeeForAppraisal {
 /** Look up one employee by code, with their current CTC — what the form pre-fills from. */
 export async function findEmployeeForAppraisal(code: string): Promise<EmployeeForAppraisal | null> {
   const { data: e } = await supabase.from('employees')
-    .select('id, emp_code, full_name, designation, company_id, companies(company_name)')
+    .select('id, emp_code, full_name, designation, company_id, companies!employees_company_id_fkey(company_name)')
     .ilike('emp_code', code.trim()).limit(1).maybeSingle()
   if (!e) return null
   const { data: c } = await supabase.from('ctc_master')

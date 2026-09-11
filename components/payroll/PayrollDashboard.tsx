@@ -8,12 +8,15 @@
 // one missing source never blanks the whole page.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK , CountUp } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FAC775', pink: '#D4537E',
-  purpleBg: '#EEEDFE', gray: '#F8F7FF', teal: '#0891B2',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint, pink: TK.critical,
+  purpleBg: TK.brandTint, gray: TK.sunken, teal: TK.info,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const num = (v: any) => (v == null || v === '' ? 0 : Number(v) || 0)
@@ -52,15 +55,15 @@ function timeAgo(iso: string) {
 // ── Presentational bits (defined outside parent) ──
 function Kpi({ label, value, accent, warn }: { label: string; value: string; accent?: string; warn?: boolean }) {
   return (
-    <div style={{ background: warn ? C.amberBg : C.card, border: `1px solid ${warn ? C.amberBd : C.border}`, borderRadius: 12, padding: '13px 15px', boxShadow: '0 1px 4px rgba(124,58,237,0.05)', minWidth: 120 }}>
-      <div style={{ fontSize: 9.5, color: warn ? C.amber : C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700, marginBottom: 5 }}>{label}</div>
+    <div style={{ background: warn ? C.amberBg : C.card, border: `1px solid ${warn ? C.amberBd : C.border}`, borderRadius: 14, padding: '13px 15px', boxShadow: 'var(--ez-shadow-flat)', minWidth: 120 }}>
+      <div style={{ fontSize: 10, color: warn ? C.amber : C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700, marginBottom: 5 }}>{label}</div>
       <div style={{ fontSize: 19, fontWeight: 800, color: accent || (warn ? C.amber : C.navy), lineHeight: 1 }}>{value}</div>
     </div>
   )
 }
 function Panel({ title, right, children, style }: { title: string; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '15px 17px', boxShadow: '0 1px 6px rgba(124,58,237,0.06)', ...style }}>
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '15px 17px', boxShadow: 'var(--ez-shadow-flat)', ...style }}>
       <div style={{ display: 'flex', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 10, fontWeight: 800, color: C.purple, textTransform: 'uppercase', letterSpacing: '.06em' }}>{title}</span>
         {right && <span style={{ marginLeft: 'auto' }}>{right}</span>}
@@ -75,7 +78,7 @@ function GenderDonut({ male, female, other }: { male: number; female: number; ot
   const segs = [
     { v: male, c: C.purple, label: 'Male' },
     { v: female, c: C.pink, label: 'Female' },
-    { v: other, c: '#94A3B8', label: 'Other' },
+    { v: other, c: TK.faint, label: 'Other' },
   ].filter(s => s.v > 0)
   let offset = 0
   return (
@@ -91,7 +94,7 @@ function GenderDonut({ male, female, other }: { male: number; female: number; ot
         <text x="44" y="48" textAnchor="middle" fontSize="15" fontWeight="800" fill={C.navy}>{total}</text>
       </svg>
       <div>
-        {[['Male', male, C.purple], ['Female', female, C.pink], ['Other', other, '#94A3B8']].filter(r => (r[1] as number) > 0).map(([l, v, c]) => (
+        {[['Male', male, C.purple], ['Female', female, C.pink], ['Other', other, TK.faint]].filter(r => (r[1] as number) > 0).map(([l, v, c]) => (
           <div key={l as string} style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5, fontSize: 12, color: C.navy }}>
             <span style={{ width: 9, height: 9, borderRadius: 2, background: c as string }} />{l as string} — <b>{v as number}</b>
           </div>
@@ -172,8 +175,19 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
       const { data: allDepts } = await supabase.from('departments').select('id, dept_name')
       ;(allDepts || []).forEach((d: any) => { deptName[d.id] = d.dept_name })
     } catch { /* ignore */ }
-    const deptCostArr = Object.entries(deptCostMap)
-      .map(([id, cost]) => ({ name: id === 'unassigned' ? 'Unassigned' : (deptName[id] || '—'), cost }))
+    // Costs accumulate per department ID, but each company has its own
+    // departments row — so "Sales & Marketing" exists several times with
+    // different IDs. Mapping IDs straight to names produced two rows with the
+    // same label and different figures, which read as a bug and gave React
+    // duplicate keys. Fold by name once the names are known: in a group view
+    // "Sales & Marketing" means the function across the group.
+    const byName: Record<string, number> = {}
+    Object.entries(deptCostMap).forEach(([id, cost]) => {
+      const name = id === 'unassigned' ? 'Unassigned' : (deptName[id] || '—')
+      byName[name] = (byName[name] || 0) + cost
+    })
+    const deptCostArr = Object.entries(byName)
+      .map(([name, cost]) => ({ name, cost }))
       .sort((a, b) => b.cost - a.cost).slice(0, 6)
 
     // ── Bonus (empty today → 0) ──
@@ -244,7 +258,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
 
   useEffect(() => { load() }, [load])
 
-  const selStyle: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 12, background: '#fff', color: C.navy, fontFamily: font, outline: 'none' }
+  const selStyle: React.CSSProperties = { padding: '7px 10px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 12, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const maxDept = Math.max(1, ...deptCost.map(d => d.cost))
 
   return (
@@ -286,7 +300,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
         <select style={selStyle} value={month} onChange={e => setMonth(e.target.value)}>
           {monthOpts.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
-        <span style={{ fontSize: 10.5, color: C.muted }}>FY set from the header above.</span>
+        <span style={{ fontSize: 11, color: C.muted }}>FY set from the header above.</span>
         {loading && <span style={{ fontSize: 11, color: C.purple, marginLeft: 'auto' }}>Refreshing…</span>}
       </div>
 
@@ -312,12 +326,12 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {deptCost.map(d => (
                   <div key={d.name}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, marginBottom: 3 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 3 }}>
                       <span style={{ color: C.navy, fontWeight: 600 }}>{d.name}</span>
                       <span style={{ color: C.muted }}>{inrShort(d.cost)}</span>
                     </div>
-                    <div style={{ height: 7, background: C.gray, borderRadius: 4, overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: 'linear-gradient(90deg,#7C3AED,#5B21B6)', borderRadius: 4 }} />
+                    <div style={{ height: 7, background: C.gray, borderRadius: 7, overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(3, (d.cost / maxDept) * 100)}%`, height: '100%', background: `linear-gradient(90deg,${TK.brand},${TK.brand})`, borderRadius: 7 }} />
                     </div>
                   </div>
                 ))}
@@ -340,7 +354,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
             <div>
               {compliance.map((e, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: i < compliance.length - 1 ? `1px solid ${C.gray}` : 'none' }}>
-                  <span style={{ fontSize: 11.5, color: C.muted, fontWeight: 700, minWidth: 52 }}>{fmtDate(e.date)}</span>
+                  <span style={{ fontSize: 12, color: C.muted, fontWeight: 700, minWidth: 52 }}>{fmtDate(e.date)}</span>
                   <span style={{ fontSize: 12, color: C.navy, textAlign: 'right' }}>{e.label}</span>
                 </div>
               ))}
@@ -354,7 +368,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
               {activity.map((a, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '6px 0', borderBottom: i < activity.length - 1 ? `1px solid ${C.gray}` : 'none' }}>
                   <span style={{ fontSize: 12, color: C.navy, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.text}</span>
-                  <span style={{ fontSize: 10.5, color: C.muted, whiteSpace: 'nowrap' }}>{a.when}</span>
+                  <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>{a.when}</span>
                 </div>
               ))}
             </div>

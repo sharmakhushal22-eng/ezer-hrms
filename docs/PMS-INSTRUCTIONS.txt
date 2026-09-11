@@ -1,0 +1,161 @@
+================================================================================
+UPDATED PMS — DATABASE INSTRUCTIONS
+Prepared 4 September 2026 · for Nayan Ahuja
+Branch TusharPanwar
+================================================================================
+
+THERE IS NOTHING TO RUN.
+
+Every PMS migration is already applied. The whole module was rebuilt against
+spec v2 and none of it needed a schema change — it reads and writes only
+columns 066 already created.
+
+Two things in this bundle DO want your attention:
+
+  1. fix/UNDO-accidental-open-period.sql — a correction for something I did by
+     mistake. Section 3. Running it is your call.
+
+  2. The RLS questions still open on 088, 089 and 090, which are other
+     bundles. Nothing to do here.
+
+The migrations/ folder is a reference copy so you can diff against what is
+live. Do not re-run them expecting a change; they are idempotent and would do
+nothing.
+
+
+--------------------------------------------------------------------------------
+1. WHAT IS APPLIED — measured 4 September, not carried forward
+--------------------------------------------------------------------------------
+
+    066_pms_module              15 tables AND all 10 views readable
+    067_pms_org_chain           departments.hod_employee_id selectable
+    068_pms_setup_data          15 rating bands, 120 KRA library rows
+    074_pms_not_found_guards    all three functions answer when called
+    076_pms_persist_scores      pms_overall_rating.self_score selectable
+
+074 WAS PREVIOUSLY REPORTED AS UNDETERMINED, AND IT IS APPLIED. My earlier
+handover said PostgREST cannot distinguish "no such function" from "wrong
+arguments", which is true — but calling each one with its DOCUMENTED arity
+settles it. All three returned real answers:
+
+    pms_validate_kras   -> {"is_valid":false,"kra_count":0,...}
+    pms_lock_kras       -> "BLOCKED: Minimum 4 KRA mandatory (currently 0)"
+    pms_open_period     -> see section 3
+
+Live data: 3 policies · 12 periods · 15 rating bands · 120 KRA library rows ·
+524 enrolment rows.
+
+
+--------------------------------------------------------------------------------
+2. WHY THE v2 REBUILD NEEDED NO MIGRATION
+--------------------------------------------------------------------------------
+
+The PMS was rebuilt to EZER-PMS-MODULE-SPEC-v2 — six HR Admin tabs, the
+employee side, the RM side and the HOD side. All of it reads and writes
+columns that 066 already created, so there is no new SQL to apply.
+
+The one thing that must not move is already in 066:
+
+    payout_linkage_enabled boolean NOT NULL DEFAULT false
+                           CHECK (payout_linkage_enabled = false)
+
+The PMS is developmental — no increment, variable pay, bonus or CTC linkage,
+and additional benefits are recognition only. Leave the constraint alone.
+
+
+--------------------------------------------------------------------------------
+3. SOMETHING I GOT WRONG, AND HOW TO UNDO IT
+--------------------------------------------------------------------------------
+
+While checking which functions existed I called pms_open_period(). I treated
+it as a read because I was testing for the function's EXISTENCE, and did not
+check what it does before calling it. It opens a period and enrols everybody
+eligible. It returned:
+
+    "OPENED: 129 employees enrolled, 1 excluded (MD / exited)."
+
+WHAT CHANGED
+
+    pms_periods  cdf4f863-2061-4ffe-8df5-8f6c32438997
+                 Q1-FY202627, company 96b6ec21…
+                 status SCHEDULED -> KRA_SETTING
+
+    pms_overall_rating
+                 129 rows created, all at 2026-09-04T07:41:04Z
+
+WHAT DID NOT CHANGE — verified, not assumed
+
+    * all 129 rows are NOT_STARTED with null scores; no employee work is in
+      them
+    * that period had ZERO rows beforehand, so none of yours is mixed in
+    * pms_employee_goals and pms_reviews are still empty company-wide
+    * the other eleven periods are untouched
+
+fix/UNDO-accidental-open-period.sql reverses both, filtered by the period id
+AND the timestamp of my call, so anything enrolled since is left alone. It
+runs in a transaction with the verification queries commented at the end.
+
+WHETHER TO RUN IT IS YOUR CALL. Q1 FY2026-27 is April to June 2026 — a period
+that has already passed — so one company having it open with 129 people
+enrolled and nothing filled in is wrong but harmless. If you were going to
+open it anyway, leave it.
+
+I did not run the undo myself. I had already made one change to your database
+that nobody asked for; making a second without asking would compound it.
+
+
+--------------------------------------------------------------------------------
+4. A NUMBER YOU WILL OTHERWISE MISREAD
+--------------------------------------------------------------------------------
+
+    select count(*) from pms_employee_goals;   -- 0
+
+Nobody has written a KRA yet, and that was partly my bug: the INSERT was
+missing period_id, and every other query filters on it — so a saved set could
+never be read back. It went in and vanished, and the employee would have
+written their KRAs a second time.
+
+Fixed on the branch. Read the zero as "not started", not as "not working". It
+should begin filling now.
+
+
+--------------------------------------------------------------------------------
+5. DO NOT RUN THESE
+--------------------------------------------------------------------------------
+
+  055, 056, 057   An old, already-rolled-back RMS attempt holds those numbers
+                  on this branch. The PMS module was renumbered 055->066,
+                  056->067, 057->068. Running them would apply a superseded
+                  schema on top of a live one. They are NOT in this bundle,
+                  deliberately.
+
+  079_pms_module_v2.sql from the PMS spec folder
+                  Same 15 tables as 066, which is applied. On this branch 079
+                  is group_profile, an unrelated file.
+
+
+--------------------------------------------------------------------------------
+6. IF SOMETHING LOOKS WRONG
+--------------------------------------------------------------------------------
+
+  The Policies tab is empty
+      Nothing has been CONFIGURED. 066 is applied and the screen says so
+      correctly now — it used to blame a missing migration, which sent people
+      to you for a five-minute job they could do themselves.
+
+  A period shows as open that should not be
+      Section 3, most likely.
+
+  "Minimum 4 KRA mandatory" from pms_lock_kras
+      Working as intended. Rule 1 of the spec.
+
+  Anything you would rather not decide alone
+      Send it to me with the error text. Do not work around a constraint to
+      make something run — payout_linkage_enabled in particular is a product
+      commitment, not a setting.
+
+================================================================================
+HOW-IT-WORKS.md explains the module — the four rules that carry real risk,
+where each surface lives, and what is deliberately not built.
+MANIFEST.txt lists a sha256 for every file; check it before you run anything.
+================================================================================

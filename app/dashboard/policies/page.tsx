@@ -7,19 +7,22 @@ import {
   loadCompaniesLite, loadPolicies, savePolicy, togglePolicy, softDeletePolicy,
   type CompanyPolicy, type CompanyLite,
 } from '@/lib/supabase-policies'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  page:  { background:'#F5F3FF', minHeight:'100vh', color:'#1E1B4B', fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
-  card:  { background:'#FFFFFF', borderRadius:10, border:'1px solid rgba(124,58,237,0.12)', padding:'14px 16px', marginBottom:12, boxShadow:'0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
-  lbl:   { fontSize:11, fontWeight:600, color:'#6D28D9', textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
-  input: { width:'100%', padding:'8px 10px', background:'#FAFAF8', border:'1px solid #DDD6FE', borderRadius:7, color:'#1E1B4B', fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
-  pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:'#7C3AED', color:'#fff', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  out:   { padding:'7px 12px', borderRadius:7, border:'1px solid #DDD6FE', cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#6D28D9', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  danger:{ padding:'6px 11px', borderRadius:7, border:'1px solid #FCA5A5', cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:'#fff', color:'#DC2626' } as React.CSSProperties,
+  page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
+  card:  { background:TK.surface, borderRadius:10, border:'1px solid var(--ez-line)', padding:'14px 16px', marginBottom:12, boxShadow:'var(--ez-shadow-flat)' } as React.CSSProperties,
+  lbl:   { fontSize:11, fontWeight:600, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 } as React.CSSProperties,
+  input: { width:'100%', padding:'8px 10px', background:TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius:7, color:TK.ink, fontSize:13, outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' } as React.CSSProperties,
+  pri:   { padding:'9px 16px', borderRadius:7, border:'none', cursor:'pointer', fontSize:13, fontWeight:600, fontFamily:'inherit', background:TK.brand, color:TK.onAccent, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  out:   { padding:'7px 12px', borderRadius:7, border: `1px solid ${TK.brandEdge}`, cursor:'pointer', fontSize:12, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.brandDeep, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  danger:{ padding:'6px 11px', borderRadius:7, border: `1px solid ${TK.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:500, fontFamily:'inherit', background:TK.surface, color:TK.critical } as React.CSSProperties,
 }
 function Toast({ msg, type, onClose }: { msg: string; type: 'success' | 'error'; onClose: () => void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
-  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?'#059669':'#DC2626', color:'#fff', borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'✓':'✗'} {msg}</div>
+  return <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:type==='success'?TK.positive:TK.critical, color:TK.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{type==='success'?'':''} {msg}</div>
 }
 
 const BLANK = (order: number) => ({ id:'', policy_code:'', policy_title:'', policy_body:'', is_mandatory:true, sort_order:order })
@@ -34,13 +37,13 @@ function PolicyModal({ row, company_id, nextOrder, onClose, onSave }: {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:1000, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }} onClick={onClose}>
       <div style={{ ...C.card, maxWidth:620, width:'100%', marginBottom:0, maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:600, marginBottom:12 }}>{row ? `Edit ${row.policy_code}` : 'Add policy'}{row && <span style={{ fontSize:11, color:'#9CA3AF', fontWeight:400 }}> · v{row.version} (edit auto-bumps version)</span>}</div>
+        <div style={{ fontSize:16, fontWeight:600, marginBottom:12 }}>{row ? `Edit ${row.policy_code}` : 'Add policy'}{row && <span style={{ fontSize:11, color:TK.faint, fontWeight:400 }}> · v{row.version} (edit auto-bumps version)</span>}</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr 0.7fr', gap:10, marginBottom:10 }}>
           <div><label style={C.lbl}>Code</label><input style={C.input} value={f.policy_code} onChange={e => set('policy_code', e.target.value.toUpperCase())} placeholder="HR-POL-005" /></div>
           <div><label style={C.lbl}>Title</label><input style={C.input} value={f.policy_title} onChange={e => set('policy_title', e.target.value)} placeholder="Confidentiality / NDA" /></div>
           <div><label style={C.lbl}>Sort</label><input type="number" style={C.input} value={f.sort_order} onChange={e => set('sort_order', Number(e.target.value))} /></div>
         </div>
-        <label style={{ display:'flex', alignItems:'center', gap:7, fontSize:12.5, cursor:'pointer', marginBottom:10 }}>
+        <label style={{ display:'flex', alignItems:'center', gap:7, fontSize:13, cursor:'pointer', marginBottom:10 }}>
           <input type="checkbox" checked={f.is_mandatory} onChange={e => set('is_mandatory', e.target.checked)} /> Mandatory (candidate must acknowledge to proceed)
         </label>
         <label style={C.lbl}>Policy text (markdown supported)</label>
@@ -95,8 +98,10 @@ export default function CompanyPoliciesPage() {
   return (
     <div style={{ ...C.page, padding:'20px 24px' }}>
       <div style={{ maxWidth:1100, margin:'0 auto' }}>
+        <div className="ez-page-head">
         <div style={{ fontSize:20, fontWeight:600, marginBottom:2 }}>Company Policies</div>
-        <div style={{ fontSize:12, color:'#6B7280', marginBottom:14 }}>Per-company policies that appear in the onboarding magic-link Phase 9 (acknowledgement). Add / edit / reorder — changes apply to new onboarding sessions instantly; already-acked candidates keep their original version.</div>
+        <div style={{ fontSize:12, color:TK.muted }}>Per-company policies that appear in the onboarding magic-link Phase 9 (acknowledgement). Add / edit / reorder — changes apply to new onboarding sessions instantly; already-acked candidates keep their original version.</div>
+        </div>
 
         <div style={{ ...C.card, display:'flex', gap:12, alignItems:'flex-end', flexWrap:'wrap' }}>
           <div><label style={C.lbl}>Company</label>
@@ -108,21 +113,21 @@ export default function CompanyPoliciesPage() {
           <button style={{ ...C.pri, marginLeft:'auto' }} disabled={!companyId} onClick={() => setEditing('new')}>+ Add policy</button>
         </div>
 
-        {loading ? <div style={{ ...C.card, textAlign:'center', color:'#7C3AED', padding:40 }}>Loading…</div> : !companyId ? null : (
+        {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : !companyId ? null : (
           <div style={{ ...C.card, overflowX:'auto', padding:0 }}>
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-              <thead><tr style={{ background:'#FAFAF8' }}>
-                {['#', 'Code', 'Title', 'Mandatory', 'Status', 'Actions'].map(h => <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:'#6B7280', textTransform:'uppercase', letterSpacing:'.04em', borderBottom:'1px solid #EDE9FE' }}>{h}</th>)}
+              <thead><tr style={{ background:TK.sunken }}>
+                {['#', 'Code', 'Title', 'Mandatory', 'Status', 'Actions'].map(h => <th key={h} style={{ padding:'9px 10px', textAlign:'left', fontSize:10, fontWeight:600, color:TK.muted, textTransform:'uppercase', letterSpacing:'.04em', borderBottom: `1px solid ${TK.brandEdge}` }}>{h}</th>)}
               </tr></thead>
               <tbody>
-                {policies.length === 0 && <tr><td colSpan={6} style={{ padding:24, textAlign:'center', color:'#9CA3AF' }}>No policies. Has migration 033 been run? Or use + Add policy.</td></tr>}
+                {policies.length === 0 && <tr><td colSpan={6} style={{ padding:24, textAlign:'center', color:TK.faint }}>No policies. Has migration 033 been run? Or use + Add policy.</td></tr>}
                 {policies.map(p => (
-                  <tr key={p.id} style={{ borderBottom:'1px solid #F3F0FF', opacity: p.is_active ? 1 : 0.5 }}>
-                    <td style={{ padding:'9px 10px', color:'#9CA3AF' }}>{p.sort_order}</td>
-                    <td style={{ padding:'9px 10px', fontWeight:600, whiteSpace:'nowrap' }}>{p.policy_code} <span style={{ fontSize:10, color:'#9CA3AF', fontWeight:400 }}>v{p.version}</span></td>
+                  <tr key={p.id} style={{ borderBottom: `1px solid ${TK.brandEdge}`, opacity: p.is_active ? 1 : 0.5 }}>
+                    <td style={{ padding:'9px 10px', color:TK.faint }}>{p.sort_order}</td>
+                    <td style={{ padding:'9px 10px', fontWeight:600, whiteSpace:'nowrap' }}>{p.policy_code} <span style={{ fontSize:10, color:TK.faint, fontWeight:400 }}>v{p.version}</span></td>
                     <td style={{ padding:'9px 10px' }}>{p.policy_title}</td>
-                    <td style={{ padding:'9px 10px' }}>{p.is_mandatory ? <span style={{ fontSize:10, fontWeight:700, color:'#7C3AED' }}>MANDATORY</span> : <span style={{ fontSize:10, color:'#9CA3AF' }}>optional</span>}</td>
-                    <td style={{ padding:'9px 10px' }}>{p.is_active ? <span style={{ fontSize:10, fontWeight:600, color:'#059669' }}>🟢 ON</span> : <span style={{ fontSize:10, color:'#9CA3AF' }}>⚪ OFF</span>}</td>
+                    <td style={{ padding:'9px 10px' }}>{p.is_mandatory ? <span style={{ fontSize:10, fontWeight:700, color:TK.brand }}>MANDATORY</span> : <span style={{ fontSize:10, color:TK.faint }}>optional</span>}</td>
+                    <td style={{ padding:'9px 10px' }}>{p.is_active ? <span style={{ fontSize:10, fontWeight:600, color:TK.positive }}>ON</span> : <span style={{ fontSize:10, color:TK.faint }}>OFF</span>}</td>
                     <td style={{ padding:'9px 10px', whiteSpace:'nowrap' }}>
                       <div style={{ display:'flex', gap:6 }}>
                         <button style={C.out} onClick={() => setEditing(p)}>Edit</button>

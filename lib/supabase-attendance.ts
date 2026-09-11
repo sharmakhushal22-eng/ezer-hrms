@@ -83,6 +83,43 @@ export async function submitRegularisation(
   return { error: error?.message || null }
 }
 
+/**
+ * One request per day, submitted together.
+ *
+ * Regularising a week of missed punches one day at a time is seven forms with
+ * the same times and the same reason typed seven times. This takes the range
+ * once. Each day is still its own row, because HR approves days individually
+ * and the table is keyed on (employee_id, attendance_date) — a bulk submission
+ * is a convenience at entry, not a different kind of record.
+ *
+ * Upsert, so re-submitting a day that was already pending updates it rather
+ * than failing the whole batch on one duplicate.
+ */
+export async function submitRegularisationBulk(
+  empId: string,
+  days: { date: string; recordedIn: string | null; recordedOut: string | null }[],
+  requestedIn: string, requestedOut: string, reason: string
+): Promise<{ inserted: number; error: string | null }> {
+  if (!days.length) return { inserted: 0, error: 'No eligible days in that range.' }
+
+  const rows = days.map(d => ({
+    employee_id: empId,
+    attendance_date: d.date,
+    recorded_in: d.recordedIn,
+    recorded_out: d.recordedOut,
+    requested_in: requestedIn,
+    requested_out: requestedOut,
+    reason,
+    status: 'PENDING',
+  }))
+
+  const { error } = await supabase
+    .from('attendance_regularisation')
+    .upsert(rows, { onConflict: 'employee_id,attendance_date' })
+
+  return { inserted: error ? 0 : rows.length, error: error?.message || null }
+}
+
 // ── Day status resolution (priority: HOLIDAY > WEEKLY_OFF > ON_LEAVE > record.status) ──
 export interface DayInfo { status: string; rec: AttendanceRecord | null; holiday: HolidayInfo | null; leave: LeaveDay | null }
 export function resolveDay(dateStr: string, m: MonthlyData, todayStr: string): DayInfo {

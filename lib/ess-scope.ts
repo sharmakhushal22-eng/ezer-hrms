@@ -29,7 +29,7 @@ export async function loadAccessScope(employeeId: string): Promise<AccessScope> 
   // This employee's own dept/location for DEPT/BRANCH scoping.
   const { data: me } = await supabase.from('employees').select('department_id, location_id').eq('id', employeeId).maybeSingle()
 
-  const cols = 'id, emp_code, full_name, designation, departments(dept_name), locations!location_id(location_name)'
+  const cols = 'id, emp_code, full_name, designation, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)'
   let q = supabase.from('employees').select(cols).eq('employment_status', 'Active').neq('is_test', true).order('emp_code')
   if (best === 'TEAM') q = q.eq('l1_manager_id', employeeId)
   else if (best === 'DEPT') q = q.eq('department_id', (me as any)?.department_id || '00000000-0000-0000-0000-000000000000')

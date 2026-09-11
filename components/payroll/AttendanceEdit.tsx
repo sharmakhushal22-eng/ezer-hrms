@@ -10,6 +10,8 @@ import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { loadRuns, editEmployeeAttendance, addArrearDays, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { C, font, lbl, ddInp, SearchSelect, type Opt } from './attendanceShared'
+// Design tokens, aliased as TK — this file declares its own C.
+import { C as TK } from '@/lib/ui'
 
 type SnapRow = {
   employee_code: string; full_name: string; department: string | null
@@ -28,7 +30,7 @@ function NumField({ label, value, onChange, hint }: { label: string; value: stri
     <div>
       <label style={lbl}>{label}</label>
       <input type="number" step="0.5" value={value} onChange={e => onChange(e.target.value)} style={ddInp} />
-      {hint && <div style={{ fontSize: 9.5, color: C.muted, marginTop: 3 }}>{hint}</div>}
+      {hint && <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>{hint}</div>}
     </div>
   )
 }
@@ -102,10 +104,10 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
     setArrMsg(`Arrear recorded — ${arrDays} day(s) from ${arrMonth} added to this run.`); loadSnap()
   }
 
-  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.06)' }
+  const card: React.CSSProperties = { background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }
   const stat = (label: string, val: any) => (
-    <div style={{ background: C.gray, borderRadius: 8, padding: '8px 11px', minWidth: 90 }}>
-      <div style={{ fontSize: 9.5, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{label}</div>
+    <div style={{ background: C.gray, borderRadius: 10, padding: '8px 11px', minWidth: 90 }}>
+      <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{label}</div>
       <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>{val ?? '—'}</div>
     </div>
   )
@@ -113,10 +115,10 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
   return (
     <div style={{ fontFamily: font, fontSize: 13, maxWidth: 780 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: mode === 'arrear' ? 'linear-gradient(135deg,#10B981,#059669)' : 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(124,58,237,0.28)' }}>{mode === 'arrear' ? '📌' : '✏️'}</div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: mode === 'arrear' ? `linear-gradient(135deg,${TK.positive},${TK.positive})` : `linear-gradient(135deg,${TK.brand},${TK.brandDeep})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: mode === 'arrear' ? '0 3px 10px rgba(5,150,105,0.28)' : '0 3px 10px rgba(37,99,235,0.28)' }}>{mode === 'arrear' ? '' : ''}</div>
         <div>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.navy, lineHeight: 1.1 }}>{mode === 'arrear' ? 'Arrear Days' : 'Attendance Edit'}</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
             {mode === 'arrear'
               ? 'Add days owed from a prior month into this run — the source month is never reopened'
               : 'Correct one employee after upload — Paid Days is recalculated by the same rule as the upload'}
@@ -124,7 +126,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
         </div>
       </div>
 
-      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', padding: '10px 12px', borderRadius: 9, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
+      {!companyId && <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, padding: '10px 12px', borderRadius: 10, marginBottom: 12 }}>Pick a specific company in the header to see its payroll months.</div>}
 
       {/* month + employee pickers */}
       <div style={card}>
@@ -147,7 +149,7 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
           {/* edit form */}
           {mode === 'edit' && (
           <div style={card}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 12 }}>✏️ Edit attendance — {cur.employee_code} · {cur.full_name}</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 12 }}>Edit attendance — {cur.employee_code} · {cur.full_name}</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 12 }}>
               <NumField label="Earned Leave" value={f.earned_leave} onChange={v => setF({ ...f, earned_leave: v })} />
               <NumField label="Casual Leave" value={f.casual_leave} onChange={v => setF({ ...f, casual_leave: v })} />
@@ -157,24 +159,24 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
               <NumField label="OT Hours" value={f.ot_hours} onChange={v => setF({ ...f, ot_hours: v })} />
             </div>
             {/* Paid Days is derived, never typed — same rule as the upload. */}
-            <div style={{ marginTop: 12, background: C.gray, borderRadius: 8, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: 10.5, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Paid Days</span>
+            <div style={{ marginTop: 12, background: C.gray, borderRadius: 10, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 11, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>Paid Days</span>
               <span style={{ fontSize: 17, fontWeight: 800, color: (() => { const p = (Number(f.earned_leave) || 0) + (Number(f.casual_leave) || 0) + (Number(f.sick_leave) || 0) + (Number(f.other_leave) || 0) - (Number(f.absent_days) || 0); return p < 0 ? C.red : C.green })() }}>
                 {(Number(f.earned_leave) || 0) + (Number(f.casual_leave) || 0) + (Number(f.sick_leave) || 0) + (Number(f.other_leave) || 0) - (Number(f.absent_days) || 0)}
               </span>
-              <span style={{ fontSize: 10.5, color: C.muted }}>= (EL + CL + SL + Other) − Absent · calculated on save, same as the upload</span>
+              <span style={{ fontSize: 11, color: C.muted }}>= (EL + CL + SL + Other) − Absent · calculated on save, same as the upload</span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={save} disabled={saveBusy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: 'linear-gradient(120deg,#7C3AED,#5B21B6)', color: '#fff', fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(124,58,237,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,${TK.brand},${TK.brandDeep})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: saveBusy ? 'not-allowed' : 'pointer', opacity: saveBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(37,99,235,0.22)' }}>
                 {saveBusy ? 'Saving…' : 'Save changes'}
               </button>
               {saveMsg && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>✓ {saveMsg}</span>}
               {saveErr && <span style={{ fontSize: 12, color: C.red }}>{saveErr}</span>}
             </div>
             {recalcMsg && (
-              <div style={{ fontSize: 11.5, fontWeight: 700, color: C.amber, background: C.amberBg, border: '1px solid #FDE8C8', borderRadius: 9, padding: '10px 12px', marginTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 12px', marginTop: 12 }}>
                 ⚠️ {recalcMsg}
               </div>
             )}
@@ -185,8 +187,8 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
           {/* arrear form */}
           {mode === 'arrear' && (
           <div style={{ ...card, borderColor: C.greenBd }}>
-            <div style={{ fontSize: 12.5, fontWeight: 800, color: C.navy, marginBottom: 4 }}>📌 Arrear days</div>
-            <div style={{ fontSize: 10.5, color: C.muted, marginBottom: 12 }}>Days owed from a prior month land in THIS run — the source month is only recorded for audit and is never reopened.</div>
+            <div style={{ fontSize: 13, fontWeight: 800, color: C.navy, marginBottom: 4 }}>Arrear days</div>
+            <div style={{ fontSize: 11, color: C.muted, marginBottom: 12 }}>Days owed from a prior month land in THIS run — the source month is only recorded for audit and is never reopened.</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
               <div><label style={lbl}>Arrear days</label><input type="number" step="0.5" value={arrDays} onChange={e => setArrDays(e.target.value)} style={ddInp} /></div>
               <div><label style={lbl}>Source period</label><input type="month" value={arrMonth} onChange={e => setArrMonth(e.target.value)} style={ddInp} /></div>
@@ -194,10 +196,10 @@ export default function AttendanceEdit({ companyId, fy, mode = 'edit' }: { compa
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
               <button onClick={saveArrear} disabled={arrBusy}
-                style={{ padding: '10px 22px', borderRadius: 9, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: '#fff', fontWeight: 700, fontSize: 13, cursor: arrBusy ? 'not-allowed' : 'pointer', opacity: arrBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
+                style={{ padding: '10px 22px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: arrBusy ? 'not-allowed' : 'pointer', opacity: arrBusy ? 0.6 : 1, boxShadow: '0 3px 10px rgba(5,150,105,0.22)' }}>
                 {arrBusy ? 'Saving…' : 'Add arrear'}
               </button>
-              {cur.arrear_days ? <span style={{ fontSize: 11.5, color: C.purpleD }}>current: <b>{cur.arrear_days}</b> day(s){cur.arrear_source_period ? ` from ${String(cur.arrear_source_period).slice(0, 7)}` : ''}</span> : null}
+              {cur.arrear_days ? <span style={{ fontSize: 12, color: C.purpleD }}>current: <b>{cur.arrear_days}</b> day(s){cur.arrear_source_period ? ` from ${String(cur.arrear_source_period).slice(0, 7)}` : ''}</span> : null}
               {arrMsg && <span style={{ fontSize: 12, fontWeight: 700, color: C.green }}>✓ {arrMsg}</span>}
               {arrErr && <span style={{ fontSize: 12, color: C.red }}>{arrErr}</span>}
             </div>

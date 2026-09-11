@@ -1,0 +1,293 @@
+================================================================================
+EZER HRMS — DATABASE HANDOVER
+Prepared 3 September 2026 · for Nayan Ahuja
+================================================================================
+
+WHAT THIS IS
+
+Eight migrations to run, in order, in the EZER Supabase project. They unlock
+features that are already built, tested and pushed to the TusharPanwar branch
+but which currently render a "not switched on yet" state because their tables
+do not exist.
+
+Nothing here has been run against the database. Nobody but you applies schema
+changes to this project.
+
+
+--------------------------------------------------------------------------------
+1. RUN THESE, IN THIS ORDER
+--------------------------------------------------------------------------------
+
+    migrations/074_pms_not_found_guards.sql
+    migrations/075_ess_notification_catalogue.sql
+    migrations/079_group_profile.sql
+    migrations/082_access_foundation.sql        <-- 084 will not work without it
+    migrations/084_wall_of_fame.sql
+    migrations/085_wall_of_fame_seed.sql
+    migrations/086_shoutouts_and_feed.sql
+    migrations/087_social_and_inbox.sql
+
+Order matters in exactly two places:
+
+  * 082 BEFORE 084. 084 calls can() at five sites and 082 creates it. Run
+    084 first and every access check in the Wall of Fame fails closed.
+
+    082 also creates explain_access(). Nothing in 084-087 actually calls
+    that one — wof_explain_access(), which 084 defines itself, is the one in
+    use. explain_access() is there because the bundle's brief named it and a
+    future route may expect it. Said plainly so you know which of the two is
+    load-bearing.
+
+  * 084 BEFORE 085, 086 and 087. Those three ALTER tables that 084 creates
+    and seed a catalogue 084 defines.
+
+There is no 083. The number is deliberately skipped — see section 5.
+
+Every file is written to be safe to run twice: CREATE TABLE IF NOT EXISTS,
+ADD COLUMN IF NOT EXISTS, CREATE OR REPLACE FUNCTION, ON CONFLICT DO NOTHING.
+If a run half-fails, fix the cause and run the whole file again.
+
+
+--------------------------------------------------------------------------------
+2. WHAT IS ALREADY IN THE DATABASE (do not re-run unless you want to)
+--------------------------------------------------------------------------------
+
+I probed the live database on 3 September rather than assuming. These came
+back present:
+
+    066_pms_module                  pms_policies, pms_periods, pms_rating_scale
+    067_pms_org_chain_resolution    departments.hod_employee_id
+    068_pms_setup_data              pms_rating_scale rows
+    076_pms_persist_scores          pms_overall_rating.self_score
+    077_company_profile_full        company_contacts
+    078_company_documents_policies  company_documents
+    080_ess_inbox                   inbox_conversations  (RLS is on — see below)
+    081_registration_documents      registrations.document_path
+
+Copies are in reference/ so you can diff them against what is live if
+anything looks wrong. They are idempotent, so re-running is harmless.
+
+ONE THING I COULD NOT DETERMINE, and I am not going to guess:
+
+    Whether the FUNCTIONS from 066 (pms_generate_periods, pms_lock_kras,
+    pms_finalise, pms_has_reviews) exist.
+
+    PostgREST returns the same PGRST202 error for "no such function" and for
+    "exists, but not with the arguments you sent", and calling them blind
+    with no arguments cannot tell those apart. My first probe said all twenty
+    functions were missing; a second, cleverer one said all twenty were
+    present — including wof_can, which cannot possibly exist because
+    wall_config does not. Neither answer was trustworthy, so I am reporting
+    the uncertainty instead of picking the reading I preferred.
+
+    Please check directly:
+
+        select p.proname, pg_get_function_identity_arguments(p.oid)
+          from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+         where n.nspname = 'public'
+           and p.proname in ('pms_generate_periods','pms_lock_kras',
+                             'pms_finalise','pms_has_reviews');
+
+    If any are absent, re-run reference/066_pms_module.sql — it is idempotent
+    and will create only what is missing.
+
+
+--------------------------------------------------------------------------------
+3. AFTER THE MIGRATIONS — activation, once per company
+--------------------------------------------------------------------------------
+
+The Wall of Fame does nothing until it is switched on. This is deliberate:
+the module is not self-serve, and only EZER activates it.
+
+    -- 1. provision the defaults
+    select seed_wall_defaults('<company_uuid>', '<hr_head_employee_uuid>');
+    select seed_shoutout_categories('<company_uuid>');
+
+    -- 2. EZER's own Super Admin flips the master switch
+    update wall_config set module_enabled = true
+     where company_id = '<company_uuid>';
+
+From then on the company's Wall Owner does everything else from the admin
+console. No further SQL.
+
+The PMS also needs one call per financial year to create its periods:
+
+    select pms_generate_periods('<policy_id>', '2026-27', '2026-04-01');
+
+Nightly job (Vercel cron or a Supabase scheduled function):
+
+    select generate_service_milestones(id) from companies;
+
+    NOTE: the bundle this came from wrote that as "... from companies where
+    is_active". companies.is_active does not exist in this database — I
+    checked. The filter is removed rather than swapped for a guess, because
+    guessing which column means "live" could silently skip real companies
+    every night and nothing would look broken. If there is a liveness
+    column, tell me and I will put it back.
+
+
+--------------------------------------------------------------------------------
+4. DECISIONS THAT ARE YOURS, NOT MINE
+--------------------------------------------------------------------------------
+
+ROW LEVEL SECURITY on every new table. I have not written policies for these
+and I am not going to copy an allow-all from an older migration. Tables
+needing a decision:
+
+    082  access_permission_map        lookup only, no company data
+    084  wall_config, wall_admins, recognition_awards, recognition_values,
+         badge_master, employee_badges, recognitions,
+         recognition_nominations, recognition_comments, board_screens,
+         wall_audit_log
+    086  shoutout_categories
+    087  wall_messages, wall_message_recipients, wall_inbox_events,
+         comment_reactions
+
+    The module gates every read and write above the row level, through
+    wof_can() and the write triggers on the config tables, which is the
+    convention the rest of this schema follows. Whether that is sufficient
+    here is your call — wall_messages in particular carries person-to-person
+    notes, and board_screens carries pair codes that grant read access to a
+    public route.
+
+080_ess_inbox IS APPLIED AND ITS RLS IS BLOCKING THE ANON KEY. Every read of
+inbox_conversations, inbox_messages and inbox_policy returned 42501
+(insufficient privilege). That may be exactly what you intended. If the ESS
+messaging screen is meant to work through the anon key, it needs a policy;
+if it is meant to go through a server route, the app needs one. Worth a
+conversation rather than a silent change either way.
+
+STORAGE BUCKET, one manual step, nothing uploads without it:
+
+    name     company-docs
+    access   PRIVATE
+    policy   whatever flexi-bills / onboarding-docs already use
+
+    Needed by 081 (registration certificates: PAN, GST, EPF, ESIC) and by
+    employees.photo_url on the board. PRIVATE matters: the app never hands
+    out a durable link, every view is a short-lived signed URL minted
+    server-side, so a public bucket would give away more than the
+    application itself ever exposes.
+
+078 IS A RUN-OR-SKIP DECISION. It creates company_documents and
+company_policies, and the Documents and Policies tabs that used them were
+removed from the company profile on request. It is already applied. Nothing
+in the app reads those tables today. Leaving them is harmless; dropping them
+is your call.
+
+
+--------------------------------------------------------------------------------
+5. WHY THERE IS NO 083
+--------------------------------------------------------------------------------
+
+The Wall of Fame bundle assumed a migration 083 providing can(uuid,text,text)
+and explain_access(). It is in neither this repository nor the database.
+
+can() is genuinely load-bearing: 084 calls it at five sites. explain_access()
+is called nowhere in 084-087 and is provided for completeness.
+
+Rather than invent a second permission system, 082 reads the one this app
+already has and populates: ess_accounts, ess_roles, ess_user_roles and
+role_permissions (module + NONE/VIEW/EDIT/FULL). can() is a reading of that
+model. Two sources of truth about who may do what is the worst possible
+thing to have two of.
+
+The number 083 is left free in case the original ever arrives.
+
+ONE QUESTION ON 082, and it is the only assumption in that file that would
+silently WIDEN access if I have it wrong:
+
+    is_ezer_staff() identifies EZER's own staff as
+        ess_roles.role_code = 'ADMIN_SUPER'  with an ACTIVE ess_account.
+
+    That is the code seeded in migration 027. If EZER staff are identified
+    some other way, tell me and I will change it. Everything that only EZER
+    may do — activating the module for a company — hangs off that one check.
+
+
+--------------------------------------------------------------------------------
+6. VERIFY IT WORKED
+--------------------------------------------------------------------------------
+
+Run these after the eight migrations. Every one should return a row.
+
+    -- 082: the access floor
+    select count(*) from access_permission_map;              -- expect 20
+    select can(null, 'wof.view', 'self');                    -- expect false
+
+    -- 084: the module's own tables
+    select count(*) from information_schema.tables
+     where table_schema='public' and table_name like 'wall%';        -- expect 5+
+    select count(*) from wall_permissions;                   -- expect 19
+
+    -- 084: the rule that must never move
+    select conname from pg_constraint
+     where conrelid = 'wall_config'::regclass
+       and pg_get_constraintdef(oid) ilike '%payout_linkage%';
+    -- must return a CHECK pinning payout_linkage = false
+
+    -- 086 / 087
+    select count(*) from shoutout_categories;                -- 0 until seeded
+    select count(*) from information_schema.columns
+     where table_name='recognition_comments'
+       and column_name in ('parent_comment_id','mentions');  -- expect 2
+
+    -- 087: no approval may enter the recognition inbox
+    select pg_get_constraintdef(oid) from pg_constraint
+     where conrelid = 'wall_inbox_events'::regclass
+       and pg_get_constraintdef(oid) ilike '%event_type%';
+    -- seven values, none of them an approval
+
+    -- 075 / 079
+    select count(*) from ess_notification_catalogue;
+    select count(*) from company_groups;
+
+If any of those fail, stop and tell me what the error was rather than
+adapting the SQL — the app is written against these exact shapes.
+
+
+--------------------------------------------------------------------------------
+7. THE TWO RULES THE SCHEMA ENFORCES ON PURPOSE
+--------------------------------------------------------------------------------
+
+RECOGNITION NEVER TOUCHES PAY. wall_config.payout_linkage is pinned false by
+a CHECK constraint, mirroring the locked PMS decision that performance
+management here is developmental only. No setting unlocks it. Please do not
+add a column, a report or an export that connects recognition points, badges
+or awards to compensation — if a requirement seems to ask for it, raise it.
+
+THE DIRECT CHANNEL CARRIES APPRECIATION AND NOTHING ELSE. wall_messages is
+not a chat table. A note requires a category, the recipient gets exactly one
+thank-back, and there is no path to an open thread. That is written into
+send_appreciation() and thank_for_appreciation(). Free-form messaging inside
+an HRMS is a harassment vector and a records-retention problem, and HR ends
+up owning both. If somebody asks for general chat, it is a different product
+with a different risk profile.
+
+
+--------------------------------------------------------------------------------
+8. IF SOMETHING GOES WRONG
+--------------------------------------------------------------------------------
+
+42501, insufficient privilege, on a config table write
+    The connection has no acting employee. The write triggers depend on it:
+        select set_config('app.current_employee_id', '<uuid>', true);
+    For a migration or a seed run, set app.service_context to 'true' instead
+    — enforce_wall_admin() lets service jobs through on that.
+
+PGRST205 or 42P01, relation does not exist
+    A migration did not run, or ran into an error partway. The files are
+    idempotent; run the whole file again.
+
+PGRST202, could not find the function
+    Either the function is genuinely absent, or you called it with different
+    arguments. Check pg_proc as in section 2 before concluding it is missing
+    — I made that mistake twice while preparing this.
+
+Everything reads as empty but nothing errors
+    Almost always wall_config.module_enabled is still false, or
+    seed_wall_defaults() has not been called for that company. The screens
+    are built to show an honest "not switched on yet" rather than a blank.
+
+CHANGES.md in this folder explains every code change behind these
+migrations, and what breaks if a particular one is skipped.

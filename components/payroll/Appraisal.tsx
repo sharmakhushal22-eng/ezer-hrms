@@ -11,28 +11,31 @@ import {
   appraisalBreakup, findEmployeeForAppraisal, saveAppraisal, loadAppraisals, backMonths,
   type AppraisalBreakup, type EmployeeForAppraisal, type AppraisalRecord,
 } from '@/lib/payroll/appraisal'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  navy: '#1E1B4B', purple: '#7C3AED', purpleD: '#3C3489', card: '#FFFFFF',
-  border: '#E9E7F5', muted: '#6B7280', green: '#059669', greenBg: '#ECFDF5', greenBd: '#A7F3D0',
-  amber: '#B45309', amberBg: '#FFFBEB', amberBd: '#FDE68A',
-  red: '#DC2626', redBg: '#FEF2F2', purpleBg: '#EEEDFE', gray: '#F8F7FF',
+  navy: TK.ink, purple: TK.brand, purpleD: TK.brandDeep, card: TK.surface,
+  border: TK.line, muted: TK.muted, green: TK.positive, greenBg: TK.positiveTint, greenBd: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, amberBd: TK.warningTint,
+  red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
 
 const inp: React.CSSProperties = {
   width: '100%', padding: '9px 11px', border: `1px solid #DDD6FE`, borderRadius: 7,
-  fontSize: 12.5, boxSizing: 'border-box', fontFamily: font, outline: 'none',
-  background: '#FAFAF8', color: C.navy,
+  fontSize: 13, boxSizing: 'border-box', fontFamily: font, outline: 'none',
+  background: TK.sunken, color: C.navy,
 }
 const lbl: React.CSSProperties = {
   fontSize: 10, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase',
   letterSpacing: '.04em', display: 'block', marginBottom: 4,
 }
 const card: React.CSSProperties = {
-  background: C.card, border: `1px solid ${C.border}`, borderRadius: 12,
-  padding: '16px 18px', marginBottom: 14, boxShadow: '0 1px 6px rgba(124,58,237,0.07)',
+  background: C.card, border: `1px solid ${C.border}`, borderRadius: 14,
+  padding: '16px 18px', marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)',
 }
 
 // ── Live breakup table ─────────────────────────────────────────────────────
@@ -82,7 +85,7 @@ function BreakupTable({ prev, next }: { prev: AppraisalBreakup | null; next: App
         </tbody>
       </table>
       {next.special_allowance_monthly < 0 && (
-        <div style={{ fontSize: 11.5, color: C.red, background: C.redBg, padding: '9px 12px' }}>
+        <div style={{ fontSize: 12, color: C.red, background: C.redBg, padding: '9px 12px' }}>
           Special Allowance is negative — Basic, HRA and Flexi together already exceed the fixed
           monthly. Raise the CTC or reduce the flexi declaration before saving.
         </div>
@@ -187,19 +190,19 @@ export default function Appraisal() {
   const tabBtn = (id: typeof tab, label: string) => (
     <button key={id} onClick={() => { setTab(id); if (id === 'report' && !report.length) loadReport() }}
       style={{
-        padding: '9px 16px', borderRadius: 9, fontFamily: font, fontSize: 12.5, fontWeight: 700,
+        padding: '9px 16px', borderRadius: 10, fontFamily: font, fontSize: 13, fontWeight: 700,
         cursor: 'pointer', border: `1px solid ${tab === id ? C.purple : C.border}`,
-        background: tab === id ? C.purple : '#fff', color: tab === id ? '#fff' : C.navy,
+        background: tab === id ? C.purple: TK.surface, color: tab === id ? TK.surface : C.navy,
       }}>{label}</button>
   )
 
   return (
     <div style={{ fontFamily: font, fontSize: 13, color: C.navy, maxWidth: 1000 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-        <div style={{ width: 44, height: 44, borderRadius: 12, background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(124,58,237,0.28)' }}>📈</div>
+        <div style={{ width: 44, height: 44, borderRadius: 14, background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, boxShadow: '0 3px 10px rgba(37,99,235,0.28)' }}></div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 18, fontWeight: 800, lineHeight: 1.1 }}>Appraisal &amp; Arrear</div>
-          <div style={{ fontSize: 10.5, color: C.muted, marginTop: 3 }}>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
             Revise CTC with an effective date — back months become head-wise arrear in the pay-out month
           </div>
         </div>
@@ -211,12 +214,12 @@ export default function Appraisal() {
         {tabBtn('report', 'Report')}
       </div>
 
-      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 9, padding: '10px 12px', marginBottom: 12 }}>{err}</div>}
+      {err && <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '10px 12px', marginBottom: 12 }}>{err}</div>}
 
       {tab === 'employee' && (
         <>
           <div style={card}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Employee</div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Employee</div>
             <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <label style={lbl}>Employee code</label>
@@ -225,13 +228,13 @@ export default function Appraisal() {
                   onKeyDown={e => { if (e.key === 'Enter') lookup() }} />
               </div>
               <button onClick={lookup} disabled={busy || !code.trim()}
-                style={{ padding: '9px 18px', borderRadius: 8, border: 'none', fontFamily: font, fontSize: 12.5, fontWeight: 700, color: '#fff', background: !code.trim() ? '#D8D3F5' : C.purple, cursor: !code.trim() ? 'not-allowed' : 'pointer' }}>
+                style={{ padding: '9px 18px', borderRadius: 10, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: !code.trim() ? TK.brandTint : C.purple, cursor: !code.trim() ? 'not-allowed' : 'pointer' }}>
                 {busy ? 'Loading…' : 'Load'}
               </button>
             </div>
             {lookupErr && <div style={{ fontSize: 12, color: C.red, marginTop: 8 }}>{lookupErr}</div>}
             {emp && (
-              <div style={{ marginTop: 12, background: C.gray, borderRadius: 9, padding: '11px 13px', display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
+              <div style={{ marginTop: 12, background: C.gray, borderRadius: 10, padding: '11px 13px', display: 'flex', gap: 20, flexWrap: 'wrap', fontSize: 12 }}>
                 <span><b>{emp.full_name}</b> · {emp.emp_code}</span>
                 <span style={{ color: C.muted }}>{emp.company_name}</span>
                 <span style={{ color: C.muted }}>{emp.designation || '—'}</span>
@@ -242,7 +245,7 @@ export default function Appraisal() {
 
           {emp && (
             <div style={card}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10 }}>Revision</div>
+              <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Revision</div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>
                 <div><label style={lbl}>Hike %</label>
                   <input style={inp} type="number" value={hike} onChange={e => onHike(e.target.value)} placeholder="e.g. 12" /></div>
@@ -263,7 +266,7 @@ export default function Appraisal() {
               {/* The whole point of the screen — say which months become arrear BEFORE Save,
                   not after somebody questions the payslip. */}
               {months.length > 0 && (
-                <div style={{ marginTop: 12, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 9, padding: '11px 13px', fontSize: 11.5, color: '#92400E', lineHeight: 1.6 }}>
+                <div style={{ marginTop: 12, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '11px 13px', fontSize: 12, color: TK.warning, lineHeight: 1.6 }}>
                   <b>{months.length} back month{months.length === 1 ? '' : 's'} → arrear:</b> {months.join(', ')}.
                   <br />All of those months were already paid at the old rate. The difference is
                   worked out head-wise (Basic / HRA / Special) and lands in the arrear columns of
@@ -272,19 +275,19 @@ export default function Appraisal() {
                 </div>
               )}
               {effFrom && payOut && months.length === 0 && (
-                <div style={{ marginTop: 12, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '11px 13px', fontSize: 11.5, color: '#047857' }}>
+                <div style={{ marginTop: 12, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '11px 13px', fontSize: 12, color: TK.positive }}>
                   No back months — the raise takes effect in the pay-out month itself, so there is no arrear.
                 </div>
               )}
 
               <div style={{ display: 'flex', gap: 10, marginTop: 14, alignItems: 'center' }}>
                 <button onClick={save} disabled={!canSave}
-                  style={{ padding: '11px 24px', borderRadius: 9, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: '#fff', background: canSave ? 'linear-gradient(120deg,#7C3AED,#5B21B6)' : '#D8D3F5', cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? '0 3px 10px rgba(124,58,237,0.22)' : 'none' }}>
-                  {busy ? 'Saving…' : '💾 Save appraisal'}
+                  style={{ padding: '11px 24px', borderRadius: 10, border: 'none', fontFamily: font, fontSize: 13, fontWeight: 700, color: TK.onAccent, background: canSave ? 'linear-gradient(120deg,#2563EB,#5B21B6)' : TK.brandTint, cursor: canSave ? 'pointer' : 'not-allowed', boxShadow: canSave ? '0 3px 10px rgba(37,99,235,0.22)' : 'none' }}>
+                  {busy ? 'Saving…' : 'Save appraisal'}
                 </button>
                 {!canSave && emp && <span style={{ fontSize: 11, color: C.muted }}>New CTC, effective date and pay-out month are all needed.</span>}
               </div>
-              {msg && <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 9, padding: '10px 13px', lineHeight: 1.6 }}>✓ {msg}</div>}
+              {msg && <div style={{ marginTop: 12, fontSize: 12, fontWeight: 600, color: C.green, background: C.greenBg, border: `1px solid ${C.greenBd}`, borderRadius: 10, padding: '10px 13px', lineHeight: 1.6 }}>✓ {msg}</div>}
             </div>
           )}
         </>
@@ -292,7 +295,7 @@ export default function Appraisal() {
 
       {tab === 'bulk' && (
         <div style={{ ...card, textAlign: 'center', padding: '38px 24px' }}>
-          <div style={{ fontSize: 30, marginBottom: 10 }}>📤</div>
+          <div style={{ fontSize: 30, marginBottom: 10 }}></div>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Bulk Upload</div>
           <div style={{ fontSize: 12, color: C.muted, maxWidth: 480, margin: '0 auto', lineHeight: 1.6 }}>
             Not built yet. One appraisal at a time goes through Employee Wise, which validates the
@@ -305,9 +308,9 @@ export default function Appraisal() {
       {tab === 'report' && (
         <div style={card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700 }}>Saved appraisals</div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>Saved appraisals</div>
             <button onClick={loadReport} disabled={repBusy}
-              style={{ marginLeft: 'auto', padding: '6px 13px', borderRadius: 8, border: `1px solid ${C.border}`, background: '#fff', color: C.purpleD, fontWeight: 700, fontSize: 11.5, cursor: 'pointer', fontFamily: font }}>
+              style={{ marginLeft: 'auto', padding: '6px 13px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: font }}>
               {repBusy ? 'Loading…' : '⟳ Refresh'}
             </button>
           </div>
@@ -341,10 +344,10 @@ export default function Appraisal() {
                           {bm.length ? bm.join(', ') : '—'}
                         </td>
                         <td style={td}>
-                          <span style={{ fontSize: 9.5, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: r.status === 'ARREAR_PROCESSED' ? C.greenBg : C.purpleBg, color: r.status === 'ARREAR_PROCESSED' ? C.green : C.purpleD }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 99, background: r.status === 'ARREAR_PROCESSED' ? C.greenBg : C.purpleBg, color: r.status === 'ARREAR_PROCESSED' ? C.green : C.purpleD }}>
                             {r.status}
                           </span>
-                          {r.requires_data_sync && <div style={{ fontSize: 9.5, color: C.amber, marginTop: 2 }}>needs Data Sync</div>}
+                          {r.requires_data_sync && <div style={{ fontSize: 10, color: C.amber, marginTop: 2 }}>needs Data Sync</div>}
                         </td>
                       </tr>
                     )
@@ -356,7 +359,7 @@ export default function Appraisal() {
         </div>
       )}
 
-      <div style={{ fontSize: 10.5, color: C.purpleD, background: C.purpleBg, borderRadius: 9, padding: '11px 13px', lineHeight: 1.6 }}>
+      <div style={{ fontSize: 11, color: C.purpleD, background: C.purpleBg, borderRadius: 10, padding: '11px 13px', lineHeight: 1.6 }}>
         <b>The effective date and the pay-out month can differ.</b> The months in between were
         already paid at the old rate, so their difference becomes <b>head-wise arrear</b> and is
         added to the pay-out month&apos;s salary — Basic, HRA and Special each in their own arrear column.

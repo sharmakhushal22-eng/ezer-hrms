@@ -2,6 +2,9 @@
 // Server component — validates token, passes data to client wizard
 import { createClient } from '@supabase/supabase-js'
 import OnboardingClient from './client'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,10 +12,10 @@ const supa = createClient(
 )
 
 const SCREEN = (title: string, subtitle: string, emoji: string) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: '#F5F3FF', fontFamily: '"DM Sans",sans-serif' }}>
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: TK.canvas, fontFamily: '"DM Sans",sans-serif' }}>
     <div style={{ textAlign: 'center', padding: 40 }}>
       <div style={{ fontSize: 56, marginBottom: 16 }}>{emoji}</div>
-      <div style={{ fontSize: 22, fontWeight: 600, color: '#1E1B4B', marginBottom: 8 }}>{title}</div>
+      <div style={{ fontSize: 22, fontWeight: 600, color: TK.ink, marginBottom: 8 }}>{title}</div>
       <div style={{ fontSize: 14, color: '#21252bff', lineHeight: 1.7 }}>{subtitle}</div>
     </div>
   </div>
@@ -34,19 +37,19 @@ export default async function OnboardingPage({ params }: { params: Promise<{ tok
     .single()
 
   if (error || !candidate) {
-    return SCREEN('Invalid Link', 'This onboarding link is not valid or has expired. Please contact HR for a new link.', '❌')
+    return SCREEN('Invalid Link', 'This onboarding link is not valid or has expired. Please contact HR for a new link.', '')
   }
 
   if (new Date(candidate.token_expires_at) < new Date()) {
-    return SCREEN('Link Expired', 'This onboarding link has expired (24 hours). Please contact HR to resend the link.', '⏰')
+    return SCREEN('Link Expired', 'This onboarding link has expired (24 hours). Please contact HR to resend the link.', '')
   }
 
   if (candidate.status === 'EMPLOYEE_CREATED') {
-    return SCREEN('Already Complete ✓', 'Your onboarding is complete and your Employee ID has been generated. Check your email for ESS access details.', '🎉')
+    return SCREEN('Already Complete ✓', 'Your onboarding is complete and your Employee ID has been generated. Check your email for ESS access details.', '')
   }
 
   if (candidate.status === 'SUBMITTED') {
-    return SCREEN('Submitted! Under Review', 'Your joining form has been submitted. HR is reviewing it and will generate your Employee ID shortly.', '📋')
+    return SCREEN('Submitted! Under Review', 'Your joining form has been submitted. HR is reviewing it and will generate your Employee ID shortly.', '')
   }
 
   // Fetch company details

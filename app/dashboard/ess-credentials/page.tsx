@@ -5,15 +5,18 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
+// Design tokens, aliased as TK — many of these files already declare
+// their own C. See lib/ui/tokens.ts.
+import { C as TK } from '@/lib/ui'
 
 const C = {
-  bg: '#F5F3FF', navy: '#1E1B4B', purple: '#7C3AED', purpleDark: '#3C3489', border: '#E9E7F5', muted: '#6B7280',
-  card: '#FFFFFF', green: '#059669', greenBg: '#ECFDF5', red: '#DC2626', amber: '#B45309', amberBg: '#FFFBEB', purpleBg: '#EEEDFE',
+  bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
+  card: TK.surface, green: TK.positive, greenBg: TK.positiveTint, red: TK.critical, amber: TK.warning, amberBg: TK.warningTint, purpleBg: TK.brandTint,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, background: '#FAFAF8', color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
-const pri: React.CSSProperties = { padding: '9px 18px', background: C.purple, color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
-const sec: React.CSSProperties = { padding: '8px 14px', background: '#fff', color: C.navy, border: `1px solid ${C.border}`, borderRadius: 8, cursor: 'pointer', fontSize: 13, fontFamily: font }
+const inp: React.CSSProperties = { padding: '8px 11px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, background: TK.sunken, color: C.navy, outline: 'none', fontFamily: font, boxSizing: 'border-box' }
+const pri: React.CSSProperties = { padding: '9px 18px', background: C.purple, color: TK.onAccent, border: 'none', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: font }
+const sec: React.CSSProperties = { padding: '8px 14px', background: TK.surface, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer', fontSize: 13, fontFamily: font }
 
 export default function EssCredentialsPage() {
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([])
@@ -38,10 +41,17 @@ export default function EssCredentialsPage() {
       .then(({ data }) => { setCompanies(data || []); if (data?.length) setCompanyId(data[0].id) })
   }, [])
   useEffect(() => {
-    if (!companyId) return
+    // '' = All companies. The generate API already reads a missing company_id the
+    // same way, so the counters and the button act on the same set of people.
     ;(async () => {
-      const { count: total } = await supabase.from('employees').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('employment_status', 'Active').neq('is_test', true)
-      const { data: emps } = await supabase.from('employees').select('id').eq('company_id', companyId).eq('employment_status', 'Active').neq('is_test', true)
+      const base = () => {
+        let q = supabase.from('employees').select('id', { count: 'exact' }).eq('employment_status', 'Active').neq('is_test', true)
+        return companyId ? q.eq('company_id', companyId) : q
+      }
+      const { count: total } = await base().limit(0)
+      const { data: emps } = await (companyId
+        ? supabase.from('employees').select('id').eq('company_id', companyId).eq('employment_status', 'Active').neq('is_test', true)
+        : supabase.from('employees').select('id').eq('employment_status', 'Active').neq('is_test', true))
       const ids = (emps || []).map((e: any) => e.id)
       let withPw = 0
       if (ids.length) { const { count } = await supabase.from('ess_accounts').select('id', { count: 'exact', head: true }).in('employee_id', ids).not('password_hash', 'is', null); withPw = count || 0 }
@@ -51,7 +61,7 @@ export default function EssCredentialsPage() {
 
   async function generate(mode: 'all' | 'selected') {
     setError(''); setBusy(true); setRows([]); setSummary(null)
-    let body: any = { reset, performedBy: 'HR', company_id: companyId }
+    let body: any = { reset, performedBy: 'HR', ...(companyId ? { company_id: companyId } : {}) }
     if (mode === 'all') body.all = true
     else {
       const codes = empCodes.split(/[\s,]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
@@ -80,18 +90,20 @@ export default function EssCredentialsPage() {
 
   return (
     <div style={{ padding: 24, background: C.bg, minHeight: '100vh', color: C.navy, fontFamily: font, fontSize: 13 }}>
+      <div className="ez-page-head">
       <div style={{ fontSize: 22, fontWeight: 700 }}>ESS Login Credentials</div>
-      <div style={{ fontSize: 12, color: C.muted, marginTop: 2, marginBottom: 16 }}>Generate employee self-service logins in bulk · temp password = employee code · forced change on first login</div>
-
-      <div style={{ background: C.amberBg, border: '1px solid #FDE68A', borderRadius: 10, padding: '11px 14px', marginBottom: 16, fontSize: 12.5, color: C.amber, display: 'flex', gap: 8 }}>
-        <span>🔒</span><span><b>Confidential.</b> Each employee&apos;s temporary password is their own <b>employee code</b> (e.g. SRS0001). They must set a new password on first login. Share the exported list securely, then delete it.</span>
+      <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Generate employee self-service logins in bulk · temp password = employee code · forced change on first login</div>
       </div>
 
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, padding: 18, marginBottom: 14, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' }}>
+      <div style={{ background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '11px 14px', marginBottom: 16, fontSize: 13, color: C.amber, display: 'flex', gap: 8 }}>
+        <span></span><span><b>Confidential.</b> Each employee&apos;s temporary password is their own <b>employee code</b> (e.g. SRS0001). They must set a new password on first login. Share the exported list securely, then delete it.</span>
+      </div>
+
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: 18, marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
           <div>
             <label style={{ fontSize: 11, color: C.purpleDark, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Company</label>
-            <select style={{ ...inp, minWidth: 240 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
+            <select style={{ ...inp, minWidth: 240 }} value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
           </div>
           <div style={{ fontSize: 12, color: C.muted }}>
             <div><b style={{ color: C.navy }}>{counts.total}</b> active employees</div>
@@ -103,7 +115,7 @@ export default function EssCredentialsPage() {
         </div>
 
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <button style={{ ...pri, opacity: busy ? .6 : 1 }} disabled={busy || !companyId} onClick={() => generate('all')}>{busy ? 'Generating…' : `⚡ Generate for all active employees`}</button>
+          <button style={{ ...pri, opacity: busy ? .6 : 1 }} disabled={busy} onClick={() => generate('all')}>{busy ? 'Generating…' : companyId ? `⚡ Generate for all active employees` : `⚡ Generate for all active employees (every company)`}</button>
           <span style={{ color: C.muted, fontSize: 12 }}>or</span>
           <div style={{ flex: 1, minWidth: 260 }}>
             <input style={{ ...inp, width: '100%', fontFamily: 'monospace' }} placeholder="Specific codes: SRS0001, SSM0002, …" value={empCodes} onChange={e => setEmpCodes(e.target.value)} />
@@ -116,11 +128,11 @@ export default function EssCredentialsPage() {
             onClick={() => generate('selected')}
           >Generate for these</button>
         </div>
-        {error && <div style={{ marginTop: 10, fontSize: 12.5, color: C.red, background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 12px' }}>⚠ {error}</div>}
+        {error && <div style={{ marginTop: 10, fontSize: 13, color: C.red, background: TK.criticalTint, border: `1px solid ${TK.criticalTint}`, borderRadius: 10, padding: '9px 12px' }}>⚠ {error}</div>}
       </div>
 
       {summary && (
-        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, overflow: 'hidden', marginBottom: 14 }}>
           <div style={{ padding: '12px 16px', borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>Credentials generated</div>
             <span style={{ fontSize: 11, color: C.green }}>✓ {summary.generated} issued</span>
@@ -147,10 +159,10 @@ export default function EssCredentialsPage() {
                               try { await navigator.clipboard.writeText(link) } catch { /* clipboard best-effort */ }
                               setCopiedIdx(i); setTimeout(() => setCopiedIdx(c => (c === i ? null : c)), 1800)
                             }}
-                            style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, border: `1px solid ${C.border}`, background: copiedIdx === i ? C.greenBg : '#fff', color: copiedIdx === i ? C.green : C.purpleDark, fontWeight: 600, cursor: 'pointer', fontFamily: font }}
-                          >{copiedIdx === i ? '✓ Copied' : '🔗 Copy link'}</button>
+                            style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, border: `1px solid ${C.border}`, background: copiedIdx === i ? C.greenBg: TK.surface, color: copiedIdx === i ? C.green : C.purpleDark, fontWeight: 600, cursor: 'pointer', fontFamily: font }}
+                          >{copiedIdx === i ? 'Copied' : 'Copy link'}</button>
                         </span>
-                      ) : <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: '#FEF2F2', color: C.red, fontWeight: 600 }}>{r.error || 'Error'}</span>}
+                      ) : <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: TK.criticalTint, color: C.red, fontWeight: 600 }}>{r.error || 'Error'}</span>}
                     </td>
                   </tr>
                 ))}

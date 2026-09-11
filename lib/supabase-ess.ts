@@ -51,7 +51,7 @@ export async function loadOrgUnits(): Promise<{ companies: OrgUnit[]; locations:
 export async function loadUsers(): Promise<EssUser[]> {
   const [{ data: emps }, { data: accts }, { data: ur }, { data: roles }] = await Promise.all([
     supabase.from('employees')
-      .select('id, emp_code, full_name, designation, company_id, location_id, department_id, date_of_resignation, last_working_date, departments(dept_name), companies(company_name), locations!location_id(location_name)')
+      .select('id, emp_code, full_name, designation, company_id, location_id, department_id, date_of_resignation, last_working_date, departments!employees_department_id_fkey(dept_name), companies!employees_company_id_fkey(company_name), locations!location_id(location_name)')
       .order('emp_code'),
     supabase.from('ess_accounts').select('*'),
     supabase.from('ess_user_roles').select('ess_account_id, role_id').eq('is_active', true),
@@ -147,6 +147,10 @@ export async function endImpersonation(logId: string) {
 // PHASE 2 — Employee Portal data
 // ════════════════════════════════════════════════════════════════
 export interface EmployeeDetail {
+  /** EMP_FIELDS fetches the whole record so ESS can render the same Personal /
+   *  Employment / Statutory / Bank screen the Employee Master shows. The named
+   *  fields below are the ones this module derives or guarantees. */
+  [k: string]: any
   id: string; emp_code: string; full_name: string; first_name: string | null; last_name: string | null
   designation: string | null; grade: string | null
   gender: string | null; date_of_birth: string | null; blood_group: string | null; marital_status: string | null
@@ -171,12 +175,27 @@ export interface LetterRequest { id: string; letter_type: string; purpose: strin
 export interface Announcement { id: string; title: string; body: string | null; category: string | null; published_at: string }
 export interface Kudo { id: string; from_name?: string; message: string | null; badge: string | null; points: number; created_at: string }
 
-const EMP_FIELDS = `id, emp_code, full_name, first_name, last_name, designation, grade,
-  gender, date_of_birth, blood_group, marital_status, mobile, personal_email, office_email,
+// Widened so ESS can render components/employees/EmployeeProfileView — the same
+// Personal / Employment / Statutory / Bank screen HR sees in the Employee Master.
+// An employee reading their own record should not get a thinner version of it.
+// Nothing sensitive is added: Aadhaar and the bank account are the masked last-4
+// columns, exactly as the master screen shows them.
+const EMP_FIELDS = `id, emp_code, common_code, full_name, first_name, last_name, designation, grade,
+  gender, date_of_birth, blood_group, marital_status, nationality, religion, birth_place,
+  father_name, mother_name, spouse_name,
+  mobile, alternate_mobile, personal_email, office_email,
+  res_address1, res_city, res_state, res_pin,
+  perm_address1, perm_city, perm_state, perm_pin,
+  emergency_name, emergency_relation, emergency_mobile,
+  emergency2_name, emergency2_relation, emergency2_mobile,
   pan_number, aadhar_last4, uan_number, group_doj, company_doj, confirmation_status,
-  employment_status, employment_type, l1_manager_id, hr_manager_id,
-  date_of_resignation, last_working_date,
-  departments(dept_name), companies(company_name), locations!location_id(location_name, city)`
+  employment_status, employment_type, collar_type, employee_function, employee_category,
+  notice_period_days, intern_pay, consultant_pay, contract_pay,
+  company_id, l1_manager_id, hr_manager_id,
+  pf_applicable, esic_applicable, pt_applicable, lwf_applicable,
+  bank_name, account_type, bank_account_last4, ifsc_code,
+  date_of_resignation, last_working_date, rehire_eligible, blacklisted,
+  departments!employees_department_id_fkey(dept_name), companies!employees_company_id_fkey(company_name), locations!location_id(location_name, city)`
 
 export async function loadEmployeeDetail(employeeId: string): Promise<EmployeeDetail | null> {
   const { data: e } = await supabase.from('employees').select(EMP_FIELDS).eq('id', employeeId).maybeSingle()
@@ -192,6 +211,11 @@ export async function loadEmployeeDetail(employeeId: string): Promise<EmployeeDe
   const { data: photoRow } = await supabase.from('employees').select('profile_photo').eq('id', employeeId).maybeSingle()
   const x: any = e
   return {
+    // Spread first so every column EMP_FIELDS fetches reaches the shared profile
+    // sections (components/employees/EmployeeProfileView), including the nested
+    // departments / companies / locations objects they read. The explicit fields
+    // below still win — they are derived, not raw.
+    ...x,
     id: x.id, emp_code: x.emp_code, full_name: x.full_name, first_name: x.first_name, last_name: x.last_name,
     designation: x.designation, grade: x.grade, gender: x.gender, date_of_birth: x.date_of_birth,
     blood_group: x.blood_group, marital_status: x.marital_status, mobile: x.mobile,
@@ -216,7 +240,7 @@ export async function loadDirectory(): Promise<DirectoryEntry[]> {
   // Throw rather than return [] — a rejected query previously rendered as a silently
   // empty directory, which is indistinguishable from "no colleagues found".
   const { data, error } = await supabase.from('employees')
-    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, blacklisted, last_working_date, departments(dept_name), locations!location_id(location_name), companies(company_name)')
+    .select('id, emp_code, full_name, designation, mobile, office_email, personal_email, blacklisted, last_working_date, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name), companies!employees_company_id_fkey(company_name)')
     .order('full_name')
   if (error) throw new Error(error.message)
   const t0 = new Date(); t0.setHours(0, 0, 0, 0)
@@ -381,7 +405,7 @@ export async function loadPendingForRole(role_id: string): Promise<{ types: stri
   const essTypes = types.filter((t: string) => ESS_LIVE_TYPES.includes(t))
   if (essTypes.length) {
     const { data } = await supabase.from('ess_service_requests')
-      .select('*, employees(full_name, emp_code, departments(dept_name))')
+      .select('*, employees(full_name, emp_code, departments!employees_department_id_fkey(dept_name))')
       .in('request_type', essTypes).in('status', ['PENDING', 'IN_REVIEW'])
       .order('submitted_at', { ascending: false })
     for (const r of (data || []) as any[]) items.push({

@@ -1,10 +1,20 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
+import EmployeeProfileSections from '@/components/employees/EmployeeProfileView'
+import { UPPERCASE, fieldError } from '@/lib/hr/validate'
+// This page keeps its own local Badge / Field / Section, so the system's
+// equivalents are aliased where the names would clash.
+import {
+  Page as UIPage, PageHeader, Button, Person, Th, Td, Tr, Empty, SkeletonRows,
+  Badge as Chip, inputStyle, tone,
+  C, F, W, S, R, E, M, numeric, eyebrow,
+  IconPlus, IconUpload, IconDownload, IconSearch, IconClose, IconEmployees, IconChevronDown,
+} from '@/lib/ui'
 
 // ─── Types ────────────────────────────────────────────────────
 interface Employee {
@@ -28,50 +38,70 @@ interface Employee {
 }
 
 // ─── Palette ──────────────────────────────────────────────────
+// Bound to the design system rather than restated. Every style helper below
+// reads from here, so the whole page follows lib/ui/tokens.ts.
 const P = {
-  navy:'#1E1B4B', purple:'#7C3AED', purpleDark:'#3C3489',
-  purpleBg:'#EEEDFE', purpleLight:'#F5F3FF',
-  border:'#E9E7F5', card:'#FFFFFF', page:'#F5F3FF',
-  text:'#1E1B4B', muted:'#6B6B7B', green:'#059669', greenBg:'#ECFDF5',
-  red:'#DC2626', redBg:'#FEF2F2', amber:'#D97706', amberBg:'#FFFBEB',
+  navy:C.ink, purple:C.brand, purpleDark:C.brandDeep,
+  purpleBg:C.brandTint, purpleLight:C.sunken,
+  border:C.line, card:C.surface, page:C.canvas,
+  text:C.ink, muted:C.muted, green:C.positive, greenBg:tone('positive').bg,
+  red:C.critical, redBg:tone('critical').bg, amber:C.warning, amberBg:tone('warning').bg,
 }
 
+/**
+ * Grade is an ordered scale — L1 is not "a different kind of thing" from M3,
+ * it is further along. The old map gave each grade an unrelated hue, which
+ * made a ranked axis look categorical. These are one violet ramp, dark at the
+ * senior end, so a column of them reads as a gradient rather than confetti.
+ */
+// Grade is an ordered scale, so the colour deepens with seniority rather than
+// each grade taking an unrelated hue. Held in theme variables as bg/fg PAIRS
+// so both halves flip together and stay readable in dark — the previous
+// hardcoded violet ramp measured 2.19:1 on dark, which is invisible.
+const g = (n: number) => ({ bg: `var(--ez-grade-${n}-bg)`, color: `var(--ez-grade-${n}-fg)` })
 const GRADE_COLORS: Record<string,{bg:string;color:string}> = {
-  L2:{bg:'#EDE9FE',color:'#7C3AED'}, L1:{bg:'#DDD6FE',color:'#6D28D9'},
-  M3:{bg:'#DBEAFE',color:'#1D4ED8'}, M2:{bg:'#E0F2FE',color:'#0369A1'},
-  M1:{bg:'#CCFBF1',color:'#0D9488'}, E3:{bg:'#DCFCE7',color:'#16A34A'},
-  E2:{bg:'#ECFCCB',color:'#65A30D'}, E1:{bg:'#FEF3C7',color:'#D97706'},
-  W2:{bg:'#FEE2E2',color:'#DC2626'}, W1:{bg:'#FFE4E6',color:'#BE123C'},
+  L1: g(1), L2: g(1),
+  M1: g(2), M2: g(3), M3: g(3),
+  E1: g(4), E2: g(5), E3: g(5),
+  W1: g(6), W2: g(6),
 }
+// Employment type IS categorical, so these stay distinct — but drawn from the
+// token palette so they belong to the same world as everything else.
 const TYPE_COLORS: Record<string,{bg:string;color:string}> = {
-  Employee:{bg:'#EDE9FE',color:'#7C3AED'}, Intern:{bg:'#DBEAFE',color:'#1D4ED8'},
-  NAPS:{bg:'#DCFCE7',color:'#16A34A'}, NATS:{bg:'#FEF3C7',color:'#D97706'},
-  Consultant:{bg:'#FEE2E2',color:'#DC2626'}, Contract:{bg:'#F1F5F9',color:'#374151'},
+  Employee:{bg:C.brandTint,color:C.brandDeep},
+  Intern:{bg:C.infoTint,color:C.info},
+  NAPS:{bg:C.positiveTint,color:C.positive},
+  NATS:{bg:C.warningTint,color:C.warning},
+  Consultant:{bg:C.criticalTint,color:C.critical},
+  Contract:{bg:C.sunken,color:C.muted},
 }
 const STATUS_COLORS: Record<string,{bg:string;color:string}> = {
-  Active:{bg:'#DCFCE7',color:'#16A34A'}, Resigned:{bg:'#FEE2E2',color:'#DC2626'},
-  Terminated:{bg:'#FEE2E2',color:'#991B1B'}, Absconding:{bg:'#FEF3C7',color:'#D97706'},
+  Active:{bg:C.positiveTint,color:C.positive},
+  Resigned:{bg:C.criticalTint,color:C.critical},
+  Terminated:{bg:C.criticalTint,color: C.critical},
+  Absconding:{bg:C.warningTint,color:C.warning},
 }
 
 // ─── Inline style helpers ─────────────────────────────────────
 const s = {
-  page:   { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:P.page, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' },
+  page:   { display:'flex' as const, flexDirection:'column' as const, minHeight:'100vh', background:P.page, fontFamily:F.family, fontSize:F.body },
   topbar: { background:P.card, padding:'11px 20px', borderBottom:`1px solid ${P.border}`, display:'flex' as const, alignItems:'center' as const, justifyContent:'space-between' as const, position:'sticky' as const, top:0, zIndex:40 },
-  body:   { flex:1, padding:'16px 20px' },
-  card:   { background:P.card, borderRadius:'12px', border:`1px solid ${P.border}`, marginBottom:'12px' } as React.CSSProperties,
-  inp:    { padding:'8px 10px', border:`1.5px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', outline:'none', background:'#F8F7FF', color:P.text, width:'100%', boxSizing:'border-box' as const },
-  sel:    { padding:'8px 10px', border:`1.5px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', outline:'none', background:'#F8F7FF', color:P.text, cursor:'pointer', width:'100%' } as React.CSSProperties,
-  priBtn: { padding:'8px 16px', background:P.purple, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer', display:'flex' as const, alignItems:'center' as const, gap:'5px' },
-  secBtn: { padding:'8px 14px', background:P.card, color:P.text, border:`1px solid ${P.border}`, borderRadius:'8px', fontSize:'12px', cursor:'pointer' },
-  saveBtn:{ padding:'8px 16px', background:P.green, color:'#fff', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:600 as const, cursor:'pointer', display:'flex' as const, alignItems:'center' as const, gap:'5px' },
+  body:   { flex:1, padding:`${S.lg}px ${S.xl}px ${S.huge}px` },
+  card:   { background:P.card, borderRadius:R.lg, border:`1px solid ${P.border}`, marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
+  inp:    { ...inputStyle(), height:34, fontSize:F.small },
+  sel:    { ...inputStyle(), height:34, fontSize:F.small, cursor:'pointer' } as React.CSSProperties,
+  priBtn: { padding:'0 14px', height:34, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.brand, fontFamily:'inherit' },
+  secBtn: { padding:'0 13px', height:34, background:P.card, color:P.text, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, boxShadow:E.flat, fontFamily:'inherit' },
+  saveBtn:{ padding:'0 14px', height:34, background:C.positive, color:C.onAccent, border:'none', borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', display:'inline-flex' as const, alignItems:'center' as const, gap:6, fontFamily:'inherit' },
 }
 
 const initials = (n: string) => n?.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase() || 'NA'
 const fmt = (v: any) => !v || v === '' ? '—' : String(v)
-const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}) }
+const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); return isNaN(d.getTime()) ? v : d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'2-digit'}).replace(/ /g,' ') }
 
 // ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
 const EMP_TYPES = ['Employee', 'Intern', 'NAPS', 'NATS', 'Consultant', 'Contract']
+
 
 // Export allowlist — only the columns marked "Keep in Report = Y" in the EZER column
 // reference sheet. Encrypted PII (aadhar_encrypted / bank_account_encrypted) is Y in the
@@ -94,10 +124,32 @@ const EXPORT_EMP_COLS = [
 ]
 const EXPORT_NAME_COLS = ['company_name','company_code','department_name','location_name','location_city']
 const mc = {
-  inp:   { width:'100%', padding:'8px 10px', background:'#F8FAFC', border:'1px solid #CBD5E1', borderRadius:'7px', fontSize:'13px', color:'#0F172A', outline:'none', boxSizing:'border-box' as const, fontFamily:'inherit' },
-  lbl:   { fontSize:'10px', fontWeight:600 as const, color:'#64748B', textTransform:'uppercase' as const, letterSpacing:'.04em', display:'block', marginBottom:'3px' },
-  pri:   { padding:'9px 16px', background:'#7C3AED', color:'#fff', border:'none', borderRadius:'8px', fontSize:'13px', fontWeight:600 as const, cursor:'pointer', fontFamily:'inherit' },
-  out:   { padding:'9px 14px', background:'#fff', color:'#475569', border:'1px solid #CBD5E1', borderRadius:'8px', fontSize:'13px', cursor:'pointer', fontFamily:'inherit' },
+  inp:   { ...inputStyle() },
+  lbl:   { ...eyebrow, display:'block', marginBottom:4 } as React.CSSProperties,
+  pri:   { padding:'0 16px', height:36, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', fontFamily:'inherit', boxShadow:E.brand },
+  out:   { padding:'0 14px', height:36, background:C.surface, color:C.ink, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', fontFamily:'inherit' },
+}
+
+// The group-level person key.
+//
+// employees.common_code has no unique constraint and onboarding sets it to the
+// emp_code by default — it is the "common" code, meaning the one that stays the
+// same wherever the person appears. For somebody carried in more than one
+// company that is exactly the link we need: three rows, three company-prefixed
+// emp_codes, one shared common_code.
+//
+// Prefixed with the group's own code (SG for Sharma Group) so it cannot be
+// mistaken for any company's sequence.
+async function nextCommonCode(groupCode: string): Promise<string> {
+  const prefix = (groupCode || 'GRP').toUpperCase()
+  const { data } = await supabase.from('employees').select('common_code').like('common_code', `${prefix}%`)
+  let max = 0
+  const re = new RegExp(`^${prefix}(\\d{4})$`)
+  for (const r of (data || []) as any[]) {
+    const m = String(r.common_code || '').match(re)
+    if (m) max = Math.max(max, parseInt(m[1], 10))
+  }
+  return `${prefix}${String(max + 1).padStart(4, '0')}`
 }
 
 // Next type-wise code from existing employees (no migration dependency, atomic-ish).
@@ -111,44 +163,365 @@ async function nextEmpCode(companyCode: string, companyId: string, employmentTyp
   return buildEmpCode(companyCode || 'EZ', employmentType, max + 1)
 }
 
+// ─── The onboarding field set ────────────────────────────────────────
+//
+// Every field in New-Employee-Field-Checklist.txt, in its order and grouping.
+// Declared as data rather than eighty hand-written inputs: the form renders
+// from this list, so adding a field is one line here and nothing else.
+//
+// All 89 of these already exist as columns on `employees` — checked against the
+// live table, which carries 246. Nothing here needs a migration; the form was
+// simply asking for nine of them.
+//
+// `req` marks the checklist's [REQ]. `cond` marks [COND] — shown always, but
+// captioned so HR knows it only applies in that situation.
+/** Columns that are text[] rather than text. Typed as comma-separated text in
+ *  the form and split on save. */
+const ARRAY_FIELDS = new Set(['hobbies'])
+
+type FType = 'text' | 'date' | 'select' | 'check' | 'number' | 'email' | 'tel'
+interface FieldDef {
+  k: string; label: string; t?: FType; opts?: string[]
+  req?: boolean; cond?: string; span?: 1 | 2 | 3; hint?: string
+}
+interface Section { title: string; note?: string; fields: FieldDef[] }
+
+
+const ONBOARDING_SECTIONS: Section[] = [
+  { title: 'Personal details', fields: [
+    { k:'salutation', label:'Salutation', t:'select', opts:['','Mr','Ms','Mrs','Dr'] },
+    { k:'name_as_per_aadhar', label:'Name as per Aadhaar', req:true, span:2,
+      hint:'Must match Aadhaar exactly — used for PF/UAN and bank validation' },
+    { k:'father_name', label:"Father's name", req:true },
+    { k:'mother_name', label:"Mother's name" },
+    { k:'gender', label:'Gender', t:'select', opts:['','Male','Female','Other'], req:true },
+    { k:'date_of_birth', label:'Date of birth', t:'date', req:true },
+    { k:'blood_group', label:'Blood group', t:'select', opts:['','A+','A-','B+','B-','O+','O-','AB+','AB-'] },
+    { k:'marital_status', label:'Marital status', t:'select', opts:['','Single','Married','Divorced','Widowed'] },
+    { k:'marriage_date', label:'Marriage date', t:'date', cond:'if married' },
+    { k:'spouse_name', label:'Spouse name', cond:'if married' },
+    { k:'spouse_dob', label:'Spouse date of birth', t:'date', cond:'if married' },
+    { k:'religion', label:'Religion' },
+    { k:'nationality', label:'Nationality' },
+    { k:'citizenship', label:'Citizenship' },
+    { k:'place_of_birth', label:'Place of birth' },
+    { k:'domicile', label:'Domicile' },
+    { k:'domicile_state', label:'Domicile state' },
+    { k:'category', label:'Category', t:'select', opts:['','General','OBC','SC','ST','EWS'] },
+    { k:'is_disabled', label:'Differently abled', t:'check', cond:'Section 80U relief' },
+    { k:'disability_type', label:'Disability type', cond:'if differently abled' },
+    { k:'number_of_children', label:'Number of children', t:'number' },
+    { k:'num_dependents', label:'Dependents', t:'number' },
+    { k:'dependent_names', label:'Dependent names', span:2 },
+    { k:'languages', label:'Languages' },
+    { k:'hobbies', label:'Hobbies', hint:'Separate with commas' },
+  ]},
+  { title: 'Contact', fields: [
+    { k:'alternate_mobile', label:'Alternate mobile', t:'tel' },
+    { k:'whatsapp_optin', label:'WhatsApp opt-in', t:'check' },
+  ]},
+  { title: 'Residential address (current)', fields: [
+    { k:'res_address1', label:'Address line 1', req:true, span:2 },
+    { k:'res_address2', label:'Address line 2', span:2 },
+    { k:'res_city', label:'City', req:true },
+    { k:'res_state', label:'State', req:true },
+    { k:'res_pin', label:'PIN', req:true },
+    { k:'res_country', label:'Country' },
+  ]},
+  { title: 'Permanent address', note:'Tick to copy the current address', fields: [
+    { k:'perm_address1', label:'Address line 1', span:2 },
+    { k:'perm_address2', label:'Address line 2', span:2 },
+    { k:'perm_city', label:'City' },
+    { k:'perm_state', label:'State' },
+    { k:'perm_pin', label:'PIN' },
+    { k:'perm_country', label:'Country' },
+  ]},
+  { title: 'Emergency contacts', fields: [
+    { k:'emergency_name', label:'Contact 1 — name', req:true },
+    { k:'emergency_relation', label:'Contact 1 — relation', req:true },
+    { k:'emergency_mobile', label:'Contact 1 — mobile', t:'tel', req:true },
+    { k:'emergency_email', label:'Contact 1 — email', t:'email' },
+    { k:'emergency_address', label:'Contact 1 — address', span:2 },
+    { k:'emergency2_name', label:'Contact 2 — name' },
+    { k:'emergency2_relation', label:'Contact 2 — relation' },
+    { k:'emergency2_mobile', label:'Contact 2 — mobile', t:'tel' },
+    { k:'emergency2_email', label:'Contact 2 — email', t:'email' },
+    { k:'emergency2_address', label:'Contact 2 — address', span:2 },
+  ]},
+  { title: 'Education', fields: [
+    { k:'highest_qualification', label:'Highest qualification' },
+    { k:'institution_name', label:'Institution / university', span:2 },
+    { k:'skill_set', label:'Skill set', span:3 },
+  ]},
+  { title: 'Previous employment and references', fields: [
+    { k:'total_experience', label:'Total experience (years)', t:'number' },
+    { k:'current_co_exp', label:'Current / last company experience', span:2 },
+    { k:'reference1_name', label:'Reference 1 — name' },
+    { k:'reference1_mobile', label:'Reference 1 — mobile', t:'tel' },
+    { k:'reference1_relation', label:'Reference 1 — relation' },
+    { k:'reference1_years', label:'Reference 1 — years known', t:'number' },
+    { k:'reference2_name', label:'Reference 2 — name' },
+    { k:'reference2_mobile', label:'Reference 2 — mobile', t:'tel' },
+    { k:'reference2_relation', label:'Reference 2 — relation' },
+    { k:'reference2_years', label:'Reference 2 — years known', t:'number' },
+  ]},
+  { title: 'Statutory IDs', note:'Aadhaar is stored masked — only the last four digits are kept in the clear', fields: [
+    { k:'pan_number', label:'PAN', req:true, hint:'ABCDE1234F' },
+    { k:'aadhaar_input', label:'Aadhaar number', req:true, hint:'12 digits' },
+    { k:'uan_number', label:'UAN', cond:'existing PF members' },
+    { k:'previous_uan', label:'Previous UAN', cond:'if any' },
+    { k:'pf_existing_member', label:'Existing PF member', t:'check', cond:'were you in EPF before' },
+    { k:'pf_scheme_certificate', label:'PF scheme certificate', cond:'if held' },
+    { k:'pension_number', label:'Pension / EPS number', cond:'if held' },
+    { k:'is_international_worker', label:'International worker', t:'check', cond:'needs Certificate of Coverage' },
+    { k:'has_certificate_of_coverage', label:'Certificate of coverage held', t:'check', cond:'international workers' },
+    { k:'voluntary_pf_applicable', label:'Voluntary PF (VPF)', t:'check' },
+    { k:'vpf_percent', label:'VPF percent', t:'number', cond:'if VPF opted' },
+    { k:'vpf_amount', label:'VPF amount', t:'number', cond:'if VPF opted' },
+    { k:'tds_regime', label:'TDS regime', t:'select', opts:['','Old','New'] },
+    { k:'investment_declared_amount', label:'Investment declaration amount', t:'number' },
+  ]},
+  { title: 'Bank details', note:'For salary credit. The account number is stored masked.', fields: [
+    { k:'bank_name', label:'Bank name', req:true },
+    { k:'bank_account_input', label:'Account number', req:true },
+    { k:'bank_holder_name', label:'Account holder name', req:true, span:2,
+      hint:'As printed on the passbook — the bank validates against this' },
+    { k:'ifsc_code', label:'IFSC', req:true, hint:'XXXX0XXXXXX' },
+    { k:'account_type', label:'Account type', t:'select', opts:['','Savings','Current','Salary'] },
+  ]},
+  { title: 'Other government IDs', fields: [
+    { k:'passport_no', label:'Passport number', cond:'if held or international worker' },
+    { k:'voter_id', label:'Voter ID' },
+    { k:'driving_licence', label:'Driving licence' },
+    { k:'nps_account', label:'NPS account number', cond:'if held' },
+  ]},
+]
+
+/** One input. Kept at module scope with the rest — a component defined inside
+ *  the modal would be a new type on every keystroke and the field would lose
+ *  focus, which is the bug the comment at the top of this file warns about. */
+function Field({ d, value, onChange }: { d: FieldDef; value: any; onChange: (v: any) => void }) {
+  const span = d.span ?? 1
+  const err = fieldError(d.k, value)
+  return (
+    <div style={{ gridColumn: span > 1 ? `span ${span}` : undefined, minWidth: 0 }}>
+      <label style={mc.lbl}>
+        {d.label}{d.req && ' *'}
+        {d.cond && !d.hint && <span style={{ color:C.faint, fontWeight:400, textTransform:'none', letterSpacing:0 }}> — {d.cond}</span>}
+      </label>
+      {d.t === 'select' ? (
+        <select style={mc.inp} value={value ?? ''} onChange={e => onChange(e.target.value)}>
+          {(d.opts ?? []).map(o => <option key={o} value={o}>{o || '—'}</option>)}
+        </select>
+      ) : d.t === 'check' ? (
+        <label style={{ display:'flex', alignItems:'center', gap:8, height:36, fontSize:13, color:C.ink }}>
+          <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} />
+          <span style={{ color:C.muted }}>{d.cond ?? 'Yes'}</span>
+        </label>
+      ) : (
+        <input
+          style={{ ...mc.inp, ...(err ? { borderColor: C.critical } : null) }}
+          aria-invalid={!!err}
+          type={d.t === 'date' ? 'date' : d.t === 'number' ? 'number' : d.t === 'email' ? 'email' : 'text'}
+          inputMode={d.t === 'tel' ? 'numeric' : undefined}
+          value={value ?? ''}
+          onChange={e => onChange(e.target.value)}
+        />
+      )}
+      {err
+        ? <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>{err}</div>
+        : d.hint && <div style={{ fontSize:11, color:C.faint, marginTop:3 }}>{d.hint}</div>}
+    </div>
+  )
+}
+
 function AddEmployeeModal({ companies, locations, departments, onClose, onSaved }: {
   companies: any[]; locations: any[]; departments: any[]
   onClose: () => void; onSaved: (msg: string) => void
 }) {
-  const [f, setF] = useState<any>({ full_name:'', company_id:'', location_id:'', department_id:'', employment_type:'Employee', designation:'', mobile:'', personal_email:'', company_doj:'', emp_code:'' })
+  // company_ids, not company_id. One employee can be carried in several of the
+  // group's companies, so the picker is a multi-select and a single company is
+  // just the one-element case.
+  const [f, setF] = useState<any>({ full_name:'', company_ids:[] as string[], location_id:'', department_id:'', employment_type:'Employee', emp_code:'', designation:'', mobile:'', personal_email:'', company_doj:'' })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [sameAddr, setSameAddr] = useState(false)
+  // The company multi-select is a dropdown, so it has to know when it is open
+  // and when a click landed somewhere else.
+  const [coOpen, setCoOpen] = useState(false)
+  const coRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!coOpen) return
+    const away = (e: MouseEvent) => { if (coRef.current && !coRef.current.contains(e.target as Node)) setCoOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setCoOpen(false) }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+  }, [coOpen])
   const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }))
-  const locs = locations.filter(l => l.company_id === f.company_id)
-  const depts = departments.filter(d => d.company_id === f.company_id)
-  const company = companies.find(c => c.id === f.company_id)
+
+  const picked: string[] = f.company_ids ?? []
+  const multi = picked.length > 1
+  const soleCompany = picked.length === 1 ? picked[0] : ''
+  // Every field that has a value and fails its format. The top-level fields are
+  // checked as well as the declared ones, since mobile and personal email live
+  // in the HR block above.
+  const problems = [
+    ...['mobile', 'personal_email'].map(k => [k, fieldError(k, f[k])] as const),
+    ...ONBOARDING_SECTIONS.flatMap(sec => sec.fields.map(d => [d.k, fieldError(d.k, f[d.k])] as const)),
+  ].filter(([, e]) => e) as [string, string][]
+
+  const ready = f.full_name.trim() && picked.length > 0 && (multi || f.emp_code.trim())
+                && problems.length === 0
+
+  const toggleCompany = (id: string) => setF((p: any) => {
+    const cur: string[] = p.company_ids ?? []
+    const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]
+    // Location and department belong to one company; the moment more than one
+    // is chosen there is no correct value to hold on to.
+    return { ...p, company_ids: next, location_id: '', department_id: '' }
+  })
+  const toggleAll = () => setF((p: any) => ({
+    ...p,
+    company_ids: (p.company_ids ?? []).length === companies.length ? [] : companies.map(c => c.id),
+    location_id: '', department_id: '',
+  }))
+
+  // Both are company-scoped, so they only apply when exactly one is chosen.
+  const locs = locations.filter(l => l.company_id === soleCompany)
+  const depts = departments.filter(d => d.company_id === soleCompany)
+  const company = companies.find(c => c.id === soleCompany)
 
   // auto-fill the code when company + type are chosen (HR can still override)
   useEffect(() => {
     let live = true
-    if (f.company_id && f.employment_type) {
-      nextEmpCode(company?.company_code || 'EZ', f.company_id, f.employment_type).then(c => { if (live) setF((p: any) => ({ ...p, emp_code: c })) })
+    if (multi) {
+      // One code per company, generated at save time — no single code to show.
+      setF((p: any) => ({ ...p, emp_code: '' }))
+    } else if (soleCompany && f.employment_type) {
+      nextEmpCode(company?.company_code || 'EZ', soleCompany, f.employment_type).then(c => { if (live) setF((p: any) => ({ ...p, emp_code: c })) })
     }
-    return () => { live = false }
-  }, [f.company_id, f.employment_type]) // eslint-disable-line react-hooks/exhaustive-deps
+  return () => { live = false }
+  }, [picked.join(','), f.employment_type]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ready = f.full_name.trim() && f.company_id && f.emp_code.trim()
+  // "same as current" copies once and then keeps them in step while ticked
+  useEffect(() => {
+    if (!sameAddr) return
+    setF((p: any) => ({ ...p,
+      perm_address1: p.res_address1, perm_address2: p.res_address2, perm_city: p.res_city,
+      perm_state: p.res_state, perm_pin: p.res_pin, perm_country: p.res_country }))
+  }, [sameAddr, f.res_address1, f.res_address2, f.res_city, f.res_state, f.res_pin, f.res_country])
+
+  // Only the three the database itself needs. The checklist's [REQ] marks are
+  // shown on the labels but not enforced here: HR routinely creates a record
+  // before every document has arrived, and blocking that would push people into
+  // typing placeholders, which is worse than an empty column.
 
   async function save() {
     setErr(''); setBusy(true)
     try {
       const code = f.emp_code.trim().toUpperCase()
-      const { data: dup } = await supabase.from('employees').select('id').eq('emp_code', code).maybeSingle()
-      if (dup) { setErr(`Code ${code} already exists.`); setBusy(false); return }
+      if (!multi) {
+        const { data: dup } = await supabase.from('employees').select('id').eq('emp_code', code).maybeSingle()
+        if (dup) { setErr(`Code ${code} already exists.`); setBusy(false); return }
+      }
       const parts = f.full_name.trim().split(/\s+/)
-      const row = {
-        emp_code: code, common_code: code,
-        company_id: f.company_id, location_id: f.location_id || null, department_id: f.department_id || null,
+
+      // Everything declared above, empty strings dropped so a blank input
+      // writes NULL rather than ''. Aadhaar and the account number are handled
+      // separately below and never written raw.
+      const extra: Record<string, any> = {}
+      for (const sec of ONBOARDING_SECTIONS) {
+        for (const d of sec.fields) {
+          if (d.k === 'aadhaar_input' || d.k === 'bank_account_input') continue
+          const v = f[d.k]
+          if (v === undefined || v === '' || v === null) continue
+          // hobbies is text[] in the database, not text. Sent as a string it
+          // fails with `malformed array literal`, and because the whole record
+          // is one insert that takes every other field down with it.
+          extra[d.k] = ARRAY_FIELDS.has(d.k)
+            ? String(v).split(',').map(x => x.trim()).filter(Boolean)
+            : UPPERCASE.has(d.k) ? String(v).toUpperCase().trim()
+            : d.t === 'number' ? Number(v) : v
+        }
+      }
+
+      // Masked, following the convention already used by the bulk upload: last
+      // four in the clear, the rest base64 in the *_encrypted column. That is
+      // encoding rather than encryption — the column name overstates it — but
+      // this writes what the rest of the system reads instead of inventing a
+      // second scheme.
+      const aadhaar = String(f.aadhaar_input ?? '').replace(/\D/g, '')
+      if (aadhaar) {
+        extra.aadhar_last4 = aadhaar.slice(-4)
+        extra.aadhar_encrypted = typeof btoa === 'function' ? btoa(aadhaar) : aadhaar
+      }
+      const acct = String(f.bank_account_input ?? '').trim()
+      if (acct) {
+        extra.bank_account_number = acct
+        extra.bank_account_last4 = acct.slice(-4)
+        extra.bank_account_encrypted = typeof btoa === 'function' ? btoa(acct) : acct
+      }
+
+      // Everything except the company, the code and the two company-scoped ids.
+      const common = {
         full_name: f.full_name.trim(), first_name: parts[0], last_name: parts.slice(1).join(' ') || null,
         designation: f.designation || null, employment_type: f.employment_type,
         employment_status: 'Active', confirmation_status: 'Probation',
         company_doj: f.company_doj || null, group_doj: f.company_doj || null,
         mobile: f.mobile || null, personal_email: f.personal_email || null, is_test: false,
+        ...extra,
+      }
+
+      if (multi) {
+        // One record per chosen company, LINKED BY A SHARED common_code.
+        //
+        // The companies all sit under one parent group (companies.group_id),
+        // so a person carried in several of them is one person, not several.
+        // emp_code cannot express that — it is company-prefixed with a
+        // per-company sequence, so the same human is SRS0004 here and SSM0002
+        // there. common_code can: it has no unique constraint, onboarding
+        // already treats it as "the code that stays the same", and every
+        // employee search on this page matches on it. Giving all the records
+        // one group-level code (SG0001) is what ties them together.
+        //
+        // Location and department are left null: both belong to a single
+        // company, so there is no correct value to copy across the others.
+        const chosen = companies.filter(c => picked.includes(c.id))
+
+        // The prefix comes from the parent group. Every company here carries a
+        // group_id; the code itself lives on `groups`, so it is read rather
+        // than assumed. If the chosen companies ever span two groups the first
+        // one wins — the shared code is a person key, and the prefix is only
+        // there to stop it being mistaken for a company sequence.
+        const gid = (chosen[0] as any)?.group_id
+        const { data: grp } = gid
+          ? await supabase.from('groups').select('group_code').eq('id', gid).maybeSingle()
+          : { data: null }
+        const shared = await nextCommonCode((grp as any)?.group_code || 'GRP')
+
+        const rows: any[] = []
+        for (const co of chosen) {
+          const c = await nextEmpCode(co.company_code || 'EZ', co.id, f.employment_type)
+          const { data: clash } = await supabase.from('employees').select('id').eq('emp_code', c).maybeSingle()
+          if (clash) { setErr(`Code ${c} already exists — nothing was created.`); setBusy(false); return }
+          rows.push({ ...common, emp_code: c, common_code: shared, company_id: co.id,
+                      location_id: null, department_id: null })
+        }
+        // One insert, so a failure on the third company cannot leave the first
+        // two behind with a common_code pointing at a person who half exists.
+        const { error } = await supabase.from('employees').insert(rows)
+        if (error) { setErr(error.message); setBusy(false); return }
+        onSaved(`${f.full_name.trim()} added to ${rows.length} companies as ${shared} (${rows.map(r => r.emp_code).join(', ')}).`)
+        return
+      }
+
+      const row = {
+        ...common,
+        // One company: common_code stays equal to emp_code, which is what
+        // onboarding already does for everybody else.
+        emp_code: code, common_code: code,
+        company_id: soleCompany, location_id: f.location_id || null, department_id: f.department_id || null,
       }
       const { error } = await supabase.from('employees').insert(row)
       if (error) { setErr(error.message); setBusy(false); return }
@@ -156,24 +529,199 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
     } catch (e: any) { setErr(e?.message || 'Failed'); setBusy(false) }
   }
 
+  const grid: React.CSSProperties = { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px' }
+
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={onClose}>
-      <div style={{ background:'#fff', borderRadius:'12px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'14px', color:'#0F172A' }}>Add Employee</div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'12px' }}>
-          <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Rahul Sharma" /></div>
-          <div><label style={mc.lbl}>Employment type</label><select style={mc.inp} value={f.employment_type} onChange={e => set('employment_type', e.target.value)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
-          <div><label style={mc.lbl}>Company *</label><select style={mc.inp} value={f.company_id} onChange={e => { set('company_id', e.target.value); set('location_id',''); set('department_id','') }}><option value="">— Select —</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name || c.company_code}</option>)}</select></div>
-          <div><label style={mc.lbl}>Location / Branch</label><select style={mc.inp} value={f.location_id} onChange={e => set('location_id', e.target.value)} disabled={!f.company_id}><option value="">— Select —</option>{locs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}</select></div>
-          <div><label style={mc.lbl}>Department</label><select style={mc.inp} value={f.department_id} onChange={e => set('department_id', e.target.value)} disabled={!f.company_id}><option value="">— Select —</option>{depts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></div>
-          <div><label style={mc.lbl}>Designation</label><input style={mc.inp} value={f.designation} onChange={e => set('designation', e.target.value)} /></div>
-          <div><label style={mc.lbl}>Mobile</label><input style={mc.inp} value={f.mobile} onChange={e => set('mobile', e.target.value)} /></div>
-          <div><label style={mc.lbl}>Personal email</label><input style={mc.inp} value={f.personal_email} onChange={e => set('personal_email', e.target.value)} /></div>
-          <div><label style={mc.lbl}>Date of joining</label><input type="date" style={mc.inp} value={f.company_doj} onChange={e => set('company_doj', e.target.value)} /></div>
-          <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Employee code (auto)</label><input style={mc.inp} value={f.emp_code} onChange={e => set('emp_code', e.target.value.toUpperCase())} placeholder="auto" /></div>
+      <div style={{ background:C.surface, borderRadius:'14px', padding:'20px', maxWidth:'820px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'4px', color:C.ink }}>Add Employee</div>
+        <div style={{ fontSize:'12px', color:C.muted, marginBottom:'14px' }}>
+          Fields marked * are required to submit onboarding. Only name, company and code are needed to create the record.
         </div>
-        {err && <div style={{ background:'#FEF2F2', color:'#B91C1C', fontSize:'12px', padding:'8px 12px', borderRadius:'7px', marginBottom:'12px' }}>{err}</div>}
-        <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+
+        {/* HR-assigned — the original nine, unchanged */}
+        <div style={{ ...grid, marginBottom:'6px' }}>
+          <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} /></div>
+          <div><label style={mc.lbl}>Employment type</label><select style={mc.inp} value={f.employment_type} onChange={e => set('employment_type', e.target.value)}>{EMP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+          {/* Companies — checkboxes inside a dropdown.
+              One person can be carried in several of the group's companies, so
+              this is a multi-select. Closed, it reads like the other fields and
+              summarises the choice; open, it is a short list of tick-boxes with
+              an "all" row on top. */}
+          <div style={{ gridColumn:'1 / 3', position:'relative' }} ref={coRef}>
+            <label style={mc.lbl}>Company *</label>
+            <button type="button" onClick={() => setCoOpen(o => !o)}
+              aria-haspopup="listbox" aria-expanded={coOpen}
+              style={{ ...mc.inp, textAlign:'left', cursor:'pointer', display:'flex',
+                       alignItems:'center', gap:8,
+                       borderColor: coOpen ? C.brand : undefined }}>
+              <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis',
+                             whiteSpace:'nowrap', color: picked.length ? C.ink : C.faint }}>
+                {picked.length === 0 ? 'Select company'
+                  : picked.length === companies.length && companies.length > 1 ? `All companies (${picked.length})`
+                  : companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')}
+              </span>
+              {picked.length > 1 && (
+                <span style={{ flex:'none', fontSize:11, fontWeight:700, padding:'1px 7px',
+                               borderRadius:999, background:C.brand, color:C.onAccent }}>
+                  {picked.length}
+                </span>
+              )}
+              <span aria-hidden style={{ flex:'none', color:C.muted, fontSize:10,
+                                         transform: coOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+            </button>
+
+            {coOpen && (
+              <div role="listbox" aria-multiselectable
+                style={{ position:'absolute', zIndex:10, left:0, right:0, top:'100%', marginTop:4,
+                         background:C.surface, border:`1px solid ${C.line}`, borderRadius:9,
+                         boxShadow:'0 10px 28px rgba(15,23,42,.18)', padding:'4px',
+                         maxHeight:240, overflowY:'auto' }}>
+                {companies.length > 1 && (
+                  <>
+                    <label style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px',
+                                    borderRadius:7, cursor:'pointer', fontSize:13, fontWeight:600,
+                                    color:C.brandDeep }}
+                           onMouseDown={e => e.preventDefault()}>
+                      <input type="checkbox"
+                             checked={picked.length === companies.length}
+                             ref={el => { if (el) el.indeterminate = picked.length > 0 && picked.length < companies.length }}
+                             onChange={toggleAll} />
+                      All companies
+                    </label>
+                    <div style={{ height:1, background:C.line, margin:'3px 8px' }} />
+                  </>
+                )}
+                {companies.map(c => {
+                  const on = picked.includes(c.id)
+                  return (
+                    <label key={c.id} role="option" aria-selected={on}
+                      onMouseDown={e => e.preventDefault()}
+                      style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px',
+                               borderRadius:7, cursor:'pointer', fontSize:13,
+                               background: on ? C.brandTint : 'transparent', color:C.ink }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleCompany(c.id)} />
+                      <span style={{ flex:'none', fontSize:11, fontWeight:700, padding:'1px 6px',
+                                     borderRadius:5, background: on ? C.brand : C.sunken,
+                                     color: on ? C.onAccent : C.muted }}>{c.company_code}</span>
+                      <span style={{ minWidth:0, overflow:'hidden', textOverflow:'ellipsis',
+                                     whiteSpace:'nowrap' }}>{c.company_name}</span>
+                    </label>
+                  )
+                })}
+                {companies.length === 0 && (
+                  <div style={{ fontSize:12, color:C.faint, padding:'10px' }}>No active companies</div>
+                )}
+              </div>
+            )}
+          </div>
+
+
+          <div>
+            <label style={mc.lbl}>Location / Branch</label>
+            <select style={mc.inp} value={f.location_id} disabled={multi}
+                    onChange={e => set('location_id', e.target.value)}>
+              <option value="">{multi ? 'Set per company' : 'Select'}</option>
+              {!multi && locs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={mc.lbl}>Department</label>
+            <select style={mc.inp} value={f.department_id} disabled={multi}
+                    onChange={e => set('department_id', e.target.value)}>
+              <option value="">{multi ? 'Set per company' : 'Select'}</option>
+              {!multi && depts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
+            </select>
+          </div>
+          <div><label style={mc.lbl}>Designation</label><input style={mc.inp} value={f.designation} onChange={e => set('designation', e.target.value)} /></div>
+          <div>
+            <label style={mc.lbl}>Mobile *</label>
+            <input style={{ ...mc.inp, ...(fieldError('mobile', f.mobile) ? { borderColor:C.critical } : null) }}
+                   aria-invalid={!!fieldError('mobile', f.mobile)}
+                   value={f.mobile} onChange={e => set('mobile', e.target.value)} />
+            {fieldError('mobile', f.mobile) &&
+              <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>{fieldError('mobile', f.mobile)}</div>}
+          </div>
+          <div>
+            <label style={mc.lbl}>Personal email *</label>
+            <input style={{ ...mc.inp, ...(fieldError('personal_email', f.personal_email) ? { borderColor:C.critical } : null) }}
+                   aria-invalid={!!fieldError('personal_email', f.personal_email)}
+                   value={f.personal_email} onChange={e => set('personal_email', e.target.value)} />
+            {fieldError('personal_email', f.personal_email) &&
+              <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>{fieldError('personal_email', f.personal_email)}</div>}
+          </div>
+          <div><label style={mc.lbl}>Date of joining</label><input type="date" style={mc.inp} value={f.company_doj} onChange={e => set('company_doj', e.target.value)} /></div>
+          <div style={{ gridColumn:'1 / 3' }}>
+            <label style={mc.lbl}>Employee code (auto)</label>
+            <input style={mc.inp} value={f.emp_code} disabled={multi}
+                   placeholder={multi ? 'One per company, generated on save' : ''}
+                   onChange={e => set('emp_code', e.target.value)} />
+          </div>
+        </div>
+
+        {/* Selecting every company creates a record in each. Said plainly here,
+            because three rows appearing from one click would otherwise be a
+            surprise. */}
+        {multi && (
+          <div style={{ display:'flex', gap:10, alignItems:'flex-start',
+                        background:C.brandTint, border:`1px solid ${C.brandEdge}`,
+                        borderRadius:10, padding:'10px 12px', marginTop:2 }}>
+            <span aria-hidden style={{ flex:'none', width:20, height:20, borderRadius:'50%',
+                                       background:C.brand, color:C.onAccent, display:'grid',
+                                       placeItems:'center', fontSize:12, fontWeight:700 }}>
+              {picked.length}
+            </span>
+            <div style={{ fontSize:12, color:C.ink, lineHeight:1.65 }}>
+              <b>{picked.length} records will be created</b> — one in{' '}
+              {companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')} — each with
+              its own employee code, tied together by a single group code so the system treats them as
+              one person.
+              <div style={{ color:C.muted, marginTop:2 }}>
+                Location and department belong to one company, so they are set on each record afterwards.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {ONBOARDING_SECTIONS.map(sec => (
+          <div key={sec.title} style={{ marginTop:'18px' }}>
+            <div style={{ display:'flex', alignItems:'baseline', gap:10, borderTop:`1px solid ${C.line}`, paddingTop:'12px', marginBottom:'10px' }}>
+              <div style={{ ...eyebrow, color:C.ink }}>{sec.title}</div>
+              {sec.note && <div style={{ fontSize:11, color:C.faint }}>{sec.note}</div>}
+              {sec.title === 'Permanent address' && (
+                <label style={{ marginLeft:'auto', fontSize:12, color:C.muted, display:'flex', alignItems:'center', gap:6 }}>
+                  <input type="checkbox" checked={sameAddr} onChange={e => setSameAddr(e.target.checked)} />
+                  Same as current
+                </label>
+              )}
+            </div>
+            <div style={grid}>
+              {sec.fields.map(d => (
+                <Field key={d.k} d={d} value={f[d.k]} onChange={v => set(d.k, v)} />
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* 11 and 12 on the checklist are uploads, not inputs. */}
+        <div style={{ marginTop:'18px', borderTop:`1px solid ${C.line}`, paddingTop:'12px' }}>
+          <div style={{ ...eyebrow, color:C.ink, marginBottom:6 }}>Photo and documents</div>
+          <div style={{ fontSize:12, color:C.muted, lineHeight:1.6 }}>
+            The passport photo and the twelve document uploads — PAN, Aadhaar, cancelled cheque,
+            education and experience certificates — are collected after the record exists, from the
+            employee&rsquo;s profile. They are files rather than fields and do not belong in this form.
+          </div>
+        </div>
+
+        {problems.length > 0 && (
+          <div style={{ background:C.criticalTint, color:C.critical, fontSize:12,
+                        padding:'9px 12px', borderRadius:8, marginTop:14, lineHeight:1.6 }}>
+            <b>{problems.length} field{problems.length === 1 ? '' : 's'} need{problems.length === 1 ? 's' : ''} checking</b>
+            {' — '}{problems.map(([k]) => k.replace(/_/g, ' ').replace('input', '')).join(', ')}
+          </div>
+        )}
+        {err && <div style={{ background:C.criticalTint, color:C.critical, fontSize:'12px', padding:'8px 12px', borderRadius:'7px', margin:'14px 0' }}>{err}</div>}
+        <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end', marginTop:'16px', position:'sticky', bottom:0, background:C.surface, paddingTop:'12px' }}>
           <button style={mc.out} onClick={onClose}>Cancel</button>
           <button style={{ ...mc.pri, opacity: ready && !busy ? 1 : 0.5 }} disabled={!ready || busy} onClick={save}>{busy ? 'Saving…' : 'Add employee'}</button>
         </div>
@@ -194,13 +742,13 @@ function StatCard({ label, value, color, onClick, active }: any) {
 }
 
 function Badge({ val, map }: { val: string; map: Record<string,{bg:string;color:string}> }) {
-  const c = map[val] || {bg:'#F1F5F9',color:'#374151'}
+  const c = map[val] || {bg:C.sunken,color:C.inkSoft}
   return <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, background:c.bg, color:c.color, whiteSpace:'nowrap' }}>{val || '—'}</span>
 }
 
 // Profile header strip
 function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any) {
-  const gc = GRADE_COLORS[emp.grade] || {bg:'#F1F5F9',color:'#374151'}
+  const gc = GRADE_COLORS[emp.grade] || {bg:C.sunken,color:C.inkSoft}
   return (
     <div style={{ background:P.navy, padding:'18px 24px 0', borderRadius:'14px 14px 0 0' }}>
       <div style={{ display:'flex', alignItems:'flex-start', gap:'16px', paddingBottom:'14px' }}>
@@ -210,8 +758,8 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
         </div>
         {/* Info */}
         <div style={{ flex:1 }}>
-          <div style={{ fontSize:'17px', fontWeight:600, color:'#fff', marginBottom:'3px' }}>{emp.full_name}</div>
-          <div style={{ fontSize:'12px', color:'rgba(255,255,255,.6)', marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
+          <div style={{ fontSize:'17px', fontWeight:600, color:C.onAccent, marginBottom:'3px' }}>{emp.full_name}</div>
+          <div style={{ fontSize:'12px', color:C.onAccentDim, marginBottom:'8px' }}>{emp.emp_code} · {fmt(emp.designation)} · {(emp as any).companies?.company_name || '—'}</div>
           <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
             <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...TYPE_COLORS[emp.employment_type] }}>{emp.employment_type}</span>
             <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...STATUS_COLORS[emp.employment_status] }}>{emp.employment_status}</span>
@@ -222,14 +770,14 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
         <div style={{ display:'flex', gap:'8px', alignItems:'center' }}>
           {editMode ? (
             <>
-              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:'#fff', border:'1px solid rgba(255,255,255,.25)', borderRadius:'8px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
+              <button onClick={onCancel} style={{ padding:'7px 14px', background:'rgba(255,255,255,.1)', color:C.onAccent, border:'1px solid rgba(255,255,255,.25)', borderRadius:'10px', cursor:'pointer', fontSize:'12px' }}>Cancel</button>
               <button onClick={onSave} disabled={saving} style={{ ...s.saveBtn, opacity: saving ? .7 : 1 }}>
-                <span>{saving ? '⏳' : '💾'}</span>{saving ? 'Saving…' : 'Save changes'}
+                <span>{saving ? '' : ''}</span>{saving ? 'Saving…' : 'Save changes'}
               </button>
             </>
           ) : (
             <button onClick={onEdit} style={{ ...s.priBtn }}>
-              <span>✏️</span> Edit profile
+              <span></span> Edit profile
             </button>
           )}
         </div>
@@ -244,8 +792,8 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
           { l:'Location', v: (emp as any).locations?.location_name || '—' },
           { l:'Notice Period', v: emp.notice_period_days ? `${emp.notice_period_days} days` : '—' },
         ].map(x => (
-          <div key={x.l} style={{ fontSize:'11px', color:'rgba(255,255,255,.55)' }}>
-            {x.l}: <span style={{ color:'#fff', fontWeight:500 }}>{x.v}</span>
+          <div key={x.l} style={{ fontSize:'11px', color:C.onAccentDim }}>
+            {x.l}: <span style={{ color:C.onAccent, fontWeight:500 }}>{x.v}</span>
           </div>
         ))}
       </div>
@@ -253,54 +801,16 @@ function ProfileHeader({ emp, editMode, saving, onEdit, onSave, onCancel }: any)
   )
 }
 
-// Single info row — view or edit
-function Field({ label, value, editMode, fieldKey, editForm, setEditForm, type, opts }: any) {
-  return (
-    <div style={{ padding:'8px 0', borderBottom:`1px solid ${P.border}` }}>
-      <div style={{ fontSize:'10px', color:P.muted, textTransform:'uppercase', letterSpacing:'.5px', marginBottom:'4px', fontWeight:500 }}>{label}</div>
-      {editMode ? (
-        opts ? (
-          <select style={s.sel} value={editForm[fieldKey] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))}>
-            <option value="">— Select —</option>
-            {opts.map((o: string) => <option key={o}>{o}</option>)}
-          </select>
-        ) : (
-          <input type={type || 'text'} style={s.inp} value={editForm[fieldKey] ?? ''} onChange={e => setEditForm((p: any) => ({ ...p, [fieldKey]: e.target.value }))} />
-        )
-      ) : (
-        <div style={{ fontSize:'13px', color: value && value !== '—' ? P.text : P.muted }}>{value || '—'}</div>
-      )}
-    </div>
-  )
-}
-
-// Section wrapper
-function Section({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
-  return (
-    <div style={{ marginBottom:'0', padding:'16px 20px', borderBottom:`1px solid ${P.border}` }}>
-      <div style={{ fontSize:'11px', fontWeight:600, color:P.purple, textTransform:'uppercase', letterSpacing:'.7px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px' }}>
-        <span>{icon}</span>{title}
-      </div>
-      {children}
-    </div>
-  )
-}
-
-// Two-column grid
-function Grid2({ children }: { children: React.ReactNode }) {
-  return <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 24px' }}>{children}</div>
-}
-
 // Tab bar
 function TabBar({ tabs, active, onChange }: any) {
   return (
-    <div style={{ display:'flex', background:'#F8F7FF', borderBottom:`1px solid ${P.border}`, overflowX:'auto' }}>
+    <div style={{ display:'flex', background:C.sunken, borderBottom:`1px solid ${P.border}`, overflowX:'auto' }}>
       {tabs.map((t: any) => (
         <button key={t.id} onClick={() => onChange(t.id)} style={{
           padding:'11px 16px', border:'none', background:'transparent', cursor:'pointer',
           fontSize:'12px', fontWeight: active===t.id ? 600 : 400,
           color: active===t.id ? P.purple : P.muted, whiteSpace:'nowrap',
-          borderBottom: active===t.id ? `2.5px solid ${P.purple}` : '2.5px solid transparent',
+          borderBottom: active===t.id ? `3px solid ${P.purple}` : '3px solid transparent',
           transition:'all .12s'
         }}>
           {t.icon} {t.label}
@@ -309,17 +819,6 @@ function TabBar({ tabs, active, onChange }: any) {
     </div>
   )
 }
-
-// Statutory chip
-function StatChip({ label, value }: { label: string; value: boolean }) {
-  return (
-    <div style={{ flex:1, padding:'10px 8px', borderRadius:'10px', background:value?P.greenBg:P.page, border:`1px solid ${value?'#BBF7D0':P.border}`, textAlign:'center' }}>
-      <div style={{ fontSize:'11px', fontWeight:600, color:P.text }}>{label}</div>
-      <div style={{ fontSize:'10px', color:value?P.green:P.muted, marginTop:'4px', fontWeight:500 }}>{value ? '✓ Yes' : '✗ No'}</div>
-    </div>
-  )
-}
-
 // ─── Main Component ───────────────────────────────────────────
 export default function EmployeeMaster() {
   const [employees, setEmployees] = useState<Employee[]>([])
@@ -336,6 +835,10 @@ export default function EmployeeMaster() {
   const [filterType, setFType]    = useState('')
   const [filterStatus, setFStatus]= useState('Active')
   const [filterGrade, setFGrade]  = useState('')
+
+  // Shown on the Filters toggle, so a filter that is still applied is never
+  // invisible just because the panel is closed.
+  const activeFilterCount = [filterDept, filterType, filterGrade].filter(Boolean).length
   const [page, setPage]           = useState(1)
   const [selected, setSelected]   = useState<Employee|null>(null)
   const [profileTab, setProfileTab] = useState('personal')
@@ -345,6 +848,9 @@ export default function EmployeeMaster() {
   const [saving, setSaving]       = useState(false)
   const [showAdd, setShowAdd]     = useState(false)
   const [showBulk, setShowBulk]   = useState(false)
+  // The secondary filters start closed. A count on the toggle means a filter
+  // that is still applied is never invisible just because the panel is shut.
+  const [moreFilters, setMoreFilters] = useState(false)
   const [addMsg, setAddMsg]       = useState('')
   const [exporting, setExporting] = useState(false)
   const [stats, setStats] = useState({ total:0,active:0,resigned:0,employee:0,intern:0,naps:0,nats:0,consultant:0,contract:0 })
@@ -371,7 +877,7 @@ export default function EmployeeMaster() {
 
   const fetchMeta = async () => {
     const [co,lo,de] = await Promise.all([
-      supabase.from('companies').select('id,company_name,company_code').eq('status','Active'),
+      supabase.from('companies').select('id,company_name,company_code,group_id').eq('status','Active'),
       supabase.from('locations').select('id,location_name,city,company_id').eq('status','Active'),
       supabase.from('departments').select('id,dept_name,company_id').eq('status','Active'),
     ])
@@ -387,7 +893,7 @@ export default function EmployeeMaster() {
       // locations!location_id — employees has two FKs to locations (location_id +
       // actual_posted_location_id); disambiguate or the embed 400s.
       let q = supabase.from('employees').select(
-        `*, companies(company_name,company_code), locations!location_id(location_name,city), departments(dept_name)`,
+        `*, companies!employees_company_id_fkey(company_name,company_code), locations!location_id(location_name,city), departments!employees_department_id_fkey(dept_name)`,
         { count: 'exact' }
       ).neq('is_test', true).order('emp_code')
 
@@ -414,7 +920,7 @@ export default function EmployeeMaster() {
     setExporting(true)
     try {
       let q = supabase.from('employees')
-        .select('*, companies(company_name, company_code), departments(dept_name), locations!location_id(location_name, city)')
+        .select('*, companies!employees_company_id_fkey(company_name, company_code), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, city)')
         .neq('is_test', true).order('emp_code')
       if (filterCompany)  q = q.eq('company_id', filterCompany)
       if (filterLocation) q = q.eq('location_id', filterLocation)
@@ -549,173 +1055,27 @@ export default function EmployeeMaster() {
   }
 
   const TABS = [
-    { id:'personal',   label:'Personal',   icon:'👤' },
-    { id:'employment', label:'Employment',  icon:'💼' },
-    { id:'statutory',  label:'Statutory',   icon:'🏛️' },
-    { id:'bank',       label:'Bank',        icon:'🏦' },
-    { id:'documents',  label:'Documents',   icon:'📄' },
-    { id:'salary',     label:'Salary',      icon:'💰' },
-    { id:'onboarding', label:'Onboarding',  icon:'📋' },
-    { id:'actions',    label:'HR Actions',  icon:'⚡' },
-    { id:'history',    label:'History',     icon:'📜' },
+    { id:'personal',   label:'Personal',   icon:'' },
+    { id:'employment', label:'Employment',  icon:'' },
+    { id:'statutory',  label:'Statutory',   icon:'' },
+    { id:'bank',       label:'Bank',        icon:'' },
+    { id:'documents',  label:'Documents',   icon:'' },
+    { id:'salary',     label:'Salary',      icon:'' },
+    { id:'onboarding', label:'Onboarding',  icon:'' },
+    { id:'actions',    label:'HR Actions',  icon:'' },
+    { id:'history',    label:'History',     icon:'' },
   ]
 
   // ─── Render profile tab content ───────────────────────────────
   const renderTab = (emp: Employee) => {
     const ef = editForm
-    const F = (label: string, key: string, type?: string, opts?: string[]) => (
-      <Field key={key} label={label} value={key === 'date_of_birth' || key.includes('doj') ? fmtDate((emp as any)[key]) : fmt((emp as any)[key])}
-        editMode={editMode} fieldKey={key} editForm={ef} setEditForm={setEditForm} type={type} opts={opts} />
-    )
 
-    if (profileTab === 'personal') return (
-      <div>
-        <Section title="Identity" icon="🪪">
-          <Grid2>
-            {F('Full Name','full_name')} {F('Common Code','common_code')}
-            {F('First Name','first_name')} {F('Last Name','last_name')}
-            {F('Gender','gender','text',['Male','Female','Other'])}
-            {F('Date of Birth','date_of_birth','date')}
-            {F('Blood Group','blood_group','text',['A+','A-','B+','B-','O+','O-','AB+','AB-'])}
-            {F('Marital Status','marital_status','text',['Single','Married','Divorced','Widowed'])}
-            {F('Nationality','nationality')} {F('Religion','religion')}
-            {F('Birth Place','birth_place')}
-          </Grid2>
-        </Section>
-        <Section title="Family" icon="👪">
-          <Grid2>
-            {F("Father's Name",'father_name')} {F("Mother's Name",'mother_name')}
-            {F('Spouse Name','spouse_name')}
-          </Grid2>
-        </Section>
-        <Section title="Contact" icon="📞">
-          <Grid2>
-            {F('Mobile','mobile')} {F('Alternate Mobile','alternate_mobile')}
-            {F('Personal Email','personal_email')} {F('Office Email','office_email')}
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Aadhaar</div>
-              <div style={{fontSize:'13px',color:P.text}}>XXXX-XXXX-{emp.aadhar_last4 || '—'}</div>
-            </div>
-            {F('PAN Number','pan_number')} {F('UAN Number','uan_number')}
-          </Grid2>
-        </Section>
-        <Section title="Residential Address" icon="🏠">
-          <Grid2>
-            {F('Address','res_address1')} {F('City','res_city')}
-            {F('State','res_state')} {F('PIN','res_pin')}
-          </Grid2>
-        </Section>
-        <Section title="Permanent Address" icon="📍">
-          <Grid2>
-            {F('Address','perm_address1')} {F('City','perm_city')}
-            {F('State','perm_state')} {F('PIN','perm_pin')}
-          </Grid2>
-        </Section>
-        <Section title="Emergency Contact" icon="🚨">
-          <Grid2>
-            {F('Name','emergency_name')} {F('Relation','emergency_relation')}
-            {F('Mobile','emergency_mobile')}
-          </Grid2>
-          <Grid2>
-            {F('Alt. Name','emergency2_name')} {F('Alt. Relation','emergency2_relation')}
-            {F('Alt. Mobile','emergency2_mobile')}
-          </Grid2>
-        </Section>
-      </div>
-    )
-
-    if (profileTab === 'employment') return (
-      <div>
-        <Section title="Employment Details" icon="💼">
-          <Grid2>
-            {F('Designation','designation')}
-            {F('Grade','grade')}
-            {F('Employment Type','employment_type','text',['Employee','Intern','NAPS','NATS','Consultant','Contract'])}
-            {F('Employment Status','employment_status','text',['Active','Resigned','Sabbatical','Abscond','Inactive'])}
-            {F('Collar Type','collar_type','text',['White Collar','Blue Collar'])}
-            {F('Function','employee_function')}
-            {F('Category','employee_category')}
-            {F('Notice Period (Days)','notice_period_days','number')}
-            {emp.employment_type === 'Intern' && F('Intern Pay (₹)','intern_pay','number')}
-            {emp.employment_type === 'Consultant' && F('Consultant Pay (₹)','consultant_pay','number')}
-            {emp.employment_type === 'Contract' && F('Contract Pay (₹)','contract_pay','number')}
-          </Grid2>
-        </Section>
-        <Section title="Joining & Confirmation" icon="📅">
-          <Grid2>
-            {F('Group DOJ','group_doj','date')}
-            {F('Company DOJ','company_doj','date')}
-            {F('Confirmation Status','confirmation_status','text',['Probation','Confirmed'])}
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Company</div>
-              <div style={{fontSize:'13px',color:P.text}}>{(emp as any).companies?.company_name || '—'}</div>
-            </div>
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Location / Branch</div>
-              <div style={{fontSize:'13px',color:P.text}}>{(emp as any).locations?.location_name || '—'}</div>
-            </div>
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Department</div>
-              <div style={{fontSize:'13px',color:P.text}}>{(emp as any).departments?.dept_name || '—'}</div>
-            </div>
-          </Grid2>
-        </Section>
-        {emp.employment_status === 'Resigned' && (
-          <Section title="Exit Details" icon="🚪">
-            <Grid2>
-              {F('Date of Resignation','date_of_resignation','date')}
-              {F('Last Working Date','last_working_date','date')}
-            </Grid2>
-            <div style={{ display:'flex', gap:'8px', marginTop:'8px' }}>
-              <div style={{ padding:'6px 12px', borderRadius:'8px', background:emp.rehire_eligible?P.greenBg:P.page, border:`1px solid ${emp.rehire_eligible?'#BBF7D0':P.border}`, fontSize:'11px', color:emp.rehire_eligible?P.green:P.muted }}>{emp.rehire_eligible?'✓ Rehire Eligible':'✗ Not Rehire Eligible'}</div>
-              {emp.blacklisted && <div style={{ padding:'6px 12px', borderRadius:'8px', background:P.redBg, border:`1px solid #FCA5A5`, fontSize:'11px', color:P.red }}>🚫 Blacklisted</div>}
-            </div>
-          </Section>
-        )}
-      </div>
-    )
-
-    if (profileTab === 'statutory') return (
-      <div>
-        <Section title="Statutory Applicability" icon="⚖️">
-          <div style={{ display:'flex', gap:'8px', marginBottom:'16px' }}>
-            <StatChip label="PF / EPF" value={emp.pf_applicable} />
-            <StatChip label="ESIC" value={emp.esic_applicable} />
-            <StatChip label="Prof. Tax" value={emp.pt_applicable} />
-            <StatChip label="LWF" value={emp.lwf_applicable} />
-          </div>
-          <Grid2>
-            {F('UAN Number','uan_number')}
-            {F('PAN Number','pan_number')}
-            <div style={{padding:'8px 0',borderBottom:`1px solid ${P.border}`}}>
-              <div style={{fontSize:'10px',color:P.muted,textTransform:'uppercase',letterSpacing:'.5px',marginBottom:'4px',fontWeight:500}}>Aadhaar</div>
-              <div style={{fontSize:'13px',fontFamily:'monospace',color:P.text}}>XXXX-XXXX-{emp.aadhar_last4||'—'}</div>
-            </div>
-          </Grid2>
-        </Section>
-      </div>
-    )
-
-    if (profileTab === 'bank') return (
-      <Section title="Salary Account" icon="🏦">
-        <div style={{ background:P.greenBg, border:`1px solid #BBF7D0`, borderRadius:'10px', padding:'16px', marginBottom:'12px' }}>
-          <div style={{ fontSize:'12px', fontWeight:600, color:'#15803D', marginBottom:'12px' }}>Primary Account</div>
-          <Grid2>
-            {[
-              ['Bank Name', emp.bank_name],
-              ['Account Type', emp.account_type],
-              ['Account No.', emp.bank_account_last4 ? `XXXX XXXX XXXX ${emp.bank_account_last4}` : '—'],
-              ['IFSC Code', emp.ifsc_code],
-            ].map(([l,v]) => (
-              <div key={l} style={{padding:'6px 0',borderBottom:`1px solid #DCFCE7`}}>
-                <div style={{fontSize:'10px',color:'#16A34A',marginBottom:'3px',fontWeight:500,textTransform:'uppercase',letterSpacing:'.4px'}}>{l}</div>
-                <div style={{fontSize:'13px',color:P.text,fontFamily:l==='Account No.'||l==='IFSC Code'?'monospace':'inherit'}}>{v||'—'}</div>
-              </div>
-            ))}
-          </Grid2>
-        </div>
-      </Section>
-    )
+    // The four record sections live in components/employees/EmployeeProfileView.tsx
+    // so the employee's own ESS Profile renders the identical screen, read-only.
+    if (['personal','employment','statutory','bank'].includes(profileTab)) {
+      return <EmployeeProfileSections emp={emp} profileTab={profileTab}
+               editMode={editMode} editForm={ef} setEditForm={setEditForm} />
+    }
 
     // These tabs delegate to HRActionPanel (existing logic preserved)
     if (['documents','salary','onboarding','actions','history'].includes(profileTab)) {
@@ -729,38 +1089,71 @@ export default function EmployeeMaster() {
   return (
     <div style={s.page}>
 
-      {/* Topbar */}
-      <div style={s.topbar}>
-        <div style={{ fontSize:'12px', color:P.muted }}>
-          <span style={{ color:P.purple, fontWeight:500 }}>Employee Master</span>
-          <span style={{ marginLeft:'8px', padding:'2px 8px', background:P.purpleBg, color:P.purple, borderRadius:'10px', fontSize:'11px' }}>
-            {stats.total} Total
-          </span>
-        </div>
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button style={{ ...s.secBtn, opacity: exporting ? 0.6 : 1 }} disabled={exporting} onClick={exportExcel}>📥 {exporting ? 'Exporting…' : 'Export Excel'}</button>
-          <button style={s.secBtn} onClick={() => setShowBulk(true)}>⬆ Bulk Upload</button>
-          <button style={s.priBtn} onClick={() => setShowAdd(true)}><span>+</span> Add Employee</button>
-        </div>
-      </div>
-
       <div style={s.body}>
+        <PageHeader
+          title="Employee Master"
+          context={loading
+            ? 'Loading…'
+            : `${stats.total.toLocaleString('en-IN')} on record · ${stats.active.toLocaleString('en-IN')} active · showing ${employees.length.toLocaleString('en-IN')}`}
+          actions={<>
+            <Button icon={<IconDownload size={16} />} disabled={exporting} onClick={exportExcel}>
+              {exporting ? 'Exporting…' : 'Export Excel'}
+            </Button>
+            <Button icon={<IconUpload size={16} />} onClick={() => setShowBulk(true)}>Bulk Upload</Button>
+            <Button variant="primary" icon={<IconPlus size={16} />} onClick={() => setShowAdd(true)}>Add Employee</Button>
+          </>}
+        />
 
-        {/* Stat Cards */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(8,1fr)', gap:'8px', marginBottom:'14px' }}>
-          <StatCard label="Total"      value={loading?'—':stats.total}      color={P.navy}    active={!filterStatus&&!filterType} onClick={()=>{setFType('');setFStatus('')}} />
-          <StatCard label="Active"     value={loading?'—':stats.active}     color={P.green}   active={filterStatus==='Active'&&!filterType}   onClick={()=>{setFType('');setFStatus('Active')}} />
-          <StatCard label="Resigned"   value={loading?'—':stats.resigned}   color={P.red}     active={filterStatus==='Resigned'&&!filterType}  onClick={()=>{setFType('');setFStatus('Resigned')}} />
-          <StatCard label="Employee"   value={loading?'—':stats.employee}   color={P.purple}  active={filterType==='Employee'}   onClick={()=>setFType('Employee')} />
-          <StatCard label="Intern"     value={loading?'—':stats.intern}     color='#1D4ED8'   active={filterType==='Intern'}     onClick={()=>setFType('Intern')} />
-          <StatCard label="NAPS"       value={loading?'—':stats.naps}       color='#0D9488'   active={filterType==='NAPS'}       onClick={()=>setFType('NAPS')} />
-          <StatCard label="Consultant" value={loading?'—':stats.consultant} color={P.amber}   active={filterType==='Consultant'} onClick={()=>setFType('Consultant')} />
-          <StatCard label="Contract"   value={loading?'—':stats.contract}   color='#374151'   active={filterType==='Contract'}   onClick={()=>setFType('Contract')} />
+        {/* These were eight equal stat cards. They are not statistics — they
+            are filters, and exactly one is active at a time. A segmented bar
+            says that; eight identical cards did not. */}
+        <div className="ez-scroll" style={{
+          display:'flex', gap:6, marginBottom:S.lg, overflowX:'auto', paddingBottom:2,
+        }}>
+          {[
+            { label:'Total',      n:stats.total,      on:!filterStatus && !filterType,               go:()=>{setFType('');setFStatus('')} },
+            { label:'Active',     n:stats.active,     on:filterStatus==='Active' && !filterType,     go:()=>{setFType('');setFStatus('Active')} },
+            { label:'Resigned',   n:stats.resigned,   on:filterStatus==='Resigned' && !filterType,   go:()=>{setFType('');setFStatus('Resigned')} },
+            { label:'Employee',   n:stats.employee,   on:filterType==='Employee',   go:()=>setFType('Employee') },
+            { label:'Intern',     n:stats.intern,     on:filterType==='Intern',     go:()=>setFType('Intern') },
+            { label:'NAPS',       n:stats.naps,       on:filterType==='NAPS',       go:()=>setFType('NAPS') },
+            { label:'Consultant', n:stats.consultant, on:filterType==='Consultant', go:()=>setFType('Consultant') },
+            { label:'Contract',   n:stats.contract,   on:filterType==='Contract',   go:()=>setFType('Contract') },
+          ].map(f => (
+            <button key={f.label} onClick={f.go} className="ez-press" style={{
+              display:'inline-flex', alignItems:'center', gap:7, flexShrink:0,
+              height:34, padding:'0 13px', borderRadius:R.pill, cursor:'pointer',
+              fontFamily:'inherit', fontSize:F.small, fontWeight:f.on ? W.semi : W.medium,
+              background: f.on ? C.brand : C.surface,
+              color: f.on ? C.surface : C.muted,
+              border:`1px solid ${f.on ? C.brandDeep : C.line}`,
+              boxShadow: f.on ? E.brand : E.flat,
+            }}>
+              {f.label}
+              <span style={{
+                fontSize:F.micro, fontWeight:W.bold, padding:'1px 6px', borderRadius:R.pill,
+                // A 22% white wash left the digits at 3.49:1 on the active
+                // pill. A solid deeper fill of the brand carries them.
+                background: f.on ? C.brandDeep : C.sunken,
+                color: f.on ? C.surface : C.faint, ...numeric,
+              }}>{loading ? '—' : f.n}</span>
+            </button>
+          ))}
         </div>
 
         {/* Filters — sticky so they stay visible while the list scrolls */}
-        <div style={{ ...s.card, display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', padding:'12px 16px', position:'sticky', top:'58px', zIndex:30, boxShadow:'0 2px 8px rgba(124,58,237,0.06)' }}>
-          <input style={{ ...s.inp, flex:1, minWidth:'200px', width:'auto' }} placeholder="🔍  Name, Code, Designation, Mobile…" value={search} onChange={e=>setSearch(e.target.value)} />
+        {/* Sticky to the top of the viewport now — the old offset was clearing
+            a topbar that the page header replaced. */}
+        <div style={{ ...s.card, display:'flex', gap:S.sm, alignItems:'center', flexWrap:'wrap',
+                      padding:`${S.sm}px ${S.md}px`, marginBottom:S.sm,
+                      position:'sticky', top:0, zIndex:30, boxShadow:E.raised }}>
+          <div style={{ position:'relative', flex:1, minWidth:220 }}>
+            <span style={{ position:'absolute', left:10, top:'50%', transform:'translateY(-50%)', color:C.faint, display:'flex', pointerEvents:'none' }}>
+              <IconSearch size={16} />
+            </span>
+            <input style={{ ...s.inp, paddingLeft:30 }} placeholder="Name, code, designation, mobile…"
+                   value={search} onChange={e=>setSearch(e.target.value)} />
+          </div>
           <select style={{ ...s.sel, width:'auto', minWidth:'140px' }} value={filterCompany} onChange={e=>{setFCo(e.target.value);setFLoc('');setFDept('')}}>
             <option value="">All Companies</option>
             {companies.map(c=><option key={c.id} value={c.id}>{c.company_code} — {c.company_name}</option>)}
@@ -769,6 +1162,25 @@ export default function EmployeeMaster() {
             <option value="">All Locations</option>
             {filteredLocs.map(l=><option key={l.id} value={l.id}>{l.location_name}</option>)}
           </select>
+          <button onClick={()=>setMoreFilters(v=>!v)} style={{ ...s.secBtn, gap:5 }}
+                  title={moreFilters ? 'Fewer filters' : 'Department, type, status and grade'}>
+            Filters
+            {activeFilterCount > 0 && (
+              <span style={{ fontSize:F.micro, fontWeight:W.bold, padding:'1px 6px',
+                             borderRadius:R.pill, background:C.brand, color:C.onAccent, ...numeric }}>
+                {activeFilterCount}
+              </span>
+            )}
+            <span style={{ display:'flex', transform:moreFilters?'rotate(180deg)':'none',
+                           transition:`transform ${M.quick}` }}><IconChevronDown size={12} /></span>
+          </button>
+        </div>
+
+        {/* The long tail of filters. Set once, then left alone — so they do not
+            hold 90px of the viewport open on every visit. */}
+        {moreFilters && (
+        <div className="ez-rise" style={{ ...s.card, display:'flex', gap:S.sm, alignItems:'center', flexWrap:'wrap',
+                      padding:`${S.sm}px ${S.md}px`, marginBottom:S.md }}>
           <select style={{ ...s.sel, width:'auto', minWidth:'130px' }} value={filterDept} onChange={e=>setFDept(e.target.value)}>
             <option value="">All Depts</option>
             {filteredDepts.map(d=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
@@ -785,66 +1197,124 @@ export default function EmployeeMaster() {
             <option value="">All Grades</option>
             {['L1','L2','M1','M2','M3','E1','E2','E3','W1','W2'].map(g=><option key={g}>{g}</option>)}
           </select>
-          <button style={s.secBtn} onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus('Active'); setFGrade('') }}>✕ Clear</button>
+          <button style={s.secBtn} onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus('Active'); setFGrade('') }}>
+            <IconClose size={12} /> Clear
+          </button>
         </div>
+        )}
 
-        {/* Error */}
-        {error && <div style={{ background:P.redBg, border:`1px solid #FCA5A5`, borderRadius:'8px', padding:'10px 14px', color:P.red, fontSize:'12px', marginBottom:'12px' }}>⚠ {error}</div>}
+        {error && (
+          <div style={{
+            background:tone('critical').bg, border:`1px solid ${tone('critical').edge}`,
+            borderRadius:R.md, padding:`${S.md}px ${S.lg}px`, color:C.inkSoft,
+            fontSize:F.small, marginBottom:S.md,
+          }}>
+            <strong style={{ color:C.critical }}>Could not load employees. </strong>{error}
+          </div>
+        )}
 
         {/* Table */}
         <div style={s.card}>
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+          <div className="ez-scroll" style={{ overflowX:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:F.small }}>
               <thead>
-                <tr style={{ borderBottom:`1.5px solid ${P.border}`, background:P.purpleLight }}>
-                  {['Emp Code','Name & Designation','Type','Location','Grade','Status','DOJ','Mobile','Actions'].map(h=>(
-                    <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:600, color:P.purpleDark, fontSize:'11px', letterSpacing:'.3px', whiteSpace:'nowrap' }}>{h}</th>
-                  ))}
+                <tr>
+                  {/* Widths are sized for the app's 130% auto-zoom, which is
+                      what the layout actually gets — at that zoom the content
+                      column is ~900px, not the ~1200 the viewport suggests. */}
+                  <Th width={78}>Emp Code</Th>
+                  <Th>Employee</Th>
+                  <Th width={70}>Type</Th>
+                  <Th width={108}>Location</Th>
+                  <Th width={50}>Grade</Th>
+                  <Th width={74}>Status</Th>
+                  <Th width={68}>Joined</Th>
+                  <Th width={84}>Mobile</Th>
+                  {/* Pinned. Nine columns at the app's 130% zoom will not fit
+                      a laptop, so the table scrolls — but the one action on a
+                      row must not be the thing that scrolls out of reach. */}
+                  <Th width={54} align="right" style={{
+                    position:'sticky', right:0, zIndex:2, background:C.sunken,
+                    boxShadow:`inset 1px 0 0 ${C.line}`,
+                  }} />
                 </tr>
               </thead>
               <tbody>
                 {loading && (
-                  <tr><td colSpan={9} style={{ padding:'32px', textAlign:'center', color:P.muted }}>Loading employees…</td></tr>
+                  <tr><td colSpan={9} style={{ padding:0 }}><SkeletonRows rows={8} /></td></tr>
                 )}
                 {!loading && employees.length === 0 && (
-                  <tr><td colSpan={9} style={{ padding:'32px', textAlign:'center', color:P.muted }}>No employees found</td></tr>
+                  <tr><td colSpan={9}>
+                    <Empty
+                      icon={<IconEmployees size={20} />}
+                      title="No employees match these filters"
+                      hint="Try clearing the search or widening the company, location and status filters."
+                      action={<Button size="sm" onClick={()=>{ setSearch(''); setFCo(''); setFLoc(''); setFDept(''); setFType(''); setFStatus(''); setFGrade('') }}>Clear all filters</Button>}
+                    />
+                  </td></tr>
                 )}
                 {employees.map(emp => {
-                  const gc = GRADE_COLORS[emp.grade] || {bg:'#F1F5F9',color:'#374151'}
-                  const sc = STATUS_COLORS[emp.employment_status] || {bg:'#F1F5F9',color:'#374151'}
+                  const gc = GRADE_COLORS[emp.grade] || { bg:C.sunken, color:C.muted }
+                  const sc = STATUS_COLORS[emp.employment_status] || { bg:C.sunken, color:C.muted }
                   return (
-                    <tr key={emp.id} onClick={()=>openProfile(emp)} style={{ borderBottom:`1px solid ${P.border}`, cursor:'pointer', transition:'background .1s' }}
-                      onMouseEnter={e=>(e.currentTarget.style.background='#FAFAFE')}
-                      onMouseLeave={e=>(e.currentTarget.style.background='')}>
-                      <td style={{ padding:'10px 12px', fontWeight:600, color:P.purple, fontFamily:'monospace', fontSize:'11px' }}>{emp.emp_code}</td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <div style={{ fontWeight:500, color:P.text }}>{emp.full_name}</div>
-                        <div style={{ fontSize:'10px', color:P.muted, marginTop:'2px' }}>{emp.designation || '—'}</div>
-                      </td>
-                      <td style={{ padding:'10px 12px' }}><Badge val={emp.employment_type} map={TYPE_COLORS} /></td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <div style={{ fontSize:'12px', color:P.text }}>{(emp as any).locations?.location_name || '—'}</div>
-                        <div style={{ fontSize:'10px', color:P.muted }}>{(emp as any).companies?.company_code || '—'}</div>
-                      </td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'11px', fontWeight:500, ...gc }}>{emp.grade || '—'}</span>
-                      </td>
-                      <td style={{ padding:'10px 12px' }}>
-                        <span style={{ padding:'2px 8px', borderRadius:'20px', fontSize:'10px', fontWeight:500, ...sc }}>{emp.employment_status}</span>
-                        {emp.employment_status==='Resigned'&&emp.last_working_date&&(
-                          <div style={{ fontSize:'9px', color:P.red, marginTop:'2px' }}>LWD: {fmtDate(emp.last_working_date)}</div>
+                    <Tr key={emp.id} onClick={()=>openProfile(emp)}>
+                      <Td mono strong style={{ color:C.brandDeep, fontSize:F.tiny, letterSpacing:'.02em' }}>
+                        {emp.emp_code}
+                      </Td>
+                      <Td>
+                        {/* Avatar + name + designation. The face makes a long
+                            list scannable in a way a column of text does not. */}
+                        <Person name={emp.full_name} meta={emp.designation || '—'} />
+                      </Td>
+                      <Td><Badge val={emp.employment_type} map={TYPE_COLORS} /></Td>
+                      <Td style={{ maxWidth:108 }}>
+                        {/* When there is no location, the company code becomes the
+                            primary line rather than sitting under a dash. Two
+                            lines to say one thing is worse than one line. */}
+                        {(() => {
+                          const loc = (emp as any).locations?.location_name
+                          const co  = (emp as any).companies?.company_code
+                          return (
+                            <>
+                              <div title={loc || co || ''} style={{
+                                color: loc ? C.ink : C.muted, whiteSpace:'nowrap',
+                                overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.3,
+                              }}>{loc || co || '—'}</div>
+                              {loc && co && (
+                                <div style={{ fontSize:F.micro, color:C.faint, lineHeight:1.3 }}>{co}</div>
+                              )}
+                            </>
+                          )
+                        })()}
+                      </Td>
+                      <Td>
+                        <span style={{
+                          padding:'2px 9px', borderRadius:R.pill, fontSize:F.tiny,
+                          fontWeight:W.semi, whiteSpace:'nowrap', ...gc,
+                        }}>{emp.grade || '—'}</span>
+                      </Td>
+                      <Td>
+                        <span style={{
+                          padding:'2px 9px', borderRadius:R.pill, fontSize:F.tiny,
+                          fontWeight:W.semi, whiteSpace:'nowrap', ...sc,
+                        }}>{emp.employment_status}</span>
+                        {emp.employment_status==='Resigned' && emp.last_working_date && (
+                          <div style={{ fontSize:F.micro, color:C.critical, marginTop:3, ...numeric }}>
+                            LWD {fmtDate(emp.last_working_date)}
+                          </div>
                         )}
-                      </td>
-                      <td style={{ padding:'10px 12px', fontSize:'11px', color:P.muted }}>{fmtDate(emp.company_doj)}</td>
-                      <td style={{ padding:'10px 12px', fontSize:'11px', color:P.text }}>{emp.mobile||'—'}</td>
-                      {/* View + Edit — both wired */}
-                      <td style={{ padding:'10px 12px' }} onClick={e=>e.stopPropagation()}>
-                        <div style={{ display:'flex', gap:'4px' }}>
-                          <button onClick={()=>openProfile(emp)} style={{ padding:'4px 10px', background:P.purpleBg, border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'10px', color:P.purple, fontWeight:500 }}>View</button>
-                          <button onClick={()=>openEdit(emp)} style={{ padding:'4px 10px', background:'#F0FDF4', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'10px', color:P.green, fontWeight:500 }}>Edit</button>
-                        </div>
-                      </td>
-                    </tr>
+                      </Td>
+                      <Td mono style={{ color:C.muted, fontSize:F.tiny, whiteSpace:'nowrap' }}>{fmtDate(emp.company_doj)}</Td>
+                      <Td mono style={{ fontSize:F.tiny, whiteSpace:'nowrap' }}>{emp.mobile||'—'}</Td>
+                      <Td align="right" style={{
+                        whiteSpace:'nowrap', position:'sticky', right:0,
+                        background:C.surface, boxShadow:`inset 1px 0 0 ${C.line}`,
+                      }}>
+                        <span onClick={e=>e.stopPropagation()}>
+                          <Button size="sm" onClick={()=>openEdit(emp)}>Edit</Button>
+                        </span>
+                      </Td>
+                    </Tr>
                   )
                 })}
               </tbody>
@@ -854,11 +1324,11 @@ export default function EmployeeMaster() {
           {/* Pagination */}
           {totalPages > 1 && (
             <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:'6px', padding:'12px', borderTop:`1px solid ${P.border}` }}>
-              <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===1?.4:1 }} onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>← Prev</button>
+              <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===1?.4:1 }} onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Prev</button>
               {Array.from({length:Math.min(totalPages,7)},(_,i)=>{
                 const p = page<=4 ? i+1 : page-3+i
                 if(p<1||p>totalPages) return null
-                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`1.5px solid ${p===page?P.purple:P.border}`,borderRadius:'6px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple:'#fff',color:p===page?'#fff':P.text }}>{p}</button>
+                return <button key={p} onClick={()=>setPage(p)} style={{ width:'32px',height:'32px',border:`2px solid ${p===page?P.purple:P.border}`,borderRadius:'7px',cursor:'pointer',fontSize:'12px',fontWeight:p===page?600:400,background:p===page?P.purple: C.surface,color:p===page?C.surface:P.text }}>{p}</button>
               })}
               <button style={{ ...s.secBtn, padding:'6px 12px', opacity:page===totalPages?.4:1 }} onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}>Next →</button>
             </div>
@@ -873,10 +1343,10 @@ export default function EmployeeMaster() {
 
             {/* Nav breadcrumb */}
             <div style={{ padding:'10px 20px', display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', color:P.muted }}>
-              <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>← Employee list</button>
+              <button onClick={closeDrawer} style={{ ...s.secBtn, padding:'5px 10px', fontSize:'11px' }}>Employee list</button>
               <span>›</span>
               <span style={{ color:P.text, fontWeight:500 }}>{selected.full_name}</span>
-              {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'6px', fontSize:'10px', fontWeight:500 }}>Editing</span>}
+              {editMode && <span style={{ padding:'2px 8px', background:P.amberBg, color:P.amber, borderRadius:'7px', fontSize:'10px', fontWeight:500 }}>Editing</span>}
             </div>
 
             {/* Profile header (with edit/save/cancel) */}
@@ -899,7 +1369,7 @@ export default function EmployeeMaster() {
       {/* ── Modals + toast ── */}
       {showAdd && <AddEmployeeModal companies={companies} locations={locations} departments={departments} onClose={() => setShowAdd(false)} onSaved={(msg) => { setShowAdd(false); setAddMsg(msg); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 3500) }} />}
       {showBulk && <BulkUploadModal companies={companies} departments={departments} locations={locations} onClose={() => setShowBulk(false)} onDone={(r) => { setAddMsg(`Bulk: ${r.added} added, ${r.skipped} skipped, ${r.errors} errors`); fetchEmployees(); fetchStats(); setTimeout(() => setAddMsg(''), 4000) }} />}
-      {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:'#059669', color:'#fff', borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
+      {addMsg && <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, background:C.positive, color:C.onAccent, borderRadius:'10px', padding:'12px 18px', fontSize:'13px', fontWeight:600, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>✓ {addMsg}</div>}
     </div>
   )
 }

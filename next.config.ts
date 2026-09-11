@@ -1,6 +1,31 @@
 import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
+  // Where the build output goes. Defaults to .next, which is also what the dev
+  // server serves from — and that overlap has bitten us: running `next build`
+  // while `next dev` was live overwrote the running server's own directory, and
+  // the Profile screen came back with no stylesheet at all. It looked exactly
+  // like a CSS bug and was not one.
+  //
+  // So a verification build can be sent somewhere else:
+  //
+  //     NEXT_DIST_DIR=.next-verify npx next build
+  //
+  // OPT-IN ON PURPOSE, not keyed on the build phase. Vercel runs `next build`
+  // and expects to find .next; switching the directory out from under it for
+  // every production build would trade a local annoyance for a broken deploy.
+  // Unset — which is the case everywhere except a local verification run — this
+  // is exactly the old behaviour.
+  //
+  // ONE CAVEAT. Next rewrites tsconfig.json on every build, and with this set it
+  // adds the verify directory to "include" and reformats the file besides. That
+  // is noise, not a change worth keeping:
+  //
+  //     git checkout -- tsconfig.json
+  //
+  // after a verification build.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+
   typescript: {
     ignoreBuildErrors: true,
   },
