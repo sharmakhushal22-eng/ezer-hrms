@@ -35,7 +35,11 @@ export default function HeroPanel({ data, prefs, onPrefs, children, onSearch }: 
             <span>{fmtDate(now, prefs.date_format)}</span>
           </div>
           <div className="hero-tools">
-            <button className="pillbtn cmd" title="Search anything" onClick={onSearch}><Search /> Search <kbd>⌘K</kbd></button>
+            {/* Only when there is something to open. The drop rendered this
+                unconditionally, so with no command palette in this portal it sat
+                in the hero doing nothing and advertising a shortcut that was not
+                bound. Pass onSearch to bring it back. */}
+            {onSearch && <button className="pillbtn cmd" title="Search anything" onClick={onSearch}><Search /> Search <kbd>⌘K</kbd></button>}
             <FormatPicker prefs={prefs} onPrefs={onPrefs} now={now} />
             <ThemeButton prefs={prefs} onPrefs={onPrefs} />
           </div>

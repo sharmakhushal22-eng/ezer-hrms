@@ -5,6 +5,8 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Prefs, TodayPayload } from '@/lib/today/types';
 import { usePrefs } from '@/lib/today/prefs-client';
+import { tabTarget } from '@/lib/today/schema';
+import { authHeaders } from '@/lib/auth-headers';
 import HeroPanel from './HeroPanel';
 import PunchDial from './PunchDial';
 import StatTiles from './StatTiles';
@@ -28,9 +30,14 @@ type Props = {
   onSearch?: () => void;
   /** Optional: post a birthday / anniversary wish to the Wall of Fame stream. */
   onWish?: (employeeId: string, kind: 'birthday' | 'anniversary') => Promise<void>;
+  /** Switch the portal to another tab. The portal is one page whose sections are
+   *  internal state, so almost every link on this tab is a tab switch, not a
+   *  navigation — see ROUTES in lib/today/schema.ts. Without this, the links
+   *  fall back to router.push and land on a 404. */
+  onOpenTab?: (key: string) => void;
 };
 
-export default function Today({ initial, onSearch, onWish }: Props) {
+export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
   const router = useRouter();
   const [data, setData] = useState<TodayPayload | null>(initial ?? null);
   const [err, setErr] = useState<string | null>(null);
@@ -46,8 +53,29 @@ export default function Today({ initial, onSearch, onWish }: Props) {
   }, []);
   useEffect(() => { if (data?.today?.punch_in && !data.today.punch_out) setLiveIn(new Date(data.today.punch_in)); }, [data]);
 
-  const nav = (r: string) => (r.startsWith('http') ? window.open(r, '_blank', 'noopener') : router.push(r));
-  const wish = onWish ?? (async () => { await new Promise(r => setTimeout(r, 300)); });
+  // Three kinds of target, in order: an external link, a tab in this portal,
+  // and — only then — a real route. cta_route values come from the database and
+  // the approvals builder, so the tab check runs on them too rather than only on
+  // the ROUTES table.
+  const nav = (r: string) => {
+    if (r.startsWith('http')) { window.open(r, '_blank', 'noopener'); return; }
+    const tab = tabTarget(r);
+    if (tab && onOpenTab) { onOpenTab(tab); return; }
+    if (r.startsWith('/')) router.push(r);
+  };
+  // The drop's default was a 300ms sleep — the button said "Sent" and nothing
+  // left the browser. This posts to the same endpoint the portal's own
+  // Celebrations card uses, so a wish from here lands in exactly the same place,
+  // duplicate-checked and notified the same way. The kind is upper-cased because
+  // that is the contract the route expects.
+  const wish = onWish ?? (async (id: string, kind: 'birthday' | 'anniversary') => {
+    const r = await fetch('/api/ess/celebrations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({ to_employee_id: id, kind: kind.toUpperCase() }),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not send the wish');
+  });
 
   if (err) return <div className="ezt"><div className="page card">Could not load Today: {err}</div></div>;
   if (!data) return <div className="ezt"><div className="page"><div className="card" style={{ height: 320, opacity: .5 }} /></div></div>;

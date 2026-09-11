@@ -11,8 +11,12 @@
 :root[data-ez-theme="dark"] .ezt,
 :root[data-theme="dark"] .ezt { --hero-a:#070F2B; --hero-b:#1E3A8A; --hero-c:#0EA5E9; --gold:#F2C14E; --gold-soft:#3A2E0F;
   --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7); --shadow-hero: 0 30px 70px -28px rgba(0,0,0,.85); --glass: rgba(23,27,33,.82); }
+/* Both attributes are excluded on purpose. The drop wrote data-theme; this app's
+   toggle (lib/ui/ThemeToggle.tsx) writes data-ez-theme. Guarding only the
+   former meant that on a dark OS, choosing Light turned the whole app light
+   and left this tab dark. */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .ezt { --hero-a:#070F2B; --hero-b:#1E3A8A; --hero-c:#0EA5E9; --gold:#F2C14E; --gold-soft:#3A2E0F;
+  :root:not([data-theme="light"]):not([data-ez-theme="light"]) .ezt { --hero-a:#070F2B; --hero-b:#1E3A8A; --hero-c:#0EA5E9; --gold:#F2C14E; --gold-soft:#3A2E0F;
     --shadow-card: 0 1px 2px rgba(0,0,0,.4), 0 10px 30px -14px rgba(0,0,0,.7); --shadow-hero: 0 30px 70px -28px rgba(0,0,0,.85); --glass: rgba(23,27,33,.82); }
 }
 .ezt .serif { font-family: var(--ezt-serif, "Fraunces", Georgia, serif); font-variation-settings:"SOFT" 50; }

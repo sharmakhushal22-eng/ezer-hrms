@@ -14,18 +14,47 @@ export const TODAY_TABLES = {
   actionItems: 'ess_action_items',
 } as const;
 
-/** Where each quick action goes. Adjust to the real ESS routes. */
+/**
+ * Where each quick action goes.
+ *
+ * The drop shipped a /ess/* URL tree — /ess/leave/apply, /ess/payslips and so
+ * on. None of it exists here: this portal is ONE page whose sections are
+ * internal state (`view` in EmployeePortal), reached by switching tabs, not by
+ * navigating. Every quick action, every "Calendar" and "Attendance" link in the
+ * drop therefore led to a 404.
+ *
+ * So a target is a TAB KEY, written `tab:<k>`, and Today's nav() switches the
+ * portal to it in place. The prefix keeps the two kinds of target apart — a
+ * real path (an announcement's cta_route, say) is still pushed to the router,
+ * and an http(s) link still opens in a new window.
+ *
+ * The keys are item keys from EmployeePortal's nav, checked against it by
+ * lib/today/__tests__/routes.test.ts. A key the view switch has no case for
+ * lands on the portal's Placeholder — which is the honest destination for a
+ * tab that is genuinely not built yet (Salary Slip is phase 3), but a key that
+ * is in NO nav section at all renders the wrong header, so the test checks
+ * membership rather than the switch.
+ */
 export const ROUTES = {
-  applyLeave: '/ess/leave/apply',
-  payslip: '/ess/payslips',
-  regularise: '/ess/attendance/regularise',
-  ticket: '/ess/helpdesk/new',
-  team: '/ess/team',
-  form16: '/ess/documents/form16',
-  inbox: '/ess/inbox',
-  attendance: '/ess/attendance',
-  calendar: '/ess/holidays',
-  wall: '/dashboard/ess',
-  appreciate: '/dashboard/ess?compose=1',
-  profile: '/ess/profile',
+  applyLeave: 'tab:leave',
+  payslip: 'tab:payslip',
+  regularise: 'tab:attendance',
+  ticket: 'tab:inbox',
+  team: 'tab:team',
+  form16: 'tab:documents',
+  inbox: 'tab:inbox',
+  attendance: 'tab:attendance',
+  calendar: 'tab:company',        // the holiday calendar lives under Company
+  wall: 'tab:wall',
+  appreciate: 'tab:wall',
+  profile: 'tab:profile',
 } as const;
+
+/** The tab key in a target, or null when it is an ordinary link. Accepts the
+ *  `tab:<k>` form and the ?tab= URLs that the approvals builder and older
+ *  action items still carry. */
+export function tabTarget(to: string): string | null {
+  if (to.startsWith('tab:')) return to.slice(4) || null;
+  const m = /[?&]tab=([a-z0-9_]+)/i.exec(to);
+  return m ? m[1].toLowerCase() : null;
+}

@@ -3740,7 +3740,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       // The Today tab (migration 111). The tab KEY stays 'home' — MOBILE_PRIMARY,
       // the default view and the "← My portal" button all reference it, and a
       // deep link should not break for a nav word. Only the label changed.
-      case 'home':          return <Today />
+      case 'home':          return <Today onOpenTab={setView} />
       // Profile 360. The portal owner's code is passed, not the viewer's —
       // the route resolves WHO IS LOOKING from the session and masks
       // accordingly, so an admin opening a colleague's portal sees that
