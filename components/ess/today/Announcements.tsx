@@ -1,4 +1,5 @@
 'use client';
+import { authHeaders } from '@/lib/auth-headers';
 // components/ess/today/Announcements.tsx — pinned banner + latest five; unread dot cleared via POST /api/ess/announcements
 import { useState } from 'react';
 import type { TodayPayload } from '@/lib/today/types';
@@ -6,7 +7,7 @@ const when = (iso: string) => { const d = new Date(iso), diff = Math.round((Date
   return diff === 0 ? 'Today' : diff === 1 ? 'Yesterday' : diff < 7 ? d.toLocaleDateString('en-IN', { weekday: 'short' }) : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }); };
 export default function Announcements({ data, nav }: { data: TodayPayload; nav: (r: string) => void }) {
   const a = data.announcements; const [read, setRead] = useState<Record<string, boolean>>({});
-  const markRead = (id: string) => { if (read[id]) return; setRead(r => ({ ...r, [id]: true })); fetch('/api/ess/announcements', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) }).catch(() => {}); };
+  const markRead = async (id: string) => { if (read[id]) return; setRead(r => ({ ...r, [id]: true })); fetch('/api/ess/announcements', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ id }) }).catch(() => {}); };
   if (!a.pinned && a.items.length === 0) return (
     <section className="card reveal" style={{ ['--i' as string]: 10 }}><h2>Announcements</h2><div style={{ fontSize: 12.5, color: 'var(--ez-faint)' }}>No announcements right now.</div></section>);
   return (

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Prefs, Theme } from './types';
 import { applyTheme } from '@/lib/ui/ThemeToggle';
+import { authHeaders } from '@/lib/auth-headers';
 
 const DEFAULT: Prefs = { theme: 'auto', time_format: '24', date_format: 'long' };
 
@@ -43,8 +44,17 @@ export function usePrefs(initial?: Prefs) {
     setPrefs(p => {
       const next = { ...p, ...patch };
       if (patch.theme !== undefined && patch.theme !== p.theme) chose.current = true;
-      fetch('/api/ess/preferences', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) })
-        .catch(() => {/* best-effort; UI already updated */});
+      // Persist outside the updater. React may call this function twice, and a
+      // request is not something to send twice; it also cannot await in here,
+      // and the PUT needs the ESS token or the route answers 401 and the
+      // preference silently fails to save.
+      queueMicrotask(async () => {
+        try {
+          await fetch('/api/ess/preferences', {
+            method: 'PUT', headers: await authHeaders(), body: JSON.stringify(next),
+          });
+        } catch {/* best-effort; the UI has already moved */}
+      });
       return next;
     });
   }, []);

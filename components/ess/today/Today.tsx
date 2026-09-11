@@ -47,8 +47,19 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
 
   useEffect(() => {
     if (initial) return;
-    fetch('/api/ess/today').then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error || 'Could not load'); setData(j); if (j.prefs) update(j.prefs); })
-      .catch(e => setErr((e as Error).message));
+    // The ESS token is what names the employee to these routes; a bare fetch
+    // gets 401 "unauthenticated" and the tab shows nothing. The drop omitted it.
+    (async () => {
+      try {
+        const r = await fetch('/api/ess/today', { headers: await authHeaders() });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j.error || 'Could not load');
+        setData(j);
+        if (j.prefs) update(j.prefs);
+      } catch (e) {
+        setErr((e as Error).message);
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => { if (data?.today?.punch_in && !data.today.punch_out) setLiveIn(new Date(data.today.punch_in)); }, [data]);

@@ -1,4 +1,5 @@
 'use client';
+import { authHeaders } from '@/lib/auth-headers';
 // components/ess/today/PunchDial.tsx — the hero element: shift-progress ring, punch in/out
 // button (→ POST /api/ess/punch → ess_punch()), running timer, on-time streak, confetti.
 import { useEffect, useRef, useState } from 'react';
@@ -39,7 +40,7 @@ export default function PunchDial({ data, prefs, onToast, onPunched }: Props) {
     if (busy) return; setBusy(true);
     const kind: 'in' | 'out' = inAt ? 'out' : 'in';
     try {
-      const res = await fetch('/api/ess/punch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ kind }) });
+      const res = await fetch('/api/ess/punch', { method: 'POST', headers: await authHeaders(), body: JSON.stringify({ kind }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || 'Punch failed');
       const at = new Date(j.at);
