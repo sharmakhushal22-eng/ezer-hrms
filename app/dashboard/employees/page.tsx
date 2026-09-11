@@ -6,6 +6,7 @@ import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
 import EmployeeProfileSections from '@/components/employees/EmployeeProfileView'
+import { UPPERCASE, fieldError } from '@/lib/hr/validate'
 // This page keeps its own local Badge / Field / Section, so the system's
 // equivalents are aliased where the names would clash.
 import {
@@ -174,6 +175,10 @@ async function nextEmpCode(companyCode: string, companyId: string, employmentTyp
 //
 // `req` marks the checklist's [REQ]. `cond` marks [COND] — shown always, but
 // captioned so HR knows it only applies in that situation.
+/** Columns that are text[] rather than text. Typed as comma-separated text in
+ *  the form and split on save. */
+const ARRAY_FIELDS = new Set(['hobbies'])
+
 type FType = 'text' | 'date' | 'select' | 'check' | 'number' | 'email' | 'tel'
 interface FieldDef {
   k: string; label: string; t?: FType; opts?: string[]
@@ -181,7 +186,6 @@ interface FieldDef {
 }
 interface Section { title: string; note?: string; fields: FieldDef[] }
 
-const YESNO = ['', 'Yes', 'No']
 
 const ONBOARDING_SECTIONS: Section[] = [
   { title: 'Personal details', fields: [
@@ -210,7 +214,7 @@ const ONBOARDING_SECTIONS: Section[] = [
     { k:'num_dependents', label:'Dependents', t:'number' },
     { k:'dependent_names', label:'Dependent names', span:2 },
     { k:'languages', label:'Languages' },
-    { k:'hobbies', label:'Hobbies' },
+    { k:'hobbies', label:'Hobbies', hint:'Separate with commas' },
   ]},
   { title: 'Contact', fields: [
     { k:'alternate_mobile', label:'Alternate mobile', t:'tel' },
@@ -266,7 +270,7 @@ const ONBOARDING_SECTIONS: Section[] = [
     { k:'aadhaar_input', label:'Aadhaar number', req:true, hint:'12 digits' },
     { k:'uan_number', label:'UAN', cond:'existing PF members' },
     { k:'previous_uan', label:'Previous UAN', cond:'if any' },
-    { k:'pf_existing_member', label:'Existing PF member', t:'select', opts:YESNO, cond:'were you in EPF before' },
+    { k:'pf_existing_member', label:'Existing PF member', t:'check', cond:'were you in EPF before' },
     { k:'pf_scheme_certificate', label:'PF scheme certificate', cond:'if held' },
     { k:'pension_number', label:'Pension / EPS number', cond:'if held' },
     { k:'is_international_worker', label:'International worker', t:'check', cond:'needs Certificate of Coverage' },
@@ -298,7 +302,7 @@ const ONBOARDING_SECTIONS: Section[] = [
  *  focus, which is the bug the comment at the top of this file warns about. */
 function Field({ d, value, onChange }: { d: FieldDef; value: any; onChange: (v: any) => void }) {
   const span = d.span ?? 1
-  const caption = d.hint ?? d.cond
+  const err = fieldError(d.k, value)
   return (
     <div style={{ gridColumn: span > 1 ? `span ${span}` : undefined, minWidth: 0 }}>
       <label style={mc.lbl}>
@@ -316,14 +320,17 @@ function Field({ d, value, onChange }: { d: FieldDef; value: any; onChange: (v: 
         </label>
       ) : (
         <input
-          style={mc.inp}
+          style={{ ...mc.inp, ...(err ? { borderColor: C.critical } : null) }}
+          aria-invalid={!!err}
           type={d.t === 'date' ? 'date' : d.t === 'number' ? 'number' : d.t === 'email' ? 'email' : 'text'}
           inputMode={d.t === 'tel' ? 'numeric' : undefined}
           value={value ?? ''}
           onChange={e => onChange(e.target.value)}
         />
       )}
-      {d.hint && <div style={{ fontSize:11, color:C.faint, marginTop:3 }}>{d.hint}</div>}
+      {err
+        ? <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>{err}</div>
+        : d.hint && <div style={{ fontSize:11, color:C.faint, marginTop:3 }}>{d.hint}</div>}
     </div>
   )
 }
@@ -356,7 +363,16 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
   const picked: string[] = f.company_ids ?? []
   const multi = picked.length > 1
   const soleCompany = picked.length === 1 ? picked[0] : ''
+  // Every field that has a value and fails its format. The top-level fields are
+  // checked as well as the declared ones, since mobile and personal email live
+  // in the HR block above.
+  const problems = [
+    ...['mobile', 'personal_email'].map(k => [k, fieldError(k, f[k])] as const),
+    ...ONBOARDING_SECTIONS.flatMap(sec => sec.fields.map(d => [d.k, fieldError(d.k, f[d.k])] as const)),
+  ].filter(([, e]) => e) as [string, string][]
+
   const ready = f.full_name.trim() && picked.length > 0 && (multi || f.emp_code.trim())
+                && problems.length === 0
 
   const toggleCompany = (id: string) => setF((p: any) => {
     const cur: string[] = p.company_ids ?? []
@@ -420,7 +436,13 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
           if (d.k === 'aadhaar_input' || d.k === 'bank_account_input') continue
           const v = f[d.k]
           if (v === undefined || v === '' || v === null) continue
-          extra[d.k] = d.t === 'number' ? Number(v) : v
+          // hobbies is text[] in the database, not text. Sent as a string it
+          // fails with `malformed array literal`, and because the whole record
+          // is one insert that takes every other field down with it.
+          extra[d.k] = ARRAY_FIELDS.has(d.k)
+            ? String(v).split(',').map(x => x.trim()).filter(Boolean)
+            : UPPERCASE.has(d.k) ? String(v).toUpperCase().trim()
+            : d.t === 'number' ? Number(v) : v
         }
       }
 
@@ -612,8 +634,22 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
             </select>
           </div>
           <div><label style={mc.lbl}>Designation</label><input style={mc.inp} value={f.designation} onChange={e => set('designation', e.target.value)} /></div>
-          <div><label style={mc.lbl}>Mobile *</label><input style={mc.inp} value={f.mobile} onChange={e => set('mobile', e.target.value)} /></div>
-          <div><label style={mc.lbl}>Personal email *</label><input style={mc.inp} value={f.personal_email} onChange={e => set('personal_email', e.target.value)} /></div>
+          <div>
+            <label style={mc.lbl}>Mobile *</label>
+            <input style={{ ...mc.inp, ...(fieldError('mobile', f.mobile) ? { borderColor:C.critical } : null) }}
+                   aria-invalid={!!fieldError('mobile', f.mobile)}
+                   value={f.mobile} onChange={e => set('mobile', e.target.value)} />
+            {fieldError('mobile', f.mobile) &&
+              <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>{fieldError('mobile', f.mobile)}</div>}
+          </div>
+          <div>
+            <label style={mc.lbl}>Personal email *</label>
+            <input style={{ ...mc.inp, ...(fieldError('personal_email', f.personal_email) ? { borderColor:C.critical } : null) }}
+                   aria-invalid={!!fieldError('personal_email', f.personal_email)}
+                   value={f.personal_email} onChange={e => set('personal_email', e.target.value)} />
+            {fieldError('personal_email', f.personal_email) &&
+              <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>{fieldError('personal_email', f.personal_email)}</div>}
+          </div>
           <div><label style={mc.lbl}>Date of joining</label><input type="date" style={mc.inp} value={f.company_doj} onChange={e => set('company_doj', e.target.value)} /></div>
           <div style={{ gridColumn:'1 / 3' }}>
             <label style={mc.lbl}>Employee code (auto)</label>
@@ -677,6 +713,13 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
           </div>
         </div>
 
+        {problems.length > 0 && (
+          <div style={{ background:C.criticalTint, color:C.critical, fontSize:12,
+                        padding:'9px 12px', borderRadius:8, marginTop:14, lineHeight:1.6 }}>
+            <b>{problems.length} field{problems.length === 1 ? '' : 's'} need{problems.length === 1 ? 's' : ''} checking</b>
+            {' — '}{problems.map(([k]) => k.replace(/_/g, ' ').replace('input', '')).join(', ')}
+          </div>
+        )}
         {err && <div style={{ background:C.criticalTint, color:C.critical, fontSize:'12px', padding:'8px 12px', borderRadius:'7px', margin:'14px 0' }}>{err}</div>}
         <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end', marginTop:'16px', position:'sticky', bottom:0, background:C.surface, paddingTop:'12px' }}>
           <button style={mc.out} onClick={onClose}>Cancel</button>
