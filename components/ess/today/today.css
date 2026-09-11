@@ -29,12 +29,26 @@
   .ezt * { box-sizing:border-box; }
   .ezt {
     padding:22px 18px 80px;
-    font-family:"DM Sans","Segoe UI",system-ui,sans-serif;
+    font-family:var(--ezt-sans,"DM Sans"),"Segoe UI",system-ui,sans-serif;
     background:var(--ez-canvas); color:var(--ez-ink);
     -webkit-font-smoothing:antialiased; font-size:14px; line-height:1.45;
     transition: background .35s, color .35s;
   }
-  .ezt .page { max-width:1100px; margin:0 auto; }
+  /* The breakpoints below ask this wrapper how wide it is, not the window. The
+     tab was designed as a full-width page but renders inside the portal, whose
+     sidebar takes 200-260px — so on a 1200px window it has ~950px, while a
+     viewport media query still reads "large" and keeps the hero in two columns
+     until the dial and the greeting are fighting over the same space.
+
+     On .page and NOT on .ezt, deliberately: container-type implies
+     contain:layout, which makes the element a containing block for fixed
+     descendants. The toast and the confetti canvas are fixed and are rendered
+     as siblings of this wrapper, so they still anchor to the viewport — put the
+     container on .ezt instead and the toast lands at the bottom of the whole
+     tab, far below the fold. */
+  .ezt .page {
+    container-type: inline-size;
+    container-name: ezt; max-width:1100px; margin:0 auto; }
   .ezt button { font-family:inherit; cursor:pointer; }
   .ezt :focus-visible { outline:2px solid var(--ez-brand); outline-offset:2px; border-radius:8px; }
 
@@ -95,7 +109,11 @@
   .ezt .seg button.on { background:var(--ez-brand-tint); border-color:var(--ez-brand); color:var(--ez-brand); }
   .ezt .seg button small { font-weight:500; color:var(--ez-muted); font-variant-numeric:tabular-nums; }
   .ezt .seg button.on small { color:var(--ez-brand); }
-  .ezt .greet { display:flex; align-items:center; gap:18px; }
+  .ezt .greet { display:flex; align-items:center; gap:18px; min-width:0; }
+  /* A flex or grid child defaults to min-width:auto, which is its CONTENT width —
+     so the 36px greeting set the hero's floor and pushed it wider than the space
+     it had, clipping the brief line and scrolling the page sideways. */
+  .ezt .greet > div, .ezt .hero > * { min-width:0; }
   .ezt .av { width:68px; height:68px; border-radius:50%; flex:none; display:grid; place-items:center; font-weight:700; font-size:22px; color:var(--hero-a);
     background:linear-gradient(145deg,#FFFFFF,#BFDBFE); box-shadow:0 0 0 4px rgba(255,255,255,.18), 0 12px 28px -10px rgba(0,0,0,.55); position:relative; }
   .ezt .av .on { position:absolute; right:2px; bottom:2px; width:14px; height:14px; border-radius:50%; background:var(--ez-line-strong); border:3px solid var(--hero-b); transition:background .4s; }
@@ -313,17 +331,24 @@
   .ezt-confetti { position:fixed; inset:0; pointer-events:none; z-index:40; }
 
 
-  @media (max-width: 900px) {
+  @container ezt (max-width: 900px) {
     .ezt .hero { grid-template-columns:1fr; }
     .ezt .stats { grid-template-columns:1fr 1fr; margin:14px 0 0; }
     .ezt .cols { grid-template-columns:1fr; }
     .ezt .qa { grid-template-columns:repeat(3,1fr); }
-    .ezt .greet h1 { font-size:28px; }
+    .ezt .greet h1 { font-size:28px; overflow-wrap:anywhere; }
     .ezt .week { gap:5px; } .day { padding:8px 4px; } .day .st { font-size:9.5px; }
   }
+  /* .ezt sizes ITSELF here, so this one stays on the viewport — an element
+     cannot be restyled by a query against its own container. */
   @media (max-width: 520px) {
     .ezt { padding:14px 12px 70px; }
+  }
+  @container ezt (max-width: 520px) {
     .ezt .hero { padding:18px 16px 40px; }
+    .ezt .greet { gap:12px; }
+    .ezt .greet h1 { font-size:24px; }
+    .ezt .hero-meta { gap:14px; }
     .ezt .av { width:54px; height:54px; font-size:18px; }
     .ezt .hero-tools .cmd { display:none; }
     .ezt .todo .go { display:none; }

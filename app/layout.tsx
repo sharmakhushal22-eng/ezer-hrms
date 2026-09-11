@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { fraunces } from '@/app/fonts'
+import { fraunces, dmSans } from '@/app/fonts'
 import "./globals.css";
 // The EZER theme: light + dark colour, elevation, and the ground the app sits
 // on. Imported as a module so the bundler serves it — a CSS @import inside
@@ -34,7 +34,7 @@ export default function RootLayout({
   return (
     <html
       lang="en-IN"
-      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${fraunces.variable} ${dmSans.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

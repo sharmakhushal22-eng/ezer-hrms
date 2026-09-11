@@ -1,7 +1,7 @@
 'use client';
 // components/ess/today/Today.tsx — the Today tab. Drop-in replacement for the old Home
 // component in components/ess/EmployeePortal.tsx. Fetches ONE payload, owns prefs + toast.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Prefs, TodayPayload } from '@/lib/today/types';
 import { usePrefs } from '@/lib/today/prefs-client';
@@ -44,6 +44,9 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
   const { prefs, update } = usePrefs(initial?.prefs);
   const { msg, show } = useToast();
   const [liveIn, setLiveIn] = useState<Date | null>(null);
+  // Outside .page on purpose — see the container-query note in today.css. A
+  // fixed overlay inside the query container would be sized to the container.
+  const confettiRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
     if (initial) return;
@@ -95,7 +98,7 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
     <div className="ezt">
       <div className="page">
         <HeroPanel data={data} prefs={prefs} onPrefs={(p: Partial<Prefs>) => update(p)} onSearch={onSearch}>
-          <PunchDial data={data} prefs={prefs} onToast={show}
+          <PunchDial data={data} prefs={prefs} onToast={show} confettiRef={confettiRef}
             onPunched={(kind, at) => { setLiveIn(kind === 'in' ? at : null);
               setData(d => d && ({ ...d, today: kind === 'in' ? { punch_in: at.toISOString(), punch_out: null, work_mode: 'office' } : { ...(d.today ?? { punch_in: null, work_mode: null }), punch_out: at.toISOString() } })); }} />
         </HeroPanel>
@@ -118,6 +121,7 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
           </div>
         </div>
       </div>
+      <canvas ref={confettiRef} className="ezt-confetti" aria-hidden="true" />
       <Toast msg={msg} />
     </div>
   );

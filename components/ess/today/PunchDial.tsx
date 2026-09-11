@@ -9,9 +9,16 @@ import { Flame } from './icons';
 import { useMounted, useNow, useReducedMotion } from './hooks';
 
 const R = 101, C = 112;
-type Props = { data: TodayPayload; prefs: Prefs; onToast: (m: string) => void; onPunched: (kind: 'in' | 'out', at: Date) => void };
-
-export default function PunchDial({ data, prefs, onToast, onPunched }: Props) {
+type Props = {
+  data: TodayPayload; prefs: Prefs;
+  onToast: (m: string) => void;
+  onPunched: (kind: 'in' | 'out', at: Date) => void;
+  /** Full-viewport confetti canvas, owned by Today so it sits OUTSIDE the
+   *  container-query wrapper — a fixed element inside that wrapper anchors to
+   *  the wrapper rather than to the screen. */
+  confettiRef: React.RefObject<HTMLCanvasElement | null>;
+};
+export default function PunchDial({ data, prefs, onToast, onPunched, confettiRef }: Props) {
   const reduce = useReducedMotion();
   const mounted = useMounted(350);
   const now = useNow(15000);
@@ -20,7 +27,7 @@ export default function PunchDial({ data, prefs, onToast, onPunched }: Props) {
   const [elapsed, setElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
   const [pulseKey, setPulseKey] = useState(0);
-  const canvas = useRef<HTMLCanvasElement>(null);
+
   const btn = useRef<HTMLButtonElement>(null);
 
   // shift progress ring
@@ -51,7 +58,7 @@ export default function PunchDial({ data, prefs, onToast, onPunched }: Props) {
   }
 
   function confetti() {
-    const cv = canvas.current; if (!cv || reduce || !btn.current) return;
+    const cv = confettiRef.current; if (!cv || reduce || !btn.current) return;
     const ctx = cv.getContext('2d')!; cv.width = innerWidth; cv.height = innerHeight;
     const r = btn.current.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
     const cols = ['#2563EB', '#60A5FA', '#7DD3FC', '#34D399', '#FCD34D', '#FFFFFF'];
@@ -72,7 +79,6 @@ export default function PunchDial({ data, prefs, onToast, onPunched }: Props) {
 
   return (
     <div className="dialwrap">
-      <canvas ref={canvas} className="ezt-confetti" aria-hidden="true" />
       <div className="dial">
         <svg viewBox="0 0 224 224" aria-hidden="true">
           <defs><linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#FFFFFF" /><stop offset="1" stopColor="#7DD3FC" /></linearGradient></defs>
