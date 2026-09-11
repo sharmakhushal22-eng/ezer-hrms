@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '../../../lib/supabase'
 import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
@@ -101,12 +101,6 @@ const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); ret
 // ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
 const EMP_TYPES = ['Employee', 'Intern', 'NAPS', 'NATS', 'Consultant', 'Contract']
 
-// Company dropdown sentinel. employees.company_id is NOT NULL and the employee
-// code is company-prefixed (SRS0003), so there is no such thing as one record
-// belonging to every company. "All companies" therefore means one record PER
-// company — same person, three rows, three codes — which is how a group
-// director or a shared-services hire is actually carried.
-const ALL_COMPANIES = '__ALL__'
 
 // Export allowlist — only the columns marked "Keep in Report = Y" in the EZER column
 // reference sheet. Encrypted PII (aadhar_encrypted / bank_account_encrypted) is Y in the
@@ -133,6 +127,28 @@ const mc = {
   lbl:   { ...eyebrow, display:'block', marginBottom:4 } as React.CSSProperties,
   pri:   { padding:'0 16px', height:36, background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, border:`1px solid ${C.brandDeep}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.semi, cursor:'pointer', fontFamily:'inherit', boxShadow:E.brand },
   out:   { padding:'0 14px', height:36, background:C.surface, color:C.ink, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', fontFamily:'inherit' },
+}
+
+// The group-level person key.
+//
+// employees.common_code has no unique constraint and onboarding sets it to the
+// emp_code by default — it is the "common" code, meaning the one that stays the
+// same wherever the person appears. For somebody carried in more than one
+// company that is exactly the link we need: three rows, three company-prefixed
+// emp_codes, one shared common_code.
+//
+// Prefixed with the group's own code (SG for Sharma Group) so it cannot be
+// mistaken for any company's sequence.
+async function nextCommonCode(groupCode: string): Promise<string> {
+  const prefix = (groupCode || 'GRP').toUpperCase()
+  const { data } = await supabase.from('employees').select('common_code').like('common_code', `${prefix}%`)
+  let max = 0
+  const re = new RegExp(`^${prefix}(\\d{4})$`)
+  for (const r of (data || []) as any[]) {
+    const m = String(r.common_code || '').match(re)
+    if (m) max = Math.max(max, parseInt(m[1], 10))
+  }
+  return `${prefix}${String(max + 1).padStart(4, '0')}`
 }
 
 // Next type-wise code from existing employees (no migration dependency, atomic-ish).
@@ -316,28 +332,61 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
   companies: any[]; locations: any[]; departments: any[]
   onClose: () => void; onSaved: (msg: string) => void
 }) {
-  const [f, setF] = useState<any>({ full_name:'', company_id:'', location_id:'', department_id:'', employment_type:'Employee', emp_code:'', designation:'', mobile:'', personal_email:'', company_doj:'' })
+  // company_ids, not company_id. One employee can be carried in several of the
+  // group's companies, so the picker is a multi-select and a single company is
+  // just the one-element case.
+  const [f, setF] = useState<any>({ full_name:'', company_ids:[] as string[], location_id:'', department_id:'', employment_type:'Employee', emp_code:'', designation:'', mobile:'', personal_email:'', company_doj:'' })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const [sameAddr, setSameAddr] = useState(false)
+  // The company multi-select is a dropdown, so it has to know when it is open
+  // and when a click landed somewhere else.
+  const [coOpen, setCoOpen] = useState(false)
+  const coRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!coOpen) return
+    const away = (e: MouseEvent) => { if (coRef.current && !coRef.current.contains(e.target as Node)) setCoOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setCoOpen(false) }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+  }, [coOpen])
   const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }))
-  // Both are company-scoped, so neither can be chosen while All is selected.
-  const locs = locations.filter(l => l.company_id === f.company_id)
-  const depts = departments.filter(d => d.company_id === f.company_id)
-  const company = companies.find(c => c.id === f.company_id)
+
+  const picked: string[] = f.company_ids ?? []
+  const multi = picked.length > 1
+  const soleCompany = picked.length === 1 ? picked[0] : ''
+  const ready = f.full_name.trim() && picked.length > 0 && (multi || f.emp_code.trim())
+
+  const toggleCompany = (id: string) => setF((p: any) => {
+    const cur: string[] = p.company_ids ?? []
+    const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]
+    // Location and department belong to one company; the moment more than one
+    // is chosen there is no correct value to hold on to.
+    return { ...p, company_ids: next, location_id: '', department_id: '' }
+  })
+  const toggleAll = () => setF((p: any) => ({
+    ...p,
+    company_ids: (p.company_ids ?? []).length === companies.length ? [] : companies.map(c => c.id),
+    location_id: '', department_id: '',
+  }))
+
+  // Both are company-scoped, so they only apply when exactly one is chosen.
+  const locs = locations.filter(l => l.company_id === soleCompany)
+  const depts = departments.filter(d => d.company_id === soleCompany)
+  const company = companies.find(c => c.id === soleCompany)
 
   // auto-fill the code when company + type are chosen (HR can still override)
   useEffect(() => {
     let live = true
-    if (f.company_id === ALL_COMPANIES) {
-      // One code per company, generated at save time — there is no single code
-      // to preview here.
+    if (multi) {
+      // One code per company, generated at save time — no single code to show.
       setF((p: any) => ({ ...p, emp_code: '' }))
-    } else if (f.company_id && f.employment_type) {
-      nextEmpCode(company?.company_code || 'EZ', f.company_id, f.employment_type).then(c => { if (live) setF((p: any) => ({ ...p, emp_code: c })) })
+    } else if (soleCompany && f.employment_type) {
+      nextEmpCode(company?.company_code || 'EZ', soleCompany, f.employment_type).then(c => { if (live) setF((p: any) => ({ ...p, emp_code: c })) })
     }
   return () => { live = false }
-  }, [f.company_id, f.employment_type]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [picked.join(','), f.employment_type]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // "same as current" copies once and then keeps them in step while ticked
   useEffect(() => {
@@ -351,14 +400,12 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
   // shown on the labels but not enforced here: HR routinely creates a record
   // before every document has arrived, and blocking that would push people into
   // typing placeholders, which is worse than an empty column.
-  const allCos = f.company_id === ALL_COMPANIES
-  const ready = f.full_name.trim() && f.company_id && (allCos ? companies.length > 0 : f.emp_code.trim())
 
   async function save() {
     setErr(''); setBusy(true)
     try {
       const code = f.emp_code.trim().toUpperCase()
-      if (!allCos) {
+      if (!multi) {
         const { data: dup } = await supabase.from('employees').select('id').eq('emp_code', code).maybeSingle()
         if (dup) { setErr(`Code ${code} already exists.`); setBusy(false); return }
       }
@@ -404,34 +451,55 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
         ...extra,
       }
 
-      if (allCos) {
-        // One record per company. Each needs its own code, because the code
-        // carries the company prefix and the sequence is per company —
-        // SRS0004, SSM0002, STC0005 are the same person in three books.
+      if (multi) {
+        // One record per chosen company, LINKED BY A SHARED common_code.
         //
-        // Location and department are deliberately left null: both belong to a
-        // single company, so there is no correct value to copy across all of
-        // them. HR sets them per record afterwards.
+        // The companies all sit under one parent group (companies.group_id),
+        // so a person carried in several of them is one person, not several.
+        // emp_code cannot express that — it is company-prefixed with a
+        // per-company sequence, so the same human is SRS0004 here and SSM0002
+        // there. common_code can: it has no unique constraint, onboarding
+        // already treats it as "the code that stays the same", and every
+        // employee search on this page matches on it. Giving all the records
+        // one group-level code (SG0001) is what ties them together.
+        //
+        // Location and department are left null: both belong to a single
+        // company, so there is no correct value to copy across the others.
+        const chosen = companies.filter(c => picked.includes(c.id))
+
+        // The prefix comes from the parent group. Every company here carries a
+        // group_id; the code itself lives on `groups`, so it is read rather
+        // than assumed. If the chosen companies ever span two groups the first
+        // one wins — the shared code is a person key, and the prefix is only
+        // there to stop it being mistaken for a company sequence.
+        const gid = (chosen[0] as any)?.group_id
+        const { data: grp } = gid
+          ? await supabase.from('groups').select('group_code').eq('id', gid).maybeSingle()
+          : { data: null }
+        const shared = await nextCommonCode((grp as any)?.group_code || 'GRP')
+
         const rows: any[] = []
-        for (const co of companies) {
+        for (const co of chosen) {
           const c = await nextEmpCode(co.company_code || 'EZ', co.id, f.employment_type)
           const { data: clash } = await supabase.from('employees').select('id').eq('emp_code', c).maybeSingle()
           if (clash) { setErr(`Code ${c} already exists — nothing was created.`); setBusy(false); return }
-          rows.push({ ...common, emp_code: c, common_code: c, company_id: co.id,
+          rows.push({ ...common, emp_code: c, common_code: shared, company_id: co.id,
                       location_id: null, department_id: null })
         }
-        // One insert, so a failure on the third company does not leave the
-        // first two behind.
+        // One insert, so a failure on the third company cannot leave the first
+        // two behind with a common_code pointing at a person who half exists.
         const { error } = await supabase.from('employees').insert(rows)
         if (error) { setErr(error.message); setBusy(false); return }
-        onSaved(`${f.full_name.trim()} added to ${rows.length} companies (${rows.map(r => r.emp_code).join(', ')}).`)
+        onSaved(`${f.full_name.trim()} added to ${rows.length} companies as ${shared} (${rows.map(r => r.emp_code).join(', ')}).`)
         return
       }
 
       const row = {
         ...common,
+        // One company: common_code stays equal to emp_code, which is what
+        // onboarding already does for everybody else.
         emp_code: code, common_code: code,
-        company_id: f.company_id, location_id: f.location_id || null, department_id: f.department_id || null,
+        company_id: soleCompany, location_id: f.location_id || null, department_id: f.department_id || null,
       }
       const { error } = await supabase.from('employees').insert(row)
       if (error) { setErr(error.message); setBusy(false); return }
@@ -453,28 +521,94 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
         <div style={{ ...grid, marginBottom:'6px' }}>
           <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} /></div>
           <div><label style={mc.lbl}>Employment type</label><select style={mc.inp} value={f.employment_type} onChange={e => set('employment_type', e.target.value)}>{EMP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
-          <div>
+          {/* Companies — checkboxes inside a dropdown.
+              One person can be carried in several of the group's companies, so
+              this is a multi-select. Closed, it reads like the other fields and
+              summarises the choice; open, it is a short list of tick-boxes with
+              an "all" row on top. */}
+          <div style={{ gridColumn:'1 / 3', position:'relative' }} ref={coRef}>
             <label style={mc.lbl}>Company *</label>
-            <select style={mc.inp} value={f.company_id} onChange={e => { set('company_id', e.target.value); set('location_id',''); set('department_id','') }}>
-              <option value="">Select</option>
-              {companies.length > 1 && <option value={ALL_COMPANIES}>All companies ({companies.length})</option>}
-              {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
-            </select>
+            <button type="button" onClick={() => setCoOpen(o => !o)}
+              aria-haspopup="listbox" aria-expanded={coOpen}
+              style={{ ...mc.inp, textAlign:'left', cursor:'pointer', display:'flex',
+                       alignItems:'center', gap:8,
+                       borderColor: coOpen ? C.brand : undefined }}>
+              <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis',
+                             whiteSpace:'nowrap', color: picked.length ? C.ink : C.faint }}>
+                {picked.length === 0 ? 'Select company'
+                  : picked.length === companies.length && companies.length > 1 ? `All companies (${picked.length})`
+                  : companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')}
+              </span>
+              {picked.length > 1 && (
+                <span style={{ flex:'none', fontSize:11, fontWeight:700, padding:'1px 7px',
+                               borderRadius:999, background:C.brand, color:C.onAccent }}>
+                  {picked.length}
+                </span>
+              )}
+              <span aria-hidden style={{ flex:'none', color:C.muted, fontSize:10,
+                                         transform: coOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+            </button>
+
+            {coOpen && (
+              <div role="listbox" aria-multiselectable
+                style={{ position:'absolute', zIndex:10, left:0, right:0, top:'100%', marginTop:4,
+                         background:C.surface, border:`1px solid ${C.line}`, borderRadius:9,
+                         boxShadow:'0 10px 28px rgba(15,23,42,.18)', padding:'4px',
+                         maxHeight:240, overflowY:'auto' }}>
+                {companies.length > 1 && (
+                  <>
+                    <label style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px',
+                                    borderRadius:7, cursor:'pointer', fontSize:13, fontWeight:600,
+                                    color:C.brandDeep }}
+                           onMouseDown={e => e.preventDefault()}>
+                      <input type="checkbox"
+                             checked={picked.length === companies.length}
+                             ref={el => { if (el) el.indeterminate = picked.length > 0 && picked.length < companies.length }}
+                             onChange={toggleAll} />
+                      All companies
+                    </label>
+                    <div style={{ height:1, background:C.line, margin:'3px 8px' }} />
+                  </>
+                )}
+                {companies.map(c => {
+                  const on = picked.includes(c.id)
+                  return (
+                    <label key={c.id} role="option" aria-selected={on}
+                      onMouseDown={e => e.preventDefault()}
+                      style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px',
+                               borderRadius:7, cursor:'pointer', fontSize:13,
+                               background: on ? C.brandTint : 'transparent', color:C.ink }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleCompany(c.id)} />
+                      <span style={{ flex:'none', fontSize:11, fontWeight:700, padding:'1px 6px',
+                                     borderRadius:5, background: on ? C.brand : C.sunken,
+                                     color: on ? C.onAccent : C.muted }}>{c.company_code}</span>
+                      <span style={{ minWidth:0, overflow:'hidden', textOverflow:'ellipsis',
+                                     whiteSpace:'nowrap' }}>{c.company_name}</span>
+                    </label>
+                  )
+                })}
+                {companies.length === 0 && (
+                  <div style={{ fontSize:12, color:C.faint, padding:'10px' }}>No active companies</div>
+                )}
+              </div>
+            )}
           </div>
+
+
           <div>
             <label style={mc.lbl}>Location / Branch</label>
-            <select style={mc.inp} value={f.location_id} disabled={allCos}
+            <select style={mc.inp} value={f.location_id} disabled={multi}
                     onChange={e => set('location_id', e.target.value)}>
-              <option value="">{allCos ? 'Set per company' : 'Select'}</option>
-              {!allCos && locs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+              <option value="">{multi ? 'Set per company' : 'Select'}</option>
+              {!multi && locs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
             </select>
           </div>
           <div>
             <label style={mc.lbl}>Department</label>
-            <select style={mc.inp} value={f.department_id} disabled={allCos}
+            <select style={mc.inp} value={f.department_id} disabled={multi}
                     onChange={e => set('department_id', e.target.value)}>
-              <option value="">{allCos ? 'Set per company' : 'Select'}</option>
-              {!allCos && depts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
+              <option value="">{multi ? 'Set per company' : 'Select'}</option>
+              {!multi && depts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
             </select>
           </div>
           <div><label style={mc.lbl}>Designation</label><input style={mc.inp} value={f.designation} onChange={e => set('designation', e.target.value)} /></div>
@@ -483,8 +617,8 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
           <div><label style={mc.lbl}>Date of joining</label><input type="date" style={mc.inp} value={f.company_doj} onChange={e => set('company_doj', e.target.value)} /></div>
           <div style={{ gridColumn:'1 / 3' }}>
             <label style={mc.lbl}>Employee code (auto)</label>
-            <input style={mc.inp} value={f.emp_code} disabled={allCos}
-                   placeholder={allCos ? 'One per company, generated on save' : ''}
+            <input style={mc.inp} value={f.emp_code} disabled={multi}
+                   placeholder={multi ? 'One per company, generated on save' : ''}
                    onChange={e => set('emp_code', e.target.value)} />
           </div>
         </div>
@@ -492,13 +626,24 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
         {/* Selecting every company creates a record in each. Said plainly here,
             because three rows appearing from one click would otherwise be a
             surprise. */}
-        {allCos && (
-          <div style={{ background:C.brandTint, border:`1px solid ${C.brandEdge}`, borderRadius:8,
-                        padding:'9px 12px', fontSize:12, color:C.ink, lineHeight:1.6 }}>
-            Creates <b>{companies.length} employee records</b> — one in each company
-            ({companies.map(c => c.company_code).join(', ')}), each with its own code and the
-            same details below. Location and department are company-specific, so they are set
-            on each record afterwards.
+        {multi && (
+          <div style={{ display:'flex', gap:10, alignItems:'flex-start',
+                        background:C.brandTint, border:`1px solid ${C.brandEdge}`,
+                        borderRadius:10, padding:'10px 12px', marginTop:2 }}>
+            <span aria-hidden style={{ flex:'none', width:20, height:20, borderRadius:'50%',
+                                       background:C.brand, color:C.onAccent, display:'grid',
+                                       placeItems:'center', fontSize:12, fontWeight:700 }}>
+              {picked.length}
+            </span>
+            <div style={{ fontSize:12, color:C.ink, lineHeight:1.65 }}>
+              <b>{picked.length} records will be created</b> — one in{' '}
+              {companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')} — each with
+              its own employee code, tied together by a single group code so the system treats them as
+              one person.
+              <div style={{ color:C.muted, marginTop:2 }}>
+                Location and department belong to one company, so they are set on each record afterwards.
+              </div>
+            </div>
           </div>
         )}
 
@@ -689,7 +834,7 @@ export default function EmployeeMaster() {
 
   const fetchMeta = async () => {
     const [co,lo,de] = await Promise.all([
-      supabase.from('companies').select('id,company_name,company_code').eq('status','Active'),
+      supabase.from('companies').select('id,company_name,company_code,group_id').eq('status','Active'),
       supabase.from('locations').select('id,location_name,city,company_id').eq('status','Active'),
       supabase.from('departments').select('id,dept_name,company_id').eq('status','Active'),
     ])
