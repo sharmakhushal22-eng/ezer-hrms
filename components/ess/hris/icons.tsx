@@ -28,11 +28,21 @@ const PATHS: Record<string, React.ReactNode> = {
 
 export type IconKey = keyof typeof PATHS
 
+/**
+ * `width`/`height` are set on the element on purpose.
+ *
+ * An <svg> carrying only a viewBox has no intrinsic size, so the moment no CSS
+ * rule matches it the browser falls back to the replaced-element default of
+ * 300x150 — which is how a location pin ended up the size of the card it was
+ * labelling. They are presentation attributes, the weakest thing in the
+ * cascade, so every `.hx-* svg { width: … }` rule still wins; they only decide
+ * what happens when nothing else does.
+ */
 export function Ic({ k, sw = 1.7, style, className }: {
   k: IconKey; sw?: number; style?: CSSProperties; className?: string
 }) {
   return (
-    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth={sw}
+    <svg viewBox="0 0 20 20" width={20} height={20} fill="none" stroke="currentColor" strokeWidth={sw}
       strokeLinecap="round" strokeLinejoin="round" style={style} className={className} aria-hidden="true">
       {PATHS[k]}
     </svg>
