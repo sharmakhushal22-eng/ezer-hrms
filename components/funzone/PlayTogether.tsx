@@ -12,7 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { listInvites, funzone } from '@/lib/funzone/client'
+import { listInvites, funzone, setFunzoneOwner } from '@/lib/funzone/client'
 import { C, F, W, S, R } from '@/lib/ui'
 import { LIVE_GAMES, gameByCode } from '@/lib/funzone/games'
 import { canInvite, canAccept, canDecline, canCancel, effectiveStatus,
@@ -31,6 +31,16 @@ export default function PlayTogether({ meId }: { meId: string }) {
   const [invites, setInvites] = useState<Invite[]>([])
   const [people, setPeople] = useState<Colleague[]>([])
   const [query, setQuery] = useState('')
+  /** Who the SERVER says I am. The meId prop is the portal owner, which is
+   *  not the same person when an administrator is looking at somebody else's
+   *  ESS portal — and the route resolves the actor from the session, not from
+   *  the page. When the two disagreed the list offered "Play" on an invite
+   *  addressed to the portal owner and the server refused it with "This
+   *  invite was not sent to you", which is true and unhelpful. One source of
+   *  truth: the session. */
+  const [serverMe, setServerMe] = useState<string | null>(null)
+  /** The name behind serverMe, for the mismatch banner. */
+  const [serverName, setServerName] = useState<string | null>(null)
   /** Held separately from the search results, which are cleared on pick —
    *  otherwise the field would forget who it is addressed to. */
   const [chosen, setChosen] = useState<Colleague | null>(null)
@@ -59,6 +69,7 @@ export default function PlayTogether({ meId }: { meId: string }) {
   }, [])
 
   const load = useCallback(async () => {
+    setFunzoneOwner(meId)
     // One call. The route resolves who I am, reads both sides of the invite
     // list and resolves the names, so there is no second trip to employees.
     const r = await listInvites()
@@ -72,6 +83,15 @@ export default function PlayTogether({ meId }: { meId: string }) {
     setLoadErr(null)
     setReady(r.data?.installed !== false)
     setInvites(r.data?.invites ?? [])
+    if (r.data?.me) {
+      setServerMe(r.data.me)
+      // The session person's own name, taken from whichever invite mentions
+      // them — cheaper than another round trip, and there is almost always one.
+      const rows = r.data.invites ?? []
+      const mine = rows.find(i => i.fromId === r.data!.me)?.fromName
+                ?? rows.find(i => i.toId === r.data!.me)?.toName ?? null
+      setServerName(mine)
+    }
   }, [])
 
   useEffect(() => { load() }, [load])
@@ -95,14 +115,20 @@ export default function PlayTogether({ meId }: { meId: string }) {
     return () => clearTimeout(t)
   }, [query])
 
+  // Declared before the live-game block below, which uses it. `const` is not
+  // hoisted, so leaving it further down threw a ReferenceError the moment a
+  // game actually started.
+  // Until the first load lands, fall back to the prop so nothing flickers.
+  const who_me = serverMe ?? meId
+
   if (live) {
     const shared = {
-      sessionId: live.sessionId, seed: live.seed, meId, hostId: live.hostId,
+      sessionId: live.sessionId, seed: live.seed, meId: who_me, hostId: live.hostId,
       opponentName: live.opponent, onExit: () => { setLive(null); load() },
     }
     if (live.gameCode === 'mem')  return <LiveMemoryMatch {...shared} />
     if (live.gameCode === 'quiz') return <LiveTrivia {...shared} />
-    return <LiveTicTacToe sessionId={shared.sessionId} meId={meId} hostId={live.hostId}
+    return <LiveTicTacToe sessionId={shared.sessionId} meId={who_me} hostId={live.hostId}
              opponentName={live.opponent} onExit={shared.onExit} />
   }
 
@@ -140,7 +166,7 @@ export default function PlayTogether({ meId }: { meId: string }) {
   }
 
   const now = nowIso()
-  const verdict = canInvite(meId, who, game, {
+  const verdict = canInvite(who_me, who, game, {
     liveGames: LIVE_GAMES.map(g => g.code), existing: invites, now,
   })
 
@@ -183,6 +209,23 @@ export default function PlayTogether({ meId }: { meId: string }) {
 
   return (
     <div style={{ display: 'grid', gap: S.md }}>
+      {/* The session and the page can be different people. Two tabs in one
+          browser share localStorage, so signing in as somebody else in the
+          second tab silently re-owns the first tab's session — and then this
+          screen was judging invites as one person while the header named
+          another. Say it plainly instead of letting somebody act on it. */}
+      {serverMe && serverMe !== meId && (
+        <div style={{ border: `1px solid ${C.critical}`, borderRadius: R.sm,
+                      padding: '11px 13px', background: C.criticalTint,
+                      fontSize: F.small, color: C.ink }}>
+          <b>This is not your Fun Zone.</b> You are signed in as{' '}
+          {serverName ?? 'a different employee'}, but you are looking at somebody
+          else&rsquo;s portal. The invites below are yours, not theirs, so anything you
+          send or accept here happens as you. Open your own portal, or sign in again in
+          this tab.
+        </div>
+      )}
+
       <section style={{ background: C.surface, border: `1px solid ${C.line}`,
                         borderRadius: R.lg, padding: '16px 18px' }}>
         <h3 style={{ margin: 0, fontSize: F.body, fontWeight: W.bold, color: C.ink }}>
@@ -295,9 +338,13 @@ export default function PlayTogether({ meId }: { meId: string }) {
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 8 }}>
-            {inboxOrder(invites, meId, now).map(inv => {
+            {inboxOrder(invites, who_me, now).map(inv => {
               const st = effectiveStatus(inv, now)
-              const mine = inv.fromId === meId
+              // Which side of the invite I am on — this decides whether the
+              // row offers "Play" or "Withdraw". It has to be the session
+              // identity: judged against the portal owner it offered Play on
+              // an invite I had sent, and the server rightly refused it.
+              const mine = inv.fromId === who_me
               const g = gameByCode(inv.gameCode)
               const waiting = st === 'PENDING'
               return (
@@ -323,18 +370,18 @@ export default function PlayTogether({ meId }: { meId: string }) {
                   {waiting && !mine && (
                     <>
                       <button onClick={() => accept(inv)}
-                        disabled={busy || !canAccept(inv, meId, now).ok} style={btnGo}>
+                        disabled={busy || !canAccept(inv, who_me, now).ok} style={btnGo}>
                         Play
                       </button>
                       <button onClick={() => answer(inv, 'DECLINED')}
-                        disabled={busy || !canDecline(inv, meId, now).ok} style={btnQuiet}>
+                        disabled={busy || !canDecline(inv, who_me, now).ok} style={btnQuiet}>
                         No thanks
                       </button>
                     </>
                   )}
                   {waiting && mine && (
                     <button onClick={() => answer(inv, 'CANCELLED')}
-                      disabled={busy || !canCancel(inv, meId, now).ok} style={btnQuiet}>
+                      disabled={busy || !canCancel(inv, who_me, now).ok} style={btnQuiet}>
                       Withdraw
                     </button>
                   )}

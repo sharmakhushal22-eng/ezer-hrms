@@ -47,13 +47,24 @@ const ACTIONS: Record<string, { fn: string; params: readonly string[]; write: bo
   request_share_to_feed:  { fn: 'request_share_to_feed_as',  params: ['p_message'] , write: true },
   approve_share_to_feed:  { fn: 'approve_share_to_feed_as',  params: ['p_message', 'p_visibility'] , write: true },
   set_recognition_marks:  { fn: 'set_recognition_marks_as',  params: ['p_recognition', 'p_badge_ref', 'p_tag_refs'] , write: true },
-  // Board screens (wall TVs) — 101. Each wrapper sets the actor for its own
-  // transaction, so the enforce_wall_admin('wof.board.manage') guard on
-  // board_screens sees a real administrator.
-  create_board_screen:    { fn: 'create_board_screen_as',    params: ['p_location', 'p_name', 'p_rotate', 'p_scope'] , write: true },
-  set_board_screen_active:{ fn: 'set_board_screen_active_as', params: ['p_screen', 'p_active'] , write: true },
-  rotate_board_pair_code: { fn: 'rotate_board_pair_code_as',  params: ['p_screen'] , write: true },
-  delete_board_screen:    { fn: 'delete_board_screen_as',     params: ['p_screen'] , write: true },
+
+  // ── Screens and administrators (106) ──────────────────────────────────
+  //
+  // These were SQL-editor errands until 106 wrapped them, for the same reason
+  // the thirteen above needed 094: grant_wall_admin and the board_screens
+  // trigger read the actor from app.current_employee_id, which PostgREST
+  // cannot set. The wrapper sets it and calls in one transaction.
+  //
+  // list_board_screens deliberately returns no pair_code. A screen list is a
+  // reasonable thing to show; handing out every board URL is not. Rotate to
+  // get a fresh code if one is lost.
+  pair_board_screen:      { fn: 'pair_board_screen_as',      params: ['p_company', 'p_location', 'p_screen_name', 'p_rotate_secs', 'p_language', 'p_scope', 'p_max_slides'] , write: true },
+  rotate_screen_pair_code:{ fn: 'rotate_screen_pair_code_as',params: ['p_screen'] , write: true },
+  set_screen_active:      { fn: 'set_screen_active_as',      params: ['p_screen', 'p_active'] , write: true },
+  list_board_screens:     { fn: 'list_board_screens_as',     params: ['p_company'] , write: false },
+  grant_wall_admin:       { fn: 'grant_wall_admin_as',       params: ['p_employee', 'p_level', 'p_reason', 'p_branch', 'p_valid_until'] , write: true },
+  revoke_wall_admin:      { fn: 'revoke_wall_admin_as',      params: ['p_grant_id', 'p_reason'] , write: true },
+  list_wall_admins:       { fn: 'list_wall_admins_as',       params: ['p_company'] , write: false },
 }
 
 /** PostgREST's "no such function". Means 094 has not been run — a deployment
@@ -80,8 +91,20 @@ export async function POST(req: NextRequest) {
   // Copy across only the parameters this action declares, dropping undefined
   // so the function's own defaults apply rather than a null overriding them.
   if (spec.write && ctx.caller.viewAs) {
-    return forbidden('Recognition is posted under your own name, so it cannot '
-                   + 'be sent while you are viewing somebody else\'s portal.')
+    // Two different situations, and the earlier message described only one of
+    // them. essCaller sets viewAs TRUE UNCONDITIONALLY for the legacy shared
+    // dashboard login, because that session is not attached to an employee at
+    // all — so somebody signed in that way was told they were "viewing
+    // somebody else's portal" while looking at their own.
+    //
+    // actorEmployeeId separates them: null means the shared login, non-null
+    // means a real person looking at a colleague's portal.
+    return forbidden(ctx.caller.actorEmployeeId === null
+      ? 'This session is the shared dashboard login, which is not attached to '
+        + 'an employee record. Recognition is posted under a name, so sign in '
+        + 'with your own ESS account to send it.'
+      : 'Recognition is posted under your own name, so it cannot be sent while '
+        + 'you are viewing somebody else\'s portal. Open your own portal to send it.')
   }
 
   const args: Record<string, unknown> = {}

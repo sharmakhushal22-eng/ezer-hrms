@@ -141,12 +141,23 @@ export default function AppreciationComposer({
 
   useEffect(() => {
     (async () => {
-      const c = await supabase.from('shoutout_categories')
+      // Per company, like everything else in this catalogue: eight categories
+      // times three companies is twenty-four rows, and without the filter all
+      // twenty-four came back — every category listed three times, each copy
+      // belonging to a different company. Same bug as the shoutout composer.
+      const me = await supabase.from('employees')
+        .select('company_id').eq('id', actorId).maybeSingle()
+      const companyId = (me.data as { company_id?: string } | null)?.company_id ?? null
+
+      let cq = supabase.from('shoutout_categories')
         .select('id, code, label, glyph, helper_text')
         .eq('is_active', true).order('sort_order').limit(24)
+      // No company resolved is not a reason to show another company's list.
+      cq = companyId ? cq.eq('company_id', companyId) : cq.limit(0)
+      const c = await cq
       if (!c.error) setCats((c.data ?? []) as unknown as Category[])
     })()
-  }, [])
+  }, [actorId])
 
   useEffect(() => {
     const q = query.trim()

@@ -1,132 +1,111 @@
-export type EditState = 'direct' | 'request' | 'locked' | 'event';
-export type ViewerRole = 'self' | 'manager' | 'hr' | 'peer';
+// lib/profile/types.ts — the shapes get_employee_profile() actually returns.
+//
+// Written against the LIVE payload, not the vendor's documentation. The view
+// behind it (v_employee_profile_360) has 89 columns; the RPC then strips
+// whatever the viewer may not read, so almost every field here is optional by
+// construction — a missing key means "you are not allowed to see this", which
+// is different from null meaning "nobody has filled it in". The UI has to
+// keep those two apart, so nothing here collapses them.
+
+/** Who the viewer is TO THIS EMPLOYEE — positional, not a job title.
+ *  Decided by get_employee_profile, never by the client. */
+export type ViewerRole = 'self' | 'manager' | 'hr' | 'peer'
+
+/** How a field may be changed. Straight from the design file. */
+export type FieldState =
+  /** Source of truth is elsewhere (HR, payroll, onboarding). Read only. */
+  | 'locked'
+  /** The employee may change it themselves, and it saves immediately. */
+  | 'direct'
+  /** Goes to HR or payroll as a change request, with a reason. */
+  | 'request'
+  /** Opens a whole workflow rather than editing one value — marital status
+   *  pulls family, nominee and insurance behind it. */
+  | 'event'
 
 export interface ProfileField {
-  key: string;
-  label: string;
-  value: string | null;
-  state: EditState;
-  column: string;
-  mono?: boolean;
-  masked?: boolean;
-  wide?: boolean;
-  hint?: string | null;
-  routeTo?: string | null;
-  restricted?: boolean;   // viewer may not read it at all
+  /** What the employee reads. */
+  label: string
+  /** Key into the employee payload. */
+  key: string
+  state: FieldState
+  /** Where the value really lives — shown small under the value, because a
+   *  person asking "why can't I edit this" is really asking "who owns it".
+   *  This is for READING. It is a label, and it uses the logical name. */
+  source: string
+  /** The actual employees column to write, for `direct` fields only.
+   *  Kept SEPARATE from `source` on purpose: 091 renamed fourteen columns on
+   *  the way in (alt_mobile -> alternate_mobile, ifsc -> ifsc_code, pan ->
+   *  pan_number and so on), so the name the screen shows and the name the
+   *  UPDATE needs are not always the same string. Deriving one from the other
+   *  is how an edit ends up writing to a column that does not exist. */
+  column?: string
+  /** Monospace: codes, numbers, identifiers. */
+  mono?: boolean
+  /** Masked behind a reveal control. */
+  mask?: boolean
+  /** Minimum role that may see it at all. Absent means anyone who can open
+   *  the profile. */
+  min?: Exclude<ViewerRole, 'peer'>
+  /** A line under the value explaining a consequence. */
+  hint?: string
+  /** Full width — addresses and anything long. */
+  wide?: boolean
 }
 
-export interface ProfileGroup { title: string; fields: ProfileField[] }
-export interface ProfileTab   { key: string; label: string; groups: ProfileGroup[] }
+export interface FieldGroup { title: string; fields: ProfileField[] }
 
-export interface EmployeeCore {
-  id: string;
-  company_id: string;
-  employee_code: string;
-  full_name: string;
-  display_name: string | null;
-  photo_path: string | null;
-  designation: string | null;
-  department_name: string | null;
-  sub_department: string | null;
-  grade: string | null;
-  job_level: string | null;
-  employment_type: string | null;
-  employee_category: string | null;
-  cost_centre: string | null;
-  business_unit: string | null;
-  workstation: string | null;
-  status: string | null;
-  company_name: string | null;
-  location_name: string | null;
-  branch_code: string | null;
-  shift_name: string | null;
-  weekly_off: string | null;
-  attendance_mode: string | null;
-  date_of_joining: string | null;
-  confirmation_date: string | null;
-  probation_months: number | null;
-  notice_period_days: number | null;
-  date_of_leaving: string | null;
-  date_of_birth: string | null;
-  age_years: number | null;
-  gender: string | null;
-  blood_group: string | null;
-  marital_status: string | null;
-  marriage_date: string | null;
-  nationality: string | null;
-  place_of_birth: string | null;
-  domicile_state: string | null;
-  father_name: string | null;
-  mother_name: string | null;
-  spouse_name: string | null;
-  languages: string | null;
-  is_disabled: boolean | null;
-  is_international_worker: boolean | null;
-  official_email: string | null;
-  personal_email: string | null;
-  mobile: string | null;
-  alt_mobile: string | null;
-  extension: string | null;
-  whatsapp_optin: boolean | null;
-  present_address: string | null;
-  permanent_address: string | null;
-  emergency_contact_1: string | null;
-  emergency_contact_2: string | null;
-  pan?: string | null;
-  aadhaar_full?: string | null;
-  aadhar_last4: string | null;
-  uan: string | null;
-  pf_number: string | null;
-  pf_applicable: boolean | null;
-  vpf_amount: number | null;
-  eps_status: string | null;
-  esic_ip_number: string | null;
-  esic_dispensary: string | null;
-  pt_state: string | null;
-  lwf_state: string | null;
-  passport_no?: string | null;
-  driving_licence: string | null;
-  voter_id: string | null;
-  bank_name: string | null;
-  bank_account_full?: string | null;
-  bank_last4: string | null;
-  ifsc: string | null;
-  bank_holder_name: string | null;
-  payment_mode: string | null;
-  annual_ctc: number | null;
-  gross_monthly: number | null;
-  rm_l1_name: string | null; rm_l1_code: string | null;
-  rm_l2_name: string | null; rm_l2_code: string | null;
-  hod_name: string | null;   hod_code: string | null;
-  md_name: string | null;    md_code: string | null;
-  reportee_count: number | null;
-  tenure_years: number | null;
-  tenure_months: number | null;
+export type TabId =
+  | 'overview' | 'personal' | 'job' | 'statutory'
+  | 'payroll' | 'time' | 'growth' | 'records'
+
+export interface Employee {
+  id: string
+  full_name: string
+  employee_code: string | null
+  photo_path: string | null
+  [key: string]: unknown
 }
 
+export interface Completeness { score: number; pending: string[] }
+
+/** The related lists. Every one of these is an array in the payload, and the
+ *  RPC returns [] rather than null when there is nothing — so the UI never has
+ *  to guard for undefined on the happy path. */
 export interface ProfilePayload {
-  employee: EmployeeCore;
-  viewer_role: ViewerRole;
-  completeness: number;
-  pending: string[];
-  family: any[];
-  nominations: any[];
-  insurance: any[];
-  documents: any[];
-  assets: any[];
-  app_access: any[];
-  education: any[];
-  experience: any[];
-  certifications: any[];
-  trainings: any[];
-  requests: any[];
+  employee: Employee
+  viewer_role: ViewerRole
+  completeness: Completeness
+  family: Row[]
+  nominations: Row[]
+  insurance: Row[]
+  documents: Row[]
+  assets: Row[]
+  education: Row[]
+  experience: Row[]
+  certifications: Row[]
+  trainings: Row[]
+  app_access: Row[]
+  /** Fetched alongside by the route, not by get_employee_profile — see the
+   *  note there. Null when the employee has none. */
+  performance?: Row | null
+  salary?: Row | null
+  recognition?: Row[]
+  error?: string
 }
 
-export interface IdTokenResponse {
-  token: string;      // goes into the QR
-  url: string;        // full verify URL encoded in the QR
-  expiresAt: number;  // epoch ms
-  ttl: number;        // seconds
-  cardNo: string;
-  validTill: string | null;
+export type Row = Record<string, unknown>
+
+/** Rank for the `min` comparison. 'peer' is the floor: somebody who can open
+ *  the page but is neither the person, their manager, nor HR. */
+export const ROLE_RANK: Record<ViewerRole, number> = {
+  peer: 0, self: 1, manager: 2, hr: 3,
+}
+
+export function maySee(viewer: ViewerRole, min?: ProfileField['min']): boolean {
+  if (!min) return true
+  // 'self' is a special case rather than a rank: you can always see your own
+  // Aadhaar, but your manager — who outranks you — cannot.
+  if (min === 'self') return viewer === 'self' || viewer === 'hr'
+  return ROLE_RANK[viewer] >= ROLE_RANK[min]
 }

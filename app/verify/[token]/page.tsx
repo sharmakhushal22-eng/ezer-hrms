@@ -1,94 +1,90 @@
-import { verifyToken } from '@/lib/profile/idcard';
-import { svc } from '@/lib/profile/access';
-import { headers } from 'next/headers';
+// app/verify/[token]/page.tsx — what the guard's camera opens.
+//
+// A phone camera pointed at the QR lands here. It must answer one question,
+// from arm's length, in a second: let this person through, or not.
+//
+// So it is a full-bleed green or red screen with the name large. No EZER
+// chrome, no navigation, nothing to tap by accident. It is rendered on the
+// SERVER and consumes the token during the render, which means the code is
+// spent by the time the page reaches the phone — a screenshot of this screen
+// verifies nothing.
 
-export const dynamic = 'force-dynamic';
-export const runtime = 'nodejs';
+import { verifyToken } from '@/lib/profile/idcard'
+import { headers } from 'next/headers'
 
-/**
- * /verify/<token> — what the guard's camera opens.
- * Rendering this page CONSUMES the token. Reload and it reports "already used",
- * which is exactly what should happen to a forwarded screenshot.
- */
-export default async function VerifyPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = await params;
-  const h = await headers();
-  const res = await verifyToken(decodeURIComponent(token), {
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
+export default async function Verify({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params
+  const h = await headers()
+  const r = await verifyToken(decodeURIComponent(token), {
     gate: h.get('x-gate-id') ?? undefined,
     ip: h.get('x-forwarded-for')?.split(',')[0]?.trim(),
     ua: h.get('user-agent') ?? undefined,
-  });
+  })
 
-  let photo: string | null = null;
-  if (res.valid && res.photo_path) {
-    const { data } = await svc().storage
-      .from('employee-photos').createSignedUrl(res.photo_path, 120);
-    photo = data?.signedUrl ?? null;
-  }
+  const ok = r.valid
+  const bg = ok ? '#065F46' : '#7F1D1D'
+  const chip = ok ? '#10B981' : '#F87171'
 
-  const good = res.valid;
   return (
     <main style={{
-      minHeight: '100dvh', display: 'grid', placeItems: 'center', padding: 20,
-      background: good ? '#ECFDF5' : '#FEF2F2',
-      fontFamily: '-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,sans-serif',
+      minHeight: '100dvh', background: bg, color: '#fff', display: 'grid',
+      placeItems: 'center', padding: 24, textAlign: 'center',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
     }}>
-      <div style={{
-        width: '100%', maxWidth: 380, background: '#fff', borderRadius: 26, padding: 26,
-        textAlign: 'center', boxShadow: '0 24px 60px -22px rgba(15,23,42,.3)',
-        border: `1px solid ${good ? '#A7F3D0' : '#FECACA'}`,
-      }}>
+      <div style={{ maxWidth: 460, width: '100%' }}>
         <div style={{
-          width: 62, height: 62, margin: '0 auto 14px', borderRadius: '50%',
-          display: 'grid', placeItems: 'center', fontSize: 30, color: '#fff',
-          background: good ? '#059669' : '#DC2626',
-        }}>{good ? '✓' : '✕'}</div>
+          width: 84, height: 84, borderRadius: '50%', margin: '0 auto 22px',
+          background: 'rgba(255,255,255,.14)', display: 'grid', placeItems: 'center',
+          fontSize: 42, lineHeight: 1,
+        }}>{ok ? '✓' : '✕'}</div>
 
-        <h1 style={{ margin: 0, fontSize: 19, letterSpacing: '-.02em' }}>
-          {good ? 'Verified' : 'Not verified'}
-        </h1>
+        <div style={{
+          display: 'inline-block', background: chip, color: '#052e26',
+          fontSize: 12, fontWeight: 800, letterSpacing: '.09em', textTransform: 'uppercase',
+          padding: '5px 14px', borderRadius: 20, marginBottom: 18,
+        }}>{ok ? 'Verified' : 'Not verified'}</div>
 
-        {good ? (
+        {ok ? (
           <>
+            <h1 style={{ fontSize: 34, fontWeight: 800, margin: '0 0 6px', letterSpacing: '-.02em' }}>
+              {r.name}
+            </h1>
+            <p style={{ fontSize: 16, opacity: .9, margin: '0 0 20px' }}>{r.designation}</p>
             <div style={{
-              width: 96, height: 96, margin: '18px auto 12px', borderRadius: 28, overflow: 'hidden',
-              background: 'linear-gradient(150deg,#3B82F6,#1D4ED8)', display: 'grid',
-              placeItems: 'center', color: '#fff', fontSize: 32, fontWeight: 700,
+              background: 'rgba(255,255,255,.12)', borderRadius: 14, padding: '14px 16px',
+              display: 'grid', gap: 10, textAlign: 'left', fontSize: 14,
             }}>
-              {photo
-                ? <img src={photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : (res.name ?? '').split(' ').map(w => w[0]).slice(0, 2).join('')}
+              <Row k="Employee code" v={r.employee_code} mono />
+              <Row k="Card number" v={r.card_no} mono />
+              {r.access_zones?.length ? <Row k="Access zones" v={r.access_zones.join(', ')} /> : null}
+              {r.valid_till ? <Row k="Valid till" v={r.valid_till} /> : null}
             </div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{res.name}</div>
-            <div style={{ color: '#64748B', fontSize: 13.5, marginTop: 2 }}>{res.designation}</div>
-            <div style={{
-              fontFamily: 'ui-monospace,monospace', marginTop: 10, fontSize: 13,
-              background: '#EFF6FF', color: '#1E3A8A', padding: '7px 12px',
-              borderRadius: 999, display: 'inline-block',
-            }}>{res.employee_code} · {res.card_no}</div>
-
-            <div style={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap', marginTop: 12 }}>
-              {(res.access_zones ?? []).map(z => (
-                <span key={z} style={{
-                  fontSize: 11, fontWeight: 700, padding: '4px 9px', borderRadius: 999,
-                  background: '#F1F5F9', color: '#334155',
-                }}>{z}</span>
-              ))}
-            </div>
-
-            <p style={{ color: '#64748B', fontSize: 12, marginTop: 16, lineHeight: 1.6 }}>
-              Scanned {new Date(res.scanned_at ?? Date.now()).toLocaleTimeString('en-IN')}.
-              This code is now used and cannot be scanned again.
+            <p style={{ fontSize: 12, opacity: .7, marginTop: 18 }}>
+              This code has now been used and will not verify again.
             </p>
           </>
         ) : (
-          <p style={{ color: '#7F1D1D', fontSize: 14, marginTop: 12, lineHeight: 1.6 }}>
-            {res.reason}
-          </p>
+          <>
+            <h1 style={{ fontSize: 26, fontWeight: 700, margin: '0 0 10px' }}>Do not let this through</h1>
+            <p style={{ fontSize: 16, opacity: .92, margin: 0 }}>{r.reason}</p>
+            <p style={{ fontSize: 12, opacity: .7, marginTop: 20 }}>
+              Every scan is logged, including this one.
+            </p>
+          </>
         )}
-
-        <div style={{ marginTop: 18, fontSize: 11, color: '#94A3B8' }}>EZER HRMS · identity check</div>
       </div>
     </main>
-  );
+  )
+}
+
+function Row({ k, v, mono }: { k: string; v?: string; mono?: boolean }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+      <span style={{ opacity: .75 }}>{k}</span>
+      <b style={{ fontFamily: mono ? 'ui-monospace, Menlo, monospace' : undefined }}>{v ?? '—'}</b>
+    </div>
+  )
 }

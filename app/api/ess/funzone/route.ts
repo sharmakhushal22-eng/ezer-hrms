@@ -114,6 +114,19 @@ export async function POST(req: NextRequest) {
   const str = (k: string) => typeof body[k] === 'string' && (body[k] as string).trim()
     ? (body[k] as string).trim() : null
 
+  // Reads are fine while viewing another portal. Writes are not: an invite,
+  // an acceptance and a score all carry a person's name, and the shared
+  // dashboard login is not attached to an employee at all. The wall refuses
+  // on the same grounds.
+  const WRITES = new Set(['send', 'accept', 'answer', 'finish', 'share'])
+  if (WRITES.has(action) && ctx.caller.viewAs) {
+    return bad(ctx.caller.actorEmployeeId === null
+      ? 'This session is the shared dashboard login, which is not attached to an '
+        + 'employee record. Sign in with your own ESS account to play.'
+      : 'You are looking at somebody else\'s portal, so this would be recorded as '
+        + 'them. Open your own portal to send or accept a game invite.', 403)
+  }
+
   switch (action) {
 
     // Search, never browse. The picker used to load up to 300 colleagues into
@@ -223,6 +236,24 @@ export async function POST(req: NextRequest) {
       const { rows } = await invitesFor(me)
       const inv = rows.find(i => i.id === id)
       if (!inv) return bad('That invite is not yours.', 403)
+
+      // "This invite was not sent to you" is true and useless on its own,
+      // because the interesting question is WHO THE SERVER THINKS YOU ARE.
+      // The list is drawn from the session identity now, so reaching this at
+      // all means the two disagree — say so, and name both people, rather
+      // than leaving somebody staring at an invite with their own name on it.
+      if (inv.toId !== me) {
+        const { data: who } = await sb.from('employees')
+          .select('id, full_name').in('id', [me, inv.toId])
+        const nameOf = (id: string) =>
+          ((who ?? []) as { id: string; full_name: string }[]).find(e => e.id === id)?.full_name
+        return bad(
+          `This invite was sent to ${nameOf(inv.toId) ?? 'somebody else'}, `
+          + `and you are signed in as ${nameOf(me) ?? 'another employee'}. `
+          + `If that is not who you expected, you are looking at a colleague's portal — `
+          + `open your own to accept invites addressed to you.`, 403)
+      }
+
       const v = canAccept(inv, me, new Date().toISOString())
       if (!v.ok) return bad(v.because)
 

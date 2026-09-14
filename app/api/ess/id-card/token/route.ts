@@ -1,45 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { essViewerId, resolveEmployeeId } from '@/lib/profile/access';
-import { issueToken } from '@/lib/profile/idcard';
+// app/api/ess/id-card/token/route.ts
+//
+//   GET -> a fresh 30-second QR token for YOUR OWN card
+//
+// The screen calls this every 15 seconds. It refuses any card but the
+// caller's own: a manager or an HR admin has no business pulling somebody
+// else's live gate code, and "I can see their profile" is not the same
+// permission as "I can walk through their door".
 
-export const runtime = 'nodejs';
-export const dynamic = 'force-dynamic';
+import { NextRequest, NextResponse } from 'next/server'
+import { essRoute } from '@/lib/ess/session'
+import { issueToken } from '@/lib/profile/idcard'
 
-/**
- * GET /api/ess/id-card/token
- * Issues a fresh 30 second QR token for the LOGGED IN employee only.
- * A manager or HR can never pull someone else's live code — that would
- * defeat the point of the card.
- */
+export const dynamic = 'force-dynamic'
+export const runtime = 'nodejs'
+
 export async function GET(req: NextRequest) {
-  const viewerId = await essViewerId(req);
-  if (!viewerId) return NextResponse.json({ error: 'not_authenticated' }, { status: 401 });
+  const { ctx, error } = await essRoute(req)
+  if (error) return error
 
-  const asked = req.nextUrl.searchParams.get('code');
-  if (asked && asked !== 'me') {
-    const target = await resolveEmployeeId(asked);
-    if (target !== viewerId) {
-      return NextResponse.json(
-        { error: 'forbidden', message: 'A live ID code can only be generated for yourself.' },
-        { status: 403 }
-      );
-    }
+  // viewAs covers both the shared dashboard login and a real person looking
+  // at a colleague's portal. Neither may mint that colleague's gate code.
+  if (ctx.caller.viewAs) {
+    return NextResponse.json({
+      error: 'A gate code can only be issued for your own card. Open your own portal.',
+    }, { status: 403 })
   }
 
   try {
-    const t = await issueToken(viewerId);
-    return NextResponse.json(t, {
-      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate', Pragma: 'no-cache' },
-    });
-  } catch (e: any) {
-    const m = String(e.message);
-    const status = m === 'rate_limited' ? 429 : m.startsWith('card_') || m === 'no_card' ? 403 : 500;
-    const message =
-      m === 'rate_limited' ? 'Too many codes requested. Wait a minute.'
-      : m === 'card_revoked' ? 'Your ID card has been revoked. Contact HR.'
-      : m === 'card_suspended' ? 'Your ID card is suspended.'
-      : m === 'no_card' ? 'No ID card has been issued to you yet.'
-      : 'Could not generate a code.';
-    return NextResponse.json({ error: m, message }, { status });
+    return NextResponse.json(await issueToken(ctx.caller.employeeId))
+  } catch (e) {
+    const m = e instanceof Error ? e.message : 'failed'
+    if (m.includes('ID_CARD_PEPPER')) {
+      return NextResponse.json({
+        error: 'The ID card is not configured on this server yet (ID_CARD_PEPPER).',
+      }, { status: 503 })
+    }
+    if (m === 'rate_limited') {
+      return NextResponse.json({
+        error: 'Too many codes requested. Wait a moment and try again.',
+      }, { status: 429 })
+    }
+    if (m.startsWith('card_')) {
+      return NextResponse.json({
+        error: `This card is ${m.slice(5)}. Ask HR to reissue it.`,
+      }, { status: 403 })
+    }
+    return NextResponse.json({ error: m }, { status: 500 })
   }
 }

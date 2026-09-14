@@ -181,17 +181,47 @@ export default function ShoutoutComposer({
 
   useEffect(() => {
     (async () => {
-      const c = await supabase.from('shoutout_categories')
+      // The company first: BOTH lists below are per-company, and reading either
+      // without it returns every company's copy.
+      const me = await supabase.from('employees')
+        .select('company_id').eq('id', actorId).maybeSingle()
+      const companyId = (me.data as { company_id?: string } | null)?.company_id ?? null
+
+      // shoutout_categories holds one row per category PER COMPANY — three
+      // companies here, eight categories each, twenty-four rows. Filtering on
+      // is_active alone returned all twenty-four, so "What is it for" listed
+      // Performance, Helping hand and the rest three times over, and choosing
+      // one was a coin toss between three identical-looking options belonging
+      // to three different companies.
+      let cq = supabase.from('shoutout_categories')
         .select('id, code, label, helper_text, glyph, requires_value')
         .eq('is_active', true).order('sort_order').limit(24)
+      cq = companyId ? cq.eq('company_id', companyId) : cq.limit(0)
+      const c = await cq
       if (!c.error) setCats((c.data ?? []) as unknown as Category[])
       // recognition_values, not company_values. I had guessed the name, and a
       // guessed relation fails the whole select rather than returning nothing.
-      const v = await supabase.from('recognition_values').select('id, label')
+      //
+      // FILTERED BY COMPANY, and that is the whole point. The table holds one
+      // row per value PER COMPANY — three companies here, six values each,
+      // eighteen rows. Selecting on is_active alone returned all eighteen, so
+      // every value appeared three times in the picker and picking one was a
+      // coin toss between three identical-looking chips belonging to three
+      // different companies.
+      //
+      // Same company, same reason. Resolved once above, from the actor rather
+      // than a prop: this composer is handed only actorId, so no caller can
+      // pass the wrong one.
+      let vq = supabase.from('recognition_values').select('id, label')
         .eq('is_active', true).order('sort_order').limit(24)
+      // No company resolved is not a reason to show another company's values.
+      vq = companyId ? vq.eq('company_id', companyId) : vq.limit(0)
+      const v = await vq
       if (!v.error) setValues((v.data ?? []) as unknown as CompanyValue[])
     })()
-  }, [])
+    // actorId is read inside now, so it belongs here — an empty array would
+    // pin the first actor's company for the life of the component.
+  }, [actorId])
 
   // Search by name or code. Anyone who has left is excluded — the database
   // refuses them anyway, and offering a name that cannot be submitted is a

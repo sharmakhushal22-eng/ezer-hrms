@@ -40,6 +40,7 @@ import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
 import WallOfFame from '@/components/ess/WallOfFame'
+import Profile360 from '@/components/profile/Profile360'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
@@ -48,7 +49,6 @@ import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
 import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/components/employees/EmployeeProfileView'
-import EssProfile360 from '@/components/profile/EssProfile360'
 
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
@@ -751,6 +751,36 @@ function ProfileHero({ emp, notify }: {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// NOT WIRED. Kept deliberately; do not delete without reading this.
+//
+// Two ESS profiles were built in parallel on two branches. This one — Nayan's
+// — renders the Employee Master record through EmployeeProfileSections, the
+// same four sections app/dashboard/employees uses, so an employee sees
+// exactly what HR sees. The other is components/profile/Profile360.tsx, built
+// against EZER-ESS-Profile-360.html: eight tabs, per-field edit states
+// (locked / direct / request / event), masking, role gating, and change
+// requests routed through raise_profile_change_request.
+//
+// The merge of NayanAhuja into TusharPanwar produced no conflict — the two
+// changes touched different lines — so git silently kept the Profile360
+// wiring. Tushar has since confirmed that is the one he wants on the Profile
+// tab, so `case 'profile'` renders Profile360 and this function is
+// unreachable.
+//
+// It is left here rather than removed because it is a colleague's work, it
+// still compiles, and EmployeeProfileView.tsx is in active use by
+// app/dashboard/employees regardless. If it is to go, that is Nayan's call.
+//
+// ONE THING IT HAS THAT PROFILE360 DOES NOT, and which is a real gap rather
+// than a preference: the bank-change form below does an IFSC lookup against
+// ifsc.razorpay.com and makes the employee type the account number twice.
+// Profile360 sends bank changes through the generic request modal, which
+// asks for a new value and a reason and validates neither. If bank details
+// start moving through the new screen, that confirmation and lookup should
+// be ported across — a mistyped account number is not a UI inconvenience, it
+// is a salary paid to a stranger.
+// ─────────────────────────────────────────────────────────────────────────
 function Profile({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
   const [tab, setTab] = useState<'OVERVIEW' | 'RECORD' | 'UPDATE'>('RECORD')
   // Sub-tab inside My Record, the same four the Employee Master drawer uses.
@@ -3714,7 +3744,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     if (section.status === 'soon' && section.features) return <FeatureGrid features={section.features} />
     switch (view) {
       case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
-      case 'profile':       return <EssProfile360 employeeId={emp.id} />
+      // Profile 360. The portal owner's code is passed, not the viewer's —
+      // the route resolves WHO IS LOOKING from the session and masks
+      // accordingly, so an admin opening a colleague's portal sees that
+      // colleague's profile with a colleague's visibility, not their own.
+      case 'profile':       return <Profile360 code={emp.emp_code} employeeId={emp.id} />
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
       // The inbox reports its own unread straight into the bell's state, so
       // the badge and the screen can never show two different numbers.

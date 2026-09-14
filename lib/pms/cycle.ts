@@ -241,6 +241,8 @@ export function stageStates(
 
 export type Urgency = 'none' | 'info' | 'due' | 'overdue'
 
+export type ActionTab = 'mine' | 'self' | 'oneone' | 'team' | 'dept' | 'fill'
+
 export interface Action {
   /** Imperative, in the reader's own terms. "Write your KRAs", not "KRA entry". */
   title: string
@@ -249,7 +251,12 @@ export interface Action {
   /** The control that does it. */
   cta: string
   /** Which tab to open. */
-  tab: string
+  /** Where the CTA goes. A union, not `string`: the tab strips use different
+   *  names ('kras', 'oneToOne', 'deptAnalytics'), and while this was `string`
+   *  nothing stopped the two vocabularies drifting apart — which is exactly
+   *  what happened, leaving every call-to-action inert. Adding a destination
+   *  here now fails the build until Performance.tsx maps it. */
+  tab: ActionTab
   urgency: Urgency
   /** Days to the window's close, when there is one. */
   daysLeft?: number | null

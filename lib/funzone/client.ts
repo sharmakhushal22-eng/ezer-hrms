@@ -15,9 +15,15 @@ export interface FzResult<T = unknown> {
   error: { message: string; status?: number } | null
 }
 
+/** Whose portal this is — see the note in lib/profile/client.ts. Without it
+ *  the shared dashboard login gets 400 from essCaller before the route runs. */
+let portalOwner: string | null = null
+export const setFunzoneOwner = (id: string | null) => { portalOwner = id }
+
 async function call<T>(init: RequestInit): Promise<FzResult<T>> {
   try {
-    const res = await fetch('/api/ess/funzone', { ...init, headers: await authHeaders() })
+    const qs = portalOwner ? `?employee_id=${encodeURIComponent(portalOwner)}` : ''
+    const res = await fetch(`/api/ess/funzone${qs}`, { ...init, headers: await authHeaders() })
     const payload = await res.json().catch(() => null) as (Record<string, unknown> | null)
     if (!res.ok) {
       return { data: null, error: {

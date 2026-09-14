@@ -1,200 +1,137 @@
-'use client';
-import { authHeaders } from '@/lib/auth-headers';
+'use client'
+// components/profile/IdCard.tsx — the digital ID card, with a live QR.
+//
+// The card flips. The front is the printed-badge face: photo, name,
+// designation, code, joining date, blood group, emergency number. The back
+// is the scannable code and a countdown.
+//
+// THE ROTATION IS THE POINT. A token lives 30 seconds and the card asks for
+// a fresh one every 15, so there is always a live overlap and the guard
+// never meets a dead code. Refresh pauses while the tab is hidden and fires
+// the moment it is visible again — a phone in a pocket should not burn
+// through the rate limit, and a phone pulled out at the gate should show a
+// live code immediately rather than a stale one for a beat.
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import QRCode from 'qrcode';
-import { T } from '@/lib/profile/theme';
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import QRCode from 'qrcode'
+import { authHeaders } from '@/lib/auth-headers'
 
-/**
- * Digital ID card with a live rotating QR.
- *
- * The code on screen is valid for 30 seconds and for exactly one scan.
- * We fetch a new one every 15 seconds so there is always overlap and the
- * guard never sees a dead code. Refresh pauses when the tab is hidden and
- * fires immediately when it comes back, so a phone in a pocket does not
- * burn through the rate limit.
- */
-
-const REFRESH_MS = 15_000;
-
-interface Props {
-  name: string;
-  code: string;
-  designation: string;
-  company: string;
-  photoUrl?: string | null;
-  initials: string;
-  bloodGroup?: string | null;
-  doj?: string | null;
-  emergency?: string | null;
+interface Issued {
+  token: string; url: string; expiresAt: number
+  ttl: number; refresh: number
+  cardNo: string; validTill: string | null; accessZones: string[]
 }
 
-interface TokenState {
-  token: string;
-  url: string;
-  expiresAt: number;
-  ttl: number;
-  cardNo: string;
-  validTill: string | null;
-  accessZones: string[];
+const ini = (n: string) => n.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
+const pretty = (v?: string | null) => {
+  if (!v) return '—'
+  const d = new Date(v)
+  return isNaN(d.getTime()) ? v
+    : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
-export default function IdCard(p: Props) {
-  const [flipped, setFlipped] = useState(false);
-  const [tok, setTok] = useState<TokenState | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [left, setLeft] = useState(0);
-  const canvas = useRef<HTMLCanvasElement | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+export default function IdCard({ name, designation, company, code, doj, blood, emergency }: {
+  name: string; designation: string; company: string
+  code: string; doj?: string | null; blood?: string | null; emergency?: string | null
+}) {
+  const [back, setBack] = useState(false)
+  const [tok, setTok] = useState<Issued | null>(null)
+  const [png, setPng] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+  const [left, setLeft] = useState(0)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const fetchToken = useCallback(async () => {
     try {
-      const r = await fetch('/api/ess/id-card/token', { cache: 'no-store', headers: await authHeaders() });
-      const j = await r.json();
-      if (!r.ok) { setErr(j.message ?? 'Could not generate a code.'); setTok(null); return; }
-      setErr(null);
-      setTok(j as TokenState);
+      const res = await fetch('/api/ess/id-card/token', { headers: await authHeaders() })
+      const body = await res.json().catch(() => null)
+      if (!res.ok) { setErr(body?.error ?? `Could not get a code (${res.status}).`); return }
+      setErr(null); setTok(body as Issued)
+      // The QR encodes the URL a phone camera opens, not the bare token —
+      // pointing a camera at it should land on the verify screen, not paste
+      // a string into a search box.
+      setPng(await QRCode.toDataURL((body as Issued).url, {
+        width: 460, margin: 1, errorCorrectionLevel: 'M',
+        color: { dark: '#0F172A', light: '#FFFFFF' },
+      }))
     } catch {
-      setErr('You are offline. The code needs a connection to stay valid.');
+      setErr('Could not reach the server.')
     }
-  }, []);
+  }, [])
 
-  // rotation loop, paused while the tab is hidden
+  // Only while the back is showing. A card sitting on its front face has no
+  // business minting gate codes.
   useEffect(() => {
-    let stopped = false;
-    const tick = async () => {
-      if (stopped) return;
-      if (document.visibilityState === 'visible') await fetchToken();
-      timer.current = setTimeout(tick, REFRESH_MS);
-    };
-    tick();
-    const onVis = () => { if (document.visibilityState === 'visible') fetchToken(); };
-    document.addEventListener('visibilitychange', onVis);
-    return () => {
-      stopped = true;
-      if (timer.current) clearTimeout(timer.current);
-      document.removeEventListener('visibilitychange', onVis);
-    };
-  }, [fetchToken]);
+    if (!back) { if (timer.current) clearTimeout(timer.current); return }
+    let live = true
+    const cycle = async () => {
+      if (!live) return
+      if (document.visibilityState === 'visible') await fetchToken()
+      timer.current = setTimeout(cycle, 15_000)
+    }
+    cycle()
+    const onVis = () => { if (document.visibilityState === 'visible') fetchToken() }
+    document.addEventListener('visibilitychange', onVis)
+    return () => { live = false; document.removeEventListener('visibilitychange', onVis)
+                   if (timer.current) clearTimeout(timer.current) }
+  }, [back, fetchToken])
 
-  // paint the QR whenever the token changes
   useEffect(() => {
-    if (!tok || !canvas.current) return;
-    QRCode.toCanvas(canvas.current, tok.url, {
-      width: 168,
-      margin: 0,
-      errorCorrectionLevel: 'M',
-      color: { dark: '#0F172A', light: '#FFFFFF' },
-    }).catch(() => setErr('Could not draw the code.'));
-  }, [tok]);
-
-  // countdown
-  useEffect(() => {
-    if (!tok) return;
-    const id = setInterval(() => {
-      setLeft(Math.max(0, Math.round((tok.expiresAt - Date.now()) / 1000)));
-    }, 250);
-    return () => clearInterval(id);
-  }, [tok]);
-
-  const pct = tok ? Math.max(0, Math.min(1, left / tok.ttl)) : 0;
-  const C = 2 * Math.PI * 15;
+    if (!tok) return
+    const t = setInterval(() => setLeft(Math.max(0, Math.ceil((tok.expiresAt - Date.now()) / 1000))), 250)
+    return () => clearInterval(t)
+  }, [tok])
 
   return (
-    <div className="ez-card" style={{ perspective: 1200 }}>
-      <div style={{ padding: 13 }}>
-        <div
-          style={{
-            position: 'relative', height: 232, transformStyle: 'preserve-3d',
-            transition: `transform .8s ${T.ease}`,
-            transform: flipped ? 'rotateY(180deg)' : 'none',
-          }}
-        >
-          {/* ─── front ─── */}
-          <div className="ez-idface">
-            <div className="ez-idwm">EZER</div>
-            <div className="ez-idtop">
-              <span className="ez-idlogo">EZ</span>
-              {p.company.toUpperCase()}
-            </div>
+    <div className="dig">
+      <div className="brandline"><span className="mark">EZ</span>{company}</div>
 
-            <div style={{ display: 'flex', gap: 11, alignItems: 'center', marginTop: 13 }}>
-              <div className="ez-idph">
-                {p.photoUrl
-                  ? <img src={p.photoUrl} alt="" />
-                  : <span>{p.initials}</span>}
-              </div>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: 700 }}>{p.name}</div>
-                <div style={{ fontSize: 11, opacity: .85 }}>{p.designation}</div>
-              </div>
+      {!back ? (
+        <>
+          <div className="top">
+            <div className="ph">{ini(name)}</div>
+            <div style={{ minWidth: 0 }}>
+              <div className="nm">{name}</div>
+              <div className="ds">{designation}</div>
             </div>
-
-            <div className="ez-idgrid">
-              <div><span>Employee code</span><b>{p.code}</b></div>
-              <div><span>Card no</span><b>{tok?.cardNo ?? '—'}</b></div>
-              <div><span>Blood group</span><b>{p.bloodGroup ?? '—'}</b></div>
-              <div><span>Valid till</span><b>{tok?.validTill ?? '—'}</b></div>
-            </div>
-
-            <button className="ez-idflip" onClick={() => setFlipped(true)}>
-              Show scan code
-            </button>
           </div>
-
-          {/* ─── back: the live QR ─── */}
-          <div className="ez-idface ez-idback">
-            <div className="ez-idtop" style={{ justifyContent: 'space-between' }}>
-              <span>SHOW THIS AT THE GATE</span>
-              <span style={{ opacity: .7 }}>{p.code}</span>
-            </div>
-
-            <div style={{ display: 'flex', gap: 13, alignItems: 'center', marginTop: 12 }}>
-              <div className="ez-qrbox">
-                {tok
-                  ? <canvas ref={canvas} width={168} height={168} />
-                  : <div className="ez-qrskel" />}
-                {/* countdown ring sits on the corner of the code */}
-                {tok && (
-                  <svg className="ez-qrring" width="34" height="34" viewBox="0 0 34 34">
-                    <circle cx="17" cy="17" r="15" fill="#fff" stroke="#E5E9EF" strokeWidth="3" />
-                    <circle
-                      cx="17" cy="17" r="15" fill="none"
-                      stroke={left <= 8 ? T.warn : T.brand} strokeWidth="3" strokeLinecap="round"
-                      strokeDasharray={C} strokeDashoffset={C * (1 - pct)}
-                      transform="rotate(-90 17 17)"
-                      style={{ transition: 'stroke-dashoffset .25s linear' }}
-                    />
-                    <text x="17" y="21" textAnchor="middle" fontSize="11" fontWeight="700" fill={T.ink}>
-                      {left}
-                    </text>
-                  </svg>
-                )}
-              </div>
-
-              <div style={{ fontSize: 11, lineHeight: 1.6, opacity: .9 }}>
-                {err
-                  ? <span style={{ color: '#FCA5A5' }}>{err}</span>
-                  : <>
-                      This code changes every {REFRESH_MS / 1000} seconds and works
-                      for <b>one scan only</b>.
-                      <br /><br />
-                      A screenshot or a forwarded photo of this code will not open the gate.
-                      Every attempt is logged against your name.
-                    </>}
-              </div>
-            </div>
-
-            <div className="ez-idzones">
-              {(tok?.accessZones ?? []).map(z => <span key={z}>{z}</span>)}
-            </div>
-
-            <button className="ez-idflip" onClick={() => setFlipped(false)}>
-              Back to card
-            </button>
+          <div className="grid2">
+            <div><div className="lb">Employee code</div><div className="vv">{code}</div></div>
+            <div><div className="lb">Date of joining</div><div className="vv">{pretty(doj)}</div></div>
+            <div><div className="lb">Blood group</div><div className="vv">{blood || '—'}</div></div>
+            <div><div className="lb">Emergency</div>
+                 <div className="vv">{(emergency || '').split('·').pop()?.trim() || '—'}</div></div>
           </div>
+        </>
+      ) : (
+        <div style={{ display: 'grid', placeItems: 'center', gap: 10, padding: '4px 0 2px' }}>
+          {err ? (
+            <div className="note" style={{ background: 'rgba(255,255,255,.16)', textAlign: 'center' }}>{err}</div>
+          ) : png ? (
+            <>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={png} alt="Scan at the gate" width={172} height={172}
+                   style={{ borderRadius: 10, display: 'block', background: '#fff', padding: 6 }} />
+              <div style={{ fontSize: 11, opacity: .9, textAlign: 'center' }}>
+                {left > 0
+                  ? <>Valid for <b>{left}s</b> · single use</>
+                  : <>Refreshing…</>}
+              </div>
+              <div style={{ fontSize: 10, opacity: .75, textAlign: 'center' }}>
+                Card {tok?.cardNo}{tok?.accessZones?.length ? ` · ${tok.accessZones.join(', ')}` : ''}
+              </div>
+            </>
+          ) : (
+            <div style={{ fontSize: 11, opacity: .85, padding: '28px 0' }}>Getting a code…</div>
+          )}
         </div>
-      </div>
+      )}
+
+      <button className="btn wide" style={{ marginTop: 12, background: 'rgba(255,255,255,.18)',
+                                            borderColor: 'rgba(255,255,255,.3)' }}
+              onClick={() => setBack(b => !b)}>
+        {back ? 'Show card' : 'Show QR'}
+      </button>
     </div>
-  );
+  )
 }
