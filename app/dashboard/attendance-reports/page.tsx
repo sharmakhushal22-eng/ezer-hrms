@@ -5,6 +5,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import { REPORTS, runReport, type ReportOutput, type ReportGroup } from '@/lib/attendance/reports'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -23,6 +25,7 @@ const today = () => new Date().toISOString().slice(0, 10)
 const monthStart = () => { const d = new Date(); d.setDate(1); return d.toISOString().slice(0, 10) }
 
 export default function AttendanceReportsPage() {
+  const { grant, loading: grantLoading } = useGrant()
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([])
   const [companyId, setCompanyId] = useState('')
   const [depts, setDepts] = useState<{ id: string; dept_name: string }[]>([])
@@ -44,21 +47,28 @@ export default function AttendanceReportsPage() {
   const report = useMemo(() => REPORTS.find(r => r.id === reportId)!, [reportId])
 
   useEffect(() => {
+    if (grantLoading) return
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
-      .then(({ data }) => setCompanies(data || []))   // default '' = All companies
-  }, [])
+      .then(({ data }) => {
+        setCompanies(scopedCompanies(grant, data || []))
+        const def = defaultCompanyId(grant)
+        if (def) setCompanyId(prev => prev || def)   // non-cross → own company, never All
+      })
+  }, [grantLoading, grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setDepartmentId(''); setLocationId(''); setEmployeeId('')
-    // Empty companyId = All companies: load the filter options across every company.
     let dq = supabase.from('departments').select('id, dept_name').order('dept_name')
     let lq = supabase.from('locations').select('id, location_name').order('location_name')
     let eq = supabase.from('employees').select('id, emp_code, full_name').neq('is_test', true).order('emp_code')
-    if (companyId) { dq = dq.eq('company_id', companyId); lq = lq.eq('company_id', companyId); eq = eq.eq('company_id', companyId) }
+    // Empty companyId is "All companies" only for a cross-company caller; everyone else
+    // is forced to their own company.
+    const co = companyFilter(grant, companyId)
+    if (co) { dq = dq.eq('company_id', co); lq = lq.eq('company_id', co); eq = eq.eq('company_id', co) }
     dq.then(({ data }) => setDepts(data || []))
     lq.then(({ data }) => setLocs(data || []))
     eq.then(({ data }) => setEmps(data || []))
-  }, [companyId])
+  }, [companyId, grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function generate() {
     setErr(''); setOut(null)
@@ -66,7 +76,8 @@ export default function AttendanceReportsPage() {
     setBusy(true)
     try {
       const codes = codesText.split(/[\s,]+/).map(c => c.trim().toUpperCase()).filter(Boolean)
-      const res = await runReport(reportId, { companyId, departmentId: departmentId || undefined, locationId: locationId || undefined, employeeId: report.singleEmp ? employeeId : undefined, employeeCodes: (!report.singleEmp && codes.length) ? codes : undefined, from, to })
+      const co = companyFilter(grant, companyId)
+      const res = await runReport(reportId, { companyId: co || '', departmentId: departmentId || undefined, locationId: locationId || undefined, employeeId: report.singleEmp ? employeeId : undefined, employeeCodes: (!report.singleEmp && codes.length) ? codes : undefined, from, to })
       setOut(res)
     } catch (e: any) { setErr(e?.message || 'Report failed.') }
     setBusy(false)
@@ -130,7 +141,7 @@ export default function AttendanceReportsPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
                 <div>
                   <label style={lbl}>Company</label>
-                  <select style={inp} value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
+                  <select style={inp} value={companyId} onChange={e => setCompanyId(e.target.value)}>{grant.crossCompany && <option value="">All companies</option>}{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
                 </div>
                 <div>
                   <label style={lbl}>Department</label>

@@ -10,7 +10,8 @@
 // of its own, and giving it a separate permission would mean two grants for one job.
 import { NextRequest, NextResponse } from 'next/server'
 import { requireModule, requireDashboardUser } from '@/lib/api-auth'
-import { orgTreeFor, peersFor, orphansFor, spanOfControlFor, driftReportFor } from '@/lib/rms/server'
+import { orgTreeFor, peersFor, orphansFor, spanOfControlFor, driftReportFor, grantForRequest } from '@/lib/rms/server'
+import { companyFilter } from '@/lib/rms/resolve'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -27,7 +28,13 @@ export async function GET(req: NextRequest) {
     ? await requireDashboardUser(req)
     : await requireModule(req, 'Employees')
   if (gate.error) return gate.error
-  const companyId = url.searchParams.get('company_id') || undefined
+
+  // Force the company to the caller's own unless they are a cross-company (super-admin)
+  // role. A non-cross caller asking for another company — or 'ALL' — is pinned back to
+  // theirs; a cross caller may narrow to a pick or, with none, see every company (null).
+  const grant = await grantForRequest(req)
+  const requested = url.searchParams.get('company_id')
+  const companyId = companyFilter(grant, requested) || undefined
 
   if (view === 'peers') {
     const employeeId = url.searchParams.get('employee_id')

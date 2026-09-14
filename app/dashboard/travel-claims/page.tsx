@@ -15,6 +15,8 @@
 // inbox by, so a person only ever sees claims genuinely routed to them.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies, defaultCompanyId, companyFilter } from '@/lib/rms/resolve'
 // Local S / Field names exist here, so spacing is imported as SP.
 import {
   C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
@@ -622,6 +624,7 @@ function PeriodRow({ p, onAct, busy }: {
 
 // ---------------------------------------------------------------------------
 export default function TravelClaimsAdmin() {
+  const { grant, loading: grantLoading } = useGrant()
   const [companies, setCompanies] = useState<Company[]>([])
   const [companyId, setCompanyId] = useState('')
   const [tab, setTab] = useState<'HR' | 'FINANCE' | 'RM' | 'PERIODS' | 'RATES'>('HR')
@@ -654,12 +657,14 @@ export default function TravelClaimsAdmin() {
 
   // ---- companies -----------------------------------------------------------
   useEffect(() => {
+    if (grantLoading) return
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
       .then(({ data }) => {
-        setCompanies((data ?? []) as Company[])
-        if (data?.length) setCompanyId(data[0].id)
+        const scoped = scopedCompanies(grant, (data ?? []) as Company[])
+        setCompanies(scoped)
+        setCompanyId(defaultCompanyId(grant) || (scoped[0]?.id || ''))
       })
-  }, [])
+  }, [grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- policy + the people who can approve for this company ----------------
   useEffect(() => {
@@ -671,7 +676,7 @@ export default function TravelClaimsAdmin() {
       let pq = supabase.from('travel_policies')
         .select('company_id, rm_stage_enabled, hr_stage_enabled, hr_fallback_only').eq('is_active', true)
         .order('effective_from', { ascending: false })
-      if (companyId) pq = pq.eq('company_id', companyId).limit(1)
+      { const co = companyFilter(grant, companyId); if (co) pq = pq.eq('company_id', co).limit(1) }
       const { data: pol } = await pq
       if (!live) return
       // Ordered latest-first, so the first row seen per company IS its current policy.
@@ -686,7 +691,7 @@ export default function TravelClaimsAdmin() {
       // employee master.
       const column = tab === 'RM' ? 'l1_manager_id' : 'hr_head_id'
       let aq = supabase.from('employees').select(column).not(column, 'is', null)
-      if (companyId) aq = aq.eq('company_id', companyId)
+      { const co = companyFilter(grant, companyId); if (co) aq = aq.eq('company_id', co) }
       const { data: emps } = await aq
       const ids = Array.from(new Set((emps ?? []).map((e: any) => e[column]).filter(Boolean)))
       if (!live) return
@@ -758,7 +763,7 @@ export default function TravelClaimsAdmin() {
         let vq = supabase.from('v_travel_claim_summary')
           .select('*').eq('status', 'APPROVED')
           .order('submitted_at', { ascending: true })
-        if (companyId) vq = vq.eq('company_id', companyId)
+        { const co = companyFilter(grant, companyId); if (co) vq = vq.eq('company_id', co) }
         const { data } = await vq
         setPayouts((data ?? []) as Claim[])
       }

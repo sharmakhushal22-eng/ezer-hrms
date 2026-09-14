@@ -22,6 +22,7 @@ import { authToken } from '@/lib/rms/client'
 import type { HrisTab } from './types'
 import { Ic } from './icons'
 import { ToastHost } from './ui'
+import { RaiseMrfSection } from '@/components/ess/RoleTabs'
 import { TeamDirectory } from './TeamDirectory'
 import { RaiseRequest } from './RaiseRequest'
 import { TasksApprovals } from './TasksApprovals'
@@ -31,6 +32,7 @@ const TABS: { k: HrisTab; label: string }[] = [
   { k: 'directory', label: 'Team Directory' },
   { k: 'requests', label: 'Raise a Request' },
   { k: 'approvals', label: 'Tasks & Approvals' },
+  { k: 'raise-mrf', label: 'Raise MRF' },
   { k: 'exit', label: 'Exit Process' },
 ]
 
@@ -41,18 +43,20 @@ interface Props {
   go: (k: string) => void
   /** False when /api/ess/menu says this login cannot approve. */
   canApprove: boolean
+  /** Same gate the portal's sub-tab row used: RM, HOD or any approver. */
+  canRaiseMrf: boolean
+  notify: (m: string, t?: 'success' | 'error') => void
 }
 
-export function HrisShell({ employeeId, tab, go, canApprove }: Props) {
-  return (
-    <ToastHost>
-      <Shell employeeId={employeeId} tab={tab} go={go} canApprove={canApprove} />
-    </ToastHost>
+export function HrisShell(p: Props) {
+  return <ToastHost><Shell {...p} /></ToastHost>
+}
+
+function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, notify }: Props) {
+  const tabs = useMemo(
+    () => TABS.filter(t => (t.k !== 'approvals' || canApprove) && (t.k !== 'raise-mrf' || canRaiseMrf)),
+    [canApprove, canRaiseMrf],
   )
-}
-
-function Shell({ employeeId, tab, go, canApprove }: Props) {
-  const tabs = useMemo(() => TABS.filter(t => t.k !== 'approvals' || canApprove), [canApprove])
   const [query, setQuery] = useState('')
   const [reqCount, setReqCount] = useState(0)
   const [apprCount, setApprCount] = useState(0)
@@ -157,6 +161,14 @@ function Shell({ employeeId, tab, go, canApprove }: Props) {
           {canApprove && (
             <Pane k="approvals" tab={tab} seen={seen}>
               <TasksApprovals employeeId={employeeId} api={api} go={go} onCount={setApprCount} />
+            </Pane>
+          )}
+          {/* Main's MRF form, reachable through the shell. It still wears the
+              portal's own styling rather than the .hx design — re-skinning it
+              is a separate piece of work from keeping it reachable. */}
+          {canRaiseMrf && (
+            <Pane k="raise-mrf" tab={tab} seen={seen}>
+              <RaiseMrfSection employeeId={employeeId} go={go} notify={notify} />
             </Pane>
           )}
           <Pane k="exit" tab={tab} seen={seen}>

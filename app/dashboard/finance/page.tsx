@@ -11,6 +11,8 @@
 // "connect the next module" is a row in a table, not an edit here.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 // This file declares its own S, Stat, Empty and Note, so the system's spacing
 // scale is imported as SP and the colliding components are not imported at all.
 import {
@@ -210,6 +212,7 @@ function TeamRow({ m, onChange, busy }: {
 
 // ---------------------------------------------------------------------------
 export default function FinanceDepartment() {
+  const { grant } = useGrant()
   const [companies, setCompanies] = useState<Company[]>([])
   const [companyId, setCompanyId] = useState('')
   const [tab, setTab] = useState<'QUEUE' | 'TEAM' | 'MODULES'>('QUEUE')
@@ -230,10 +233,13 @@ export default function FinanceDepartment() {
   useEffect(() => {
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
       .then(({ data }) => {
-        setCompanies((data ?? []) as Company[])
-        if (data?.length) setCompanyId(data[0].id)
+        const scoped = scopedCompanies(grant, (data ?? []) as Company[])
+        setCompanies(scoped)
+        // Non-cross → own company; cross → first company (as before).
+        const def = defaultCompanyId(grant) || scoped[0]?.id
+        if (def) setCompanyId(prev => prev || def)
       })
-  }, [])
+  }, [grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -344,7 +350,7 @@ export default function FinanceDepartment() {
           <label style={S.lbl}>Company</label>
           <select value={companyId} onChange={e => setCompanyId(e.target.value)}
                   style={{ ...S.inp, minWidth: 210 }}>
-            <option value="">All companies</option>
+            {grant.crossCompany && <option value="">All companies</option>}
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
         </div>

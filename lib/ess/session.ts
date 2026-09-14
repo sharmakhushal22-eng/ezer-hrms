@@ -69,8 +69,15 @@ export async function essCaller(req: NextRequest): Promise<{ caller: EssCaller; 
 }
 
 export async function essContext(caller: EssCaller): Promise<EssContext> {
+  // ess_menu occasionally returns a transient gateway timeout under load even though the
+  // function itself is fast — retry once before failing the whole request.
+  const menuRpc = async () => {
+    let res = await sb.rpc('ess_menu', { p_employee_id: caller.employeeId })
+    if (res.error) { await new Promise(r => setTimeout(r, 350)); res = await sb.rpc('ess_menu', { p_employee_id: caller.employeeId }) }
+    return res
+  }
   const [{ data: m, error }, grant, { data: emp }] = await Promise.all([
-    sb.rpc('ess_menu', { p_employee_id: caller.employeeId }),
+    menuRpc(),
     grantForEmployee(caller.employeeId),
     sb.from('employees').select('company_id').eq('id', caller.employeeId).maybeSingle(),
   ])

@@ -17,6 +17,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter } from '@/lib/rms/resolve'
 import { C as TK, F, W, S, R, E, numeric } from '@/lib/ui'
 import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components/pms/AdminOverview'
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
@@ -53,6 +55,7 @@ interface Coverage {
 }
 
 export default function PmsPage() {
+  const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<Tab>('overview')
   const [ready, setReady] = useState<boolean | null>(null)   // null = still checking
   const [loading, setLoading] = useState(true)
@@ -85,10 +88,13 @@ export default function PmsPage() {
     // The active period, named the way a person would say it rather than by
     // its filing code.
     const today = localToday()
-    const per = await supabase.from('pms_periods')
+    const co = companyFilter(grant, grant.companyId)
+    let perQ = supabase.from('pms_periods')
       .select('id, period_name, period_code, financial_year, period_no, period_start, period_end,'
             + ' status, pms_policies(frequency)')
       .in('status', PERIOD_OPEN)
+    if (co) perQ = perQ.eq('company_id', co)
+    const per = await perQ
       .order('period_start', { ascending: false }).limit(1).maybeSingle()
 
     const row = (per.data ?? null) as unknown as (Record<string, string | null> & { id: string }) | null
@@ -107,10 +113,11 @@ export default function PmsPage() {
       // vw_pms_fill_status already collapses ten workflow values into the five
       // states an admin chases. One CASE in SQL beats the same mapping
       // rewritten in every screen that needs it.
-      const pol = await supabase.from('pms_policies')
+      let polQ = supabase.from('pms_policies')
         .select('id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
               + ' total_weightage, min_weightage_per_kra, who_can_finalise')
-        .limit(50)
+      if (co) polQ = polQ.eq('company_id', co)
+      const pol = await polQ.limit(50)
       if (!pol.error) {
         setPolicies(((pol.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
           id: String(r.id), name: String(r.policy_name ?? 'Policy'),
@@ -134,7 +141,7 @@ export default function PmsPage() {
     }
 
     setLoading(false)
-  }, [])
+  }, [grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Coverage reads `employees`, which exists regardless of the migration, so it
   // is loaded separately and still works while the module is pending.
@@ -148,9 +155,11 @@ export default function PmsPage() {
   // the override source can be counted. That is reported as a distinct state
   // rather than folded into "0 mapped", which would misdescribe the problem.
   const loadCoverage = useCallback(async () => {
+    const co = companyFilter(grant, grant.companyId)
     const count = async (col?: 'l1_manager_id' | 'l2_manager_id' | 'hod_id') => {
       let q = supabase.from('employees').select('id', { count: 'exact', head: true })
       if (col) q = q.not(col, 'is', null)
+      if (co) q = q.eq('company_id', co)
       const { count: n } = await q
       return n || 0
     }
@@ -161,7 +170,9 @@ export default function PmsPage() {
     const hodOverride = await count('hod_id')
 
     // Does the department source exist yet?
-    const dept = await supabase.from('departments').select('id,hod_employee_id').limit(400)
+    let deptQ = supabase.from('departments').select('id,hod_employee_id')
+    if (co) deptQ = deptQ.eq('company_id', co)
+    const dept = await deptQ.limit(400)
     if (dept.error) {
       setCov({ total, l1, l2, hodOverride, hodDept: 0, hodResolved: hodOverride, deptSourceReady: false })
       return
@@ -170,17 +181,19 @@ export default function PmsPage() {
       (dept.data || []).filter(d => d.hod_employee_id).map(d => d.id as string),
     )
     // Employees covered by their department having an HOD
-    const { count: byDept } = mapped.size
-      ? await supabase.from('employees').select('id', { count: 'exact', head: true })
-          .in('department_id', [...mapped]).is('hod_id', null)
-      : { count: 0 }
+    const byDeptQ = mapped.size
+      ? (() => { let q = supabase.from('employees').select('id', { count: 'exact', head: true })
+                   .in('department_id', [...mapped]).is('hod_id', null)
+                 if (co) q = q.eq('company_id', co); return q })()
+      : null
+    const { count: byDept } = byDeptQ ? await byDeptQ : { count: 0 }
     setCov({
       total, l1, l2, hodOverride,
       hodDept: byDept || 0,
       hodResolved: hodOverride + (byDept || 0),
       deptSourceReady: true,
     })
-  }, [])
+  }, [grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Department names, so the table says "Finance & Accounts" and not a uuid.
   useEffect(() => {
@@ -188,7 +201,10 @@ export default function PmsPage() {
       // dept_name, not name. `name` does not exist on this table, and asking
       // for it fails the whole select — so every department silently rendered
       // as "Unknown department" while the screen looked like it had loaded.
-      const d = await supabase.from('departments').select('id, dept_name').limit(400)
+      const co = companyFilter(grant, grant.companyId)
+      let dQ = supabase.from('departments').select('id, dept_name')
+      if (co) dQ = dQ.eq('company_id', co)
+      const d = await dQ.limit(400)
       if (d.error) return
       const m: Record<string, string> = {}
       for (const r of (d.data ?? []) as unknown as { id: string; dept_name: string }[]) {
@@ -196,7 +212,7 @@ export default function PmsPage() {
       }
       setDeptNames(m)
     })()
-  }, [])
+  }, [grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); loadCoverage() }, [load, loadCoverage])
 

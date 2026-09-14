@@ -674,7 +674,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 // ═══════════════════════════════════════════════════════════════
 // HR MANAGER: SEND OFFER LETTER
 // ═══════════════════════════════════════════════════════════════
-export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup }: any = {}) {
+export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup, allowedMrfIds = null }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [approved, setApproved] = useState<any[]>([])
@@ -688,11 +688,13 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
 
   useEffect(() => {
     supabase.from('offer_approval_requests')
-      .select('*, candidates(full_name, email, phone, designation, experience_years, current_company), companies(company_name, company_code), manpower_requisitions(designation), ctc_negotiations(basic_monthly, hra_monthly, net_monthly, variable_pct)')
+      .select('*, candidates(full_name, email, phone, designation, experience_years, current_company, mrf_id), companies(company_name, company_code), manpower_requisitions(designation), ctc_negotiations(basic_monthly, hra_monthly, net_monthly, variable_pct)')
       .eq('status','HR_HEAD_APPROVED')
       .order('hr_head_actioned_at',{ ascending:false })
-      .then(({ data }) => setApproved(data || []))
-  }, [])
+      // A scoped hiring manager only sees offers for candidates under the MRFs assigned to
+      // them; `allowedMrfIds` is null for oversight roles (no filter).
+      .then(({ data }) => setApproved((data || []).filter((r: any) => !allowedMrfIds || (r.candidates?.mrf_id && allowedMrfIds.has(r.candidates.mrf_id)))))
+  }, [allowedMrfIds])
 
   function prepareOffer(r: any) {
     setSelected(r)

@@ -14,8 +14,9 @@ export async function GET(req: NextRequest) {
   const r = await essRoute(req)
   if (r.error) return r.error
   const { ctx } = r
-  if (!ctx.canApprovals) return forbidden()
-  const items = await buildPending(ctx)
+  // Everyone can open Approvals (for the MRF / hiring block); a non-approver just
+  // has an empty leave/travel/resignation list.
+  const items = ctx.canApprovals ? await buildPending(ctx) : []
   const id = req.nextUrl.searchParams.get('resignation_id')
   let chain: any[] | undefined
   if (id) {

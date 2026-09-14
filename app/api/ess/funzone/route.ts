@@ -93,11 +93,16 @@ export async function GET(req: NextRequest) {
   const me = ctx.caller.employeeId
 
   const { rows, missing } = await invitesFor(me)
+  // Never cache the installed flag or the invite list. Without this the browser
+  // could hold a stale "installed:false" from before 090 was applied and keep
+  // showing "Playing together is not switched on yet" even after it was.
+  const noStore = { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
   if (missing) {
     return NextResponse.json({ installed: false, invites: [],
-      reason: 'The Fun Zone multiplayer tables are not in the database yet (migration 090).' })
+      reason: 'The Fun Zone multiplayer tables are not in the database yet (migration 090).' },
+      { headers: noStore })
   }
-  return NextResponse.json({ installed: true, invites: rows, me })
+  return NextResponse.json({ installed: true, invites: rows, me }, { headers: noStore })
 }
 
 export async function POST(req: NextRequest) {
@@ -194,7 +199,15 @@ export async function POST(req: NextRequest) {
         game_code: game, from_employee: me, to_employee: to,
         message: str('message'),
       }).select('id, created_at').single()
-      if (ins.error) return bad(ins.error.message)
+      if (ins.error) {
+        // uq_game_invites_open: one PENDING invite per (from, to, game). The
+        // client's canInvite catches most of these, but a stale invite list or a
+        // second tab can still race to the insert — answer with the reason, not
+        // the raw constraint name.
+        if (ins.error.code === '23505')
+          return bad('You already have a pending invite to this colleague for this game. Wait for their reply, or cancel it under Invites first.')
+        return bad(ins.error.message)
+      }
 
       // THE PART THAT WAS MISSING. Worded by inviteLine so the notification
       // and the Fun Zone card say the same thing, which is what it was

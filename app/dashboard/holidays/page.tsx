@@ -17,6 +17,8 @@ import {
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies } from '@/lib/rms/resolve'
 
 // ── Style constant (project palette) ────────────────────────────────
 const C = {
@@ -457,6 +459,7 @@ function PreviewTab({ employees, companies, notify }: { employees: EmployeeLite[
 
 // ══════════════════════════════════════════════════════════════════
 export function HolidaysSection() {
+  const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<'cal' | 'hol' | 'week' | 'prev'>('cal')
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -480,11 +483,12 @@ export function HolidaysSection() {
       const [c, co, b, d, e, mp, w] = await Promise.all([
         listCalendars(), listCompanies(), listBranches(), listDepartments(), listEmployees(), listCompanyMaps(), listWeeklyOffs(),
       ])
-      setCalendars(c); setCompanies(co); setBranches(b); setDepartments(d); setEmployees(e); setMaps(mp); setWeeklyOffs(w)
+      // Non-cross-company users only ever see and configure their own company.
+      setCalendars(c); setCompanies(scopedCompanies(grant, co as any) as CompanyLite[]); setBranches(b); setDepartments(d); setEmployees(e); setMaps(mp); setWeeklyOffs(w)
     } catch (err: any) { notify('Load failed: ' + (err?.message || 'check migration 026'), 'error') }
     setLoading(false)
-  }, [])
-  useEffect(() => { reload() }, [reload])
+  }, [grant])
+  useEffect(() => { if (!grantLoading) reload() }, [reload, grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reloadHolidays = useCallback(async (calId: string) => {
     if (!calId) { setHolidays([]); setAppl([]); return }

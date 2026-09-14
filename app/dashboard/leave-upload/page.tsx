@@ -19,6 +19,8 @@ import { HolidaysSection } from '@/app/dashboard/holidays/page'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
@@ -346,6 +348,7 @@ function UploadTab() {
 
 // ══════════════════════════════════════════════════════════════════
 export default function LeaveConfigPage() {
+  const { grant, loading: grantLoading } = useGrant()
   const [section, setSection] = useState<'leave' | 'holidays'>('leave')
   const [tab, setTab] = useState<'types' | 'quota' | 'upload'>('types')
   const [loading, setLoading] = useState(true)
@@ -366,11 +369,16 @@ export default function LeaveConfigPage() {
     setLoading(true)
     try {
       const [t, c, b] = await Promise.all([loadLeaveTypes(), loadCompanies(), loadBranches()])
-      setTypes(t); setCompanies(c); setBranches(b)
+      // Non-cross-company users configure only their own company, so "all companies"
+      // resolves to just theirs.
+      const cs = scopedCompanies(grant, c as any) as OrgLite[]
+      setTypes(t); setCompanies(cs); setBranches(b)
+      const def = defaultCompanyId(grant)
+      if (def) setQCompany(prev => prev ? prev : def)
     } catch (e: any) { notify('Load failed: ' + (e?.message || 'check migration 030'), 'error') }
     setLoading(false)
-  }, [])
-  useEffect(() => { reload() }, [reload])
+  }, [grant])
+  useEffect(() => { if (!grantLoading) reload() }, [reload, grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadQuota = useCallback(async (company: string, branch: string, fy: string) => {
     if (!company) { setQRows([]); return }

@@ -4,6 +4,8 @@
 // Inline styles only. All sub-components OUTSIDE the parent (no focus-loss).
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies, defaultCompanyId, companyFilter } from '@/lib/rms/resolve'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -50,6 +52,7 @@ function PendingApprovals({ companyId, companyEmpIds, empMap, typeMap, notify }:
   const load = useCallback(async () => {
     // '' = All companies — the request list simply loses its company clause.
     let q = supabase.from('loan_requests').select('*').eq('status', 'IN_APPROVAL').order('created_at', { ascending: false })
+    // companyId is a prop, already scoped to the caller's company by the parent.
     if (companyId) q = q.eq('company_id', companyId)
     const { data } = await q
     const reqs = data || []
@@ -370,6 +373,7 @@ function LoanFilterBar({ locations, departments, location, department, search, m
 
 // ── Parent ───────────────────────────────────────────────────────
 export default function LoansPage() {
+  const { grant, loading: grantLoading } = useGrant()
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([])
   const [companyId, setCompanyId] = useState('')
   const [emps, setEmps] = useState<any[]>([])
@@ -381,18 +385,19 @@ export default function LoansPage() {
   const notify = (msg: string, t?: 'error') => { setToast({ msg, err: t === 'error' }); setTimeout(() => setToast(null), 3000) }
 
   useEffect(() => {
+    if (grantLoading) return
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name').then(({ data }) => {
-      const list = data || []
+      const list = scopedCompanies(grant, data || [])
       setCompanies(list)
-      if (list.length) setCompanyId(list[0].id)
+      setCompanyId(defaultCompanyId(grant) || (list[0]?.id || ''))
     })
-  }, [])
+  }, [grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // '' = All companies. Every panel below scopes through empIds / these queries,
     // so this one effect is the whole of "group mode" for this page.
     let eq = supabase.from('employees').select('id, emp_code, full_name, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)')
     let tq = supabase.from('loan_types').select('id, name')
-    if (companyId) { eq = eq.eq('company_id', companyId); tq = tq.eq('company_id', companyId) }
+    { const co = companyFilter(grant, companyId); if (co) { eq = eq.eq('company_id', co); tq = tq.eq('company_id', co) } }
     eq.then(({ data }) => setEmps(data || []))
     tq.then(({ data }) => setTypes(data || []))
   }, [companyId])

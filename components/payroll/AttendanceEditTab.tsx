@@ -12,6 +12,8 @@
 // that run back to SYNCED, so payroll has to be recalculated against the new paid days.
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies } from '@/lib/rms/resolve'
 import { loadRuns, loadCompanies, editEmployeeAttendance, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { C, font, lbl, ddInp, GROUP, SearchSelect, MultiSelect, maxDaysLive, runPeriodISO, type Opt } from './attendanceShared'
 // Design tokens, aliased as TK — this file declares its own C.
@@ -48,6 +50,7 @@ function ReadOut({ label, value, tone }: { label: string; value: any; tone?: str
 }
 
 export default function AttendanceEditTab({ companyId, fy }: { companyId: string; fy: string }) {
+  const { grant } = useGrant()
   const [companies, setCompanies] = useState<Opt[]>([])
   const [allRuns, setAllRuns] = useState<PayrollRun[]>([])
   const [coId, setCoId] = useState('')
@@ -67,10 +70,13 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
   const [saveErr, setSaveErr] = useState(''); const [saveMsg, setSaveMsg] = useState(''); const [recalc, setRecalc] = useState('')
 
   useEffect(() => {
-    loadCompanies().then(cs => setCompanies((cs as any[]).map(c => ({ value: c.id, label: c.company_name })))).catch(() => {})
+    loadCompanies().then(cs => setCompanies(scopedCompanies(grant, cs as any[]).map((c: any) => ({ value: c.id, label: c.company_name })))).catch(() => {})
     loadRuns('', fy).then(setAllRuns).catch(() => {})
-  }, [fy])
-  useEffect(() => { setCoId(companyId || GROUP) }, [companyId])
+  }, [fy, grant]) // eslint-disable-line react-hooks/exhaustive-deps
+  // Non-cross-company users are forced onto their own company; GROUP is never selected.
+  useEffect(() => {
+    setCoId(!grant.crossCompany && grant.companyId ? grant.companyId : (companyId || GROUP))
+  }, [companyId, grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!coId) return
@@ -206,7 +212,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
       {/* filters */}
       <div style={card}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Company</label><SearchSelect value={coId} options={[{ value: GROUP, label: 'Group Companies (all)' }, ...companies]} placeholder="Select company" onChange={setCoId} /></div>
+          <div><label style={lbl}>Company</label><SearchSelect value={coId} options={[...(grant.crossCompany ? [{ value: GROUP, label: 'Group Companies (all)' }] : []), ...companies]} placeholder="Select company" onChange={setCoId} /></div>
           <div><label style={lbl}>Month</label><SearchSelect value={monthVal} options={monthOpts} placeholder={monthOpts.length ? 'Select month' : 'No month created'} onChange={setMonthVal} /></div>
           <div><label style={lbl}>Location / Branch</label><SearchSelect value={loc} options={[{ value: '', label: 'All locations' }, ...locOpts]} placeholder="All locations" onChange={setLoc} /></div>
           <div><label style={lbl}>Department</label><SearchSelect value={dept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDept} /></div>

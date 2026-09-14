@@ -11,6 +11,9 @@
 // ================================================================
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { requireModule } from '@/lib/api-auth'
+import { grantForRequest } from '@/lib/rms/server'
+import { companyFilter } from '@/lib/rms/resolve'
 import { resolveMergeFieldsForEmployee } from '@/lib/letters/mergeFields'
 import { renderTemplate } from '@/lib/letters/renderTemplate'
 import { mergeLetterOntoLetterhead } from '@/lib/letterhead/merge'
@@ -35,8 +38,16 @@ interface EmployeeResult {
 }
 
 export async function POST(req: NextRequest) {
+  // Generating letters is an HR Letters action — gate it, and pin to the caller's own
+  // company unless they are a cross-company (super-admin) role.
+  const gate = await requireModule(req, 'HR Letters', 'EDIT')
+  if (gate.error) return gate.error
+
   const body: GenerateRequest = await req.json()
-  const { template_id, company_id, employee_codes, generated_by } = body
+  const { template_id, employee_codes, generated_by } = body
+
+  const grant = await grantForRequest(req)
+  const company_id = companyFilter(grant, body.company_id) || body.company_id
 
   if (!template_id || !company_id || !employee_codes?.length) {
     return NextResponse.json({ error: 'template_id, company_id, and employee_codes are required' }, { status: 400 })

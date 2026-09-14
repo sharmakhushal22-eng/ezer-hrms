@@ -5,12 +5,13 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  loadUsers, loadRoles, loadAudit, loadOrgUnits, setStatus, assignRoles,
+  loadUsers, loadRoles, loadAudit, setStatus, assignRoles,
   startImpersonation, endImpersonation,
-  type EssUser, type EssRole, type AuditRow, type OrgUnit,
+  type EssUser, type EssRole, type AuditRow,
 } from '@/lib/supabase-ess'
 import EmployeePortal from '@/components/ess/EmployeePortal'
 import { RolesPermissionsSection } from '@/app/dashboard/roles/page'
+import { useGrant } from '@/lib/rms/client'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -67,6 +68,42 @@ function Bar({ label, value, max, color=TK.brand }: { label:string; value:number
       <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:TK.muted, marginBottom:3 }}><span>{label}</span><span style={{ fontWeight:600, color:TK.ink }}>{value}</span></div>
       <div style={{ height:6, background:TK.brandTint, borderRadius:99, overflow:'hidden' }}><div style={{ height:'100%', width:`${pct}%`, background:color, borderRadius:99 }}/></div>
     </div>
+  )
+}
+
+// ── Locked roles ────────────────────────────────────────────────────
+// L1 / L2 / HOD are NOT hand-assigned here — they come from the reporting structure
+// (employees.l1_manager_id / l2_manager_id / hod_id, set by the bulk uploader or the
+// employee record). EMPLOYEE is automatic: every person holds it. So all four are shown
+// on this screen but locked — you can see them, you cannot toggle them here.
+const HIERARCHY_ROLE_CODES = ['L1_MANAGER', 'L2_MANAGER', 'HOD']
+const AUTO_BASE_ROLE_CODES = ['EMPLOYEE']
+// Hiring Manager / Recruiter is granted ONLY by an Implementation Manager (or a super
+// admin). For everyone else its checkbox is locked.
+const HIRING_MANAGER_ROLE_CODE = 'RECRUITER'
+const IMPL_MANAGER_ROLE_CODE = 'IMPL_MANAGER'
+
+function RoleCheckbox({ r, picked, onToggle, canGrantHiringManager }: { r: EssRole; picked: Set<string>; onToggle: (id: string) => void; canGrantHiringManager: boolean }) {
+  const isBase = AUTO_BASE_ROLE_CODES.includes(r.role_code)
+  const isHier = HIERARCHY_ROLE_CODES.includes(r.role_code)
+  const hiringLocked = r.role_code === HIRING_MANAGER_ROLE_CODE && !canGrantHiringManager
+  const locked = isBase || isHier || hiringLocked
+  const checked = isBase ? true : picked.has(r.id)   // EMPLOYEE always reads as on
+  const hint = isBase ? 'auto · everyone'
+    : isHier ? 'auto · reporting structure'
+    : hiringLocked ? 'Implementation Manager only'
+    : r.salary_visibility
+  const title = hiringLocked ? 'Only an Implementation Manager can grant Hiring Manager / Recruiter.'
+    : isBase ? 'Every employee has this automatically.'
+    : isHier ? 'Set from the reporting structure — change it in the employee record or the bulk uploader.'
+    : undefined
+  return (
+    <label style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 4px', cursor: locked ? 'not-allowed' : 'pointer', fontSize:12, opacity: locked ? 0.65 : 1 }}
+           title={title}>
+      <input type="checkbox" checked={checked} disabled={locked} onChange={() => { if (!locked) onToggle(r.id) }} />
+      <span style={{ flex:1 }}>{r.role_name}</span>
+      <span style={{ fontSize:9, color: locked ? TK.brand : TK.faint }}>{hint}</span>
+    </label>
   )
 }
 
@@ -287,17 +324,23 @@ function AccessTab({ users, isMobile, onActivate, onDeactivate, onAssignOpen, on
 // ══════════════════════════════════════════════════════════════════
 // ROLES TAB
 // ══════════════════════════════════════════════════════════════════
-function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign }: {
+function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign, canGrantHiringManager }: {
   users: EssUser[]; roles: EssRole[]; isMobile: boolean
   selected: EssUser | null
   onSelect: (u: EssUser) => void
   onAssign: (u: EssUser, roleIds: string[]) => void
+  canGrantHiringManager: boolean
 }) {
   const [q, setQ] = useState('')
+  const [roleFilter, setRoleFilter] = useState('')   // role id — '' = all roles
+  const [hoverId, setHoverId] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
   useEffect(() => { setPicked(new Set((selected?.roles || []).map(r => r.id))) }, [selected?.employee_id])
 
-  const filtered = users.filter(u => !q || u.full_name.toLowerCase().includes(q.toLowerCase()) || (u.emp_code||'').toLowerCase().includes(q.toLowerCase()))
+  const filtered = users.filter(u =>
+    (!q || u.full_name.toLowerCase().includes(q.toLowerCase()) || (u.emp_code||'').toLowerCase().includes(q.toLowerCase())) &&
+    (!roleFilter || u.roles.some(r => r.id === roleFilter))
+  )
   const toggle = (id: string) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const pickedRoles = roles.filter(r => picked.has(r.id))
   const salaryVis = pickedRoles.reduce((acc, r) => (acc === 'ALL' || r.salary_visibility === 'ALL') ? 'ALL' : (r.salary_visibility !== 'NONE' ? r.salary_visibility : acc), 'NONE' as string)
@@ -305,10 +348,17 @@ function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign }: {
   return (
     <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 280px', gap:10, alignItems:'start' }}>
       <div style={T.card}>
-        <input style={{ ...T.input, marginBottom:10 }} placeholder="Search user" value={q} onChange={e => setQ(e.target.value)} />
+        <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap' }}>
+          <input style={{ ...T.input, flex:1, minWidth:160, marginBottom:0 }} placeholder="Search user" value={q} onChange={e => setQ(e.target.value)} />
+          <select style={{ ...T.input, maxWidth:200 }} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
+            <option value="">All roles</option>
+            {roles.map(r => <option key={r.id} value={r.id}>{r.role_name}</option>)}
+          </select>
+        </div>
+        <div style={{ fontSize:11, color:TK.muted, marginBottom:8 }}>{filtered.length} shown{roleFilter ? ` · ${roles.find(r => r.id === roleFilter)?.role_name || ''}` : ''}</div>
         <div style={{ maxHeight:'60vh', overflowY:'auto' }}>
           {filtered.map(u => (
-            <div key={u.employee_id} onClick={() => onSelect(u)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, background: selected?.employee_id === u.employee_id ? TK.brandTint : 'transparent', border: selected?.employee_id === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
+            <div key={u.employee_id} onClick={() => onSelect(u)} onMouseEnter={() => setHoverId(u.employee_id)} onMouseLeave={() => setHoverId('')} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, transition:'box-shadow .15s, background .15s', background: selected?.employee_id === u.employee_id ? TK.brandTint : (hoverId === u.employee_id ? TK.sunken : 'transparent'), border: selected?.employee_id === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent', boxShadow: hoverId === u.employee_id ? '0 2px 10px rgba(124,58,237,0.18)' : 'none' }}>
               <div><div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div><div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.dept_name || '—'}</div></div>
               <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end' }}>{u.roles.map(r => <RoleChip key={r.id} label={r.role_name} />)}</div>
             </div>
@@ -325,13 +375,7 @@ function RolesTab({ users, roles, isMobile, selected, onSelect, onAssign }: {
             <div style={{ fontSize:13, fontWeight:600, marginBottom:2 }}>{selected.full_name}</div>
             <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>{selected.emp_code} · {selected.designation || '—'}</div>
             <div style={{ maxHeight:'42vh', overflowY:'auto', marginBottom:10 }}>
-              {roles.map(r => (
-                <label key={r.id} style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 4px', cursor:'pointer', fontSize:12 }}>
-                  <input type="checkbox" checked={picked.has(r.id)} onChange={() => toggle(r.id)} />
-                  <span style={{ flex:1 }}>{r.role_name}</span>
-                  <span style={{ fontSize:9, color:TK.faint }}>{r.salary_visibility}</span>
-                </label>
-              ))}
+              {roles.map(r => <RoleCheckbox key={r.id} r={r} picked={picked} onToggle={toggle} canGrantHiringManager={canGrantHiringManager} />)}
             </div>
             <div style={{ fontSize:11, color:TK.muted, marginBottom:10 }}>Salary visibility: <b>{salaryVis}</b></div>
             <button onClick={() => onAssign(selected, [...picked])} style={{ ...T.btnPrimary, width:'100%' }}>Assign {picked.size} role(s)</button>
@@ -355,87 +399,49 @@ function StepHead({ n, title, hint, done }: { n: number; title: string; hint?: s
   )
 }
 
-function RoleAssignTab({ users, roles, org, isMobile, onAssign }: {
+function RoleAssignTab({ users, roles, isMobile, onAssign, canGrantHiringManager }: {
   users: EssUser[]; roles: EssRole[]
-  org: { companies: OrgUnit[]; locations: OrgUnit[]; departments: OrgUnit[] }
   isMobile: boolean
   onAssign: (u: EssUser, roleIds: string[]) => void
+  canGrantHiringManager: boolean
 }) {
-  const [companyId, setCompanyId] = useState('')
-  const [locationId, setLocationId] = useState('') // '' = all branches
-  const [deptId, setDeptId] = useState('')         // '' = all departments
   const [empId, setEmpId] = useState('')
   const [empQ, setEmpQ] = useState('')
+  const [hoverId, setHoverId] = useState('')
   const [picked, setPicked] = useState<Set<string>>(new Set())
 
-  const locations = org.locations.filter(l => l.company_id === companyId)
-  const departments = org.departments.filter(d => d.company_id === companyId)
   const selEmp = users.find(u => u.employee_id === empId) || null
 
-  // reset downstream selections when an upstream choice changes
-  const pickCompany = (v: string) => { setCompanyId(v); setLocationId(''); setDeptId(''); setEmpId('') }
-  const pickLocation = (v: string) => { setLocationId(v); setEmpId('') }
-  const pickDept = (v: string) => { setDeptId(v); setEmpId('') }
-
-  // seed checkboxes with the employee's current roles whenever selection changes
+  // seed checkboxes with the employee's current roles whenever the selection changes
   useEffect(() => { setPicked(new Set((selEmp?.roles || []).map(r => r.id))) }, [empId])
 
+  // Employee is the entry point now — search across everyone; Company & Branch fill in
+  // from whoever is picked.
   const emps = users.filter(u =>
-    u.company_id === companyId &&
-    (!locationId || u.location_id === locationId) &&
-    (!deptId || u.department_id === deptId) &&
-    (!empQ || u.full_name.toLowerCase().includes(empQ.toLowerCase()) || (u.emp_code || '').toLowerCase().includes(empQ.toLowerCase()))
+    !empQ || u.full_name.toLowerCase().includes(empQ.toLowerCase()) || (u.emp_code || '').toLowerCase().includes(empQ.toLowerCase())
   )
 
   const toggle = (id: string) => setPicked(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
   const pickedRoles = roles.filter(r => picked.has(r.id))
   const salaryVis = pickedRoles.reduce((acc, r) => (acc === 'ALL' || r.salary_visibility === 'ALL') ? 'ALL' : (r.salary_visibility !== 'NONE' ? r.salary_visibility : acc), 'NONE' as string)
 
-  const SEL = { ...T.input, maxWidth: isMobile ? '100%' : 360 } as React.CSSProperties
+  // Read-only, auto-filled field (Company / Branch).
+  const roField: React.CSSProperties = { ...T.input, maxWidth: isMobile ? '100%' : 360, background: TK.sunken, color: selEmp ? TK.ink : TK.faint, cursor: 'default' }
 
   return (
     <div style={{ display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 320px', gap:10, alignItems:'start' }}>
       <div>
-        {/* Step 1 — Company */}
+        {/* 1 — Employee (the entry point) */}
         <div style={T.card}>
-          <StepHead n={1} title="Select Company" done={!!companyId} />
-          <select style={SEL} value={companyId} onChange={e => pickCompany(e.target.value)}>
-            <option value="">— Choose company —</option>
-            {org.companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        </div>
-
-        {/* Step 2 — Location / Branch */}
-        <div style={{ ...T.card, opacity: companyId ? 1 : 0.5, pointerEvents: companyId ? 'auto' : 'none' }}>
-          <StepHead n={2} title="Select Location / Branch" hint="blank = all branches" done={!!locationId} />
-          <select style={SEL} value={locationId} onChange={e => pickLocation(e.target.value)}>
-            <option value="">All branches</option>
-            {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-          </select>
-          {companyId && locations.length === 0 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>No branch found for this company.</div>}
-        </div>
-
-        {/* Step 3 — Department */}
-        <div style={{ ...T.card, opacity: companyId ? 1 : 0.5, pointerEvents: companyId ? 'auto' : 'none' }}>
-          <StepHead n={3} title="Select Department" hint="blank = all departments" done={!!deptId} />
-          <select style={SEL} value={deptId} onChange={e => pickDept(e.target.value)}>
-            <option value="">All departments</option>
-            {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-          </select>
-          {companyId && departments.length === 0 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>No department found for this company.</div>}
-        </div>
-
-        {/* Step 4 — Employee */}
-        <div style={{ ...T.card, opacity: companyId ? 1 : 0.5, pointerEvents: companyId ? 'auto' : 'none' }}>
-          <StepHead n={4} title="Select Employee" hint={`${emps.length} match`} done={!!empId} />
+          <StepHead n={1} title="Select Employee" hint={`${emps.length} match`} done={!!empId} />
           <input style={{ ...T.input, marginBottom:8 }} placeholder="Search name / emp code" value={empQ} onChange={e => setEmpQ(e.target.value)} />
-          <div style={{ maxHeight:300, overflowY:'auto' }}>
-            {emps.length === 0 && <div style={{ fontSize:12, color:TK.faint, padding:'8px 4px' }}>{companyId ? 'No employee matched.' : 'Pick a company first.'}</div>}
-            {emps.map(u => (
-              <div key={u.employee_id} onClick={() => setEmpId(u.employee_id)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, background: empId === u.employee_id ? TK.brandTint : 'transparent', border: empId === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent' }}>
+          <div style={{ maxHeight:320, overflowY:'auto' }}>
+            {emps.length === 0 && <div style={{ fontSize:12, color:TK.faint, padding:'8px 4px' }}>No employee matched.</div>}
+            {emps.slice(0, 200).map(u => (
+              <div key={u.employee_id} onClick={() => setEmpId(u.employee_id)} onMouseEnter={() => setHoverId(u.employee_id)} onMouseLeave={() => setHoverId('')} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderRadius:7, cursor:'pointer', marginBottom:4, transition:'box-shadow .15s, background .15s', background: empId === u.employee_id ? TK.brandTint : (hoverId === u.employee_id ? TK.sunken : 'transparent'), border: empId === u.employee_id ? '1px solid #DDD6FE' : '1px solid transparent', boxShadow: hoverId === u.employee_id ? '0 2px 10px rgba(124,58,237,0.18)' : 'none' }}>
                 <div>
                   <div style={{ fontSize:13, fontWeight:600 }}>{u.full_name}</div>
-                  <div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.location_name || '—'} · {u.dept_name || '—'}</div>
+                  <div style={{ fontSize:10, color:TK.faint }}>{u.emp_code} · {u.company_name || '—'} · {u.location_name || '—'}</div>
                 </div>
                 <div style={{ display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end', alignItems:'center' }}>
                   <StatusPill status={u.account?.status} />
@@ -443,27 +449,34 @@ function RoleAssignTab({ users, roles, org, isMobile, onAssign }: {
                 </div>
               </div>
             ))}
+            {emps.length > 200 && <div style={{ fontSize:11, color:TK.faint, marginTop:6 }}>Showing first 200 — refine the search.</div>}
           </div>
+        </div>
+
+        {/* 2 — Company (auto-filled from the employee) */}
+        <div style={T.card}>
+          <StepHead n={2} title="Company" hint="auto-filled" done={!!selEmp} />
+          <div style={roField}>{selEmp?.company_name || 'Select an employee first'}</div>
+        </div>
+
+        {/* 3 — Branch (auto-filled from the employee) */}
+        <div style={T.card}>
+          <StepHead n={3} title="Branch" hint="auto-filled" done={!!selEmp} />
+          <div style={roField}>{selEmp?.location_name || 'Select an employee first'}</div>
         </div>
       </div>
 
-      {/* Step 5 — Role (sticky panel) */}
+      {/* Role (sticky panel) */}
       <div style={{ ...T.card, position: isMobile ? 'static' : 'sticky', top:10 }}>
-        <StepHead n={5} title="Assign Role" done={picked.size > 0 && !!empId} />
+        <StepHead n={4} title="Assign Role" done={picked.size > 0 && !!empId} />
         {!selEmp ? (
-          <div style={{ fontSize:12, color:TK.faint, padding:'8px 0' }}>Complete steps 1–4, then pick an employee.</div>
+          <div style={{ fontSize:12, color:TK.faint, padding:'8px 0' }}>Pick an employee to assign roles.</div>
         ) : (
           <>
             <div style={{ fontSize:13, fontWeight:600, marginBottom:2 }}>{selEmp.full_name}</div>
             <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>{selEmp.emp_code} · {selEmp.designation || '—'}</div>
             <div style={{ maxHeight:'42vh', overflowY:'auto', marginBottom:10 }}>
-              {roles.map(r => (
-                <label key={r.id} style={{ display:'flex', gap:8, alignItems:'center', padding:'6px 4px', cursor:'pointer', fontSize:12 }}>
-                  <input type="checkbox" checked={picked.has(r.id)} onChange={() => toggle(r.id)} />
-                  <span style={{ flex:1 }}>{r.role_name}</span>
-                  <span style={{ fontSize:9, color:TK.faint }}>{r.salary_visibility}</span>
-                </label>
-              ))}
+              {roles.map(r => <RoleCheckbox key={r.id} r={r} picked={picked} onToggle={toggle} canGrantHiringManager={canGrantHiringManager} />)}
             </div>
             <div style={{ fontSize:11, color:TK.muted, marginBottom:10 }}>Salary visibility: <b>{salaryVis}</b></div>
             <button onClick={() => onAssign(selEmp, [...picked])} style={{ ...T.btnPrimary, width:'100%' }}>Assign {picked.size} role(s)</button>
@@ -504,7 +517,6 @@ export default function ESSPage() {
   const [tab, setTab] = useState<'dashboard'|'access'|'roles'|'assign'|'audit'>('dashboard')
   const [users, setUsers] = useState<EssUser[]>([])
   const [roles, setRoles] = useState<EssRole[]>([])
-  const [org, setOrg] = useState<{ companies: OrgUnit[]; locations: OrgUnit[]; departments: OrgUnit[] }>({ companies: [], locations: [], departments: [] })
   const [audit, setAudit] = useState<AuditRow[]>([])
   const [loading, setLoading] = useState(true)
   const [toast, setToast] = useState<{ msg:string; type:'success'|'error' }|null>(null)
@@ -516,6 +528,11 @@ export default function ESSPage() {
 
   const notify = (msg: string, type:'success'|'error'='success') => setToast({ msg, type })
 
+  // Hiring Manager / Recruiter can only be handed out by an Implementation Manager
+  // (or a super admin) — this gates that one checkbox for the current admin.
+  const { grant } = useGrant()
+  const canGrantHiringManager = grant.isSuperAdmin || (grant.roles || []).some(r => r.role_code === IMPL_MANAGER_ROLE_CODE)
+
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 1024)
     check(); window.addEventListener('resize', check)
@@ -525,8 +542,8 @@ export default function ESSPage() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [u, r, a, o] = await Promise.all([loadUsers(), loadRoles(), loadAudit(), loadOrgUnits()])
-      setUsers(u); setRoles(r); setAudit(a); setOrg(o)
+      const [u, r, a] = await Promise.all([loadUsers(), loadRoles(), loadAudit()])
+      setUsers(u); setRoles(r); setAudit(a)
     } catch (e: any) {
       notify('Load failed: ' + (e?.message || 'check that the ESS migration was run'), 'error')
     }
@@ -547,7 +564,16 @@ export default function ESSPage() {
     notify(`${u.full_name} deactivated — login & password reset blocked.`); reload()
   }
   async function doAssign(u: EssUser, roleIds: string[]) {
-    const { error } = await assignRoles(u, roleIds, 'Admin')
+    // assignRoles replaces the whole set, so fold back the roles this screen locks:
+    // the automatic EMPLOYEE base role (always), and any hierarchy role (L1/L2/HOD) the
+    // person already held — those are owned by the reporting structure, not this screen,
+    // and must never be dropped by a save here.
+    const forcedIds = roles.filter(r =>
+      AUTO_BASE_ROLE_CODES.includes(r.role_code) ||
+      (HIERARCHY_ROLE_CODES.includes(r.role_code) && u.roles.some(ur => ur.id === r.id))
+    ).map(r => r.id)
+    const finalIds = [...new Set([...roleIds, ...forcedIds])]
+    const { error } = await assignRoles(u, finalIds, 'Admin')
     if (error) { notify('Failed: ' + error.message, 'error'); return }
     notify(`Roles updated for ${u.full_name}.`); reload()
   }
@@ -603,8 +629,8 @@ export default function ESSPage() {
           <>
             {tab === 'dashboard' && <DashboardTab users={users} audit={audit} isMobile={isMobile} />}
             {tab === 'access' && <AccessTab users={users} isMobile={isMobile} onActivate={doActivate} onDeactivate={askDeactivate} onAssignOpen={(u)=>{ setSelUser(u); setTab('roles') }} onImpersonate={doImpersonate} onBulk={doBulk} />}
-            {tab === 'roles' && <RolesTab users={users} roles={roles} isMobile={isMobile} selected={selUser} onSelect={setSelUser} onAssign={doAssign} />}
-            {tab === 'assign' && <RoleAssignTab users={users} roles={roles} org={org} isMobile={isMobile} onAssign={doAssign} />}
+            {tab === 'roles' && <RolesTab users={users} roles={roles} isMobile={isMobile} selected={selUser} onSelect={setSelUser} onAssign={doAssign} canGrantHiringManager={canGrantHiringManager} />}
+            {tab === 'assign' && <RoleAssignTab users={users} roles={roles} isMobile={isMobile} onAssign={doAssign} canGrantHiringManager={canGrantHiringManager} />}
             {tab === 'audit' && <AuditTab audit={audit} />}
           </>
         )}

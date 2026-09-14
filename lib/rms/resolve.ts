@@ -25,10 +25,17 @@ export interface Grant {
   employeeId: string | null
   empCode: string | null
   name: string | null
+  /** The caller's own company. The scope gate forces every cross-employee read to this
+   *  company_id unless the caller is a group-level (super-admin) role. Null for the legacy
+   *  shared login, which has no employee row — treated as "no company gate", see server.ts. */
+  companyId: string | null
   roles: RoleRef[]
   modules: Record<string, AccessLevel>
   approvals: ApprovalRight[]
   isSuperAdmin: boolean
+  /** True when a role lets the caller see beyond their own company (ORG scope /
+   *  ADMIN_SUPER / ALL_ACCESS). When false, company data is forced to companyId. */
+  crossCompany: boolean
   /** False while the roll-out is still assigning roles. When false the sidebar shows
    *  everything, exactly as it did before roles existed, so a half-seeded permission
    *  table cannot lock the HR team out on the morning it ships. */
@@ -42,6 +49,39 @@ export interface Grant {
   resolved: boolean
 }
 
+/**
+ * The company_id a caller's cross-employee reads must be pinned to — or null when they
+ * may legitimately see every company.
+ *
+ * `requested` is an optional company the caller picked (a dashboard dropdown). A
+ * cross-company caller (super admin / ORG-scoped) may narrow to it, or see all when it is
+ * blank/'ALL'. Everyone else is forced to their own company and `requested` is ignored —
+ * this is the single choke-point that stops '' / 'ALL' from leaking other companies.
+ */
+export function companyFilter(grant: Grant, requested?: string | null): string | null {
+  // Cross-company callers, and callers whose own company is unknown (the legacy shared
+  // login has no employee row), are not pinned — they may narrow to a requested company
+  // or see all. Everyone else is forced to their own company.
+  if (grant.crossCompany || !grant.companyId) {
+    return requested && requested !== 'ALL' && requested !== '' ? requested : null
+  }
+  return grant.companyId
+}
+
+/** The companies a caller may choose in a dropdown. A cross-company caller sees all;
+ *  everyone else sees only their own. Pure — safe on client and server. */
+export function scopedCompanies<T extends { id: string }>(grant: Grant, all: T[]): T[] {
+  if (grant.crossCompany || !grant.companyId) return all
+  return all.filter(c => c.id === grant.companyId)
+}
+
+/** What a company selector should default to: '' (All) for a cross-company caller, else
+ *  the caller's own company id. '' is only ever offered to cross-company callers. */
+export function defaultCompanyId(grant: Grant): string {
+  if (grant.crossCompany || !grant.companyId) return ''
+  return grant.companyId
+}
+
 export const SUPER_ADMIN_CODES = ['ADMIN_SUPER', 'SUPER_ADMIN']
 /** Roles allowed to hand out roles. Short on purpose: the screen that grants permissions
  *  is itself permission-gated. */
@@ -49,9 +89,9 @@ export const ROLE_ADMIN_CODES = [...SUPER_ADMIN_CODES, 'HR_HEAD', 'CHRO']
 
 export function emptyGrant(): Grant {
   return {
-    employeeId: null, empCode: null, name: null,
+    employeeId: null, empCode: null, name: null, companyId: null,
     roles: [], modules: {}, approvals: [],
-    isSuperAdmin: false, enforced: true, legacy: false, resolved: true,
+    isSuperAdmin: false, crossCompany: false, enforced: true, legacy: false, resolved: true,
   }
 }
 
@@ -59,6 +99,7 @@ export interface ResolveInput {
   employeeId: string | null
   empCode?: string | null
   name?: string | null
+  companyId?: string | null
   roles: RoleRef[]
   permissions: { role_id: string; module: string; access_level: AccessLevel }[]
   approvals: (ApprovalRight & { role_id: string })[]
@@ -81,10 +122,15 @@ export function resolveGrant(input: ResolveInput): Grant {
   g.employeeId = input.employeeId
   g.empCode = input.empCode ?? null
   g.name = input.name ?? null
+  g.companyId = input.companyId ?? null
   g.roles = input.roles
   g.enforced = input.enforced !== false
   g.legacy = !!input.legacy
   g.isSuperAdmin = input.roles.some(r => SUPER_ADMIN_CODES.includes(r.role_code))
+  // A caller reaches beyond their own company only via a super-admin role or a role
+  // scoped ORG. Everyone else is pinned to companyId by the scope gate.
+  g.crossCompany = g.isSuperAdmin ||
+    input.roles.some(r => String(r.scope || '').toUpperCase() === 'ORG')
 
   const held = new Set(input.roles.map(r => r.id))
 

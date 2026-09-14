@@ -20,7 +20,7 @@
 // exactly as the full chart built it. One recursive renderer draws all of it.
 import { useState, useEffect, useMemo } from 'react'
 import { authToken } from '@/lib/rms/client'
-import { buildForest, pathTo, flatten, type TreeNode } from '@/lib/rms/tree'
+import { buildForest, pathTo, type TreeNode } from '@/lib/rms/tree'
 import type { OrgTreeNode } from '@/lib/rms/server'
 
 const P = {
@@ -39,41 +39,48 @@ function initials(name: string | null): string {
   return (name || '?').split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase()
 }
 
-/** One box in the flow. Colour is derived from the data the same way the full Org Chart
- *  derives it — root, department head, has-reports, or plain — never hand-tagged.
- *  `emphasis` marks the one employee this whole panel is about. */
-function FlowBox({ n, emphasis }: { n: Row; emphasis?: boolean }) {
+const clamp2: React.CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }
+const TIER: Record<string, { bar: string; tag: string }> = {
+  root:    { bar: P.amber,  tag: 'Leadership' },
+  hod:     { bar: P.blue,   tag: 'Dept Head' },
+  manager: { bar: P.purple, tag: 'Manager' },
+  ic:      { bar: P.grey,   tag: 'Team' },
+}
+
+/** One box in the flow. Colour and tier come from the data — root, department head,
+ *  has-reports, or plain — never hand-tagged. `emphasis` marks the one employee this
+ *  panel is about. */
+const REPORT_GREEN = '#059669'
+function FlowBox({ n, emphasis, isReport }: { n: Row; emphasis?: boolean; isReport?: boolean }) {
   const tier = !n.managerId ? 'root' : n.isHod ? 'hod' : n.directReports > 0 ? 'manager' : 'ic'
-  const bar = tier === 'root' ? P.amber : tier === 'hod' ? P.blue : tier === 'manager' ? P.purple : P.grey
+  const t = TIER[tier]
+  const accent = isReport ? REPORT_GREEN : emphasis ? P.purple : null
   return (
     <div className="org-node" style={{
-      width: 148, background: P.card, borderRadius: 8, overflow: 'hidden', flexShrink: 0,
-      border: `1px solid ${emphasis ? P.purple : P.border}`,
-      boxShadow: emphasis ? `0 0 0 3px ${P.purpleBg}, 0 4px 14px rgba(124,58,237,0.18)` : '0 1px 3px rgba(30,27,75,0.06)',
+      width: 170, background: isReport ? '#ECFDF5' : emphasis ? P.purpleLight : P.card, borderRadius: 11, overflow: 'hidden', flexShrink: 0,
+      border: `1.5px solid ${accent || P.border}`,
+      boxShadow: isReport ? `0 0 0 3px ${REPORT_GREEN}22, 0 6px 16px rgba(5,150,105,0.18)`
+        : emphasis ? `0 0 0 3px ${P.purpleBg}, 0 6px 18px rgba(124,58,237,0.20)` : '0 1px 4px rgba(30,27,75,0.07)',
     }}>
-      <div style={{ height: 5, background: bar }} />
-      <div style={{ padding: '8px 8px 7px', textAlign: 'center' }}>
+      <div style={{ height: 4, background: isReport ? REPORT_GREEN : t.bar }} />
+      <div style={{ padding: '10px 10px 9px', textAlign: 'center' }}>
         <div style={{
-          width: 34, height: 34, borderRadius: '50%', background: bar + '22', color: bar,
-          fontSize: 11.5, fontWeight: 700, margin: '0 auto 5px',
+          width: 40, height: 40, borderRadius: '50%', background: (isReport ? REPORT_GREEN : t.bar) + '20', color: isReport ? REPORT_GREEN : t.bar,
+          fontSize: 13, fontWeight: 700, margin: '0 auto 6px', border: `1.5px solid ${(isReport ? REPORT_GREEN : t.bar)}33`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>{initials(n.fullName)}</div>
-        <div style={{
-          fontSize: 11.5, fontWeight: 700, color: P.text, lineHeight: 1.2,
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-        }}>{n.fullName || '—'}</div>
-        <div style={{ fontSize: 9.5, color: P.muted, fontFamily: 'monospace', marginTop: 1 }}>{n.empCode || '—'}</div>
-        <div style={{
-          fontSize: 9.5, color: P.muted, marginTop: 2, lineHeight: 1.25,
-          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-        }}>{n.designation || '—'}</div>
-        {emphasis && <div style={{ fontSize: 8.5, fontWeight: 700, color: P.purple, marginTop: 2 }}>THIS EMPLOYEE</div>}
-      </div>
-      {n.directReports > 0 && (
-        <div style={{ fontSize: 9, fontWeight: 700, color: P.purpleDark, background: P.purpleLight, textAlign: 'center', padding: '2px 0', borderTop: `1px solid ${P.border}` }}>
-          {n.directReports} direct
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: P.text, lineHeight: 1.2, ...clamp2 }}>{n.fullName || '—'}</div>
+        <div style={{ fontSize: 10, color: P.muted, fontFamily: 'monospace', marginTop: 2 }}>{n.empCode || '—'}</div>
+        <div style={{ fontSize: 10, color: P.muted, marginTop: 3, lineHeight: 1.3, ...clamp2 }}>{n.designation || '—'}</div>
+        <div style={{ marginTop: 7, display: 'flex', gap: 4, justifyContent: 'center', flexWrap: 'wrap' }}>
+          {emphasis
+            ? <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.06em', color: '#fff', background: P.purple, padding: '2px 9px', borderRadius: 99 }}>YOU</span>
+            : isReport
+              ? <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: '.04em', color: '#fff', background: REPORT_GREEN, padding: '2px 9px', borderRadius: 99 }}>REPORTS TO YOU</span>
+              : <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '.04em', color: t.bar, background: t.bar + '18', padding: '2px 9px', borderRadius: 99 }}>{t.tag}</span>}
+          {n.directReports > 0 && <span style={{ fontSize: 8.5, fontWeight: 700, color: P.purpleDark, background: P.purpleLight, padding: '2px 8px', borderRadius: 99 }}>{n.directReports} report{n.directReports > 1 ? 's' : ''}</span>}
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -81,14 +88,14 @@ function FlowBox({ n, emphasis }: { n: Row; emphasis?: boolean }) {
 /** Draws one synthetic node and, if it has any, its children below it — the same nested
  *  <ul>/<li> connector pattern the full Org Chart uses, rooted here instead of at the
  *  top of the company. */
-function FlowBranch({ node, meId }: { node: TreeNode<Row>; meId: string }) {
+function FlowBranch({ node, meId, reportIds }: { node: TreeNode<Row>; meId: string; reportIds: Set<string> }) {
   const hasChildren = node.children.length > 0
   return (
     <li className={hasChildren ? 'has-children' : ''}>
-      <FlowBox n={node.node} emphasis={node.node.id === meId} />
+      <FlowBox n={node.node} emphasis={node.node.id === meId} isReport={reportIds.has(node.node.id)} />
       {hasChildren && (
         <ul>
-          {node.children.map(c => <FlowBranch key={c.node.id} node={c} meId={meId} />)}
+          {node.children.map(c => <FlowBranch key={c.node.id} node={c} meId={meId} reportIds={reportIds} />)}
         </ul>
       )}
     </li>
@@ -134,39 +141,25 @@ export default function EmployeeOrgFlow({ employeeId, companyId, employeeName }:
   //   peers       this employee's parent's other children — their own level
   //   me          this employee's own node; its .children IS the whole team,
   //               however deep, because buildForest already nested it
-  const { synthetic, peerCount, teamCount } = useMemo(() => {
-    if (!employeeId) return { synthetic: null as TreeNode<Row> | null, peerCount: 0, teamCount: 0 }
+  const { synthetic, teamCount, chainLen, reportIds } = useMemo(() => {
+    if (!employeeId) return { synthetic: null as TreeNode<Row> | null, teamCount: 0, chainLen: 0, reportIds: new Set<string>() }
     const path = pathTo(forest, employeeId)
-    if (!path.length) return { synthetic: null as TreeNode<Row> | null, peerCount: 0, teamCount: 0 }
+    if (!path.length) return { synthetic: null as TreeNode<Row> | null, teamCount: 0, chainLen: 0, reportIds: new Set<string>() }
 
     const me = path[path.length - 1]
     const ancestors = path.slice(0, -1)
-    const parent = ancestors[ancestors.length - 1]
-    const peers = parent ? parent.children.filter(c => c.node.id !== employeeId) : []
-    const team = flatten(me.children)
 
-    // The level this employee stands on: every peer as a leaf (their own teams do not
-    // expand here — this panel is about this employee, not a tour of the company), and
-    // this employee's node exactly as it came from the real tree, subtree intact.
-    let level: TreeNode<Row> = {
-      node: (parent ?? me).node,
-      children: parent
-        ? [...peers.map(p => ({ node: p.node, children: [] as TreeNode<Row>[] })), me]
-            .sort((a, b) => String(a.node.fullName || '').localeCompare(String(b.node.fullName || '')))
-        : me.children,
-    }
-    // If there is no manager, the "level" IS this employee — nothing to wrap.
-    if (!parent) level = me
-
-    // Each ancestor above the immediate manager keeps only the single child that leads
-    // down to this employee, so nobody else's branch of the company appears on the way
-    // up — matching what was asked for: a straight line, not a wider chart.
-    let root = level
-    for (let i = ancestors.length - 2; i >= 0; i--) {
-      root = { node: ancestors[i].node, children: [root] }
+    // A single, clean line of command — no peers, no side branches, and NOT the whole
+    // sub-tree beneath: leadership at the top → … → your manager → YOU → the people who
+    // report DIRECTLY to you (one level, as leaves — their own teams are not drawn here).
+    const directReports = me.children.map(c => ({ node: c.node, children: [] as TreeNode<Row>[] }))
+    const reportIds = new Set(directReports.map(r => r.node.id))
+    let node: TreeNode<Row> = { node: me.node, children: directReports }
+    for (let i = ancestors.length - 1; i >= 0; i--) {
+      node = { node: ancestors[i].node, children: [node] }
     }
 
-    return { synthetic: root, peerCount: peers.length, teamCount: team.length }
+    return { synthetic: node, teamCount: directReports.length, chainLen: ancestors.length, reportIds }
   }, [forest, employeeId])
 
   if (loading) return <div style={{ fontSize: 12.5, color: P.muted, padding: '8px 0' }}>Loading the reporting line…</div>
@@ -180,17 +173,19 @@ export default function EmployeeOrgFlow({ employeeId, companyId, employeeName }:
   }
 
   return (
-    <div style={{ fontFamily: font, overflowX: 'auto', padding: '4px 0 0' }}>
-      <ul className="org-tree" style={{ justifyContent: 'center', minWidth: 'fit-content', margin: '0 auto' }}>
-        <FlowBranch node={synthetic} meId={employeeId as string} />
-      </ul>
-      {(peerCount > 0 || teamCount > 0) && (
-        <div style={{ fontSize: 10.5, color: P.muted, textAlign: 'center', marginTop: 4 }}>
-          {peerCount > 0 && `${peerCount} at the same level`}
-          {peerCount > 0 && teamCount > 0 && ' · '}
-          {teamCount > 0 && `${teamCount} in their team`}
-        </div>
-      )}
+    <div style={{ fontFamily: font }}>
+      <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'center', fontSize: 10.5, color: P.muted, marginBottom: 8 }}>
+        <span>Your reporting line — leadership on top, <b style={{ color: P.purple }}>you</b> in the middle, your direct reports below.</span>
+        <span style={{ marginLeft: 'auto', display: 'flex', gap: 10 }}>
+          {chainLen > 0 && <span>{chainLen} level{chainLen > 1 ? 's' : ''} above you</span>}
+          {teamCount > 0 && <span>{teamCount} direct report{teamCount > 1 ? 's' : ''}</span>}
+        </span>
+      </div>
+      <div style={{ overflowX: 'auto', padding: '4px 0 2px' }}>
+        <ul className="org-tree" style={{ justifyContent: 'center', minWidth: 'fit-content', margin: '0 auto' }}>
+          <FlowBranch node={synthetic} meId={employeeId as string} reportIds={reportIds} />
+        </ul>
+      </div>
     </div>
   )
 }

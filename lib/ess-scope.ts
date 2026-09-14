@@ -3,8 +3,8 @@
 // BRANCH → same location. ORG → everyone. (Highest scope among the employee's roles wins.)
 import { supabase } from '@/lib/supabase'
 
-export type Scope = 'SELF' | 'TEAM' | 'DEPT' | 'BRANCH' | 'ORG'
-const RANK: Record<Scope, number> = { SELF: 0, TEAM: 1, DEPT: 2, BRANCH: 3, ORG: 4 }
+export type Scope = 'SELF' | 'TEAM' | 'DEPT' | 'BRANCH' | 'COMPANY' | 'ORG'
+const RANK: Record<Scope, number> = { SELF: 0, TEAM: 1, DEPT: 2, BRANCH: 3, COMPANY: 4, ORG: 5 }
 
 export interface ScopeEmployee { id: string; emp_code: string; full_name: string; designation: string | null; dept_name: string | null; location_name: string | null }
 export interface AccessScope { scope: Scope; roleNames: string[]; canViewOthers: boolean; employees: ScopeEmployee[] }
@@ -26,15 +26,16 @@ export async function loadAccessScope(employeeId: string): Promise<AccessScope> 
   const roleNames = (roles as any[]).map(r => r.role_name)
   if (best === 'SELF') return { scope: 'SELF', roleNames, canViewOthers: false, employees: [] }
 
-  // This employee's own dept/location for DEPT/BRANCH scoping.
-  const { data: me } = await supabase.from('employees').select('department_id, location_id').eq('id', employeeId).maybeSingle()
+  // This employee's own company/dept/location for COMPANY/DEPT/BRANCH scoping.
+  const { data: me } = await supabase.from('employees').select('company_id, department_id, location_id').eq('id', employeeId).maybeSingle()
 
   const cols = 'id, emp_code, full_name, designation, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)'
   let q = supabase.from('employees').select(cols).eq('employment_status', 'Active').neq('is_test', true).order('emp_code')
   if (best === 'TEAM') q = q.eq('l1_manager_id', employeeId)
   else if (best === 'DEPT') q = q.eq('department_id', (me as any)?.department_id || '00000000-0000-0000-0000-000000000000')
   else if (best === 'BRANCH') q = q.eq('location_id', (me as any)?.location_id || '00000000-0000-0000-0000-000000000000')
-  // ORG → no extra filter.
+  else if (best === 'COMPANY') q = q.eq('company_id', (me as any)?.company_id || '00000000-0000-0000-0000-000000000000')
+  // ORG → no extra filter (super admins only, after migration 113).
   const { data } = await q.limit(5000)
   const employees: ScopeEmployee[] = (data || []).map((e: any) => ({
     id: e.id, emp_code: e.emp_code, full_name: e.full_name, designation: e.designation,

@@ -83,4 +83,4 @@ export interface ResignationState {
 
 /** Which HRIS screen is showing. Matches the portal's `view` keys exactly, so
  *  the portal stays the single source of truth for navigation. */
-export type HrisTab = 'directory' | 'requests' | 'approvals' | 'exit'
+export type HrisTab = 'directory' | 'requests' | 'approvals' | 'raise-mrf' | 'exit'

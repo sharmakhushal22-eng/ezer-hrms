@@ -12,7 +12,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant, authToken } from '@/lib/rms/client'
-import { canSee } from '@/lib/rms/resolve'
+import { canSee, scopedCompanies } from '@/lib/rms/resolve'
 import { buildForest, flatten, pathTo, countNodes, type TreeNode } from '@/lib/rms/tree'
 import type { OrgTreeNode } from '@/lib/rms/server'
 
@@ -56,9 +56,13 @@ function initials(name: string | null): string {
   return (name || '?').split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase()
 }
 
-function OrgCard({ node, isSelf, onToggle, collapsed, hasChildren, registerRef, highlighted }: {
+const REPORT = '#059669'
+const REPORT_BG = '#ECFDF5'
+
+function OrgCard({ node, isSelf, isReport, onToggle, collapsed, hasChildren, registerRef, highlighted }: {
   node: TreeNode<Row>
   isSelf: boolean
+  isReport: boolean
   onToggle: () => void
   collapsed: boolean
   hasChildren: boolean
@@ -68,21 +72,24 @@ function OrgCard({ node, isSelf, onToggle, collapsed, hasChildren, registerRef, 
   const n = node.node
   const tier = tierOf(n)
   const style = TIER_STYLE[tier]
+  const bottomTag = isSelf || isReport
   return (
     <div
       ref={el => registerRef(n.id, el)}
       className="org-node"
       style={{
-        width: 172, background: P.card, borderRadius: 12, position: 'relative', flexShrink: 0,
-        border: `1px solid ${highlighted ? P.purple : P.border}`,
-        boxShadow: highlighted
-          ? `0 0 0 3px ${P.purpleBg}, 0 10px 24px rgba(124,58,237,0.22)`
-          : '0 2px 8px rgba(30,27,75,0.07)',
+        width: 172, background: isReport ? REPORT_BG : P.card, borderRadius: 12, position: 'relative', flexShrink: 0,
+        border: `1px solid ${isReport ? REPORT : highlighted ? P.purple : P.border}`,
+        boxShadow: isReport
+          ? `0 0 0 3px ${REPORT}22, 0 8px 20px rgba(5,150,105,0.22)`
+          : highlighted
+            ? `0 0 0 3px ${P.purpleBg}, 0 10px 24px rgba(124,58,237,0.22)`
+            : '0 2px 8px rgba(30,27,75,0.07)',
       }}
       title={`${n.fullName || '—'} · ${n.designation || '—'}${n.department ? ' · ' + n.department : ''}`}
     >
       <div style={{ height: 5, borderRadius: '12px 12px 0 0', background: `linear-gradient(90deg, ${style.bar}, ${style.bar}AA)` }} />
-      <div style={{ padding: '12px 11px 10px', textAlign: 'center', position: 'relative', borderRadius: isSelf ? 0 : '0 0 12px 12px', overflow: 'hidden' }}>
+      <div style={{ padding: '12px 11px 10px', textAlign: 'center', position: 'relative', borderRadius: bottomTag ? 0 : '0 0 12px 12px', overflow: 'hidden' }}>
         {n.directReports > 0 && (
           <div style={{
             position: 'absolute', top: 8, right: 7, fontSize: 9.5, fontWeight: 700,
@@ -117,6 +124,12 @@ function OrgCard({ node, isSelf, onToggle, collapsed, hasChildren, registerRef, 
           borderRadius: '0 0 12px 12px', background: `linear-gradient(90deg, ${P.purple}, ${P.purpleDark})`,
         }}>YOU ARE HERE</div>
       )}
+      {isReport && !isSelf && (
+        <div style={{
+          fontSize: 9, fontWeight: 700, color: '#fff', textAlign: 'center', padding: '3px 0',
+          borderRadius: '0 0 12px 12px', background: `linear-gradient(90deg, ${REPORT}, #047857)`,
+        }}>REPORTS TO YOU</div>
+      )}
       {hasChildren && (
         <button
           onClick={onToggle}
@@ -135,9 +148,10 @@ function OrgCard({ node, isSelf, onToggle, collapsed, hasChildren, registerRef, 
   )
 }
 
-function TreeLI({ node, selfId, collapsedIds, onToggle, registerRef, highlightId }: {
+function TreeLI({ node, selfId, reportIds, collapsedIds, onToggle, registerRef, highlightId }: {
   node: TreeNode<Row>
   selfId: string | null
+  reportIds: Set<string>
   collapsedIds: Set<string>
   onToggle: (id: string) => void
   registerRef: (id: string, el: HTMLDivElement | null) => void
@@ -148,7 +162,7 @@ function TreeLI({ node, selfId, collapsedIds, onToggle, registerRef, highlightId
   return (
     <li className={hasChildren && !collapsed ? 'has-children' : ''}>
       <OrgCard
-        node={node} isSelf={node.node.id === selfId}
+        node={node} isSelf={node.node.id === selfId} isReport={reportIds.has(node.node.id)}
         onToggle={() => onToggle(node.node.id)}
         collapsed={collapsed} hasChildren={hasChildren}
         registerRef={registerRef}
@@ -157,7 +171,7 @@ function TreeLI({ node, selfId, collapsedIds, onToggle, registerRef, highlightId
       {hasChildren && !collapsed && (
         <ul>
           {node.children.map(c => (
-            <TreeLI key={c.node.id} node={c} selfId={selfId} collapsedIds={collapsedIds}
+            <TreeLI key={c.node.id} node={c} selfId={selfId} reportIds={reportIds} collapsedIds={collapsedIds}
               onToggle={onToggle} registerRef={registerRef} highlightId={highlightId} />
           ))}
         </ul>
@@ -259,7 +273,8 @@ export default function OrgChartPage() {
     // alphabetical first) reads as the wrong chart, not as a default.
     ;(async () => {
       const { data } = await supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
-      const list = data || []
+      // A non-cross-company viewer only ever sees their own company's chart.
+      const list = scopedCompanies(grant, data || [])
       setCompanies(list)
       let own: string | null = null
       if (grant.employeeId) {
@@ -287,6 +302,34 @@ export default function OrgChartPage() {
   const forest = useMemo(() => buildForest<Row>(rows), [rows])
   const allIds = useMemo(() => flatten(forest).map(n => n.node.id), [forest])
   const total = useMemo(() => countNodes(forest), [forest])
+
+  // "My chain" — the single line of command for the viewer: leadership at the top → … →
+  // their manager → THEM → their direct reports (one level, as leaves). No peers, no
+  // sub-trees — nobody unrelated to the viewer. Falls back to null when the viewer has no
+  // employee row or isn't in the loaded company (then the whole-company forest shows).
+  const chainForest = useMemo(() => {
+    if (!grant.employeeId) return null
+    const path = pathTo(forest, grant.employeeId)
+    if (!path.length) return null
+    const me = path[path.length - 1]
+    const ancestors = path.slice(0, -1)
+    const directReports = me.children.map(c => ({ node: c.node, children: [] as TreeNode<Row>[] }))
+    let node: TreeNode<Row> = { node: me.node, children: directReports }
+    for (let i = ancestors.length - 1; i >= 0; i--) node = { node: ancestors[i].node, children: [node] }
+    return [node]
+  }, [forest, grant.employeeId])
+  const [chainOnly, setChainOnly] = useState(true)
+  // The people who report DIRECTLY to the viewer — highlighted green wherever they appear.
+  const reportIds = useMemo(() => {
+    if (!grant.employeeId) return new Set<string>()
+    const path = pathTo(forest, grant.employeeId)
+    if (!path.length) return new Set<string>()
+    return new Set(path[path.length - 1].children.map(c => c.node.id))
+  }, [forest, grant.employeeId])
+  const NO_COLLAPSE = useMemo(() => new Set<string>(), [])
+  const inChain = chainOnly && !!chainForest
+  const viewForest = inChain ? chainForest! : forest
+  const viewCollapsed = inChain ? NO_COLLAPSE : collapsedIds
 
   // Default view: the root plus its direct reports, everything deeper collapsed —
   // the same "collapse to my level" starting point the reference layout describes.
@@ -419,8 +462,14 @@ export default function OrgChartPage() {
 
         {divider}
 
-        <button onClick={() => setCollapsedIds(new Set())} style={btn}>⤢ Expand all</button>
-        <button onClick={resetToDefault} style={btn}>⤡ Collapse to my level</button>
+        {chainForest && (
+          <button onClick={() => setChainOnly(v => !v)}
+            style={{ ...btn, background: inChain ? P.purple : '#fff', color: inChain ? '#fff' : P.purpleDark, borderColor: inChain ? P.purple : P.border }}>
+            {inChain ? '🏢 Show whole company' : '👤 Show my chain'}
+          </button>
+        )}
+        {!inChain && <button onClick={() => setCollapsedIds(new Set())} style={btn}>⤢ Expand all</button>}
+        {!inChain && <button onClick={resetToDefault} style={btn}>⤡ Collapse to my level</button>}
         {canSee(grant, 'Employees') && (
           <button onClick={() => setShowDiag(s => !s)} style={{ ...btn, background: showDiag ? P.purple : '#fff', color: showDiag ? '#fff' : P.purpleDark, borderColor: showDiag ? P.purple : P.border }}>
             ⚠ Diagnostics
@@ -457,8 +506,8 @@ export default function OrgChartPage() {
           ) : (
             <div ref={wrapRef} style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', display: 'inline-block' }}>
               <ul className="org-tree" style={{ justifyContent: 'center' }}>
-                {forest.map(n => (
-                  <TreeLI key={n.node.id} node={n} selfId={grant.employeeId} collapsedIds={collapsedIds}
+                {viewForest.map(n => (
+                  <TreeLI key={n.node.id} node={n} selfId={grant.employeeId} reportIds={reportIds} collapsedIds={viewCollapsed}
                     onToggle={toggle} registerRef={registerRef} highlightId={highlightId} />
                 ))}
               </ul>

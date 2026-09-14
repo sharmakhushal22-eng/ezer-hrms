@@ -6,6 +6,7 @@ export interface EssRole {
   salary_visibility: 'NONE' | 'OWN' | 'TEAM' | 'DEPT' | 'BRANCH' | 'ALL'
   scope: 'SELF' | 'TEAM' | 'DEPT' | 'BRANCH' | 'ORG'
   sort_order: number
+  is_custom?: boolean   // true for HR-created custom roles (migration 112); built-ins are false/undefined
 }
 export interface EssAccount {
   id: string; employee_id: string; status: 'ACTIVE' | 'INACTIVE' | 'LOCKED'
@@ -31,6 +32,46 @@ export interface AuditRow {
 export async function loadRoles(): Promise<EssRole[]> {
   const { data } = await supabase.from('ess_roles').select('*').order('sort_order')
   return (data as any) || []
+}
+
+// ── Custom roles (migration 112) ────────────────────────────────────────────
+// HR can invent a role, then grant it modules in Module Access and hand it to
+// employees in Assign Roles — a custom role is an ess_roles row like any other,
+// only flagged is_custom = true so the built-in fourteen can never be deleted.
+
+/** Turn a human name into a unique UPPER_SNAKE role_code. */
+async function uniqueRoleCode(name: string): Promise<string> {
+  let base = name.trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 40)
+  if (!base) base = 'CUSTOM_ROLE'
+  const { data } = await supabase.from('ess_roles').select('role_code').eq('role_code', base)
+  if (data && data.length) base = `${base}_${Date.now().toString(36).slice(-4).toUpperCase()}`
+  return base
+}
+
+export async function createRole(role_name: string): Promise<{ data?: EssRole; error?: { message: string } }> {
+  const name = role_name.trim()
+  if (!name) return { error: { message: 'Give the role a name.' } }
+  const role_code = await uniqueRoleCode(name)
+  // Put new roles at the end of the list.
+  const { data: maxRow } = await supabase.from('ess_roles').select('sort_order').order('sort_order', { ascending: false }).limit(1).maybeSingle()
+  const sort_order = ((maxRow as any)?.sort_order || 0) + 1
+  const { data, error } = await supabase.from('ess_roles')
+    .insert({ role_code, role_name: name, is_custom: true, scope: 'SELF', salary_visibility: 'NONE', sort_order })
+    .select('*').single()
+  if (error) return { error }
+  return { data: data as any }
+}
+
+/** Delete a CUSTOM role and everything hanging off it. Built-ins are refused. */
+export async function deleteRole(role: EssRole): Promise<{ error?: { message: string } }> {
+  if (!role.is_custom) return { error: { message: 'Built-in roles cannot be deleted.' } }
+  // Clear dependents first so no orphan rows or FK errors remain.
+  await supabase.from('role_permissions').delete().eq('role_id', role.id)
+  await supabase.from('ess_user_roles').delete().eq('role_id', role.id)
+  await supabase.from('role_approval_rights').delete().eq('role_id', role.id)
+  const { error } = await supabase.from('ess_roles').delete().eq('id', role.id)
+  if (error) return { error }
+  return {}
 }
 
 // Company → Location/Branch → Department lookups for the cascading assign flow.
