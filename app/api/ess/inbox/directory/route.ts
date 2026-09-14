@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute } from '@/lib/ess/session'
 import { policy, notInstalled } from '@/lib/inbox/server'
+import { orIlike } from '@/lib/pg-search'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +28,7 @@ export async function GET(req: NextRequest) {
   }
 
   const { data: mine } = await sb.from('employees')
-    .select('id, company_id, department_id, l1_manager_id, l2_manager_id')
+    .select('id, company_id, department_id, l1_manager_id, l2_manager_id, full_name, emp_code, designation')
     .eq('id', me).maybeSingle()
   if (!mine) return NextResponse.json({ people: [] })
 
@@ -39,11 +40,22 @@ export async function GET(req: NextRequest) {
   // Narrow in SQL where the mode allows it, so we are not pulling 400 rows to
   // throw most of them away.
   if (pol.reach_mode === 'COMPANY' && mine.company_id) sel = sel.eq('company_id', mine.company_id)
-  if (q) sel = sel.or(`full_name.ilike.%${q}%,emp_code.ilike.%${q}%,designation.ilike.%${q}%`)
+  // Quoted, because this is a search box: a name with a comma or a full stop
+  // in it was being read as more filter syntax and came back 400, which the
+  // compose sheet could only render as "nobody matched".
+  if (q) sel = sel.or(orIlike(['full_name', 'emp_code', 'designation'], q))
   sel = sel.order('full_name')
 
   const { data: rows, error: de } = await sel
   if (de) return NextResponse.json({ error: de.message }, { status: 500 })
+
+  // The list excludes the caller, because messaging yourself is not a thing.
+  // That makes searching your OWN name or code the one empty result with no
+  // explanation in it — and on a portal an admin is viewing, "yourself" is the
+  // employee whose portal it is, which is easy to type by accident. Say so
+  // rather than leaving an empty sheet to be read as a broken search.
+  const matchedSelf = !!q && [mine.full_name, mine.emp_code, mine.designation]
+    .some(v => String(v ?? '').toLowerCase().includes(q.toLowerCase()))
 
   let list = rows ?? []
 
@@ -72,6 +84,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     installed: true,
     reach_mode: pol.reach_mode,
+    matched_self: matchedSelf,
     people: list.map((e: any) => ({
       id: e.id, name: e.full_name, code: e.emp_code,
       designation: e.designation, photo: e.photo_url,

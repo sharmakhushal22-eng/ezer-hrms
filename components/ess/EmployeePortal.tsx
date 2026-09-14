@@ -28,7 +28,7 @@ import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import Inbox from './Inbox'
-import InboxTabs from './InboxTabs'
+import { InboxShell } from './inbox/InboxShell'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
@@ -3751,7 +3751,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
       // The inbox reports its own unread straight into the bell's state, so
       // the badge and the screen can never show two different numbers.
-      case 'inbox':         return <InboxTabs employeeId={emp.id} onUnread={setUnread} />
+      // The bell gets the MESSAGES count only. Wall and Broadcast carry their
+      // own badges inside the shell and are never added to it.
+      case 'inbox':         return <InboxShell employeeId={emp.id}
+                                              firstName={emp.first_name || emp.full_name.split(' ')[0]}
+                                              onUnread={setUnread} />
       case 'vpf':           return <VpfSection emp={emp} notify={notify} />
       case 'nps':           return <NpsSection emp={emp} notify={notify} />
       case 'loans':         return <LoansSection emp={emp} notify={notify} />
@@ -3866,11 +3870,24 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           // their own <Page> padding and expect the full width.
           <AdminModuleHost moduleKey={adminKey} />
         ) : (
-          <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
-            <TabHeader s={section} />
-            <SubTabs items={sectionItems} view={view} go={go} />
-            {renderView()}
-          </div>
+          view === 'inbox' ? (
+            // The inbox is a full-bleed tab: three panes that fill the viewport
+            // and scroll independently. Capping it at 1100px would put it in its
+            // own narrow breakpoint on every desktop, so only the header band
+            // keeps the standard measure — .ib brings its own width and padding.
+            <div style={{ paddingTop: isMobile ? 14 : 18 }}>
+              <div style={{ padding: isMobile ? '0 12px' : '0 22px', maxWidth:1100 }}>
+                <TabHeader s={section} />
+              </div>
+              {renderView()}
+            </div>
+          ) : (
+            <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
+              <TabHeader s={section} />
+              <SubTabs items={sectionItems} view={view} go={go} />
+              {renderView()}
+            </div>
+          )
         )}
       </div>
 

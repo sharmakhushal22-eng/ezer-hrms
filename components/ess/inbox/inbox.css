@@ -1,0 +1,583 @@
+/* ==========================================================================
+   EZER ESS · Inbox — scoped styles (redesign)
+   Scope: everything lives under `.ib` (the InboxShell root), same convention
+   as wall.css (`.wof`) and today.css. Colours come from lib/ui/theme.css tokens
+   (--ez-*); nothing here redefines a token.
+
+   Folder ink: elements that carry a folder colour set --ib-l / --ib-d inline
+   (values from lib/inbox/streams.ts) and wear the `ib-h` class; --ib resolves
+   to the right one for the active theme ON that element. Same mechanism as
+   the old screen — do not simplify it.
+   ========================================================================== */
+.ib{
+  --ib-offset:92px;                 /* portal chrome above the inbox; the portal may override */
+  /* Fraunces is already on <html> as --ezt-serif (app/fonts.ts, loaded in
+     app/layout.tsx). Georgia keeps the four serif moments readable before
+     the font arrives, and if it never does. */
+  --ib-serif:var(--ezt-serif, "Fraunces", Georgia, serif);
+  --ease-out:cubic-bezier(.22,1,.36,1);
+  --ease-spring:cubic-bezier(.34,1.4,.64,1);
+  --ez-gold:#C2751B;
+}
+:root[data-ez-theme="dark"] .ib{ --ez-gold:#E0A24A }
+@media (prefers-color-scheme:dark){ :root:not([data-ez-theme="light"]) .ib{ --ez-gold:#E0A24A } }
+
+.ib .ib-h{ --ib:var(--ib-l) }
+:root:not([data-ez-theme="light"]) .ib .ib-h{ --ib:var(--ib-d) }
+@media (prefers-color-scheme:light){ :root:not([data-ez-theme="dark"]) .ib .ib-h{ --ib:var(--ib-l) } }
+:root[data-ez-theme="dark"]  .ib .ib-h{ --ib:var(--ib-d) }
+:root[data-ez-theme="light"] .ib .ib-h{ --ib:var(--ib-l) }
+
+.ib *{box-sizing:border-box}
+.ib button{font-family:inherit; color:inherit; cursor:pointer}
+.ib button:focus-visible, .ib input:focus-visible, .ib textarea:focus-visible, .ib [tabindex]:focus-visible{outline:2px solid var(--ez-brand); outline-offset:2px; border-radius:8px;}
+.ib .sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+.ib svg.i{width:16px; height:16px; stroke:currentColor; fill:none; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; flex-shrink:0}
+/* ---------- shell ---------- */
+.ib{max-width:1480px; margin:14px auto 24px; padding:0 22px;
+  display:grid; grid-template-rows:auto 1fr; gap:14px;
+  /* The pre-hydration fallback. useInboxOffset() measures the real value and
+     overrides both, because UiScale's `zoom` on <html> scales dvh too. */
+  height:calc(100dvh - var(--ib-offset)); min-height:420px;}
+/* ---------- group switcher ---------- */
+.ib .groups{display:flex; align-items:center; gap:18px; flex-wrap:wrap;}
+.ib .seg{position:relative; display:inline-grid; grid-auto-flow:column; grid-auto-columns:1fr;
+  padding:4px; border-radius:14px; background:var(--ez-surface);
+  border:1px solid var(--ez-line); box-shadow:var(--ez-shadow-flat); isolation:isolate;}
+.ib .seg .pill{position:absolute; top:4px; left:0; height:calc(100% - 8px); width:0;
+  border-radius:10px; background:var(--ez-brand-tint);
+  border:1px solid var(--ez-brand-edge);
+  transition:transform .42s var(--ease-spring), width .3s var(--ease-out);
+  z-index:0; pointer-events:none;}
+.ib .seg button{position:relative; z-index:1; border:0; background:transparent;
+  display:flex; align-items:center; gap:9px;
+  padding:9px 18px; border-radius:10px; font-size:13.5px; font-weight:600;
+  color:var(--ez-ink-soft); white-space:nowrap; transition:color .2s;}
+.ib .seg button[aria-selected="true"]{color:var(--ez-brand-deep)}
+:root[data-ez-theme="dark"] .ib .seg button[aria-selected="true"], :root[data-ez-theme="auto"].is-dark .ib .seg button[aria-selected="true"]{color:var(--ez-brand)}
+.ib .seg button .cnt{min-width:20px; height:20px; padding:0 6px; border-radius:999px; display:inline-grid; place-items:center;
+  font-size:11px; font-weight:700; background:var(--ez-sunken); color:var(--ez-ink-soft);
+  transition:background .2s, color .2s;}
+.ib .seg button[aria-selected="true"] .cnt{background:var(--ez-brand); color:var(--ez-on-accent)}
+.ib .seg button .cnt:empty{display:none}
+.ib .blurb{font-size:13px; color:var(--ez-muted); min-height:1.4em}
+.ib .blurb span{display:inline-block; animation:fadeUp .35s var(--ease-out) both}
+.ib .groups .live{margin-left:auto; display:flex; align-items:center; gap:7px; font-size:12px; color:var(--ez-faint);}
+.ib .groups .live i{width:7px; height:7px; border-radius:50%; background:var(--ez-positive); position:relative;}
+.ib .groups .live i::after{content:""; position:absolute; inset:-4px; border-radius:50%; border:1.5px solid var(--ez-positive);
+  animation:pulse 2.4s ease-out infinite; opacity:0;}
+/* ---------- group panels ---------- */
+.ib .group{min-height:0; min-width:0}
+.ib > *{min-width:0}
+.ib .group[hidden]{display:none}
+/* Messages: three panes.
+   .ib-messages sits between .group and .panes and carries the data-pane /
+   data-rail state. It needs a resolved height of its own or .panes'
+   height:100% has nothing to measure against and the three panes collapse
+   to their content. */
+.ib .ib-messages{height:100%; min-height:0; min-width:0}
+.ib .panes{display:grid; grid-template-columns:250px minmax(300px,380px) 1fr; gap:14px; height:100%; min-height:0;}
+.ib .pane{background:var(--ez-surface); border:1px solid var(--ez-line); border-radius:16px;
+  box-shadow:var(--ez-shadow-flat); min-height:0; display:flex; flex-direction:column; overflow:hidden;
+  animation:paneIn .55s var(--ease-out) both;}
+.ib .panes > .pane, .ib .wall > .pane, .ib .bc > .pane{min-width:0}
+.ib .pane.rail{animation-delay:.02s}
+.ib .pane.list{animation-delay:.09s}
+.ib .pane.thread{animation-delay:.16s}
+/* rail */
+.ib .rail{padding:14px 10px}
+.ib .compose{display:flex; align-items:center; justify-content:center; gap:8px; width:100%;
+  height:40px; border:0; border-radius:12px; font-size:13.5px; font-weight:700;
+  color:#fff; background:linear-gradient(135deg,#2563EB,#1D4ED8);
+  box-shadow:var(--ez-shadow-brand); transition:transform .18s var(--ease-out), box-shadow .18s;}
+.ib .compose:hover{transform:translateY(-1px); box-shadow:0 2px 4px rgba(29,78,216,.24),0 12px 26px -8px rgba(37,99,235,.5)}
+.ib .compose:active{transform:translateY(0) scale(.99)}
+.ib .rail h3{margin:18px 10px 6px; font-size:11.5px; font-weight:700; color:var(--ez-faint); letter-spacing:.01em}
+.ib .folders{display:flex; flex-direction:column; gap:2px; overflow:auto; padding-bottom:6px}
+.ib .folder{position:relative; display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+  padding:8px 10px 8px 14px; border:0; border-radius:10px; background:transparent;
+  font-size:13px; font-weight:600; color:var(--ez-ink);
+  transition:background .16s ease, transform .16s ease;}
+.ib .folder::before{content:""; position:absolute; left:4px; top:20%; height:60%; width:3px; border-radius:3px;
+  background:var(--ib); transform:scaleY(0); transition:transform .28s var(--ease-spring);}
+.ib .folder:hover{background:color-mix(in srgb,var(--ib) 10%,transparent); transform:translateX(2px)}
+.ib .folder[aria-current="true"]{background:color-mix(in srgb,var(--ib) 14%,transparent)}
+.ib .folder[aria-current="true"]::before{transform:scaleY(1)}
+.ib .folder .dot{width:8px; height:8px; border-radius:3px; background:var(--ib); flex-shrink:0}
+.ib .folder .lbl{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.ib .folder .lbl small{display:grid; grid-template-rows:0fr; font-size:11px; font-weight:500; color:var(--ez-faint); line-height:1.3;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:0; transition:grid-template-rows .28s var(--ease-out), opacity .2s, margin .28s}
+.ib .folder .lbl small > span{min-height:0; overflow:hidden; text-overflow:ellipsis}
+.ib .folder[aria-current="true"] .lbl small{grid-template-rows:1fr; opacity:1; margin-top:2px}
+.ib .folder .n{min-width:20px; height:20px; padding:0 6px; border-radius:999px; display:inline-grid; place-items:center;
+  font-size:11px; font-weight:700; background:var(--ib); color:#fff;}
+:root[data-ez-theme="dark"] .ib .folder .n, :root[data-ez-theme="auto"].is-dark .ib .folder .n{color:#0D1117}
+.ib .folder .n:empty{display:none}
+.ib .rail .foot{margin-top:auto; padding:12px 10px 2px; font-size:11.5px; color:var(--ez-faint); line-height:1.4;
+  border-top:1px solid var(--ez-line);}
+.ib .rail .foot kbd{font:inherit; font-size:10.5px; padding:1px 5px; border:1px solid var(--ez-line-strong); border-radius:5px; background:var(--ez-sunken)}
+/* list */
+.ib .list .head{padding:14px 14px 10px; border-bottom:1px solid var(--ez-line)}
+.ib .list .head .row1{display:flex; align-items:baseline; gap:8px}
+.ib .list .head h2{margin:0; font-size:15px; font-weight:700}
+.ib .list .head .sum{font-size:12px; color:var(--ez-faint)}
+.ib .list .head .mark{margin-left:auto; border:0; background:transparent; font-size:12px; font-weight:600; color:var(--ez-brand);
+  padding:2px 6px; border-radius:6px; transition:background .16s;}
+.ib .list .head .mark:hover{background:var(--ez-brand-tint)}
+.ib .list .head .mark:disabled{color:var(--ez-faint); cursor:default; background:none}
+.ib .search{margin-top:10px; display:flex; align-items:center; gap:8px; height:36px; padding:0 10px;
+  border:1px solid var(--ez-line); border-radius:10px; background:var(--ez-sunken);
+  transition:border-color .16s, box-shadow .16s, background .16s;}
+.ib .search:focus-within{border-color:var(--ez-brand); background:var(--ez-surface); box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 18%,transparent)}
+.ib .search input{flex:1; border:0; background:transparent; font:inherit; font-size:13px; color:var(--ez-ink); outline:none; min-width:0}
+.ib .search input::placeholder{color:var(--ez-faint)}
+.ib .search kbd{font:inherit; font-size:10.5px; color:var(--ez-faint); padding:1px 5px; border:1px solid var(--ez-line-strong); border-radius:5px}
+.ib .chips{display:flex; gap:6px; margin-top:10px}
+.ib .chip{border:1px solid var(--ez-line); background:transparent; border-radius:999px; padding:4px 11px;
+  font-size:12px; font-weight:600; color:var(--ez-ink-soft); transition:all .16s;}
+.ib .chip:hover{border-color:var(--ez-line-strong); background:var(--ez-sunken)}
+.ib .chip[aria-pressed="true"]{background:var(--ez-ink); color:var(--ez-surface); border-color:var(--ez-ink)}
+.ib .rows{overflow:auto; flex:1; min-height:0; padding:6px}
+.ib .row{position:relative; display:grid; grid-template-columns:38px 1fr; column-gap:11px; row-gap:2px;
+  width:100%; text-align:left; padding:11px 12px; border:0; border-radius:12px; background:transparent;
+  transition:background .16s ease; animation:rowIn .35s var(--ease-out) both;}
+.ib .row + .row{margin-top:2px}
+.ib .row > *{min-width:0}
+.ib .row:hover{background:color-mix(in srgb,var(--ib) 8%,transparent)}
+.ib .row[aria-current="true"]{background:color-mix(in srgb,var(--ib) 13%,transparent)}
+.ib .row[aria-current="true"]::before{content:""; position:absolute; left:3px; top:14px; bottom:14px; width:3px; border-radius:3px; background:var(--ib);
+  animation:barIn .3s var(--ease-spring) both;}
+.ib .av{width:38px; height:38px; border-radius:11px; display:grid; place-items:center; grid-row:span 2;
+  font-size:12.5px; font-weight:700; color:var(--ib);
+  background:color-mix(in srgb,var(--ib) 14%,var(--ez-surface));
+  border:1px solid color-mix(in srgb,var(--ib) 22%,transparent);}
+.ib .av.desk{border-radius:50%}
+.ib .row .t{display:flex; align-items:baseline; gap:8px; min-width:0}
+.ib .row .t b{font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ib .row.unread .t b{font-weight:700}
+.ib .row .t time{font-size:11.5px; color:var(--ez-faint); flex-shrink:0}
+.ib .row.unread .t time{color:var(--ib); font-weight:600}
+.ib .row .m{display:flex; align-items:center; gap:7px; min-width:0}
+.ib .row .m p{margin:0; flex:1; min-width:0; font-size:12.5px; color:var(--ez-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ib .row.unread .m p{color:var(--ez-ink-soft)}
+.ib .kind{font-size:10.5px; font-weight:700; padding:1px 6px; border-radius:6px; flex-shrink:0;
+  color:var(--ib); background:color-mix(in srgb,var(--ib) 13%,transparent);}
+.ib .kind.staff{color:var(--ez-gold); background:color-mix(in srgb,var(--ez-gold) 14%,transparent)}
+.ib .row .un{min-width:18px; height:18px; padding:0 5px; border-radius:999px; display:inline-grid; place-items:center;
+  font-size:10.5px; font-weight:700; background:var(--ib); color:#fff; flex-shrink:0;}
+:root[data-ez-theme="dark"] .ib .row .un, :root[data-ez-theme="auto"].is-dark .ib .row .un{color:#0D1117}
+.ib .row .flags{display:inline-flex; gap:4px; color:var(--ez-faint)}
+.ib .row .flags svg{width:13px; height:13px}
+.ib .row .flags .star{color:var(--ez-gold); fill:var(--ez-gold)}
+.ib .empty{margin:auto; padding:32px 26px; text-align:center; color:var(--ez-muted); max-width:300px;
+  animation:fadeUp .4s var(--ease-out) both;}
+.ib .empty h4{margin:12px 0 4px; font-family:var(--ib-serif); font-weight:500; font-size:20px; color:var(--ez-ink); letter-spacing:-.01em}
+.ib .empty p{margin:0; font-size:13px; line-height:1.5}
+.ib .empty .btn{margin-top:14px}
+.ib .empty .btn svg{width:14px; height:14px}
+
+/* The list holds the conversations you already have. When a search looks past
+   them, this is the way out to the directory rather than a dead end. */
+.ib .dirhint{display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+  margin:0; padding:10px 14px; border:0; border-bottom:1px solid var(--ez-line);
+  background:var(--ez-sunken); font-size:12px; font-weight:600; color:var(--ez-brand);
+  transition:background .16s;}
+.ib .dirhint:hover{background:var(--ez-brand-tint)}
+.ib .dirhint svg{width:14px; height:14px; flex-shrink:0}
+.ib .dirhint span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ib .empty .glyph{width:56px; height:56px; margin:0 auto; border-radius:18px; display:grid; place-items:center;
+  background:var(--ez-brand-tint); color:var(--ez-brand); border:1px solid var(--ez-brand-edge)}
+.ib .empty .glyph svg{width:26px; height:26px}
+/* thread */
+.ib .thread{position:relative}
+.ib .catch{padding:34px 36px; overflow:auto; animation:fadeUp .45s var(--ease-out) both; max-width:680px}
+.ib .catch h4{margin:0 0 6px; font-family:var(--ib-serif); font-weight:500; font-size:28px; letter-spacing:-.015em; line-height:1.1}
+.ib .catch .lead{margin:0 0 22px; font-size:14px; color:var(--ez-muted); line-height:1.5}
+.ib .catch .lead b{color:var(--ez-ink); font-weight:700}
+.ib .catch h5{margin:18px 0 8px; font-size:12px; font-weight:700; color:var(--ez-faint)}
+.ib .catch .cl{display:grid; gap:6px; grid-template-columns:minmax(0,1fr)}
+.ib .catch .ci{min-width:0}
+.ib .catch .ci{display:flex; align-items:center; gap:12px; width:100%; text-align:left; padding:10px 12px; border:1px solid var(--ez-line); border-radius:13px; background:var(--ez-surface);
+  transition:border-color .16s, background .16s, transform .18s var(--ease-out); animation:rowIn .35s var(--ease-out) both}
+.ib .catch .ci:hover{border-color:color-mix(in srgb,var(--ib) 40%,var(--ez-line)); background:color-mix(in srgb,var(--ib) 5%,var(--ez-surface)); transform:translateX(2px)}
+.ib .catch .ci .ic{width:38px; height:38px; border-radius:11px; display:grid; place-items:center; flex-shrink:0; background:color-mix(in srgb,var(--ib) 14%,var(--ez-surface)); color:var(--ib)}
+.ib .catch .ci .av{grid-row:auto; flex-shrink:0}
+.ib .catch .ci .tx{flex:1; min-width:0}
+.ib .catch .ci .tx b{display:block; font-size:13.5px; font-weight:600}
+.ib .catch .ci .tx small{display:block; font-size:12px; color:var(--ez-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px}
+.ib .catch .ci .go{font-size:12px; font-weight:700; color:var(--ib); padding:4px 9px; border-radius:7px; background:color-mix(in srgb,var(--ib) 12%,transparent); white-space:nowrap}
+.ib .catch .ci .un{min-width:20px; height:20px; padding:0 6px; border-radius:999px; display:inline-grid; place-items:center; font-size:11px; font-weight:700; background:var(--ib); color:#fff}
+:root[data-ez-theme="dark"] .ib .catch .ci .un, :root[data-ez-theme="auto"].is-dark .ib .catch .ci .un{color:#0D1117}
+.ib .catch .cfoot{margin-top:26px; display:flex; align-items:center; gap:14px; font-size:12.5px; color:var(--ez-faint); flex-wrap:wrap}
+.ib .catch .cfoot .btn{--ib:var(--ez-brand)}
+@media (max-width:760px){
+.ib .catch{padding:22px 18px}
+.ib .catch h4{font-size:24px}
+}
+.ib .thread .head{display:flex; align-items:center; gap:12px; padding:12px 14px 12px 16px; border-bottom:1px solid var(--ez-line);}
+.ib .thread .head .back{display:none}
+.ib .thread .head .who{flex:1; min-width:0}
+.ib .thread .head h2{margin:0; font-family:var(--ib-serif); font-weight:500; font-size:20px; letter-spacing:-.01em; line-height:1.15;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.ib .thread .head .sub{font-size:12px; color:var(--ez-muted); display:flex; align-items:center; gap:7px; margin-top:2px; flex-wrap:wrap}
+.ib .thread .head .sub .st{display:inline-flex; align-items:center; gap:4px; padding:1px 7px; border-radius:6px; font-weight:600; font-size:11px}
+.ib .st.muted{background:var(--ez-sunken); color:var(--ez-muted)}
+.ib .st.closed{background:var(--ez-warning-tint); color:var(--ez-warning)}
+.ib .actions{display:flex; gap:2px}
+.ib .ab{width:34px; height:34px; border:0; border-radius:9px; background:transparent; display:grid; place-items:center;
+  color:var(--ez-muted); position:relative; transition:background .16s, color .16s, transform .16s;}
+.ib .ab:hover{background:var(--ez-sunken); color:var(--ez-ink)}
+.ib .ab[aria-pressed="true"]{color:var(--ez-brand)}
+.ib .ab.star[aria-pressed="true"]{color:var(--ez-gold)}
+.ib .ab.star[aria-pressed="true"] svg{fill:var(--ez-gold); animation:pop .38s var(--ease-spring)}
+.ib .ab .tip{position:absolute; top:calc(100% + 6px); left:50%; transform:translateX(-50%) translateY(-2px);
+  font-size:11px; font-weight:600; color:var(--ez-surface); background:var(--ez-ink); padding:4px 8px;
+  border-radius:6px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity .15s, transform .15s; z-index:2;}
+.ib .ab:hover .tip, .ib .ab:focus-visible .tip{opacity:1; transform:translateX(-50%) translateY(0)}
+.ib .feed{flex:1; min-height:0; overflow:auto; padding:18px 18px 8px; display:flex; flex-direction:column; gap:6px; scroll-behavior:smooth}
+.ib .feed.enter{animation:threadIn .32s var(--ease-out) both}
+.ib .day.newline{align-self:stretch; display:flex; align-items:center; gap:10px; background:none; padding:0; color:var(--ez-critical); animation:fadeUp .4s var(--ease-out) both}
+.ib .day.newline::before, .ib .day.newline::after{content:""; flex:1; height:1px; background:color-mix(in srgb,var(--ez-critical) 45%,transparent)}
+.ib .day{align-self:center; margin:8px 0 6px; font-size:11px; font-weight:600; color:var(--ez-faint); padding:3px 10px; border-radius:999px; background:var(--ez-sunken)}
+.ib .msg{display:flex; flex-direction:column; max-width:min(72%,560px); animation:msgIn .28s var(--ease-out) both}
+.ib .msg.me{align-self:flex-end; align-items:flex-end}
+.ib .msg .bub{min-width:0; padding:9px 13px; border-radius:16px; font-size:13.5px; line-height:1.5; white-space:pre-wrap; word-break:break-word;
+  box-shadow:var(--ez-shadow-flat);}
+.ib .msg.them .bub{background:var(--ez-surface); border:1px solid var(--ez-line); border-bottom-left-radius:5px}
+.ib .msg.me .bub{background:linear-gradient(180deg,#2563EB,#1D4ED8); color:#fff; border-bottom-right-radius:5px}
+.ib .msg.tomb .bub{background:var(--ez-sunken); color:var(--ez-faint); font-style:italic; border:1px dashed var(--ez-line-strong); box-shadow:none}
+.ib .msg time{font-size:10.5px; color:var(--ez-faint); margin:4px 6px 0}
+.ib .msg .att{display:flex; align-items:center; gap:10px; margin-top:6px; padding:8px 10px; border-radius:11px;
+  border:1px solid var(--ez-line); background:var(--ez-surface); color:var(--ez-ink); font-size:12.5px; text-decoration:none;
+  transition:border-color .16s, transform .16s;}
+.ib .msg .att:hover{border-color:var(--ez-brand-edge); transform:translateY(-1px)}
+.ib .msg .att .ic{width:32px; height:32px; border-radius:8px; display:grid; place-items:center; background:var(--ez-critical-tint); color:var(--ez-critical); font-size:9.5px; font-weight:800}
+.ib .msg .att small{display:block; color:var(--ez-faint); font-size:11px}
+/* SYSTEM conversations: a notification with an action, not a chat bubble */
+.ib .note{align-self:stretch; max-width:none; display:grid; grid-template-columns:38px 1fr; gap:12px; padding:14px 16px;
+  border-radius:14px; border:1px solid color-mix(in srgb,var(--ib) 26%,transparent);
+  background:color-mix(in srgb,var(--ib) 7%,var(--ez-surface)); animation:msgIn .3s var(--ease-out) both;}
+.ib .note .ic{width:38px; height:38px; border-radius:11px; display:grid; place-items:center; background:color-mix(in srgb,var(--ib) 16%,transparent); color:var(--ib)}
+.ib .note h5{margin:0 0 3px; font-size:13.5px; font-weight:700}
+.ib .note p{margin:0; font-size:13px; color:var(--ez-ink-soft); line-height:1.5}
+.ib .note .cta{display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap}
+.ib .note time{font-size:11px; color:var(--ez-faint)}
+.ib .btn{display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 13px; border-radius:9px; border:0;
+  font-size:12.5px; font-weight:700; background:var(--ib,var(--ez-brand)); color:#fff;
+  transition:transform .16s var(--ease-out), filter .16s;}
+.ib .btn:hover{transform:translateY(-1px); filter:brightness(1.06)}
+:root[data-ez-theme="dark"] .ib .btn:not(.ghost):not(.done), :root[data-ez-theme="auto"].is-dark .ib .btn:not(.ghost):not(.done){color:#0D1117}
+.ib .btn.ghost{background:transparent; color:var(--ib,var(--ez-brand)); border:1px solid color-mix(in srgb,var(--ib,var(--ez-brand)) 40%,transparent)}
+.ib .btn.done{background:var(--ez-positive-tint); color:var(--ez-positive); pointer-events:none}
+.ib .composer{border-top:1px solid var(--ez-line); padding:10px 12px 12px}
+.ib .composer .attchips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px}
+.ib .composer .attchips:empty{display:none}
+.ib .composer .attchips span{display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:4px 8px 4px 10px; border-radius:8px; background:var(--ez-brand-tint); color:var(--ez-brand-deep); border:1px solid var(--ez-brand-edge); animation:pop .3s var(--ease-spring)}
+.ib .composer .attchips button{border:0; background:transparent; padding:0; color:inherit; opacity:.7; display:grid}
+.ib .composer .box{display:flex; align-items:flex-end; gap:8px; padding:6px 6px 6px 8px; border:1px solid var(--ez-line); border-radius:14px;
+  background:var(--ez-sunken); transition:border-color .16s, box-shadow .16s, background .16s;}
+.ib .composer .box:focus-within{border-color:var(--ez-brand); background:var(--ez-surface); box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 18%,transparent)}
+.ib .composer textarea{flex:1; resize:none; border:0; background:transparent; font:inherit; font-size:13.5px; color:var(--ez-ink);
+  min-height:36px; max-height:160px; padding:8px 4px; outline:none; line-height:1.45;}
+.ib .composer textarea::placeholder{color:var(--ez-faint)}
+.ib .composer .clip{width:36px; height:36px; border:0; border-radius:10px; background:transparent; color:var(--ez-muted); display:grid; place-items:center; transition:background .16s, color .16s}
+.ib .composer .clip:hover{background:var(--ez-brand-tint); color:var(--ez-brand)}
+.ib .composer .send{width:36px; height:36px; border:0; border-radius:10px; display:grid; place-items:center; color:#fff;
+  background:linear-gradient(135deg,#2563EB,#1D4ED8); box-shadow:var(--ez-shadow-brand);
+  transition:transform .18s var(--ease-out), opacity .18s, background .3s;}
+.ib .composer .send:disabled{opacity:.45; box-shadow:none; cursor:default}
+.ib .composer .send:not(:disabled):hover{transform:translateY(-1px)}
+.ib .composer .send.ok{background:var(--ez-positive); animation:pop .4s var(--ease-spring)}
+.ib .composer .send svg{transition:transform .3s var(--ease-spring)}
+.ib .composer .hint{margin:7px 4px 0; font-size:11px; color:var(--ez-faint); display:flex; gap:12px}
+.ib .composer .hint kbd{font:inherit; font-size:10.5px; padding:0 4px; border:1px solid var(--ez-line-strong); border-radius:4px}
+.ib .composer.off{padding:14px; text-align:center; font-size:12.5px; color:var(--ez-muted); background:var(--ez-sunken)}
+.ib .composer.off b{color:var(--ez-ink)}
+.ib .composer.off button{margin-left:8px; border:0; background:transparent; color:var(--ez-brand); font-weight:700; font-size:12.5px}
+/* toast */
+.ib .toast{position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px); opacity:0;
+  background:var(--ez-ink); color:var(--ez-surface); font-size:13px; font-weight:600; padding:10px 16px; border-radius:12px;
+  box-shadow:var(--ez-shadow-overlay); pointer-events:none; transition:transform .3s var(--ease-out), opacity .3s; z-index:40;
+  display:flex; gap:10px; align-items:center; max-width:calc(100vw - 32px);}
+.ib .toast > span{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.ib .toast.on{transform:translateX(-50%) translateY(0); opacity:1; pointer-events:auto}
+.ib .toast button{border:0; background:transparent; color:var(--ez-brand); font-weight:700; font-size:13px; padding:0}
+:root[data-ez-theme="dark"] .ib .toast button, :root[data-ez-theme="auto"].is-dark .ib .toast button{color:#1D4ED8}
+/* ---------- Wall of Fame group ---------- */
+.ib .wall{display:grid; grid-template-columns:1fr; gap:14px; height:100%; min-height:0}
+.ib .wall .pane{animation:paneIn .5s var(--ease-out) both}
+.ib .wall .top{display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--ez-line); flex-wrap:wrap}
+.ib .wall .top h2{margin:0; font-size:15px; font-weight:700}
+.ib .wall .top .why{font-size:12px; color:var(--ez-faint); margin-left:6px}
+.ib .wall .top .chips{margin:0 0 0 auto}
+.ib .wall .cards{overflow:auto; padding:14px; display:grid; gap:10px; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); align-content:start}
+.ib .wcard{position:relative; padding:14px 16px 12px; border-radius:14px; border:1px solid var(--ez-line); background:var(--ez-surface);
+  display:grid; grid-template-columns:40px 1fr; gap:12px; animation:rowIn .4s var(--ease-out) both; transition:box-shadow .2s, transform .2s var(--ease-out);}
+.ib .wcard:hover{box-shadow:var(--ez-shadow-raised); transform:translateY(-1px)}
+.ib .wcard.unread{border-color:color-mix(in srgb,var(--ez-gold) 45%,var(--ez-line)); background:color-mix(in srgb,var(--ez-gold) 5%,var(--ez-surface))}
+.ib .wcard.unread::after{content:""; position:absolute; top:14px; right:14px; width:8px; height:8px; border-radius:50%; background:var(--ez-gold); box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-gold) 22%,transparent)}
+.ib .wcard .pav{width:40px; height:40px; border-radius:50%; display:grid; place-items:center; font-weight:700; font-size:13px; color:#7A4A0E;
+  background:linear-gradient(135deg,#FFE9C6,#FFBE5C); border:2px solid #fff; box-shadow:0 0 0 1.5px var(--ez-gold)}
+.ib .wcard .who{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap}
+.ib .wcard .who b{font-weight:700}
+.ib .wcard .who small{font-size:11.5px; color:var(--ez-faint)}
+.ib .wcard .who time{margin-left:auto; font-size:11px; color:var(--ez-faint)}
+.ib .wcard.unread .who time{margin-right:16px}
+.ib .wcard .cat{display:inline-flex; align-items:center; gap:5px; margin-top:4px; font-size:11px; font-weight:700; padding:2px 8px; border-radius:6px; background:var(--ez-sunken); color:var(--ez-ink-soft)}
+.ib .wcard .cat.badge{background:color-mix(in srgb,var(--ez-gold) 15%,transparent); color:var(--ez-gold)}
+.ib .wcard .cat.comment{background:var(--ez-info-tint); color:var(--ez-info)}
+.ib .wcard .cat.reply{background:var(--ez-positive-tint); color:var(--ez-positive)}
+.ib .wcard .txt{margin:8px 0 0; font-size:13.5px; line-height:1.5; color:var(--ez-ink-soft)}
+.ib .wcard .txt q{font-family:var(--ib-serif); font-style:italic; font-size:15px; color:var(--ez-ink); quotes:"“" "”"}
+.ib .wcard .foot{display:flex; gap:8px; margin-top:10px; align-items:center}
+.ib .thank{display:inline-flex; align-items:center; gap:6px; height:30px; padding:0 12px; border-radius:9px; font-size:12.5px; font-weight:700;
+  border:1px solid color-mix(in srgb,var(--ez-gold) 40%,transparent); background:transparent; color:var(--ez-gold); position:relative;
+  transition:background .2s, transform .2s var(--ease-spring);}
+.ib .thank:hover{background:color-mix(in srgb,var(--ez-gold) 10%,transparent)}
+.ib .thank.done{background:var(--ez-gold); color:#fff; border-color:transparent; transform:scale(1.03)}
+.ib .thank.done svg{fill:#fff; animation:pop .45s var(--ease-spring)}
+.ib .thank .burst{position:absolute; inset:0; pointer-events:none}
+.ib .thank .burst i{position:absolute; left:50%; top:50%; width:5px; height:5px; border-radius:50%; background:var(--ez-gold); opacity:0}
+.ib .thank.done .burst i{animation:burst .7s var(--ease-out) forwards}
+.ib .thank .burst i:nth-child(1){--dx:-22px; --dy:-18px}
+.ib .thank .burst i:nth-child(2){--dx:24px; --dy:-16px}
+.ib .thank .burst i:nth-child(3){--dx:-28px; --dy:8px}
+.ib .thank .burst i:nth-child(4){--dx:30px; --dy:10px}
+.ib .thank .burst i:nth-child(5){--dx:0; --dy:-26px}
+.ib .thank .burst i:nth-child(6){--dx:6px; --dy:24px}
+/* ---------- Broadcasts group ---------- */
+.ib .bc{height:100%; min-height:0; display:grid; grid-template-columns:1fr}
+.ib .bc .pane{animation:paneIn .5s var(--ease-out) both}
+.ib .absent{margin:auto; text-align:center; max-width:420px; padding:40px 24px; animation:fadeUp .45s var(--ease-out) both}
+.ib .absent .glyph{width:64px; height:64px; margin:0 auto 14px; border-radius:20px; display:grid; place-items:center; background:var(--ez-warning-tint); color:var(--ez-warning); border:1px solid color-mix(in srgb,var(--ez-warning) 35%,transparent)}
+.ib .absent .glyph svg{width:28px; height:28px}
+.ib .absent h3{margin:0 0 6px; font-family:var(--ib-serif); font-weight:500; font-size:24px; letter-spacing:-.01em}
+.ib .absent p{margin:0; color:var(--ez-muted); font-size:13.5px; line-height:1.55}
+.ib .absent code{font-size:12px; padding:2px 6px; border-radius:6px; background:var(--ez-sunken); border:1px solid var(--ez-line)}
+.ib .bclist{overflow:auto; padding:16px; display:grid; gap:12px; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); align-content:start}
+.ib .bcard{padding:16px 18px; border-radius:14px; border:1px solid var(--ez-line); background:var(--ez-surface); animation:rowIn .4s var(--ease-out) both; position:relative; overflow:hidden}
+.ib .bcard.pin::before{content:""; position:absolute; left:0; top:0; bottom:0; width:4px; background:linear-gradient(180deg,#2563EB,#1D4ED8)}
+.ib .bcard .meta{display:flex; gap:8px; align-items:center; font-size:11.5px; color:var(--ez-faint)}
+.ib .bcard .meta .pinlbl{color:var(--ez-brand); font-weight:700}
+.ib .bcard h4{margin:6px 0 4px; font-size:15px; font-weight:700}
+.ib .bcard p{margin:0; font-size:13px; color:var(--ez-ink-soft); line-height:1.5}
+.ib .bcard .foot{margin-top:12px; display:flex; align-items:center; gap:10px; font-size:12px; color:var(--ez-faint)}
+.ib .bcard .foot .ro{display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border-radius:6px; background:var(--ez-sunken); font-weight:600}
+.ib .bcard .foot button{margin-left:auto; border:1px solid var(--ez-line); background:transparent; border-radius:8px; padding:5px 10px; font-size:12px; font-weight:600; color:var(--ez-brand); transition:background .16s}
+.ib .bcard .foot button:hover{background:var(--ez-brand-tint)}
+
+/* The broadcast group's own top bar, matching the wall's. */
+.ib .bc .top{display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--ez-line); flex-wrap:wrap}
+.ib .bc .top h2{margin:0; font-size:15px; font-weight:700}
+.ib .bc .top .why{font-size:12px; color:var(--ez-faint); margin-left:6px}
+
+/* Unread notices carry the same quiet marker the wall's cards do, in brand
+   rather than gold: this is company business, not recognition. */
+.ib .bcard.unread{border-color:var(--ez-brand-edge); background:color-mix(in srgb,var(--ez-brand) 4%,var(--ez-surface))}
+.ib .bcard .meta .pri{font-weight:700; text-transform:none}
+.ib .bcard .meta .pri.important{color:var(--ez-warning)}
+.ib .bcard .meta .pri.urgent{color:var(--ez-critical)}
+.ib .bcard .foot .ro.why{margin-left:auto; background:transparent; font-weight:500; color:var(--ez-faint)}
+
+/* Reply privately — the one write on this screen, so it opens inside the card
+   it answers rather than over the top of everything else. */
+.ib .bcreply{margin-top:12px; padding-top:12px; border-top:1px dashed var(--ez-line); animation:fadeUp .26s var(--ease-out) both}
+.ib .bcreply textarea{width:100%; resize:vertical; min-height:64px; max-height:200px; padding:10px 12px; font:inherit; font-size:13px;
+  color:var(--ez-ink); background:var(--ez-sunken); border:1px solid var(--ez-line); border-radius:10px; outline:none}
+.ib .bcreply textarea:focus{border-color:var(--ez-brand); background:var(--ez-surface); box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 18%,transparent)}
+.ib .bcreply .hint{display:flex; align-items:center; gap:10px; margin-top:8px; font-size:11.5px; color:var(--ez-faint)}
+.ib .bcreply .hint .send{margin-left:auto; border:0; border-radius:9px; padding:6px 14px; font-size:12.5px; font-weight:700;
+  background:linear-gradient(135deg,var(--ez-brand),var(--ez-brand-deep)); color:var(--ez-on-accent); box-shadow:var(--ez-shadow-brand)}
+.ib .bcreply .hint .send:disabled{opacity:.45; box-shadow:none; cursor:default}
+.ib .bcsent{margin-top:10px; font-size:12px; font-weight:600; color:var(--ez-positive)}
+
+/* A count that cannot be accounted for, said in words. Shared by both groups. */
+.ib .wnotice{margin:10px 16px 0; padding:9px 12px; border-radius:10px; font-size:12px; font-weight:600; line-height:1.5;
+  background:var(--ez-warning-tint); color:var(--ez-warning); border:1px solid color-mix(in srgb,var(--ez-warning) 30%,transparent)}
+.ib .wnotice.bad{background:var(--ez-critical-tint); color:var(--ez-critical); border-color:color-mix(in srgb,var(--ez-critical) 30%,transparent)}
+
+/* The headline is the system's sentence about what happened; their words sit
+   under it. Distinct weights, so the card is not two paragraphs of the same grey. */
+.ib .wcard .head{margin:8px 0 0; font-size:13px; font-weight:600; color:var(--ez-ink); line-height:1.45}
+.ib .wcard .head + .txt{margin-top:6px}
+/* ---------- compose dialog ---------- */
+.ib dialog.sheet{width:min(560px,calc(100vw - 32px)); max-height:min(680px,calc(100vh - 48px)); padding:0; border:1px solid var(--ez-line);
+  /* The sheet lives inside .ib so that inbox.css reaches it — a top-layer
+     dialog is still a descendant for the cascade. Centring is spelled out
+     because the UA's `margin:auto` only lands when the viewport is the
+     containing block, and inside the shell it is not. */
+  position:fixed; inset:0; margin:auto;
+  border-radius:18px; background:var(--ez-surface); color:var(--ez-ink); box-shadow:var(--ez-shadow-overlay);
+  opacity:0; transform:translateY(14px) scale(.98); overflow:hidden; display:none;
+  transition:opacity .28s var(--ease-out), transform .32s var(--ease-out), display .32s allow-discrete, overlay .32s allow-discrete;}
+.ib dialog.sheet[open]{display:flex; flex-direction:column; opacity:1; transform:none}
+@starting-style {
+.ib dialog.sheet[open]{opacity:0; transform:translateY(14px) scale(.98)}
+}
+.ib dialog.sheet::backdrop{background:rgba(17,24,39,0); backdrop-filter:blur(0); transition:background .3s, backdrop-filter .3s, display .32s allow-discrete, overlay .32s allow-discrete}
+.ib dialog.sheet[open]::backdrop{background:rgba(17,24,39,.42); backdrop-filter:blur(3px)}
+@starting-style {
+.ib dialog.sheet[open]::backdrop{background:rgba(17,24,39,0); backdrop-filter:blur(0)}
+}
+.ib .sheet .sh{display:flex; align-items:center; gap:10px; padding:16px 18px 12px}
+.ib .sheet .sh h3{margin:0; font-family:var(--ib-serif); font-weight:500; font-size:22px; letter-spacing:-.01em; flex:1}
+.ib .sheet .sh .x{width:32px; height:32px; border:0; border-radius:9px; background:var(--ez-sunken); display:grid; place-items:center; color:var(--ez-muted)}
+.ib .sheet .sh .x:hover{background:var(--ez-line)}
+.ib .sheet .search{margin:0 18px 10px}
+.ib .sheet .body{overflow:auto; padding:4px 10px 14px; flex:1}
+.ib .sheet h4{margin:10px 10px 6px; font-size:11.5px; font-weight:700; color:var(--ez-faint)}
+.ib .opt{display:flex; align-items:center; gap:11px; width:100%; text-align:left; padding:9px 10px; border:0; border-radius:11px; background:transparent;
+  transition:background .16s, transform .16s;}
+.ib .opt:hover{background:color-mix(in srgb,var(--ib,var(--ez-brand)) 9%,transparent); transform:translateX(2px)}
+.ib .opt .dot{width:8px; height:8px; border-radius:3px; background:var(--ib)}
+.ib .opt .av{width:32px; height:32px; border-radius:9px; font-size:11.5px; grid-row:auto}
+.ib .opt b{display:block; font-size:13.5px; font-weight:600}
+.ib .opt small{display:block; font-size:12px; color:var(--ez-muted); margin-top:1px}
+.ib .opt .go{margin-left:auto; color:var(--ez-faint); opacity:0; transition:opacity .16s, transform .16s}
+.ib .opt:hover .go{opacity:1; transform:translateX(2px)}
+.ib .warn{margin:8px 10px 0; padding:10px 12px; border-radius:10px; background:var(--ez-warning-tint); border:1px solid color-mix(in srgb,var(--ez-warning) 40%,transparent); font-size:12.5px; color:var(--ez-ink-soft); line-height:1.5}
+.ib .warn b{color:var(--ez-warning)}
+.ib .sheet .foot{padding:10px 18px 14px; font-size:11.5px; color:var(--ez-faint); border-top:1px solid var(--ez-line)}
+/* ---------- refinements ---------- */
+/* boot skeleton — the `loading` state ("Opening your inbox…") */
+.ib .skel{position:relative; overflow:hidden; background:var(--ez-sunken); border-radius:8px}
+.ib .skel::after{content:""; position:absolute; inset:0; transform:translateX(-100%);
+  background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--ez-ink) 5%,transparent),transparent); animation:shimmer 1.3s ease-in-out infinite}
+.ib .skrow{display:grid; grid-template-columns:38px 1fr; gap:11px; padding:11px 12px}
+.ib .skrow .a{width:38px; height:38px; border-radius:11px}
+.ib .skrow .l1{height:12px; width:55%; margin:4px 0 8px}
+.ib .skrow .l2{height:10px; width:85%}
+.ib .booting{display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; margin:auto; color:var(--ez-faint); font-size:12.5px}
+.ib .booting .ring{width:22px; height:22px; border-radius:50%; border:2px solid var(--ez-line); border-top-color:var(--ez-brand); animation:spin .9s linear infinite}
+/* rail collapse */
+.ib .rail .tog{position:absolute; top:12px; right:-12px; width:24px; height:24px; border-radius:50%; border:1px solid var(--ez-line); background:var(--ez-surface);
+  display:grid; place-items:center; color:var(--ez-muted); box-shadow:var(--ez-shadow-raised); opacity:0; transition:opacity .16s, transform .3s var(--ease-spring); z-index:2}
+.ib .pane.rail{position:relative; overflow:visible}
+.ib .pane.rail:hover .tog, .ib .rail .tog:focus-visible{opacity:1}
+.ib [data-rail="min"] .rail .tog{opacity:1; transform:rotate(180deg)}
+.ib [data-rail="min"] .panes{grid-template-columns:64px minmax(300px,380px) 1fr}
+.ib [data-rail="min"] .rail{padding:14px 10px}
+.ib [data-rail="min"] .compose span, .ib [data-rail="min"] .rail h3, .ib [data-rail="min"] .folder .lbl, .ib [data-rail="min"] .rail .foot{display:none}
+.ib [data-rail="min"] .compose{width:44px; height:44px; margin:0 auto; border-radius:14px}
+.ib [data-rail="min"] .folder{justify-content:center; padding:10px 0; gap:0; position:relative}
+.ib [data-rail="min"] .folder .dot{width:12px; height:12px; border-radius:4px}
+.ib [data-rail="min"] .folder .n{position:absolute; top:2px; right:6px; min-width:16px; height:16px; font-size:9.5px; padding:0 4px}
+.ib [data-rail="min"] .folder::before{display:none}
+.ib .panes{transition:grid-template-columns .32s var(--ease-out)}
+/* row quick actions on hover */
+.ib .row .qa{position:absolute; right:10px; top:50%; transform:translateY(-50%) translateX(6px); display:flex; gap:2px; padding:3px; border-radius:9px;
+  background:var(--ez-surface); border:1px solid var(--ez-line); box-shadow:var(--ez-shadow-raised); opacity:0; pointer-events:none; transition:opacity .16s, transform .2s var(--ease-out)}
+.ib .row:hover .qa, .ib .row:focus-within .qa{opacity:1; transform:translateY(-50%); pointer-events:auto}
+.ib .row .qa span{width:26px; height:26px; border-radius:7px; display:grid; place-items:center; color:var(--ez-muted); transition:background .14s, color .14s}
+.ib .row .qa span:hover{background:var(--ez-sunken); color:var(--ez-ink)}
+.ib .row .qa span svg{width:14px; height:14px}
+.ib .row:hover .un, .ib .row:hover .flags, .ib .row:hover .t time{opacity:0; transition:opacity .12s}
+@media (hover:none){
+.ib .row .qa{display:none}
+.ib .row:hover .un, .ib .row:hover .flags, .ib .row:hover .t time{opacity:1}
+}
+/* search match highlight */
+.ib mark{background:color-mix(in srgb,var(--ez-warning) 30%,transparent); color:inherit; border-radius:3px; padding:0 1px}
+/* thread header carries the folder ink, quietly */
+.ib .thread .head{background:linear-gradient(180deg,color-mix(in srgb,var(--ib) 6%,var(--ez-surface)),var(--ez-surface))}
+.ib .thread .head .av{box-shadow:0 0 0 3px color-mix(in srgb,var(--ib) 14%,transparent)}
+/* consecutive messages from the same side group tighter; only the last carries a time */
+.ib .msg.cont{margin-top:-3px}
+.ib .msg.them.cont .bub{border-top-left-radius:6px}
+.ib .msg.me.cont .bub{border-top-right-radius:6px}
+.ib .msg{position:relative}
+.ib .msg .del{position:absolute; right:calc(100% + 6px); top:4px; width:28px; height:28px; border:0; border-radius:8px; background:transparent; color:var(--ez-faint); display:grid; place-items:center; opacity:0; transition:opacity .15s, background .15s, color .15s}
+.ib .msg:hover .del, .ib .msg .del:focus-visible{opacity:1}
+.ib .msg .del:hover{background:var(--ez-critical-tint); color:var(--ez-critical)}
+.ib .msg .del .tip{position:absolute; top:calc(100% + 4px); left:50%; transform:translateX(-50%); font-size:11px; font-weight:600; color:var(--ez-surface); background:var(--ez-ink); padding:3px 7px; border-radius:6px; opacity:0; pointer-events:none; transition:opacity .15s}
+.ib .msg .del:hover .tip{opacity:1}
+@media (hover:none){
+.ib .msg .del{display:none}
+}
+.ib .msg .meta{display:flex; gap:6px; align-items:center; font-size:10.5px; color:var(--ez-faint); margin:4px 6px 0}
+.ib .msg .meta .sent{display:inline-flex; align-items:center; gap:2px; color:var(--ez-positive)}
+.ib .msg .meta .sent svg{width:11px; height:11px}
+.ib .msg .meta .sending{opacity:.7}
+/* typing indicator — shown while a reply is arriving */
+.ib .typing{align-self:flex-start; display:flex; gap:4px; align-items:center; padding:12px 14px; border-radius:16px; border-bottom-left-radius:5px;
+  background:var(--ez-surface); border:1px solid var(--ez-line); box-shadow:var(--ez-shadow-flat); animation:msgIn .25s var(--ease-out) both}
+.ib .typing i{width:6px; height:6px; border-radius:50%; background:var(--ez-faint); animation:dot 1.2s ease-in-out infinite}
+.ib .typing i:nth-child(2){animation-delay:.15s}
+.ib .typing i:nth-child(3){animation-delay:.3s}
+/* jump to latest */
+.ib .jump{position:absolute; left:50%; bottom:88px; transform:translateX(-50%) translateY(14px); opacity:0; pointer-events:none;
+  display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px 0 10px; border-radius:999px; border:1px solid var(--ez-line);
+  background:var(--ez-surface); color:var(--ez-ink); font-size:12px; font-weight:700; box-shadow:var(--ez-shadow-floating);
+  transition:opacity .2s, transform .28s var(--ease-out); z-index:3}
+.ib .jump.on{opacity:1; transform:translateX(-50%); pointer-events:auto}
+.ib .jump.new{background:var(--ez-brand); color:var(--ez-on-accent); border-color:transparent}
+/* drop files onto the composer */
+.ib .composer .box.drop{border-color:var(--ez-brand); border-style:dashed; background:var(--ez-brand-tint)}
+/* compose keyboard selection */
+.ib .opt[aria-selected="true"]{background:color-mix(in srgb,var(--ib,var(--ez-brand)) 12%,transparent)}
+.ib .opt[aria-selected="true"] .go{opacity:1}
+@keyframes shimmer{to{ transform:translateX(100%) }}
+@keyframes spin{to{ transform:rotate(360deg) }}
+@keyframes dot{0%,60%,100%{ transform:translateY(0); opacity:.5 } 30%{ transform:translateY(-4px); opacity:1 }}
+/* ---------- keyframes ---------- */
+@keyframes paneIn{from{ opacity:0; transform:translateY(12px) scale(.995) } to{ opacity:1; transform:none }}
+@keyframes rowIn{from{ opacity:0; transform:translateY(6px) } to{ opacity:1; transform:none }}
+@keyframes msgIn{from{ opacity:0; transform:translateY(8px) scale(.98) } to{ opacity:1; transform:none }}
+@keyframes threadIn{from{ opacity:0; transform:translateX(10px) } to{ opacity:1; transform:none }}
+@keyframes barIn{from{ transform:scaleY(0) } to{ transform:scaleY(1) }}
+@keyframes fadeUp{from{ opacity:0; transform:translateY(4px) } to{ opacity:1; transform:none }}
+@keyframes pop{0%{ transform:scale(.6) } 60%{ transform:scale(1.25) } 100%{ transform:scale(1) }}
+@keyframes tick{0%{ transform:scale(1) } 40%{ transform:scale(1.35) } 100%{ transform:scale(1) }}
+@keyframes pulse{0%{ transform:scale(.6); opacity:.9 } 100%{ transform:scale(1.9); opacity:0 }}
+@keyframes burst{0%{ opacity:1; transform:translate(-50%,-50%) } 100%{ opacity:0; transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.4) }}
+@keyframes shake{0%,100%{ transform:none } 30%{ transform:translateX(-3px) } 60%{ transform:translateX(3px) }}
+.ib .tick{animation:tick .4s var(--ease-spring)}
+.ib .shake{animation:shake .35s ease}
+/* ---------- responsive ---------- */
+@media (max-width:1100px){
+.ib .panes{grid-template-columns:214px minmax(280px,340px) 1fr}
+.ib .folder .lbl small{display:none}
+}
+@media (max-width:760px){
+.ib .thread .head .sub > span:not(.kind):not(.st){display:none}
+.ib{padding:0 12px; height:auto; min-height:calc(100vh - 70px); margin-top:10px}
+.ib .seg button{padding:8px 12px; font-size:12.5px}
+.ib .groups .live{display:none}
+.ib .groups{gap:8px}
+.ib .seg{max-width:100%; overflow-x:auto; scrollbar-width:none}
+.ib{overflow-x:hidden}
+.ib .panes{grid-template-columns:1fr; grid-template-rows:auto 1fr; gap:10px}
+.ib .pane.rail{flex-direction:row; align-items:center; padding:10px; gap:8px; overflow:auto; border-radius:14px}
+.ib .rail h3, .ib .rail .foot{display:none}
+.ib .compose{width:auto; flex-shrink:0; padding:0 14px; height:36px}
+.ib .compose span{display:none}
+.ib .folders{flex-direction:row; gap:6px; overflow-x:auto; padding:0}
+.ib .folder{width:auto; white-space:nowrap; padding:7px 10px 7px 12px; border-radius:999px; flex-shrink:0; border:1px solid var(--ez-line);}
+.ib .folder::before{display:none}
+.ib .folder .lbl small{display:none}
+.ib .pane.thread{position:fixed; inset:0; z-index:30; border-radius:0; border:0; transform:translateX(100%); transition:transform .32s var(--ease-out); animation:none}
+.ib [data-pane="thread"] .pane.thread{transform:none}
+.ib .thread .head .back{display:grid; width:34px; height:34px; border:0; border-radius:9px; background:var(--ez-sunken); place-items:center; color:var(--ez-ink)}
+.ib .thread .head h2{font-size:18px}
+.ib .msg{max-width:84%}
+.ib .actions .ab.hide-m{display:none}
+.ib .rail .tog{display:none}
+.ib .row .qa{display:none}
+.ib .jump{bottom:96px}
+.ib .wall .cards, .ib .bclist{grid-template-columns:1fr}
+}
+@media (prefers-reduced-motion:reduce){
+.ib *, .ib *::before, .ib *::after{animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important}
+.ib .seg .pill{transition:none}
+.ib .pane.thread{transition:none}
+}
+
+/* dark variants when the OS is dark and no explicit theme is set (mirrors the data-ez-theme rules above) */
+@media (prefers-color-scheme:dark){
+  :root:not([data-ez-theme="light"]) .ib .seg button[aria-selected="true"]{color:var(--ez-brand)}
+  :root:not([data-ez-theme="light"]) .ib .folder .n{color:#0D1117}
+  :root:not([data-ez-theme="light"]) .ib .row .un{color:#0D1117}
+  :root:not([data-ez-theme="light"]) .ib .catch .ci .un{color:#0D1117}
+  :root:not([data-ez-theme="light"]) .ib .btn:not(.ghost):not(.done){color:#0D1117}
+  :root:not([data-ez-theme="light"]) .ib .toast button{color:#1D4ED8}
+}
