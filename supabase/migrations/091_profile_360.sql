@@ -402,34 +402,34 @@ begin
   if not found then return; end if;
 
   if e.photo_path is not null then got := got + 1;
-    else miss := miss || 'Upload a passport size photo'; end if;
+    else miss := array_append(miss, 'Upload a passport size photo'); end if;
   if e.pan_number is not null then got := got + 1;
-    else miss := miss || 'Add your PAN'; end if;
+    else miss := array_append(miss, 'Add your PAN'); end if;
   if coalesce(e.aadhar_last4, '') <> '' then got := got + 1;
-    else miss := miss || 'Add your Aadhaar'; end if;
+    else miss := array_append(miss, 'Add your Aadhaar'); end if;
   if e.uan_number is not null then got := got + 1;
-    else miss := miss || 'Add your UAN'; end if;
+    else miss := array_append(miss, 'Add your UAN'); end if;
   if e.bank_account_last4 is not null then got := got + 1;
-    else miss := miss || 'Add your salary account'; end if;
+    else miss := array_append(miss, 'Add your salary account'); end if;
   if e.res_address1 is not null then got := got + 1;
-    else miss := miss || 'Add your present address'; end if;
+    else miss := array_append(miss, 'Add your present address'); end if;
   if e.perm_address1 is not null then got := got + 1;
-    else miss := miss || 'Add your permanent address'; end if;
+    else miss := array_append(miss, 'Add your permanent address'); end if;
   if e.emergency_contact_1 is not null then got := got + 1;
-    else miss := miss || 'Add an emergency contact'; end if;
+    else miss := array_append(miss, 'Add an emergency contact'); end if;
   if e.blood_group is not null then got := got + 1;
-    else miss := miss || 'Add your blood group'; end if;
+    else miss := array_append(miss, 'Add your blood group'); end if;
 
   if exists (select 1 from employee_nominations
               where employee_id = p_employee_id and scheme = 'pf')
-    then got := got + 1; else miss := miss || 'Add a provident fund nominee'; end if;
+    then got := got + 1; else miss := array_append(miss, 'Add a provident fund nominee'); end if;
   if exists (select 1 from employee_nominations
               where employee_id = p_employee_id and scheme = 'gratuity')
     then got := got + 1;
-    else miss := miss || 'Add a gratuity nominee — the shares must total 100%'; end if;
+    else miss := array_append(miss, 'Add a gratuity nominee — the shares must total 100%'); end if;
   if exists (select 1 from employee_documents
               where employee_id = p_employee_id and status = 'verified')
-    then got := got + 1; else miss := miss || 'Upload your onboarding documents'; end if;
+    then got := got + 1; else miss := array_append(miss, 'Upload your onboarding documents'); end if;
 
   score := floor(got::numeric / total * 100);
   pending := miss;
