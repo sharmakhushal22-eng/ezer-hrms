@@ -4,6 +4,8 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import ActivationWizard from '@/components/onboarding/ActivationWizard'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -90,6 +92,7 @@ function ProgressBar({pct,color=P}:{pct:number;color?:string}) {
 // MAIN DASHBOARD
 // ══════════════════════════════════════════════════════════════════
 export default function OnboardingDashboard() {
+  const { grant, loading: grantLoading } = useGrant()
   const [tab,          setTab]        = useState<Tab>('overview')
   const [candidates,   setCandidates] = useState<Candidate[]>([])
   const [loading,      setLoading]    = useState(true)
@@ -121,15 +124,17 @@ export default function OnboardingDashboard() {
 
   // Load companies + departments for the link modal (auto-select if there's only one).
   useEffect(()=>{
+    if (grantLoading) return
     supabase.from('companies').select('id,company_code,company_name').order('company_code')
       .then(({data})=>{
-        const list = data || []
+        const list = scopedCompanies(grant, data || [])
         setCompanies(list)
-        if (list.length === 1) setNewForm(f=>({...f, company_id:list[0].id}))
+        const def = defaultCompanyId(grant) || (list.length === 1 ? list[0].id : '')
+        if (def) setNewForm(f=> f.company_id ? f : { ...f, company_id:def })
       })
     supabase.from('departments').select('id,dept_name,company_id').order('dept_name')
       .then(({data})=>setDepartments(data || []))
-  },[])
+  },[grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = (msg:string, type:'ok'|'err'='ok') => setToast({msg,type})
 
@@ -216,10 +221,13 @@ export default function OnboardingDashboard() {
     // joined) OR have a joining date set — so HR can send the onboarding link
     // even before a joining date is fixed. Not-yet-invited ones show as
     // NOT_INVITED cards with a "Send onboarding link" button.
-    const { data: recJoiners } = await supabase
+    const scopeCo = companyFilter(grant, null)
+    let recQ = supabase
       .from('candidates')
       .select('id, full_name, email, mobile, phone, designation, company_id, onboarding_date, blacklisted, offer_accepted, stage, created_at')
       .or('onboarding_date.not.is.null,offer_accepted.is.true,stage.eq.Joined')
+    if (scopeCo) recQ = recQ.eq('company_id', scopeCo)
+    const { data: recJoiners } = await recQ
 
     const invitedIds = new Set(enriched.map(c => c.candidate_id).filter(Boolean))
     const pending: Candidate[] = (recJoiners || [])
@@ -249,17 +257,20 @@ export default function OnboardingDashboard() {
       })
 
     // Soonest joining date first; undated rows last.
-    const merged = [...pending, ...enriched].sort((a, b) => {
+    // Safety net: a non-cross caller only ever sees their own company's candidates,
+    // covering both the invited (enriched) and pending lists.
+    const both = scopeCo ? [...pending, ...enriched].filter(c => c.company_id === scopeCo) : [...pending, ...enriched]
+    const merged = both.sort((a, b) => {
       const da = a.date_of_joining ? new Date(a.date_of_joining).getTime() : Infinity
       const db = b.date_of_joining ? new Date(b.date_of_joining).getTime() : Infinity
       return da - db
     })
 
-    setCandidates(merged)
+    setCandidates(merged as Candidate[])
     setLoading(false)
-  }, [])
+  }, [grant])
 
-  useEffect(()=>{ load() },[load])
+  useEffect(()=>{ if (!grantLoading) load() },[load, grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Send onboarding link ────────────────────────────────────────────
   const sendMagicLink = async () => {

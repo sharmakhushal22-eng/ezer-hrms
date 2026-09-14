@@ -4,6 +4,8 @@
 // GET: claims by employee_id or company_id (+ month/year/status filters).
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { grantForRequest } from '@/lib/rms/server'
+import { companyFilter } from '@/lib/rms/resolve'
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -152,12 +154,13 @@ export async function GET(req: NextRequest) {
   }
 
   if (compId) {
+    // Pin to the caller's own company unless a cross-company (super-admin) role. A
+    // non-cross caller asking for another company — or 'ALL' — is forced back to theirs.
+    const grant = await grantForRequest(req)
+    const company = companyFilter(grant, compId)
     let q = supa.from('flexi_claims')
       .select('*, employees(emp_code, full_name, department_id, location_id, company_id, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)), flexi_claim_files(id, file_name, file_type, file_url)')
-    // 'ALL' = the whole group. Deliberately an explicit token rather than an absent
-    // parameter, so a caller that forgot the id still gets the 400 below instead of
-    // silently receiving every company's bills.
-    if (compId !== 'ALL') q = q.eq('company_id', compId)
+    if (company) q = q.eq('company_id', company)
     if (status) q = q.eq('status', status)
     if (month && year) {
       const m = Number(month)

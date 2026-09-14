@@ -7,6 +7,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { hashPassword } from '@/lib/ess-auth'
+import { requireModule } from '@/lib/api-auth'
+import { grantForRequest } from '@/lib/rms/server'
+import { companyFilter } from '@/lib/rms/resolve'
 
 export const runtime = 'nodejs'
 
@@ -16,15 +19,27 @@ const sb = createClient(
 )
 
 export async function POST(req: NextRequest) {
+  // Generating login credentials is an ESS-admin action — gate it, and scope it to the
+  // caller's own company unless they are a cross-company (super-admin) role. Previously
+  // this route had no auth at all.
+  const gate = await requireModule(req, 'ESS & Roles')
+  if (gate.error) return gate.error
+
   let body: any
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid request' }, { status: 400 }) }
   const { employee_ids, company_id, all, reset, performedBy } = body
 
+  const grant = await grantForRequest(req)
+  const company = companyFilter(grant, company_id ?? null)
+
   // Target employee set.
   let q = sb.from('employees').select('id, emp_code, full_name, office_email, personal_email, employment_status').neq('is_test', true)
   if (Array.isArray(employee_ids) && employee_ids.length) q = q.in('id', employee_ids)
-  else if (all) { q = q.eq('employment_status', 'Active'); if (company_id) q = q.eq('company_id', company_id) }
+  else if (all) { q = q.eq('employment_status', 'Active') }
   else return NextResponse.json({ error: 'Provide employee_ids or all=true' }, { status: 400 })
+  // Force the company on every path — a non-cross caller cannot issue credentials for
+  // another company's employees, even by passing their ids.
+  if (company) q = q.eq('company_id', company)
 
   const { data: emps, error } = await q.order('emp_code')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

@@ -6,6 +6,8 @@
 // Writes flexi_policy_slabs + flexi_slab_limits (migration 043). Sub-components OUTSIDE parent.
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies, defaultCompanyId, companyFilter } from '@/lib/rms/resolve'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -80,6 +82,7 @@ function ComponentRow({ c, rs, onToggle, onField }: {
 }
 
 export default function FlexiConfigBuilder() {
+  const { grant, loading: grantLoading } = useGrant()
   const [companies, setCompanies] = useState<any[]>([])
   const [companyId, setCompanyId] = useState('')
   const [smin, setSmin] = useState('0')
@@ -91,14 +94,19 @@ export default function FlexiConfigBuilder() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (grantLoading) return
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
-      .then(({ data }) => { setCompanies(data || []); if (data && data.length && !companyId) setCompanyId(data[0].id) })
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+      .then(({ data }) => {
+        const scoped = scopedCompanies(grant, data || [])
+        setCompanies(scoped)
+        setCompanyId(defaultCompanyId(grant) || (scoped[0]?.id || ''))
+      })
+  }, [grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSlabs = useCallback(async () => {
     // No company selected = "All Companies" → list slabs across every company.
     let q = supabase.from('flexi_policy_slabs').select('*').order('company_id').order('sort_order')
-    if (companyId) q = q.eq('company_id', companyId)
+    { const co = companyFilter(grant, companyId); if (co) q = q.eq('company_id', co) }
     const { data } = await q
     setSlabs(data ?? [])
   }, [companyId])
@@ -206,7 +214,7 @@ export default function FlexiConfigBuilder() {
           <span style={{ background: TK.brandTint, color: C.purpleDark, fontSize: 12, padding: '3px 10px', borderRadius: 20, fontWeight: 500 }}>{companyId ? `Slab ${slabs.length + 1}` : 'New slab'}</span>
           <span style={{ fontSize: 11, color: C.muted }}>Annual Fixed = CTC − Variable</span>
           <select value={companyId} onChange={e => setCompanyId(e.target.value)} style={{ marginLeft: 'auto', padding: '7px 10px', borderRadius: 10, border: `1px solid ${C.border}`, fontSize: 13, fontFamily: 'inherit', background: TK.surface, color: C.navy }}>
-            <option value="">All Companies</option>
+            {grant.crossCompany && <option value="">All Companies</option>}
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
         </div>

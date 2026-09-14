@@ -8,6 +8,8 @@
 // one missing source never blanks the whole page.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter, scopedCompanies } from '@/lib/rms/resolve'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK , CountUp } from '@/lib/ui'
@@ -105,6 +107,9 @@ function GenderDonut({ male, female, other }: { male: number; female: number; ot
 }
 
 export default function PayrollDashboard({ companyId, fy, companies }: { companyId: string; fy: string; companies: { id: string; company_name: string; group_name?: string | null }[] }) {
+  const { grant } = useGrant()
+  // Non-cross-company users see only their own company in the dropdown.
+  const scopedCos = scopedCompanies(grant, companies)
   const monthOpts = fyMonthOptions(fy)
   const defMonth = monthOpts.find(m => m.value.startsWith('2026-07')) || monthOpts[3] || monthOpts[0]
   const [month, setMonth] = useState(defMonth.value)
@@ -112,8 +117,12 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
   const [deptId, setDeptId] = useState('')
   const [depts, setDepts] = useState<{ id: string; dept_name: string; company_id: string }[]>([])
 
-  // keep the dashboard's company filter in sync if the header company changes
-  useEffect(() => { setCoFilter(companyId); setDeptId('') }, [companyId])
+  // keep the dashboard's company filter in sync if the header company changes; a
+  // non-cross-company user is forced onto their own company, never "All".
+  useEffect(() => {
+    setCoFilter(!grant.crossCompany && grant.companyId ? grant.companyId : companyId)
+    setDeptId('')
+  }, [companyId, grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [loading, setLoading] = useState(true)
   const [kpi, setKpi] = useState({ headcount: 0, gross: 0, basic: 0, statutory: 0, perquisites: 0, bonus: 0 })
@@ -127,9 +136,9 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
   // department options cascade from the selected company
   useEffect(() => {
     let q = supabase.from('departments').select('id, dept_name, company_id').eq('status', 'Active').order('dept_name')
-    if (coFilter) q = q.eq('company_id', coFilter)
+    { const co = companyFilter(grant, coFilter); if (co) q = q.eq('company_id', co) }
     q.then(({ data }) => setDepts(data || []), () => setDepts([]))
-  }, [coFilter])
+  }, [coFilter, grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -137,7 +146,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
     let eq = supabase.from('employees')
       .select('id, gender, department_id, company_id, created_at, full_name')
       .eq('employment_status', 'Active').neq('is_test', true)
-    if (coFilter) eq = eq.eq('company_id', coFilter)
+    { const co = companyFilter(grant, coFilter); if (co) eq = eq.eq('company_id', co) }
     if (deptId) eq = eq.eq('department_id', deptId)
     const { data: emps } = await eq
     const empList = emps || []
@@ -211,7 +220,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
     // ── Branches per company ──
     try {
       let lq = supabase.from('locations').select('company_id').eq('status', 'Active')
-      if (coFilter) lq = lq.eq('company_id', coFilter)
+      { const co = companyFilter(grant, coFilter); if (co) lq = lq.eq('company_id', co) }
       const { data: locs } = await lq
       const cm: Record<string, string> = {}; companies.forEach(c => { cm[c.id] = c.company_name })
       const bc: Record<string, number> = {}; (locs || []).forEach((l: any) => { bc[l.company_id] = (bc[l.company_id] || 0) + 1 })
@@ -247,14 +256,14 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
     // ── Payroll month status (runs are empty today) ──
     try {
       let rq = supabase.from('payroll_runs').select('status')
-      if (coFilter) rq = rq.eq('company_id', coFilter)
+      { const co = companyFilter(grant, coFilter); if (co) rq = rq.eq('company_id', co) }
       const { data: runs } = await rq
       const statuses = Array.from(new Set((runs || []).map((r: any) => r.status).filter(Boolean)))
       setRunStatus(statuses.length ? statuses.join(', ') : '')
     } catch { setRunStatus('') }
 
     setLoading(false)
-  }, [coFilter, deptId, fy, month, companies])
+  }, [coFilter, deptId, fy, month, companies, grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load() }, [load])
 
@@ -268,12 +277,12 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
         <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>Filters:</span>
         <select style={selStyle} value={coFilter} onChange={e => { setCoFilter(e.target.value); setDeptId('') }}>
           {(() => {
-            const groups = Array.from(new Set(companies.map(c => c.group_name || 'Companies')))
+            const groups = Array.from(new Set(scopedCos.map(c => c.group_name || 'Companies')))
             return <>
-              <option value="">All companies</option>
+              {grant.crossCompany && <option value="">All companies</option>}
               {groups.map(g => (
                 <optgroup key={g} label={g}>
-                  {companies.filter(c => (c.group_name || 'Companies') === g).map(c => (
+                  {scopedCos.filter(c => (c.group_name || 'Companies') === g).map(c => (
                     <option key={c.id} value={c.id}>{c.company_name}</option>
                   ))}
                 </optgroup>

@@ -43,7 +43,7 @@ import WallOfFame from '@/components/ess/WallOfFame'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
-import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
+import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
@@ -3281,6 +3281,9 @@ const SECTIONS: NavSection[] = [
       // Approvals appears only for a login the menu says can approve (RM, HOD, or a
       // functional approver) — decided from /api/ess/menu, not from a role name here.
       { k:'approvals',   label:'Tasks & Approvals' },
+      // Raise MRF — a dedicated section beside Approvals. Shown only for a login that can
+      // raise one (RM / HOD / approver), gated below from /api/ess/menu.
+      { k:'raise-mrf',   label:'Raise MRF' },
       { k:'exit',        label:'Exit Process' },
     ]},
 
@@ -3698,7 +3701,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
   const meta = viewMeta(view)
   const section = SECTIONS.find(s => s.k === meta.section)!
-  const sectionItems = section.k === 'hris' && !essMenu.can.approvals ? section.items.filter(i => i.k !== 'approvals') : section.items
+  // Approvals is shown to everyone now — it carries the MRF / hiring block for
+  // RMs and HODs, and an empty state for everyone else. Raise MRF is a raiser-only
+  // section, so it drops out of the sub-tabs for anyone who cannot raise one.
+  const canRaiseMrf = essMenu.super_admin || essMenu.is_rm || essMenu.is_hod || essMenu.can.approvals || essMenu.approval_types.length > 0
+  const sectionItems = section.items.filter(i => i.k !== 'raise-mrf' || canRaiseMrf)
 
   const renderView = () => {
     if (!emp) return null
@@ -3728,6 +3735,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'orgchart':      return <AdminModuleHost moduleKey="org-chart" />
       case 'directory':     return <Directory isMobile={isMobile} />
       case 'approvals':     return <ApprovalsSection employeeId={emp.id} go={go} notify={notify} />
+      case 'raise-mrf':     return <RaiseMrfSection employeeId={emp.id} go={go} notify={notify} />
       case 'exit':          return <ExitSection employeeId={emp.id} notify={notify} />
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />

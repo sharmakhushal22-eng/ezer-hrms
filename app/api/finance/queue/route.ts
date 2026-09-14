@@ -18,6 +18,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { serviceClient } from '@/lib/travel/access';
 import { requireModule } from '@/lib/api-auth';
+import { grantForRequest } from '@/lib/rms/server';
+import { companyFilter } from '@/lib/rms/resolve';
 import { errorResponse } from '@/lib/travel/errors';
 
 export const dynamic = 'force-dynamic';
@@ -29,15 +31,14 @@ export async function GET(req: NextRequest) {
 
     const sb = serviceClient();
     const p = req.nextUrl.searchParams;
-    const companyId = p.get('company_id');
-    if (!companyId) {
-      return NextResponse.json({ error: 'company_id is required' }, { status: 400 });
-    }
 
-    // 'ALL' = the whole group. An explicit token rather than an absent parameter, so
-    // a caller that forgot the id still gets the 400 above.
+    // Pin to the caller's own company unless they are a cross-company (super-admin)
+    // role. companyFilter returns null only for a cross caller who asked for all.
+    const grant = await grantForRequest(req);
+    const company = companyFilter(grant, p.get('company_id'));
+
     let q = sb.from('finance_work_items').select('*');
-    if (companyId !== 'ALL') q = q.eq('company_id', companyId);
+    if (company) q = q.eq('company_id', company);
     const mod = p.get('module');
     const status = p.get('status') ?? 'PENDING';
     if (mod) q = q.eq('module_code', mod);

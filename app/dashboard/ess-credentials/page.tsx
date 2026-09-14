@@ -4,6 +4,8 @@
 // Generates accounts, previews the list, and exports an Excel to distribute.
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -19,6 +21,7 @@ const pri: React.CSSProperties = { padding: '9px 18px', background: C.purple, co
 const sec: React.CSSProperties = { padding: '8px 14px', background: TK.surface, color: C.navy, border: `1px solid ${C.border}`, borderRadius: 10, cursor: 'pointer', fontSize: 13, fontFamily: font }
 
 export default function EssCredentialsPage() {
+  const { grant, loading: grantLoading } = useGrant()
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([])
   const [companyId, setCompanyId] = useState('')
   const [empCodes, setEmpCodes] = useState('')
@@ -37,9 +40,14 @@ export default function EssCredentialsPage() {
   }, [])
 
   useEffect(() => {
+    if (grantLoading) return
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
-      .then(({ data }) => { setCompanies(data || []); if (data?.length) setCompanyId(data[0].id) })
-  }, [])
+      .then(({ data }) => {
+        const scoped = scopedCompanies(grant, data || [])
+        setCompanies(scoped)
+        setCompanyId(defaultCompanyId(grant) || (scoped[0]?.id || ''))
+      })
+  }, [grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     // '' = All companies. The generate API already reads a missing company_id the
     // same way, so the counters and the button act on the same set of people.
@@ -103,7 +111,7 @@ export default function EssCredentialsPage() {
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 14 }}>
           <div>
             <label style={{ fontSize: 11, color: C.purpleDark, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 4 }}>Company</label>
-            <select style={{ ...inp, minWidth: 240 }} value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
+            <select style={{ ...inp, minWidth: 240 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>{grant.crossCompany && <option value="">All companies</option>}{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select>
           </div>
           <div style={{ fontSize: 12, color: C.muted }}>
             <div><b style={{ color: C.navy }}>{counts.total}</b> active employees</div>

@@ -13,8 +13,10 @@
 // Every screen fetches its own scoped data; the same component renders for an
 // employee, an RM and an HR Head because the query differs, not the component.
 import { useCallback, useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { authToken } from '@/lib/rms/client'
 import { C as TK } from '@/lib/ui'
+import MrfForm from './MrfForm'
 
 const C = {
   ink: '#1E1B4B', muted: '#6B7280', faint: '#9CA3AF', border: 'rgba(124,58,237,0.12)', card: '#FFFFFF',
@@ -263,6 +265,248 @@ export function TeamRoster({ employeeId, isHod, isRm }: { employeeId: string; is
 }
 
 // ── APPROVALS ──────────────────────────────────────────────────────────────
+// ── MRF (Manpower Requisition) — raise + approve, shown inside Approvals ──────
+export function MrfApprovals({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+  const [d, setD] = useState<any>(null)
+  const [err, setErr] = useState('')
+  const [reviewFor, setReviewFor] = useState<any | null>(null)   // the MRF open in the review popup
+  const [reviewStep, setReviewStep] = useState<'details' | 'assign'>('details')
+  const [selHr, setSelHr] = useState<string[]>([])
+  const [busy, setBusy] = useState(false)
+  const load = useCallback(() => api('/api/ess/mrf', employeeId).then(x => { setD(x); setErr('') }).catch(e => setErr(e.message)), [employeeId])
+  useEffect(() => { load() }, [load])
+
+  const decide = async (id: string, action: 'approve' | 'reject', extra: Record<string, any> = {}) => {
+    const note = action === 'reject' ? (window.prompt('Reason for rejection (optional):') || '') : ''
+    setBusy(true)
+    try {
+      await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify({ action, id, note, ...extra }) })
+      notify(action === 'approve' ? 'MRF approved.' : 'MRF rejected.'); setReviewFor(null); setSelHr([]); setReviewStep('details'); load()
+    } catch (e: any) { notify(e.message, 'error') } finally { setBusy(false) }
+  }
+  // The role of the step this MRF is currently waiting on.
+  const curRole = (m: any) => {
+    const ch = Array.isArray(m.approval_chain) ? m.approval_chain : []
+    return (ch.find((s: any) => s.status === 'PENDING') || {}).role
+  }
+  const openReview = (m: any) => { setSelHr([]); setReviewStep('details'); setReviewFor(m) }
+  const closeReview = () => { if (!busy) { setReviewFor(null); setSelHr([]); setReviewStep('details') } }
+  const acknowledge = async (id: string) => {
+    try { await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', id }) }); notify('Acknowledged — this MRF is now in your Recruitment.'); load() }
+    catch (e: any) { notify(e.message, 'error') }
+  }
+
+  if (err) return <div style={S.note('d')}>{err}</div>
+  if (!d) return null
+  const stepLabel = (m: any) => {
+    const ch = Array.isArray(m.approval_chain) ? m.approval_chain : []
+    const cur = ch.find((s: any) => s.status === 'PENDING')
+    if (m.status === 'APPROVED') return 'Approved'
+    if (m.status === 'REJECTED') return 'Rejected'
+    return cur ? `With ${cur.role === 'HR_HEAD' ? 'HR Head' : 'RM2'} · ${cur.approver_name}` : m.status
+  }
+
+  return (
+    <div style={S.card}>
+      <div style={S.section}>Hiring Requests · MRF</div>
+
+      {(d.myAssignments && d.myAssignments.length > 0) && <>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.green, margin: '6px 0 4px' }}>Assigned to you ({d.myAssignments.length})</div>
+        {d.myAssignments.map((m: any) => (
+          <div key={m.id} style={{ borderBottom: `1px solid ${C.border}`, padding: '9px 0', display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 220px' }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{m.designation || m.position} · {m.no_of_openings || m.openings || 1} opening(s)</div>
+              <div style={{ fontSize: 11.5, color: C.muted }}>{m.departments?.dept_name || '—'} · You’ve been assigned to hire for this — run it in Recruitment.</div>
+            </div>
+            {m.acknowledged
+              ? <span style={pill('ok')}>Acknowledged ✓</span>
+              : <button style={{ ...S.btn, background: C.green }} onClick={() => acknowledge(m.id)}>Acknowledge</button>}
+          </div>
+        ))}
+      </>}
+
+      {d.toApprove.length > 0 && <>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, margin: '6px 0 4px' }}>Waiting on you ({d.toApprove.length})</div>
+        {d.toApprove.map((m: any) => (
+          <div key={m.id} style={{ borderBottom: `1px solid ${C.border}`, padding: '8px 0' }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{m.designation || m.position} · {m.no_of_openings || m.openings || 1} opening(s)</div>
+            <div style={{ fontSize: 11.5, color: C.muted }}>{m.departments?.dept_name || '—'} · raised by {m.raised_by_name || '—'}{m.raised_by_role ? ` (${m.raised_by_role})` : ''} · {m.urgency || 'Normal'}</div>
+            {m.reason && <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{m.reason}</div>}
+            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+              <button style={{ ...S.btn, background: C.green }} onClick={() => openReview(m)}>Review &amp; Approve</button>
+              <button style={S.btnD} onClick={() => decide(m.id, 'reject')}>Reject</button>
+            </div>
+          </div>
+        ))}
+      </>}
+
+      <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: '10px 0 4px' }}>My requests ({d.mine.length})</div>
+      {d.mine.length === 0 && <div style={{ fontSize: 12, color: C.faint }}>You haven’t raised any MRF yet.</div>}
+      {d.mine.map((m: any) => (
+        <div key={m.id} style={{ borderBottom: `1px solid ${C.border}`, padding: '7px 0', display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{m.designation || m.position} · {m.no_of_openings || m.openings || 1}</div>
+            <div style={{ fontSize: 11.5, color: C.muted }}>{m.departments?.dept_name || '—'}</div>
+          </div>
+          <span style={{ fontSize: 11.5, alignSelf: 'center', fontWeight: 600, color: m.status === 'APPROVED' ? C.green : m.status === 'REJECTED' ? C.red : C.amber }}>{stepLabel(m)}</span>
+        </div>
+      ))}
+
+      {reviewFor && createPortal((() => {
+        const m = reviewFor
+        const isHrHead = curRole(m) === 'HR_HEAD'
+        const onAssignStep = isHrHead && reviewStep === 'assign'
+        const money = (v: any) => (v || v === 0) ? `₹${Number(v).toLocaleString('en-IN')}` : ''
+        const groups: [string, [string, any][]][] = [
+          ['Position', [
+            ['Designation', m.designation || m.position], ['Job Title', m.job_title], ['No. of Openings', m.no_of_openings || m.openings || 1],
+            ['Company', m.companies?.company_name], ['Department', m.departments?.dept_name], ['Location', m.locations?.location_name],
+            ['Business Unit', m.business_unit], ['Grade', m.grade], ['Job Code', m.job_code],
+            ['Employment Type', m.employment_type], ['Work Mode', m.work_mode],
+          ]],
+          ['Budget & Cost', [
+            ['Budget', (m.budget_min || m.budget_max) ? `${money(m.budget_min)} – ${money(m.budget_max)}${m.pay_period === 'MONTHLY' ? ' /mo' : m.pay_period === 'ANNUAL' ? ' /yr' : ''}` : ''],
+            ['Cost Center', m.cost_center], ['Budgeted', m.is_budgeted === true ? 'Yes' : m.is_budgeted === false ? 'No' : ''], ['Headcount Ref', m.headcount_ref],
+          ]],
+          ['Candidate Requirements', [
+            ['Experience', (m.experience_min || m.experience_max) ? `${m.experience_min ?? '—'}–${m.experience_max ?? '—'} yrs` : ''],
+            ['Education', (m.education_min || m.education_max) ? `${m.education_min || 'Any'} – ${m.education_max || 'Any'}` : ''],
+            ['Mandatory Skills', m.skills_required], ['Good-to-have Skills', m.good_to_have_skills],
+          ]],
+          ['Timeline & Meta', [
+            ['Type', m.mrf_type], ['Requisition', m.hiring_type], ['Priority', m.urgency],
+            ['Reason for Hire', m.reason || m.reason_for_hire], ['Sourcing', m.sourcing_mode],
+            ['Target Joining', m.target_joining_date], ['Validity', m.validity_date],
+            ['MRF No.', m.mrf_number], ['Raised by', m.raised_by_name ? `${m.raised_by_name}${m.raised_by_role ? ` (${m.raised_by_role})` : ''}` : ''],
+          ]],
+        ]
+        const wide = new Set(['Mandatory Skills', 'Good-to-have Skills', 'Reason for Hire'])
+        return (
+          <div onClick={closeReview} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,.5)', backdropFilter: 'blur(2px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 'min(620px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,.4)', overflow: 'hidden' }}>
+              {/* Header */}
+              <div style={{ padding: '16px 22px 14px', background: `linear-gradient(135deg, ${C.purple}, #4F46E5)`, color: '#fff' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div style={{ fontSize: 16, fontWeight: 700 }}>{m.designation || m.position}</div>
+                  <span style={{ fontSize: 11, fontWeight: 700, background: 'rgba(255,255,255,.22)', borderRadius: 99, padding: '2px 9px' }}>{m.no_of_openings || m.openings || 1} opening{(m.no_of_openings || m.openings || 1) > 1 ? 's' : ''}</span>
+                  {m.mrf_number && <span style={{ fontSize: 11, color: 'rgba(255,255,255,.85)' }}>{m.mrf_number}</span>}
+                </div>
+                {isHrHead ? (
+                  <div style={{ display: 'flex', gap: 6, marginTop: 9 }}>
+                    {(['details', 'assign'] as const).map((s, i) => (
+                      <span key={s} style={{ fontSize: 10.5, fontWeight: 700, padding: '3px 10px', borderRadius: 99, background: reviewStep === s ? '#fff' : 'rgba(255,255,255,.2)', color: reviewStep === s ? C.purple : 'rgba(255,255,255,.9)' }}>
+                        {i + 1}. {s === 'details' ? 'Review' : 'Assign Hiring Manager'}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 12, color: 'rgba(255,255,255,.85)', marginTop: 4 }}>Review the requisition, then approve below.</div>
+                )}
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: '16px 22px', overflowY: 'auto', flex: 1 }}>
+                {!onAssignStep ? (
+                  <>
+                    {groups.map(([title, gr]) => {
+                      const shown = gr.filter(([, v]) => v !== null && v !== undefined && v !== '')
+                      if (!shown.length) return null
+                      return (
+                        <div key={title} style={{ marginBottom: 14 }}>
+                          <div style={{ fontSize: 10.5, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{title}</div>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 22px', background: C.bg, borderRadius: 9, padding: '4px 14px' }}>
+                            {shown.map(([label, v]) => (
+                              <div key={label} style={{ padding: '7px 0', borderBottom: `1px solid ${C.border}`, ...(wide.has(label) ? { gridColumn: '1 / -1' } : {}) }}>
+                                <div style={{ fontSize: 9, color: C.faint, textTransform: 'uppercase', letterSpacing: '.5px', fontWeight: 700 }}>{label}</div>
+                                <div style={{ fontSize: 12.5, color: C.ink, marginTop: 2, fontWeight: 500 }}>{String(v)}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )
+                    })}
+                    {m.business_justification && (
+                      <div>
+                        <div style={{ fontSize: 10.5, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Business Justification</div>
+                        <div style={{ fontSize: 12.5, color: C.ink, lineHeight: 1.55, background: C.bg, borderRadius: 9, padding: '10px 14px' }}>{m.business_justification}</div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 3 }}>Assign Hiring Manager(s)</div>
+                    <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>This requisition is approved. Pick one or more hiring managers to run the hiring.</div>
+                    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
+                      {(!d.hrOptions || d.hrOptions.length === 0) && <div style={{ fontSize: 12.5, color: C.faint, padding: '16px' }}>No hiring manager found in your company. Assign the “Hiring Manager / Recruiter” role first (ESS &amp; Access → Assign Roles).</div>}
+                      {(d.hrOptions || []).map((h: any, i: number) => {
+                        const on = selHr.includes(h.id)
+                        return (
+                          <label key={h.id} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '11px 14px', cursor: 'pointer', background: on ? C.greenBg : '#fff', borderTop: i ? `1px solid ${C.border}` : 'none' }}>
+                            <input type="checkbox" checked={on} onChange={e => setSelHr(s => e.target.checked ? [...s, h.id] : s.filter(x => x !== h.id))} />
+                            <span style={{ width: 30, height: 30, borderRadius: '50%', background: on ? C.green : C.soft, color: on ? '#fff' : C.purpleD, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{(h.name || '?').split(' ').slice(0, 2).map((x: string) => x[0]).join('').toUpperCase()}</span>
+                            <span style={{ flex: 1 }}>
+                              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{h.name}</div>
+                              <div style={{ fontSize: 11, color: C.faint }}>{h.code} · Hiring Manager</div>
+                            </span>
+                            {on && <span style={{ fontSize: 15, color: C.green }}>✓</span>}
+                          </label>
+                        )
+                      })}
+                    </div>
+                    {selHr.length > 0 && <div style={{ fontSize: 11.5, color: C.green, fontWeight: 600, marginTop: 8 }}>{selHr.length} hiring manager{selHr.length > 1 ? 's' : ''} selected</div>}
+                  </>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '13px 22px', borderTop: `1px solid ${C.border}`, background: '#fff' }}>
+                {onAssignStep ? (
+                  <>
+                    <button style={S.btnO} disabled={busy} onClick={() => setReviewStep('details')}>← Back</button>
+                    <button style={{ ...S.btn, background: C.green, marginLeft: 'auto' }} disabled={busy || selHr.length === 0}
+                      onClick={() => decide(m.id, 'approve', { assigned_hr_ids: selHr })}>
+                      {busy ? 'Submitting…' : `Submit & Assign${selHr.length ? ` (${selHr.length})` : ''}`}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button style={S.btnO} disabled={busy} onClick={closeReview}>Cancel</button>
+                    <button style={{ ...S.btnD, marginLeft: 'auto' }} disabled={busy} onClick={() => decide(m.id, 'reject')}>Reject</button>
+                    <button style={{ ...S.btn, background: C.green }} disabled={busy}
+                      onClick={() => { if (isHrHead) setReviewStep('assign'); else decide(m.id, 'approve') }}>
+                      {busy ? 'Approving…' : isHrHead ? 'Approve →' : 'Approve'}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })(), document.body)}
+    </div>
+  )
+}
+
+// ── Raise MRF — its own sidebar section (beside Tasks & Approvals) ───────────
+export function RaiseMrfSection({ employeeId, notify, go }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void; go?: (k: string) => void }) {
+  const [canRaise, setCanRaise] = useState<boolean | null>(null)
+  const [formKey, setFormKey] = useState(0)   // remount the form to raise another after a submit
+  useEffect(() => { api('/api/ess/mrf', employeeId).then(d => setCanRaise(!!d.canRaise)).catch(() => setCanRaise(true)) }, [employeeId])
+  return (
+    <div>
+      <div style={{ ...S.section, fontSize: 14, marginBottom: 4 }}>Raise a Manpower Requisition (MRF)</div>
+      <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>Fill the form to open a hiring requisition. It routes through your reporting chain to the HR Head, company-scoped.</div>
+      {canRaise === false ? (
+        <div style={S.note()}>Raising an MRF is available to reporting managers (RM1 / RM2) and heads of department. If you should have this, ask HR to set your reporting line.</div>
+      ) : (
+        <MrfForm key={formKey} employeeId={employeeId} notify={notify}
+          onDone={() => { setFormKey(k => k + 1); window.scrollTo({ top: 0 }) }}
+          onCancel={() => { if (go) go('approvals') }} />
+      )}
+    </div>
+  )
+}
+
 export function ApprovalsSection({ employeeId, go, notify }: { employeeId: string; go: (k: string) => void; notify: (m: string, t?: 'success' | 'error') => void }) {
   const [items, setItems] = useState<PendingItem[] | null>(null)
   const [err, setErr] = useState('')
@@ -275,6 +519,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
   const mine = items.filter(i => i.mine).length
   return (
     <div>
+      <MrfApprovals employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },
         { label: 'In your scope', value: items.length - mine },

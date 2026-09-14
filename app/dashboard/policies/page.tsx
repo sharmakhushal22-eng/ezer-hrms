@@ -10,6 +10,8 @@ import {
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 
 const C = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
@@ -58,6 +60,7 @@ function PolicyModal({ row, company_id, nextOrder, onClose, onSave }: {
 }
 
 export default function CompanyPoliciesPage() {
+  const { grant, loading: grantLoading } = useGrant()
   const [companies, setCompanies] = useState<CompanyLite[]>([])
   const [companyId, setCompanyId] = useState('')
   const [policies, setPolicies] = useState<CompanyPolicy[]>([])
@@ -67,9 +70,16 @@ export default function CompanyPoliciesPage() {
   const notify = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
 
   useEffect(() => {
-    loadCompaniesLite().then(cs => { setCompanies(cs); if (cs.length) setCompanyId(cs[0].id); setLoading(false) })
+    if (grantLoading) return
+    loadCompaniesLite().then(all => {
+      const cs = scopedCompanies(grant, all as any) as CompanyLite[]
+      setCompanies(cs)
+      const def = defaultCompanyId(grant) || (cs.length ? cs[0].id : '')
+      if (def) setCompanyId(def)
+      setLoading(false)
+    })
       .catch(e => { notify('Load failed: ' + (e?.message || ''), 'error'); setLoading(false) })
-  }, [])
+  }, [grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const reload = useCallback(async (id: string) => {
     if (!id) { setPolicies([]); return }

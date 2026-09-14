@@ -3,6 +3,8 @@
 // The sidebar/chrome is provided by app/dashboard/layout.tsx; this renders content only.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter } from '@/lib/rms/resolve'
 import {
   Page, PageHeader, Card, Section, Stat, StatRow, Button, Badge, Input, Empty,
   Person, TableWrap, Th, Td, Tr, Skeleton, Notice, CountUp,
@@ -297,6 +299,7 @@ function BarRow({ label, count, max, colour = C.brand, labelW = 150 }: {
 }
 
 export default function Dashboard() {
+  const { grant } = useGrant()
   const [loading, setLoading] = useState(true)
   const [wished, setWished] = useState<string[]>([])      // employee ids already wished
   const [wishing, setWishing] = useState<string | null>(null)
@@ -308,11 +311,18 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setLoading(true)
     const today = new Date(); today.setHours(0,0,0,0)
+    // A non-cross-company viewer's landing page shows only their own company; a
+    // cross-company (super-admin) viewer keeps the whole-group rollup (co = null).
+    const co = companyFilter(grant, grant.companyId)
+    let empQ = supabase.from('employees').select('id, full_name, emp_code, first_name, employment_status, blacklisted, date_of_birth, group_doj, last_working_date, company_id, location_id, companies!employees_company_id_fkey(company_name), locations!location_id(location_name)').neq('is_test', true)
+    let candQ = supabase.from('candidates').select('id, full_name, stage, onboarding_date, blacklisted, created_at, designation, mrf_id, offer_accepted')
+    let mrfQ = supabase.from('manpower_requisitions').select('id, status, no_of_openings, openings, designation, position, department_id, location_id')
+    if (co) { empQ = empQ.eq('company_id', co); candQ = candQ.eq('company_id', co); mrfQ = mrfQ.eq('company_id', co) }
     const [empR, compR, candR, mrfR, audR, deptR, locR] = await Promise.all([
-      supabase.from('employees').select('id, full_name, emp_code, first_name, employment_status, blacklisted, date_of_birth, group_doj, last_working_date, company_id, location_id, companies!employees_company_id_fkey(company_name), locations!location_id(location_name)').neq('is_test', true),
+      empQ,
       supabase.from('companies').select('id, company_name'),
-      supabase.from('candidates').select('id, full_name, stage, onboarding_date, blacklisted, created_at, designation, mrf_id, offer_accepted'),
-      supabase.from('manpower_requisitions').select('id, status, no_of_openings, openings, designation, position, department_id, location_id'),
+      candQ,
+      mrfQ,
       supabase.from('recruitment_audit_logs').select('action_type, details, created_at').order('created_at', { ascending:false }).limit(8),
       // department / location names for the pipeline drill-down (candidate → MRF → dept/loc)
       supabase.from('departments').select('id, dept_name'),
@@ -416,7 +426,7 @@ export default function Dashboard() {
       today: celeb.filter(c => c.days <= 0), week: celeb.filter(c => c.days > 0).slice(0,6),
     })
     setLoading(false)
-  }, [])
+  }, [grant]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
 
   // Send the wish for real — it lands in the employee's ESS → 🔔 Notifications.

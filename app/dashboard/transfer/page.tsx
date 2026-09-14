@@ -4,6 +4,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as HR from '@/lib/employees/hr-actions'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -175,6 +177,7 @@ function Toast({ t }: { t: { msg: string; type: 'success'|'error' } }) {
 
 // ════════════════════════════════════════════════════════════════
 export default function TransferPage() {
+  const { grant, loading: grantLoading } = useGrant()
   const [companies, setCompanies] = useState<any[]>([])
   const [branches, setBranches] = useState<any[]>([])
   const [employees, setEmployees] = useState<any[]>([])
@@ -194,17 +197,24 @@ export default function TransferPage() {
   const notify = (msg: string, type: 'success'|'error' = 'success') => { setToast({ msg, type }); setTimeout(() => setToast(null), 3500) }
 
   const load = useCallback(async () => {
+    // Non-cross-company users only ever load and transfer their own company's employees.
+    const co = companyFilter(grant, null)
+    let empQ = supabase.from('employees').select('id, full_name, emp_code, company_id, location_id, designation').eq('employment_status', 'Active')
+    let mgrQ = supabase.from('employees').select('id, full_name, emp_code, company_id').eq('employment_status', 'Active')
+    if (co) { empQ = empQ.eq('company_id', co); mgrQ = mgrQ.eq('company_id', co) }
     const [comp, loc, emp, dep, mgr] = await Promise.all([
       supabase.from('companies').select('id, company_name, status').eq('status', 'Active'),
       supabase.from('locations').select('id, location_name, state, company_id, status').eq('status', 'Active'),
-      supabase.from('employees').select('id, full_name, emp_code, company_id, location_id, designation').eq('employment_status', 'Active'),
+      empQ,
       supabase.from('departments').select('id, dept_name, company_id, status').eq('status', 'Active'),
-      supabase.from('employees').select('id, full_name, emp_code').eq('employment_status', 'Active'),
+      mgrQ,
     ])
-    setCompanies(comp.data || []); setBranches(loc.data || []); setEmployees(emp.data || [])
+    setCompanies(scopedCompanies(grant, comp.data || [])); setBranches(loc.data || []); setEmployees(emp.data || [])
     setDepartments(dep.data || []); setManagers(mgr.data || [])
-  }, [])
-  useEffect(() => { load() }, [load])
+    const def = defaultCompanyId(grant)
+    if (def) setCompany(def)
+  }, [grant])
+  useEffect(() => { if (!grantLoading) load() }, [grantLoading, load]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filtered employee list
   const codeList = codes.split(',').map(c => c.trim().toUpperCase()).filter(Boolean)

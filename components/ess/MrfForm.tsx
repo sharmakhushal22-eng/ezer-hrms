@@ -1,0 +1,454 @@
+'use client'
+// components/ess/MrfForm.tsx — the full Manpower Requisition form for the ESS portal.
+//
+// Same shape as the Recruitment module's "New MRF" form (Quick Hire / Full MRF toggle and
+// every section), but raised from an employee's own portal: it routes through the ESS
+// approval chain (RM1 → RM2 → HR Head, company-scoped) built server-side in /api/ess/mrf,
+// and it AUTOFILLS everything it can from the person raising it — their company and
+// department (both locked), their reporting line (RM1 = them, RM2 = their manager, HOD),
+// and their name. It loads its own reference lists (masters, skills, colleagues, locations)
+// with the anon client, exactly like the other ESS record screens.
+import { useEffect, useRef, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { authToken } from '@/lib/rms/client'
+
+// ── ESS-portal palette (matches components/ess/RoleTabs.tsx) ─────────────────
+const C = {
+  ink: '#1E1B4B', muted: '#6B7280', faint: '#9CA3AF', border: 'rgba(124,58,237,0.12)', card: '#FFFFFF',
+  purple: '#7C3AED', purpleD: '#6D28D9', soft: 'rgba(124,58,237,0.08)', green: '#059669', greenBg: '#ECFDF5',
+  amber: '#B45309', red: '#DC2626', redBg: '#FEF2F2', bg: '#F5F3FF', locked: '#F3F1FB',
+}
+const st = {
+  label: { fontSize: 11, fontWeight: 600, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 } as React.CSSProperties,
+  input: { width: '100%', padding: '9px 11px', background: '#FAFAF8', border: '1px solid #DDD6FE', borderRadius: 7, color: C.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
+  btn: { padding: '9px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: C.purple, color: '#fff', whiteSpace: 'nowrap' } as React.CSSProperties,
+  btnO: { padding: '9px 16px', borderRadius: 7, border: '1px solid #DDD6FE', cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: C.purpleD, whiteSpace: 'nowrap' } as React.CSSProperties,
+}
+const g2: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }
+
+// ── Constants (mirrored from the Recruitment MRF form) ───────────────────────
+const REQ_TYPES = ['New Hire', 'Replacement', 'Temporary', 'Backfill']
+const PRIORITIES: [string, string][] = [['HIGH', 'High / Urgent'], ['MEDIUM', 'Medium / Normal'], ['LOW', 'Low']]
+const EMP_TYPES = ['Employee', 'Intern', 'Contract', 'Consultant', 'NAPS', 'NATS', 'Live Project']
+const WORK_MODES = ['Onsite', 'Hybrid', 'Remote']
+const SOURCING_MODES = ['External', 'Internal', 'Both']
+const REASON_FOR_HIRE = ['New position', 'Replacement', 'Expansion', 'Attrition']
+const PREV_COMPANY: [string, string][] = [['', 'Select Preference'], ['MNC', 'MNC'], ['STARTUP', 'Startup']]
+const EDUCATION_OPTIONS = ['Any Graduate', 'Bachelors', 'B.Tech/B.E.', 'MBA/PGDM', 'M.Tech', 'B.Com/M.Com', 'BCA/MCA', 'Diploma', '12th Pass', 'Any Post Graduate', 'Masters']
+const QUICK_HIRE_CAP = 600000
+const COMPENSATION: Record<string, { kind: string; label: string; period: string; fixedTerm: boolean; ph: [string, string] }> = {
+  Employee:       { kind: 'SALARY',  label: 'Salary',  period: 'ANNUAL',  fixedTerm: false, ph: ['600000', '1200000'] },
+  Intern:         { kind: 'STIPEND', label: 'Stipend', period: 'MONTHLY', fixedTerm: true,  ph: ['10000', '25000'] },
+  NAPS:           { kind: 'STIPEND', label: 'Stipend', period: 'MONTHLY', fixedTerm: true,  ph: ['9000', '15000'] },
+  NATS:           { kind: 'STIPEND', label: 'Stipend', period: 'MONTHLY', fixedTerm: true,  ph: ['9000', '15000'] },
+  'Live Project': { kind: 'STIPEND', label: 'Stipend', period: 'MONTHLY', fixedTerm: true,  ph: ['5000', '15000'] },
+  Contract:       { kind: 'FEES',    label: 'Fees',    period: 'MONTHLY', fixedTerm: true,  ph: ['50000', '120000'] },
+  Consultant:     { kind: 'FEES',    label: 'Fees',    period: 'MONTHLY', fixedTerm: false, ph: ['75000', '200000'] },
+}
+const compOf = (t: string) => COMPENSATION[t] || COMPENSATION.Employee
+const perLabel = (p: string) => (p === 'ANNUAL' ? 'per annum' : 'per month')
+
+type Master = { code: string; label: string }
+async function loadMasters(codes: string[]): Promise<Record<string, Master[]>> {
+  const out: Record<string, Master[]> = {}; codes.forEach(c => { out[c] = [] })
+  const { data: types } = await supabase.from('master_types').select('id, code').in('code', codes)
+  if (!types?.length) return out
+  const byId = new Map(types.map((t: any) => [t.id, t.code]))
+  const { data: vals } = await supabase.from('master_values')
+    .select('type_id, code, label, is_active, sort_order').in('type_id', types.map((t: any) => t.id)).order('sort_order')
+  for (const v of vals || []) { if (v.is_active === false) continue; const c = byId.get(v.type_id) as string; if (c) out[c].push({ code: v.code, label: v.label }) }
+  return out
+}
+async function api(path: string, employeeId: string, init?: RequestInit) {
+  const token = await authToken()
+  const sep = path.includes('?') ? '&' : '?'
+  const res = await fetch(`${path}${sep}employee_id=${encodeURIComponent(employeeId)}`, {
+    ...init, cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init?.headers || {}) },
+  })
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
+  return body
+}
+
+// ── Sub-components (OUTSIDE the parent — no focus loss) ───────────────────────
+function SectionLine({ n, title }: { n: string; title: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '16px 0 8px' }}>
+      <span style={{ fontSize: 11, fontWeight: 700, color: C.purple, textTransform: 'uppercase', letterSpacing: '.08em', whiteSpace: 'nowrap' }}>{n} · {title}</span>
+      <span style={{ flex: 1, height: 1, background: C.border }} />
+    </div>
+  )
+}
+function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label style={st.label}>{label}{required && <span style={{ color: C.red }}> *</span>}</label>
+      {children}
+      {hint && <div style={{ fontSize: 10.5, color: C.faint, marginTop: 3 }}>{hint}</div>}
+    </div>
+  )
+}
+function Locked({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <Field label={label} hint={hint || 'auto · locked'}>
+      <div style={{ ...st.input, background: C.locked, color: C.ink, display: 'flex', alignItems: 'center', minHeight: 38 }}>{value || '—'}</div>
+    </Field>
+  )
+}
+function Sel({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+  return <select style={{ ...st.input, cursor: 'pointer' }} value={value} onChange={e => onChange(e.target.value)}>{children}</select>
+}
+function MasterSel({ value, onChange, opts, placeholder, useCode }: { value: string; onChange: (v: string) => void; opts: Master[]; placeholder: string; useCode?: boolean }) {
+  return (
+    <Sel value={value} onChange={onChange}>
+      <option value="">{placeholder}</option>
+      {opts.map(o => <option key={o.code} value={useCode ? o.code : o.label}>{o.label}</option>)}
+    </Sel>
+  )
+}
+function ChannelPicker({ value, onChange, opts }: { value: string[]; onChange: (v: string[]) => void; opts: Master[] }) {
+  const on = (label: string) => value.includes(label)
+  const toggle = (label: string) => onChange(on(label) ? value.filter(x => x !== label) : [...value, label])
+  if (!opts.length) return <div style={{ fontSize: 12, color: C.faint }}>No sourcing channels configured.</div>
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {opts.map(o => (
+        <button key={o.code} type="button" onClick={() => toggle(o.label)}
+          style={{ padding: '5px 11px', borderRadius: 99, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+            border: `1px solid ${on(o.label) ? C.purple : '#DDD6FE'}`, background: on(o.label) ? C.purple : '#fff', color: on(o.label) ? '#fff' : C.purpleD }}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+// Skills picker — same behaviour as Recruitment: chips + a live-search dropdown over the
+// skills master, plus "add custom". Stores a comma-joined string (skills_required column).
+function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill, placeholder }: { value: string; onChange: (v: string) => void; allSkills: string[]; onAddSkill: (n: string) => void; placeholder?: string }) {
+  const [q, setQ] = useState('')
+  const [open, setOpen] = useState(false)
+  const boxRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const selected = value ? value.split(',').map(s => s.trim()).filter(Boolean) : []
+  const lowerSel = selected.map(s => s.toLowerCase())
+  // On focus (empty query) show the first skills; while typing, filter. Either way, never
+  // show one that's already picked.
+  const matches = allSkills.filter(s => !lowerSel.includes(s.toLowerCase()) && (!q.trim() || s.toLowerCase().includes(q.trim().toLowerCase()))).slice(0, 10)
+  const exact = allSkills.some(s => s.toLowerCase() === q.trim().toLowerCase()) || lowerSel.includes(q.trim().toLowerCase())
+  const add = (skill: string) => { if (!lowerSel.includes(skill.toLowerCase())) onChange([...selected, skill].join(', ')); setQ(''); setOpen(false) }
+  const remove = (skill: string) => onChange(selected.filter(s => s !== skill).join(', '))
+  const addCustom = () => { const n = q.trim(); if (!n) return; onAddSkill(n); add(n) }
+  return (
+    <div ref={boxRef}>
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+          {selected.map(s => (
+            <span key={s} style={{ fontSize: 11, padding: '3px 8px', borderRadius: 99, background: C.soft, color: C.purpleD, fontWeight: 500, display: 'inline-flex', alignItems: 'center' }}>
+              {s}<span onClick={() => remove(s)} style={{ cursor: 'pointer', marginLeft: 5, fontWeight: 700 }}>×</span>
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ position: 'relative' }}>
+        <input style={st.input} value={q} onFocus={() => setOpen(true)} onChange={e => { setQ(e.target.value); setOpen(true) }}
+          placeholder={placeholder || "Click to pick a skill, or type to search / add custom"}
+          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (matches[0]) add(matches[0]); else if (q.trim() && !exact) addCustom() } }} />
+        {open && (matches.length > 0 || q.trim()) && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #DDD6FE', borderRadius: 7, marginTop: 2, zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 6px 18px rgba(0,0,0,.14)' }}>
+            {matches.map(s => <div key={s} onClick={() => add(s)} style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: C.ink }}>{s}</div>)}
+            {q.trim() && !exact && (
+              <div onClick={addCustom} style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: C.purple, fontWeight: 600, borderTop: matches.length ? '1px solid #F3F0FF' : 'none' }}>+ Add custom: “{q.trim()}”</div>
+            )}
+            {matches.length === 0 && !q.trim() && <div style={{ padding: '8px 11px', fontSize: 12, color: C.faint }}>Type to search or add a skill…</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type Person = { id: string; full_name: string; emp_code: string; designation: string | null }
+
+const EMPTY = {
+  mrf_type: 'Full MRF', hiring_type: 'New Hire', urgency: 'MEDIUM', raised_by_name: '', raised_by_role: '',
+  job_title: '', designation: '', business_unit: '', grade: '', job_code: '', no_of_openings: '1',
+  employment_type: 'Employee', work_mode: 'Onsite', location_id: '', shift_schedule: '',
+  cost_center: '', is_budgeted: '', headcount_ref: '', currency: 'INR', budget_min: '', budget_max: '', duration_months: '',
+  reason: '', outgoing_employee_id: '', exit_reason: '', business_justification: '',
+  target_joining_date: '', validity_date: '',
+  experience_min: '', experience_max: '', education_min: '', education_max: '', previous_company_preference: '',
+  skills_required: '', good_to_have_skills: '', job_description: '',
+  sourcing_mode: 'External', sourcing_channels: [] as string[],
+}
+
+export default function MrfForm({ employeeId, onDone, onCancel, notify }: {
+  employeeId: string
+  onDone: () => void
+  onCancel: () => void
+  notify: (m: string, t?: 'success' | 'error') => void
+}) {
+  const [form, setForm] = useState<any>({ ...EMPTY })
+  const [masters, setMasters] = useState<Record<string, Master[]>>({})
+  const [people, setPeople] = useState<Person[]>([])
+  const [skills, setSkills] = useState<string[]>([])
+  const [locations, setLocations] = useState<{ id: string; location_name: string }[]>([])
+  const [auto, setAuto] = useState<any>(null)   // raiser autofill bundle
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const F = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
+  // Persist a brand-new skill to the master so it is there next time, and show it now.
+  const addSkill = async (name: string) => {
+    const n = name.trim(); if (!n) return
+    setSkills(s => (s.some(x => x.toLowerCase() === n.toLowerCase()) ? s : [...s, n].sort((a, b) => a.localeCompare(b))))
+    await supabase.from('skills').insert({ name: n }).then(() => {}, () => {})   // ignore duplicates
+  }
+
+  useEffect(() => {
+    let live = true
+    ;(async () => {
+      setLoading(true)
+      // The raiser — their company & department (locked) and reporting line.
+      const { data: me } = await supabase.from('employees')
+        .select('id, full_name, emp_code, designation, company_id, department_id, hod_id, l1_manager_id, companies:companies!employees_company_id_fkey(company_name), departments:departments!employees_department_id_fkey(dept_name)')
+        .eq('id', employeeId).maybeSingle()
+      const mm: any = me || {}
+      const others = [mm.l1_manager_id, mm.hod_id].filter(Boolean)
+      const { data: rel } = others.length
+        ? await supabase.from('employees').select('id, full_name, emp_code').in('id', others)
+        : { data: [] as any[] }
+      const byId: Record<string, any> = {}; (rel || []).forEach((r: any) => { byId[r.id] = r })
+      // Raiser's ESS role (for "Raised By — Role"): first non-Employee role, else designation.
+      let role = mm.designation || ''
+      const { data: acct } = await supabase.from('ess_accounts').select('id').eq('employee_id', employeeId).maybeSingle()
+      if (acct?.id) {
+        const { data: ur } = await supabase.from('ess_user_roles').select('ess_roles(role_name, role_code)').eq('ess_account_id', acct.id).eq('is_active', true)
+        const names = (ur || []).map((r: any) => r.ess_roles).filter((r: any) => r && r.role_code !== 'EMPLOYEE')
+        if (names.length) role = names[0].role_name
+      }
+      const fmt = (p: any) => p ? `${p.full_name} (${p.emp_code})` : '—'
+      const bundle = {
+        name: mm.full_name || '', code: mm.emp_code || '', designation: mm.designation || '', role,
+        company_id: mm.company_id || '', company_name: mm.companies?.company_name || '—',
+        department_id: mm.department_id || '', department_name: mm.departments?.dept_name || '—',
+        rm1: mm.full_name ? `${mm.full_name} (${mm.emp_code})` : '—',
+        rm2: fmt(byId[mm.l1_manager_id]), rm2_id: mm.l1_manager_id || '',
+        hod: fmt(byId[mm.hod_id]), hod_id: mm.hod_id || '',
+      }
+      // Reference lists — company-scoped where it matters.
+      const [mst, ppl, locs, sk] = await Promise.all([
+        loadMasters(['grade', 'shift_type', 'candidate_source', 'separation_reason', 'business_unit', 'cost_center', 'currency']),
+        mm.company_id ? supabase.from('employees').select('id, full_name, emp_code, designation').eq('company_id', mm.company_id).eq('employment_status', 'Active').order('full_name') : Promise.resolve({ data: [] as any[] }),
+        mm.company_id ? supabase.from('locations').select('id, location_name').eq('company_id', mm.company_id).eq('status', 'Active').order('location_name') : Promise.resolve({ data: [] as any[] }),
+        supabase.from('skills').select('name').order('name'),
+      ])
+      if (!live) return
+      setAuto(bundle)
+      setMasters(mst)
+      setPeople((ppl.data as any[]) || [])
+      setLocations((locs.data as any[]) || [])
+      setSkills(((sk.data as any[]) || []).map((r: any) => r.name).filter(Boolean))
+      setForm((f: any) => ({ ...f, raised_by_name: bundle.name, raised_by_role: bundle.role }))
+      setLoading(false)
+    })()
+    return () => { live = false }
+  }, [employeeId])
+
+  const isQuick = form.mrf_type === 'Quick Hire'
+  const isReplacement = form.hiring_type === 'Replacement' || form.hiring_type === 'Backfill'
+  const comp = compOf(form.employment_type)
+
+  // Lane check — annualised max vs the ₹6L cap.
+  const annualMax = (Number(form.budget_max) || 0) * (comp.period === 'MONTHLY' ? 12 : 1)
+  const laneShouldBe = annualMax > QUICK_HIRE_CAP ? 'Full MRF' : 'Quick Hire'
+  const laneMismatch = !!form.budget_max && laneShouldBe !== form.mrf_type
+
+  async function save(status: 'DRAFT' | 'SUBMITTED') {
+    const designation = String(form.designation || '').trim()
+    if (!designation) { notify('Designation is required.', 'error'); return }
+    if (status === 'SUBMITTED') {
+      if (!form.reason) { notify('Reason for hire is required to submit.', 'error'); return }
+      if (!form.target_joining_date) { notify('Target joining date is required to submit.', 'error'); return }
+      if (!isQuick && !String(form.skills_required || '').trim() && !String(form.job_description || '').trim()) { notify('Add mandatory skills or a job description to submit a Full MRF.', 'error'); return }
+      if (isReplacement && !form.outgoing_employee_id) { notify('Pick the outgoing employee for a replacement.', 'error'); return }
+    }
+    setSaving(true)
+    try {
+      const payload = {
+        action: 'create', status, designation,
+        mrf_type: form.mrf_type, hiring_type: form.hiring_type, urgency: form.urgency,
+        raised_by_name: form.raised_by_name || null, raised_by_role: form.raised_by_role || null,
+        job_title: form.job_title || null, business_unit: form.business_unit || null, grade: form.grade || null, job_code: form.job_code || null,
+        openings: Number(form.no_of_openings) || 1,
+        hod_id: auto?.hod_id || null,
+        employment_type: form.employment_type, work_mode: form.work_mode, location_id: form.location_id || null, shift_schedule: form.shift_schedule || null,
+        cost_center: form.cost_center || null, is_budgeted: form.is_budgeted, headcount_ref: form.headcount_ref || null,
+        currency: form.currency || 'INR', budget_min: form.budget_min || null, budget_max: form.budget_max || null,
+        compensation_type: comp.kind, pay_period: comp.period,
+        duration_months: (comp.fixedTerm || form.duration_months) ? (Number(form.duration_months) || null) : null,
+        reason: form.reason || null,
+        outgoing_employee_id: isReplacement ? (form.outgoing_employee_id || null) : null,
+        exit_reason: isReplacement ? (form.exit_reason || null) : null,
+        business_justification: form.business_justification || null,
+        target_joining_date: form.target_joining_date || null, validity_date: form.validity_date || null,
+        experience_min: form.experience_min || null, experience_max: form.experience_max || null,
+        education_min: form.education_min || null, education_max: form.education_max || null,
+        previous_company_preference: form.previous_company_preference || null,
+        skills_required: form.skills_required || null, good_to_have_skills: form.good_to_have_skills || null,
+        job_description: form.job_description || null,
+        sourcing_mode: form.sourcing_mode || null, sourcing_channels: form.sourcing_channels || [],
+      }
+      await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify(payload) })
+      notify(status === 'DRAFT' ? 'MRF saved as draft.' : 'MRF raised — sent for approval.')
+      onDone()
+    } catch (e: any) { notify(e.message, 'error') } finally { setSaving(false) }
+  }
+
+  if (loading) return <div style={{ fontSize: 13, color: C.muted, padding: '10px 0' }}>Loading form…</div>
+
+  return (
+    <div style={{ border: `2px solid ${C.purple}`, borderRadius: 10, padding: '14px 16px', marginBottom: 12, background: '#fff' }}>
+      {/* Quick Hire / Full MRF toggle */}
+      <div style={{ display: 'flex', gap: 0, border: `1px solid ${C.purple}`, borderRadius: 8, overflow: 'hidden', marginBottom: 4 }}>
+        {(['Quick Hire', 'Full MRF'] as const).map(t => (
+          <button key={t} type="button" onClick={() => F('mrf_type', t)}
+            style={{ flex: 1, padding: '9px 8px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+              background: form.mrf_type === t ? C.purple : '#F5F3FF', color: form.mrf_type === t ? '#fff' : C.purpleD }}>
+            {t} ({t === 'Quick Hire' ? 'CTC ≤ ₹6L' : 'CTC > ₹6L'})
+          </button>
+        ))}
+      </div>
+      {laneMismatch && (
+        <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '7px 10px', margin: '8px 0', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span>This budget suits <b>{laneShouldBe}</b>.</span>
+          <button type="button" style={{ ...st.btnO, padding: '4px 10px', fontSize: 12 }} onClick={() => F('mrf_type', laneShouldBe)}>Switch to {laneShouldBe}</button>
+        </div>
+      )}
+
+      {/* 1 · Requisition Meta */}
+      <SectionLine n="1" title="Requisition Meta" />
+      <div style={g2}>
+        <Field label="Requisition Type"><Sel value={form.hiring_type} onChange={v => F('hiring_type', v)}>{REQ_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
+        <Field label="Priority"><Sel value={form.urgency} onChange={v => F('urgency', v)}>{PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Sel></Field>
+        <Field label="Requisition ID" hint="Generated on save"><div style={{ ...st.input, background: C.locked, color: C.faint, display: 'flex', alignItems: 'center', minHeight: 38 }}>Auto-generated</div></Field>
+        <Field label="Raised By — Name"><input style={st.input} value={form.raised_by_name} onChange={e => F('raised_by_name', e.target.value)} placeholder="Your name" /></Field>
+        <Field label="Raised By — Role"><input style={st.input} value={form.raised_by_role} onChange={e => F('raised_by_role', e.target.value)} placeholder="e.g. Department Head" /></Field>
+      </div>
+
+      {/* 2 · Position Details */}
+      <SectionLine n="2" title="Position Details" />
+      <div style={g2}>
+        <Locked label="Company" value={auto?.company_name} hint="auto · your company" />
+        <Locked label="Department / Function" value={auto?.department_name} hint="auto · your department" />
+        <Field label="Business Unit"><MasterSel value={form.business_unit} onChange={v => F('business_unit', v)} opts={masters.business_unit || []} placeholder="Select…" /></Field>
+        <Field label="Job Title"><input style={st.input} value={form.job_title} onChange={e => F('job_title', e.target.value)} placeholder="e.g. Backend Engineer II" /></Field>
+        <Field label="Designation" required><input style={st.input} value={form.designation} onChange={e => F('designation', e.target.value)} placeholder="e.g. Senior Engineer" /></Field>
+        <Field label="No. of Openings"><input type="number" min="1" style={st.input} value={form.no_of_openings} onChange={e => F('no_of_openings', e.target.value)} /></Field>
+        <Field label="Grade / Band"><MasterSel value={form.grade} onChange={v => F('grade', v)} opts={masters.grade || []} placeholder="Select…" /></Field>
+        <Field label="Job Code" hint="Position-based staffing only"><input style={st.input} value={form.job_code} onChange={e => F('job_code', e.target.value)} placeholder="e.g. ENG-BE-02" /></Field>
+        <Locked label="RM1 — Reporting Manager" value={auto?.rm1} hint="auto · you" />
+        <Locked label="RM2 — Skip-level Manager" value={auto?.rm2} hint="auto · your manager" />
+        <Locked label="HOD — Department Head" value={auto?.hod} hint="auto · your HOD" />
+      </div>
+
+      {/* 3 · Employment Details */}
+      <SectionLine n="3" title="Employment Details" />
+      <div style={g2}>
+        <Field label="Employment Type"><Sel value={form.employment_type} onChange={v => F('employment_type', v)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
+        <Field label="Work Mode"><Sel value={form.work_mode} onChange={v => F('work_mode', v)}>{WORK_MODES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
+        <Field label="Work Location"><Sel value={form.location_id} onChange={v => F('location_id', v)}><option value="">Select Location</option>{locations.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}</Sel></Field>
+        <Field label="Shift / Schedule"><MasterSel value={form.shift_schedule} onChange={v => F('shift_schedule', v)} opts={masters.shift_type || []} placeholder="Select…" /></Field>
+      </div>
+
+      {/* 4 · Budget & Cost */}
+      <SectionLine n="4" title="Budget & Cost" />
+      <div style={{ fontSize: 12, color: C.purpleD, background: C.soft, borderRadius: 7, padding: '7px 10px', margin: '2px 0 8px' }}>
+        {form.employment_type} → paid as <b>{comp.label.toLowerCase()}</b>, quoted <b>{perLabel(comp.period)}</b>
+      </div>
+      <div style={g2}>
+        <Field label="Cost Center"><MasterSel value={form.cost_center} onChange={v => F('cost_center', v)} opts={masters.cost_center || []} placeholder="Select…" /></Field>
+        <Field label="Budgeted Position"><Sel value={form.is_budgeted} onChange={v => F('is_budgeted', v)}><option value="">Not specified</option><option value="yes">Yes — budgeted</option><option value="no">No — unbudgeted</option></Sel></Field>
+        <Field label="Approved Headcount Ref."><input style={st.input} value={form.headcount_ref} onChange={e => F('headcount_ref', e.target.value)} placeholder="e.g. HCP-2026-014" /></Field>
+        <Field label="Currency"><MasterSel value={form.currency} onChange={v => F('currency', v)} opts={masters.currency || []} placeholder="INR" useCode /></Field>
+        <Field label={`${comp.label} Range — Min`} hint={perLabel(comp.period)}><input type="number" style={st.input} value={form.budget_min} onChange={e => F('budget_min', e.target.value)} placeholder={comp.ph[0]} /></Field>
+        <Field label={`${comp.label} Range — Max`} hint={perLabel(comp.period)}><input type="number" style={st.input} value={form.budget_max} onChange={e => F('budget_max', e.target.value)} placeholder={comp.ph[1]} /></Field>
+        {(comp.fixedTerm || comp.period === 'MONTHLY') && (
+          <Field label="Duration (months)"><input type="number" min="1" max="60" style={st.input} value={form.duration_months} onChange={e => F('duration_months', e.target.value)} /></Field>
+        )}
+      </div>
+
+      {/* 5 · Justification */}
+      <SectionLine n="5" title="Justification" />
+      <div style={g2}>
+        <Field label="Reason for Hire"><Sel value={form.reason} onChange={v => F('reason', v)}><option value="">Select Reason</option>{REASON_FOR_HIRE.map(r => <option key={r}>{r}</option>)}</Sel></Field>
+        <Field label="Outgoing Employee" hint="Only for Replacement / Backfill">
+          <Sel value={form.outgoing_employee_id} onChange={v => F('outgoing_employee_id', v)}>
+            <option value="">{isReplacement ? 'Select Employee' : '— N/A —'}</option>
+            {isReplacement && people.map(p => <option key={p.id} value={p.id}>{p.full_name} ({p.emp_code})</option>)}
+          </Sel>
+        </Field>
+        <Field label="Reason for Exit"><MasterSel value={form.exit_reason} onChange={v => F('exit_reason', v)} opts={isReplacement ? (masters.separation_reason || []) : []} placeholder={isReplacement ? 'Select Reason' : '— N/A —'} /></Field>
+      </div>
+      <div style={{ marginTop: 10 }}>
+        <Field label="Business Justification"><textarea style={{ ...st.input, minHeight: 80, resize: 'vertical' }} value={form.business_justification} onChange={e => F('business_justification', e.target.value)} placeholder="Why this headcount is needed — business impact, workload, revenue linkage…" /></Field>
+      </div>
+
+      {/* 6 · Timeline */}
+      <SectionLine n="6" title="Timeline" />
+      <div style={g2}>
+        <Field label="Target Joining Date"><input type="date" style={st.input} value={form.target_joining_date} onChange={e => F('target_joining_date', e.target.value)} /></Field>
+        <Field label="Requisition Validity / Expiry" hint="Auto-flagged as expired if unfilled past this date"><input type="date" style={st.input} value={form.validity_date} onChange={e => F('validity_date', e.target.value)} /></Field>
+      </div>
+
+      {/* 7 · Candidate Requirements (Full MRF only) */}
+      {!isQuick && <>
+        <SectionLine n="7" title="Candidate Requirements" />
+        <div style={g2}>
+          <Field label="Experience — Min (years)"><input type="number" style={st.input} value={form.experience_min} onChange={e => F('experience_min', e.target.value)} /></Field>
+          <Field label="Experience — Max (years)"><input type="number" style={st.input} value={form.experience_max} onChange={e => F('experience_max', e.target.value)} /></Field>
+          <Field label="Education — Minimum"><Sel value={form.education_min} onChange={v => F('education_min', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
+          <Field label="Education — Maximum"><Sel value={form.education_max} onChange={v => F('education_max', v)}><option value="">Any</option>{EDUCATION_OPTIONS.map(o => <option key={o}>{o}</option>)}</Sel></Field>
+          <Field label="Previous Company Preference"><Sel value={form.previous_company_preference} onChange={v => F('previous_company_preference', v)}>{PREV_COMPANY.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Sel></Field>
+        </div>
+        <div style={{ marginTop: 10, display: 'grid', gap: 10 }}>
+          <Field label="Mandatory Skills"><SkillsMultiSelect value={form.skills_required} onChange={v => F('skills_required', v)} allSkills={skills} onAddSkill={addSkill} /></Field>
+          <Field label="Good-to-have Skills"><SkillsMultiSelect value={form.good_to_have_skills} onChange={v => F('good_to_have_skills', v)} allSkills={skills} onAddSkill={addSkill} placeholder="Search good-to-have skills, or add custom" /></Field>
+          <Field label="Job Description"><textarea style={{ ...st.input, minHeight: 120, resize: 'vertical' }} value={form.job_description} onChange={e => F('job_description', e.target.value)} placeholder="Role summary, responsibilities, must-haves…" /></Field>
+        </div>
+      </>}
+
+      {/* 8 · Approval Workflow (fixed ESS routing) */}
+      <SectionLine n="8" title="Approval Workflow" />
+      <div style={{ fontSize: 12.5, color: C.muted, background: C.soft, borderRadius: 7, padding: '10px 12px', lineHeight: 1.6 }}>
+        On submit this routes through your reporting chain, company-scoped:
+        <div style={{ marginTop: 4, color: C.ink, fontWeight: 500 }}>You ({auto?.code}) → RM2 {auto?.rm2 !== '—' ? `· ${auto.rm2}` : '(if set)'} → HR Head</div>
+      </div>
+
+      {/* 9 · Sourcing (Full MRF only) */}
+      {!isQuick && <>
+        <SectionLine n="9" title="Sourcing" />
+        <div style={g2}>
+          <Field label="Internal vs External"><Sel value={form.sourcing_mode} onChange={v => F('sourcing_mode', v)}>{SOURCING_MODES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
+        </div>
+        <div style={{ marginTop: 10 }}>
+          <Field label="Preferred Sourcing Channels"><ChannelPicker value={form.sourcing_channels} onChange={v => F('sourcing_channels', v)} opts={masters.candidate_source || []} /></Field>
+        </div>
+      </>}
+
+      {/* 10 · Attachments */}
+      <SectionLine n="10" title="Attachments" />
+      <div style={{ fontSize: 12, color: C.faint }}>Files can be attached from the Recruitment module once the MRF is created.</div>
+
+      {/* Footer */}
+      <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+        <button type="button" style={st.btnO} disabled={saving} onClick={() => save('DRAFT')}>Save Draft</button>
+        <button type="button" style={st.btn} disabled={saving} onClick={() => save('SUBMITTED')}>{saving ? 'Submitting…' : 'Submit for Approval'}</button>
+        <button type="button" style={{ ...st.btnO, marginLeft: 'auto' }} disabled={saving} onClick={onCancel}>Cancel</button>
+      </div>
+    </div>
+  )
+}

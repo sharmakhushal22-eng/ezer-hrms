@@ -1,6 +1,8 @@
 'use client'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter, scopedCompanies } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
@@ -197,8 +199,16 @@ function SectionLine({ title }:{ title:string }) {
   )
 }
 
+// Roles that get FULL oversight of recruitment — they see every MRF and candidate in
+// their company. Everyone else who can open recruitment (a Hiring Manager / Recruiter) is
+// scoped to the MRFs an HR Head assigned to them (manpower_requisitions.assigned_recruiter_ids).
+const OVERSIGHT_CODES = ['ADMIN_SUPER', 'SUPER_ADMIN', 'ALL_ACCESS', 'HR_HEAD', 'HR_MANAGER', 'CHRO']
+
 // ── MAIN ──────────────────────────────────────────────────────────
 export default function RecruitmentPage() {
+  const { grant, loading: grantLoading } = useGrant()
+  // The HR Head tab is for the HR Head alone (and super admin / legacy dashboard login).
+  const isHrHead = grant.legacy || grant.isSuperAdmin || (grant.roles || []).some((r: any) => r.role_code === 'HR_HEAD')
   const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
   const [companies, setCompanies] = useState<Company[]>([])
   const [locations, setLocations] = useState<Location[]>([])
@@ -212,20 +222,37 @@ export default function RecruitmentPage() {
 
   const loadAll = useCallback(async () => {
     try {
+      // Non-cross-company users only ever load their own company's MRFs and candidates,
+      // so every tab (all rendered from this data) is company-scoped at the source.
+      const co2 = companyFilter(grant, null)
+      let mrfQ = supabase.from('manpower_requisitions').select('*').order('created_at',{ ascending:false })
+      let candQ = supabase.from('candidates').select('*').order('created_at',{ ascending:false })
+      if (co2) { mrfQ = mrfQ.eq('company_id', co2); candQ = candQ.eq('company_id', co2) }
       const [{ data:co },{ data:lo },{ data:de },{ data:mrf },{ data:cand }] = await Promise.all([
         supabase.from('companies').select('id,company_code,company_name').order('company_code'),
         supabase.from('locations').select('id,location_code,location_name,company_id').order('location_name'),
         supabase.from('departments').select('id,dept_name,dept_code,company_id').order('dept_name'),
-        supabase.from('manpower_requisitions').select('*').order('created_at',{ ascending:false }),
-        supabase.from('candidates').select('*').order('created_at',{ ascending:false }),
+        mrfQ,
+        candQ,
       ])
-      setCompanies(co||[]); setLocations(lo||[]); setDepartments(de||[])
-      setMrfs(mrf||[]); setCandidates(cand||[])
+      setCompanies(scopedCompanies(grant, co||[])); setLocations(lo||[]); setDepartments(de||[])
+      // A hiring manager only sees the MRFs an HR Head assigned to them, and only the
+      // candidates under those MRFs. Assigned HMs of the SAME MRF therefore share its
+      // candidates; a different MRF's candidates never appear. Oversight roles see all.
+      let mrf2: any[] = mrf || [], cand2: any[] = cand || []
+      const myId = grant.employeeId
+      const oversight = grant.legacy || grant.isSuperAdmin || grant.crossCompany || (grant.roles || []).some((r: any) => OVERSIGHT_CODES.includes(r.role_code))
+      if (!oversight && myId) {
+        const mine = new Set(mrf2.filter(m => Array.isArray(m.assigned_recruiter_ids) && m.assigned_recruiter_ids.includes(myId)).map(m => m.id))
+        mrf2 = mrf2.filter(m => mine.has(m.id))
+        cand2 = cand2.filter(c => c.mrf_id && mine.has(c.mrf_id))
+      }
+      setMrfs(mrf2); setCandidates(cand2)
     } catch(e) { showNotify('Data load error','error') }
     setLoading(false)
-  }, [supabase, showNotify])
+  }, [grant, showNotify])
 
-  useEffect(() => { loadAll() }, [loadAll])
+  useEffect(() => { if (!grantLoading) loadAll() }, [loadAll, grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Eleven tabs is a lot to scan, and eleven different emoji in front of them
   // made it harder rather than easier — each one drew the eye equally. The
@@ -243,6 +270,10 @@ export default function RecruitmentPage() {
     { k:'preonboarding', l:'Pre-onboarding' },
     { k:'jobstatus', l:'Job Status' },
   ]
+  const visibleTabs = TABS.filter(t => t.k !== 'hrhead' || isHrHead)
+  // Scoped-HM MRF id set for the Send Offers tab (null = oversight, no filter). Memoised so
+  // the child's fetch effect does not refire on every render.
+  const sendOfferAllowed = useMemo(() => isHrHead ? null : new Set(mrfs.map(m => m.id)), [isHrHead, mrfs])
   const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify }
 
   if (loading) return (
@@ -273,7 +304,7 @@ export default function RecruitmentPage() {
                     padding:`10px ${S.xl}px`,
                     borderTop:`1px solid ${C.line}`, borderBottom:`1px solid ${C.line}`,
                     position:'sticky', top:0, zIndex:30, boxShadow:E.flat }}>
-        {TABS.map(t => {
+        {visibleTabs.map(t => {
           const on = tab === t.k
           return (
             // Pill tabs — same shape as the Onboarding page's join-window buttons.
@@ -301,8 +332,8 @@ export default function RecruitmentPage() {
         {tab==='pipeline' && <PipelineTab {...props} />}
         {tab==='negotiation' && <NegotiationTab {...props} />}
         {tab==='offerapproval' && <OfferApprovalTab {...props} />}
-        {tab==='hrhead' && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
-        {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
+        {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
+        {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
         {tab==='offers' && <OffersTab {...props} />}
         {tab==='preonboarding' && <PreOnboardTab {...props} />}
         {tab==='jobstatus' && <JobStatusTab {...props} />}

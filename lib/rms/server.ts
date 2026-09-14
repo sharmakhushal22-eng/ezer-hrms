@@ -32,6 +32,18 @@ const sb = createClient(
 
 export { sb as rmsServiceClient }
 
+/** The EMPLOYEE base role is automatic: every person in the company holds it, whether or
+ *  not anyone assigned it, and it cannot be taken away from the Assign Roles screen. It is
+ *  the self-service floor (Company Profile view + the ESS portal). Resolved once and cached
+ *  — the role's id never changes for the life of the process. */
+let _employeeRoleId: string | null | undefined
+async function employeeBaseRoleId(): Promise<string | null> {
+  if (_employeeRoleId !== undefined) return _employeeRoleId
+  const { data } = await sb.from('ess_roles').select('id').eq('role_code', 'EMPLOYEE').maybeSingle()
+  _employeeRoleId = (data?.id as string) ?? null
+  return _employeeRoleId
+}
+
 interface HeaderBag { headers: { get(n: string): string | null } }
 
 function bearer(req: HeaderBag): string {
@@ -79,10 +91,11 @@ async function legacyGrant(email: string | null): Promise<Grant> {
 /** Resolve one employee into a full grant. Exported because the role assignment screen
  *  needs to preview somebody else's access without becoming them. */
 export async function grantForEmployee(employeeId: string): Promise<Grant> {
-  const [{ data: emp }, { data: acct }, enforced] = await Promise.all([
-    sb.from('employees').select('id, full_name, emp_code').eq('id', employeeId).maybeSingle(),
+  const [{ data: emp }, { data: acct }, enforced, empRoleId] = await Promise.all([
+    sb.from('employees').select('id, full_name, emp_code, company_id').eq('id', employeeId).maybeSingle(),
     sb.from('ess_accounts').select('id').eq('employee_id', employeeId).maybeSingle(),
     enforcementOn(),
+    employeeBaseRoleId(),
   ])
   if (!emp) return emptyGrant()
 
@@ -90,20 +103,23 @@ export async function grantForEmployee(employeeId: string): Promise<Grant> {
     employeeId: emp.id as string,
     name: (emp.full_name as string) ?? null,
     empCode: (emp.emp_code as string) ?? null,
+    companyId: (emp.company_id as string) ?? null,
     enforced,
   }
-  if (!acct?.id) {
-    // No ESS account means no roles — they cannot sign in at all.
-    return resolveGrant({ ...base, roles: [], permissions: [], approvals: [] })
+
+  // Whatever was explicitly assigned (needs an account) …
+  let heldRoleIds: string[] = []
+  if (acct?.id) {
+    const { data: ur } = await sb
+      .from('ess_user_roles')
+      .select('role_id')
+      .eq('ess_account_id', acct.id)
+      .eq('is_active', true)
+    heldRoleIds = (ur || []).map((r: any) => r.role_id as string)
   }
-
-  const { data: ur } = await sb
-    .from('ess_user_roles')
-    .select('role_id')
-    .eq('ess_account_id', acct.id)
-    .eq('is_active', true)
-
-  const roleIds = (ur || []).map((r: any) => r.role_id as string)
+  // … plus the automatic EMPLOYEE base role, always. A newly-added employee gets its
+  // permissions the moment they exist, with no account, backfill or assignment step.
+  const roleIds = [...new Set([...heldRoleIds, ...(empRoleId ? [empRoleId] : [])])]
   if (!roleIds.length) return resolveGrant({ ...base, roles: [], permissions: [], approvals: [] })
 
   const [{ data: roles }, { data: perms }, { data: rights }] = await Promise.all([

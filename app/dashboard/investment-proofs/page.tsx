@@ -7,6 +7,8 @@
 //   • the gap between declared and proven, per employee
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter } from '@/lib/rms/resolve'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -110,6 +112,7 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
 }
 
 export default function InvestmentProofsPage() {
+  const { grant } = useGrant()
   const [rows, setRows] = useState<Row[]>([])
   const [emps, setEmps] = useState<Record<string, { name: string; code: string; leaving: string | null }>>({})
   const [draft, setDraft] = useState<Record<string, string>>({})
@@ -124,23 +127,29 @@ export default function InvestmentProofsPage() {
     try {
       const { data, error } = await supabase.from('investment_proofs').select('*').eq('fy', FY).order('deadline')
       if (error) throw new Error(error.message)
-      const list = (data || []) as any as Row[]
+      let list = (data || []) as any as Row[]
+      // investment_proofs has no company_id — scope by the employee's company: a
+      // non-cross-company caller only sees proofs for their own company's staff.
+      const co = companyFilter(grant, grant.companyId)
+      const ids = Array.from(new Set(list.map(r => r.employee_id)))
+      if (ids.length) {
+        const { data: e } = await supabase.from('employees')
+          .select('id, full_name, emp_code, company_id, date_of_leaving, last_working_date, relieving_date').in('id', ids)
+        const m: Record<string, { name: string; code: string; leaving: string | null }> = {}
+        const companyById: Record<string, string | null> = {}
+        ;(e || []).forEach((x: any) => {
+          m[x.id] = { name: x.full_name || '—', code: x.emp_code || '—', leaving: x.date_of_leaving || x.last_working_date || x.relieving_date || null }
+          companyById[x.id] = x.company_id ?? null
+        })
+        setEmps(m)
+        if (co) list = list.filter(r => companyById[r.employee_id] === co)
+      }
       setRows(list)
       const d: Record<string, string> = {}
       list.forEach(r => { d[r.id] = String(num(r.submitted_amount) || '') })
       setDraft(d)
-      const ids = Array.from(new Set(list.map(r => r.employee_id)))
-      if (ids.length) {
-        const { data: e } = await supabase.from('employees')
-          .select('id, full_name, emp_code, date_of_leaving, last_working_date, relieving_date').in('id', ids)
-        const m: Record<string, { name: string; code: string; leaving: string | null }> = {}
-        ;(e || []).forEach((x: any) => {
-          m[x.id] = { name: x.full_name || '—', code: x.emp_code || '—', leaving: x.date_of_leaving || x.last_working_date || x.relieving_date || null }
-        })
-        setEmps(m)
-      }
     } catch (e: any) { setErr(e.message || String(e)) } finally { setLoading(false) }
-  }, [])
+  }, [grant]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
 
   async function decide(r: Row, approve: boolean) {

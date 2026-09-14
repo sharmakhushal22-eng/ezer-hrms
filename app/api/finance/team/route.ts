@@ -8,6 +8,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { serviceClient } from '@/lib/travel/access';
 import { requireModule } from '@/lib/api-auth';
+import { grantForRequest } from '@/lib/rms/server';
+import { companyFilter } from '@/lib/rms/resolve';
 import { errorResponse } from '@/lib/travel/errors';
 
 export const dynamic = 'force-dynamic';
@@ -18,19 +20,18 @@ export async function GET(req: NextRequest) {
     if (gate.error) return gate.error;
 
     const sb = serviceClient();
-    const companyId = req.nextUrl.searchParams.get('company_id');
-    if (!companyId) return NextResponse.json({ error: 'company_id is required' }, { status: 400 });
+    // Pin to the caller's own company unless cross-company. null = every company
+    // (a cross caller who asked for all).
+    const grant = await grantForRequest(req);
+    const company = companyFilter(grant, req.nextUrl.searchParams.get('company_id'));
 
     let tq = sb.from('finance_team').select('*').order('role').order('created_at');
-    // 'ALL' = every company's team in one list. The PATCH authority check already
-    // looks a member up by employee_id alone, so the acting-as list can span
-    // companies without changing what anyone is allowed to do.
-    if (companyId !== 'ALL') tq = tq.eq('company_id', companyId);
+    if (company) tq = tq.eq('company_id', company);
     const { data: teamRaw, error } = await tq;
     if (error) throw error;
-    // One row per person on ALL — the same head of finance on three companies is
-    // one person in the acting-as dropdown, not three entries.
-    const team = companyId === 'ALL'
+    // Across-companies (cross caller, no pick) → one row per person, so the same head
+    // of finance on three companies is one entry in the acting-as dropdown.
+    const team = !company
       ? Array.from(new Map((teamRaw ?? []).map((t) => [t.employee_id, t])).values())
       : teamRaw;
 

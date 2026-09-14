@@ -10,6 +10,8 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
+import { useGrant } from '@/lib/rms/client';
+import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve';
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -602,9 +604,38 @@ const REPORTS: ReportConfig[] = [
       { key: 'acknowledged', label: 'Acknowledged', format: 'boolean' },
     ],
   },
+  // ROLES ACCESS — who holds which ESS roles, with their reporting line.
+  {
+    id: 'roles_access',
+    label: 'Roles & Access',
+    description: 'Every employee with their assigned ESS roles, reporting line (L1 / L2 / HOD) and login status',
+    icon: '',
+    category: 'Roles Access',
+    scope: 'all',
+    filters: [
+      { key: 'department', label: 'Department', type: 'select', field: 'department_name' },
+      { key: 'location', label: 'Location / Branch', type: 'select', field: 'location_name' },
+      { key: 'employment_status', label: 'Status', type: 'select', options: ['Active','Resigned','Terminated','Absconded'] },
+      { key: 'role', label: 'Has Role (contains)', type: 'text' },
+      { key: 'ess_status', label: 'Login Status', type: 'select', options: ['ACTIVE','INACTIVE','LOCKED','No account'] },
+    ],
+    columns: [
+      { key: 'emp_code', label: 'Emp Code' },
+      { key: 'full_name', label: 'Full Name' },
+      { key: 'designation', label: 'Designation' },
+      { key: 'department_name', label: 'Department' },
+      { key: 'location_name', label: 'Location / Branch' },
+      { key: 'company_name', label: 'Company' },
+      { key: 'roles', label: 'Roles' },
+      { key: 'l1_manager_name', label: 'L1 Manager' },
+      { key: 'l2_manager_name', label: 'L2 Manager' },
+      { key: 'hod_name', label: 'HOD' },
+      { key: 'ess_status', label: 'Login Status', format: 'badge' },
+    ],
+  },
 ];
 
-const CATEGORIES = ['All', 'Employee', 'Salary', 'Leave', 'Tax', 'Statutory'];
+const CATEGORIES = ['All', 'Employee', 'Salary', 'Leave', 'Tax', 'Statutory', 'Roles Access'];
 
 // ─── Helper: format cell ──────────────────────────────────────
 function formatCell(value: any, format?: string): string {
@@ -662,6 +693,8 @@ function flattenEmp(e: any, nameById: Record<string, string>) {
     company_name: e.companies?.company_name ?? null,
     res_state: e.res_state ?? e.locations?.state ?? null,
     l1_manager_name: e.l1_manager_id ? (nameById[e.l1_manager_id] || null) : (e.reporting_manager || null),
+    l2_manager_name: e.l2_manager_id ? (nameById[e.l2_manager_id] || null) : null,
+    hod_name: e.hod_id ? (nameById[e.hod_id] || null) : null,
     hr_manager_name: e.hr_manager_id ? (nameById[e.hr_manager_id] || null) : null,
     tenure_months: monthsBetween(e.company_doj || e.group_doj, exitDate),
   };
@@ -699,6 +732,42 @@ async function fetchReportRows(report: ReportConfig, companyId: string): Promise
     emps = emps.filter((e: any) => ['Resigned', 'Terminated', 'Absconded'].includes(e.employment_status));
   } else if (report.scope === 'confirmation_due') {
     emps = emps.filter((e: any) => e.employment_status === 'Active' && e.confirmation_status !== 'Confirmed');
+  }
+
+  // Roles & Access — one row per employee, enriched with their ESS roles + login status.
+  if (report.id === 'roles_access') {
+    const ids = emps.map((e: any) => e.id);
+    const empById: Record<string, any> = {};
+    emps.forEach((e: any) => { empById[e.id] = e; e.ess_status = 'No account'; });
+    // accounts → status, and a way back from account id to employee
+    const acctIdToEmp: Record<string, string> = {};
+    const acctIds: string[] = [];
+    for (let i = 0; i < ids.length; i += 500) {
+      const { data } = await supabase.from('ess_accounts').select('id, employee_id, status').in('employee_id', ids.slice(i, i + 500));
+      (data || []).forEach((a: any) => { acctIdToEmp[a.id] = a.employee_id; acctIds.push(a.id); if (empById[a.employee_id]) empById[a.employee_id].ess_status = a.status || 'INACTIVE'; });
+    }
+    // role names per account
+    const roleNamesByEmp: Record<string, string[]> = {};
+    if (acctIds.length) {
+      const { data: allRoles } = await supabase.from('ess_roles').select('id, role_name');
+      const roleName: Record<string, string> = {};
+      (allRoles || []).forEach((r: any) => { roleName[r.id] = r.role_name; });
+      for (let i = 0; i < acctIds.length; i += 500) {
+        const { data } = await supabase.from('ess_user_roles').select('ess_account_id, role_id').eq('is_active', true).in('ess_account_id', acctIds.slice(i, i + 500));
+        (data || []).forEach((ur: any) => {
+          const emp = acctIdToEmp[ur.ess_account_id]; if (!emp) return;
+          const arr = roleNamesByEmp[emp] || (roleNamesByEmp[emp] = []);
+          const nm = roleName[ur.role_id]; if (nm) arr.push(nm);
+        });
+      }
+    }
+    emps.forEach((e: any) => {
+      let names = roleNamesByEmp[e.id] || [];
+      // The Employee base role is automatic for everyone — always show it.
+      if (!names.some((n: string) => n.toLowerCase() === 'employee')) names = ['Employee', ...names];
+      e.roles = names.join(', ');
+    });
+    return emps;
   }
 
   if (!report.join) return emps;
@@ -864,6 +933,11 @@ function applyFilters(rows: any[], report: ReportConfig, filters: Record<string,
         if (rg !== String(val).toUpperCase()) return false;
         continue;
       }
+      if (f.key === 'role') {
+        // Substring match against the comma-joined role list.
+        if (!String(r.roles || '').toLowerCase().includes(String(val).toLowerCase())) return false;
+        continue;
+      }
       if (String(r[field] ?? '') !== String(val)) return false;
     }
     return true;
@@ -872,6 +946,7 @@ function applyFilters(rows: any[], report: ReportConfig, filters: Record<string,
 
 // ─── Main Page ────────────────────────────────────────────────
 export default function ReportsPage() {
+  const { grant, loading: grantLoading } = useGrant();
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([]);
   const [companyId, setCompanyId] = useState('');
 
@@ -884,9 +959,14 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (grantLoading) return;
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
-      .then(({ data }) => setCompanies(data || []));
-  }, []);
+      .then(({ data }) => {
+        setCompanies(scopedCompanies(grant, data || []));
+        const def = defaultCompanyId(grant);
+        if (def) setCompanyId(def);
+      });
+  }, [grantLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredReports = REPORTS.filter(r =>
     (category === 'All' || r.category === category) &&
@@ -983,7 +1063,7 @@ export default function ReportsPage() {
           <div style={{ marginLeft: 'auto' }}>
             <label style={{ fontSize: 11, color: C.muted, display: 'block', marginBottom: 4 }}>Company</label>
             <select style={{ ...s.inp, minWidth: 200 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-              <option value=''>All Companies</option>
+              {grant.crossCompany && <option value=''>All Companies</option>}
               {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
             </select>
           </div>
@@ -1098,7 +1178,7 @@ export default function ReportsPage() {
         </div>
         <div style={{ marginLeft: 'auto' }}>
           <select style={{ ...s.inp, minWidth: 200 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-            <option value=''>All Companies</option>
+            {grant.crossCompany && <option value=''>All Companies</option>}
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
         </div>

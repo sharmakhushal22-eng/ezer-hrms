@@ -4,6 +4,8 @@
 // printable voucher PDF. Invoice no: EZER-FLX-{COMPANY_CODE}-{YYYYMM}-{EMP_CODE}.
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import { COMP_NAMES } from '@/lib/flexi/claims'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -93,6 +95,7 @@ function voucherHtml(ym: string, vouchers: EmpVoucher[]): string {
 }
 
 export default function FlexiInvoicesPage() {
+  const { grant, loading: grantLoading } = useGrant()
   const [companies, setCompanies] = useState<any[]>([])
   const [companyId, setCompanyId] = useState('')
   const [ym, setYm] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`)
@@ -100,9 +103,14 @@ export default function FlexiInvoicesPage() {
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
+    if (grantLoading) return
     supabase.from('companies').select('id, company_name, company_code').eq('status', 'Active').order('company_name')
-      .then(({ data }) => { setCompanies(data || []); if (data?.length) setCompanyId(data[0].id) })
-  }, [])
+      .then(({ data }) => {
+        const scoped = scopedCompanies(grant, data || [])
+        setCompanies(scoped)
+        setCompanyId(defaultCompanyId(grant) || (scoped[0]?.id || ''))
+      })
+  }, [grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
   const load = useCallback(async () => {
@@ -114,7 +122,7 @@ export default function FlexiInvoicesPage() {
       .select('employee_id, company_id, component_code, claim_amount, status, reviewed_at, employees(emp_code, full_name, designation, departments!employees_department_id_fkey(dept_name))')
       .in('status', ['APPROVED', 'PAYROLL_PROCESSED'])
       .gte('submitted_at', from).lt('submitted_at', to)
-    if (companyId) q = q.eq('company_id', companyId)   // '' = All companies
+    { const co = companyFilter(grant, companyId); if (co) q = q.eq('company_id', co) }   // '' = All (cross-company only)
     const { data } = await q
     const coById = new Map(companies.map(c => [c.id, c]))
     const byEmp = new Map<string, EmpVoucher>()
@@ -134,7 +142,7 @@ export default function FlexiInvoicesPage() {
     })
     setRows(Array.from(byEmp.values()).sort((a, b) => a.emp_code.localeCompare(b.emp_code)))
     setLoading(false)
-  }, [companyId, ym, companies])
+  }, [companyId, ym, companies, grant]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
 
   function print(vouchers: EmpVoucher[]) {
@@ -154,7 +162,7 @@ export default function FlexiInvoicesPage() {
           <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>Generate reimbursement vouchers for approved flexi claims · one voucher per employee per month</div>
         </div>
         <div><label style={{ fontSize: 10, color: C.purpleDark, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Company</label>
-          <select style={{ ...inp, minWidth: 200 }} value={companyId} onChange={e => setCompanyId(e.target.value)}><option value="">All companies</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select></div>
+          <select style={{ ...inp, minWidth: 200 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>{grant.crossCompany && <option value="">All companies</option>}{companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}</select></div>
         <div><label style={{ fontSize: 10, color: C.purpleDark, fontWeight: 600, textTransform: 'uppercase', display: 'block', marginBottom: 4 }}>Period</label>
           <input type="month" style={inp} value={ym} onChange={e => setYm(e.target.value)} /></div>
       </div>

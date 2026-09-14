@@ -7,7 +7,8 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import * as XLSX from 'xlsx'
 import { parseOrgSheet, summarise, type ParsedSheet } from '@/lib/rms/excel'
-import { authToken } from '@/lib/rms/client'
+import { authToken, useGrant } from '@/lib/rms/client'
+import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -83,6 +84,7 @@ function parseDateIndia(str: string): string | null {
 }
 
 export default function BulkUploaderPage() {
+  const { grant, loading: grantLoading } = useGrant()
   const [active, setActive] = useState(UPLOADERS[0])
   const [companies, setCompanies] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
@@ -106,13 +108,19 @@ export default function BulkUploaderPage() {
 
   const loadLogs = useCallback(() => { authHeaders().then(h => fetch('/api/employees/bulk-upload?limit=8', { headers: h }).then(r => r.json()).then(d => setLogs(d.logs || []))) }, [])
   useEffect(() => {
+    if (grantLoading) return
     Promise.all([
       supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name'),
       supabase.from('locations').select('id, location_name').eq('status', 'Active').order('location_name'),
       supabase.from('departments').select('id, dept_name').eq('status', 'Active').order('dept_name'),
-    ]).then(([c, l, d]) => { setCompanies(c.data || []); setLocations(l.data || []); setDepartments(d.data || []) })
+    ]).then(([c, l, d]) => {
+      // Non-cross-company users see and tag only their own company.
+      setCompanies(scopedCompanies(grant, c.data || [])); setLocations(l.data || []); setDepartments(d.data || [])
+      const def = defaultCompanyId(grant)
+      if (def) setFilters(f => f.company ? f : { ...f, company: def })
+    })
     loadLogs()
-  }, [loadLogs])
+  }, [loadLogs, grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function select(u: any) {
     setActive(u); setFile(null); setRows([]); setValidation([]); setStage('idle'); setAck(false); setShowAlert(false)

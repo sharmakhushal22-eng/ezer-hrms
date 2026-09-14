@@ -11,6 +11,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { parseOrgSheet, relationshipRows, summarise, type Issue } from '@/lib/rms/excel'
 import { requireModule } from '@/lib/api-auth'
+import { grantForRequest } from '@/lib/rms/server'
+import { companyFilter } from '@/lib/rms/resolve'
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -260,7 +262,13 @@ export async function POST(req: NextRequest) {
     if (gate.error) return gate.error
 
     const body = await req.json()
-    const { uploaderType, rows, performedBy, companyId, acknowledged } = body
+    const { uploaderType, rows, performedBy, acknowledged } = body
+
+    // Company scope: a non-cross-company caller is pinned to their own company, so a
+    // passed companyId for another company is overridden, and rows resolving to other
+    // companies are dropped below.
+    const grant = await grantForRequest(req)
+    const companyId = companyFilter(grant, body.companyId) || body.companyId
 
     // The org-chart workbook has a different shape from the seven flat templates, so it
     // takes a different path — but the same endpoint, the same log and the same
@@ -290,6 +298,15 @@ export async function POST(req: NextRequest) {
     for (let i = 0; i < codes.length; i += 300) {
       const { data } = await supa.from('employees').select('id, emp_code, company_id').in('emp_code', codes.slice(i, i + 300))
       ;(data || []).forEach((e: any) => { idByCode[e.emp_code] = { id: e.id, company_id: e.company_id } })
+    }
+
+    // Drop any resolved employee outside the caller's company (non-cross callers only).
+    // Their rows lose their id and are skipped downstream, so a bulk upload can never
+    // reach across companies.
+    if (!grant.crossCompany && grant.companyId) {
+      for (const code of Object.keys(idByCode)) {
+        if (idByCode[code].company_id !== grant.companyId) delete idByCode[code]
+      }
     }
 
     // Name → id maps for the employment uploader.

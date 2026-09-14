@@ -7,7 +7,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   loadRoles, loadUsers, assignRoles, loadOrgUnits, loadRolePermissions, upsertRolePermission, loadApprovalRights, setApprovalRight,
-  loadPendingForRole, resolveApproval, loadRecruiters,
+  loadPendingForRole, resolveApproval, loadRecruiters, createRole, deleteRole,
   PERM_MODULES, APPROVAL_TYPES,
   type EssRole, type EssUser, type OrgUnit, type RolePermission, type ApprovalRight, type PendingItem, type AccessLevel, type Recruiter,
 } from '@/lib/supabase-ess'
@@ -273,7 +273,10 @@ function AssignRoleTab({ roles, users, rights, org, selId, onSelect, onToggle, i
   const [companyId, setCompanyId] = useState('')
   const [locId, setLocId] = useState('')   // location / branch
   const [deptId, setDeptId] = useState('')
-  const assignable = roles.filter(r => r.role_code !== 'EMPLOYEE') // EMPLOYEE excluded (spec)
+  // EMPLOYEE is automatic (every person holds it); L1/L2/HOD come from the reporting
+  // structure (employee record / bulk uploader) — none of the four are hand-assigned here.
+  const LOCKED_ROLE_CODES = ['EMPLOYEE', 'L1_MANAGER', 'L2_MANAGER', 'HOD']
+  const assignable = roles.filter(r => !LOCKED_ROLE_CODES.includes(r.role_code))
   const sel = roles.find(r => r.id === selId) || null
   const has = (u: EssUser) => u.roles.some(r => r.id === selId)
 
@@ -436,8 +439,52 @@ function ESSPortalTab({ users, perms, rights, selId, onSelect, isMobile }: {
 }
 
 // ══════════════════════════════════════════════════════════════════
+// ══ TAB · Custom Roles (create arbitrary roles, then grant + assign them) ═════
+function CustomRolesTab({ roles, onCreate, onDelete, onGoModule }: {
+  roles: EssRole[]
+  onCreate: (name: string) => Promise<void>
+  onDelete: (role: EssRole) => Promise<void>
+  onGoModule: (id: string) => void
+}) {
+  const [name, setName] = useState('')
+  const [busy, setBusy] = useState(false)
+  const custom = roles.filter(r => r.is_custom)
+  const create = async () => {
+    if (!name.trim() || busy) return
+    setBusy(true); await onCreate(name.trim()); setName(''); setBusy(false)
+  }
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:10, maxWidth:720 }}>
+      <div style={C.card}>
+        <div style={C.sec}>Create a custom role</div>
+        <div style={{ fontSize:11, color:TK.faint, marginBottom:10 }}>
+          Invent any role, then give it module access in the <b>Module Access</b> tab and hand it to
+          employees in the ESS <b>Assign Roles</b> tab. An employee with several roles gets the widest access of them.
+        </div>
+        <div style={{ display:'flex', gap:8 }}>
+          <input style={{ ...C.input, flex:1 }} placeholder="e.g. Regional Auditor" value={name}
+            onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') create() }} />
+          <button style={C.pri} disabled={busy || !name.trim()} onClick={create}>{busy ? 'Creating…' : 'Create role'}</button>
+        </div>
+      </div>
+      <div style={C.card}>
+        <div style={C.sec}>Custom roles ({custom.length})</div>
+        {custom.length === 0 ? <div style={{ fontSize:12, color:TK.faint }}>No custom roles yet — create one above.</div> : custom.map(r => (
+          <div key={r.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, padding:'8px 10px', borderBottom:`1px solid ${TK.brandEdge}` }}>
+            <div><div style={{ fontSize:13, fontWeight:600 }}>{r.role_name}</div><div style={{ fontSize:10, color:TK.faint }}>{r.role_code}</div></div>
+            <div style={{ display:'flex', gap:6 }}>
+              <button style={C.out} onClick={() => onGoModule(r.id)}>Set access →</button>
+              <button style={{ ...C.out, border:`1px solid ${TK.criticalTint}`, color:TK.critical }} onClick={() => onDelete(r)}>Delete</button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function RolesPermissionsSection() {
-  const [tab, setTab] = useState<'assign' | 'ess' | 'overview' | 'modules' | 'approvals' | 'queue'>('assign')
+  const [tab, setTab] = useState<'assign' | 'ess' | 'overview' | 'modules' | 'approvals' | 'queue' | 'custom'>('assign')
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -510,6 +557,23 @@ export function RolesPermissionsSection() {
     setUsers(await loadUsers()) // refresh just the user→role view
   }
 
+  async function doCreateRole(name: string) {
+    const { data, error } = await createRole(name)
+    if (error) { notify('Create failed: ' + error.message, 'error'); return }
+    notify(`Role “${data?.role_name}” created · set its access in Module Access`)
+    await reload()
+  }
+
+  async function doDeleteRole(role: EssRole) {
+    if (!window.confirm(`Delete custom role “${role.role_name}”? This removes its permissions and unassigns it from every employee. This cannot be undone.`)) return
+    const { error } = await deleteRole(role)
+    if (error) { notify('Delete failed: ' + error.message, 'error'); return }
+    notify(`Role “${role.role_name}” deleted`)
+    if (selRole === role.id) setSelRole('')
+    await reload()
+    setUsers(await loadUsers())
+  }
+
   async function doResolve(item: PendingItem, action: 'APPROVED' | 'REJECTED', remark: string, recs?: Recruiter[]) {
     const byName = roles.find(r => r.id === queueRole)?.role_name || 'Admin'
     const { error } = await resolveApproval(item, action, remark, byName, recs)
@@ -518,7 +582,7 @@ export function RolesPermissionsSection() {
     reloadQueue(queueRole)
   }
 
-  const tabs: [typeof tab, string][] = [['assign', 'Role Assignment'], ['ess', 'ESS Portal View'], ['overview', 'Overview'], ['modules', 'Module Access'], ['approvals', 'Approval Rights'], ['queue', 'Approval / Rejection']]
+  const tabs: [typeof tab, string][] = [['assign', 'Role Assignment'], ['ess', 'ESS Portal View'], ['overview', 'Overview'], ['modules', 'Module Access'], ['approvals', 'Approval Rights'], ['queue', 'Approval / Rejection'], ['custom', 'Custom Roles']]
 
   return (
     <>
@@ -539,6 +603,7 @@ export function RolesPermissionsSection() {
             {tab === 'modules' && <ModuleAccessTab roles={roles} perms={perms} selId={selRole} onSelect={setSelRole} onSet={setModule} />}
             {tab === 'approvals' && <ApprovalRightsTab roles={roles} rights={rights} selId={selRole} onSelect={setSelRole} onSet={setRight} />}
             {tab === 'queue' && <ApprovalTab roles={roles} selId={queueRole} onSelect={setQueueRole} pending={pending} recruiters={recruiters} onResolve={doResolve} />}
+            {tab === 'custom' && <CustomRolesTab roles={roles} onCreate={doCreateRole} onDelete={doDeleteRole} onGoModule={(id) => { setSelRole(id); setTab('modules') }} />}
           </>
         )}
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}

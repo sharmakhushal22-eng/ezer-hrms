@@ -5,6 +5,8 @@
 // Real company / department / location data from the DB.
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import { COMP_NAMES, NO_INVOICE, ACCEPTED_TYPES, loadEntitlements, loadWindow, type ComponentLimit } from '@/lib/flexi/claims'
 import { useRef } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
@@ -527,6 +529,7 @@ function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: s
     if (term.length < 2) { setEmps([]); return }
     const t = setTimeout(async () => {
       let query = supabase.from('employees').select('id, emp_code, full_name').eq('employment_type', 'Employee').or(`emp_code.ilike.%${term}%,full_name.ilike.%${term}%`).limit(10)
+      // companyId is a prop, already scoped to the caller's company by the parent tab.
       if (companyId) query = query.eq('company_id', companyId)
       const { data } = await query
       setEmps((data || []) as Emp[])
@@ -627,6 +630,7 @@ function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: s
 // PAGE
 // ─────────────────────────────────────────────────────────────
 export default function FlexiClaimsAdmin() {
+  const { grant, loading: grantLoading } = useGrant()
   const [companies, setCompanies] = useState<{ id: string; company_name: string }[]>([])
   const [companyId, setCompanyId] = useState('')
   const [tab, setTab] = useState<'approvals' | 'submit' | 'window' | 'limits'>('approvals')
@@ -634,9 +638,14 @@ export default function FlexiClaimsAdmin() {
   const notify = (m: string) => setToast(m)
 
   useEffect(() => {
+    if (grantLoading) return
     supabase.from('companies').select('id, company_name').eq('status', 'Active').order('company_name')
-      .then(({ data }) => { setCompanies(data || []); if (data?.length) setCompanyId(data[0].id) })
-  }, [])
+      .then(({ data }) => {
+        const scoped = scopedCompanies(grant, data || [])
+        setCompanies(scoped)
+        setCompanyId(defaultCompanyId(grant) || (scoped[0]?.id || ''))
+      })
+  }, [grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const TABS: [typeof tab, string][] = [['approvals', 'Approvals'], ['submit', 'Submit Bill'], ['window', 'Window'], ['limits', 'Limits & Requests']]
 
@@ -650,7 +659,7 @@ export default function FlexiClaimsAdmin() {
         <div>
           <label style={S.label}>Company</label>
           <select style={{ ...S.inp, minWidth: 220 }} value={companyId} onChange={e => setCompanyId(e.target.value)}>
-            <option value="">All companies</option>
+            {grant.crossCompany && <option value="">All companies</option>}
             {companies.map(c => <option key={c.id} value={c.id}>{c.company_name}</option>)}
           </select>
         </div>

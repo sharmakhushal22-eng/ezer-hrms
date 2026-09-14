@@ -1,6 +1,8 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../../../lib/supabase'
+import { useGrant } from '@/lib/rms/client'
+import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
@@ -27,7 +29,7 @@ interface Employee {
   pan_number: string; aadhar_last4: string; uan_number: string
   pf_applicable: boolean; esic_applicable: boolean; pt_applicable: boolean; lwf_applicable: boolean
   bank_name: string; bank_account_last4: string; ifsc_code: string; account_type: string
-  l1_manager_id: string | null; l2_manager_id: string | null; hr_manager_id: string | null
+  l1_manager_id: string | null; l2_manager_id: string | null; hod_id: string | null; hr_manager_id: string | null
   notice_period_days: number; date_of_resignation: string | null; last_working_date: string | null
   intern_pay: number | null; consultant_pay: number | null; contract_pay: number | null
   blacklisted: boolean; rehire_eligible: boolean; company_id: string; location_id: string; department_id: string
@@ -301,6 +303,7 @@ function TabBar({ tabs, active, onChange }: any) {
 }
 // ─── Main Component ───────────────────────────────────────────
 export default function EmployeeMaster() {
+  const { grant, loading: grantLoading } = useGrant()
   const [employees, setEmployees] = useState<Employee[]>([])
   const [companies, setCompanies] = useState<any[]>([])
   const [locations, setLocations] = useState<any[]>([])
@@ -338,7 +341,7 @@ export default function EmployeeMaster() {
 
   const fetchStats = useCallback(async () => {
     let q = supabase.from('employees').select('employment_status,employment_type').neq('is_test', true)
-    if (filterCompany)  q = q.eq('company_id', filterCompany)
+    { const co = companyFilter(grant, filterCompany); if (co) q = q.eq('company_id', co) }
     if (filterLocation) q = q.eq('location_id', filterLocation)
     if (filterDept)     q = q.eq('department_id', filterDept)
     const { data } = await q
@@ -353,7 +356,7 @@ export default function EmployeeMaster() {
       consultant:data.filter(e=>e.employment_type==='Consultant').length,
       contract:data.filter(e=>e.employment_type==='Contract').length,
     })
-  }, [filterCompany, filterLocation, filterDept])
+  }, [filterCompany, filterLocation, filterDept, grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchMeta = async () => {
     const [co,lo,de] = await Promise.all([
@@ -361,7 +364,12 @@ export default function EmployeeMaster() {
       supabase.from('locations').select('id,location_name,city,company_id').eq('status','Active'),
       supabase.from('departments').select('id,dept_name,company_id').eq('status','Active'),
     ])
-    setCompanies(co.data||[]); setLocations(lo.data||[]); setDepts(de.data||[])
+    // Non-cross-company users see only their own company in the filter, and it is
+    // pre-selected — they never get an "All companies" option that leaks the group.
+    const scoped = scopedCompanies(grant, co.data || [])
+    setCompanies(scoped); setLocations(lo.data||[]); setDepts(de.data||[])
+    const def = defaultCompanyId(grant)
+    if (def && !filterCompany) setFCo(def)
   }
 
   const fetchEmployees = useCallback(async () => {
@@ -377,7 +385,7 @@ export default function EmployeeMaster() {
         { count: 'exact' }
       ).neq('is_test', true).order('emp_code')
 
-      if (filterCompany)  q = q.eq('company_id', filterCompany)
+      { const co = companyFilter(grant, filterCompany); if (co) q = q.eq('company_id', co) }
       if (filterLocation) q = q.eq('location_id', filterLocation)
       if (filterDept)     q = q.eq('department_id', filterDept)
       if (filterType)     q = q.eq('employment_type', filterType)
@@ -392,7 +400,7 @@ export default function EmployeeMaster() {
       setEmployees((data as any[])||[]); setTotal(count||0)
     } catch(e:any) { setError(e.message||'Load failed') }
     finally { setLoading(false) }
-  }, [search,filterCompany,filterLocation,filterDept,filterType,filterStatus,filterGrade,page])
+  }, [search,filterCompany,filterLocation,filterDept,filterType,filterStatus,filterGrade,page,grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Export ALL employees matching the current filters (no pagination) to Excel —
   // every employees column plus CTC master and current Salary Structure.
@@ -402,7 +410,7 @@ export default function EmployeeMaster() {
       let q = supabase.from('employees')
         .select('*, companies!employees_company_id_fkey(company_name, company_code), departments!employees_department_id_fkey(dept_name), locations!location_id(location_name, city)')
         .neq('is_test', true).order('emp_code')
-      if (filterCompany)  q = q.eq('company_id', filterCompany)
+      { const co = companyFilter(grant, filterCompany); if (co) q = q.eq('company_id', co) }
       if (filterLocation) q = q.eq('location_id', filterLocation)
       if (filterDept)     q = q.eq('department_id', filterDept)
       if (filterType)     q = q.eq('employment_type', filterType)
@@ -473,7 +481,7 @@ export default function EmployeeMaster() {
     setExporting(false)
   }
 
-  useEffect(() => { fetchMeta() }, [])
+  useEffect(() => { if (!grantLoading) fetchMeta() }, [grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { fetchStats() }, [fetchStats])
   useEffect(() => { setPage(1) }, [search,filterCompany,filterLocation,filterDept,filterType,filterStatus,filterGrade])
   useEffect(() => { fetchEmployees() }, [fetchEmployees])
@@ -492,7 +500,8 @@ export default function EmployeeMaster() {
 
   // openEdit — populate the form and switch to edit mode. Optional `emp` lets the
   // row-level Edit button open the drawer straight into edit mode.
-  const EDIT_FIELDS = ['full_name','first_name','last_name','gender','date_of_birth','blood_group','marital_status','designation','grade','employment_type','employment_status','collar_type','employee_function','employee_category','mobile','personal_email','office_email','notice_period_days','intern_pay','consultant_pay','contract_pay',
+  const EDIT_FIELDS = ['full_name','first_name','last_name','gender','date_of_birth','blood_group','marital_status','designation','grade','employment_type','employment_status','collar_type','employee_function','employee_category','mobile','personal_email','office_email','notice_period_days','intern_pay','consultant_pay','contract_pay','l1_manager_id','l2_manager_id','hod_id',
+    'group_doj','company_doj','confirmation_status','date_of_resignation','last_working_date',
     'father_name','mother_name','spouse_name','nationality','religion','birth_place','pan_number','uan_number','alternate_mobile',
     'res_address1','res_city','res_state','res_pin','perm_address1','perm_city','perm_state','perm_pin',
     'emergency_name','emergency_relation','emergency_mobile','emergency2_name','emergency2_relation','emergency2_mobile']
@@ -520,6 +529,10 @@ export default function EmployeeMaster() {
     if (patch.notice_period_days !== '') patch.notice_period_days = Number(patch.notice_period_days)||0
     // Pay columns are numeric — blank → null, otherwise coerce to a number.
     for (const k of ['intern_pay','consultant_pay','contract_pay']) patch[k] = (patch[k] === '' || patch[k] == null) ? null : (Number(patch[k]) || 0)
+    // Manager FKs are UUIDs — an empty string is not a valid uuid, so blank → null.
+    for (const k of ['l1_manager_id','l2_manager_id','hod_id']) if (k in patch) patch[k] = patch[k] || null
+    // Date columns — an empty string is not a valid date, so blank → null.
+    for (const k of ['date_of_birth','group_doj','company_doj','date_of_resignation','last_working_date']) if (k in patch) patch[k] = patch[k] || null
     const { error } = await supabase.from('employees').update(patch).eq('id', selected.id)
     setSaving(false)
     if (error) { alert('Save failed: '+error.message); return }

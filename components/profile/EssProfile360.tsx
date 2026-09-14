@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { authHeaders } from '@/lib/auth-headers'
 import ProfileShell from './ProfileShell'
+import { OtherInfoSection } from '@/components/employees/EmployeeProfileView'
 import './profile.css'
 import { C as TK } from '@/lib/ui'
 
@@ -44,5 +45,15 @@ export default function EssProfile360({ employeeId, code = 'me' }: { employeeId?
     completeness: comp ? (comp.score ?? 0) : (rest.completeness ?? 0),
     pending: comp ? (comp.pending ?? []) : (rest.pending ?? []),
   }
-  return <ProfileShell data={data} photoUrl={photoUrl ?? null} isSelf={!!isSelf} />
+  const selfId = employeeId || (rest as any)?.employee?.id
+  return (
+    <>
+      <ProfileShell data={data} photoUrl={photoUrl ?? null} isSelf={!!isSelf} />
+      {selfId && (
+        <div style={{ marginTop: 12, background: '#FFFFFF', borderRadius: 12, border: '1px solid rgba(124,58,237,0.12)', overflow: 'hidden' }}>
+          <OtherInfoSection emp={{ id: selfId }} />
+        </div>
+      )}
+    </>
+  )
 }
