@@ -29,6 +29,7 @@ import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import Inbox from './Inbox'
 import { InboxShell } from './inbox/InboxShell'
+import { HrisShell } from './hris/HrisShell'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
 import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
@@ -3767,12 +3768,19 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
-      case 'requests':      return <Requests emp={emp} notify={notify} />
+
       case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
       case 'orgchart':      return <AdminModuleHost moduleKey="org-chart" />
-      case 'directory':     return <Directory isMobile={isMobile} />
-      case 'approvals':     return <ApprovalsSection employeeId={emp.id} go={go} notify={notify} />
-      case 'exit':          return <ExitSection employeeId={emp.id} notify={notify} />
+      // HRIS — one shell for all four screens. It draws its own sub-tabs (the
+      // design calls for a sliding indicator and per-tab counts) but `view` is
+      // still the portal's, and picking a tab calls go() — so the sidebar, the
+      // deep link from Home's "pending on you", and the travel-claims hand-off
+      // all keep working off one source of truth.
+      case 'directory':
+      case 'requests':
+      case 'approvals':
+      case 'exit':          return <HrisShell employeeId={emp.id} tab={view} go={go}
+                                              canApprove={essMenu.can.approvals} />
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />
           case 'performance':   return <Performance employeeId={emp.id} />
@@ -3870,7 +3878,13 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           // their own <Page> padding and expect the full width.
           <AdminModuleHost moduleKey={adminKey} />
         ) : (
-          view === 'inbox' ? (
+          view === 'inbox' || section.k === 'hris' ? (
+            section.k === 'hris' ? (
+              // HRIS draws its own header band (title, badge, search) and its own
+              // sub-tabs, so the portal's TabHeader and SubTabs would be a second
+              // copy of both.
+              <div>{renderView()}</div>
+            ) : (
             // The inbox is a full-bleed tab: three panes that fill the viewport
             // and scroll independently. Capping it at 1100px would put it in its
             // own narrow breakpoint on every desktop, so only the header band
@@ -3881,6 +3895,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
               </div>
               {renderView()}
             </div>
+            )
           ) : (
             <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
               <TabHeader s={section} />
