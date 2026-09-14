@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
       .select('id, mrf_number, designation, position, job_title, no_of_openings, openings, reason, reason_for_hire, urgency, status, approval_chain, raised_by_name, raised_by_role, department_id, company_id, location_id, created_at, requested_by, mrf_type, hiring_type, employment_type, work_mode, grade, job_code, business_unit, currency, budget_min, budget_max, pay_period, compensation_type, target_joining_date, validity_date, business_justification, skills_required, good_to_have_skills, experience_min, experience_max, education_min, education_max, cost_center, is_budgeted, headcount_ref, sourcing_mode, departments:department_id(dept_name), companies:company_id(company_name), locations:location_id(location_name)')
       .eq('status', 'SUBMITTED').order('created_at', { ascending: false }).limit(500),
     sb.from('manpower_requisitions')
-      .select('id, designation, position, no_of_openings, openings, reason, urgency, status, approval_chain, created_at, department_id, departments:department_id(dept_name)')
+      .select('*, departments:department_id(dept_name)')
       .eq('requested_by', me).order('created_at', { ascending: false }).limit(60),
     sb.from('departments').select('id, dept_name').eq('company_id', ctx.companyId).eq('status', 'Active').order('dept_name'),
     hrTeamFor(ctx.companyId),
@@ -128,6 +128,16 @@ export async function POST(req: NextRequest) {
     const { data: meRow } = await sb.from('employees')
       .select('id, full_name, company_id, department_id, l1_manager_id').eq('id', me).maybeSingle()
     if (!meRow) return forbidden()
+
+    // Resubmit / edit-after-send-back: scrap the previous requisition (only the raiser's
+    // own, and only while it is still their draft / awaiting approval / needs revision).
+    const replaceId = String(body.replace_id || '')
+    if (replaceId) {
+      const { data: old } = await sb.from('manpower_requisitions').select('id, requested_by, status').eq('id', replaceId).maybeSingle()
+      if (old && old.requested_by === me && ['SUBMITTED', 'DRAFT', 'NEEDS_REVISION'].includes(String(old.status))) {
+        await sb.from('manpower_requisitions').delete().eq('id', replaceId)
+      }
+    }
 
     // Is the raiser an RM2 (a second-line manager)? Read it off the grant essRoute
     // already loaded — no extra round trips. Then fetch the RM2 (raiser's manager) and
@@ -189,11 +199,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, id: created.id, status })
   }
 
-  // ── Approve / reject ───────────────────────────────────────────────────────
-  if (action === 'approve' || action === 'reject') {
+  // ── Approve / reject / send back for revision ──────────────────────────────
+  if (action === 'approve' || action === 'reject' || action === 'revise') {
     const id = String(body.id || '')
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
-    const { data: mrf } = await sb.from('manpower_requisitions').select('id, status, approval_chain').eq('id', id).maybeSingle()
+    const { data: mrf } = await sb.from('manpower_requisitions').select('id, status, approval_chain, requested_by, designation, position, mrf_number').eq('id', id).maybeSingle()
     if (!mrf) return NextResponse.json({ error: 'MRF not found' }, { status: 404 })
     const chain = Array.isArray(mrf.approval_chain) ? mrf.approval_chain.map((s: any) => ({ ...s })) : []
     const cur = chain.find((s: any) => s.status === 'PENDING')
@@ -202,6 +212,18 @@ export async function POST(req: NextRequest) {
 
     const now = new Date().toISOString()
     const note = String(body.note || '').trim() || null
+
+    // Send back for revision — the approver spotted something; the raiser (RM1) fixes it
+    // and resubmits, which re-enters the chain from the top.
+    if (action === 'revise') {
+      if (!note) return NextResponse.json({ error: 'Add a remark explaining what to fix.' }, { status: 400 })
+      cur.status = 'REVISION'; cur.acted_at = now; cur.comment = note
+      await sb.from('manpower_requisitions').update({ approval_chain: chain, status: 'NEEDS_REVISION', remarks: note }).eq('id', id)
+      const label = `${mrf.designation || mrf.position || 'your requisition'}${mrf.mrf_number ? ` (${mrf.mrf_number})` : ''}`
+      await notify(mrf.requested_by as string, 'MRF sent back for changes',
+        `${label} was sent back by ${cur.approver_name || 'an approver'}: “${note}”. Open Tasks & Approvals to edit and resubmit it.`, '/ess?tab=approvals', 'MRF')
+      return NextResponse.json({ ok: true })
+    }
 
     if (action === 'reject') {
       cur.status = 'REJECTED'; cur.acted_at = now; cur.comment = note

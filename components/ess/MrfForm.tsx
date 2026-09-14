@@ -177,7 +177,7 @@ type Person = { id: string; full_name: string; emp_code: string; designation: st
 const EMPTY = {
   mrf_type: 'Full MRF', hiring_type: 'New Hire', urgency: 'MEDIUM', raised_by_name: '', raised_by_role: '',
   job_title: '', designation: '', business_unit: '', grade: '', job_code: '', no_of_openings: '1',
-  employment_type: 'Employee', work_mode: 'Onsite', location_id: '', shift_schedule: '',
+  employment_type: 'Employee', work_mode: 'Onsite', location_id: '',
   cost_center: '', is_budgeted: '', headcount_ref: '', currency: 'INR', budget_min: '', budget_max: '', duration_months: '',
   reason: '', outgoing_employee_id: '', exit_reason: '', business_justification: '',
   target_joining_date: '', validity_date: '',
@@ -186,13 +186,41 @@ const EMPTY = {
   sourcing_mode: 'External', sourcing_channels: [] as string[],
 }
 
-export default function MrfForm({ employeeId, onDone, onCancel, notify }: {
+// Map a manpower_requisitions row back into the form shape — used when editing a
+// requisition that was sent back for revision.
+export function mrfToForm(m: any): Record<string, any> {
+  return {
+    ...EMPTY,
+    mrf_type: m.mrf_type || 'Full MRF', hiring_type: m.hiring_type || 'New Hire', urgency: m.urgency || 'MEDIUM',
+    raised_by_name: m.raised_by_name || '', raised_by_role: m.raised_by_role || '',
+    job_title: m.job_title || '', designation: m.designation || m.position || '', business_unit: m.business_unit || '',
+    grade: m.grade || '', job_code: m.job_code || '', no_of_openings: String(m.no_of_openings || m.openings || 1),
+    employment_type: m.employment_type || 'Employee', work_mode: m.work_mode || 'Onsite', location_id: m.location_id || '',
+    cost_center: m.cost_center || '', is_budgeted: m.is_budgeted === true ? 'yes' : m.is_budgeted === false ? 'no' : '',
+    headcount_ref: m.headcount_ref || '', currency: m.currency || 'INR',
+    budget_min: m.budget_min != null ? String(m.budget_min) : '', budget_max: m.budget_max != null ? String(m.budget_max) : '',
+    duration_months: m.duration_months != null ? String(m.duration_months) : '',
+    reason: m.reason || m.reason_for_hire || '', outgoing_employee_id: m.outgoing_employee_id || '', exit_reason: m.exit_reason || '',
+    business_justification: m.business_justification || '',
+    target_joining_date: (m.target_joining_date || '').slice(0, 10), validity_date: (m.validity_date || '').slice(0, 10),
+    experience_min: m.experience_min != null ? String(m.experience_min) : '', experience_max: m.experience_max != null ? String(m.experience_max) : '',
+    education_min: m.education_min || '', education_max: m.education_max || '', previous_company_preference: m.previous_company_preference || '',
+    skills_required: m.skills_required || '', good_to_have_skills: m.good_to_have_skills || '', job_description: m.job_description || '',
+    sourcing_mode: m.sourcing_mode || 'External', sourcing_channels: Array.isArray(m.sourcing_channels) ? m.sourcing_channels : [],
+  }
+}
+
+export default function MrfForm({ employeeId, onDone, onCancel, notify, initial, replaceId }: {
   employeeId: string
   onDone: () => void
   onCancel: () => void
   notify: (m: string, t?: 'success' | 'error') => void
+  initial?: Record<string, any> | null   // prefill (editing a sent-back requisition)
+  replaceId?: string | null              // scrap this requisition when the new one is submitted
 }) {
-  const [form, setForm] = useState<any>({ ...EMPTY })
+  const [form, setForm] = useState<any>({ ...EMPTY, ...(initial || {}) })
+  const [done, setDone] = useState<null | { id: string }>(null)   // success screen after submit
+  const [replaceRef, setReplaceRef] = useState<string | null>(replaceId || null)
   const [masters, setMasters] = useState<Record<string, Master[]>>({})
   const [people, setPeople] = useState<Person[]>([])
   const [skills, setSkills] = useState<string[]>([])
@@ -252,7 +280,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify }: {
       setPeople((ppl.data as any[]) || [])
       setLocations((locs.data as any[]) || [])
       setSkills(((sk.data as any[]) || []).map((r: any) => r.name).filter(Boolean))
-      setForm((f: any) => ({ ...f, raised_by_name: bundle.name, raised_by_role: bundle.role }))
+      setForm((f: any) => ({ ...f, raised_by_name: f.raised_by_name || bundle.name, raised_by_role: f.raised_by_role || bundle.role }))
       setLoading(false)
     })()
     return () => { live = false }
@@ -280,12 +308,13 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify }: {
     try {
       const payload = {
         action: 'create', status, designation,
+        replace_id: replaceRef || null,   // scrap the old requisition (resubmit / edit after send-back)
         mrf_type: form.mrf_type, hiring_type: form.hiring_type, urgency: form.urgency,
         raised_by_name: form.raised_by_name || null, raised_by_role: form.raised_by_role || null,
         job_title: form.job_title || null, business_unit: form.business_unit || null, grade: form.grade || null, job_code: form.job_code || null,
         openings: Number(form.no_of_openings) || 1,
         hod_id: auto?.hod_id || null,
-        employment_type: form.employment_type, work_mode: form.work_mode, location_id: form.location_id || null, shift_schedule: form.shift_schedule || null,
+        employment_type: form.employment_type, work_mode: form.work_mode, location_id: form.location_id || null,
         cost_center: form.cost_center || null, is_budgeted: form.is_budgeted, headcount_ref: form.headcount_ref || null,
         currency: form.currency || 'INR', budget_min: form.budget_min || null, budget_max: form.budget_max || null,
         compensation_type: comp.kind, pay_period: comp.period,
@@ -302,16 +331,53 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify }: {
         job_description: form.job_description || null,
         sourcing_mode: form.sourcing_mode || null, sourcing_channels: form.sourcing_channels || [],
       }
-      await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify(payload) })
-      notify(status === 'DRAFT' ? 'MRF saved as draft.' : 'MRF raised — sent for approval.')
-      onDone()
+      const res = await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify(payload) })
+      if (status === 'DRAFT') { notify('MRF saved as draft.'); onDone(); return }
+      // Submitted → show the success screen with "raise one more" / "resubmit".
+      setReplaceRef(null)
+      setDone({ id: res?.id || '' })
     } catch (e: any) { notify(e.message, 'error') } finally { setSaving(false) }
+  }
+
+  // Reset to a fresh, blank requisition (keeps the autofilled name/role + company chain).
+  function raiseAnother() {
+    setForm({ ...EMPTY, raised_by_name: auto?.name || '', raised_by_role: auto?.role || '' })
+    setReplaceRef(null); setDone(null)
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
+  }
+  // Go back to editing the just-submitted one — on the next submit it is scrapped and a
+  // corrected requisition is submitted in its place.
+  function resubmit() {
+    setReplaceRef(done?.id || null); setDone(null)
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
   }
 
   if (loading) return <div style={{ fontSize: 13, color: C.muted, padding: '10px 0' }}>Loading form…</div>
 
+  // ── Success screen ─────────────────────────────────────────────────────────
+  if (done) return (
+    <div style={{ border: `2px solid ${C.green}`, borderRadius: 12, padding: '32px 24px', marginBottom: 12, background: C.greenBg, textAlign: 'center' }}>
+      <div style={{ width: 64, height: 64, borderRadius: '50%', background: C.green, color: '#fff', fontSize: 36, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>✓</div>
+      <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>You have successfully raised the MRF</div>
+      <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
+        It’s been sent for approval through your reporting chain (RM2 → HR Head).
+        You can raise another, or resubmit this one if you spotted a mistake (the one you just submitted will be scrapped).
+      </div>
+      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 20, flexWrap: 'wrap' }}>
+        <button type="button" style={st.btn} onClick={raiseAnother}>＋ Raise one more MRF</button>
+        <button type="button" style={st.btnO} onClick={resubmit}>↺ Resubmit (fix this one)</button>
+        <button type="button" style={{ ...st.btnO, marginLeft: 8 }} onClick={onDone}>Done</button>
+      </div>
+    </div>
+  )
+
   return (
     <div style={{ border: `2px solid ${C.purple}`, borderRadius: 10, padding: '14px 16px', marginBottom: 12, background: '#fff' }}>
+      {replaceRef && (
+        <div style={{ fontSize: 12, color: C.amber, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '8px 11px', marginBottom: 10, lineHeight: 1.5 }}>
+          <b>Editing / resubmitting.</b> When you submit, the previous requisition is scrapped and this corrected one goes for approval afresh.
+        </div>
+      )}
       {/* Quick Hire / Full MRF toggle */}
       <div style={{ display: 'flex', gap: 0, border: `1px solid ${C.purple}`, borderRadius: 8, overflow: 'hidden', marginBottom: 4 }}>
         {(['Quick Hire', 'Full MRF'] as const).map(t => (
@@ -361,7 +427,6 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify }: {
         <Field label="Employment Type"><Sel value={form.employment_type} onChange={v => F('employment_type', v)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
         <Field label="Work Mode"><Sel value={form.work_mode} onChange={v => F('work_mode', v)}>{WORK_MODES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
         <Field label="Work Location"><Sel value={form.location_id} onChange={v => F('location_id', v)}><option value="">Select Location</option>{locations.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}</Sel></Field>
-        <Field label="Shift / Schedule"><MasterSel value={form.shift_schedule} onChange={v => F('shift_schedule', v)} opts={masters.shift_type || []} placeholder="Select…" /></Field>
       </div>
 
       {/* 4 · Budget & Cost */}

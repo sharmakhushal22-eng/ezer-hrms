@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { authToken } from '@/lib/rms/client'
 import { C as TK } from '@/lib/ui'
-import MrfForm from './MrfForm'
+import MrfForm, { mrfToForm } from './MrfForm'
 
 const C = {
   ink: '#1E1B4B', muted: '#6B7280', faint: '#9CA3AF', border: 'rgba(124,58,237,0.12)', card: '#FFFFFF',
@@ -273,15 +273,18 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
   const [reviewStep, setReviewStep] = useState<'details' | 'assign'>('details')
   const [selHr, setSelHr] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
+  const [remark, setRemark] = useState('')                       // send-back remark
+  const [showRemark, setShowRemark] = useState(false)            // remark box open in the modal
+  const [editMrf, setEditMrf] = useState<any | null>(null)       // a sent-back MRF being edited & resubmitted
   const load = useCallback(() => api('/api/ess/mrf', employeeId).then(x => { setD(x); setErr('') }).catch(e => setErr(e.message)), [employeeId])
   useEffect(() => { load() }, [load])
 
-  const decide = async (id: string, action: 'approve' | 'reject', extra: Record<string, any> = {}) => {
-    const note = action === 'reject' ? (window.prompt('Reason for rejection (optional):') || '') : ''
+  const decide = async (id: string, action: 'approve' | 'reject' | 'revise', extra: Record<string, any> = {}) => {
     setBusy(true)
     try {
-      await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify({ action, id, note, ...extra }) })
-      notify(action === 'approve' ? 'MRF approved.' : 'MRF rejected.'); setReviewFor(null); setSelHr([]); setReviewStep('details'); load()
+      await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify({ action, id, ...extra }) })
+      notify(action === 'approve' ? 'MRF approved.' : action === 'reject' ? 'MRF rejected.' : 'Sent back for changes.')
+      setReviewFor(null); setSelHr([]); setReviewStep('details'); setRemark(''); setShowRemark(false); load()
     } catch (e: any) { notify(e.message, 'error') } finally { setBusy(false) }
   }
   // The role of the step this MRF is currently waiting on.
@@ -289,8 +292,8 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
     const ch = Array.isArray(m.approval_chain) ? m.approval_chain : []
     return (ch.find((s: any) => s.status === 'PENDING') || {}).role
   }
-  const openReview = (m: any) => { setSelHr([]); setReviewStep('details'); setReviewFor(m) }
-  const closeReview = () => { if (!busy) { setReviewFor(null); setSelHr([]); setReviewStep('details') } }
+  const openReview = (m: any) => { setSelHr([]); setReviewStep('details'); setRemark(''); setShowRemark(false); setReviewFor(m) }
+  const closeReview = () => { if (!busy) { setReviewFor(null); setSelHr([]); setReviewStep('details'); setRemark(''); setShowRemark(false) } }
   const acknowledge = async (id: string) => {
     try { await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', id }) }); notify('Acknowledged — this MRF is now in your Recruitment.'); load() }
     catch (e: any) { notify(e.message, 'error') }
@@ -305,6 +308,21 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
     if (m.status === 'REJECTED') return 'Rejected'
     return cur ? `With ${cur.role === 'HR_HEAD' ? 'HR Head' : 'RM2'} · ${cur.approver_name}` : m.status
   }
+
+  // Editing a sent-back requisition — show the full form pre-filled; on submit the old one
+  // is scrapped and the corrected one re-enters approval.
+  if (editMrf) return (
+    <div style={S.card}>
+      <div style={{ ...S.section, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span>Edit &amp; resubmit MRF</span>
+        <button style={S.btnO} onClick={() => setEditMrf(null)}>← Back</button>
+      </div>
+      {editMrf.remarks && <div style={S.note('w')}>Sent back for changes: “{editMrf.remarks}”. Fix and resubmit below.</div>}
+      <MrfForm employeeId={employeeId} notify={notify}
+        initial={mrfToForm(editMrf)} replaceId={editMrf.id}
+        onDone={() => { setEditMrf(null); load() }} onCancel={() => setEditMrf(null)} />
+    </div>
+  )
 
   return (
     <div style={S.card}>
@@ -334,7 +352,7 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
             {m.reason && <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{m.reason}</div>}
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
               <button style={{ ...S.btn, background: C.green }} onClick={() => openReview(m)}>Review &amp; Approve</button>
-              <button style={S.btnD} onClick={() => decide(m.id, 'reject')}>Reject</button>
+              <button style={S.btnD} onClick={() => decide(m.id, 'reject', { note: window.prompt('Reason for rejection (optional):') || '' })}>Reject</button>
             </div>
           </div>
         ))}
@@ -342,15 +360,28 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
 
       <div style={{ fontSize: 12, fontWeight: 700, color: C.muted, margin: '10px 0 4px' }}>My requests ({d.mine.length})</div>
       {d.mine.length === 0 && <div style={{ fontSize: 12, color: C.faint }}>You haven’t raised any MRF yet.</div>}
-      {d.mine.map((m: any) => (
-        <div key={m.id} style={{ borderBottom: `1px solid ${C.border}`, padding: '7px 0', display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{m.designation || m.position} · {m.no_of_openings || m.openings || 1}</div>
-            <div style={{ fontSize: 11.5, color: C.muted }}>{m.departments?.dept_name || '—'}</div>
+      {d.mine.map((m: any) => {
+        const needsRevision = m.status === 'NEEDS_REVISION'
+        return (
+          <div key={m.id} style={{ borderBottom: `1px solid ${C.border}`, padding: '8px 0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{m.designation || m.position} · {m.no_of_openings || m.openings || 1}</div>
+                <div style={{ fontSize: 11.5, color: C.muted }}>{m.departments?.dept_name || '—'}</div>
+              </div>
+              <span style={{ fontSize: 11.5, alignSelf: 'center', fontWeight: 600, color: m.status === 'APPROVED' ? C.green : (m.status === 'REJECTED' || needsRevision) ? C.red : C.amber }}>
+                {needsRevision ? 'Sent back — needs changes' : stepLabel(m)}
+              </span>
+            </div>
+            {needsRevision && (
+              <div style={{ marginTop: 6, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '8px 10px' }}>
+                {m.remarks && <div style={{ fontSize: 12, color: '#8a5a08', marginBottom: 6 }}>“{m.remarks}”</div>}
+                <button style={{ ...S.btn, background: C.amber }} onClick={() => setEditMrf(m)}>✎ Edit &amp; resubmit</button>
+              </div>
+            )}
           </div>
-          <span style={{ fontSize: 11.5, alignSelf: 'center', fontWeight: 600, color: m.status === 'APPROVED' ? C.green : m.status === 'REJECTED' ? C.red : C.amber }}>{stepLabel(m)}</span>
-        </div>
-      ))}
+        )
+      })}
 
       {reviewFor && createPortal((() => {
         const m = reviewFor
@@ -458,8 +489,18 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
                 )}
               </div>
 
+              {/* Send-back remark box (details step) */}
+              {!onAssignStep && showRemark && (
+                <div style={{ padding: '0 22px 12px' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: C.amber, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Remark — what should the raiser fix?</div>
+                  <textarea autoFocus value={remark} onChange={e => setRemark(e.target.value)}
+                    placeholder="e.g. Budget looks too high for this grade — please revise the range."
+                    style={{ ...S.input, minHeight: 64, resize: 'vertical' }} />
+                </div>
+              )}
+
               {/* Footer */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '13px 22px', borderTop: `1px solid ${C.border}`, background: '#fff' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '13px 22px', borderTop: `1px solid ${C.border}`, background: '#fff', flexWrap: 'wrap' }}>
                 {onAssignStep ? (
                   <>
                     <button style={S.btnO} disabled={busy} onClick={() => setReviewStep('details')}>← Back</button>
@@ -468,10 +509,19 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
                       {busy ? 'Submitting…' : `Submit & Assign${selHr.length ? ` (${selHr.length})` : ''}`}
                     </button>
                   </>
+                ) : showRemark ? (
+                  <>
+                    <button style={S.btnO} disabled={busy} onClick={() => { setShowRemark(false); setRemark('') }}>← Back</button>
+                    <button style={{ ...S.btn, background: C.amber, marginLeft: 'auto' }} disabled={busy || !remark.trim()}
+                      onClick={() => decide(m.id, 'revise', { note: remark.trim() })}>
+                      {busy ? 'Sending…' : 'Send back for revision'}
+                    </button>
+                  </>
                 ) : (
                   <>
                     <button style={S.btnO} disabled={busy} onClick={closeReview}>Cancel</button>
-                    <button style={{ ...S.btnD, marginLeft: 'auto' }} disabled={busy} onClick={() => decide(m.id, 'reject')}>Reject</button>
+                    <button style={{ ...S.btnO, marginLeft: 'auto', borderColor: '#FDE68A', color: C.amber }} disabled={busy} onClick={() => setShowRemark(true)}>↩ Send back</button>
+                    <button style={S.btnD} disabled={busy} onClick={() => decide(m.id, 'reject', { note: '' })}>Reject</button>
                     <button style={{ ...S.btn, background: C.green }} disabled={busy}
                       onClick={() => { if (isHrHead) setReviewStep('assign'); else decide(m.id, 'approve') }}>
                       {busy ? 'Approving…' : isHrHead ? 'Approve →' : 'Approve'}
