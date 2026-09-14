@@ -32,6 +32,7 @@
 // why they are service-role only.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { orIlike } from '@/lib/pg-search'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, notify } from '@/lib/ess/session'
 import {
@@ -136,16 +137,15 @@ export async function POST(req: NextRequest) {
       const mine = await sb.from('employees').select('company_id').eq('id', me).maybeSingle()
       const company = (mine.data as { company_id?: string } | null)?.company_id
 
-      // Escape the PostgREST or() metacharacters. A comma or a parenthesis in
-      // the search box would otherwise be parsed as more filter terms.
-      const safe = q.replace(/[,()*\\]/g, ' ').trim()
-      if (!safe) return NextResponse.json({ ok: true, people: [] })
-
       let sel = sb.from('employees')
         .select('id, full_name, emp_code, designation')
         .neq('id', me)
         .is('date_of_leaving', null)
-        .or(`full_name.ilike.*${safe}*,emp_code.ilike.*${safe}*`)
+        // This used to blank out the or() metacharacters instead of quoting
+        // them, which stopped the 400 but changed the search: "Nair, Priya"
+        // became "Nair  Priya" and then matched nobody, because the stored
+        // name still has the comma. Quoting keeps the term intact.
+        .or(orIlike(['full_name', 'emp_code'], q))
         .order('full_name')
         .limit(10)
       // Fun Zone is per company: you play with the people you work with.

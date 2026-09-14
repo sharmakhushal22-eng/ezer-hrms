@@ -17,6 +17,7 @@
 // Sub-components at module scope. See the note in ShoutoutComposer.
 
 import { useCallback, useEffect, useState } from 'react'
+import { orIlike } from '@/lib/pg-search'
 import { supabase } from '@/lib/supabase'
 import { wallRpc } from '@/lib/wall/rpc'
 import {
@@ -167,7 +168,7 @@ export default function AppreciationComposer({
       const r = await supabase.from('employees')
         .select('id, full_name, emp_code, designation')
         .is('date_of_leaving', null)
-        .or(`full_name.ilike.%${q}%,emp_code.ilike.%${q}%`)
+        .or(orIlike(['full_name', 'emp_code'], q))
         .limit(8)
       if (alive && !r.error) setFound((r.data ?? []) as unknown as Person[])
     }, 220)

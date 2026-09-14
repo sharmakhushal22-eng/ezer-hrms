@@ -15,6 +15,7 @@
 // while typing rather than after pressing send. The database still decides.
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
+import { orIlike } from '@/lib/pg-search'
 import RecognitionPicker from '@/components/wall/RecognitionPicker'
 import { MAX_TAGS } from '@/lib/wall/catalogue'
 import { supabase } from '@/lib/supabase'
@@ -234,7 +235,7 @@ export default function ShoutoutComposer({
       const r = await supabase.from('employees')
         .select('id, full_name, emp_code, designation')
         .is('date_of_leaving', null)
-        .or(`full_name.ilike.%${q}%,emp_code.ilike.%${q}%`)
+        .or(orIlike(['full_name', 'emp_code'], q))
         .limit(8)
       if (alive && !r.error) setFound((r.data ?? []) as unknown as Person[])
     }, 220)

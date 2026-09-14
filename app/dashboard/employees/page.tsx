@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { orIlike } from '@/lib/pg-search'
 import { supabase } from '../../../lib/supabase'
 import HRActionPanel from '@/components/employees/HRActionPanel'
 import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
@@ -903,7 +904,7 @@ export default function EmployeeMaster() {
       if (filterType)     q = q.eq('employment_type', filterType)
       if (filterStatus)   q = q.eq('employment_status', filterStatus)
       if (filterGrade)    q = q.eq('grade', filterGrade)
-      if (search.trim())  q = q.or(`full_name.ilike.%${search}%,emp_code.ilike.%${search}%,common_code.ilike.%${search}%,designation.ilike.%${search}%,mobile.ilike.%${search}%`)
+      if (search.trim())  q = q.or(orIlike(['full_name', 'emp_code', 'common_code', 'designation', 'mobile'], search.trim()))
 
       const from = (page-1)*PER_PAGE
       q = q.range(from, from+PER_PAGE-1)
@@ -928,7 +929,7 @@ export default function EmployeeMaster() {
       if (filterType)     q = q.eq('employment_type', filterType)
       if (filterStatus)   q = q.eq('employment_status', filterStatus)
       if (filterGrade)    q = q.eq('grade', filterGrade)
-      if (search.trim())  q = q.or(`full_name.ilike.%${search}%,emp_code.ilike.%${search}%,common_code.ilike.%${search}%,designation.ilike.%${search}%,mobile.ilike.%${search}%`)
+      if (search.trim())  q = q.or(orIlike(['full_name', 'emp_code', 'common_code', 'designation', 'mobile'], search.trim()))
       const { data, error: err } = await q
       if (err) throw err
       const list = (data as any[] || [])
