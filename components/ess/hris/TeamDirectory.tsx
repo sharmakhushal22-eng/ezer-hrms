@@ -156,17 +156,20 @@ function PersonCard({ e, animate, i, onOpen }: {
         <div style={{ minWidth: 0, flex: 1 }}>
           <div className="nm">{e.full_name}</div>
           <div className="dg">{e.designation || '—'}</div>
-          <div className="cd">{e.emp_code}</div>
         </div>
       </div>
-      {(e.dept_name || e.location_name) && (
-        <div className="hx-tags">
-          {e.dept_name && <span className="hx-tag dept"><span>{e.dept_name}</span></span>}
-          {e.location_name && (
-            <span className="hx-tag loc"><Ic k="pin" /><span>{e.location_name}</span></span>
-          )}
-        </div>
-      )}
+      {/* Code, department and location share one row at the card's own left
+          edge. The code used to sit in the text column beside the avatar, which
+          gave the card two competing left edges — an indented header over a
+          flush-left body — and made the avatar centre against three lines
+          instead of two. */}
+      <div className="hx-tags">
+        <span className="hx-tag code"><span>{e.emp_code}</span></span>
+        {e.dept_name && <span className="hx-tag dept"><span>{e.dept_name}</span></span>}
+        {e.location_name && (
+          <span className="hx-tag loc"><Ic k="pin" /><span>{e.location_name}</span></span>
+        )}
+      </div>
       <div className="hx-contacts" data-stop onClick={stop}>
         {e.office_email && <a href={`mailto:${e.office_email}`} title={e.office_email}><Ic k="mail" />Email</a>}
         {e.mobile && <a href={`tel:${e.mobile}`} title={e.mobile}><Ic k="phone" />Call</a>}
