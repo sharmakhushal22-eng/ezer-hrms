@@ -515,7 +515,7 @@ left join lateral (select annual_ctc from ctc_master x
                     order by effective_from desc limit 1) ctc on true
 left join lateral (select gross_monthly from salary_structures y
                     where y.employee_id = e.id
-                    order by effective_from desc limit 1) ss on true;
+                    order by effective_date desc limit 1) ss on true;
 
 
 -- ─── 9. the read path ────────────────────────────────────────────────
