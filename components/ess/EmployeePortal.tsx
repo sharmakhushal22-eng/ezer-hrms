@@ -1107,7 +1107,16 @@ function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
         fetch(`/api/rms/hierarchy?employee_id=${emp.id}&view=reports`, { headers, cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
       ])
       if (!live) return
-      setPeers((peersRes.peers || []).map((p: any) => ({ id: p.employee_id, full_name: p.full_name, designation: p.designation, department: p.department, isSelf: p.is_self, direct_reports: p.direct_reports })))
+      // peersFor() already camel-cases the RPC's columns before it leaves the
+      // server: { id, emp_code, full_name, designation, department, isSelf,
+      // directReports }. Reading employee_id / is_self / direct_reports here
+      // yielded undefined three times over — an undefined key (React's warning),
+      // a self-filter that never matched so you appeared in your own team-mates
+      // list, and a reports badge that never showed.
+      setPeers((peersRes.peers || []).map((p: any) => ({
+        id: p.id, full_name: p.full_name, designation: p.designation,
+        department: p.department, isSelf: !!p.isSelf, direct_reports: p.directReports || 0,
+      })))
       setReports(reportsRes.reports || [])
       setLoading(false)
     })()
