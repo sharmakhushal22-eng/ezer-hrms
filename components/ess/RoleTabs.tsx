@@ -4,7 +4,8 @@
 //
 //   useEssMenu      the nav as data — /api/ess/menu; nothing here compares a role code
 //   PendingOnYou    Home card: KPIs + "pending on you" with inline actions
-//   TeamRoster      scope-aware roster with the status pill (MyTeam, RM / HOD only)
+//   (TeamRoster moved to components/ess/team/TeamRoster.tsx with the redesign;
+//    it is rendered by MyTeam, which is the only thing that ever used it.)
 //   ApprovalsSection  full list, actions, resignation chain viewer
 //   CompanySection  headcount by department, exit reasons, regime election
 //   ReportsSection  five reports, CSV export
@@ -14,7 +15,7 @@
 // employee, an RM and an HR Head because the query differs, not the component.
 import { useCallback, useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { authToken } from '@/lib/rms/client'
+import { api } from '@/lib/ess/api'
 import { C as TK } from '@/lib/ui'
 import MrfForm, { mrfToForm } from './MrfForm'
 
@@ -50,18 +51,6 @@ const pill = (tone: 'ok' | 'warn' | 'dang' | 'info' | 'mut') => ({
 
 // ── fetch helper: ESS token or the dashboard session; employee_id always sent so the
 //    admin preview (legacy login) can name whose portal it is looking at ─────────
-async function api(path: string, employeeId: string, init?: RequestInit) {
-  const token = await authToken()
-  const sep = path.includes('?') ? '&' : '?'
-  const res = await fetch(`${path}${sep}employee_id=${encodeURIComponent(employeeId)}`, {
-    ...init, cache: 'no-store',
-    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(init?.headers || {}) },
-  })
-  const body = await res.json().catch(() => ({}))
-  if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
-  return body
-}
-
 export interface EssMenuData {
   tabs: { id: string; label: string }[]
   is_rm: boolean; direct_reports: number; is_hod: boolean; hod_departments: string[]
@@ -216,51 +205,6 @@ export function PendingOnYou({ employeeId, go, notify }: { employeeId: string; g
         </div>
       )}
     </>
-  )
-}
-
-// ── TEAM roster (RM / HOD) ────────────────────────────────────────────────
-export function TeamRoster({ employeeId, isHod, isRm }: { employeeId: string; isHod: boolean; isRm: boolean }) {
-  const [scope, setScope] = useState<'TEAM' | 'DEPT'>(isRm ? 'TEAM' : 'DEPT')
-  const [rows, setRows] = useState<any[] | null>(null)
-  const [err, setErr] = useState('')
-  useEffect(() => {
-    let live = true
-    api(`/api/ess/team?scope=${scope}`, employeeId).then(d => { if (live) { setRows(d.rows || []); setErr('') } }).catch(e => { if (live) setErr(e.message) })
-    return () => { live = false }
-  }, [employeeId, scope])
-  if (!isRm && !isHod) return null
-  return (
-    <div style={S.card}>
-      <div style={{ ...S.section, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
-        <span>{scope === 'DEPT' ? 'My department' : 'My team — direct reports'}{rows ? ` (${rows.length})` : ''}</span>
-        {isRm && isHod && (
-          <span style={{ display: 'flex', gap: 4 }}>
-            <button onClick={() => setScope('TEAM')} style={scope === 'TEAM' ? S.btn : S.btnO}>Direct reports</button>
-            <button onClick={() => setScope('DEPT')} style={scope === 'DEPT' ? S.btn : S.btnO}>Whole department</button>
-          </span>
-        )}
-      </div>
-      {err && <div style={S.note('w')}>{err}</div>}
-      {rows && rows.length === 0 && <div style={{ fontSize: 12.5, color: C.muted }}>Nobody in this scope yet.</div>}
-      {rows && rows.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr><th style={S.th}>Code</th><th style={S.th}>Name</th><th style={S.th}>Designation</th>{scope === 'DEPT' && <th style={S.th}>Reports to you</th>}<th style={S.th}>Status</th></tr></thead>
-            <tbody>{rows.map(r => (
-              <tr key={r.id}>
-                <td style={{ ...S.td, fontFamily: 'ui-monospace, monospace' }}>{r.code || '—'}</td>
-                <td style={{ ...S.td, fontWeight: 600 }}>{r.name}</td>
-                <td style={S.td}>{r.designation || '—'}{r.department && scope === 'DEPT' ? '' : ''}</td>
-                {scope === 'DEPT' && <td style={S.td}>{r.direct ? 'Direct' : '—'}</td>}
-                <td style={S.td}><span style={pill(r.tone === 'warn' ? 'warn' : r.tone === 'info' ? 'info' : 'ok')}>{r.status}</span></td>
-              </tr>
-            ))}</tbody>
-          </table>
-        </div>
-      )}
-      <div style={S.note()}>{scope === 'DEPT' ? 'DEPT scope — everyone in the department(s) you head. Company-wide headcount is under the Company tab.' : 'TEAM scope — your direct reports only. Your HOD sees this list plus every other team in the department.'}</div>
-    </div>
   )
 }
 
