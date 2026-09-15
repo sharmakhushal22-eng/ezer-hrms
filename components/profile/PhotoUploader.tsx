@@ -3,7 +3,22 @@ import { authHeaders } from '@/lib/auth-headers';
 
 import { useCallback, useRef, useState } from 'react';
 
-/** Crops to a real 512×512 JPEG on the client, then posts it. */
+/** Crops to a real 512×512 JPEG on the client, then posts it.
+ *
+ *  ZOOM. UiScale sets CSS `zoom` on <html> (1.25 at 1440px), and
+ *  getBoundingClientRect() reports ZOOMED pixels while CSS lengths, the
+ *  element's transform and BOX below are all unzoomed. Mixing the two put
+ *  `cx - BOX / 2` at 23 instead of 0 and, multiplied by k = 512 / 184, threw
+ *  the saved crop about 64px off inside a 512px image — you dragged a face
+ *  into the circle and got its ear. Pointer deltas have the same problem from
+ *  the other end: clientX is zoomed, so a drag moved the picture 1.25x further
+ *  than the cursor.
+ *
+ *  Everything below therefore works in CSS pixels, converting at the two
+ *  boundaries where zoomed values enter: the stage rect and the pointer. */
+const docZoom = () =>
+  parseFloat(getComputedStyle(document.documentElement).zoom || '1') || 1
+
 export default function PhotoUploader({
   open, onClose, onDone,
 }: {
@@ -36,8 +51,10 @@ export default function PhotoUploader({
       const el = img.current, st = stage.current;
       if (!el || !st) return reject(new Error('no image'));
       const S = 512, sc = zoom / 100, k = S / BOX;
+      // Back to CSS pixels, so this agrees with BOX and with the transform.
+      const z = docZoom();
       const r = st.getBoundingClientRect();
-      const cx = r.width / 2, cy = r.height / 2;
+      const cx = r.width / z / 2, cy = r.height / z / 2;
       const w = el.naturalWidth * sc, h = el.naturalHeight * sc;
       const left = cx + pos.x - w / 2, top = cy + pos.y - h / 2;
 
@@ -85,12 +102,14 @@ export default function PhotoUploader({
             onDrop={e => { e.preventDefault(); load(e.dataTransfer.files?.[0]); }}
             onPointerDown={e => {
               if (!src) return;
-              drag.current = { x: e.clientX - pos.x, y: e.clientY - pos.y };
+              const z = docZoom();
+              drag.current = { x: e.clientX / z - pos.x, y: e.clientY / z - pos.y };
               (e.target as HTMLElement).setPointerCapture(e.pointerId);
             }}
             onPointerMove={e => {
               if (!drag.current) return;
-              setPos({ x: e.clientX - drag.current.x, y: e.clientY - drag.current.y });
+              const z = docZoom();
+              setPos({ x: e.clientX / z - drag.current.x, y: e.clientY / z - drag.current.y });
             }}
             onPointerUp={() => { drag.current = null; }}
           >

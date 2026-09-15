@@ -348,3 +348,158 @@
   .ezp .reqs .acts { justify-content: stretch; }
   .ezp .reqs .acts .btn { flex: 1; }
 }
+
+/* ===========================================================================
+   PROFILE PHOTO — the avatar, and the uploader that sets it.
+
+   All of this is new. PhotoUploader.tsx shipped with the vendor drop and its
+   stylesheet did not: ez-scrim, ez-modal, ez-stage, ez-cring, ez-slider and
+   ez-prog were defined NOWHERE in the repo, and nothing rendered the component
+   either. So the markup existed, unreachable and unstyled, and the profile had
+   no way to set a picture at all.
+
+   Scoped under .ezp like everything else here, which is why the uploader is
+   mounted inside the .ezp tree — those class names are un-namespaced and have
+   no business styling anything outside this screen.
+   =========================================================================== */
+
+/* ── the avatar itself ───────────────────────────────────────────────────── */
+.ezp .face { position: relative; overflow: visible; }
+
+.ezp .face.hasimg { background: var(--ez-sunken); }
+
+.ezp .face img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;                 /* a portrait must not stretch to square */
+  border-radius: 15px;               /* 18px outer minus the 3px border */
+  display: block;
+}
+
+/* The camera button. Sits on the corner of the disc rather than over the face,
+   so it never covers what you are trying to look at. */
+.ezp .face .facebtn {
+  position: absolute; right: -5px; bottom: -5px;
+  width: 26px; height: 26px; padding: 0;
+  display: grid; place-items: center;
+  border: 2px solid var(--ez-surface);
+  border-radius: 999px;
+  background: var(--ez-brand);
+  color: var(--ez-on-accent);
+  cursor: pointer;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, .5);
+  transition: background 120ms ease, transform 120ms ease;
+}
+
+.ezp .face .facebtn:hover { background: var(--ez-brand-deep); transform: translateY(-1px); }
+.ezp .face .facebtn:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 2px; }
+.ezp .face .facebtn svg { display: block; }
+
+/* ── the uploader modal ──────────────────────────────────────────────────── */
+.ezp .ez-scrim {
+  position: fixed; inset: 0; z-index: 90;
+  display: grid; place-items: center;
+  padding: 20px;
+  background: rgba(15, 23, 42, .52);
+  backdrop-filter: blur(2px);
+}
+
+.ezp .ez-modal {
+  width: 100%; max-height: 92vh; overflow: auto;
+  background: var(--ez-surface);
+  border: 1px solid var(--ez-line);
+  border-radius: 16px;
+  box-shadow: 0 24px 60px -20px rgba(15, 23, 42, .5);
+}
+
+.ezp .ez-mh { padding: 16px 18px 12px; border-bottom: 1px solid var(--ez-line); }
+.ezp .ez-mh h3 { margin: 0; font-size: 15px; font-weight: 700; color: var(--ez-ink); }
+.ezp .ez-mh p  { margin: 4px 0 0; font-size: 12.5px; line-height: 1.55; color: var(--ez-muted); }
+
+.ezp .ez-mb { padding: 16px 18px; }
+
+.ezp .ez-mf {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 12px 18px 16px;
+  border-top: 1px solid var(--ez-line);
+}
+
+/* The crop stage. 184px square, matching PhotoUploader's own BOX constant —
+   the crop maths reads that number, so the two must not drift. */
+.ezp .ez-stage {
+  position: relative;
+  width: 184px; height: 184px;
+  margin: 0 auto;
+  display: grid; place-items: center;
+  overflow: hidden;
+  border: 1px dashed var(--ez-line-strong);
+  border-radius: 14px;
+  background: var(--ez-sunken);
+  cursor: grab;
+  touch-action: none;                /* or a drag scrolls the page on a phone */
+  user-select: none;
+}
+
+.ezp .ez-stage:active { cursor: grabbing; }
+
+/* The circle telling you what survives the crop. Drawn as a ring rather than a
+   mask so the parts being cut are dimmed, not hidden — you can see what you
+   are losing while you drag. */
+.ezp .ez-cring {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  border-radius: 14px;
+  box-shadow: inset 0 0 0 999px rgba(15, 23, 42, .34);
+  -webkit-mask: radial-gradient(circle at 50% 50%, #000 66px, rgba(0,0,0,.55) 67px);
+          mask: radial-gradient(circle at 50% 50%, #000 66px, rgba(0,0,0,.55) 67px);
+}
+
+.ezp .ez-slider { width: 100%; margin-top: 14px; accent-color: var(--ez-brand); }
+
+.ezp .ez-prog {
+  height: 5px; margin-top: 12px; overflow: hidden;
+  border-radius: 999px; background: var(--ez-sunken);
+}
+.ezp .ez-prog i {
+  display: block; height: 100%;
+  border-radius: 999px; background: var(--ez-brand);
+  transition: width 180ms ease;
+}
+
+.ezp .ez-subtle { font-size: 12.5px; line-height: 1.6; color: var(--ez-muted); }
+
+.ezp .ez-note { font-size: 12.5px; line-height: 1.55; padding: 9px 11px; border-radius: 9px; }
+.ezp .ez-note.ez-bad {
+  color: var(--ez-critical);
+  background: var(--ez-critical-tint);
+  border: 1px solid var(--ez-critical);
+}
+
+.ezp .ez-btn {
+  padding: 8px 14px;
+  font: inherit; font-size: 12.5px; font-weight: 650;
+  color: var(--ez-ink-soft);
+  background: var(--ez-surface);
+  border: 1px solid var(--ez-line-strong);
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.ezp .ez-btn:hover { background: var(--ez-sunken); }
+.ezp .ez-btn:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 2px; }
+.ezp .ez-btn[disabled] { opacity: .6; cursor: default; }
+
+.ezp .ez-btn.ez-pri {
+  color: var(--ez-on-accent);
+  background: var(--ez-brand);
+  border-color: var(--ez-brand);
+}
+.ezp .ez-btn.ez-pri:hover { background: var(--ez-brand-deep); border-color: var(--ez-brand-deep); }
+
+.ezp .ez-btn.ez-sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ezp .face .facebtn,
+  .ezp .ez-prog i,
+  .ezp .ez-btn { transition: none; }
+}

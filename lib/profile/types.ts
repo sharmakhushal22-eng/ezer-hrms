@@ -91,6 +91,10 @@ export interface ProfilePayload {
   performance?: Row | null
   salary?: Row | null
   recognition?: Row[]
+  /** Signed for eight hours by the route — employee-photos is a private
+   *  bucket, so the raw photo_path is no use to the browser. Null when the
+   *  employee has not set one. */
+  photoUrl?: string | null
   error?: string
 }
 

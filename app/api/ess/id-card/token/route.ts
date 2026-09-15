@@ -27,7 +27,21 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await issueToken(ctx.caller.employeeId))
+    // The origin the browser actually reached us on. Without it a QR minted on
+    // a LAN address would still encode whatever NEXT_PUBLIC_APP_URL says, and
+    // a phone cannot scan its way to somebody else's localhost.
+    //
+    // Read from the Host header, NOT req.nextUrl.origin: nextUrl normalises to
+    // the configured origin, so it answered "localhost" even for a request
+    // that arrived on 10.0.1.42 — which is precisely the case this is for.
+    // x-forwarded-* first, so it stays correct behind a proxy.
+    const fwdHost  = req.headers.get('x-forwarded-host')
+    const fwdProto = req.headers.get('x-forwarded-proto')
+    const host = fwdHost || req.headers.get('host')
+    const proto = fwdProto || (host?.startsWith('localhost') || host?.startsWith('127.') ? 'http' : 'https')
+    const origin = host ? `${proto}://${host}` : null
+
+    return NextResponse.json(await issueToken(ctx.caller.employeeId, origin))
   } catch (e) {
     const m = e instanceof Error ? e.message : 'failed'
     if (m.includes('ID_CARD_PEPPER')) {

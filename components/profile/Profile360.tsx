@@ -35,6 +35,7 @@ import ChangeRequests from '@/components/profile/ChangeRequests'
 import { maySee, type ProfileField, type ProfilePayload, type Row, type TabId } from '@/lib/profile/types'
 import { loadProfile, editField, requestChange, setProfileOwner } from '@/lib/profile/client'
 import IdCard from '@/components/profile/IdCard'
+import PhotoUploader from '@/components/profile/PhotoUploader'
 import '@/components/profile/profile.css'
 
 const val = (v: unknown): string => {
@@ -243,13 +244,17 @@ export default function Profile360({ code, employeeId, initial }: {
   const [tab, setTab] = useState<TabId>('overview')
   const [editing, setEditing] = useState<ProfileField | null>(null)
   const [flash, setFlash] = useState<string | null>(null)
+  // Held locally so a freshly uploaded picture appears at once. The payload is
+  // only refetched on mount, and waiting for that would make Save look inert.
+  const [photo, setPhoto] = useState<string | null>(null)
+  const [photoOpen, setPhotoOpen] = useState(false)
 
   const load = useCallback(async () => {
     if (initial) return
     setProfileOwner(employeeId ?? null)
     const r = await loadProfile(code)
     if (r.error) { setErr(r.error.message); setPayload(null); return }
-    setErr(null); setPayload(r.data)
+    setErr(null); setPayload(r.data); setPhoto(r.data?.photoUrl ?? null)
   }, [code, employeeId, initial])
   useEffect(() => { load() }, [load])
 
@@ -301,7 +306,26 @@ export default function Profile360({ code, employeeId, initial }: {
       </div>
 
       <div className="idcard">
-        <div className="face">{ini(emp.full_name)}</div>
+        {/* The avatar was initials and nothing else, with no way to set a
+            picture — PhotoUploader existed but nothing rendered it. Your own
+            profile gets an overlay button; a colleague's is just a face. */}
+        <div className={'face' + (photo ? ' hasimg' : '')}>
+          {photo
+            /* eslint-disable-next-line @next/next/no-img-element */
+            ? <img src={photo} alt="" />
+            : ini(emp.full_name)}
+          {self && (
+            <button type="button" className="facebtn" onClick={() => setPhotoOpen(true)}
+                    aria-label={photo ? 'Change your profile photo' : 'Add a profile photo'}
+                    title={photo ? 'Change photo' : 'Add photo'}>
+              <svg viewBox="0 0 20 20" width={14} height={14} fill="none" stroke="currentColor"
+                   strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3.5 6.8h2.4l1.1-1.7h5.9l1.1 1.7h2.5v8.2h-13z" />
+                <circle cx="10" cy="10.9" r="2.6" />
+              </svg>
+            </button>
+          )}
+        </div>
         <div className="who">
           <h2>{val(emp.full_name)}</h2>
           <div className="role">
@@ -701,6 +725,19 @@ export default function Profile360({ code, employeeId, initial }: {
         <ChangeModal field={editing} onClose={() => setEditing(null)}
                      onDone={m => { setEditing(null); setFlash(m); load()
                                     setTimeout(() => setFlash(null), 4500) }} />
+      )}
+
+      {/* Inside .ezp deliberately: PhotoUploader's classes are un-namespaced,
+          so profile.css scopes them under .ezp and they only bite here. */}
+      {self && (
+        <PhotoUploader
+          open={photoOpen}
+          onClose={() => setPhotoOpen(false)}
+          onDone={url => {
+            setPhoto(url)
+            setFlash('Profile photo updated.')
+            setTimeout(() => setFlash(null), 4500)
+          }} />
       )}
     </div>
   )
