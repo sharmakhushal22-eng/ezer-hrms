@@ -60,7 +60,7 @@ import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/co
 import {
   C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
-  IconLetters, IconReports, IconRecruitment, IconAi, IconBell,
+  IconLetters, IconReports, IconRecruitment, IconAi, IconBell, IconMail,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
 
@@ -3155,7 +3155,9 @@ interface NavSection {
  */
 const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => React.ReactElement> = {
   home: IconHome, profile: IconEmployees, team: IconEmployees, payroll: IconPayroll,
-  inbox: IconBell,
+  // An envelope, not a bell: this is the Inbox, and the bell in the header
+  // is a different thing that still uses IconBell.
+  inbox: IconMail,
   attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
   wall: IconRecruitment, rnr: IconAi, funzone: IconAi,
 }
