@@ -108,7 +108,17 @@ export async function GET(req: NextRequest) {
   // nothing renders the component that calls it.
   const photoUrl = await signPhoto(subject)
 
-  return NextResponse.json({ ...(payload as object), ...extras, photoUrl })
+  // IS THIS MY OWN RECORD — an identity question, answered by identity.
+  //
+  // get_employee_profile reports a POSITIONAL role, and for an HR person
+  // looking at their own profile that role is 'hr', not 'self'. The screen was
+  // reading viewer_role === 'self' to mean "mine", so an HR user opening their
+  // own profile was treated as a visitor: no ID card, no QR, and no way to set
+  // their photo. viewer_role stays exactly as it was — it still decides what
+  // may be READ — this only answers whose record it is.
+  const isSelf = subject === me
+
+  return NextResponse.json({ ...(payload as object), ...extras, photoUrl, isSelf })
 }
 
 /** A signed URL for this employee's avatar, or null when they have none. */

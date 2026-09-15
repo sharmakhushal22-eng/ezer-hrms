@@ -95,6 +95,9 @@ export interface ProfilePayload {
    *  bucket, so the raw photo_path is no use to the browser. Null when the
    *  employee has not set one. */
   photoUrl?: string | null
+  /** Whether the viewer IS the subject. Distinct from viewer_role, which is a
+   *  positional role and reads 'hr' for an HR person on their own record. */
+  isSelf?: boolean
   error?: string
 }
 

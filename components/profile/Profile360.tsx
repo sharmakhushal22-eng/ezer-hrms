@@ -264,7 +264,10 @@ export default function Profile360({ code, employeeId, initial }: {
   if (!payload) return <div className="ezp"><div className="card"><div className="empty">Loading…</div></div></div>
 
   const emp = payload.employee
-  const self = payload.viewer_role === 'self'
+  // Identity, not positional role. viewer_role is 'hr' for an HR person on
+  // their own profile, which used to hide their own ID card and photo button
+  // from them. Falls back to the old test for a payload without the flag.
+  const self = payload.isSelf ?? payload.viewer_role === 'self'
   const groups = MODEL[tab] ?? []
   const pending = payload.completeness.pending ?? []
 
