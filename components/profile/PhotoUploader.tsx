@@ -1,7 +1,7 @@
 'use client';
 import { uploadAuthHeaders } from '@/lib/auth-headers';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** Crops to a real 512×512 JPEG on the client, then posts it.
  *
@@ -72,22 +72,36 @@ async function decodeHeic(f: File): Promise<Blob> {
   return Array.isArray(out) ? out[0] : out
 }
 
-const toDataUrl = (b: Blob): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const r = new FileReader()
-    r.onload = () => resolve(String(r.result))
-    r.onerror = () => reject(new Error('Could not read the converted image.'))
-    r.readAsDataURL(b)
-  })
+/** An object URL, not a data URL.
+ *
+ *  readAsDataURL base64-encodes the whole file into a JavaScript string — a
+ *  33% blow-up held in memory on top of the file and the decoded bitmap. For
+ *  a JPEG nobody notices; for a PNG, which is lossless and routinely tens of
+ *  megabytes, it is the difference between working and not. An object URL is
+ *  a pointer to the blob the browser already has. */
+const blobUrl = (b: Blob): string => URL.createObjectURL(b)
 
-/** Resolves when the browser has actually decoded the data URL. */
-const decodable = (data: string): Promise<boolean> =>
+/** Resolves once the browser has actually decoded the URL, with the size it
+ *  found — the caller needs both the yes/no and the pixel count. */
+const probeImage = (url: string): Promise<{ ok: boolean; w: number; h: number }> =>
   new Promise(resolve => {
     const probe = new Image()
-    probe.onload = () => resolve(!!probe.naturalWidth && !!probe.naturalHeight)
-    probe.onerror = () => resolve(false)
-    probe.src = data
+    probe.onload = () => resolve({ ok: !!probe.naturalWidth && !!probe.naturalHeight, w: probe.naturalWidth, h: probe.naturalHeight })
+    probe.onerror = () => resolve({ ok: false, w: 0, h: 0 })
+    probe.src = url
   })
+
+/** BYTES. Was 8 MB, which quietly made PNG a second-class format: PNG is
+ *  lossless, so a plain screenshot clears 8 MB without being a large picture
+ *  in any sense that matters, and the person got "compress it and try again"
+ *  for a perfectly ordinary file. Nothing downstream cares — the crop leaves
+ *  here as a 512x512 JPEG of about 50 KB whatever arrives. */
+const MAX_BYTES = 40 * 1024 * 1024
+
+/** PIXELS, which is the limit that actually protects anything. Bytes say
+ *  nothing about decode cost: a 2 MB PNG can be 100 megapixels and ask for
+ *  400 MB of bitmap. 60 MP passes any phone or camera made. */
+const MAX_PIXELS = 60_000_000
 
 export default function PhotoUploader({
   open, onClose, onDone,
@@ -108,9 +122,21 @@ export default function PhotoUploader({
   const stage = useRef<HTMLDivElement | null>(null);
   const BOX = 184;
 
+  /** The object URL currently on screen, so it can be revoked when replaced.
+   *  Without this every re-pick leaks the previous blob for the tab's life. */
+  const objUrl = useRef<string | null>(null);
+  const show = useCallback((url: string) => {
+    if (objUrl.current && objUrl.current !== url) URL.revokeObjectURL(objUrl.current);
+    objUrl.current = url;
+    setSrc(url);
+  }, []);
+  useEffect(() => () => { if (objUrl.current) URL.revokeObjectURL(objUrl.current); }, []);
+
   const load = useCallback((f?: File | null) => {
     if (!f) return;
-    if (f.size > 8e6) return setErr('Image is over 8 MB. Compress it and try again.');
+    if (f.size > MAX_BYTES) {
+      return setErr(`That image is ${(f.size / 1048576).toFixed(0)} MB, over the ${MAX_BYTES / 1048576} MB limit.`);
+    }
     setErr(null); setReady(false); setSrc(null);
 
     void (async () => {
@@ -125,23 +151,33 @@ export default function PhotoUploader({
         setBusy(heif ? 10 : 0);
 
         // Try the browser first, even for HEIC — Safari decodes it natively,
-        // and a local decode beats a round trip.
-        let data = await toDataUrl(f);
-        if (!(await decodable(data))) {
+        // and a local decode beats loading a megabyte of WebAssembly.
+        let url = blobUrl(f);
+        let probe = await probeImage(url);
+
+        if (!probe.ok) {
+          URL.revokeObjectURL(url);
           if (!heif) { setErr(UNREADABLE); setBusy(0); return; }
           // Chrome, Firefox, Edge: no HEIC decoder. Decode it here instead.
           setBusy(35);
-          data = await toDataUrl(await decodeHeic(f));
-          if (!(await decodable(data))) { setErr(UNREADABLE); setBusy(0); return; }
+          url = blobUrl(await decodeHeic(f));
+          probe = await probeImage(url);
+          if (!probe.ok) { URL.revokeObjectURL(url); setErr(UNREADABLE); setBusy(0); return; }
         }
 
-        setSrc(data); setPos({ x: 0, y: 0 }); setZoom(125); setReady(true); setBusy(0);
+        if (probe.w * probe.h > MAX_PIXELS) {
+          URL.revokeObjectURL(url);
+          setErr(`That image is ${probe.w}x${probe.h}, too large to crop in the browser. Scale it down and try again.`);
+          setBusy(0); return;
+        }
+
+        show(url); setPos({ x: 0, y: 0 }); setZoom(125); setReady(true); setBusy(0);
       } catch (e: unknown) {
         setBusy(0);
         setErr(e instanceof Error ? e.message : UNREADABLE);
       }
     })();
-  }, []);
+  }, [show]);
 
   const crop = (): Promise<Blob> =>
     new Promise((resolve, reject) => {
