@@ -580,16 +580,27 @@
 
 .tl { position: relative; padding: 4px 16px 16px; }
 
-/* A quiet rule carrying the relationship, not an eyebrow carrying nothing. */
+/* A rule carrying the relationship, not an eyebrow carrying nothing.
+   Reads at --ez-ink-soft rather than --ez-muted: these two labels are the only
+   thing naming what each part of the line IS, and at muted they sank into the
+   hairline beside them and got missed. */
 .tl-label {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 16px 0 0;
-  font-size: 12px;
-  font-weight: 650;
-  color: var(--ez-muted);
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ez-ink-soft);
 }
+
+/* THE BRANCH LABEL IS INDENTED PAST THE RAIL, AND HAS TO BE.
+   .tl-down::before reaches UP past this label (top: -40px) so the rail reads as
+   one line you are standing in. But the rail sits at x=33 and the label text
+   starts at x=16, so it was drawn straight through the middle of the words.
+   36px puts the text at x=52 — the same column the report avatars start in —
+   which clears the rail and aligns the label with what it labels. */
+.tl-label--branch { padding-left: 36px; }
 
 .tl-label::after {
   content: "";
@@ -760,6 +771,7 @@
   .tl-up::before,
   .tl-down::before { left: 15px; }
   .tl-down { padding-left: 30px; }
+  .tl-label--branch { padding-left: 30px; }
   .tl-down .tl-node::before { left: -15px; width: 15px; }
   .tl-beside,
   .tl-mates,

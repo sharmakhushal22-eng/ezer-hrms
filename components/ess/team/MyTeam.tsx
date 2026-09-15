@@ -145,7 +145,7 @@ export function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boole
               )}
             </div>
 
-            <p className="tl-label">Your team</p>
+            <p className="tl-label tl-label--branch">Your team</p>
             {reports.length === 0 ? (
               <p className="tl-empty">Nobody reports to you directly.</p>
             ) : (
