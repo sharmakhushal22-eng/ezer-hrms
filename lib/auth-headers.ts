@@ -73,3 +73,19 @@ export async function authHeaders(): Promise<Record<string, string>> {
     return base
   }
 }
+
+/** The same credentials, WITHOUT Content-Type — for a multipart/FormData body.
+ *
+ *  Setting Content-Type by hand on a FormData POST is a silent killer: the
+ *  browser then does not append the `boundary=...` it alone knows, so the
+ *  server cannot parse the parts. Next answers with an empty 500 and the
+ *  caller's `res.json()` dies on "Unexpected end of JSON input" — a message
+ *  about JSON, for a header mistake, on an upload.
+ *
+ *  lib/company/client.ts already worked around this inline. This is that fix,
+ *  named, so the next upload does not have to rediscover it. */
+export async function uploadAuthHeaders(): Promise<Record<string, string>> {
+  const h = await authHeaders()
+  delete h['Content-Type']
+  return h
+}

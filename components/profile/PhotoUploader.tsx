@@ -1,5 +1,5 @@
 'use client';
-import { authHeaders } from '@/lib/auth-headers';
+import { uploadAuthHeaders } from '@/lib/auth-headers';
 
 import { useCallback, useRef, useState } from 'react';
 
@@ -19,6 +19,13 @@ import { useCallback, useRef, useState } from 'react';
 const docZoom = () =>
   parseFloat(getComputedStyle(document.documentElement).zoom || '1') || 1
 
+/** Said when the bytes are not an image the browser can draw. Names HEIC
+ *  because that is what it almost always is: a photo straight off an iPhone
+ *  arrives as image/heic, passes every type check, and decodes to nothing. */
+const UNREADABLE =
+  'That image could not be opened. Photos from an iPhone are often HEIC, '
+  + 'which browsers cannot read — export it as JPG or PNG and try again.'
+
 export default function PhotoUploader({
   open, onClose, onDone,
 }: {
@@ -30,6 +37,8 @@ export default function PhotoUploader({
   const [zoom, setZoom] = useState(125);
   const [pos, setPos] = useState({ x: 0, y: 0 });
   const [busy, setBusy] = useState(0);
+  // Only true once the bytes have actually decoded — see load().
+  const [ready, setReady] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const drag = useRef<{ x: number; y: number } | null>(null);
   const img = useRef<HTMLImageElement | null>(null);
@@ -40,9 +49,30 @@ export default function PhotoUploader({
     if (!f) return;
     if (!f.type.startsWith('image/')) return setErr('That file is not an image. Use JPG or PNG.');
     if (f.size > 8e6) return setErr('Image is over 8 MB. Compress it and try again.');
-    setErr(null);
+    setErr(null); setReady(false);
     const r = new FileReader();
-    r.onload = () => { setSrc(String(r.result)); setPos({ x: 0, y: 0 }); setZoom(125); };
+    r.onerror = () => { setSrc(null); setErr('That file could not be read. Try another.'); };
+    r.onload = () => {
+      const data = String(r.result);
+      // DECODE IT BEFORE SHOWING IT.
+      //
+      // f.type is what the OS claims, not what this browser can draw. An
+      // undecodable file passed the check above, rendered as a broken <img>
+      // (complete === true, naturalWidth === 0) and then threw
+      //   "The HTMLImageElement provided is in the 'broken' state"
+      // out of drawImage — at SAVE time, a whole interaction after the actual
+      // mistake, with the crop stage sitting there looking empty but fine.
+      //
+      // Probing here puts the failure on the file, where the person can act
+      // on it, and Save can never be reached with an image that cannot crop.
+      const probe = new Image();
+      probe.onload = () => {
+        if (!probe.naturalWidth || !probe.naturalHeight) { setSrc(null); setErr(UNREADABLE); return; }
+        setSrc(data); setPos({ x: 0, y: 0 }); setZoom(125); setReady(true);
+      };
+      probe.onerror = () => { setSrc(null); setReady(false); setErr(UNREADABLE); };
+      probe.src = data;
+    };
     r.readAsDataURL(f);
   }, []);
 
@@ -50,6 +80,9 @@ export default function PhotoUploader({
     new Promise((resolve, reject) => {
       const el = img.current, st = stage.current;
       if (!el || !st) return reject(new Error('no image'));
+      // Belt and braces: load() should have caught this, but a canvas throw
+      // here is unreadable and this is one line.
+      if (!el.complete || !el.naturalWidth) return reject(new Error(UNREADABLE));
       const S = 512, sc = zoom / 100, k = S / BOX;
       // Back to CSS pixels, so this agrees with BOX and with the transform.
       const z = docZoom();
@@ -74,10 +107,18 @@ export default function PhotoUploader({
       setBusy(45);
       const fd = new FormData();
       fd.append('file', new File([blob], 'avatar.jpg', { type: 'image/jpeg' }));
-      const res = await fetch('/api/ess/profile/photo', { method: 'POST', body: fd, headers: await authHeaders() });
-      const j = await res.json();
+      // uploadAuthHeaders, not authHeaders: the latter sets
+      // Content-Type: application/json, which on a FormData body suppresses
+      // the multipart boundary. The route's req.formData() then cannot parse,
+      // Next returns an empty 500, and res.json() below failed with
+      // "Unexpected end of JSON input" — so the upload never once worked from
+      // this screen, while the same POST by curl did.
+      const res = await fetch('/api/ess/profile/photo', { method: 'POST', body: fd, headers: await uploadAuthHeaders() });
+      // Tolerate a body that is not JSON, so a transport failure reports its
+      // status instead of a parser error.
+      const j = await res.json().catch(() => ({} as Record<string, string>));
       setBusy(100);
-      if (!res.ok) throw new Error(j.message ?? 'Upload failed.');
+      if (!res.ok) throw new Error(j.message ?? j.error ?? `Upload failed (${res.status}).`);
       onDone(j.url ?? URL.createObjectURL(blob));
       setTimeout(() => { setBusy(0); onClose(); }, 250);
     } catch (e: any) {
@@ -128,6 +169,7 @@ export default function PhotoUploader({
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   ref={img} src={src} alt=""
+                  onError={() => { setSrc(null); setReady(false); setErr(UNREADABLE); }}
                   style={{
                     position: 'absolute', maxWidth: 'none', userSelect: 'none', pointerEvents: 'none',
                     transform: `translate(${pos.x}px, ${pos.y}px) scale(${zoom / 100})`,
@@ -149,7 +191,7 @@ export default function PhotoUploader({
         </div>
         <div className="ez-mf">
           <button className="ez-btn" onClick={onClose}>Cancel</button>
-          <button className="ez-btn ez-pri" onClick={save} disabled={busy > 0}>
+          <button className="ez-btn ez-pri" onClick={save} disabled={busy > 0 || !src || !ready}>
             {busy > 0 ? 'Saving…' : 'Save photo'}
           </button>
         </div>
