@@ -19,12 +19,75 @@ import { useCallback, useRef, useState } from 'react';
 const docZoom = () =>
   parseFloat(getComputedStyle(document.documentElement).zoom || '1') || 1
 
-/** Said when the bytes are not an image the browser can draw. Names HEIC
- *  because that is what it almost always is: a photo straight off an iPhone
- *  arrives as image/heic, passes every type check, and decodes to nothing. */
+/** Said when the bytes are not an image anything here can draw — after the
+ *  server has had its turn too, so this now means genuinely broken. */
 const UNREADABLE =
-  'That image could not be opened. Photos from an iPhone are often HEIC, '
-  + 'which browsers cannot read — export it as JPG or PNG and try again.'
+  'That image could not be opened. Try a JPG or PNG.'
+
+/** Is this an ISO-BMFF still image — HEIC, HEIF, or their AVIF cousin?
+ *
+ *  Sniffed from the BYTES, never from file.type. iOS reports HEIC
+ *  inconsistently: sometimes image/heic, sometimes an empty string when the
+ *  file came through a share sheet or a sync folder, and a type-based test
+ *  misses exactly the cases that need this most.
+ *
+ *  Layout: [4 bytes box size][ftyp][4-byte major brand]. The brands below are
+ *  the still-image ones; mif1/msf1 are the generic HEIF containers Apple also
+ *  emits. */
+const BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1', 'msf1', 'avif'])
+
+async function isHeif(f: File): Promise<boolean> {
+  try {
+    const head = new Uint8Array(await f.slice(0, 12).arrayBuffer())
+    if (head.length < 12) return false
+    const tag = String.fromCharCode(...head.subarray(4, 8))
+    if (tag !== 'ftyp') return false
+    return BRANDS.has(String.fromCharCode(...head.subarray(8, 12)).toLowerCase())
+  } catch { return false }
+}
+
+/** Decode HEIC in the browser, with libheif compiled to WebAssembly.
+ *
+ *  THE SERVER CANNOT DO THIS, which is worth writing down because it looks
+ *  like it should. sharp is installed and sharp reads the HEIC container
+ *  happily — metadata() answers "heif 600x400" and looks like success. It is
+ *  not a decode. Ask it for pixels and libvips says:
+ *
+ *      heif: Error while loading plugin: Support for this compression format
+ *      has not been built in
+ *
+ *  HEIC pixels are H.265, and the decoder for it is patent-encumbered, so no
+ *  stock libvips build ships one. Neither does any browser except Safari.
+ *  That leaves a WASM decoder, which is what this is.
+ *
+ *  IMPORTED DYNAMICALLY, AND ONLY HERE. The bundle is 1.35 MB. Loading it up
+ *  front would charge every person who opens their profile for a format most
+ *  of them will never upload; inside this branch, only somebody who actually
+ *  picked a HEIC pays, once, while a progress bar is already running. */
+async function decodeHeic(f: File): Promise<Blob> {
+  const heic2any = (await import('heic2any')).default
+  // A HEIC can legally hold a burst or a Live Photo, i.e. several images.
+  // The first is the one the phone shows as the picture.
+  const out = await heic2any({ blob: f, toType: 'image/jpeg', quality: 0.92 })
+  return Array.isArray(out) ? out[0] : out
+}
+
+const toDataUrl = (b: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(String(r.result))
+    r.onerror = () => reject(new Error('Could not read the converted image.'))
+    r.readAsDataURL(b)
+  })
+
+/** Resolves when the browser has actually decoded the data URL. */
+const decodable = (data: string): Promise<boolean> =>
+  new Promise(resolve => {
+    const probe = new Image()
+    probe.onload = () => resolve(!!probe.naturalWidth && !!probe.naturalHeight)
+    probe.onerror = () => resolve(false)
+    probe.src = data
+  })
 
 export default function PhotoUploader({
   open, onClose, onDone,
@@ -47,33 +110,37 @@ export default function PhotoUploader({
 
   const load = useCallback((f?: File | null) => {
     if (!f) return;
-    if (!f.type.startsWith('image/')) return setErr('That file is not an image. Use JPG or PNG.');
     if (f.size > 8e6) return setErr('Image is over 8 MB. Compress it and try again.');
-    setErr(null); setReady(false);
-    const r = new FileReader();
-    r.onerror = () => { setSrc(null); setErr('That file could not be read. Try another.'); };
-    r.onload = () => {
-      const data = String(r.result);
-      // DECODE IT BEFORE SHOWING IT.
-      //
-      // f.type is what the OS claims, not what this browser can draw. An
-      // undecodable file passed the check above, rendered as a broken <img>
-      // (complete === true, naturalWidth === 0) and then threw
-      //   "The HTMLImageElement provided is in the 'broken' state"
-      // out of drawImage — at SAVE time, a whole interaction after the actual
-      // mistake, with the crop stage sitting there looking empty but fine.
-      //
-      // Probing here puts the failure on the file, where the person can act
-      // on it, and Save can never be reached with an image that cannot crop.
-      const probe = new Image();
-      probe.onload = () => {
-        if (!probe.naturalWidth || !probe.naturalHeight) { setSrc(null); setErr(UNREADABLE); return; }
-        setSrc(data); setPos({ x: 0, y: 0 }); setZoom(125); setReady(true);
-      };
-      probe.onerror = () => { setSrc(null); setReady(false); setErr(UNREADABLE); };
-      probe.src = data;
-    };
-    r.readAsDataURL(f);
+    setErr(null); setReady(false); setSrc(null);
+
+    void (async () => {
+      try {
+        const heif = await isHeif(f);
+        // The type check allows through anything the BYTES say is a still
+        // image, because iOS often reports no type at all for a HEIC.
+        if (!heif && !f.type.startsWith('image/')) {
+          setErr('That file is not an image. Use JPG or PNG.'); return;
+        }
+
+        setBusy(heif ? 10 : 0);
+
+        // Try the browser first, even for HEIC — Safari decodes it natively,
+        // and a local decode beats a round trip.
+        let data = await toDataUrl(f);
+        if (!(await decodable(data))) {
+          if (!heif) { setErr(UNREADABLE); setBusy(0); return; }
+          // Chrome, Firefox, Edge: no HEIC decoder. Decode it here instead.
+          setBusy(35);
+          data = await toDataUrl(await decodeHeic(f));
+          if (!(await decodable(data))) { setErr(UNREADABLE); setBusy(0); return; }
+        }
+
+        setSrc(data); setPos({ x: 0, y: 0 }); setZoom(125); setReady(true); setBusy(0);
+      } catch (e: unknown) {
+        setBusy(0);
+        setErr(e instanceof Error ? e.message : UNREADABLE);
+      }
+    })();
   }, []);
 
   const crop = (): Promise<Blob> =>
