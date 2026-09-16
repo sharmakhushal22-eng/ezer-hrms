@@ -1,32 +1,25 @@
 'use client'
 // components/wall/CommentThread.tsx — comments on a recognition.
 //
-// ONE LEVEL DEEP, AND THAT IS THE FEATURE.
+// v8: RESTYLED ONLY, AND STILL NOT MOUNTED ANYWHERE — exactly as in v7.
+// Mounting it under FeedCard would be a new feature, so it is left for a
+// deliberate decision. When it is mounted it will already match the rest of
+// the module.
 //
-// wall_config.comment_max_depth defaults to 1: a comment and its replies,
-// never a tree. add_comment() refuses a deeper one, and this screen refuses
-// to OFFER one — a reply box under a reply would be an invitation the
-// database declines, which is a worse experience than not offering it.
+// ONE LEVEL DEEP, AND THAT IS THE FEATURE. comment_max_depth defaults to 1;
+// add_comment() refuses a deeper one and this screen never offers one.
 //
-// This is also the ONLY threaded surface in the module. The direct
-// appreciation channel deliberately has no thread at all: one note, one
-// thank-back, no rolling conversation. If these two ever look like
-// duplicates, the difference is the point, not an oversight.
-//
-// Sub-components at module scope — see the note in ShoutoutComposer.
+// Behaviour unchanged: recognition_comments + comment_reactions read
+// directly, add_comment through wallRpc, reactions inserted optimistically.
+// Sub-components at module scope.
 
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { wallRpc } from '@/lib/wall/rpc'
-// WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
-//
-// tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
-// mode and white on it falls to 2.5:1. Measured here at 2.54 on the Send
-// button. C.onAccent is the theme-aware ink for an accent fill and is what
-// every one of these should have used from the start.
-import { C, F, W, S, R } from '@/lib/ui'
+import { C, F, W, S } from '@/lib/ui'
 import { threadComments, renderBody,
-         type CommentRow, type Reaction, type Threaded } from '@/lib/wall/comments'
+         type CommentRow, type Reaction } from '@/lib/wall/comments'
+import { Avatar, Button, FieldError, RAD, inputStyle, shortDate } from '@/components/wall/ui'
 
 // ── module scope ─────────────────────────────────────────────────────────
 
@@ -39,7 +32,7 @@ function Mention({ name }: { name: string }) {
 
 function Body({ text, names }: { text: string; names: Map<string, string> }) {
   return (
-    <p style={{ margin: 0, fontSize: F.small, color: C.inkSoft, lineHeight: 1.6 }}>
+    <p style={{ margin: '2px 0 0', fontSize: F.small, color: C.inkSoft, lineHeight: 1.6 }}>
       {renderBody(text, names).map((piece, i) =>
         typeof piece === 'string'
           ? <span key={i}>{piece}</span>
@@ -51,14 +44,14 @@ function Body({ text, names }: { text: string; names: Map<string, string> }) {
 function Reacts({ emojis, onReact }: { emojis: Record<string, number>; onReact: (e: string) => void }) {
   const CHOICES = ['👏', '🙌', '❤️']
   return (
-    <div style={{ display: 'flex', gap: 5, marginTop: 6, flexWrap: 'wrap' }}>
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
       {CHOICES.map(e => {
         const n = emojis[e] ?? 0
         return (
-          <button key={e} type="button" onClick={() => onReact(e)}
+          <button key={e} type="button" onClick={() => onReact(e)} className="wof-tile"
             aria-label={`React with ${e}${n ? `, ${n} so far` : ''}`}
             style={{ cursor: 'pointer', fontFamily: 'inherit', display: 'inline-flex',
-                     alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 999,
+                     alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 999,
                      fontSize: F.micro, lineHeight: 1.6,
                      border: `1px solid ${n ? C.brandEdge : C.line}`,
                      background: n ? C.brandTint : C.surface,
@@ -71,34 +64,33 @@ function Reacts({ emojis, onReact }: { emojis: Record<string, number>; onReact: 
   )
 }
 
-function One({ c, names, reacts, onReact, onReply, canReply }: {
+function One({ c, names, reacts, onReact, onReply, canReply, small }: {
   c: CommentRow; names: Map<string, string>
   reacts: Record<string, number>
   onReact: (id: string, emoji: string) => void
   onReply?: () => void
   canReply: boolean
+  small?: boolean
 }) {
   const who = names.get(c.employee_id) ?? 'Someone'
-  const when = c.created_at
-    ? new Date(c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-    : ''
+  const when = shortDate(c.created_at)
   return (
-    <div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{who}</span>
-        {when && <span style={{ fontSize: F.micro, color: C.faint }}>{when}</span>}
-      </div>
-      <Body text={c.body} names={names} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
-        <Reacts emojis={reacts} onReact={e => onReact(c.id, e)} />
-        {canReply && onReply && (
-          <button type="button" onClick={onReply}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', fontFamily: 'inherit',
-                     fontSize: F.micro, fontWeight: W.semi, color: C.brand, padding: '3px 0',
-                     marginTop: 6 }}>
-            Reply
-          </button>
-        )}
+    <div style={{ display: 'flex', gap: 10 }}>
+      <Avatar name={who} size={small ? 26 : 32} />
+      <div style={{ minWidth: 0, flex: 1 }}>
+        <div style={{ background: C.sunken, borderRadius: RAD.tile, padding: '8px 12px' }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 7, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{who}</span>
+            {when && <span style={{ fontSize: F.micro, color: C.faint }}>{when}</span>}
+          </div>
+          <Body text={c.body} names={names} />
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, flexWrap: 'wrap', marginTop: 5 }}>
+          <Reacts emojis={reacts} onReact={e => onReact(c.id, e)} />
+          {canReply && onReply && (
+            <Button size="sm" variant="ghost" onClick={onReply}>Reply</Button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -151,8 +143,6 @@ export default function CommentThread({
     const body = draft.trim()
     if (!body) return
     setBusy(true); setErr(null)
-    // Mentions are resolved from the names the caller already has, so a typo
-    // becomes plain text rather than a broken chip pointing at nobody.
     const mentioned = [...names.entries()]
       .filter(([, n]) => body.includes('@' + n)).map(([id]) => id)
     const r = await wallRpc('add_comment', {
@@ -170,7 +160,7 @@ export default function CommentThread({
       [commentId]: { ...cur[commentId], [emoji]: (cur[commentId]?.[emoji] ?? 0) + 1 } }))
     const r = await supabase.from('comment_reactions')
       .insert({ comment_id: commentId, emoji })
-    if (r.error) load()   // put it back the way the database sees it
+    if (r.error) load()
   }
 
   const threads = threadComments(rows)
@@ -182,13 +172,11 @@ export default function CommentThread({
           <One c={t} names={names} reacts={reacts[t.id] ?? {}} onReact={react}
                canReply={repliesEnabled} onReply={() => setReplyTo(t.id)} />
           {t.replies.length > 0 && (
-            // One level of indentation, and only one. The rail makes the
-            // nesting readable without a second tier ever being possible.
-            <div style={{ paddingLeft: S.md, borderLeft: `2px solid ${C.line}`,
+            <div style={{ marginLeft: 16, paddingLeft: 26, borderLeft: `2px solid ${C.line}`,
                           display: 'grid', gap: S.sm }}>
               {t.replies.map(r => (
                 <One key={r.id} c={r} names={names} reacts={reacts[r.id] ?? {}}
-                     onReact={react} canReply={false} />
+                     onReact={react} canReply={false} small />
               ))}
             </div>
           )}
@@ -196,14 +184,9 @@ export default function CommentThread({
       ))}
 
       {replyTo && (
-        <div style={{ fontSize: F.micro, color: C.muted }}>
+        <div style={{ fontSize: F.micro, color: C.muted, display: 'flex', alignItems: 'center', gap: 6 }}>
           Replying to {names.get(threads.find(t => t.id === replyTo)?.employee_id ?? '') ?? 'a comment'}
-          {' · '}
-          <button type="button" onClick={() => setReplyTo(null)}
-            style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.brand,
-                     fontFamily: 'inherit', fontSize: F.micro, fontWeight: W.semi, padding: 0 }}>
-            cancel
-          </button>
+          <Button size="sm" variant="ghost" onClick={() => setReplyTo(null)}>Cancel</Button>
         </div>
       )}
 
@@ -213,25 +196,15 @@ export default function CommentThread({
           placeholder={replyTo ? 'Write a reply…' : 'Add a comment. Use @ to mention someone.'}
           aria-label={replyTo ? 'Your reply' : 'Your comment'}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); post() } }}
-          style={{ flex: '1 1 240px', minWidth: 0, padding: '9px 12px', borderRadius: R.sm,
-                   fontFamily: 'inherit', fontSize: F.small, border: `1px solid ${C.line}`,
-                   background: C.surface, color: C.ink, boxSizing: 'border-box' }}
+          style={{ ...inputStyle, flex: '1 1 240px', width: 'auto', minWidth: 0, borderRadius: 999,
+                   padding: '9px 16px' }}
         />
-        <button type="button" onClick={post} disabled={busy || !draft.trim()}
-          style={{ fontFamily: 'inherit', fontSize: F.small, fontWeight: W.bold,
-                   padding: '9px 16px', borderRadius: R.sm, border: 'none',
-                   cursor: busy || !draft.trim() ? 'not-allowed' : 'pointer',
-                   background: draft.trim() ? C.brand : C.sunken,
-                   color: draft.trim() ? C.onAccent : C.muted }}>
+        <Button variant="primary" icon="send" onClick={post} busy={busy} disabled={!draft.trim()}>
           {busy ? 'Posting…' : replyTo ? 'Reply' : 'Comment'}
-        </button>
+        </Button>
       </div>
 
-      {err && (
-        <div role="alert" style={{ fontSize: F.micro, color: C.critical, fontWeight: W.semi }}>
-          {err}
-        </div>
-      )}
+      <FieldError>{err}</FieldError>
     </div>
   )
 }

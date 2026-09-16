@@ -1,23 +1,26 @@
 'use client'
 // components/wall/ShoutoutComposer.tsx — give a shoutout.
 //
-// Layout copied from design/EZER-WallOfFame-v7.html: person search, category
-// grid, optional value tags, message with a counter, visibility segment, live
-// preview. Not redesigned.
+// v8 REDESIGN. The form is now a numbered, five-step column — Who, What for,
+// (Which value), Badge and tags, Message, Who sees it — with the live preview
+// and the send button in a rail beside it that stays in view while you write.
+// On a narrow screen the rail drops beneath the steps.
 //
-// EVERY SUB-COMPONENT IS AT MODULE SCOPE, AND THAT IS NOT A STYLE CHOICE.
-// Declared inside the parent, React sees a new component type on every render
-// and remounts it — which on this screen means the search box and the textarea
-// lose focus on every keystroke. This codebase has had that bug once already.
+// NOTHING ABOUT WHAT IT DOES HAS CHANGED:
+//   - same reads: employees.company_id → shoutout_categories and
+//     recognition_values, both filtered by that company
+//   - same writes: create_shoutout, then set_recognition_marks for the
+//     badge and tags, through wallRpc
+//   - same rules from lib/wall/shoutout.ts, shown only after the first try
+//   - the send button stays enabled while the form is incomplete, because
+//     pressing it is how somebody finds out what is missing
 //
-// The rules live in lib/wall/shoutout.ts, mirrored from create_shoutout().
-// They are mirrored so somebody is told about the fifteen-character minimum
-// while typing rather than after pressing send. The database still decides.
+// Sub-components at module scope. The person search moved to PersonPicker.tsx.
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
-import { orIlike } from '@/lib/pg-search'
 import RecognitionPicker from '@/components/wall/RecognitionPicker'
-import { MAX_TAGS } from '@/lib/wall/catalogue'
+import PersonPicker, { type Person } from '@/components/wall/PersonPicker'
+import { MAX_TAGS, badgeByRef, tagByRef } from '@/lib/wall/catalogue'
 import { supabase } from '@/lib/supabase'
 import { wallRpc } from '@/lib/wall/rpc'
 import {
@@ -25,94 +28,41 @@ import {
   VISIBILITIES, DEFAULT_RULES, EMPTY_DRAFT,
   type Draft, type WallRules, type Problem,
 } from '@/lib/wall/shoutout'
-// WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
-//
-// tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
-// mode and white on it falls to 2.5:1. Measured here at 2.54 on the Send
-// button. C.onAccent is the theme-aware ink for an accent fill and is what
-// every one of these should have used from the start.
-import { C, F, W, S, R } from '@/lib/ui'
+import { C, F, W, S } from '@/lib/ui'
+import {
+  Avatar, AvatarStack, Button, CategoryGrid, FieldError, Icon, Notice, Pill, RAD,
+  Segmented, Split, Step, inputStyle,
+} from '@/components/wall/ui'
 
-export interface Person { id: string; full_name: string; emp_code?: string | null; designation?: string | null }
+export type { Person }
 export interface Category {
   id: string; code: string; label: string; helper_text?: string | null
   glyph?: string | null; requires_value?: boolean | null
 }
 export interface CompanyValue { id: string; label: string }
 
+const VIS_ICON = { company: 'globe', branch: 'users', department: 'users', team: 'users' } as const
+
 // ── module-scope pieces ──────────────────────────────────────────────────
 
-function Label({ children, hint }: { children: React.ReactNode; hint?: string }) {
-  return (
-    <div style={{ marginBottom: 7 }}>
-      <div style={{ fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.1em',
-                    textTransform: 'uppercase', color: C.muted }}>{children}</div>
-      {hint && <div style={{ fontSize: F.micro, color: C.faint, marginTop: 2 }}>{hint}</div>}
-    </div>
-  )
-}
-
-function Err({ children }: { children: React.ReactNode }) {
-  if (!children) return null
-  return (
-    <div role="alert" style={{ fontSize: F.micro, color: C.critical, marginTop: 6, fontWeight: W.semi }}>
-      {children}
-    </div>
-  )
-}
-
-function PersonChip({ p, onRemove }: { p: Person; onRemove: () => void }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 6px 4px 10px',
-                   borderRadius: 999, background: C.brandTint, color: C.brand,
-                   fontSize: F.micro, fontWeight: W.semi }}>
-      {p.full_name}
-      <button type="button" onClick={onRemove} aria-label={`Remove ${p.full_name}`}
-              style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'inherit',
-                       fontSize: 15, lineHeight: 1, padding: '0 2px', fontFamily: 'inherit' }}>×</button>
-    </span>
-  )
-}
-
-function CategoryChip({ c, on, onPick }: { c: Category; on: boolean; onPick: () => void }) {
-  return (
-    <button type="button" onClick={onPick} aria-pressed={on}
-      style={{
-        textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', padding: '10px 12px',
-        borderRadius: R.sm, minWidth: 0,
-        border: `1px solid ${on ? C.brand : C.line}`,
-        background: on ? C.brandTint : C.surface,
-        boxShadow: on ? 'none' : '0 1px 2px rgba(16,36,100,.05)',
-      }}>
-      <div style={{ fontSize: F.small, fontWeight: W.bold, color: on ? C.brand : C.ink }}>
-        {c.glyph ? `${c.glyph} ` : ''}{c.label}
-      </div>
-      {c.helper_text && (
-        <div style={{ fontSize: F.micro, color: C.muted, marginTop: 3, lineHeight: 1.4 }}>
-          {c.helper_text}
-        </div>
-      )}
-    </button>
-  )
-}
-
-function Segment({ options, value, onPick }: {
-  options: readonly string[]; value: string; onPick: (v: string) => void
+function ValueChips({ values, picked, onToggle }: {
+  values: CompanyValue[]; picked: string[]; onToggle: (id: string) => void
 }) {
   return (
-    <div role="group" style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4, padding: 3,
-                               background: C.sunken, borderRadius: R.sm }}>
-      {options.map(o => {
-        const on = o === value
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+      {values.map(v => {
+        const on = picked.includes(v.id)
         return (
-          <button key={o} type="button" onClick={() => onPick(o)} aria-pressed={on}
-            style={{ cursor: 'pointer', fontFamily: 'inherit', padding: '6px 12px',
-                     borderRadius: R.sm, border: 'none', textTransform: 'capitalize',
-                     fontSize: F.micro, fontWeight: on ? W.bold : W.semi,
-                     background: on ? C.surface : 'transparent',
-                     color: on ? C.ink : C.muted,
-                     boxShadow: on ? '0 1px 2px rgba(16,36,100,.14)' : 'none' }}>
-            {o}
+          <button key={v.id} type="button" aria-pressed={on} onClick={() => onToggle(v.id)}
+            className="wof-tile"
+            style={{ cursor: 'pointer', fontFamily: 'inherit', padding: '6px 13px',
+                     borderRadius: RAD.pill, fontSize: F.micro, fontWeight: W.semi,
+                     display: 'inline-flex', alignItems: 'center', gap: 6,
+                     border: `1.5px solid ${on ? C.brand : C.line}`,
+                     background: on ? C.brandTint : C.surface,
+                     color: on ? C.brand : C.inkSoft }}>
+            {on && <Icon name="check" size={12} stroke={2.6} />}
+            {v.label}
           </button>
         )
       })}
@@ -120,39 +70,88 @@ function Segment({ options, value, onPick }: {
   )
 }
 
-/** What the card will look like once it lands on the feed. Shown while
- *  writing, because the note is public and people edit differently when they
- *  can see the thing they are actually making. */
+function MessageMeter({ len, min }: { len: number; min: number }) {
+  const pct = Math.min(100, Math.round((len / Math.max(1, min)) * 100))
+  const done = len >= min
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span aria-hidden="true" style={{ width: 54, height: 4, borderRadius: 4, background: C.sunken,
+                                        overflow: 'hidden' }}>
+        <span style={{ display: 'block', height: '100%', width: `${pct}%`,
+                       background: done ? C.positive : C.brand, transition: 'width .2s' }} />
+      </span>
+      {/* Counts up to the minimum, then stops nagging. A counter that keeps
+          score forever reads as a limit when it is a floor. */}
+      <span style={{ fontSize: F.micro, color: done ? C.positive : C.faint, fontWeight: W.semi }}>
+        {done ? 'Long enough' : `${len} of ${min} characters`}
+      </span>
+    </div>
+  )
+}
+
+/** What the card will look like on the feed — the same anatomy as FeedCard,
+ *  so what you see here is what lands. */
 function Preview({ draft, people, category }: {
   draft: Draft; people: Person[]; category: Category | null
 }) {
+  const badge = draft.badgeRef ? badgeByRef(draft.badgeRef) : null
+  const tags = (draft.tagRefs ?? []).map(r => tagByRef(r)?.name).filter(Boolean)
+  const names = people.map(p => p.full_name)
   return (
-    <div style={{ border: `1px dashed ${C.lineStrong}`, borderRadius: R.sm,
-                  padding: `${S.md}px`, background: C.surface }}>
-      <div style={{ fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.1em',
-                    textTransform: 'uppercase', color: C.faint, marginBottom: 9 }}>
-        How it will look
+    <div style={{ border: `1px solid ${C.line}`, borderRadius: RAD.tile, background: C.surface,
+                  overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px',
+                    background: C.sunken, borderBottom: `1px solid ${C.line}`,
+                    fontSize: F.micro, fontWeight: W.semi, color: C.muted }}>
+        <Icon name="eye" size={14} /> How it will look on the wall
       </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>You</span>
-        <span aria-hidden style={{ color: C.faint }}>→</span>
-        <span style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>
-          {people.length ? people.map(p => p.full_name).join(', ') : 'nobody yet'}
-        </span>
-        {category && (
-          <span style={{ fontSize: F.micro, fontWeight: W.semi, padding: '2px 8px', borderRadius: 999,
-                         background: C.brandTint, color: C.brand }}>
-            {category.glyph ? `${category.glyph} ` : ''}{category.label}
-          </span>
+      <div style={{ padding: 14, display: 'grid', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Avatar name="You" size={34} />
+          <div style={{ minWidth: 0, flex: 1, fontSize: F.small, color: C.ink, lineHeight: 1.4 }}>
+            <strong>You</strong>
+            <span style={{ color: C.muted }}> recognised </span>
+            <strong style={{ color: names.length ? C.ink : C.faint }}>
+              {names.length ? names.join(', ') : 'nobody yet'}
+            </strong>
+          </div>
+          {names.length > 1 && <AvatarStack names={names} size={24} />}
+        </div>
+        {(category || badge) && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {category && <Pill>{category.glyph ? `${category.glyph} ` : ''}{category.label}</Pill>}
+            {badge && <Pill tone="neutral">{badge.glyph} {badge.name}</Pill>}
+          </div>
         )}
+        <p style={{ margin: 0, fontSize: F.small, lineHeight: 1.65, whiteSpace: 'pre-wrap',
+                    color: draft.message ? C.inkSoft : C.faint,
+                    borderLeft: `3px solid ${C.brandEdge}`, paddingLeft: 12 }}>
+          {draft.message || 'Your message will appear here.'}
+        </p>
+        {tags.length > 0 && (
+          <div style={{ fontSize: F.micro, color: C.muted }}>{tags.join(' · ')}</div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: F.micro, color: C.faint }}>
+          <Icon name={VIS_ICON[draft.visibility as keyof typeof VIS_ICON] ?? 'globe'} size={13} />
+          {visibilityNote(draft.visibility)}
+        </div>
       </div>
-      <p style={{ margin: '9px 0 0', fontSize: F.small, color: draft.message ? C.inkSoft : C.faint,
-                  lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
-        {draft.message || 'Your message will appear here.'}
-      </p>
-      <div style={{ fontSize: F.micro, color: C.faint, marginTop: 9 }}>
-        {visibilityNote(draft.visibility)}
-      </div>
+    </div>
+  )
+}
+
+function QuotaDots({ left, total }: { left: number; total: number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+      <span style={{ fontSize: F.micro, color: left > 0 ? C.muted : C.critical, fontWeight: W.semi }}>
+        {left > 0 ? `${left} left today` : 'None left today'}
+      </span>
+      <span aria-hidden="true" style={{ display: 'flex', gap: 4 }}>
+        {Array.from({ length: total }, (_, i) => (
+          <span key={i} style={{ width: 8, height: 8, borderRadius: '50%',
+                                 background: i < left ? C.brand : C.line }} />
+        ))}
+      </span>
     </div>
   )
 }
@@ -169,8 +168,6 @@ export default function ShoutoutComposer({
   onSent?: () => void
 }) {
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
-  const [query, setQuery] = useState('')
-  const [found, setFound] = useState<Person[]>([])
   const [picked, setPicked] = useState<Person[]>([])
   const [cats, setCats] = useState<Category[]>([])
   const [values, setValues] = useState<CompanyValue[]>([])
@@ -182,65 +179,28 @@ export default function ShoutoutComposer({
 
   useEffect(() => {
     (async () => {
-      // The company first: BOTH lists below are per-company, and reading either
-      // without it returns every company's copy.
+      // The company first: BOTH lists below are per-company, and reading
+      // either without it returns every company's copy.
       const me = await supabase.from('employees')
         .select('company_id').eq('id', actorId).maybeSingle()
       const companyId = (me.data as { company_id?: string } | null)?.company_id ?? null
 
-      // shoutout_categories holds one row per category PER COMPANY — three
-      // companies here, eight categories each, twenty-four rows. Filtering on
-      // is_active alone returned all twenty-four, so "What is it for" listed
-      // Performance, Helping hand and the rest three times over, and choosing
-      // one was a coin toss between three identical-looking options belonging
-      // to three different companies.
       let cq = supabase.from('shoutout_categories')
         .select('id, code, label, helper_text, glyph, requires_value')
         .eq('is_active', true).order('sort_order').limit(24)
       cq = companyId ? cq.eq('company_id', companyId) : cq.limit(0)
       const c = await cq
       if (!c.error) setCats((c.data ?? []) as unknown as Category[])
-      // recognition_values, not company_values. I had guessed the name, and a
-      // guessed relation fails the whole select rather than returning nothing.
-      //
-      // FILTERED BY COMPANY, and that is the whole point. The table holds one
-      // row per value PER COMPANY — three companies here, six values each,
-      // eighteen rows. Selecting on is_active alone returned all eighteen, so
-      // every value appeared three times in the picker and picking one was a
-      // coin toss between three identical-looking chips belonging to three
-      // different companies.
-      //
-      // Same company, same reason. Resolved once above, from the actor rather
-      // than a prop: this composer is handed only actorId, so no caller can
-      // pass the wrong one.
+
+      // recognition_values, filtered by company — one row per value PER
+      // company, so an unfiltered read shows every value three times.
       let vq = supabase.from('recognition_values').select('id, label')
         .eq('is_active', true).order('sort_order').limit(24)
-      // No company resolved is not a reason to show another company's values.
       vq = companyId ? vq.eq('company_id', companyId) : vq.limit(0)
       const v = await vq
       if (!v.error) setValues((v.data ?? []) as unknown as CompanyValue[])
     })()
-    // actorId is read inside now, so it belongs here — an empty array would
-    // pin the first actor's company for the life of the component.
   }, [actorId])
-
-  // Search by name or code. Anyone who has left is excluded — the database
-  // refuses them anyway, and offering a name that cannot be submitted is a
-  // dead end dressed up as a choice.
-  useEffect(() => {
-    const q = query.trim()
-    if (q.length < 2) { setFound([]); return }
-    let alive = true
-    const t = setTimeout(async () => {
-      const r = await supabase.from('employees')
-        .select('id, full_name, emp_code, designation')
-        .is('date_of_leaving', null)
-        .or(orIlike(['full_name', 'emp_code'], q))
-        .limit(8)
-      if (alive && !r.error) setFound((r.data ?? []) as unknown as Person[])
-    }, 220)
-    return () => { alive = false; clearTimeout(t) }
-  }, [query])
 
   const category = useMemo(
     () => cats.find(c => c.code === draft.categoryCode) ?? null, [cats, draft.categoryCode])
@@ -255,7 +215,6 @@ export default function ShoutoutComposer({
   const add = useCallback((p: Person) => {
     setPicked(cur => cur.some(x => x.id === p.id) ? cur : [...cur, p])
     setDraft(d => d.receiverIds.includes(p.id) ? d : { ...d, receiverIds: [...d.receiverIds, p.id] })
-    setQuery(''); setFound([])
   }, [])
 
   const remove = useCallback((id: string) => {
@@ -275,10 +234,8 @@ export default function ShoutoutComposer({
       p_visibility: draft.visibility,
     }, actorId)
     // The badge and tags go on afterwards, through their own function.
-    // create_shoutout's signature is 086's and adding arguments to it would
-    // either make every existing call ambiguous or mean copying its whole
-    // body into 089 — see the note there. A failure here loses the marks,
-    // not the shoutout, so it is reported without discarding the post.
+    // A failure here loses the marks, not the shoutout, so it is reported
+    // without discarding the post.
     if (!r.error && (draft.badgeRef || (draft.tagRefs ?? []).length)) {
       const id = (r.data as { id?: string } | null)?.id
       if (id) {
@@ -292,8 +249,7 @@ export default function ShoutoutComposer({
     }
     setSending(false)
     if (r.error) {
-      // The database's own words. It is the authority, and rephrasing its
-      // refusal here would give two different explanations for one rule.
+      // The database's own words — it is the authority.
       setServerErr(r.error.message)
       return
     }
@@ -302,162 +258,89 @@ export default function ShoutoutComposer({
   }
 
   const show = (f: Parameters<typeof problemFor>[0]) => tried ? problemFor(f, probs) : null
+  const needsValue = (rules.requireValue || category?.requires_value) && values.length > 0
+  let n = 0
 
-  return (
-    <div style={{ display: 'grid', gap: S.lg, gridTemplateColumns: 'minmax(0, 1fr)' }}>
-      <div style={{ display: 'grid', gap: S.md }}>
-        {/* who */}
-        <div>
-          <Label hint={rules.allowGroup ? `Up to ${rules.maxReceivers} people at once` : 'One person at a time'}>
-            Who are you recognising
-          </Label>
-          {picked.length > 0 && (
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {picked.map(p => <PersonChip key={p.id} p={p} onRemove={() => remove(p.id)} />)}
-            </div>
-          )}
-          <input
-            value={query} onChange={e => setQuery(e.target.value)}
-            placeholder="Search by name or employee code"
-            aria-label="Search for a colleague"
-            style={{ width: '100%', padding: '10px 12px', borderRadius: R.sm, fontFamily: 'inherit',
-                     fontSize: F.small, border: `1px solid ${C.line}`, background: C.surface,
-                     color: C.ink, boxSizing: 'border-box' }}
-          />
-          {found.length > 0 && (
-            <div style={{ marginTop: 6, border: `1px solid ${C.line}`, borderRadius: R.sm,
-                          background: C.surface, overflow: 'hidden' }}>
-              {found.map(p => (
-                <button key={p.id} type="button" onClick={() => add(p)}
-                  style={{ display: 'block', width: '100%', textAlign: 'left', cursor: 'pointer',
-                           padding: '9px 12px', border: 'none', background: 'none',
-                           fontFamily: 'inherit', borderBottom: `1px solid ${C.line}` }}>
-                  <span style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink }}>{p.full_name}</span>
-                  <span style={{ fontSize: F.micro, color: C.muted, marginLeft: 8 }}>
-                    {[p.emp_code, p.designation].filter(Boolean).join(' · ')}
-                  </span>
-                </button>
-              ))}
-            </div>
-          )}
-          <Err>{show('receivers')}</Err>
+  const steps = (
+    <div>
+      <Step n={++n} title="Who are you recognising"
+        hint={rules.allowGroup ? `Up to ${rules.maxReceivers} people at once` : 'One person at a time'}
+        error={show('receivers')} done={picked.length > 0}>
+        <PersonPicker picked={picked} onAdd={add} onRemove={remove} inputId="wof-shout-people" />
+      </Step>
+
+      {cats.length > 0 && (
+        <Step n={++n} title="What is it for" error={show('category')} done={!!category}>
+          <CategoryGrid cats={cats} value={draft.categoryCode}
+            onPick={code => setDraft(d => ({ ...d, categoryCode: code }))} />
+        </Step>
+      )}
+
+      {needsValue && (
+        <Step n={++n} title="Which company value" hint="This category is tied to a company value"
+          error={show('value')} done={draft.valueIds.length > 0}>
+          <ValueChips values={values} picked={draft.valueIds}
+            onToggle={id => setDraft(d => ({ ...d,
+              valueIds: d.valueIds.includes(id) ? d.valueIds.filter(x => x !== id) : [...d.valueIds, id] }))} />
+        </Step>
+      )}
+
+      {/* Optional on purpose: forcing a badge onto every thank-you would
+          spend the badges on "thanks for covering my shift". */}
+      <Step n={++n} title="Badge and tags" hint={`Optional · one badge, up to ${MAX_TAGS} tags`}
+        done={!!draft.badgeRef || (draft.tagRefs ?? []).length > 0}>
+        <RecognitionPicker
+          value={{ badgeRef: draft.badgeRef ?? null, tagRefs: draft.tagRefs ?? [] }}
+          onChange={sel => setDraft(d => ({ ...d, badgeRef: sel.badgeRef, tagRefs: sel.tagRefs }))} />
+      </Step>
+
+      <Step n={++n} title="What did they do" hint="Be specific. What happened, and why it mattered."
+        error={show('message')} done={len >= rules.minMessageLength}>
+        <textarea
+          id="wof-shout-message"
+          value={draft.message} onChange={e => setDraft(d => ({ ...d, message: e.target.value }))}
+          rows={5} placeholder="e.g. Stayed back on Friday to rebuild the dispatch sheet, so the morning shift started on time."
+          aria-label="Your message"
+          style={{ ...inputStyle, resize: 'vertical', lineHeight: 1.65, minHeight: 120 }}
+        />
+        <div style={{ marginTop: 8 }}>
+          <MessageMeter len={len} min={rules.minMessageLength} />
         </div>
+      </Step>
 
-        {/* what for */}
-        {cats.length > 0 && (
-          <div>
-            <Label>What is it for</Label>
-            <div style={{ display: 'grid', gap: 8,
-                          gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
-              {cats.map(c => (
-                <CategoryChip key={c.id} c={c} on={draft.categoryCode === c.code}
-                  onPick={() => setDraft(d => ({ ...d, categoryCode: c.code }))} />
-              ))}
-            </div>
-            <Err>{show('category')}</Err>
-          </div>
-        )}
-
-        {/* values — only when one is actually wanted */}
-        {(rules.requireValue || category?.requires_value) && values.length > 0 && (
-          <div>
-            <Label hint="This category is tied to a company value">Which value</Label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {values.map(v => {
-                const on = draft.valueIds.includes(v.id)
-                return (
-                  <button key={v.id} type="button" aria-pressed={on}
-                    onClick={() => setDraft(d => ({ ...d,
-                      valueIds: on ? d.valueIds.filter(x => x !== v.id) : [...d.valueIds, v.id] }))}
-                    style={{ cursor: 'pointer', fontFamily: 'inherit', padding: '6px 12px',
-                             borderRadius: 999, fontSize: F.micro, fontWeight: W.semi,
-                             border: `1px solid ${on ? C.brand : C.line}`,
-                             background: on ? C.brandTint : C.surface,
-                             color: on ? C.brand : C.inkSoft }}>
-                    {v.label}
-                  </button>
-                )
-              })}
-            </div>
-            <Err>{show('value')}</Err>
-          </div>
-        )}
-
-        {/* badge and tags — the catalogue from the Applause master (089).
-            Optional on purpose: forcing a badge onto every thank-you would
-            spend the badges on "thanks for covering my shift". */}
-        <div>
-          <Label hint={`One badge, and up to ${MAX_TAGS} tags saying why`}>
-            Badge and tags
-          </Label>
-          <RecognitionPicker
-            value={{ badgeRef: draft.badgeRef ?? null, tagRefs: draft.tagRefs ?? [] }}
-            onChange={sel => setDraft(d => ({ ...d, badgeRef: sel.badgeRef,
-                                              tagRefs: sel.tagRefs }))} />
+      <Step n={++n} title="Who can see it" done>
+        <Segmented label="Who can see it" options={VISIBILITIES} value={draft.visibility as typeof VISIBILITIES[number]}
+          onPick={v => setDraft(d => ({ ...d, visibility: v }))} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: F.micro,
+                      color: C.muted, marginTop: 8 }}>
+          <Icon name={VIS_ICON[draft.visibility as keyof typeof VIS_ICON] ?? 'globe'} size={13} />
+          {visibilityNote(draft.visibility)}
         </div>
+      </Step>
+    </div>
+  )
 
-        {/* the words */}
-        <div>
-          <Label>What did they do</Label>
-          <textarea
-            value={draft.message} onChange={e => setDraft(d => ({ ...d, message: e.target.value }))}
-            rows={4} placeholder="Be specific. What happened, and why it mattered."
-            aria-label="Your message"
-            style={{ width: '100%', padding: '10px 12px', borderRadius: R.sm, fontFamily: 'inherit',
-                     fontSize: F.small, lineHeight: 1.6, border: `1px solid ${C.line}`,
-                     background: C.surface, color: C.ink, resize: 'vertical', boxSizing: 'border-box' }}
-          />
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 5 }}>
-            <span style={{ fontSize: F.micro, color: C.faint }}>
-              {/* Counts up to the minimum, then stops nagging. A counter that
-                  keeps score forever reads as a limit when it is a floor. */}
-              {len < rules.minMessageLength
-                ? `${len} of ${rules.minMessageLength} characters`
-                : 'Long enough'}
-            </span>
-            <span style={{ fontSize: F.micro, color: left > 0 ? C.faint : C.critical }}>
-              {left > 0 ? `${left} left today` : 'None left today'}
-            </span>
-          </div>
-          <Err>{show('message')}</Err>
-        </div>
+  const rail = (
+    <div style={{ display: 'grid', gap: S.md }}>
+      <Preview draft={live} people={picked} category={category} />
 
-        {/* how far it travels */}
-        <div>
-          <Label>Who can see it</Label>
-          <Segment options={VISIBILITIES} value={draft.visibility}
-                   onPick={v => setDraft(d => ({ ...d, visibility: v }))} />
-          <div style={{ fontSize: F.micro, color: C.muted, marginTop: 6 }}>
-            {visibilityNote(draft.visibility)}
-          </div>
-        </div>
-
-        <Preview draft={live} people={picked} category={category} />
-
-        <Err>{show('quota')}</Err>
-        {serverErr && (
-          <div role="alert" style={{ background: C.criticalTint, border: `1px solid ${C.critical}44`,
-                        borderRadius: R.sm, padding: `${S.sm}px ${S.md}px`, fontSize: F.small,
-                        color: C.ink }}>
-            {serverErr}
-          </div>
-        )}
-
-        <div>
-          <button type="button" onClick={send} disabled={sending || left === 0}
-            style={{ fontFamily: 'inherit', fontSize: F.small, fontWeight: W.bold,
-                     padding: '11px 20px', borderRadius: R.sm, border: 'none',
-                     cursor: sending || left === 0 ? 'not-allowed' : 'pointer',
-                     background: left === 0 ? C.sunken : C.brand,
-                     color: left === 0 ? C.muted : C.onAccent,
-                     opacity: sending ? .7 : 1 }}>
-            {sending ? 'Sending…' : 'Send it'}
-          </button>
-          {/* The button stays enabled while the form is incomplete on purpose:
-              pressing it is how somebody finds out WHAT is incomplete. A
-              disabled button with no explanation is the worst of both. */}
+      <div style={{ border: `1px solid ${C.line}`, borderRadius: RAD.tile, padding: 14,
+                    display: 'grid', gap: 12, background: C.surface }}>
+        <QuotaDots left={left} total={rules.dailyLimit} />
+        <FieldError>{show('quota')}</FieldError>
+        {serverErr && <Notice tone="critical" role="alert">{serverErr}</Notice>}
+        {/* Enabled while incomplete on purpose — pressing it is how somebody
+            finds out WHAT is incomplete. */}
+        <Button variant="primary" size="lg" icon="send" full onClick={send}
+          busy={sending} disabled={left === 0}>
+          {sending ? 'Posting…' : 'Post shoutout'}
+        </Button>
+        <div style={{ fontSize: F.micro, color: C.faint, lineHeight: 1.5, textAlign: 'center' }}>
+          Recognition is thanks, never pay.
         </div>
       </div>
     </div>
   )
+
+  return <Split main={steps} rail={rail} mainMin={440} railMin={280} stickyRail />
 }

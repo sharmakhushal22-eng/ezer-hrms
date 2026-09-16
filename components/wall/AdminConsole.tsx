@@ -1,33 +1,34 @@
 'use client'
 // components/wall/AdminConsole.tsx — the Wall of Fame admin console.
 //
-// DENIAL IS A STATE, NOT A 404.
+// v8 REDESIGN. A settings layout: the six areas as a navigation column on
+// the left, each with its icon and a lock when the viewer lacks the grant,
+// and the chosen area on the right. On a narrow screen the column sits
+// above the content.
 //
-// Someone who lacks a permission sees the screen, disabled, with the reason
-// from wof_explain_access() printed inline. Telling an HR Manager "this needs
-// Wall Administrator level wall_admin — ask a Wall Owner" is worth far more
-// than a blank page, because it names the person who can fix it. A 404 makes
-// them think the feature is missing and open a ticket.
+// NOTHING ABOUT WHAT IT DOES HAS CHANGED:
+//   - one gate pass: wof_can for every permission, wof_explain_access for
+//     each one refused — the database's sentence is shown verbatim
+//   - areas read-only, company-scoped, same columns as v7
+//   - Screens is the one writable area and calls the SAME four actions as
+//     v7 (create_board_screen, set_board_screen_active,
+//     rotate_board_pair_code, delete_board_screen).
 //
-// NOTHING HERE IS SELF-SERVE, AND THAT IS ENFORCED BELOW THIS FILE.
+//     FIXED IN THE ROUTE, NOT HERE. These four used to answer "Unknown
+//     action" because the route exposed migration 106's names with different
+//     parameters, and 106 has no delete at all. The route now maps all four
+//     to migration 101's wrappers, which match what this file already sends.
+//     The component was always right; nothing here changed.
 //
-// Config tables carry write triggers that reject anyone without a current
-// grant, so a stray route cannot bypass the check and neither can this
-// screen. What it renders is therefore an honest picture of what the person
-// may do, not the gate itself.
-//
-// Sub-components at module scope.
+// DENIAL IS A STATE, NOT A 404. Sub-components at module scope.
 
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { wallRpc } from '@/lib/wall/rpc'
-// WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
-//
-// tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
-// mode and white on it falls to 2.5:1. Measured here at 2.54 on the Send
-// button. C.onAccent is the theme-aware ink for an accent fill and is what
-// every one of these should have used from the start.
-import { C, F, W, S, R } from '@/lib/ui'
+import { C, F, W, S } from '@/lib/ui'
+import {
+  Button, Empty, FieldLabel, Icon, Notice, Pill, RAD, Skeleton, inputStyle, type IconName,
+} from '@/components/wall/ui'
 
 const MISSING = 'PGRST205'
 const gone = (e: unknown) =>
@@ -36,94 +37,179 @@ const gone = (e: unknown) =>
 
 /** The surfaces the console offers, each with the permission it needs. */
 const AREAS = [
-  { k: 'awards',  label: 'Awards',        perm: 'wof.configure',
+  { k: 'awards',  label: 'Awards',         perm: 'wof.configure',    icon: 'trophy',
     blurb: 'What can be won, who may nominate, and how often' },
-  { k: 'values',  label: 'Company values', perm: 'wof.configure',
+  { k: 'values',  label: 'Company values', perm: 'wof.configure',    icon: 'heart',
     blurb: 'The values a shoutout can be tagged against' },
-  { k: 'badges',  label: 'Badges',        perm: 'wof.badge.manage',
+  { k: 'badges',  label: 'Badges',         perm: 'wof.badge.manage', icon: 'medal',
     blurb: 'Shapes, glyphs and the rules that unlock them' },
-  { k: 'screens', label: 'Screens',       perm: 'wof.board.manage',
+  { k: 'screens', label: 'Screens',        perm: 'wof.board.manage', icon: 'tv',
     blurb: 'Televisions on the wall, and their pair codes' },
-  { k: 'admins',  label: 'Administrators', perm: 'wof.admin.grant',
+  { k: 'admins',  label: 'Administrators', perm: 'wof.admin.grant',  icon: 'users',
     blurb: 'Who may change any of this, and why they were granted it' },
-  { k: 'audit',   label: 'Audit',         perm: 'wof.report.view',
+  { k: 'audit',   label: 'Audit',          perm: 'wof.report.view',  icon: 'clock',
     blurb: 'Every configuration change, who made it and when' },
-] as const
+] as const satisfies readonly { k: string; label: string; perm: string; icon: IconName; blurb: string }[]
 
 type AreaKey = (typeof AREAS)[number]['k']
+type Cell = string | number | null
 
 // ── module scope ─────────────────────────────────────────────────────────
 
-function Card({ children, tone }: { children: React.ReactNode; tone?: 'warn' | 'off' }) {
-  const edge = tone === 'warn' ? `${C.warning}44` : C.line
-  const fill = tone === 'warn' ? C.warningTint : tone === 'off' ? C.sunken : C.surface
-  return (
-    <div style={{ background: fill, border: `1px solid ${edge}`, borderRadius: R.sm,
-                  padding: `${S.md}px ${S.lg}px` }}>{children}</div>
-  )
-}
-
-/** An area the person cannot open. Shown, greyed, with the reason — never
- *  hidden, because a missing tab is indistinguishable from a missing feature. */
-function Locked({ label, blurb, reason }: { label: string; blurb: string; reason: string }) {
-  return (
-    <Card tone="off">
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: F.small, fontWeight: W.bold, color: C.inkSoft }}>{label}</span>
-        <span aria-hidden style={{ fontSize: F.micro, color: C.muted }}>locked</span>
-      </div>
-      <div style={{ fontSize: F.micro, color: C.muted, marginTop: 3 }}>{blurb}</div>
-      {/* The database's own sentence. It names the level required and who can
-          grant it, which is the only useful thing to say here. */}
-      <div style={{ fontSize: F.small, color: C.ink, marginTop: 9, lineHeight: 1.55 }}>
-        {reason}
-      </div>
-    </Card>
-  )
-}
-
-function Row({ cells, head }: { cells: (string | number | null)[]; head?: boolean }) {
-  return (
-    <tr style={{ borderTop: head ? 'none' : `1px solid ${C.line}` }}>
-      {cells.map((c, i) => (
-        head ? (
-          <th key={i} style={{ textAlign: 'left', padding: '0 10px 8px', whiteSpace: 'nowrap',
-                               fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.08em',
-                               textTransform: 'uppercase', color: C.muted }}>{c}</th>
-        ) : (
-          <td key={i} style={{ padding: '9px 10px', fontSize: F.small,
-                               color: i === 0 ? C.ink : C.inkSoft,
-                               fontWeight: i === 0 ? W.semi : W.regular }}>{c ?? '—'}</td>
-        )
-      ))}
-    </tr>
-  )
-}
-
-function Table({ head, rows, empty }: {
-  head: string[]; rows: (string | number | null)[][]; empty: string
+function NavItem({ label, icon, on, locked, onClick }: {
+  label: string; icon: IconName; on: boolean; locked: boolean; onClick: () => void
 }) {
-  if (!rows.length) {
-    return <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>{empty}</div>
-  }
   return (
-    <div style={{ overflowX: 'auto', minWidth: 0, maxWidth: '100%' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 420 }}>
-        <thead><Row cells={head} head /></thead>
-        <tbody>{rows.map((r, i) => <Row key={i} cells={r} />)}</tbody>
+    <button type="button" onClick={onClick} aria-current={on ? 'page' : undefined}
+      className={on ? 'wof-btn' : 'wof-btn wof-btn-ghost'}
+      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
+               padding: '9px 11px', borderRadius: RAD.control, cursor: 'pointer',
+               fontFamily: 'inherit', fontSize: F.small,
+               fontWeight: on ? W.bold : W.semi, border: 'none',
+               background: on ? C.brandTint : 'transparent',
+               color: on ? C.brand : locked ? C.faint : C.inkSoft }}>
+      <Icon name={icon} size={16} />
+      <span style={{ flex: 1, minWidth: 0 }}>{label}</span>
+      {locked && <span title="Locked" style={{ color: C.faint }}><Icon name="lock" size={13} /></span>}
+    </button>
+  )
+}
+
+function AreaHeader({ label, blurb, icon, right }: {
+  label: string; blurb: string; icon: IconName; right?: React.ReactNode
+}) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between',
+                  gap: 10, flexWrap: 'wrap', marginBottom: S.md }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <span style={{ color: C.brand }}><Icon name={icon} size={20} /></span>
+        <div>
+          <div style={{ fontSize: F.body, fontWeight: W.bold, color: C.ink }}>{label}</div>
+          <div style={{ fontSize: F.micro, color: C.muted, marginTop: 1 }}>{blurb}</div>
+        </div>
+      </div>
+      {right}
+    </div>
+  )
+}
+
+/** An area the person cannot open. Shown, with the reason — never hidden. */
+function Locked({ label, blurb, icon, reason }: {
+  label: string; blurb: string; icon: IconName; reason: string
+}) {
+  return (
+    <div>
+      <AreaHeader label={label} blurb={blurb} icon={icon} right={<Pill tone="neutral" icon="lock">Locked</Pill>} />
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', padding: S.md,
+                    borderRadius: RAD.tile, background: C.sunken, border: `1px solid ${C.line}` }}>
+        <span style={{ width: 38, height: 38, borderRadius: '50%', flexShrink: 0, display: 'grid',
+                       placeItems: 'center', background: C.surface, color: C.muted,
+                       border: `1px solid ${C.line}` }}>
+          <Icon name="lock" size={17} />
+        </span>
+        <div>
+          <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>You can&rsquo;t open this yet</div>
+          {/* The database's own sentence. It names the level required and who
+              can grant it, which is the only useful thing to say here. */}
+          <div style={{ fontSize: F.small, color: C.inkSoft, marginTop: 4, lineHeight: 1.6 }}>{reason}</div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatusCell({ value }: { value: string }) {
+  const good = value === 'active'
+  return <Pill tone={good ? 'positive' : 'neutral'}>{value}</Pill>
+}
+
+function Table({ head, rows, empty, statusCol }: {
+  head: string[]; rows: Cell[][]; empty: string; statusCol?: number
+}) {
+  if (!rows.length) return <Empty icon="list" compact>{empty}</Empty>
+  return (
+    <div style={{ overflowX: 'auto', minWidth: 0, maxWidth: '100%', border: `1px solid ${C.line}`,
+                  borderRadius: RAD.tile }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 440 }}>
+        <thead>
+          <tr style={{ background: C.sunken }}>
+            {head.map((h, i) => (
+              <th key={i} scope="col" style={{ textAlign: 'left', padding: '9px 12px', whiteSpace: 'nowrap',
+                                               fontSize: F.micro, fontWeight: W.bold, color: C.muted,
+                                               borderBottom: `1px solid ${C.line}` }}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, ri) => (
+            <tr key={ri} className="wof-row" style={{ borderTop: ri ? `1px solid ${C.line}` : 'none' }}>
+              {r.map((c, i) => (
+                <td key={i} style={{ padding: '10px 12px', fontSize: F.small, verticalAlign: 'middle',
+                                     color: i === 0 ? C.ink : C.inkSoft,
+                                     fontWeight: i === 0 ? W.semi : W.regular }}>
+                  {i === statusCol && typeof c === 'string' ? <StatusCell value={c} /> : (c ?? '—')}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
       </table>
     </div>
   )
 }
 
-// ── the console ──────────────────────────────────────────────────────────
-
 interface Loc { id: string; location_name: string }
 interface Screen { id: string; screen_name: string; pair_code: string; rotate_seconds: number; is_active: boolean; location_id: string }
 
-// The Screens area, writable. Every change goes through /api/ess/wall, which
-// resolves the actor from the session and calls the 101 wrapper — the board_screens
-// guard rejects an unidentified write, so there is no client-side shortcut.
+function ScreenCard({ sc, locName, copied, confirming, onCopy, onRotate, onToggle, onRemove, onCancel }: {
+  sc: Screen; locName?: string; copied: boolean; confirming: boolean
+  onCopy: () => void; onRotate: () => void; onToggle: () => void; onRemove: () => void; onCancel: () => void
+}) {
+  return (
+    <div style={{ border: `1px solid ${C.line}`, borderRadius: RAD.tile, padding: 14,
+                  display: 'grid', gap: 12, background: C.surface }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <span style={{ width: 40, height: 40, borderRadius: 11, flexShrink: 0, display: 'grid',
+                       placeItems: 'center', background: sc.is_active ? C.brandTint : C.sunken,
+                       color: sc.is_active ? C.brand : C.faint }}>
+          <Icon name="tv" size={19} />
+        </span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink, overflow: 'hidden',
+                        textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.screen_name}</div>
+          <div style={{ fontSize: F.micro, color: C.muted, marginTop: 2 }}>
+            {[locName, `${sc.rotate_seconds}s rotation`].filter(Boolean).join(' · ')}
+          </div>
+        </div>
+        <Pill tone={sc.is_active ? 'positive' : 'neutral'}>{sc.is_active ? 'active' : 'off'}</Pill>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button type="button" onClick={onCopy} title="Copy pair code" className="wof-btn"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                   fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: F.small,
+                   fontWeight: W.bold, letterSpacing: '.14em', color: C.brandDeep,
+                   background: C.brandTint, border: `1px dashed ${C.brandEdge}`,
+                   borderRadius: RAD.control, padding: '6px 12px' }}>
+          {copied ? <>Copied <Icon name="check" size={13} stroke={2.6} /></> : <>{sc.pair_code} <Icon name="copy" size={13} /></>}
+        </button>
+        <span style={{ flex: 1 }} />
+        <Button size="sm" icon="refresh" onClick={onRotate}>New code</Button>
+        <Button size="sm" icon="power" onClick={onToggle}>{sc.is_active ? 'Deactivate' : 'Activate'}</Button>
+        {confirming ? (
+          <>
+            <Button size="sm" variant="danger" icon="trash" onClick={onRemove}>Confirm remove</Button>
+            <Button size="sm" variant="ghost" onClick={onCancel}>Keep</Button>
+          </>
+        ) : (
+          <Button size="sm" variant="danger" icon="trash" onClick={onRemove}>Remove</Button>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// The Screens area, writable. Every change goes through /api/ess/wall.
 function ScreensManager({ employeeId }: { employeeId: string }) {
   const [locs, setLocs] = useState<Loc[]>([])
   const [screens, setScreens] = useState<Screen[]>([])
@@ -133,6 +219,7 @@ function ScreensManager({ employeeId }: { employeeId: string }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState(''); const [err, setErr] = useState('')
   const [copied, setCopied] = useState('')
+  const [confirmId, setConfirmId] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const { data: me } = await supabase.from('employees').select('company_id').eq('id', employeeId).maybeSingle()
@@ -168,64 +255,87 @@ function ScreensManager({ employeeId }: { employeeId: string }) {
     if (error) return flash(setErr, error.message); flash(setMsg, 'New pair code issued — the old one no longer works'); load()
   }
   async function remove(sc: Screen) {
+    if (confirmId !== sc.id) { setConfirmId(sc.id); return }
+    setConfirmId(null)
     const { error } = await wallRpc('delete_board_screen', { p_screen: sc.id }, employeeId)
     if (error) return flash(setErr, error.message); load()
   }
   const copy = async (code: string) => { try { await navigator.clipboard.writeText(code) } catch { /* best effort */ } flash(setCopied, code) }
 
-  const inp: React.CSSProperties = { padding: '8px 10px', border: `1px solid ${C.line}`, borderRadius: 9, fontSize: F.small, background: C.sunken, color: C.ink, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }
+  const locName = (id: string) => locs.find(l => l.id === id)?.location_name
 
   return (
-    <Card>
-      <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>Screens</div>
-      <div style={{ fontSize: F.micro, color: C.muted, marginTop: 3, marginBottom: S.md }}>Televisions on the wall, and their pair codes</div>
+    <div>
+      <AreaHeader label="Screens" blurb="Televisions on the wall, and their pair codes" icon="tv" />
 
       {/* Add a screen */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: S.md, padding: S.md, background: C.sunken, borderRadius: R.md }}>
-        <div style={{ flex: '2 1 180px' }}>
-          <label style={{ fontSize: F.micro, color: C.muted, display: 'block', marginBottom: 3 }}>Screen name</label>
-          <input style={{ ...inp, width: '100%' }} placeholder="Manesar Plant · Gate 2" value={name} onChange={e => setName(e.target.value)} />
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end',
+                    marginBottom: S.md, padding: 14, background: C.sunken,
+                    borderRadius: RAD.tile, border: `1px solid ${C.line}` }}>
+        <div style={{ flex: '2 1 200px' }}>
+          <FieldLabel htmlFor="wof-sc-name">Screen name</FieldLabel>
+          <input id="wof-sc-name" style={inputStyle} placeholder="Manesar Plant · Gate 2"
+            value={name} onChange={e => setName(e.target.value)} />
         </div>
-        <div style={{ flex: '1 1 140px' }}>
-          <label style={{ fontSize: F.micro, color: C.muted, display: 'block', marginBottom: 3 }}>Location</label>
-          <select style={{ ...inp, width: '100%', cursor: 'pointer' }} value={locId} onChange={e => setLocId(e.target.value)}>
+        <div style={{ flex: '1 1 160px' }}>
+          <FieldLabel htmlFor="wof-sc-loc">Location</FieldLabel>
+          <select id="wof-sc-loc" style={{ ...inputStyle, cursor: 'pointer' }} value={locId}
+            onChange={e => setLocId(e.target.value)}>
             {locs.length === 0 && <option value="">No locations</option>}
             {locs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
           </select>
         </div>
-        <div style={{ width: 96 }}>
-          <label style={{ fontSize: F.micro, color: C.muted, display: 'block', marginBottom: 3 }}>Rotate (s)</label>
-          <input type="number" min={5} max={120} style={{ ...inp, width: '100%' }} value={rotate} onChange={e => setRotate(e.target.value)} />
+        <div style={{ flex: '0 0 110px' }}>
+          <FieldLabel htmlFor="wof-sc-rot">Rotate every (s)</FieldLabel>
+          <input id="wof-sc-rot" type="number" min={5} max={120} style={inputStyle}
+            value={rotate} onChange={e => setRotate(e.target.value)} />
         </div>
-        <button onClick={add} disabled={busy}
-          style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: C.brand, color: C.onAccent, fontWeight: W.bold, fontSize: F.small, cursor: busy ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: busy ? 0.6 : 1 }}>
-          {busy ? 'Adding…' : '+ Add screen'}
-        </button>
+        <Button variant="primary" icon="plus" onClick={add} busy={busy}>
+          {busy ? 'Adding…' : 'Add screen'}
+        </Button>
       </div>
 
-      {/* Existing screens */}
-      {screens.length === 0 ? (
-        <div style={{ fontSize: F.micro, color: C.muted, padding: '14px 0', textAlign: 'center' }}>No screens paired yet. Add one to put the wall on a television.</div>
-      ) : screens.map(sc => (
-        <div key={sc.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.line}`, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-            <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.screen_name}</div>
-            <div style={{ fontSize: F.micro, color: C.muted }}>{sc.rotate_seconds}s rotation · {sc.is_active ? 'active' : 'off'}</div>
-          </div>
-          <button onClick={() => copy(sc.pair_code)} title="Copy pair code"
-            style={{ fontFamily: 'ui-monospace, monospace', fontSize: F.small, fontWeight: W.bold, letterSpacing: '.12em', color: C.brandDeep, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius: 8, padding: '5px 12px', cursor: 'pointer' }}>
-            {copied === sc.pair_code ? 'Copied ✓' : sc.pair_code}
-          </button>
-          <button onClick={() => rotateCode(sc)} style={{ fontSize: F.micro, padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.line}`, background: C.surface, color: C.muted, cursor: 'pointer', fontFamily: 'inherit' }}>↻ New code</button>
-          <button onClick={() => toggle(sc)} style={{ fontSize: F.micro, padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.line}`, background: C.surface, color: sc.is_active ? C.warning : C.positive, cursor: 'pointer', fontFamily: 'inherit' }}>{sc.is_active ? 'Deactivate' : 'Activate'}</button>
-          <button onClick={() => remove(sc)} style={{ fontSize: F.micro, padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.line}`, background: C.surface, color: C.critical, cursor: 'pointer', fontFamily: 'inherit' }}>Remove</button>
-        </div>
-      ))}
+      {msg && <div style={{ marginBottom: S.sm }}><Notice tone="positive" role="status">{msg}</Notice></div>}
+      {err && <div style={{ marginBottom: S.sm }}><Notice tone="critical" role="alert">{err}</Notice></div>}
 
-      {msg && <div style={{ fontSize: F.micro, color: C.positive, marginTop: S.md }}>✓ {msg}</div>}
-      {err && <div style={{ fontSize: F.micro, color: C.critical, marginTop: S.md }}>⚠ {err}</div>}
-    </Card>
+      {screens.length === 0 ? (
+        <Empty icon="tv" title="No screens paired yet">
+          Add one to put the wall on a television.
+        </Empty>
+      ) : (
+        <div style={{ display: 'grid', gap: 10,
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 320px), 1fr))' }}>
+          {screens.map(sc => (
+            <ScreenCard key={sc.id} sc={sc} locName={locName(sc.location_id)}
+              copied={copied === sc.pair_code} confirming={confirmId === sc.id}
+              onCopy={() => copy(sc.pair_code)} onRotate={() => rotateCode(sc)}
+              onToggle={() => toggle(sc)} onRemove={() => remove(sc)}
+              onCancel={() => setConfirmId(null)} />
+          ))}
+        </div>
+      )}
+    </div>
   )
+}
+
+// ── the console ──────────────────────────────────────────────────────────
+
+const HEADS: Record<AreaKey, string[]> = {
+  awards: ['Award', 'Cadence', 'Status'],
+  values: ['Value', 'Code', 'Status'],
+  badges: ['Badge', 'Shape', 'Tier', 'Status'],
+  screens: ['Screen', 'Pair code', 'Rotates', 'Status'],
+  admins: ['Level', 'Why they were granted it', 'Status'],
+  audit: ['Action', 'Entity', 'When'],
+}
+const STATUS_COL: Partial<Record<AreaKey, number>> = { awards: 2, values: 2, badges: 3, screens: 3, admins: 2 }
+const EMPTY: Record<AreaKey, string> = {
+  awards: 'No awards yet. Your Wall Owner adds the first one.',
+  values: 'No values yet. A values programme is optional.',
+  badges: 'No badges yet. Service milestones generate their own.',
+  screens: 'No screens paired. Add one to put the wall on a television.',
+  admins: 'Only the Wall Owner, so far.',
+  audit: 'Nothing changed yet.',
 }
 
 export default function AdminConsole({ employeeId }: { employeeId: string }) {
@@ -233,11 +343,11 @@ export default function AdminConsole({ employeeId }: { employeeId: string }) {
   const [ready, setReady] = useState<boolean | null>(null)
   const [allowed, setAllowed] = useState<Record<string, boolean>>({})
   const [reasons, setReasons] = useState<Record<string, string>>({})
-  const [rows, setRows] = useState<(string | number | null)[][]>([])
+  const [rows, setRows] = useState<Cell[][]>([])
   const [err, setErr] = useState<string | null>(null)
 
-  // One pass over every permission the console offers, so the whole screen
-  // renders in its true state at once rather than revealing locks tab by tab.
+  // One pass over every permission, so the console renders in its true
+  // state at once rather than revealing locks tab by tab.
   const loadGates = useCallback(async () => {
     const probe = await supabase.from('wall_config').select('module_enabled').limit(1)
     if (probe.error) {
@@ -272,11 +382,6 @@ export default function AdminConsole({ employeeId }: { employeeId: string }) {
   const loadArea = useCallback(async () => {
     if (!may) { setRows([]); return }
     const q = {
-      // `frequency`, not `cadence`. There is no cadence column on
-      // recognition_awards, and a wrong name fails the WHOLE select with
-      // 42703 — so the Awards panel showed nothing at all rather than a
-      // blank column. Found by checking every selected column against the
-      // database once the migrations were applied.
       awards:  ['recognition_awards', 'name, frequency, is_active', (r: Record<string, unknown>) =>
                  [r.name as string, r.frequency as string, r.is_active ? 'active' : 'off']],
       values:  ['recognition_values', 'label, code, is_active', (r: Record<string, unknown>) =>
@@ -293,21 +398,14 @@ export default function AdminConsole({ employeeId }: { employeeId: string }) {
       audit:   ['wall_audit_log', 'action, entity, created_at', (r: Record<string, unknown>) =>
                  [r.action as string, r.entity as string,
                   r.created_at ? new Date(r.created_at as string).toLocaleString('en-IN') : '—']],
-    }[area] as [string, string, (r: Record<string, unknown>) => (string | number | null)[]]
+    }[area] as [string, string, (r: Record<string, unknown>) => Cell[]]
 
-    // SCOPED TO THE VIEWER'S COMPANY. Every table behind these panels carries
-    // company_id and holds one row per company: awards, values, badges,
-    // screens, admins and the audit log. Reading them unfiltered listed all
-    // three companies at once, so Values showed six entries as eighteen and
-    // Badges fourteen as forty-two — three identical rows with nothing on
-    // screen to tell them apart, and no way to know which one an edit touched.
+    // SCOPED TO THE VIEWER'S COMPANY — every table here holds one row per company.
     const meRow = await supabase.from('employees')
       .select('company_id').eq('id', employeeId).maybeSingle()
     const companyId = (meRow.data as { company_id?: string } | null)?.company_id ?? null
 
     let query = supabase.from(q[0]).select(q[1]).limit(100)
-    // Without a company there is nothing safe to show, so show nothing rather
-    // than another company's configuration.
     query = companyId ? query.eq('company_id', companyId) : query.limit(0)
     const res = await query
     if (res.error) { setRows([]); return }
@@ -316,84 +414,57 @@ export default function AdminConsole({ employeeId }: { employeeId: string }) {
 
   useEffect(() => { loadArea() }, [loadArea])
 
-  if (ready === null) {
-    return <div style={{ fontSize: F.small, color: C.muted }}>Loading…</div>
-  }
+  if (ready === null) return <Skeleton lines={4} />
 
   if (ready === false) {
     return (
-      <Card tone="warn">
-        <div style={{ fontSize: F.body, fontWeight: W.bold, color: C.ink }}>
-          The Wall of Fame is not installed yet
-        </div>
-        <div style={{ fontSize: F.small, color: C.inkSoft, marginTop: 7, lineHeight: 1.6,
-                      maxWidth: '70ch' }}>
+      <Notice tone="warning" title="The Wall of Fame is not installed yet">
+        <span style={{ display: 'block', maxWidth: '70ch' }}>
           {err ?? 'Migrations 082 and 084–087 are written and handed over but not applied to '
                 + 'this database. Once they run, EZER switches the module on for your company '
                 + 'and your HR team names a Wall Owner. Nothing after that needs SQL.'}
-        </div>
-      </Card>
+        </span>
+      </Notice>
     )
   }
 
-  const HEADS: Record<AreaKey, string[]> = {
-    awards: ['Award', 'Cadence', 'Status'],
-    values: ['Value', 'Code', 'Status'],
-    badges: ['Badge', 'Shape', 'Tier', 'Status'],
-    screens: ['Screen', 'Pair code', 'Rotates', 'Status'],
-    admins: ['Level', 'Why they were granted it', 'Status'],
-    audit: ['Action', 'Entity', 'When'],
-  }
-  const EMPTY: Record<AreaKey, string> = {
-    awards: 'No awards yet. Your Wall Owner adds the first one.',
-    values: 'No values yet. A values programme is optional.',
-    badges: 'No badges yet. Service milestones generate their own.',
-    screens: 'No screens paired. Add one to put the wall on a television.',
-    admins: 'Only the Wall Owner, so far.',
-    audit: 'Nothing changed yet.',
-  }
+  const openCount = AREAS.filter(a => allowed[a.perm] === true).length
 
   return (
-    <div style={{ display: 'grid', gap: S.md }}>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {AREAS.map(a => {
-          const on = a.k === area
-          const locked = allowed[a.perm] === false
-          return (
-            <button key={a.k} type="button" onClick={() => setArea(a.k)} aria-pressed={on}
-              style={{ cursor: 'pointer', fontFamily: 'inherit', padding: '7px 13px',
-                       borderRadius: R.sm, fontSize: F.small,
-                       fontWeight: on ? W.bold : W.semi,
-                       border: `1px solid ${on ? C.brand : C.line}`,
-                       background: on ? C.brand : C.surface,
-                       color: on ? C.onAccent : locked ? C.faint : C.inkSoft }}>
-              {a.label}{locked ? ' · locked' : ''}
-            </button>
-          )
-        })}
-      </div>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: S.lg, alignItems: 'flex-start' }}>
+      <nav aria-label="Wall settings" style={{ flex: '1 1 200px', maxWidth: '100%', minWidth: 0 }}>
+        <div style={{ display: 'grid', gap: 2, padding: 6, borderRadius: RAD.tile,
+                      background: C.sunken, border: `1px solid ${C.line}` }}>
+          {AREAS.map(a => (
+            <NavItem key={a.k} label={a.label} icon={a.icon} on={a.k === area}
+              locked={allowed[a.perm] === false} onClick={() => setArea(a.k)} />
+          ))}
+        </div>
+        <div style={{ fontSize: F.micro, color: C.faint, marginTop: 8, paddingLeft: 6 }}>
+          You can open {openCount} of {AREAS.length}
+        </div>
+      </nav>
 
-      {may && area === 'screens' ? (
-        <ScreensManager employeeId={employeeId} />
-      ) : may ? (
-        <Card>
-          <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>{current.label}</div>
-          <div style={{ fontSize: F.micro, color: C.muted, marginTop: 3, marginBottom: S.md }}>
-            {current.blurb}
+      <div style={{ flex: '999 1 420px', minWidth: 0 }}>
+        {may && area === 'screens' ? (
+          <ScreensManager employeeId={employeeId} />
+        ) : may ? (
+          <div>
+            <AreaHeader label={current.label} blurb={current.blurb} icon={current.icon}
+              right={<Pill tone="neutral" icon="eye">Read-only</Pill>} />
+            <Table head={HEADS[area]} rows={rows} empty={EMPTY[area]} statusCol={STATUS_COL[area]} />
+            {/* Read-only from here. A Save button that always failed would be
+                worse than none. */}
+            <div style={{ fontSize: F.micro, color: C.faint, marginTop: S.md, lineHeight: 1.5 }}>
+              Read-only in this build. Changing configuration needs a server route that proves who
+              is asking, because the database rejects an unidentified write.
+            </div>
           </div>
-          <Table head={HEADS[area]} rows={rows} empty={EMPTY[area]} />
-          {/* Read-only from here. Writes need a server route that establishes
-              session identity, or the config triggers reject them with 42501
-              — and a Save button that always failed would be worse than none. */}
-          <div style={{ fontSize: F.micro, color: C.faint, marginTop: S.md, lineHeight: 1.5 }}>
-            Read-only in this build. Changing configuration needs a server route that proves who
-            is asking, because the database rejects an unidentified write.
-          </div>
-        </Card>
-      ) : (
-        <Locked label={current.label} blurb={current.blurb}
-                reason={reasons[current.perm] ?? 'You do not have access to this.'} />
-      )}
+        ) : (
+          <Locked label={current.label} blurb={current.blurb} icon={current.icon}
+            reason={reasons[current.perm] ?? 'You do not have access to this.'} />
+        )}
+      </div>
     </div>
   )
 }
