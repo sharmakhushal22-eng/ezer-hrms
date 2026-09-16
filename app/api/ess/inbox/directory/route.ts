@@ -21,15 +21,28 @@ export async function GET(req: NextRequest) {
   const me = ctx.caller.employeeId
   const q = (req.nextUrl.searchParams.get('q') || '').trim()
 
-  let pol
-  try { pol = await policy() } catch (e: any) {
+  // THREE ROUND-TRIPS, NOT EIGHT.
+  //
+  // Every step here used to be awaited in sequence, and this endpoint is what
+  // the compose sheet waits on: measured in production at 0.34-1.37s, long
+  // after its 320ms open animation has finished. Nothing in it is slow — the
+  // steps were simply queued, and each one crosses a region boundary.
+  //
+  // Phase 1: the two lookups that depend on nothing.
+  let pol, mineRes
+  try {
+    [pol, mineRes] = await Promise.all([
+      policy(),
+      sb.from('employees')
+        .select('id, company_id, department_id, l1_manager_id, l2_manager_id, full_name, emp_code, designation')
+        .eq('id', me).maybeSingle(),
+    ])
+  } catch (e: any) {
     if (notInstalled(e)) return NextResponse.json({ installed: false, people: [] })
     throw e
   }
 
-  const { data: mine } = await sb.from('employees')
-    .select('id, company_id, department_id, l1_manager_id, l2_manager_id, full_name, emp_code, designation')
-    .eq('id', me).maybeSingle()
+  const mine = mineRes.data
   if (!mine) return NextResponse.json({ people: [] })
 
   let sel = sb.from('employees')
@@ -46,7 +59,25 @@ export async function GET(req: NextRequest) {
   if (q) sel = sel.or(orIlike(['full_name', 'emp_code', 'designation'], q))
   sel = sel.order('full_name')
 
-  const { data: rows, error: de } = await sel
+  // Phase 2: the people query, plus everything that does not depend on it.
+  //
+  // The desks and their agents need nothing from `sel`, and the CHAIN_HR
+  // lookups need only `mine` — which phase 1 already produced. `sel` itself
+  // could not move earlier: it is built from pol.reach_mode and
+  // mine.company_id, so it genuinely had to wait for both.
+  const chain = pol.reach_mode === 'CHAIN_HR'
+  const [{ data: rows, error: de }, desksRes, agentsRes, reportsRes, peersRes] = await Promise.all([
+    sel,
+    sb.from('inbox_desks')
+      .select('desk_code, label, description, accent').eq('is_active', true).order('sort_order'),
+    sb.from('inbox_desk_agents').select('desk_id').eq('is_active', true),
+    chain
+      ? sb.from('employees').select('id').or(`l1_manager_id.eq.${me},l2_manager_id.eq.${me}`)
+      : null,
+    chain && mine.l1_manager_id
+      ? sb.from('employees').select('id').eq('l1_manager_id', mine.l1_manager_id)
+      : null,
+  ])
   if (de) return NextResponse.json({ error: de.message }, { status: 500 })
 
   // The list excludes the caller, because messaging yourself is not a thing.
@@ -61,25 +92,18 @@ export async function GET(req: NextRequest) {
 
   // CHAIN_HR and NO_COLD_UP are structural, not a column filter, so they are
   // applied here against the same rule the database uses.
-  if (pol.reach_mode === 'CHAIN_HR') {
+  // Same rule as before, now applied to rows phase 2 already fetched.
+  if (chain) {
     const allowed = new Set<string>([mine.l1_manager_id, mine.l2_manager_id].filter(Boolean) as string[])
-    const { data: reports } = await sb.from('employees').select('id')
-      .or(`l1_manager_id.eq.${me},l2_manager_id.eq.${me}`)
-    for (const r of reports ?? []) allowed.add(r.id)
-    if (mine.l1_manager_id) {
-      const { data: peers } = await sb.from('employees').select('id').eq('l1_manager_id', mine.l1_manager_id)
-      for (const p of peers ?? []) if (p.id !== me) allowed.add(p.id)
-    }
+    for (const r of reportsRes?.data ?? []) allowed.add(r.id)
+    for (const p of peersRes?.data ?? []) if (p.id !== me) allowed.add(p.id)
     list = list.filter((e: any) => allowed.has(e.id))
   }
 
-  const { data: desks } = await sb.from('inbox_desks')
-    .select('desk_code, label, description, accent').eq('is_active', true).order('sort_order')
-
+  const desks = desksRes.data
   // How many desks have nobody on them. The UI says so rather than accepting
   // a message into a void.
-  const { data: agents } = await sb.from('inbox_desk_agents').select('desk_id').eq('is_active', true)
-  const staffed = new Set((agents ?? []).map((a: any) => a.desk_id))
+  const staffed = new Set((agentsRes.data ?? []).map((a: any) => a.desk_id))
 
   return NextResponse.json({
     installed: true,

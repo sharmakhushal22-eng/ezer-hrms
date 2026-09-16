@@ -401,7 +401,17 @@
 .ib .wcard .head{margin:8px 0 0; font-size:13px; font-weight:600; color:var(--ez-ink); line-height:1.45}
 .ib .wcard .head + .txt{margin-top:6px}
 /* ---------- compose dialog ---------- */
-.ib dialog.sheet{width:min(560px,calc(100vw - 32px)); max-height:min(680px,calc(100vh - 48px)); padding:0; border:1px solid var(--ez-line);
+.ib dialog.sheet{width:min(560px,calc(100vw - 32px));
+  /* HEIGHT, not only max-height.
+     The dialog is content-sized, so while the directory is still loading the
+     body holds a single spinner and the sheet opens at 237px — 35% of its
+     680px loaded size — then jumps 443px the moment the list arrives. Measured.
+     In production that gap is the 0.34-1.37s /api/ess/inbox/directory takes,
+     which is long after the 320ms entry transition has finished: the box sits
+     there visibly the wrong size, which reads as "it does not open fully".
+     A fixed height opens it at full size and lets the spinner sit inside. */
+  height:min(680px,calc(100vh - 48px)); max-height:min(680px,calc(100vh - 48px));
+  padding:0; border:1px solid var(--ez-line);
   /* The sheet lives inside .ib so that inbox.css reaches it — a top-layer
      dialog is still a descendant for the cascade. Centring is spelled out
      because the UA's `margin:auto` only lands when the viewport is the
