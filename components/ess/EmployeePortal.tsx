@@ -8,7 +8,7 @@
 // Anything not built yet renders a labelled placeholder naming the module it waits on,
 // rather than a screen that looks finished and does nothing.
 // All sub-components are defined OUTSIDE the parent (no focus-loss).
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, startTransition } from 'react'
 import {
   loadEmployeeDetail, updateEmployeePhoto, loadDirectory, loadNotifications, markNotification, markAllNotifications,
   loadServiceRequests, createServiceRequest, loadLetterRequests, createLetterRequest,
@@ -27,33 +27,17 @@ import * as HR from '@/lib/employees/hr-actions'
 import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
 import { loadLeaveTypes } from '@/lib/supabase-leave-config'
-import Inbox from './Inbox'
-import { InboxShell } from './inbox/InboxShell'
-import { HrisShell } from './hris/HrisShell'
+import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
-import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
-import FunZone from '@/components/ess/FunZone'
-import FlexiClaims from '@/components/ess/FlexiClaims'
-import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
-import InvestmentProofs from '@/components/ess/InvestmentProofs'
-import TravelClaims from '@/components/ess/TravelClaims'
-import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
-// Social (118) — birthdays, work anniversaries, new joiners, and the Wall of
-// Fame gathered under one tab. WallOfFame is deliberately NOT imported here
-// any more: Social imports and renders it for its own first sub-tab, and this
-// file's last use of it went with the 'wall' case.
-import Social from '@/components/ess/social/Social'
+// Today is the landing tab, so it stays a static import. Splitting it would
+// trade bundle size for a spinner on the one screen everybody sees first.
 import Today from '@/components/ess/today/Today'
-import Profile360 from '@/components/profile/Profile360'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
 import { useEssMenu, PendingOnYou, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
-// Team, redesigned — direction B, "one continuous line". The section owns its
-// own stylesheet the way Inbox (.ib) and HRIS (.hx) do; the roster moved with it.
-import MyTeam from '@/components/ess/team/MyTeam'
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
@@ -67,6 +51,47 @@ import {
   IconLetters, IconReports, IconAi, IconBell, IconMail,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
+
+// ── Sections load on demand ────────────────────────────────────────
+//
+// Every one of these is reached only through a case in renderView(), yet each
+// was a static import — so opening ESS downloaded, parsed and hydrated all of
+// them before the first click. Measured: 2.14 MB of JavaScript across 22
+// script tags for /ess-portal, most of it for tabs an employee never opens.
+// Social alone drags in the whole 3,383-line wall module.
+//
+// Same pattern AdminModules.tsx already uses, and for the same stated reason:
+// "an employee who holds nothing downloads none of it". ssr:false because
+// these read localStorage and the Supabase browser client on mount, which is
+// also what the portal itself does.
+//
+// Today is NOT here, on purpose — see its import above.
+const SectionLoading = () => (
+  <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontSize: F.small,
+                fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
+    Loading…
+  </div>
+)
+// The options MUST be an inline object literal at every call site — Turbopack
+// analyses them statically, and hoisting them into a shared const fails the
+// build with "next/dynamic options must be an object literal" once per call.
+
+const FlexiTdsCalculator   = dynamic(() => import('@/components/ess/FlexiTdsCalculator'), { ssr: false, loading: SectionLoading })
+const FunZone              = dynamic(() => import('@/components/ess/FunZone'), { ssr: false, loading: SectionLoading })
+const FlexiClaims          = dynamic(() => import('@/components/ess/FlexiClaims'), { ssr: false, loading: SectionLoading })
+const InvestmentDeclaration= dynamic(() => import('@/components/ess/InvestmentDeclaration'), { ssr: false, loading: SectionLoading })
+const InvestmentProofs     = dynamic(() => import('@/components/ess/InvestmentProofs'), { ssr: false, loading: SectionLoading })
+const TravelClaims         = dynamic(() => import('@/components/ess/TravelClaims'), { ssr: false, loading: SectionLoading })
+const Performance          = dynamic(() => import('@/components/ess/Performance'), { ssr: false, loading: SectionLoading })
+const Profile360           = dynamic(() => import('@/components/profile/Profile360'), { ssr: false, loading: SectionLoading })
+const MyTeam               = dynamic(() => import('@/components/ess/team/MyTeam'), { ssr: false, loading: SectionLoading })
+// Social (118) — birthdays, work anniversaries, new joiners, and the Wall of
+// Fame under one tab. WallOfFame is not imported here: Social renders it for
+// its own first sub-tab, so splitting Social splits the wall module with it.
+const Social               = dynamic(() => import('@/components/ess/social/Social'), { ssr: false, loading: SectionLoading })
+// Named exports, so they need unwrapping.
+const InboxShell = dynamic(() => import('./inbox/InboxShell').then(m => m.InboxShell), { ssr: false, loading: SectionLoading })
+const HrisShell  = dynamic(() => import('./hris/HrisShell').then(m => m.HrisShell), { ssr: false, loading: SectionLoading })
 
 // ── Styles ─────────────────────────────────────────────────────────
 // Bound to the design system. See lib/ui/tokens.ts.
@@ -3624,7 +3649,20 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   // have to cross into /dashboard — the Admin button stays as the door for those
   // who prefer the old shell.
   const [adminKey, setAdminKey] = useState<string | null>(null)
-  const go = (k: string) => { setAdminKey(null); setView(k); setBellOpen(false); setMoreOpen(false) }
+  // The affordances close URGENTLY; only the section swap is a transition.
+  //
+  // A tab click was costing 139ms of render (Vercel INP trace: 70ms input
+  // delay + 139ms render = 214ms) because `view` lives in this 3,900-line
+  // component beside 121 other useStates, so setView re-renders all of it.
+  // Marking that update as a transition lets React keep the interaction
+  // responsive and paint the nav change first.
+  //
+  // setBellOpen/setMoreOpen stay urgent deliberately: a menu that waits for a
+  // heavy section to finish rendering before it closes feels broken.
+  const go = (k: string) => {
+    setAdminKey(null); setBellOpen(false); setMoreOpen(false)
+    startTransition(() => setView(k))
+  }
   const goAdmin = (k: string) => { setAdminKey(k); setBellOpen(false); setMoreOpen(false); window.scrollTo({ top: 0 }) }
   // Clicking a section lands on its first item — the section itself is never a
   // destination, so there is no empty "section landing page" to design or maintain.
@@ -3668,7 +3706,9 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       // reference it, and a deep link should not break for a nav word. The
       // component and its files keep the Today name: that is what the drop, the
       // payload function and lib/today are all called.
-      case 'home':          return <Today onOpenTab={setView} />
+      // go(), not setView — Today's shortcuts are navigation too, and passing
+      // the raw setter would skip the transition and keep the blocking render.
+      case 'home':          return <Today onOpenTab={go} />
       // Profile 360. The portal owner's code is passed, not the viewer's —
       // the route resolves WHO IS LOOKING from the session and masks
       // accordingly, so an admin opening a colleague's portal sees that
