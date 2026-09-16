@@ -183,7 +183,7 @@ export function MessagesInbox({ employeeId, firstName, onUnread, onPolled, onSta
             conversation={openConv} folder={folders[openConv.folder]}
             messages={data.thread?.messages ?? []} notes={data.thread?.notes ?? []}
             unreadAtOpen={data.thread?.unreadAtOpen ?? 0}
-            loading={!data.thread || (data.thread.messages.length === 0 && data.thread.notes.length === 0)}
+            loading={!data.thread || !data.thread.loaded}
             autoFocus={!mobile}
             onBack={back} onSend={onSend} onAction={a => void act(openConv.id, a)}
             onDeleteMessage={onDelete} onWriteToDesk={writeToDesk}

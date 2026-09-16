@@ -38,6 +38,27 @@ interface Props {
 
 export function InboxShell({ employeeId, firstName, onUnread }: Props) {
   const [group, setGroup] = useState<Group>('messages');
+
+  /**
+   * Wall and Broadcast each load on mount — 2 wall RPCs and 3 Supabase queries
+   * respectively — and they did it while `hidden`, so simply opening the Inbox
+   * paid for all three panels before you had chosen one.
+   *
+   * They now mount on FIRST VISIT and stay mounted afterwards, so rule 2 above
+   * still holds from that point on: switching tabs does not unmount, and a
+   * half-written reply survives.
+   *
+   * THE COST, stated plainly: the Wall and Broadcast unread badges read 0 until
+   * their tab has been opened once. Only the Messages count reaches the portal
+   * bell (rule 1), and that one is unaffected.
+   */
+  const [visited, setVisited] = useState<Record<Group, boolean>>({
+    messages: true, wall: false, broadcast: false,
+  });
+  const pick = useCallback((g: Group) => {
+    setGroup(g);
+    setVisited(v => (v[g] ? v : { ...v, [g]: true }));
+  }, []);
   const [counts, setCounts] = useState<Record<Group, number>>({ messages: 0, wall: 0, broadcast: 0 });
   const [polledAt, setPolledAt] = useState<number>(Date.now());
   const [ago, setAgo] = useState('just now');
@@ -95,7 +116,7 @@ export function InboxShell({ employeeId, firstName, onUnread }: Props) {
         <header className="groups">
           <div className="seg" role="tablist" aria-label="Inbox groups" ref={segRef}>
             <span className="pill" aria-hidden="true" ref={pillRef} />
-            {GROUPS.map(g => <GroupTab key={g.id} g={g} active={group === g.id} count={counts[g.id]} onPick={() => setGroup(g.id)} />)}
+            {GROUPS.map(g => <GroupTab key={g.id} g={g} active={group === g.id} count={counts[g.id]} onPick={() => pick(g.id)} />)}
           </div>
           <div className="blurb" aria-live="polite"><span key={group}>{GROUPS.find(g => g.id === group)?.blurb}</span></div>
           <div className="live" title="Polled every 20 seconds"><i /><span>Updated {ago}</span></div>
@@ -113,14 +134,16 @@ export function InboxShell({ employeeId, firstName, onUnread }: Props) {
         </section>
         <section className="group" role="tabpanel" hidden={group !== 'wall'}>
           <div className="wall">
-            {/* Its own count, reported separately. Never added to the others. */}
-            <WallInbox employeeId={employeeId} onUnread={onWallUnread} />
+            {/* Its own count, reported separately. Never added to the others.
+                Mounted on first visit; kept mounted from then on. */}
+            {visited.wall && <WallInbox employeeId={employeeId} onUnread={onWallUnread} />}
           </div>
         </section>
         <section className="group" role="tabpanel" hidden={group !== 'broadcast'}>
           <div className="bc">
-            {/* Its own count, reported separately. Never added to the others. */}
-            <BroadcastInbox employeeId={employeeId} onUnread={onBroadcastUnread} />
+            {/* Its own count, reported separately. Never added to the others.
+                Mounted on first visit; kept mounted from then on. */}
+            {visited.broadcast && <BroadcastInbox employeeId={employeeId} onUnread={onBroadcastUnread} />}
           </div>
         </section>
       </main>

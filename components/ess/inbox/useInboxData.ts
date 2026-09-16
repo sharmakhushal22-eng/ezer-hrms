@@ -43,6 +43,17 @@ export interface ThreadData {
   messages: MessageVM[]   // DIRECT / DESK
   notes: NoteVM[]         // SYSTEM
   unreadAtOpen: number    // where the red "New" divider goes
+  /**
+   * Has the thread actually come back from the server?
+   *
+   * REQUIRED, not optional, on purpose: the compiler then names every place a
+   * thread object is built, which is how this stays honest.
+   *
+   * Without it the UI inferred "still loading" from "has no messages", and a
+   * conversation you have just started genuinely has none — so the spinner
+   * waited for messages that were never coming.
+   */
+  loaded: boolean
 }
 
 /** What POST /api/ess/inbox needs to open a conversation, by kind of target. */
@@ -116,6 +127,7 @@ export function useInboxData(employeeId: string) {
       messages: kind === 'SYSTEM' ? [] : raw.map(toMessage),
       notes: kind === 'SYSTEM' ? raw.map(toNote) : [],
       unreadAtOpen: prev?.id === id ? prev.unreadAtOpen : 0,
+      loaded: true,
     }))
   }, [call, employeeId])
 
@@ -124,15 +136,20 @@ export function useInboxData(employeeId: string) {
     // Remembered BEFORE the fetch: the GET marks it read, so afterwards the
     // count is zero and the "New" divider would have nowhere to sit.
     const unreadAtOpen = state.conversations.find(c => c.id === id)?.unread ?? 0
-    setThread({ id, messages: [], notes: [], unreadAtOpen })
+    // The placeholder, so the pane can paint the header immediately. Not loaded
+    // yet — that is the whole distinction this flag exists to carry.
+    setThread({ id, messages: [], notes: [], unreadAtOpen, loaded: false })
 
     // The row stops looking unread the moment it is opened, as it does today.
     setState(s => ({ ...s, conversations: s.conversations.map(c => (c.id === id ? { ...c, unread: 0 } : c)) }))
 
     await loadThread(id)
     setThread(t => (t && t.id === id ? { ...t, unreadAtOpen } : t))
-    void loadList()
-  }, [loadThread, loadList, state.conversations])
+    // NO loadList() here, deliberately. The row is marked read locally above,
+    // and loadThread already reports the server's new TOTAL through unreadRef —
+    // so the full list rebuild this used to fire (the whole multi-query GET,
+    // permission resolution included) bought nothing a click could see.
+  }, [loadThread, state.conversations])
 
   const close = useCallback(() => { openIdRef.current = null; setThread(null) }, [])
 
@@ -153,8 +170,9 @@ export function useInboxData(employeeId: string) {
         method: 'POST',
         body: JSON.stringify({ id, body, employee_id: employeeId }),
       })
-      await loadThread(id)   // re-open the thread …
-      await loadList()       // … and reload the list, so previews and counts stay true
+      // Two independent endpoints. Awaited end to end this cost two full
+      // round-trips (each re-resolving permissions); together it costs one.
+      await Promise.all([loadThread(id), loadList()])
     } catch (e) {
       setThread(t => (t && t.id === id ? { ...t, messages: t.messages.filter(m => m.id !== tempId) } : t))
       throw e
@@ -184,7 +202,11 @@ export function useInboxData(employeeId: string) {
       method: 'POST',
       body: JSON.stringify({ ...payload, employee_id: employeeId }),
     })
-    await loadList()
+    // NOT awaited, deliberately. The caller opens the new thread the moment
+    // this returns, and a whole list rebuild — its own request, permission
+    // resolution included — used to sit in front of that. It refreshes in the
+    // background instead, and the poll would have caught it regardless.
+    void loadList()
     return String(json.id ?? '')
   }, [call, employeeId, loadList])
 

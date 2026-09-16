@@ -107,6 +107,17 @@ export function ThreadPane(p: Props) {
         {p.loading && items.length === 0 && (
           <div className="booting"><span className="ring" />Opening the conversation…</div>
         )}
+
+        {/* Loaded, and genuinely empty — which is exactly what a conversation
+            you have just started looks like.
+            Until `loaded` existed, "still loading" was inferred from "has no
+            messages", so this case spun forever waiting for messages that were
+            never coming. Flipping that off alone would have left a blank feed,
+            which reads as broken more quietly. Hence an actual empty state.
+            No .ring child: the spin lives on .ring, not on .booting. */}
+        {!p.loading && items.length === 0 && c.kind !== 'SYSTEM' && (
+          <div className="booting">No messages yet — say hello.</div>
+        )}
         {c.kind === 'SYSTEM'
           ? <Notes notes={p.notes} folder={folder} onDone={p.onNoteDone} />
           : <Messages messages={p.messages} newFrom={newFrom} onDelete={flags.deleteOwnMessage ? p.onDeleteMessage : undefined} />}
