@@ -99,6 +99,25 @@ export const PEER: NotificationDef[] = [
   D('KUDOS_RECEIVED',     'You received kudos',               'PEER', 'NORMAL', false, '/ess'),
 ]
 
+// ── Social (118) — the Social section's own codes ───────────────────────────
+// notify() looks every code up in this catalogue and DROPS anything it does not
+// find, with only a console warning. So these are not documentation: without
+// them the takedown notice below would never reach the person it is about, and
+// nothing would show that it had failed.
+//
+// Reactions deliberately do not notify. A feed where six colleagues clapping
+// puts six rows in your bell trains people to stop opening the bell, and the
+// count is already on the post.
+export const SOCIAL: NotificationDef[] = [
+  D('SOCIAL_COMMENT',         'Someone commented on your post',   'PEER', 'NORMAL', false, '/ess?tab=social'),
+  // The takedown pair. The BODY carries HR's own remark, and neither the title
+  // nor the body ever names who acted — the person is told what rule they
+  // crossed, not who decided it. The acting employee is recorded in
+  // social_posts.removed_by for audit and never leaves the server.
+  D('SOCIAL_POST_REMOVED',    'A post of yours was removed',      'PEER', 'HIGH',   false, '/ess?tab=social'),
+  D('SOCIAL_COMMENT_REMOVED', 'A comment of yours was removed',   'PEER', 'HIGH',   false, '/ess?tab=social'),
+]
+
 // ── 2. Reporting Manager (L1) ───────────────────────────────────────────────
 export const RM_L1: NotificationDef[] = [
   D('MGR_NEW_LEAVE',            'New leave request from your team',      'RM_L1', 'NORMAL', false, '/ess?tab=approvals'),
@@ -173,7 +192,7 @@ export const MD: NotificationDef[] = [
 ]
 
 export const ALL: NotificationDef[] = [
-  ...EMPLOYEE, ...PEER, ...RM_L1, ...RM_L2, ...HOD,
+  ...EMPLOYEE, ...PEER, ...SOCIAL, ...RM_L1, ...RM_L2, ...HOD,
   ...HR_MANAGER, ...HR_HEAD, ...FINANCE, ...PAYROLL, ...IT_ADMIN, ...MD,
 ]
 

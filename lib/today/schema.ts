@@ -45,8 +45,13 @@ export const ROUTES = {
   inbox: 'tab:inbox',
   attendance: 'tab:attendance',
   calendar: 'tab:company',        // the holiday calendar lives under Company
-  wall: 'tab:wall',
-  appreciate: 'tab:wall',
+  // Both used to point at 'tab:wall'. The Wall is a sub-tab of Social now, and
+  // Social opens on it — so these land exactly where they did, by the door the
+  // rail actually has. Left pointing at 'wall' they resolved to a view key that
+  // no longer exists in VIEWS, which sends viewMeta() to its fallback and draws
+  // the Home header above the Wall.
+  wall: 'tab:social',
+  appreciate: 'tab:social',
   profile: 'tab:profile',
 } as const;
 

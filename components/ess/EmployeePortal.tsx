@@ -40,7 +40,11 @@ import InvestmentProofs from '@/components/ess/InvestmentProofs'
 import TravelClaims from '@/components/ess/TravelClaims'
 import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
-import WallOfFame from '@/components/ess/WallOfFame'
+// Social (118) — birthdays, work anniversaries, new joiners, and the Wall of
+// Fame gathered under one tab. WallOfFame is deliberately NOT imported here
+// any more: Social imports and renders it for its own first sub-tab, and this
+// file's last use of it went with the 'wall' case.
+import Social from '@/components/ess/social/Social'
 import Today from '@/components/ess/today/Today'
 import Profile360 from '@/components/profile/Profile360'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
@@ -60,7 +64,7 @@ import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/co
 import {
   C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
-  IconLetters, IconReports, IconRecruitment, IconAi, IconBell, IconMail,
+  IconLetters, IconReports, IconAi, IconBell, IconMail,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
 
@@ -3159,7 +3163,7 @@ const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => R
   // is a different thing that still uses IconBell.
   inbox: IconMail,
   attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
-  wall: IconRecruitment, rnr: IconAi, funzone: IconAi,
+  social: IconEmployees, rnr: IconAi, funzone: IconAi,
 }
 function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
   const I = ESS_ICON[k]
@@ -3249,17 +3253,17 @@ const SECTIONS: NavSection[] = [
     desc:'Your KRAs, and the reviews you owe',
     items:[{ k:'performance', label:'Performance' }] },
 
-  // Was a 'soon' placeholder. Promoted rather than duplicated — adding a
-  // second entry with the same key is what produced React's "two children
-  // with the same key" warning, and duplicate keys let React drop or swap
-  // siblings silently.
-  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'ready',
-    desc:'What your colleagues have noticed — shoutouts, awards, badges and service milestones. Thanks, never pay.',
-    items:[{ k:'wall', label:'Wall of Fame' }],
-    features:[
-      { icon:'', name:'Give a Shoutout', note:'Quick appreciation post' },
-      { icon:'', name:'Company Feed',    note:'See everyone’s shoutouts' },
-    ]},
+  // Social (118). Wall of Fame used to be a top-level section here and is now
+  // the first sub-tab inside this one, so the rail has one door to everything
+  // social rather than four.
+  //
+  // ONE ITEM ON PURPOSE. A section with a single entry draws no pill row (see
+  // SubTabs), and Social renders its own four tabs — the same ones the design
+  // preview shows. Listing them here as well would put two tab rows on one
+  // screen, which is what the Inbox and HRIS shells already avoid.
+  { k:'social', label:'Social', short:'Social', icon:'', status:'ready',
+    desc:'Birthdays, work anniversaries, new joiners and the Wall of Fame — everyone across your group, in one place',
+    items:[{ k:'social', label:'Social' }]},
 
   { k:'rnr', label:'RNR', short:'RNR', icon:'', status:'soon',
     desc:'Structured Reward & Recognition, points-based',
@@ -3713,7 +3717,13 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />
           case 'performance':   return <Performance employeeId={emp.id} />
-      case 'wall':          return <WallOfFame employeeId={emp.id} />
+      // Social owns the Wall now and renders <WallOfFame/> itself for its first
+      // sub-tab, so there is no 'wall' case any more: 'wall' is not a view key
+      // in VIEWS, and a case for it would render the Wall under the Home header
+      // (viewMeta falls back to VIEWS[0] for an unknown key). The two routes
+      // that pointed at it — ROUTES.wall and ROUTES.appreciate in
+      // lib/today/schema.ts — now say 'tab:social'.
+      case 'social':        return <Social employeeId={emp.id} />
       case 'funzone':       return <FunZone employeeId={emp.id} />
       default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
     }
