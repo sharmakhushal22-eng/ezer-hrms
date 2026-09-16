@@ -17,6 +17,7 @@ import Journey from './Journey';
 import TeamToday from './TeamToday';
 import HolidayCard from './HolidayCard';
 import Celebrations from './Celebrations';
+import NewJoiners from './NewJoiners';
 import RecognitionCard from './RecognitionCard';
 import Announcements from './Announcements';
 import Toast from './Toast';
@@ -91,6 +92,19 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
     if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not send the wish');
   });
 
+  // Welcoming a new joiner goes to the same endpoint, under the JOINING badge —
+  // which is what ess_new_joiners_feed() reads back to decide whether this
+  // viewer has already congratulated them. The route rejected that kind until
+  // now; it is in its KINDS set as of this change.
+  const congratulate = async (id: string) => {
+    const r = await fetch('/api/ess/celebrations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
+      body: JSON.stringify({ to_employee_id: id, kind: 'JOINING' }),
+    });
+    if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || 'Could not send that');
+  };
+
   if (err) return <div className="ezt"><div className="page card">Could not load Today: {err}</div></div>;
   if (!data) return <div className="ezt"><div className="page"><div className="card" style={{ height: 320, opacity: .5 }} /></div></div>;
 
@@ -116,6 +130,7 @@ export default function Today({ initial, onSearch, onWish, onOpenTab }: Props) {
             <TeamToday data={data} nav={nav} />
             <HolidayCard data={data} nav={nav} />
             <Celebrations data={data} onWish={wish} onToast={show} />
+            <NewJoiners data={data} onCongratulate={congratulate} onToast={show} />
             <RecognitionCard data={data} nav={nav} />
             <Announcements data={data} nav={nav} />
           </div>

@@ -86,7 +86,12 @@ export async function GET(req: NextRequest) {
   })
 }
 
-const KINDS = new Set(['BIRTHDAY', 'ANNIVERSARY', 'KUDOS'])
+// JOINING is the badge 116's ledger already keys `already_congratulated` on
+// (ess_new_joiners_feed checks `k.badge = 'JOINING'`), so a congratulation sent
+// from the Home card has to be stored under it or the button never flips to
+// "Congratulated". It was missing here, which meant this route rejected the one
+// kind its own new-joiner card needs.
+const KINDS = new Set(['BIRTHDAY', 'ANNIVERSARY', 'KUDOS', 'JOINING'])
 
 export async function POST(req: NextRequest) {
   const r = await essRoute(req)

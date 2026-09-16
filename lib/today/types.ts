@@ -30,6 +30,21 @@ export interface TodayPayload {
   next_holiday: { date: string; name: string; days_away: number; long_weekend: boolean } | null;
   celebrations: Array<{ id: string; name: string; initials: string; kind: 'birthday' | 'anniversary'; on: string; years?: number }>;
   recognition: { badge: string | null; from: string; message: string | null; tags: string[] | null; at: string } | null;
+  /**
+   * Everyone recently issued an ESS code who actually started recently — the
+   * two-part rule in migration 116. Added to the payload by 117 as a straight
+   * pass-through of ess_new_joiners_feed().
+   *
+   * OPTIONAL ON PURPOSE. 117 is a separate migration from the one that created
+   * the ledger, so a database can legitimately have 116 and not 117. The card
+   * falls back to calling the feed directly rather than showing nothing.
+   */
+  new_joiners?: Array<{
+    id: string; name: string; initials: string; code: string | null;
+    designation: string | null; department: string | null; photo: string | null;
+    joined_on: string | null; code_issued_at: string;
+    days_since_joining: number | null; already_congratulated: boolean;
+  }>;
   announcements: {
     pinned: { id: string; title: string; body: string | null; cta_label: string | null; cta_route: string | null; published_at: string } | null;
     items: Array<{ id: string; title: string; body: string | null; published_at: string; unread: boolean }>;
