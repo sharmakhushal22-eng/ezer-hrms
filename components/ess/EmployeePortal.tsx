@@ -3766,10 +3766,8 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
               Could not load your access: {essMenuError}
             </div>
           )}
-          {/* Reads the signed-in user's own grant, so it is hidden while viewing
-              somebody else's portal — otherwise the admin's door shows up in an
-              employee's sidebar. */}
-          {!adminMode && <AdminEntry />}
+          {/* Admin button removed from the ESS sidebar for all employees — admins use
+              /dashboard directly. */}
         </div>
       )}
 
@@ -3886,7 +3884,6 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
                   <span style={{ width:6, height:6, borderRadius:'50%', background:DOT[s.status], flexShrink:0 }} />
                 </button>
               ))}
-              {!adminMode && <AdminEntry isMobile />}
             </div>
             {adminGroups.length > 0 && (
               <>

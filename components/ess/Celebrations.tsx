@@ -35,9 +35,16 @@ interface Celebrant {
   designation: string | null; dept_name: string | null
   years?: number; already_wished: boolean
 }
+interface NewJoiner {
+  id: string; name: string; initials: string; code: string | null
+  designation: string | null; department: string | null; photo: string | null
+  joined_on: string | null; days_since_joining: number | null
+  already_congratulated: boolean
+}
 interface Payload {
   birthdays: Celebrant[]
   anniversaries: Celebrant[]
+  new_joiners?: NewJoiner[]
   mine: { birthday: boolean; anniversary: boolean }
 }
 
@@ -59,36 +66,42 @@ export default function Celebrations({ employeeId, onSent }: { employeeId: strin
 
   useEffect(() => { load() }, [load])
 
-  const wish = async (c: Celebrant, kind: 'BIRTHDAY' | 'ANNIVERSARY') => {
-    setBusy(c.id)
+  // A joining is congratulated, never "wished". The copy branches on kind.
+  const send = async (id: string, name: string, kind: 'BIRTHDAY' | 'ANNIVERSARY' | 'JOINING') => {
+    setBusy(id)
+    const first = name.split(' ')[0]
+    const joining = kind === 'JOINING'
     try {
       const r = await fetch('/api/ess/celebrations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...(await authHeaders()) },
-        body: JSON.stringify({ to_employee_id: c.id, kind }),
+        body: JSON.stringify({ to_employee_id: id, kind }),
       })
       const j = await r.json().catch(() => ({}))
       if (r.ok) {
-        // A wish to somebody with no ESS login is stored but unreadable. Say so
-        // rather than showing the same tick as a delivered one.
+        // Flip the button locally right away — the payload is cached and a refetch
+        // could take a moment.
+        if (joining) setData(d => d ? { ...d, new_joiners: (d.new_joiners || []).map(n => n.id === id ? { ...n, already_congratulated: true } : n) } : d)
         setNote(j.warning ? j.warning
-          : j.duplicate ? `Already wished ${c.full_name.split(' ')[0]} today`
-          : `Wish sent to ${c.full_name.split(' ')[0]}`)
+          : j.duplicate ? (joining ? `Already congratulated ${first}` : `Already wished ${first} today`)
+          : joining ? `Your congratulations are on their way to ${first}` : `Wish sent to ${first}`)
         await load(); onSent?.()
       } else {
-        setNote(j.error || 'Could not send that wish')
+        setNote(j.error || (joining ? 'Could not send that' : 'Could not send that wish'))
       }
     } catch {
-      setNote('Could not send that wish')
+      setNote(joining ? 'Could not send that' : 'Could not send that wish')
     } finally {
       setBusy(null)
       setTimeout(() => setNote(null), 3000)
     }
   }
+  const wish = (c: Celebrant, kind: 'BIRTHDAY' | 'ANNIVERSARY') => send(c.id, c.full_name, kind)
 
   if (!data) return null
   const { birthdays, anniversaries, mine } = data
-  if (!birthdays.length && !anniversaries.length && !mine.birthday && !mine.anniversary) return null
+  const newJoiners = data.new_joiners || []
+  if (!birthdays.length && !anniversaries.length && !newJoiners.length && !mine.birthday && !mine.anniversary) return null
 
   const Row = ({ c, kind }: { c: Celebrant; kind: 'BIRTHDAY' | 'ANNIVERSARY' }) => (
     <div style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${C.brandEdge}` }}>
@@ -146,6 +159,40 @@ export default function Celebrations({ employeeId, onSent }: { employeeId: strin
             🌟 Work anniversaries today
           </div>
           {anniversaries.map(c => <Row key={c.id} c={c} kind="ANNIVERSARY" />)}
+        </>
+      )}
+
+      {newJoiners.length > 0 && (
+        <>
+          <div style={{ fontSize:12, fontWeight:W.bold, color:C.muted, letterSpacing:.3, textTransform:'uppercase', marginTop: (birthdays.length || anniversaries.length) ? 14 : 0, marginBottom:4 }}>
+            🎉 New joiners
+          </div>
+          {newJoiners.map(n => (
+            <div key={n.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${C.brandEdge}` }}>
+              {n.photo
+                ? <img src={n.photo} alt="" width={34} height={34} style={{ width:34, height:34, borderRadius:'50%', objectFit:'cover', flexShrink:0 }} />
+                : <div aria-hidden style={{ width:34, height:34, borderRadius:'50%', flexShrink:0, background:C.brandTint, color:C.brandDeep, display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, fontWeight:W.bold }}>{n.initials || initials(n.name)}</div>}
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{n.name}</div>
+                <div style={{ fontSize:11, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                  {[n.designation, n.department].filter(Boolean).join(' · ') || '—'}
+                </div>
+              </div>
+              <button
+                onClick={() => send(n.id, n.name, 'JOINING')}
+                disabled={n.already_congratulated || busy === n.id}
+                style={{
+                  flexShrink:0, padding:'6px 12px', borderRadius:R.md, fontSize:12, fontWeight:600, fontFamily:'inherit',
+                  cursor: n.already_congratulated ? 'default' : 'pointer',
+                  border: n.already_congratulated ? `1px solid ${C.brandEdge}` : 'none',
+                  background: n.already_congratulated ? 'transparent' : C.brand,
+                  color: n.already_congratulated ? C.muted : C.onAccent,
+                  opacity: busy === n.id ? .6 : 1,
+                }}>
+                {n.already_congratulated ? 'Congratulated' : busy === n.id ? '…' : 'Congratulate'}
+              </button>
+            </div>
+          ))}
         </>
       )}
 

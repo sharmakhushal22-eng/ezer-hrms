@@ -74,10 +74,18 @@ export async function GET(req: NextRequest) {
     years, already_wished: wished.has(e.id),
   })
 
+  // New joiners in the viewer's company — HR just generated their ESS code and they
+  // joined recently. ess_new_joiners_feed() carries name/designation/department and
+  // whether THIS viewer has already congratulated them. Never null (SQL coalesces to []).
+  let new_joiners: any[] = []
+  const { data: nj } = await sb.rpc('ess_new_joiners_feed', { p_employee_id: me })
+  if (Array.isArray(nj)) new_joiners = nj
+
   return NextResponse.json({
     birthdays: birthdayRows.filter(e => e.id !== me).map(e => shape(e)),
     anniversaries: anniversaryRows.filter(e => e.id !== me).map(e =>
       shape(e, today.getUTCFullYear() - new Date(e.company_doj!).getUTCFullYear())),
+    new_joiners,
     // Your own, so the portal can say happy birthday to you too.
     mine: {
       birthday: birthdayRows.some(e => e.id === me),
@@ -86,11 +94,10 @@ export async function GET(req: NextRequest) {
   })
 }
 
-// JOINING is the badge 116's ledger already keys `already_congratulated` on
-// (ess_new_joiners_feed checks `k.badge = 'JOINING'`), so a congratulation sent
-// from the Home card has to be stored under it or the button never flips to
-// "Congratulated". It was missing here, which meant this route rejected the one
-// kind its own new-joiner card needs.
+// JOINING is the badge 116's ledger keys `already_congratulated` on
+// (ess_new_joiners_feed checks `k.badge = 'JOINING'`), so a congratulation has
+// to be stored under it or the button never flips. Note its duplicate rule is
+// not the others' — see the POST handler below.
 const KINDS = new Set(['BIRTHDAY', 'ANNIVERSARY', 'KUDOS', 'JOINING'])
 
 export async function POST(req: NextRequest) {
@@ -113,14 +120,19 @@ export async function POST(req: NextRequest) {
     .select('id, full_name').eq('id', to).is('date_of_leaving', null).maybeSingle()
   if (!recipient) return NextResponse.json({ error: 'No such active employee' }, { status: 404 })
 
-  // One wish per person per day. Without this the bell becomes a spam target,
-  // and there is no undo on a notification.
-  const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0)
-  const { data: already } = await sb.from('ess_kudos')
-    .select('id').eq('from_employee_id', me).eq('to_employee_id', to)
-    .gte('created_at', startOfDay.toISOString()).limit(1)
+  // One wish per person per day — except a JOINING, which is once, ever (you only
+  // join once). This must agree with `already_congratulated` in ess_new_joiners_feed(),
+  // which matches any JOINING kudo from the sender with no date bound.
+  let dupQ = sb.from('ess_kudos').select('id').eq('from_employee_id', me).eq('to_employee_id', to)
+  if (kind === 'JOINING') {
+    dupQ = dupQ.eq('badge', 'JOINING')
+  } else {
+    const startOfDay = new Date(); startOfDay.setUTCHours(0, 0, 0, 0)
+    dupQ = dupQ.gte('created_at', startOfDay.toISOString())
+  }
+  const { data: already } = await dupQ.limit(1)
   if ((already ?? []).length) {
-    return NextResponse.json({ ok: true, duplicate: true, message: 'Already wished today' })
+    return NextResponse.json({ ok: true, duplicate: true, message: kind === 'JOINING' ? 'Already congratulated' : 'Already wished today' })
   }
 
   const { data: sender } = await sb.from('employees')
@@ -136,6 +148,7 @@ export async function POST(req: NextRequest) {
   const title =
     kind === 'BIRTHDAY'    ? `🎂 ${senderName} wished you a happy birthday`
   : kind === 'ANNIVERSARY' ? `🌟 ${senderName} congratulated you on your work anniversary`
+  : kind === 'JOINING'     ? `🎉 ${senderName} congratulated you on joining`
   :                          `👏 ${senderName} sent you kudos`
 
   const res = await notify({
