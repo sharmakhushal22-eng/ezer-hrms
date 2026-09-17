@@ -6,6 +6,7 @@ import { companyFilter, scopedCompanies } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
+import CandidateInterviewModal from '@/components/recruitment/CandidateInterviewModal'
 
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
@@ -275,7 +276,7 @@ export default function RecruitmentPage() {
   // Scoped-HM MRF id set for the Send Offers tab (null = oversight, no filter). Memoised so
   // the child's fetch effect does not refire on every render.
   const sendOfferAllowed = useMemo(() => isHrHead ? null : new Set(mrfs.map(m => m.id)), [isHrHead, mrfs])
-  const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify }
+  const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify, employeeId: grant.employeeId }
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -3099,7 +3100,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
 }
 
 // ── PIPELINE ──────────────────────────────────────────────────────
-function PipelineTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify }:any) {
+function PipelineTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId }:any) {
   const [interviewCand, setInterviewCand] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [selMRF, setSelMRF] = useState('all')
@@ -3630,13 +3631,16 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
         </div>
       )}
 
-      {/* Candidate Drawer */}
+      {/* Candidate popup — centered modal; runs the round-by-round interview flow */}
       {selCand&&(
-        <CandidateDrawer candidate={selCand} mrfs={mrfs} onClose={()=>setSelCand(null)}
-          onStageChange={moveStage} onSaveNotes={saveNotes}
-          aiQs={aiQs} aiQLoading={aiQLoading} onGetQuestions={getAIQuestions}
-          aiFbLoading={aiFbLoading} onGetFeedback={getAIFeedback}
-          onOpenInterviews={(c:Candidate)=>{ setSelCand(null); setInterviewCand(c) }} />
+        <CandidateInterviewModal
+          candidate={selCand}
+          mrf={mrfs.find((m:MRF)=>m.id===selCand.mrf_id) || null}
+          stages={STAGES} stageColor={STAGE_COLOR} stageText={STAGE_TEXT}
+          schedulerId={employeeId}
+          onClose={()=>setSelCand(null)}
+          onStageChange={moveStage}
+          showNotify={showNotify} />
       )}
 
       {/* ── Interview Pipeline full-screen overlay ── */}

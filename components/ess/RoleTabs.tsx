@@ -17,6 +17,7 @@ import { createPortal } from 'react-dom'
 import { authToken } from '@/lib/rms/client'
 import { C as TK } from '@/lib/ui'
 import MrfForm, { mrfToForm } from './MrfForm'
+import InterviewFeedbackForm, { type Feedback as InterviewFeedback } from '@/components/recruitment/InterviewFeedbackForm'
 
 const C = {
   ink: '#1E1B4B', muted: '#6B7280', faint: '#9CA3AF', border: 'rgba(124,58,237,0.12)', card: '#FFFFFF',
@@ -557,6 +558,77 @@ export function RaiseMrfSection({ employeeId, notify, go }: { employeeId: string
   )
 }
 
+// ── Interviews to conduct — the interviewer's half of the round flow ──────────
+// A row per interview this employee has been added to. Acknowledge first (the
+// button then turns into a blue "Give feedback"); giving feedback opens the
+// 8-parameter form and, once submitted, the row is marked done.
+function InterviewInvites({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+  const [invites, setInvites] = useState<any[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [fbFor, setFbFor] = useState<any | null>(null)
+  const [saving, setSaving] = useState(false)
+  const load = useCallback(() => api('/api/ess/interview', employeeId).then(d => setInvites(d.invites || [])).catch(() => setInvites([])), [employeeId])
+  useEffect(() => { load() }, [load])
+  if (!invites || invites.length === 0) return null
+
+  const pending = invites.filter((i: any) => i.status !== 'submitted')
+  const ack = async (id: string) => {
+    setBusy(id)
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify('Acknowledged — record your feedback after the interview.'); await load() }
+    catch (e: any) { notify(e.message, 'error') }
+    setBusy(null)
+  }
+  const submit = async (fb: InterviewFeedback) => {
+    if (!fbFor) return
+    setSaving(true)
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'feedback', invite_id: fbFor.id, feedback: fb }) }); notify('Feedback submitted. Thank you.'); setFbFor(null); await load() }
+    catch (e: any) { notify(e.message, 'error') }
+    setSaving(false)
+  }
+
+  return (
+    <div style={S.card}>
+      <div style={S.section}>Interviews to conduct ({pending.length || invites.length})</div>
+      {invites.map((i: any) => {
+        const when = i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'time to be confirmed'
+        return (
+          <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{i.candidate_name || 'Candidate'} <span style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, background: C.soft, borderRadius: 99, padding: '2px 8px', marginLeft: 4 }}>{i.round}</span></div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>
+                {when}{i.scheduled_by_name ? ` · by ${i.scheduled_by_name}` : ''}
+                {i.meet_link ? <> · <a href={i.meet_link} target="_blank" rel="noreferrer" style={{ color: C.blue, fontWeight: 600 }}>Join link</a></> : ''}
+              </div>
+            </div>
+            {i.status === 'submitted' ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.green, background: C.greenBg, borderRadius: 99, padding: '4px 12px' }}>Feedback submitted ✓</span>
+            ) : i.status === 'acknowledged' ? (
+              <button onClick={() => setFbFor(i)} style={{ ...S.btn, background: C.blue }}>Give feedback</button>
+            ) : (
+              <button onClick={() => ack(i.id)} disabled={busy === i.id} style={{ ...S.btn, background: C.green, opacity: busy === i.id ? .6 : 1 }}>{busy === i.id ? '…' : 'Acknowledge'}</button>
+            )}
+          </div>
+        )
+      })}
+
+      {fbFor && createPortal(
+        <div onMouseDown={e => { if (e.target === e.currentTarget && !saving) setFbFor(null) }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 4000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '24px 16px' }}>
+          <div style={{ background: C.card, borderRadius: 16, width: 'min(1000px, 100%)', boxShadow: '0 24px 70px rgba(30,27,75,0.3)', padding: '18px 20px', margin: '0 auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <div style={{ fontSize: 16, fontWeight: 800, color: C.ink }}>{fbFor.round} — Interview Feedback</div>
+              <button onClick={() => !saving && setFbFor(null)} style={S.btnO}>Close</button>
+            </div>
+            <InterviewFeedbackForm
+              mode="fill" round={fbFor.round} submitting={saving}
+              candidate={{ name: fbFor.candidate_name || 'Candidate', sub: fbFor.round }}
+              onSubmit={submit} onClose={() => !saving && setFbFor(null)} />
+          </div>
+        </div>, document.body)}
+    </div>
+  )
+}
+
 export function ApprovalsSection({ employeeId, go, notify }: { employeeId: string; go: (k: string) => void; notify: (m: string, t?: 'success' | 'error') => void }) {
   const [items, setItems] = useState<PendingItem[] | null>(null)
   const [err, setErr] = useState('')
@@ -570,6 +642,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
   return (
     <div>
       <MrfApprovals employeeId={employeeId} notify={notify} />
+      <InterviewInvites employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },
         { label: 'In your scope', value: items.length - mine },
