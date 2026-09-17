@@ -19,6 +19,7 @@ interface Location { id:string; location_code:string; location_name:string; comp
 interface Department { id:string; dept_name:string; dept_code:string; company_id:string }
 interface MRF {
   id:string; company_id:string; location_id?:string; department_id?:string
+  location_name?:string; dept_name?:string
   designation?:string; position?:string; no_of_openings?:number; openings?:number
   urgency?:string; reason?:string; reason_for_hire?:string; status:string
   job_description?:string; employment_type?:string; budget_min?:number; budget_max?:number
@@ -3107,13 +3108,54 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   const [aiQs, setAiQs] = useState<string[]>([])
   const [aiQLoading, setAiQLoading] = useState(false)
   const [aiFbLoading, setAiFbLoading] = useState(false)
-  const EMPTY_C = { mrf_id:'', full_name:'', phone:'', email:'', hr_email:'', current_company:'', designation:'', experience_years:'', current_ctc:'', expected_ctc:'', notice_period:'', source:'Direct', overtime_pay_applicable:'No' }
+  // Full Add-candidate form. Core identity fields map to their own candidates
+  // columns; everything else rides along in application_details (migration 121).
+  const EMPTY_C = {
+    // 1 requisition
+    mrf_id:'', job_location:'', recruiter:'', employment_type:'Full time — permanent',
+    // 2 personal
+    first_name:'', middle_name:'', last_name:'', dob:'', gender:'', marital_status:'', nationality:'Indian', languages:'',
+    // 3 contact
+    email:'', dial_code:'+91', phone:'', alt_mobile:'', current_city:'', preferred_location:'', permanent_address:'', relocate:'Not applicable',
+    // 4 professional
+    total_exp_years:'', total_exp_months:'', relevant_exp:'', current_company:'', designation:'', function:'', qualification:'', specialization:'', passing_year:'', institute:'', certifications:'', skills:[] as string[], custom_skill:'', notice_period:'', last_working_day:'', buyout:'No',
+    // 5 compensation (₹ LPA)
+    current_fixed:'', current_variable:'', expected_ctc:'', negotiable:'Yes', offer_in_hand:'No', offer_company:'', offer_amount:'', offer_deadline:'',
+    // 6 source
+    source:'', sourced_on:new Date().toISOString().slice(0,10), referrer_id:'', referrer_name:'', referrer_relation:'Ex-colleague', vendor_name:'', vendor_fee:'', portal_link:'',
+    // 7 documents
+    resume_name:'', photo_name:'', linkedin:'', portfolio:'', consent:false,
+    // 8 screening
+    q1:'', q2:'', stage:'Applied', availability:'', remarks:'', notify:'Yes',
+    hr_email:'',
+  }
   const [cForm, setCForm] = useState<any>(EMPTY_C)
+  const [saving, setSaving] = useState(false)
+  const [touched, setTouched] = useState(false)   // reveal red on the missing fields only after a submit attempt
   const [myEmail, setMyEmail] = useState('')
-  useEffect(()=>{ supabase.auth.getUser().then(({data}:any)=>{ const em=data?.user?.email; if(em){ setMyEmail(em); setCForm((f:any)=>({...f, hr_email:f.hr_email||em})) } }) },[])
+  useEffect(()=>{ supabase.auth.getUser().then(({data}:any)=>{ const em=data?.user?.email; if(em){ setMyEmail(em); setCForm((f:any)=>({...f, hr_email:f.hr_email||em, recruiter:f.recruiter||em})) } }) },[])
   const cMrf = mrfs.find((m:MRF)=>m.id===cForm.mrf_id)
-  const expCtcOver = !!(cMrf?.budget_max && cForm.expected_ctc!=='' && Number(cForm.expected_ctc) > Number(cMrf.budget_max))
+  // expected_ctc is captured in ₹ lakh per annum; the MRF budget is in rupees.
+  const expCtcOver = !!(cMrf?.budget_max && cForm.expected_ctc!=='' && Number(cForm.expected_ctc)*100000 > Number(cMrf.budget_max))
   const CF = (k:string,v:any) => setCForm((f:any)=>({...f,[k]:v}))
+  const toggleSkill = (s:string) => setCForm((f:any)=>({ ...f, skills: f.skills.includes(s) ? f.skills.filter((x:string)=>x!==s) : [...f.skills, s] }))
+  const addCustomSkill = () => { const s=(cForm.custom_skill||'').trim(); if(!s) return; setCForm((f:any)=>({ ...f, skills: f.skills.includes(s)?f.skills:[...f.skills,s], custom_skill:'' })) }
+  // Fields that must be filled before a candidate can be saved.
+  const isEmail = (v:string)=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)
+  const missing = {
+    mrf_id: !cForm.mrf_id, first_name: !cForm.first_name.trim(), last_name: !cForm.last_name.trim(),
+    email: !isEmail(cForm.email.trim()), phone: !/^\d{10}$/.test(cForm.phone.trim()),
+    current_city: !cForm.current_city.trim(), total_exp_years: cForm.total_exp_years==='',
+    qualification: !cForm.qualification, notice_period: !cForm.notice_period,
+    current_fixed: cForm.current_fixed==='', expected_ctc: cForm.expected_ctc==='',
+    source: !cForm.source, consent: !cForm.consent,
+  } as Record<string,boolean>
+  const bad = (k:string)=> touched && missing[k]
+  const missingCount = Object.values(missing).filter(Boolean).length
+  const errStyle = { borderColor:C.critical, background:C.criticalTint } as React.CSSProperties
+  const inp = (k:string):React.CSSProperties => ({ ...T.input, ...(bad(k)?errStyle:{}) })
+  const sel = (k:string):React.CSSProperties => ({ ...T.select, ...(bad(k)?errStyle:{}) })
+  const reqMark = <span style={{ color:C.critical }}> *</span>
   const approvedMRFs = mrfs.filter((m:MRF)=>m.status==='APPROVED')
   const [pipeQ, setPipeQ] = useState('')
   const [stageF, setStageF] = useState('')   // '' = all stages
@@ -3123,22 +3165,67 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   const filtered = stageF ? baseList.filter((c:Candidate)=>c.stage===stageF) : baseList
 
   async function addCandidate() {
-    if (!cForm.full_name||!cForm.phone) { showNotify('Name and Phone are required','error'); return }
-    const { data:dup } = await supabase.from('candidates').select('id').or(`phone.eq.${cForm.phone},email.eq.${cForm.email||'none'}`).limit(1)
-    if (dup?.length&&!window.confirm('A candidate with the same phone/email already exists. Add anyway?')) return
-    const mrf = mrfs.find((m:MRF)=>m.id===cForm.mrf_id)
-    const { error } = await supabase.from('candidates').insert({
-      mrf_id:cForm.mrf_id||null, company_id:mrf?.company_id||null,
-      full_name:cForm.full_name, phone:cForm.phone, mobile:cForm.phone,
-      email:cForm.email||null, hr_email:cForm.hr_email||null, current_company:cForm.current_company||null,
-      designation:cForm.designation||null, experience_years:Number(cForm.experience_years)||0,
-      current_ctc:Number(cForm.current_ctc)||null, expected_ctc:Number(cForm.expected_ctc)||null,
-      notice_period:Number(cForm.notice_period)||null, source:cForm.source, stage:'Applied',
-      overtime_pay_applicable: cForm.overtime_pay_applicable === 'Yes',
-      status:'active', applied_date:new Date().toISOString().split('T')[0],
-    })
-    if (error) { showNotify('Error: '+error.message,'error'); return }
-    showNotify('Candidate added!'); setShowAdd(false); setCForm({...EMPTY_C, hr_email:myEmail}); onRefresh()
+    setTouched(true)
+    if (missingCount > 0) { showNotify(`${missingCount} required field${missingCount>1?'s':''} still missing`,'error'); return }
+    setSaving(true)
+    try {
+      const phone = cForm.phone.trim()
+      const email = cForm.email.trim()
+      const { data:dup } = await supabase.from('candidates').select('id').or(`phone.eq.${phone},email.eq.${email||'none'}`).limit(1)
+      if (dup?.length && !window.confirm('A candidate with the same phone/email already exists. Add anyway?')) { setSaving(false); return }
+
+      const mrf = mrfs.find((m:MRF)=>m.id===cForm.mrf_id)
+      const fullName = [cForm.first_name, cForm.middle_name, cForm.last_name].map((s:string)=>s.trim()).filter(Boolean).join(' ')
+      // total experience → the column is an integer number of years; the exact
+      // years + months are kept in application_details.professional.
+      const expYears = Math.round((Number(cForm.total_exp_years)||0) + (Number(cForm.total_exp_months)||0)/12)
+      const noticeDays = cForm.notice_period==='Immediate' ? 0 : (parseInt(cForm.notice_period,10) || null)
+      // ₹ LPA → rupees, the unit every existing card and offer screen already reads.
+      const fixedRs = Math.round((Number(cForm.current_fixed)||0) * 100000) || null
+      const varRs = Math.round((Number(cForm.current_variable)||0) * 100000) || null
+      const expRs = Math.round((Number(cForm.expected_ctc)||0) * 100000) || null
+      // Knockout screening: a "No" on either question drops the candidate into Rejected.
+      const knockedOut = cForm.q1==='No' || cForm.q2==='No'
+      const stage = knockedOut ? 'Rejected' : cForm.stage
+
+      const details = {
+        requisition:{ job_location:cForm.job_location||mrf?.location_name||null, recruiter:cForm.recruiter||null, employment_type:cForm.employment_type },
+        personal:{ first_name:cForm.first_name, middle_name:cForm.middle_name, last_name:cForm.last_name, dob:cForm.dob||null, gender:cForm.gender||null, marital_status:cForm.marital_status||null, nationality:cForm.nationality||null, languages:cForm.languages||null },
+        contact:{ dial_code:cForm.dial_code, alt_mobile:cForm.alt_mobile||null, current_city:cForm.current_city, preferred_location:cForm.preferred_location||null, permanent_address:cForm.permanent_address||null, willing_to_relocate:cForm.relocate },
+        professional:{ relevant_exp:cForm.relevant_exp||null, function:cForm.function||null, qualification:cForm.qualification, specialization:cForm.specialization||null, passing_year:cForm.passing_year||null, institute:cForm.institute||null, certifications:cForm.certifications||null, skills:cForm.skills, buyout:cForm.buyout, last_working_day:cForm.last_working_day||null },
+        compensation:{ current_fixed_lpa:Number(cForm.current_fixed)||null, current_variable_lpa:Number(cForm.current_variable)||null, total_current_ctc_rs:(fixedRs||0)+(varRs||0)||null, expected_ctc_lpa:Number(cForm.expected_ctc)||null, negotiable:cForm.negotiable, offer_in_hand:cForm.offer_in_hand, offer_company:cForm.offer_company||null, offer_amount_lpa:cForm.offer_amount||null, offer_deadline:cForm.offer_deadline||null },
+        source:{ channel:cForm.source, sourced_on:cForm.sourced_on||null, referrer_id:cForm.referrer_id||null, referrer_name:cForm.referrer_name||null, referrer_relation:cForm.referrer_relation||null, vendor_name:cForm.vendor_name||null, vendor_fee:cForm.vendor_fee||null, portal_link:cForm.portal_link||null },
+        documents:{ resume_name:cForm.resume_name||null, photo_name:cForm.photo_name||null, linkedin:cForm.linkedin||null, portfolio:cForm.portfolio||null, consent:cForm.consent, consent_at:cForm.consent?new Date().toISOString():null },
+        screening:{ q1:cForm.q1||null, q2:cForm.q2||null, chosen_stage:cForm.stage, availability:cForm.availability||null, notify_hiring_manager:cForm.notify, knocked_out:knockedOut },
+      }
+
+      const base:any = {
+        mrf_id:cForm.mrf_id||null, company_id:mrf?.company_id||null,
+        full_name:fullName, phone, mobile:phone,
+        email:email||null, hr_email:cForm.hr_email||null, current_company:cForm.current_company||null,
+        designation:cForm.designation||null, experience_years:expYears,
+        current_ctc:fixedRs, expected_ctc:expRs,
+        notice_period:noticeDays, notice_period_days:noticeDays,
+        source:cForm.source, stage,
+        status:'active', applied_date:new Date().toISOString().split('T')[0],
+        interview_notes:cForm.remarks||null,
+        ...(knockedOut ? { blacklist_reason:`Screening knockout: ${cForm.q1==='No'?'cannot run 500+ payroll independently':'cannot join within notice'}` } : {}),
+      }
+
+      let error = (await supabase.from('candidates').insert({ ...base, application_details:details })).error
+      // Graceful fallback if migration 121 (application_details column) is not applied yet —
+      // the candidate still saves with all its core fields.
+      if (error && (error.code==='42703' || /application_details/i.test(error.message))) {
+        error = (await supabase.from('candidates').insert(base)).error
+        if (!error) showNotify('Candidate added (run migration 121 to also store the extended details).')
+      } else if (!error) {
+        showNotify('Candidate added!')
+      }
+      if (error) { showNotify('Error: '+error.message,'error'); setSaving(false); return }
+      setShowAdd(false); setTouched(false); setCForm({...EMPTY_C, hr_email:myEmail, recruiter:myEmail}); onRefresh()
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function moveStage(id:string, stage:string) {
@@ -3279,54 +3366,241 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
         </div>
       )}
 
-      {/* Add Candidate Modal */}
+      {/* Add Candidate — full form */}
       {showAdd&&(
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', overflowY:'auto' }}>
-          <div style={{ background:C.surface, borderRadius:14, padding:24, width:520, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', margin:'20px auto' }}>
-            <div style={{ fontSize:15, fontWeight:600, color:C.ink, marginBottom:16 }}>Add Candidate</div>
-            <div style={{ marginBottom:10 }}>
-              <label style={T.label}>For Opening (MRF)</label>
-              <select style={T.select} value={cForm.mrf_id} onChange={e=>CF('mrf_id',e.target.value)}>
-                <option value="">Select Opening</option>
-                {approvedMRFs.map((m:MRF)=><option key={m.id} value={m.id}>{m.designation||m.position} ({m.no_of_openings||m.openings||0} openings)</option>)}
-              </select>
-            </div>
-            <div style={{ ...T.g2, marginBottom:10 }}>
-              <div><label style={T.label}>Full Name *</label><input style={T.input} value={cForm.full_name} onChange={e=>CF('full_name',e.target.value)} /></div>
-              <div><label style={T.label}>Phone *</label><input style={T.input} value={cForm.phone} onChange={e=>CF('phone',e.target.value)} /></div>
-            </div>
-            <div style={{ ...T.g2, marginBottom:10 }}>
-              <div><label style={T.label}>Candidate Email</label><input style={T.input} value={cForm.email} onChange={e=>CF('email',e.target.value)} placeholder="candidate@email.com" /></div>
-              <div><label style={T.label}>HR Email (for follow-ups)</label><input style={T.input} value={cForm.hr_email} onChange={e=>CF('hr_email',e.target.value)} placeholder="hr@company.com" /></div>
-            </div>
-            <div style={{ ...T.g2, marginBottom:10 }}>
-              <div><label style={T.label}>Source</label>
-                <select style={T.select} value={cForm.source} onChange={e=>CF('source',e.target.value)}>
-                  {SOURCES.map(s=><option key={s}>{s}</option>)}
-                </select>
-              </div>
-              <div><label style={T.label}>Overtime Pay Applicable</label>
-                <select style={T.select} value={cForm.overtime_pay_applicable} onChange={e=>CF('overtime_pay_applicable',e.target.value)}>
-                  <option>No</option><option>Yes</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ ...T.g2, marginBottom:10 }}>
-              <div><label style={T.label}>Current Company</label><input style={T.input} value={cForm.current_company} onChange={e=>CF('current_company',e.target.value)} /></div>
-              <div><label style={T.label}>Experience (Yrs)</label><input style={T.input} type="number" value={cForm.experience_years} onChange={e=>CF('experience_years',e.target.value)} /></div>
-            </div>
-            <div style={{ ...T.g3, marginBottom:16 }}>
-              <div><label style={T.label}>Current CTC (₹)</label><input style={T.input} type="number" value={cForm.current_ctc} onChange={e=>CF('current_ctc',e.target.value)} /></div>
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}
+          onMouseDown={e=>{ if(e.target===e.currentTarget && !saving) setShowAdd(false) }}>
+          <div style={{ background:C.surface, borderRadius:16, width:'min(920px, 100%)', boxShadow:'0 24px 70px rgba(0,0,0,0.28)', overflow:'hidden', display:'flex', flexDirection:'column', maxHeight:'92vh' }}>
+            {/* header */}
+            <div style={{ background:`linear-gradient(135deg,${C.brand},${C.brandDeep})`, color:C.onAccent, padding:'16px 22px', display:'flex', alignItems:'center', gap:14, flexShrink:0 }}>
               <div>
-                <label style={T.label}>Expected CTC (₹)</label>
-                <input style={{ ...T.input, ...(expCtcOver?{ borderColor: C.criticalTint, background:C.criticalTint }:{}) }} type="number" value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} />
-                {expCtcOver && <div style={{ fontSize:10, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>}
+                <div style={{ fontSize:17, fontWeight:700 }}>Add candidate</div>
+                <div style={{ fontSize:12, color:C.onAccentDim, marginTop:2 }}>
+                  {cMrf ? `${cMrf.designation||cMrf.position}${cMrf.location_name?' · '+cMrf.location_name:''}` : 'Attach the candidate to an approved opening'}
+                </div>
               </div>
-              <div><label style={T.label}>Notice Period (Days)</label><input style={T.input} type="number" value={cForm.notice_period} onChange={e=>CF('notice_period',e.target.value)} /></div>
+              <button onClick={()=>!saving&&setShowAdd(false)} style={{ marginLeft:'auto', background:'transparent', border:`1px solid ${C.onAccentDim}`, color:C.onAccent, borderRadius:8, padding:'5px 12px', cursor:'pointer', fontSize:13, fontFamily:'inherit' }}>Close</button>
             </div>
-            <div style={{ display:'flex', gap:8 }}>
-              <button onClick={addCandidate} style={{ ...T.btnPrimary, flex:1 }}>Add to Pipeline</button>
-              <button onClick={()=>setShowAdd(false)} style={{ ...T.btnOutline }}>Cancel</button>
+
+            {/* scrollable body */}
+            <div style={{ overflowY:'auto', padding:'6px 22px 18px' }}>
+
+              {/* 1 · Requisition */}
+              <SectionLine title="Requisition" />
+              <div style={{ ...T.g2, marginBottom:14 }}>
+                <div style={{ gridColumn:'1 / -1' }}>
+                  <label style={T.label}>For Opening (MRF){reqMark}</label>
+                  <select style={sel('mrf_id')} value={cForm.mrf_id} onChange={e=>CF('mrf_id',e.target.value)}>
+                    <option value="">Select an approved opening</option>
+                    {approvedMRFs.map((m:MRF)=><option key={m.id} value={m.id}>{m.designation||m.position} ({m.no_of_openings||m.openings||0} openings){m.location_name?` · ${m.location_name}`:''}</option>)}
+                  </select>
+                  {approvedMRFs.length===0 && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>No approved MRF yet — approve one in the MRF tab first.</div>}
+                </div>
+                <div><label style={T.label}>Department</label><input style={{ ...T.input, opacity:.7 }} value={cMrf?.dept_name||'—'} readOnly /></div>
+                <div><label style={T.label}>Job location</label>
+                  <input style={T.input} value={cForm.job_location} onChange={e=>CF('job_location',e.target.value)} placeholder={cMrf?.location_name||'City / Remote'} />
+                </div>
+                <div><label style={T.label}>Recruiter</label><input style={T.input} value={cForm.recruiter} onChange={e=>CF('recruiter',e.target.value)} placeholder="Recruiter name / email" /></div>
+                <div><label style={T.label}>Employment type</label>
+                  <select style={T.select} value={cForm.employment_type} onChange={e=>CF('employment_type',e.target.value)}>
+                    {['Full time — permanent','Fixed term contract','Third party payroll','Intern'].map(o=><option key={o}>{o}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* 2 · Personal */}
+              <SectionLine title="Personal details" />
+              <div style={{ ...T.g3, marginBottom:14 }}>
+                <div><label style={T.label}>First name{reqMark}</label><input style={inp('first_name')} value={cForm.first_name} onChange={e=>CF('first_name',e.target.value)} /></div>
+                <div><label style={T.label}>Middle name</label><input style={T.input} value={cForm.middle_name} onChange={e=>CF('middle_name',e.target.value)} /></div>
+                <div><label style={T.label}>Last name{reqMark}</label><input style={inp('last_name')} value={cForm.last_name} onChange={e=>CF('last_name',e.target.value)} /></div>
+                <div><label style={T.label}>Date of birth</label><input style={T.input} type="date" max="2010-01-01" value={cForm.dob} onChange={e=>CF('dob',e.target.value)} /></div>
+                <div><label style={T.label}>Gender</label>
+                  <select style={T.select} value={cForm.gender} onChange={e=>CF('gender',e.target.value)}>
+                    <option value="">Prefer not to say</option><option>Female</option><option>Male</option><option>Other</option>
+                  </select>
+                </div>
+                <div><label style={T.label}>Marital status</label>
+                  <select style={T.select} value={cForm.marital_status} onChange={e=>CF('marital_status',e.target.value)}>
+                    <option value="">Select</option><option>Single</option><option>Married</option><option>Other</option>
+                  </select>
+                </div>
+                <div><label style={T.label}>Nationality</label><input style={T.input} value={cForm.nationality} onChange={e=>CF('nationality',e.target.value)} /></div>
+                <div style={{ gridColumn:'span 2' }}><label style={T.label}>Languages known <span style={{ color:C.faint, fontWeight:400 }}>(comma separated)</span></label><input style={T.input} value={cForm.languages} onChange={e=>CF('languages',e.target.value)} placeholder="Hindi, English" /></div>
+              </div>
+
+              {/* 3 · Contact */}
+              <SectionLine title="Contact" />
+              <div style={{ ...T.g2, marginBottom:14 }}>
+                <div><label style={T.label}>Personal email{reqMark}</label><input style={inp('email')} type="email" value={cForm.email} onChange={e=>CF('email',e.target.value)} placeholder="name@example.com" /></div>
+                <div><label style={T.label}>Mobile{reqMark} <span style={{ color:C.faint, fontWeight:400 }}>(10 digits)</span></label>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <select style={{ ...T.select, flex:'0 0 80px' }} value={cForm.dial_code} onChange={e=>CF('dial_code',e.target.value)}>{['+91','+971','+1','+44','+65'].map(o=><option key={o}>{o}</option>)}</select>
+                    <input style={{ ...inp('phone'), flex:1 }} inputMode="numeric" maxLength={10} value={cForm.phone} onChange={e=>CF('phone',e.target.value.replace(/\D/g,''))} placeholder="10 digits" />
+                  </div>
+                </div>
+                <div><label style={T.label}>Alternate number</label><input style={T.input} inputMode="numeric" maxLength={10} value={cForm.alt_mobile} onChange={e=>CF('alt_mobile',e.target.value.replace(/\D/g,''))} /></div>
+                <div><label style={T.label}>Current city{reqMark}</label><input style={inp('current_city')} value={cForm.current_city} onChange={e=>CF('current_city',e.target.value)} placeholder="Gurugram" /></div>
+                <div><label style={T.label}>HR email (for follow-ups)</label><input style={T.input} value={cForm.hr_email} onChange={e=>CF('hr_email',e.target.value)} placeholder="hr@company.com" /></div>
+                <div><label style={T.label}>Willing to relocate</label>
+                  <select style={T.select} value={cForm.relocate} onChange={e=>CF('relocate',e.target.value)}><option>Not applicable</option><option>Yes</option><option>No</option></select>
+                </div>
+                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Permanent address</label><textarea style={{ ...T.textarea, minHeight:60 }} value={cForm.permanent_address} onChange={e=>CF('permanent_address',e.target.value)} placeholder="House, street, city, state, PIN" /></div>
+              </div>
+
+              {/* 4 · Professional */}
+              <SectionLine title="Professional background" />
+              <div style={{ ...T.g3, marginBottom:14 }}>
+                <div><label style={T.label}>Total experience — years{reqMark}</label><input style={inp('total_exp_years')} type="number" min={0} max={50} value={cForm.total_exp_years} onChange={e=>CF('total_exp_years',e.target.value)} /></div>
+                <div><label style={T.label}>Months</label><input style={T.input} type="number" min={0} max={11} value={cForm.total_exp_months} onChange={e=>CF('total_exp_months',e.target.value)} /></div>
+                <div><label style={T.label}>Relevant experience (yrs)</label><input style={T.input} type="number" min={0} max={50} step={0.5} value={cForm.relevant_exp} onChange={e=>CF('relevant_exp',e.target.value)} /></div>
+                <div><label style={T.label}>Current employer</label><input style={T.input} value={cForm.current_company} onChange={e=>CF('current_company',e.target.value)} placeholder="Blank if fresher" /></div>
+                <div><label style={T.label}>Current designation</label><input style={T.input} value={cForm.designation} onChange={e=>CF('designation',e.target.value)} /></div>
+                <div><label style={T.label}>Function</label>
+                  <select style={T.select} value={cForm.function} onChange={e=>CF('function',e.target.value)}>
+                    <option value="">Select</option>{['Payroll','HR Operations','HR Compliance','Talent Acquisition','Finance','Engineering','Sales','Other'].map(o=><option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div><label style={T.label}>Highest qualification{reqMark}</label>
+                  <select style={sel('qualification')} value={cForm.qualification} onChange={e=>CF('qualification',e.target.value)}>
+                    <option value="">Select</option>{['Diploma','Graduate','Post graduate','Professional — CA / CS / CMA','Doctorate'].map(o=><option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div><label style={T.label}>Specialization</label><input style={T.input} value={cForm.specialization} onChange={e=>CF('specialization',e.target.value)} placeholder="B.Com (Hons), MBA-HR" /></div>
+                <div><label style={T.label}>Year of passing</label><input style={T.input} type="number" min={1970} max={2035} value={cForm.passing_year} onChange={e=>CF('passing_year',e.target.value)} placeholder="2019" /></div>
+                <div style={{ gridColumn:'span 2' }}><label style={T.label}>Institute / university</label><input style={T.input} value={cForm.institute} onChange={e=>CF('institute',e.target.value)} /></div>
+                <div><label style={T.label}>Certifications</label><input style={T.input} value={cForm.certifications} onChange={e=>CF('certifications',e.target.value)} placeholder="SHRM-CP, Payroll (NPI)" /></div>
+              </div>
+              {/* skills */}
+              <div style={{ marginBottom:14 }}>
+                <label style={T.label}>Key skills</label>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:2 }}>
+                  {['Payroll processing','Statutory compliance','PF / ESIC','Income tax — TDS','Advanced Excel','Recruitment','Stakeholder management','Communication'].concat(cForm.skills.filter((s:string)=>!['Payroll processing','Statutory compliance','PF / ESIC','Income tax — TDS','Advanced Excel','Recruitment','Stakeholder management','Communication'].includes(s))).map((s:string)=>{
+                    const on = cForm.skills.includes(s)
+                    return <button key={s} type="button" onClick={()=>toggleSkill(s)} style={{ ...T.btn, height:30, padding:'0 12px', borderRadius:99, fontSize:12, fontWeight:on?600:500, background:on?C.brand:C.sunken, color:on?C.onAccent:C.inkSoft, border:`1px solid ${on?C.brand:C.line}` }}>{s}</button>
+                  })}
+                </div>
+                <div style={{ display:'flex', gap:6, marginTop:8, maxWidth:340 }}>
+                  <input style={{ ...T.input, height:32 }} value={cForm.custom_skill} onChange={e=>CF('custom_skill',e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); addCustomSkill() } }} placeholder="Add a custom skill…" />
+                  <button type="button" onClick={addCustomSkill} style={{ ...T.btnOutline, height:32 }}>Add</button>
+                </div>
+              </div>
+              <div style={{ ...T.g3, marginBottom:14 }}>
+                <div><label style={T.label}>Notice period{reqMark}</label>
+                  <select style={sel('notice_period')} value={cForm.notice_period} onChange={e=>CF('notice_period',e.target.value)}>
+                    <option value="">Select</option>{['Immediate','15 days','30 days','60 days','90 days','Serving notice'].map(o=><option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                {cForm.notice_period==='Serving notice' && <div><label style={T.label}>Last working day</label><input style={T.input} type="date" value={cForm.last_working_day} onChange={e=>CF('last_working_day',e.target.value)} /></div>}
+                <div><label style={T.label}>Buyout possible</label>
+                  <select style={T.select} value={cForm.buyout} onChange={e=>CF('buyout',e.target.value)}><option>No</option><option>Yes</option><option>To be discussed</option></select>
+                </div>
+              </div>
+
+              {/* 5 · Compensation */}
+              <SectionLine title="Compensation (₹ lakh per annum)" />
+              <div style={{ ...T.g3, marginBottom:14 }}>
+                <div><label style={T.label}>Current fixed CTC{reqMark}</label><input style={inp('current_fixed')} type="number" min={0} step={0.01} value={cForm.current_fixed} onChange={e=>CF('current_fixed',e.target.value)} placeholder="8.40" /></div>
+                <div><label style={T.label}>Current variable</label><input style={T.input} type="number" min={0} step={0.01} value={cForm.current_variable} onChange={e=>CF('current_variable',e.target.value)} placeholder="0.60" /></div>
+                <div style={{ background:C.ink, color:C.onAccent, borderRadius:R.md, padding:'8px 12px', alignSelf:'end' }}>
+                  <div style={{ fontSize:10, color:C.onAccentDim }}>Total current CTC</div>
+                  <div style={{ fontSize:17, fontWeight:700 }}>₹{((Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0)).toFixed(2)} LPA</div>
+                </div>
+                <div><label style={T.label}>Expected CTC{reqMark}</label>
+                  <input style={{ ...inp('expected_ctc'), ...(expCtcOver?errStyle:{}) }} type="number" min={0} step={0.01} value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} placeholder="11.00" />
+                  {expCtcOver && <div style={{ fontSize:10, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>}
+                </div>
+                <div><label style={T.label}>Negotiable</label>
+                  <select style={T.select} value={cForm.negotiable} onChange={e=>CF('negotiable',e.target.value)}><option>Yes</option><option>No</option><option>Depends on role</option></select>
+                </div>
+                <div style={{ background:C.sunken, borderRadius:R.md, padding:'8px 12px', alignSelf:'end', border:`1px solid ${C.line}` }}>
+                  <div style={{ fontSize:10, color:C.faint }}>Hike over current</div>
+                  <div style={{ fontSize:17, fontWeight:700, color:C.positive }}>{(()=>{ const t=(Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0); const e=Number(cForm.expected_ctc)||0; return (t>0&&e>0)?(((e-t)/t)*100).toFixed(1)+'%':'—' })()}</div>
+                </div>
+                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Offer in hand</label>
+                  <select style={{ ...T.select, maxWidth:200 }} value={cForm.offer_in_hand} onChange={e=>CF('offer_in_hand',e.target.value)}><option>No</option><option>Yes</option></select>
+                </div>
+                {cForm.offer_in_hand==='Yes' && <>
+                  <div><label style={T.label}>Offering company</label><input style={T.input} value={cForm.offer_company} onChange={e=>CF('offer_company',e.target.value)} /></div>
+                  <div><label style={T.label}>Offered CTC (LPA)</label><input style={T.input} type="number" min={0} step={0.01} value={cForm.offer_amount} onChange={e=>CF('offer_amount',e.target.value)} /></div>
+                  <div><label style={T.label}>Joining deadline</label><input style={T.input} type="date" value={cForm.offer_deadline} onChange={e=>CF('offer_deadline',e.target.value)} /></div>
+                </>}
+              </div>
+
+              {/* 6 · Source */}
+              <SectionLine title="Source" />
+              <div style={{ ...T.g2, marginBottom:14 }}>
+                <div><label style={T.label}>Source{reqMark}</label>
+                  <select style={sel('source')} value={cForm.source} onChange={e=>CF('source',e.target.value)}>
+                    <option value="">Select</option>{SOURCES.map(s=><option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div><label style={T.label}>Sourced on</label><input style={T.input} type="date" value={cForm.sourced_on} onChange={e=>CF('sourced_on',e.target.value)} /></div>
+                {cForm.source==='Referral' && <>
+                  <div><label style={T.label}>Referring employee ID</label><input style={T.input} value={cForm.referrer_id} onChange={e=>CF('referrer_id',e.target.value)} placeholder="EMP-10234" /></div>
+                  <div><label style={T.label}>Referring employee name</label><input style={T.input} value={cForm.referrer_name} onChange={e=>CF('referrer_name',e.target.value)} /></div>
+                  <div><label style={T.label}>Relationship</label>
+                    <select style={T.select} value={cForm.referrer_relation} onChange={e=>CF('referrer_relation',e.target.value)}><option>Ex-colleague</option><option>Friend</option><option>Family</option><option>Other</option></select>
+                  </div>
+                </>}
+                {cForm.source==='Consultancy' && <>
+                  <div><label style={T.label}>Vendor name</label><input style={T.input} value={cForm.vendor_name} onChange={e=>CF('vendor_name',e.target.value)} /></div>
+                  <div><label style={T.label}>Agreed fee (% of CTC)</label><input style={T.input} type="number" min={0} max={30} step={0.5} value={cForm.vendor_fee} onChange={e=>CF('vendor_fee',e.target.value)} placeholder="8.33" /></div>
+                </>}
+                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Job portal / profile link</label><input style={T.input} type="url" value={cForm.portal_link} onChange={e=>CF('portal_link',e.target.value)} placeholder="https://" /></div>
+              </div>
+
+              {/* 7 · Documents */}
+              <SectionLine title="Documents" />
+              <div style={{ ...T.g2, marginBottom:14 }}>
+                <div><label style={T.label}>Resume <span style={{ color:C.faint, fontWeight:400 }}>(PDF/DOCX)</span></label>
+                  <input style={{ ...T.input, padding:'7px 9px' }} type="file" accept=".pdf,.doc,.docx" onChange={e=>CF('resume_name',e.target.files?.[0]?.name||'')} />
+                  {cForm.resume_name && <div style={{ fontSize:11, color:C.positive, marginTop:3 }}>Attached: {cForm.resume_name}</div>}
+                </div>
+                <div><label style={T.label}>Photograph <span style={{ color:C.faint, fontWeight:400 }}>(optional)</span></label>
+                  <input style={{ ...T.input, padding:'7px 9px' }} type="file" accept="image/*" onChange={e=>CF('photo_name',e.target.files?.[0]?.name||'')} />
+                </div>
+                <div><label style={T.label}>LinkedIn profile</label><input style={T.input} type="url" value={cForm.linkedin} onChange={e=>CF('linkedin',e.target.value)} placeholder="https://linkedin.com/in/" /></div>
+                <div><label style={T.label}>Portfolio / other link</label><input style={T.input} type="url" value={cForm.portfolio} onChange={e=>CF('portfolio',e.target.value)} placeholder="https://" /></div>
+                <div style={{ gridColumn:'1 / -1' }}>
+                  <label style={{ display:'flex', alignItems:'flex-start', gap:8, cursor:'pointer', fontSize:12.5, color:C.ink, ...(bad('consent')?{ color:C.critical }:{}) }}>
+                    <input type="checkbox" checked={cForm.consent} onChange={e=>CF('consent',e.target.checked)} style={{ marginTop:2 }} />
+                    <span>Candidate has consented to their data being stored and processed for this hiring process{reqMark}</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* 8 · Screening */}
+              <SectionLine title="Screening" />
+              <div style={{ marginBottom:10 }}>
+                <div style={{ background:C.sunken, border:`1px solid ${C.line}`, borderRadius:R.md, padding:'10px 12px', marginBottom:8 }}>
+                  <div style={{ fontSize:12.5, fontWeight:500, marginBottom:6 }}>Has the candidate independently run a monthly payroll cycle for 500+ employees?</div>
+                  <div style={{ display:'flex', gap:16 }}>{['Yes','No','Partially'].map(o=><label key={o} style={{ display:'flex', gap:5, alignItems:'center', fontSize:13 }}><input type="radio" name="q1" checked={cForm.q1===o} onChange={()=>CF('q1',o)} />{o}</label>)}</div>
+                </div>
+                <div style={{ background:C.sunken, border:`1px solid ${C.line}`, borderRadius:R.md, padding:'10px 12px' }}>
+                  <div style={{ fontSize:12.5, fontWeight:500, marginBottom:6 }}>Can the candidate join within the notice period stated above?</div>
+                  <div style={{ display:'flex', gap:16 }}>{['Yes','No'].map(o=><label key={o} style={{ display:'flex', gap:5, alignItems:'center', fontSize:13 }}><input type="radio" name="q2" checked={cForm.q2===o} onChange={()=>CF('q2',o)} />{o}</label>)}</div>
+                </div>
+                {(cForm.q1==='No'||cForm.q2==='No') && <div style={{ fontSize:11.5, color:C.critical, marginTop:6, fontWeight:600 }}>A “No” on a knockout question will file this candidate under Rejected.</div>}
+              </div>
+              <div style={{ ...T.g2, marginBottom:6 }}>
+                <div><label style={T.label}>Stage</label>
+                  <select style={T.select} value={cForm.stage} onChange={e=>CF('stage',e.target.value)}>
+                    {['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted'].map(s=><option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div><label style={T.label}>Interview availability</label><input style={T.input} value={cForm.availability} onChange={e=>CF('availability',e.target.value)} placeholder="Weekdays after 6 pm, Sat full day" /></div>
+                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Recruiter remarks <span style={{ color:C.faint, fontWeight:400 }}>(visible to hiring manager)</span></label><textarea style={{ ...T.textarea, minHeight:64 }} value={cForm.remarks} onChange={e=>CF('remarks',e.target.value)} placeholder="Screening call summary, red flags, why this profile fits" /></div>
+              </div>
+            </div>
+
+            {/* sticky footer */}
+            <div style={{ borderTop:`1px solid ${C.line}`, padding:'12px 22px', display:'flex', alignItems:'center', gap:10, flexShrink:0, background:C.surface }}>
+              <button onClick={addCandidate} disabled={saving} style={{ ...T.btnPrimary, opacity:saving?.6:1, cursor:saving?'default':'pointer' }}>{saving?'Saving…':'Add to pipeline'}</button>
+              <button onClick={()=>!saving&&setShowAdd(false)} style={T.btnOutline}>Cancel</button>
+              <span style={{ marginLeft:'auto', fontSize:12, fontWeight:500, color: touched&&missingCount>0 ? C.critical : C.faint }}>
+                {touched&&missingCount>0 ? `${missingCount} required field${missingCount>1?'s':''} missing` : 'Fields marked * are required'}
+              </span>
             </div>
           </div>
         </div>

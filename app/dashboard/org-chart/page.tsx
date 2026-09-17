@@ -103,12 +103,12 @@ function OrgCard({ node, isSelf, isReport, onToggle, collapsed, hasChildren, reg
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           border: '2px solid #fff', boxShadow: `0 3px 8px ${style.bar}55`,
         }}>{initials(n.fullName)}</div>
-        <div style={{
+        <div className="orgcard-clamp" style={{
           fontSize: 12, fontWeight: 700, color: P.text, lineHeight: 1.25,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>{n.fullName || '—'}</div>
         <div style={{ fontSize: 10, color: P.muted, fontFamily: 'monospace', marginTop: 2 }}>{n.empCode || '—'}</div>
-        <div style={{
+        <div className="orgcard-clamp" style={{
           fontSize: 10.5, color: P.muted, marginTop: 3, lineHeight: 1.3,
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
         }}>{n.designation || '—'}</div>
@@ -370,7 +370,24 @@ export default function OrgChartPage() {
     try {
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
       const { default: html2canvas } = await import('html2canvas')
-      const canvas = await html2canvas(wrap, { backgroundColor: P.page, scale: 2, useCORS: true })
+      const canvas = await html2canvas(wrap, {
+        backgroundColor: P.page, scale: 2, useCORS: true,
+        // html2canvas cannot measure -webkit-line-clamp / -webkit-box and clips the
+        // text — names and designations came out with their lower halves sliced off.
+        // Un-clamp those cells in the capture clone only (the live chart keeps its
+        // 2-line clamp); a hair of line-height + bottom padding keeps descenders (g, y)
+        // off the bottom edge too.
+        onclone: (doc) => {
+          doc.querySelectorAll<HTMLElement>('.orgcard-clamp').forEach((el) => {
+            el.style.display = 'block'
+            el.style.setProperty('-webkit-line-clamp', 'unset')
+            el.style.overflow = 'visible'
+            el.style.whiteSpace = 'normal'
+            el.style.lineHeight = '1.4'
+            el.style.paddingBottom = '2px'
+          })
+        },
+      })
       const companyName = companies.find(c => c.id === companyId)?.company_name || 'All_companies'
       const safeName = companyName.replace(/[^a-z0-9]+/gi, '-').toLowerCase()
       const link = document.createElement('a')
