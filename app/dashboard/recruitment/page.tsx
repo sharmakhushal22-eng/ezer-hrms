@@ -3140,6 +3140,28 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   const CF = (k:string,v:any) => setCForm((f:any)=>({...f,[k]:v}))
   const toggleSkill = (s:string) => setCForm((f:any)=>({ ...f, skills: f.skills.includes(s) ? f.skills.filter((x:string)=>x!==s) : [...f.skills, s] }))
   const addCustomSkill = () => { const s=(cForm.custom_skill||'').trim(); if(!s) return; setCForm((f:any)=>({ ...f, skills: f.skills.includes(s)?f.skills:[...f.skills,s], custom_skill:'' })) }
+  // MRF carries its department and location as ids; resolve them to names against
+  // the lists this tab already loaded (the raw mrf row has no *_name field).
+  const mrfLocName = (m:any) => (locations||[]).find((l:any)=>l.id===m?.location_id)?.location_name || m?.location_name || ''
+  const mrfDeptName = (m:any) => (departments||[]).find((d:any)=>d.id===m?.department_id)?.dept_name || m?.dept_name || ''
+  const EMP_TYPES = ['Full time — permanent','Fixed term contract','Third party payroll','Intern']
+  // Autofill everything the chosen opening already knows, the moment it is picked:
+  // job location, recruiter, employment type and the role's required skills. Only
+  // the requisition-derived fields are touched — the candidate's own details stay.
+  useEffect(() => {
+    if (!cForm.mrf_id) return
+    const m = mrfs.find((x:MRF)=>x.id===cForm.mrf_id)
+    if (!m) return
+    const parsedSkills = String(m.skills_required||'').split(/[,;/|\n]+/).map((s:string)=>s.trim()).filter(Boolean)
+    setCForm((f:any)=>({
+      ...f,
+      job_location:    mrfLocName(m) || f.job_location,
+      recruiter:       m.assigned_recruiter || f.recruiter,
+      employment_type: m.employment_type || f.employment_type,
+      skills:          parsedSkills.length ? Array.from(new Set([...f.skills, ...parsedSkills])) : f.skills,
+    }))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cForm.mrf_id])
   // Fields that must be filled before a candidate can be saved.
   const isEmail = (v:string)=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)
   const missing = {
@@ -3376,7 +3398,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <div>
                 <div style={{ fontSize:17, fontWeight:700 }}>Add candidate</div>
                 <div style={{ fontSize:12, color:C.onAccentDim, marginTop:2 }}>
-                  {cMrf ? `${cMrf.designation||cMrf.position}${cMrf.location_name?' · '+cMrf.location_name:''}` : 'Attach the candidate to an approved opening'}
+                  {cMrf ? [cMrf.designation||cMrf.position, mrfDeptName(cMrf), mrfLocName(cMrf)].filter(Boolean).join(' · ') : 'Attach the candidate to an approved opening'}
                 </div>
               </div>
               <button onClick={()=>!saving&&setShowAdd(false)} style={{ marginLeft:'auto', background:'transparent', border:`1px solid ${C.onAccentDim}`, color:C.onAccent, borderRadius:8, padding:'5px 12px', cursor:'pointer', fontSize:13, fontFamily:'inherit' }}>Close</button>
@@ -3396,14 +3418,14 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   </select>
                   {approvedMRFs.length===0 && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>No approved MRF yet — approve one in the MRF tab first.</div>}
                 </div>
-                <div><label style={T.label}>Department</label><input style={{ ...T.input, opacity:.7 }} value={cMrf?.dept_name||'—'} readOnly /></div>
+                <div><label style={T.label}>Department</label><input style={{ ...T.input, opacity:.7 }} value={mrfDeptName(cMrf)||'—'} readOnly /></div>
                 <div><label style={T.label}>Job location</label>
-                  <input style={T.input} value={cForm.job_location} onChange={e=>CF('job_location',e.target.value)} placeholder={cMrf?.location_name||'City / Remote'} />
+                  <input style={T.input} value={cForm.job_location} onChange={e=>CF('job_location',e.target.value)} placeholder={mrfLocName(cMrf)||'City / Remote'} />
                 </div>
                 <div><label style={T.label}>Recruiter</label><input style={T.input} value={cForm.recruiter} onChange={e=>CF('recruiter',e.target.value)} placeholder="Recruiter name / email" /></div>
                 <div><label style={T.label}>Employment type</label>
                   <select style={T.select} value={cForm.employment_type} onChange={e=>CF('employment_type',e.target.value)}>
-                    {['Full time — permanent','Fixed term contract','Third party payroll','Intern'].map(o=><option key={o}>{o}</option>)}
+                    {Array.from(new Set([...EMP_TYPES, cForm.employment_type].filter(Boolean))).map(o=><option key={o as string}>{o as string}</option>)}
                   </select>
                 </div>
               </div>
@@ -3508,7 +3530,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 </div>
                 <div><label style={T.label}>Expected CTC{reqMark}</label>
                   <input style={{ ...inp('expected_ctc'), ...(expCtcOver?errStyle:{}) }} type="number" min={0} step={0.01} value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} placeholder="11.00" />
-                  {expCtcOver && <div style={{ fontSize:10, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>}
+                  {expCtcOver
+                    ? <div style={{ fontSize:10, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>
+                    : cMrf?.budget_max ? <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>MRF budget: ₹{(Number(cMrf.budget_min||0)/100000).toFixed(1)}L – ₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L</div> : null}
                 </div>
                 <div><label style={T.label}>Negotiable</label>
                   <select style={T.select} value={cForm.negotiable} onChange={e=>CF('negotiable',e.target.value)}><option>Yes</option><option>No</option><option>Depends on role</option></select>
