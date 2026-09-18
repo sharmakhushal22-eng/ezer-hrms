@@ -350,6 +350,7 @@ function GameTile({ t, i, onOpen }: { t: Tile; i: number; onOpen: (k: string) =>
   )
 }
 
+const TITLE = 'Fun Zone'.split('')
 
 function Hub({ employeeId, onOpen }: { employeeId?: string; onOpen: (k: string) => void }) {
   const [filter, setFilter] = useState<Filter>('all')
@@ -362,15 +363,32 @@ function Hub({ employeeId, onOpen }: { employeeId?: string; onOpen: (k: string) 
 
   return (
     <div className="fz-view">
-      {/* NO HERO BAND.
-          The portal already draws one: TabHeader renders "Fun Zone" with its
-          icon, status badge and description directly above this component, so a
-          second title and blurb here read as two headers stacked on one screen —
-          the same fault the Social tab had.
-          What stayed is what you can press. Surprise me and the filters are
-          controls, not chrome, so they moved out of the removed band into a
-          plain row on the canvas. */}
-      <div className="fz-bar">
+      <div className="fz-hero">
+        <div className="fz-hero-row">
+          <div>
+            <h1 className="fz-title" aria-label="Fun Zone">
+              {TITLE.map((ch, i) => (
+                <span key={i} aria-hidden="true" className={ch === ' ' ? 'sp' : undefined}
+                      style={{ '--i': i } as CSSProperties}>{ch}</span>
+              ))}
+            </h1>
+            <p className="fz-blurb">
+              Take a break. Play on your own, against the computer, or with a colleague
+              on two screens — nothing here is scored towards anything.
+            </p>
+          </div>
+          <div>
+            <button type="button" className="fz-key lg" onClick={surprise}>
+              <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect x="2.5" y="2.5" width="15" height="15" rx="3.5" stroke="currentColor" strokeWidth="2" />
+                <circle cx="7" cy="7" r="1.4" fill="currentColor" /><circle cx="13" cy="13" r="1.4" fill="currentColor" />
+                <circle cx="10" cy="10" r="1.4" fill="currentColor" />
+              </svg>
+              Surprise me
+            </button>
+            <div className="fz-hero-meta">{ALL_TILES.length} games, {GAMES.filter(g => g.live).length} of them live</div>
+          </div>
+        </div>
         <div className="fz-chips" role="group" aria-label="Show games">
           {FILTERS.map(f => (
             <button key={f.k} type="button" className="fz-chip" aria-pressed={filter === f.k}
@@ -378,17 +396,6 @@ function Hub({ employeeId, onOpen }: { employeeId?: string; onOpen: (k: string) 
               {f.label} <span className="n">{count(f.k)}</span>
             </button>
           ))}
-        </div>
-        <div className="fz-bar-end">
-          <button type="button" className="fz-key lg" onClick={surprise}>
-            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-              <rect x="2.5" y="2.5" width="15" height="15" rx="3.5" stroke="currentColor" strokeWidth="2" />
-              <circle cx="7" cy="7" r="1.4" fill="currentColor" /><circle cx="13" cy="13" r="1.4" fill="currentColor" />
-              <circle cx="10" cy="10" r="1.4" fill="currentColor" />
-            </svg>
-            Surprise me
-          </button>
-          <div className="fz-hero-meta">{ALL_TILES.length} games, {GAMES.filter(g => g.live).length} of them live</div>
         </div>
       </div>
 

@@ -201,37 +201,18 @@
 .fz .fz-title span:nth-child(8) { color: #FDBA74; }
 @keyframes fz-letter { from { opacity: 0; transform: translateY(40%) rotate(-8deg); } }
 .fz .fz-blurb { font-size: 14.5px; line-height: 1.6; color: var(--fz-on-stage-2); max-width: 46ch; margin: 0; }
-.fz .fz-bar .fz-key { --a-solid: #FBBF24; color: #1E1B4B; }
-.fz .fz-bar .fz-key svg { width: 18px; height: 18px; }
-.fz .fz-hero-meta { font-size: 12.5px; color: var(--fz-muted); margin-top: 8px; text-align: right; }
+.fz .fz-hero .fz-key { --a-solid: #FBBF24; color: #1E1B4B; }
+.fz .fz-hero .fz-key svg { width: 18px; height: 18px; }
+.fz .fz-hero-meta { font-size: 12.5px; color: var(--fz-on-stage-2); margin-top: 10px; text-align: right; }
 
-/* ── the control row that replaced the hero band ──────────────────────────
-   Chips on the left, Surprise me on the right, sitting straight on the
-   canvas. No surface of its own: the portal's TabHeader is the only header
-   this screen gets. */
-.fz .fz-bar {
-  display: flex; align-items: flex-start; justify-content: space-between;
-  gap: 14px 24px; flex-wrap: wrap; margin-bottom: 22px;
-}
-/* The chips take the room that is going and push Surprise me to the far edge.
-   Without flex:1 the eight of them filled the row on their own and the button
-   wrapped underneath, left-aligned, reading as a stray control rather than the
-   other end of a bar. min-width lets the whole thing stack honestly when the
-   column really is narrow. */
-.fz .fz-bar .fz-chips { flex: 1 1 320px; min-width: 0; align-content: flex-start; }
-.fz .fz-bar-end {
-  display: flex; flex-direction: column; align-items: flex-end;
-  flex: 0 0 auto; margin-left: auto;
-}
-
-.fz .fz-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.fz .fz-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 22px; }
 .fz .fz-chip {
   font-size: 13px; font-weight: 600; padding: 7px 14px; border-radius: 999px; cursor: pointer;
-  border: 1.5px solid var(--fz-edge); background: var(--fz-surface); color: var(--fz-ink-soft);
+  border: 1.5px solid rgba(255,255,255,.18); background: transparent; color: var(--fz-on-stage);
   transition: background .15s, border-color .15s, color .15s;
 }
-.fz .fz-chip:hover { border-color: var(--fz-brand); color: var(--fz-ink); }
-.fz .fz-chip[aria-pressed="true"] { background: var(--fz-stage); color: var(--fz-on-stage); border-color: var(--fz-stage); }
+.fz .fz-chip:hover { border-color: rgba(255,255,255,.5); }
+.fz .fz-chip[aria-pressed="true"] { background: var(--fz-on-stage); color: var(--fz-stage); border-color: var(--fz-on-stage); }
 .fz .fz-chip .n { opacity: .6; font-weight: 500; margin-left: 4px; }
 
 .fz .fz-shelf { margin-bottom: 28px; }
@@ -822,8 +803,7 @@
    shape below is declared as a class in this stylesheet, so it would otherwise
    lose to that rule — silently, and only inside the portal: the arcade keys and
    the pills would flatten to 10px rectangles in ESS while looking correct in
-   design/EZER-FunZone.html and /funzone-preview, neither of which mounts
-   <UIKeyframes/>.
+   design/EZER-FunZone.html, which mounts no <UIKeyframes/>.
 
    Same !important, higher specificity, so the global rule still governs every
    button this file does not name. Anything added later that is not a 10px
@@ -831,8 +811,8 @@
 
    Only the shapes that are actually <button> elements are listed. .echo-pad,
    .cb-row and .fz-tile .dots are divs and spans — the global rule never
-   touches them, and re-asserting them here would be noise. .fz-key.sm is 10px
-   already and needs no defence. */
+   touches them. .fz-key.sm is 10px already and needs no defence. Each value
+   matches the shape's own declaration above; do not invent one. */
 .fz .fz-key        { border-radius: 12px  !important; }
 .fz .fz-key.sm     { border-radius: 10px  !important; }
 .fz .fz-key.lg     { border-radius: 14px  !important; }
