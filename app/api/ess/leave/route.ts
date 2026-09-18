@@ -123,8 +123,24 @@ export async function GET(req: NextRequest) {
   const annotated = (types || []).map((t: any) => {
     const reasons: string[] = []
     if (t.gender !== 'ANY' && gender && t.gender !== gender) reasons.push('Not available for your gender')
-    if (onProbation && !t.probation_eligible && t.eligible_from === 'AFTER_PROBATION') reasons.push('Available after confirmation')
-    if (onProbation && !t.probation_eligible && t.eligible_from !== 'AFTER_PROBATION') reasons.push('Not available during probation')
+    // Probation does NOT block every leave type.
+    //
+    // This previously read `onProbation && !t.probation_eligible`, which looked
+    // correct but locked 171 of 398 active employees (43%) out of applying for
+    // ANY leave at all. Migration 030's seed never lists probation_eligible in
+    // its INSERT, so all 11 types inherit the column default of FALSE — the flag
+    // has never been populated, it just defaulted. The component this route
+    // replaced had no probation check whatsoever, so this was a regression.
+    //
+    // Only the EXPLICIT rule stands: a type that declares eligible_from =
+    // 'AFTER_PROBATION' is unavailable until confirmation. No live type does.
+    // Once HR actually sets probation_eligible per type, the stricter gate can
+    // come back. The script that sets those flags (leave-probation-eligibility.sql)
+    // is handed over separately and is deliberately NOT in this repo and NOT
+    // applied: which leave types are available during probation is an HR policy
+    // decision, not a default. Restoring the gate against today's all-FALSE data
+    // would lock out 171 of 398 active employees again.
+    if (onProbation && t.eligible_from === 'AFTER_PROBATION') reasons.push('Available after confirmation')
     if (t.eligible_from === 'AFTER_DAYS' && doj) {
       const eligibleOn = new Date(new Date(doj + 'T00:00:00Z').getTime() + Number(t.min_tenure_days || 0) * 86400000)
       if (eligibleOn > today) reasons.push(`Available from ${fmtDate(iso(eligibleOn))}`)
@@ -214,10 +230,15 @@ export async function POST(req: NextRequest) {
     return forbidden(`${type.name} is not available for your gender record.`)
   }
 
+  // Probation is NOT a blanket bar — see the long note in GET.
+  //
+  // A gate stood here reading `onProbation && !type.probation_eligible`. Because
+  // migration 030's seed never lists probation_eligible, all 11 live types sit
+  // at the column default of FALSE, so that one line refused every leave type
+  // for every probationer — 171 of 398 active employees. `onProbation` is kept:
+  // it still feeds the explicit AFTER_PROBATION rule directly below, which is
+  // the only probation rule any leave type actually declares.
   const onProbation = String(emp.confirmation_status || '') === 'Probation'
-  if (onProbation && !type.probation_eligible) {
-    return forbidden(`${type.name} is not available during probation.`)
-  }
 
   const doj = emp.company_doj || emp.group_doj || null
   if (type.eligible_from === 'AFTER_PROBATION' && onProbation) {
