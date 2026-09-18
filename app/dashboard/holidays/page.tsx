@@ -18,7 +18,7 @@ import {
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 import { useGrant } from '@/lib/rms/client'
-import { scopedCompanies } from '@/lib/rms/resolve'
+import { scopedCompanies, canSeeScreen } from '@/lib/rms/resolve'
 
 // ── Style constant (project palette) ────────────────────────────────
 const C = {
@@ -462,6 +462,10 @@ export function HolidaysSection() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<'cal' | 'hol' | 'week' | 'prev'>('cal')
   const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    const vis = (['cal','hol','week','prev'] as const).filter(k => canSeeScreen(grant, 'holidays.'+k))
+    if (vis.length && !vis.includes(tab)) setTab(vis[0])
+  }, [grant, tab])
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const notify = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
 
@@ -518,7 +522,7 @@ export function HolidaysSection() {
         </div>
 
         <div style={{ display:'flex', gap:8, marginBottom:14, flexWrap:'wrap' }}>
-          {tabs.map(([k, label]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{label}</button>)}
+          {tabs.filter(([k]) => canSeeScreen(grant, 'holidays.'+k)).map(([k, label]) => <button key={k} style={C.tab(tab === k)} onClick={() => setTab(k)}>{label}</button>)}
         </div>
 
         {loading ? <div style={{ ...C.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (

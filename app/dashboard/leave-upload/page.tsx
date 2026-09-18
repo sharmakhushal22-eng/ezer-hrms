@@ -20,7 +20,7 @@ import { HolidaysSection } from '@/app/dashboard/holidays/page'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 import { useGrant } from '@/lib/rms/client'
-import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
+import { scopedCompanies, defaultCompanyId, canSeeScreen } from '@/lib/rms/resolve'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
@@ -352,6 +352,10 @@ export default function LeaveConfigPage() {
   const [section, setSection] = useState<'leave' | 'holidays'>('leave')
   const [tab, setTab] = useState<'types' | 'quota' | 'upload'>('types')
   const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    const vis = (['types','quota','upload'] as const).filter(k => canSeeScreen(grant, 'leave.'+k))
+    if (vis.length && !vis.includes(tab)) setTab(vis[0])
+  }, [grant, tab])
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const notify = (msg: string, type: 'success' | 'error' = 'success') => setToast({ msg, type })
 
@@ -441,7 +445,7 @@ export default function LeaveConfigPage() {
         </div>
 
         <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
-          {tabs.map(([k, l]) => <button key={k} style={T.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}
+          {tabs.filter(([k]) => canSeeScreen(grant, 'leave.'+k)).map(([k, l]) => <button key={k} style={T.tab(tab === k)} onClick={() => setTab(k)}>{l}</button>)}
         </div>
 
         {loading ? <div style={{ ...T.card, textAlign:'center', color:TK.brand, padding:40 }}>Loading…</div> : (

@@ -18,7 +18,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
-import { companyFilter } from '@/lib/rms/resolve'
+import { companyFilter, canSeeScreen } from '@/lib/rms/resolve'
 import { C as TK, F, W, S, R, E, numeric } from '@/lib/ui'
 import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components/pms/AdminOverview'
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
@@ -57,6 +57,10 @@ interface Coverage {
 export default function PmsPage() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<Tab>('overview')
+  useEffect(() => {
+    const vis = (['overview','config','setup','policies','fill','upload','pip','reports','chain'] as Tab[]).filter(k => canSeeScreen(grant, 'pms.'+k))
+    if (vis.length && !vis.includes(tab)) setTab(vis[0])
+  }, [grant, tab])
   const [ready, setReady] = useState<boolean | null>(null)   // null = still checking
   const [loading, setLoading] = useState(true)
   const [cov, setCov] = useState<Coverage | null>(null)
@@ -260,7 +264,7 @@ export default function PmsPage() {
           eight tabs, eight filled chips read as eight competing buttons; an
           underline puts the weight on the one you are in. */}
       <div className="tabs">
-        {TABS.map(t => (
+        {TABS.filter(t => canSeeScreen(grant, 'pms.'+t.k)).map(t => (
           <button key={t.k} type="button" onClick={() => setTab(t.k)}
                   className={tab === t.k ? 'on' : undefined}
                   aria-current={tab === t.k ? 'page' : undefined}>

@@ -8,9 +8,11 @@ import { useState, useEffect, useCallback } from 'react'
 import {
   loadRoles, loadUsers, assignRoles, loadOrgUnits, loadRolePermissions, upsertRolePermission, loadApprovalRights, setApprovalRight,
   loadPendingForRole, resolveApproval, loadRecruiters, createRole, deleteRole,
+  loadRoleScreens, setRoleModuleScreens,
   PERM_MODULES, APPROVAL_TYPES,
-  type EssRole, type EssUser, type OrgUnit, type RolePermission, type ApprovalRight, type PendingItem, type AccessLevel, type Recruiter,
+  type EssRole, type EssUser, type OrgUnit, type RolePermission, type ApprovalRight, type PendingItem, type AccessLevel, type Recruiter, type RoleScreen,
 } from '@/lib/supabase-ess'
+import { SCREEN_MODULES, moduleKeyOf } from '@/lib/rms/screens'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -483,8 +485,72 @@ function CustomRolesTab({ roles, onCreate, onDelete, onGoModule }: {
   )
 }
 
+// ══ TAB · Screen Access (per-role sub-module / tab visibility) ══════════════
+function ScreenAccessTab({ roles, screens, selId, onSelect, onSetModule }: {
+  roles: EssRole[]; screens: RoleScreen[]; selId: string; onSelect: (id: string) => void
+  onSetModule: (role_id: string, allKeys: string[], allowedKeys: string[]) => void
+}) {
+  const sel = roles.find(r => r.id === selId)
+  const rowsFor = (moduleKey: string) => screens.filter(s => s.role_id === selId && moduleKeyOf(s.screen_key) === moduleKey)
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:'260px 1fr', gap:10, alignItems:'start' }}>
+      <RoleList roles={roles} selId={selId} onSelect={onSelect}
+        rightCount={r => { const n = new Set(screens.filter(s => s.role_id === r.id).map(s => moduleKeyOf(s.screen_key))).size; return n ? `${n} restricted` : '' }} />
+      <div>
+        {!sel ? <div style={C.card}><span style={{ fontSize:12, color:TK.faint }}>Pick a role to set which tabs it sees inside each module.</span></div> : (
+          <>
+            <div style={C.card}>
+              <div style={C.sec}>{sel.role_name} — tab visibility</div>
+              <div style={{ fontSize:11.5, color:TK.muted, lineHeight:1.6 }}>
+                Tick the tabs this role may open inside each module. <b>All ticked</b> (or none) = no restriction — the role sees every tab.
+                Untick some, and it sees only the ticked ones. Controls the tabs a role sees inside a module it already has access to (set module access in the <b>Module Access</b> tab first). Super admins are never restricted.
+              </div>
+            </div>
+            {SCREEN_MODULES.map(m => {
+              const allKeys = m.screens.map(s => `${m.moduleKey}.${s.key}`)
+              const rows = rowsFor(m.moduleKey)
+              const configured = rows.length > 0
+              const allowSet = new Set(rows.map(r => r.screen_key))
+              const isChecked = (k: string) => configured ? allowSet.has(k) : true
+              const shown = configured ? allowSet.size : allKeys.length
+              const toggle = (k: string) => {
+                const cur = new Set(configured ? [...allowSet] : allKeys)
+                if (cur.has(k)) cur.delete(k); else cur.add(k)
+                const allowedList = allKeys.filter(x => cur.has(x))
+                // all ticked → clear the restriction (module fully visible again)
+                onSetModule(selId, allKeys, allowedList.length === allKeys.length ? [] : allowedList)
+              }
+              return (
+                <div key={m.moduleKey} style={C.card}>
+                  <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:8 }}>
+                    <span style={{ fontSize:13, fontWeight:600 }}>{m.label}</span>
+                    <Pill text={configured ? `Restricted · ${shown}/${allKeys.length}` : 'All visible'}
+                      bg={configured ? TK.warningTint : TK.positiveTint} color={configured ? TK.warning : TK.positive} />
+                    {configured && <button style={{ ...C.out, marginLeft:'auto', padding:'4px 10px' }} onClick={() => onSetModule(selId, allKeys, [])}>Clear</button>}
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(190px, 1fr))', gap:'6px 14px' }}>
+                    {m.screens.map(s => {
+                      const k = `${m.moduleKey}.${s.key}`
+                      return (
+                        <label key={k} style={{ display:'flex', alignItems:'center', gap:8, fontSize:12.5, cursor:'pointer', padding:'3px 0' }}>
+                          <input type="checkbox" checked={isChecked(k)} onChange={() => toggle(k)} style={{ cursor:'pointer' }} />
+                          <span style={{ color: isChecked(k) ? TK.ink : TK.faint }}>{s.label}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function RolesPermissionsSection() {
-  const [tab, setTab] = useState<'assign' | 'ess' | 'overview' | 'modules' | 'approvals' | 'queue' | 'custom'>('assign')
+  const [tab, setTab] = useState<'assign' | 'ess' | 'overview' | 'modules' | 'screens' | 'approvals' | 'queue' | 'custom'>('assign')
   const [loading, setLoading] = useState(true)
   const [isMobile, setIsMobile] = useState(false)
   const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
@@ -494,6 +560,7 @@ export function RolesPermissionsSection() {
   const [users, setUsers] = useState<EssUser[]>([])
   const [org, setOrg] = useState<{ companies: OrgUnit[]; locations: OrgUnit[]; departments: OrgUnit[] }>({ companies: [], locations: [], departments: [] })
   const [perms, setPerms] = useState<RolePermission[]>([])
+  const [screens, setScreens] = useState<RoleScreen[]>([])
   const [rights, setRights] = useState<ApprovalRight[]>([])
   const [selRole, setSelRole] = useState('')
   const [assignRole, setAssignRole] = useState('')
@@ -512,8 +579,8 @@ export function RolesPermissionsSection() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [r, u, o, p, a, rec] = await Promise.all([loadRoles(), loadUsers(), loadOrgUnits(), loadRolePermissions(), loadApprovalRights(), loadRecruiters()])
-      setRoles(r); setUsers(u); setOrg(o); setPerms(p); setRights(a); setRecruiters(rec)
+      const [r, u, o, p, a, rec, sc] = await Promise.all([loadRoles(), loadUsers(), loadOrgUnits(), loadRolePermissions(), loadApprovalRights(), loadRecruiters(), loadRoleScreens()])
+      setRoles(r); setUsers(u); setOrg(o); setPerms(p); setRights(a); setRecruiters(rec); setScreens(sc)
       if (r.length) {
         if (!selRole) setSelRole(r[0].id)
         if (!assignRole) setAssignRole(r.find(x => x.role_code !== 'EMPLOYEE')?.id || r[0].id)
@@ -537,6 +604,17 @@ export function RolesPermissionsSection() {
     })
     const { error } = await upsertRolePermission(role_id, module, level)
     if (error) { notify('Save failed: ' + error.message, 'error'); reload() } else notify('Module access saved.')
+  }
+
+  async function setScreensModule(role_id: string, allKeys: string[], allowedKeys: string[]) {
+    // optimistic: replace this role+module's rows locally
+    setScreens(prev => {
+      const others = prev.filter(s => !(s.role_id === role_id && allKeys.includes(s.screen_key)))
+      return [...others, ...allowedKeys.map(screen_key => ({ role_id, screen_key, can_view: true }))]
+    })
+    const { error } = await setRoleModuleScreens(role_id, allKeys, allowedKeys)
+    if (error) { notify('Save failed: ' + error.message, 'error'); reload() }
+    else notify(allowedKeys.length ? 'Tab visibility saved.' : 'Restriction cleared — all tabs visible.')
   }
 
   async function setRight(role_id: string, approval_type: string, triple: { can_approve: boolean; can_reject: boolean; can_initiate: boolean }) {
@@ -582,7 +660,7 @@ export function RolesPermissionsSection() {
     reloadQueue(queueRole)
   }
 
-  const tabs: [typeof tab, string][] = [['assign', 'Role Assignment'], ['ess', 'ESS Portal View'], ['overview', 'Overview'], ['modules', 'Module Access'], ['approvals', 'Approval Rights'], ['queue', 'Approval / Rejection'], ['custom', 'Custom Roles']]
+  const tabs: [typeof tab, string][] = [['assign', 'Role Assignment'], ['ess', 'ESS Portal View'], ['overview', 'Overview'], ['modules', 'Module Access'], ['screens', 'Screen Access'], ['approvals', 'Approval Rights'], ['queue', 'Approval / Rejection'], ['custom', 'Custom Roles']]
 
   return (
     <>
@@ -601,6 +679,7 @@ export function RolesPermissionsSection() {
             {tab === 'ess' && <ESSPortalTab users={users} perms={perms} rights={rights} selId={essEmp} onSelect={setEssEmp} isMobile={isMobile} />}
             {tab === 'overview' && <OverviewTab roles={roles} perms={perms} rights={rights} />}
             {tab === 'modules' && <ModuleAccessTab roles={roles} perms={perms} selId={selRole} onSelect={setSelRole} onSet={setModule} />}
+            {tab === 'screens' && <ScreenAccessTab roles={roles} screens={screens} selId={selRole} onSelect={setSelRole} onSetModule={setScreensModule} />}
             {tab === 'approvals' && <ApprovalRightsTab roles={roles} rights={rights} selId={selRole} onSelect={setSelRole} onSet={setRight} />}
             {tab === 'queue' && <ApprovalTab roles={roles} selId={queueRole} onSelect={setQueueRole} pending={pending} recruiters={recruiters} onResolve={doResolve} />}
             {tab === 'custom' && <CustomRolesTab roles={roles} onCreate={doCreateRole} onDelete={doDeleteRole} onGoModule={(id) => { setSelRole(id); setTab('modules') }} />}

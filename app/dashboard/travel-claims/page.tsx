@@ -16,7 +16,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
-import { scopedCompanies, defaultCompanyId, companyFilter } from '@/lib/rms/resolve'
+import { scopedCompanies, defaultCompanyId, companyFilter, canSeeScreen } from '@/lib/rms/resolve'
 // Local S / Field names exist here, so spacing is imported as SP.
 import {
   C, F, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
@@ -643,6 +643,12 @@ export default function TravelClaimsAdmin() {
     if (tab === 'HR' && !hrEnabled) setTab(rmEnabled ? 'RM' : 'FINANCE')
     else if (tab === 'RM' && !rmEnabled) setTab(hrEnabled ? 'HR' : 'FINANCE')
   }, [rmEnabled, hrEnabled, tab])
+  // Role-wise tab visibility (Roles → Screen Access), on top of the policy flags.
+  useEffect(() => {
+    const base = [...(rmEnabled ? ['RM'] : []), ...(hrEnabled ? ['HR'] : []), 'FINANCE', 'RATES', 'PERIODS']
+    const vis = base.filter(k => canSeeScreen(grant, 'travel.' + k))
+    if (vis.length && !vis.includes(tab)) setTab(vis[0] as typeof tab)
+  }, [grant, tab, rmEnabled, hrEnabled])
   const [approvers, setApprovers] = useState<Approver[]>([])
   const [actingId, setActingId] = useState('')
 
@@ -925,7 +931,7 @@ export default function TravelClaimsAdmin() {
 
       {/* ---- tabs ---- */}
       <div style={{ display: 'flex', gap: 7, marginBottom: 12, flexWrap: 'wrap' }}>
-        {TABS.map(t => (
+        {TABS.filter(t => canSeeScreen(grant, 'travel.' + t.k)).map(t => (
           <button key={t.k} onClick={() => setTab(t.k)}
                   style={{ padding: '8px 16px', borderRadius: 7, fontSize: 13, fontWeight: 600,
                            fontFamily: 'inherit', cursor: 'pointer',

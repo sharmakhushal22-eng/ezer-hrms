@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
+import { canSeeScreen } from '@/lib/rms/resolve'
 import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
 import ActivationWizard from '@/components/onboarding/ActivationWizard'
 // Design tokens, aliased as TK — many of these files already declare
@@ -94,6 +95,11 @@ function ProgressBar({pct,color=P}:{pct:number;color?:string}) {
 export default function OnboardingDashboard() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab,          setTab]        = useState<Tab>('overview')
+  // Role-wise tab visibility (Roles → Screen Access). Bounce off a hidden tab.
+  useEffect(() => {
+    const vis = (['overview','candidates','pending','insights','compliance'] as Tab[]).filter(k => canSeeScreen(grant, 'onboarding.'+k))
+    if (vis.length && !vis.includes(tab)) setTab(vis[0])
+  }, [grant, tab])
   const [candidates,   setCandidates] = useState<Candidate[]>([])
   const [loading,      setLoading]    = useState(true)
   const [toast,        setToast]      = useState<{msg:string;type:'ok'|'err'}|null>(null)
@@ -1050,7 +1056,7 @@ export default function OnboardingDashboard() {
 
         {/* Tab nav */}
         <div style={{display:'flex',gap:6,paddingBottom:14,flexWrap:'wrap'}}>
-          {TABS.map(t=>(
+          {TABS.filter(t=>canSeeScreen(grant,'onboarding.'+t.key)).map(t=>(
             <button key={t.key} onClick={()=>setTab(t.key)}
               className="ez-tab" data-on={tab===t.key ? '1' : '0'}
               style={{padding:'7px 13px',cursor:'pointer',fontSize:12,fontWeight:tab===t.key?600:500,fontFamily:'inherit',

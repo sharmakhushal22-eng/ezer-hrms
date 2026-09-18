@@ -2,7 +2,9 @@
 // app/dashboard/letters/page.tsx — HR Letters section.
 // Tab 1 (built): Letterhead & Signatory configuration (Group → Company → Branch cascade).
 // Future tabs (templates, generate & issue) will compose letters onto the resolved letterhead.
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useGrant } from '@/lib/rms/client'
+import { canSeeScreen } from '@/lib/rms/resolve'
 import LetterheadConfig from '@/components/letters/LetterheadConfig'
 import LetterTemplates from '@/components/letters/LetterTemplates'
 // Design tokens, aliased as TK — many of these files already declare
@@ -18,7 +20,12 @@ const TABS: { id: string; label: string; icon: string; soon?: boolean }[] = [
 ]
 
 export default function LettersPage() {
+  const { grant } = useGrant()
   const [tab, setTab] = useState('letterhead')
+  useEffect(() => {
+    const vis = ['letterhead','letters'].filter(k => canSeeScreen(grant, 'letters.'+k))
+    if (vis.length && !vis.includes(tab)) setTab(vis[0])
+  }, [grant, tab])
   return (
     <div style={{ background: C.bg, minHeight: '100vh', fontFamily: font, color: C.navy }}>
       {/* Header — the shared band. Was a navy-to-blue gradient with white text
@@ -43,7 +50,7 @@ export default function LettersPage() {
           </div>
           {/* Tabs — the same outlined pills the other modules use */}
           <div style={{ display: 'flex', gap: 6, paddingBottom: 14, flexWrap: 'wrap' }}>
-            {TABS.map(t => {
+            {TABS.filter(t => canSeeScreen(grant, 'letters.'+t.id)).map(t => {
               const active = tab === t.id
               return (
                 <button key={t.id} onClick={() => !t.soon && setTab(t.id)} disabled={t.soon}

@@ -377,6 +377,28 @@ export async function upsertRolePermission(role_id: string, module: string, acce
     .upsert({ role_id, module, access_level, updated_at: new Date().toISOString() }, { onConflict: 'role_id,module' })
 }
 
+// ── Role-wise sub-module (tab) visibility — role_screen_access (migration 123) ──
+export interface RoleScreen { role_id: string; screen_key: string; can_view: boolean }
+
+export async function loadRoleScreens(): Promise<RoleScreen[]> {
+  const { data, error } = await supabase.from('role_screen_access').select('role_id, screen_key, can_view')
+  if (error) return []   // table not there yet → treat as "nothing restricted"
+  return (data || []) as RoleScreen[]
+}
+
+/** Set a role's visibility for one module's tabs in a single transaction:
+ *  pass the screen_keys the role MAY see. An empty list clears the restriction
+ *  (the module goes back to fully visible for that role). `allKeys` is every
+ *  screen_key that belongs to the module, so we can delete the ones being turned off. */
+export async function setRoleModuleScreens(role_id: string, allKeys: string[], allowedKeys: string[]) {
+  // remove every existing row for this module's screens, then insert the allowed ones
+  const del = await supabase.from('role_screen_access').delete().eq('role_id', role_id).in('screen_key', allKeys)
+  if (del.error) return del
+  if (!allowedKeys.length) return del
+  return supabase.from('role_screen_access')
+    .insert(allowedKeys.map(screen_key => ({ role_id, screen_key, can_view: true })))
+}
+
 export async function loadApprovalRights(): Promise<ApprovalRight[]> {
   const { data } = await supabase.from('role_approval_rights').select('*')
   return (data || []) as ApprovalRight[]

@@ -1,5 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { useGrant } from '@/lib/rms/client'
+import { canSeeScreen } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
 import {
   loadCompanies, loadPayHeads, savePayHead, deletePayHead,
@@ -1111,10 +1113,15 @@ const FY_OPTIONS = ['2026-27', '2025-26', '2024-25']
 interface CompanyOpt { id: string; company_name: string; group_id?: string | null; group_name?: string | null }
 
 export default function PayrollPage() {
+  const { grant } = useGrant()
   const [companies, setCompanies] = useState<CompanyOpt[]>([])
   const [companyId, setCompanyId] = useState('')   // '' = Group Companies
   const [fy, setFy] = useState('2026-27')
   const [tab, setTab] = useState('dashboard')
+  useEffect(() => {
+    const vis = ['dashboard','config','attendance','employees','run','statutory','benefits','offcycle','reports','admin'].filter(k => canSeeScreen(grant, 'payroll.'+k))
+    if (vis.length && !vis.includes(tab)) setTab(vis[0])
+  }, [grant, tab])
   const [sub, setSub] = useState('')                // active sub-section id within the current tab
   const [subView, setSubView] = useState('catalog') // active nested sub-view (e.g. Pay Heads → Standard)
 
@@ -1166,7 +1173,7 @@ export default function PayrollPage() {
         {/* Tab bar — each main tab is a dropdown of its sub-sections; pick one to enter it.
             Wraps onto multiple rows so every section is always visible without scrolling. */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, rowGap: 8, marginBottom: 16, paddingBottom: 8, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 8, boxShadow: 'var(--ez-shadow-flat)' }}>
-          {TABS.map(t => (
+          {TABS.filter(t => canSeeScreen(grant, 'payroll.'+t.id)).map(t => (
             <MainTabDropdown
               key={t.id}
               label={t.label}

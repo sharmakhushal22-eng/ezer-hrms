@@ -6,7 +6,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
-import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
+import { scopedCompanies, defaultCompanyId, canSeeScreen } from '@/lib/rms/resolve'
 import { COMP_NAMES, NO_INVOICE, ACCEPTED_TYPES, loadEntitlements, loadWindow, type ComponentLimit } from '@/lib/flexi/claims'
 import { useRef } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
@@ -635,6 +635,10 @@ export default function FlexiClaimsAdmin() {
   const [companyId, setCompanyId] = useState('')
   const [tab, setTab] = useState<'approvals' | 'submit' | 'window' | 'limits'>('approvals')
   const [toast, setToast] = useState('')
+  useEffect(() => {
+    const vis = (['approvals','submit','window','limits'] as const).filter(k => canSeeScreen(grant, 'flexi.'+k))
+    if (vis.length && !vis.includes(tab)) setTab(vis[0])
+  }, [grant, tab])
   const notify = (m: string) => setToast(m)
 
   useEffect(() => {
@@ -666,7 +670,7 @@ export default function FlexiClaimsAdmin() {
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {TABS.map(([id, label]) => (
+        {TABS.filter(([id]) => canSeeScreen(grant, 'flexi.'+id)).map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{ padding: '9px 16px', borderRadius: 10, border: `1px solid ${tab === id ? C.purple : C.border}`, background: tab === id ? C.purple: TK.surface, color: tab === id ? TK.surface : C.navy, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>{label}</button>
         ))}
       </div>

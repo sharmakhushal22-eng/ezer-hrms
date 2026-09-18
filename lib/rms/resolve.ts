@@ -5,6 +5,7 @@
 // being allowed into Payroll. The two live in different tables and meet only where a
 // screen chooses to use both.
 import { MODULES, atLeast, higher, type AccessLevel, type Module } from './modules.ts'
+import { moduleKeyOf } from './screens.ts'
 
 export interface RoleRef {
   id: string
@@ -31,6 +32,13 @@ export interface Grant {
   companyId: string | null
   roles: RoleRef[]
   modules: Record<string, AccessLevel>
+  /** Sub-module (tab) visibility. `screenAllow['recruitment.mrf'] === true` means at least
+   *  one held role grants that tab. `screenConfigured['recruitment'] === true` means at
+   *  least one held role has ANY screen row for that module — so the module's tabs are
+   *  being restricted for this person. A module NOT in screenConfigured is left fully open,
+   *  so nothing is hidden until an admin actually restricts it (see canSeeScreen). */
+  screenAllow: Record<string, boolean>
+  screenConfigured: Record<string, boolean>
   approvals: ApprovalRight[]
   isSuperAdmin: boolean
   /** True when a role lets the caller see beyond their own company (ORG scope /
@@ -90,7 +98,7 @@ export const ROLE_ADMIN_CODES = [...SUPER_ADMIN_CODES, 'HR_HEAD', 'CHRO']
 export function emptyGrant(): Grant {
   return {
     employeeId: null, empCode: null, name: null, companyId: null,
-    roles: [], modules: {}, approvals: [],
+    roles: [], modules: {}, screenAllow: {}, screenConfigured: {}, approvals: [],
     isSuperAdmin: false, crossCompany: false, enforced: true, legacy: false, resolved: true,
   }
 }
@@ -103,6 +111,7 @@ export interface ResolveInput {
   roles: RoleRef[]
   permissions: { role_id: string; module: string; access_level: AccessLevel }[]
   approvals: (ApprovalRight & { role_id: string })[]
+  screens?: { role_id: string; screen_key: string; can_view: boolean }[]
   enforced?: boolean
   legacy?: boolean
 }
@@ -143,6 +152,15 @@ export function resolveGrant(input: ResolveInput): Grant {
     }
   }
 
+  // Screen (sub-module tab) visibility, unioned across the person's roles. A module is
+  // "configured" the moment ANY held role has a screen row for it — and only then are its
+  // tabs restricted; otherwise every tab stays visible. Super admin is never restricted.
+  for (const s of input.screens || []) {
+    if (!held.has(s.role_id)) continue
+    g.screenConfigured[moduleKeyOf(s.screen_key)] = true
+    if (s.can_view) g.screenAllow[s.screen_key] = true
+  }
+
   const byType = new Map<string, ApprovalRight>()
   for (const a of input.approvals) {
     if (!held.has(a.role_id)) continue
@@ -167,6 +185,23 @@ export function canSee(g: Grant, m: Module | null): boolean {
   if (!g.enforced) return true
   if (m === null) return true                       // dashboard landing page
   return atLeast(g.modules[m], 'VIEW')
+}
+
+/** May this person see this sub-module tab? Reliability-first, default-VISIBLE:
+ *   • super admin → yes, always.
+ *   • the tab's module has no screen config for any of this person's roles → yes
+ *     (nothing is hidden until an admin actually restricts that module for the role).
+ *   • otherwise → only if a held role explicitly grants this tab.
+ *
+ * Deliberately NOT gated by the global `enforced` (module roll-out) flag. Screen
+ * restrictions are opt-in per (role, module) — a module nobody configured is untouched —
+ * so they are safe to honour immediately, without flipping app-wide module enforcement.
+ * A page that passes an unknown/unregistered key is never wrongly hidden. */
+export function canSeeScreen(g: Grant, screenKey: string): boolean {
+  if (g.isSuperAdmin) return true
+  const mk = moduleKeyOf(screenKey)
+  if (!g.screenConfigured[mk]) return true
+  return !!g.screenAllow[screenKey]
 }
 
 export function canEdit(g: Grant, m: Module): boolean {

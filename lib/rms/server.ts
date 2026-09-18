@@ -122,11 +122,15 @@ export async function grantForEmployee(employeeId: string): Promise<Grant> {
   const roleIds = [...new Set([...heldRoleIds, ...(empRoleId ? [empRoleId] : [])])]
   if (!roleIds.length) return resolveGrant({ ...base, roles: [], permissions: [], approvals: [] })
 
-  const [{ data: roles }, { data: perms }, { data: rights }] = await Promise.all([
+  const [{ data: roles }, { data: perms }, { data: rights }, screensRes] = await Promise.all([
     sb.from('ess_roles').select('id, role_code, role_name, scope, salary_visibility').in('id', roleIds),
     sb.from('role_permissions').select('role_id, module, access_level').in('role_id', roleIds),
     sb.from('role_approval_rights')
       .select('role_id, approval_type, can_approve, can_reject, can_initiate').in('role_id', roleIds),
+    // Sub-module (tab) visibility. Resilient: if the table isn't there yet (migration 123
+    // not run) this resolves to no screen config, i.e. every tab stays visible.
+    sb.from('role_screen_access').select('role_id, screen_key, can_view').in('role_id', roleIds)
+      .then(r => r, () => ({ data: [] as any[] })),
   ])
 
   return resolveGrant({
@@ -134,6 +138,7 @@ export async function grantForEmployee(employeeId: string): Promise<Grant> {
     roles: (roles || []) as RoleRef[],
     permissions: (perms || []) as { role_id: string; module: string; access_level: AccessLevel }[],
     approvals: (rights || []) as any[],
+    screens: ((screensRes as any)?.data || []) as { role_id: string; screen_key: string; can_view: boolean }[],
   })
 }
 

@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
-import { companyFilter, scopedCompanies } from '@/lib/rms/resolve'
+import { companyFilter, scopedCompanies, canSeeScreen } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
@@ -272,7 +272,12 @@ export default function RecruitmentPage() {
     { k:'preonboarding', l:'Pre-onboarding' },
     { k:'jobstatus', l:'Job Status' },
   ]
-  const visibleTabs = TABS.filter(t => t.k !== 'hrhead' || isHrHead)
+  // hrhead stays HR-Head only; on top of that, role-wise tab visibility (Roles → Screen Access)
+  const visibleTabs = TABS.filter(t => (t.k !== 'hrhead' || isHrHead) && canSeeScreen(grant, `recruitment.${t.k}`))
+  // If the current tab is not one this role may see, fall back to the first it can.
+  useEffect(() => {
+    if (visibleTabs.length && !visibleTabs.some(t => t.k === tab)) setTab(visibleTabs[0].k as typeof tab)
+  }, [visibleTabs, tab])
   // Scoped-HM MRF id set for the Send Offers tab (null = oversight, no filter). Memoised so
   // the child's fetch effect does not refire on every render.
   const sendOfferAllowed = useMemo(() => isHrHead ? null : new Set(mrfs.map(m => m.id)), [isHrHead, mrfs])
