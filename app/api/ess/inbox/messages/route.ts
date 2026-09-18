@@ -35,30 +35,39 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: me2.message }, { status: 500 })
   }
 
-  const dir = await people((msgs ?? []).map((m: any) => m.sender_employee_id).filter(Boolean))
-  const { data: desks } = await sb.from('inbox_desks').select('id, label, desk_code, accent')
-  const deskById = new Map((desks ?? []).map((d: any) => [d.id, d]))
+  // FOUR STEPS THAT NEED NOTHING FROM EACH OTHER, RUN TOGETHER.
+  //
+  // These were four sequential awaits: the senders, the desks, the read-mark,
+  // and the bell clear. Only unreadCount below depends on any of them, and it
+  // stays where it is precisely because it has to observe the read-mark.
+  const [dir, desksRes] = await Promise.all([
+    people((msgs ?? []).map((m: any) => m.sender_employee_id).filter(Boolean)),
+    sb.from('inbox_desks').select('id, label, desk_code, accent'),
 
-  // Opening a thread is reading it. Done here rather than asking the client to
-  // send a second call it might forget.
-  await sb.from('inbox_participants')
-    .update({ last_read_at: new Date().toISOString() })
-    .eq('conversation_id', id).eq('employee_id', me)
+    // Opening a thread is reading it. Done here rather than asking the client
+    // to send a second call it might forget.
+    sb.from('inbox_participants')
+      .update({ last_read_at: new Date().toISOString() })
+      .eq('conversation_id', id).eq('employee_id', me),
 
-  // Reading a notification HERE has to clear it on the bell as well, or the
-  // employee reads everything in the inbox and the badge still says 6. The
-  // notification rows are the single source of truth for "read"; the inbox
-  // mirrors them, so the mirror marks the original.
-  if (gate.conv?.kind === 'SYSTEM') {
-    const codes = [...new Set((msgs ?? [])
-      .filter((m: any) => m.kind === 'NOTIFICATION' && m.notification_code)
-      .map((m: any) => m.notification_code as string))]
-    if (codes.length) {
-      await sb.from('ess_notifications')
-        .update({ is_read: true })
-        .eq('employee_id', me).eq('is_read', false).in('category', codes)
-    }
-  }
+    // Reading a notification HERE has to clear it on the bell as well, or the
+    // employee reads everything in the inbox and the badge still says 6. The
+    // notification rows are the single source of truth for "read"; the inbox
+    // mirrors them, so the mirror marks the original.
+    gate.conv?.kind === 'SYSTEM'
+      ? (async () => {
+          const codes = [...new Set((msgs ?? [])
+            .filter((m: any) => m.kind === 'NOTIFICATION' && m.notification_code)
+            .map((m: any) => m.notification_code as string))]
+          if (codes.length) {
+            await sb.from('ess_notifications')
+              .update({ is_read: true })
+              .eq('employee_id', me).eq('is_read', false).in('category', codes)
+          }
+        })()
+      : Promise.resolve(),
+  ])
+  const deskById = new Map((desksRes.data ?? []).map((d: any) => [d.id, d]))
 
   return NextResponse.json({
     installed: true,

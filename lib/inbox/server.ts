@@ -59,14 +59,16 @@ export async function myDesks(employeeId: string): Promise<DeskRow[]> {
  * allowed so the caller does not fetch it twice.
  */
 export async function openable(employeeId: string, conversationId: string) {
-  const { data: conv } = await sb
-    .from('inbox_conversations').select('*').eq('id', conversationId).maybeSingle()
+  // Both lookups at once: neither depends on the other, and this runs on EVERY
+  // thread open and every reply. One wasted query in the rare not-found case is
+  // cheaper than one wasted round trip in the common one.
+  const [{ data: conv }, { data: part }] = await Promise.all([
+    sb.from('inbox_conversations').select('*').eq('id', conversationId).maybeSingle(),
+    sb.from('inbox_participants')
+      .select('id, last_read_at, is_muted, is_starred, left_at')
+      .eq('conversation_id', conversationId).eq('employee_id', employeeId).maybeSingle(),
+  ])
   if (!conv) return { conv: null, why: 'not-found' as const }
-
-  const { data: part } = await sb
-    .from('inbox_participants')
-    .select('id, last_read_at, is_muted, is_starred, left_at')
-    .eq('conversation_id', conversationId).eq('employee_id', employeeId).maybeSingle()
 
   if (part && !part.left_at) return { conv, part, why: null }
 

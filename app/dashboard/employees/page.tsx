@@ -1,5 +1,6 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { orIlike } from '@/lib/pg-search'
 import { supabase } from '../../../lib/supabase'
 import { useGrant } from '@/lib/rms/client'
 import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve'
@@ -8,6 +9,7 @@ import { buildEmpCode, TYPE_SUFFIX } from '@/lib/employee-code'
 import BulkUploadModal from '@/components/employees/BulkUploadModal'
 import * as XLSX from 'xlsx'
 import EmployeeProfileSections from '@/components/employees/EmployeeProfileView'
+import { UPPERCASE, fieldError } from '@/lib/hr/validate'
 // This page keeps its own local Badge / Field / Section, so the system's
 // equivalents are aliased where the names would clash.
 import {
@@ -103,6 +105,7 @@ const fmtDate = (v: string) => { if(!v) return '—'; const d = new Date(v); ret
 // ─── Add Employee modal (defined OUTSIDE parent — no focus-loss) ─────
 const EMP_TYPES = ['Employee', 'Intern', 'NAPS', 'NATS', 'Consultant', 'Contract']
 
+
 // Export allowlist — only the columns marked "Keep in Report = Y" in the EZER column
 // reference sheet. Encrypted PII (aadhar_encrypted / bank_account_encrypted) is Y in the
 // sheet but its note says "NEVER in report", so it is deliberately excluded here.
@@ -130,6 +133,28 @@ const mc = {
   out:   { padding:'0 14px', height:36, background:C.surface, color:C.ink, border:`1px solid ${C.lineStrong}`, borderRadius:R.md, fontSize:F.small, fontWeight:W.medium, cursor:'pointer', fontFamily:'inherit' },
 }
 
+// The group-level person key.
+//
+// employees.common_code has no unique constraint and onboarding sets it to the
+// emp_code by default — it is the "common" code, meaning the one that stays the
+// same wherever the person appears. For somebody carried in more than one
+// company that is exactly the link we need: three rows, three company-prefixed
+// emp_codes, one shared common_code.
+//
+// Prefixed with the group's own code (SG for Sharma Group) so it cannot be
+// mistaken for any company's sequence.
+async function nextCommonCode(groupCode: string): Promise<string> {
+  const prefix = (groupCode || 'GRP').toUpperCase()
+  const { data } = await supabase.from('employees').select('common_code').like('common_code', `${prefix}%`)
+  let max = 0
+  const re = new RegExp(`^${prefix}(\\d{4})$`)
+  for (const r of (data || []) as any[]) {
+    const m = String(r.common_code || '').match(re)
+    if (m) max = Math.max(max, parseInt(m[1], 10))
+  }
+  return `${prefix}${String(max + 1).padStart(4, '0')}`
+}
+
 // Next type-wise code from existing employees (no migration dependency, atomic-ish).
 async function nextEmpCode(companyCode: string, companyId: string, employmentType: string): Promise<string> {
   const suffix = TYPE_SUFFIX[employmentType] ?? ''
@@ -141,44 +166,365 @@ async function nextEmpCode(companyCode: string, companyId: string, employmentTyp
   return buildEmpCode(companyCode || 'EZ', employmentType, max + 1)
 }
 
+// ─── The onboarding field set ────────────────────────────────────────
+//
+// Every field in New-Employee-Field-Checklist.txt, in its order and grouping.
+// Declared as data rather than eighty hand-written inputs: the form renders
+// from this list, so adding a field is one line here and nothing else.
+//
+// All 89 of these already exist as columns on `employees` — checked against the
+// live table, which carries 246. Nothing here needs a migration; the form was
+// simply asking for nine of them.
+//
+// `req` marks the checklist's [REQ]. `cond` marks [COND] — shown always, but
+// captioned so HR knows it only applies in that situation.
+/** Columns that are text[] rather than text. Typed as comma-separated text in
+ *  the form and split on save. */
+const ARRAY_FIELDS = new Set(['hobbies'])
+
+type FType = 'text' | 'date' | 'select' | 'check' | 'number' | 'email' | 'tel'
+interface FieldDef {
+  k: string; label: string; t?: FType; opts?: string[]
+  req?: boolean; cond?: string; span?: 1 | 2 | 3; hint?: string
+}
+interface Section { title: string; note?: string; fields: FieldDef[] }
+
+
+const ONBOARDING_SECTIONS: Section[] = [
+  { title: 'Personal details', fields: [
+    { k:'salutation', label:'Salutation', t:'select', opts:['','Mr','Ms','Mrs','Dr'] },
+    { k:'name_as_per_aadhar', label:'Name as per Aadhaar', req:true, span:2,
+      hint:'Must match Aadhaar exactly — used for PF/UAN and bank validation' },
+    { k:'father_name', label:"Father's name", req:true },
+    { k:'mother_name', label:"Mother's name" },
+    { k:'gender', label:'Gender', t:'select', opts:['','Male','Female','Other'], req:true },
+    { k:'date_of_birth', label:'Date of birth', t:'date', req:true },
+    { k:'blood_group', label:'Blood group', t:'select', opts:['','A+','A-','B+','B-','O+','O-','AB+','AB-'] },
+    { k:'marital_status', label:'Marital status', t:'select', opts:['','Single','Married','Divorced','Widowed'] },
+    { k:'marriage_date', label:'Marriage date', t:'date', cond:'if married' },
+    { k:'spouse_name', label:'Spouse name', cond:'if married' },
+    { k:'spouse_dob', label:'Spouse date of birth', t:'date', cond:'if married' },
+    { k:'religion', label:'Religion' },
+    { k:'nationality', label:'Nationality' },
+    { k:'citizenship', label:'Citizenship' },
+    { k:'place_of_birth', label:'Place of birth' },
+    { k:'domicile', label:'Domicile' },
+    { k:'domicile_state', label:'Domicile state' },
+    { k:'category', label:'Category', t:'select', opts:['','General','OBC','SC','ST','EWS'] },
+    { k:'is_disabled', label:'Differently abled', t:'check', cond:'Section 80U relief' },
+    { k:'disability_type', label:'Disability type', cond:'if differently abled' },
+    { k:'number_of_children', label:'Number of children', t:'number' },
+    { k:'num_dependents', label:'Dependents', t:'number' },
+    { k:'dependent_names', label:'Dependent names', span:2 },
+    { k:'languages', label:'Languages' },
+    { k:'hobbies', label:'Hobbies', hint:'Separate with commas' },
+  ]},
+  { title: 'Contact', fields: [
+    { k:'alternate_mobile', label:'Alternate mobile', t:'tel' },
+    { k:'whatsapp_optin', label:'WhatsApp opt-in', t:'check' },
+  ]},
+  { title: 'Residential address (current)', fields: [
+    { k:'res_address1', label:'Address line 1', req:true, span:2 },
+    { k:'res_address2', label:'Address line 2', span:2 },
+    { k:'res_city', label:'City', req:true },
+    { k:'res_state', label:'State', req:true },
+    { k:'res_pin', label:'PIN', req:true },
+    { k:'res_country', label:'Country' },
+  ]},
+  { title: 'Permanent address', note:'Tick to copy the current address', fields: [
+    { k:'perm_address1', label:'Address line 1', span:2 },
+    { k:'perm_address2', label:'Address line 2', span:2 },
+    { k:'perm_city', label:'City' },
+    { k:'perm_state', label:'State' },
+    { k:'perm_pin', label:'PIN' },
+    { k:'perm_country', label:'Country' },
+  ]},
+  { title: 'Emergency contacts', fields: [
+    { k:'emergency_name', label:'Contact 1 — name', req:true },
+    { k:'emergency_relation', label:'Contact 1 — relation', req:true },
+    { k:'emergency_mobile', label:'Contact 1 — mobile', t:'tel', req:true },
+    { k:'emergency_email', label:'Contact 1 — email', t:'email' },
+    { k:'emergency_address', label:'Contact 1 — address', span:2 },
+    { k:'emergency2_name', label:'Contact 2 — name' },
+    { k:'emergency2_relation', label:'Contact 2 — relation' },
+    { k:'emergency2_mobile', label:'Contact 2 — mobile', t:'tel' },
+    { k:'emergency2_email', label:'Contact 2 — email', t:'email' },
+    { k:'emergency2_address', label:'Contact 2 — address', span:2 },
+  ]},
+  { title: 'Education', fields: [
+    { k:'highest_qualification', label:'Highest qualification' },
+    { k:'institution_name', label:'Institution / university', span:2 },
+    { k:'skill_set', label:'Skill set', span:3 },
+  ]},
+  { title: 'Previous employment and references', fields: [
+    { k:'total_experience', label:'Total experience (years)', t:'number' },
+    { k:'current_co_exp', label:'Current / last company experience', span:2 },
+    { k:'reference1_name', label:'Reference 1 — name' },
+    { k:'reference1_mobile', label:'Reference 1 — mobile', t:'tel' },
+    { k:'reference1_relation', label:'Reference 1 — relation' },
+    { k:'reference1_years', label:'Reference 1 — years known', t:'number' },
+    { k:'reference2_name', label:'Reference 2 — name' },
+    { k:'reference2_mobile', label:'Reference 2 — mobile', t:'tel' },
+    { k:'reference2_relation', label:'Reference 2 — relation' },
+    { k:'reference2_years', label:'Reference 2 — years known', t:'number' },
+  ]},
+  { title: 'Statutory IDs', note:'Aadhaar is stored masked — only the last four digits are kept in the clear', fields: [
+    { k:'pan_number', label:'PAN', req:true, hint:'ABCDE1234F' },
+    { k:'aadhaar_input', label:'Aadhaar number', req:true, hint:'12 digits' },
+    { k:'uan_number', label:'UAN', cond:'existing PF members' },
+    { k:'previous_uan', label:'Previous UAN', cond:'if any' },
+    { k:'pf_existing_member', label:'Existing PF member', t:'check', cond:'were you in EPF before' },
+    { k:'pf_scheme_certificate', label:'PF scheme certificate', cond:'if held' },
+    { k:'pension_number', label:'Pension / EPS number', cond:'if held' },
+    { k:'is_international_worker', label:'International worker', t:'check', cond:'needs Certificate of Coverage' },
+    { k:'has_certificate_of_coverage', label:'Certificate of coverage held', t:'check', cond:'international workers' },
+    { k:'voluntary_pf_applicable', label:'Voluntary PF (VPF)', t:'check' },
+    { k:'vpf_percent', label:'VPF percent', t:'number', cond:'if VPF opted' },
+    { k:'vpf_amount', label:'VPF amount', t:'number', cond:'if VPF opted' },
+    { k:'tds_regime', label:'TDS regime', t:'select', opts:['','Old','New'] },
+    { k:'investment_declared_amount', label:'Investment declaration amount', t:'number' },
+  ]},
+  { title: 'Bank details', note:'For salary credit. The account number is stored masked.', fields: [
+    { k:'bank_name', label:'Bank name', req:true },
+    { k:'bank_account_input', label:'Account number', req:true },
+    { k:'bank_holder_name', label:'Account holder name', req:true, span:2,
+      hint:'As printed on the passbook — the bank validates against this' },
+    { k:'ifsc_code', label:'IFSC', req:true, hint:'XXXX0XXXXXX' },
+    { k:'account_type', label:'Account type', t:'select', opts:['','Savings','Current','Salary'] },
+  ]},
+  { title: 'Other government IDs', fields: [
+    { k:'passport_no', label:'Passport number', cond:'if held or international worker' },
+    { k:'voter_id', label:'Voter ID' },
+    { k:'driving_licence', label:'Driving licence' },
+    { k:'nps_account', label:'NPS account number', cond:'if held' },
+  ]},
+]
+
+/** One input. Kept at module scope with the rest — a component defined inside
+ *  the modal would be a new type on every keystroke and the field would lose
+ *  focus, which is the bug the comment at the top of this file warns about. */
+function Field({ d, value, onChange }: { d: FieldDef; value: any; onChange: (v: any) => void }) {
+  const span = d.span ?? 1
+  const err = fieldError(d.k, value)
+  return (
+    <div style={{ gridColumn: span > 1 ? `span ${span}` : undefined, minWidth: 0 }}>
+      <label style={mc.lbl}>
+        {d.label}{d.req && ' *'}
+        {d.cond && !d.hint && <span style={{ color:C.faint, fontWeight:400, textTransform:'none', letterSpacing:0 }}> — {d.cond}</span>}
+      </label>
+      {d.t === 'select' ? (
+        <select style={mc.inp} value={value ?? ''} onChange={e => onChange(e.target.value)}>
+          {(d.opts ?? []).map(o => <option key={o} value={o}>{o || '—'}</option>)}
+        </select>
+      ) : d.t === 'check' ? (
+        <label style={{ display:'flex', alignItems:'center', gap:8, height:36, fontSize:13, color:C.ink }}>
+          <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} />
+          <span style={{ color:C.muted }}>{d.cond ?? 'Yes'}</span>
+        </label>
+      ) : (
+        <input
+          style={{ ...mc.inp, ...(err ? { borderColor: C.critical } : null) }}
+          aria-invalid={!!err}
+          type={d.t === 'date' ? 'date' : d.t === 'number' ? 'number' : d.t === 'email' ? 'email' : 'text'}
+          inputMode={d.t === 'tel' ? 'numeric' : undefined}
+          value={value ?? ''}
+          onChange={e => onChange(e.target.value)}
+        />
+      )}
+      {err
+        ? <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>{err}</div>
+        : d.hint && <div style={{ fontSize:11, color:C.faint, marginTop:3 }}>{d.hint}</div>}
+    </div>
+  )
+}
+
 function AddEmployeeModal({ companies, locations, departments, onClose, onSaved }: {
   companies: any[]; locations: any[]; departments: any[]
   onClose: () => void; onSaved: (msg: string) => void
 }) {
-  const [f, setF] = useState<any>({ full_name:'', company_id:'', location_id:'', department_id:'', employment_type:'Employee', designation:'', mobile:'', personal_email:'', company_doj:'', emp_code:'' })
+  // company_ids, not company_id. One employee can be carried in several of the
+  // group's companies, so the picker is a multi-select and a single company is
+  // just the one-element case.
+  const [f, setF] = useState<any>({ full_name:'', company_ids:[] as string[], location_id:'', department_id:'', employment_type:'Employee', emp_code:'', designation:'', mobile:'', personal_email:'', company_doj:'' })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [sameAddr, setSameAddr] = useState(false)
+  // The company multi-select is a dropdown, so it has to know when it is open
+  // and when a click landed somewhere else.
+  const [coOpen, setCoOpen] = useState(false)
+  const coRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!coOpen) return
+    const away = (e: MouseEvent) => { if (coRef.current && !coRef.current.contains(e.target as Node)) setCoOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setCoOpen(false) }
+    document.addEventListener('mousedown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+  }, [coOpen])
   const set = (k: string, v: any) => setF((p: any) => ({ ...p, [k]: v }))
-  const locs = locations.filter(l => l.company_id === f.company_id)
-  const depts = departments.filter(d => d.company_id === f.company_id)
-  const company = companies.find(c => c.id === f.company_id)
+
+  const picked: string[] = f.company_ids ?? []
+  const multi = picked.length > 1
+  const soleCompany = picked.length === 1 ? picked[0] : ''
+  // Every field that has a value and fails its format. The top-level fields are
+  // checked as well as the declared ones, since mobile and personal email live
+  // in the HR block above.
+  const problems = [
+    ...['mobile', 'personal_email'].map(k => [k, fieldError(k, f[k])] as const),
+    ...ONBOARDING_SECTIONS.flatMap(sec => sec.fields.map(d => [d.k, fieldError(d.k, f[d.k])] as const)),
+  ].filter(([, e]) => e) as [string, string][]
+
+  const ready = f.full_name.trim() && picked.length > 0 && (multi || f.emp_code.trim())
+                && problems.length === 0
+
+  const toggleCompany = (id: string) => setF((p: any) => {
+    const cur: string[] = p.company_ids ?? []
+    const next = cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]
+    // Location and department belong to one company; the moment more than one
+    // is chosen there is no correct value to hold on to.
+    return { ...p, company_ids: next, location_id: '', department_id: '' }
+  })
+  const toggleAll = () => setF((p: any) => ({
+    ...p,
+    company_ids: (p.company_ids ?? []).length === companies.length ? [] : companies.map(c => c.id),
+    location_id: '', department_id: '',
+  }))
+
+  // Both are company-scoped, so they only apply when exactly one is chosen.
+  const locs = locations.filter(l => l.company_id === soleCompany)
+  const depts = departments.filter(d => d.company_id === soleCompany)
+  const company = companies.find(c => c.id === soleCompany)
 
   // auto-fill the code when company + type are chosen (HR can still override)
   useEffect(() => {
     let live = true
-    if (f.company_id && f.employment_type) {
-      nextEmpCode(company?.company_code || 'EZ', f.company_id, f.employment_type).then(c => { if (live) setF((p: any) => ({ ...p, emp_code: c })) })
+    if (multi) {
+      // One code per company, generated at save time — no single code to show.
+      setF((p: any) => ({ ...p, emp_code: '' }))
+    } else if (soleCompany && f.employment_type) {
+      nextEmpCode(company?.company_code || 'EZ', soleCompany, f.employment_type).then(c => { if (live) setF((p: any) => ({ ...p, emp_code: c })) })
     }
   return () => { live = false }
-  }, [f.company_id, f.employment_type]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [picked.join(','), f.employment_type]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const ready = f.full_name.trim() && f.company_id && f.emp_code.trim()
+  // "same as current" copies once and then keeps them in step while ticked
+  useEffect(() => {
+    if (!sameAddr) return
+    setF((p: any) => ({ ...p,
+      perm_address1: p.res_address1, perm_address2: p.res_address2, perm_city: p.res_city,
+      perm_state: p.res_state, perm_pin: p.res_pin, perm_country: p.res_country }))
+  }, [sameAddr, f.res_address1, f.res_address2, f.res_city, f.res_state, f.res_pin, f.res_country])
+
+  // Only the three the database itself needs. The checklist's [REQ] marks are
+  // shown on the labels but not enforced here: HR routinely creates a record
+  // before every document has arrived, and blocking that would push people into
+  // typing placeholders, which is worse than an empty column.
 
   async function save() {
     setErr(''); setBusy(true)
     try {
       const code = f.emp_code.trim().toUpperCase()
-      const { data: dup } = await supabase.from('employees').select('id').eq('emp_code', code).maybeSingle()
-      if (dup) { setErr(`Code ${code} already exists.`); setBusy(false); return }
+      if (!multi) {
+        const { data: dup } = await supabase.from('employees').select('id').eq('emp_code', code).maybeSingle()
+        if (dup) { setErr(`Code ${code} already exists.`); setBusy(false); return }
+      }
       const parts = f.full_name.trim().split(/\s+/)
-      const row = {
-        emp_code: code, common_code: code,
-        company_id: f.company_id, location_id: f.location_id || null, department_id: f.department_id || null,
+
+      // Everything declared above, empty strings dropped so a blank input
+      // writes NULL rather than ''. Aadhaar and the account number are handled
+      // separately below and never written raw.
+      const extra: Record<string, any> = {}
+      for (const sec of ONBOARDING_SECTIONS) {
+        for (const d of sec.fields) {
+          if (d.k === 'aadhaar_input' || d.k === 'bank_account_input') continue
+          const v = f[d.k]
+          if (v === undefined || v === '' || v === null) continue
+          // hobbies is text[] in the database, not text. Sent as a string it
+          // fails with `malformed array literal`, and because the whole record
+          // is one insert that takes every other field down with it.
+          extra[d.k] = ARRAY_FIELDS.has(d.k)
+            ? String(v).split(',').map(x => x.trim()).filter(Boolean)
+            : UPPERCASE.has(d.k) ? String(v).toUpperCase().trim()
+            : d.t === 'number' ? Number(v) : v
+        }
+      }
+
+      // Masked, following the convention already used by the bulk upload: last
+      // four in the clear, the rest base64 in the *_encrypted column. That is
+      // encoding rather than encryption — the column name overstates it — but
+      // this writes what the rest of the system reads instead of inventing a
+      // second scheme.
+      const aadhaar = String(f.aadhaar_input ?? '').replace(/\D/g, '')
+      if (aadhaar) {
+        extra.aadhar_last4 = aadhaar.slice(-4)
+        extra.aadhar_encrypted = typeof btoa === 'function' ? btoa(aadhaar) : aadhaar
+      }
+      const acct = String(f.bank_account_input ?? '').trim()
+      if (acct) {
+        extra.bank_account_number = acct
+        extra.bank_account_last4 = acct.slice(-4)
+        extra.bank_account_encrypted = typeof btoa === 'function' ? btoa(acct) : acct
+      }
+
+      // Everything except the company, the code and the two company-scoped ids.
+      const common = {
         full_name: f.full_name.trim(), first_name: parts[0], last_name: parts.slice(1).join(' ') || null,
         designation: f.designation || null, employment_type: f.employment_type,
         employment_status: 'Active', confirmation_status: 'Probation',
         company_doj: f.company_doj || null, group_doj: f.company_doj || null,
         mobile: f.mobile || null, personal_email: f.personal_email || null, is_test: false,
+        ...extra,
+      }
+
+      if (multi) {
+        // One record per chosen company, LINKED BY A SHARED common_code.
+        //
+        // The companies all sit under one parent group (companies.group_id),
+        // so a person carried in several of them is one person, not several.
+        // emp_code cannot express that — it is company-prefixed with a
+        // per-company sequence, so the same human is SRS0004 here and SSM0002
+        // there. common_code can: it has no unique constraint, onboarding
+        // already treats it as "the code that stays the same", and every
+        // employee search on this page matches on it. Giving all the records
+        // one group-level code (SG0001) is what ties them together.
+        //
+        // Location and department are left null: both belong to a single
+        // company, so there is no correct value to copy across the others.
+        const chosen = companies.filter(c => picked.includes(c.id))
+
+        // The prefix comes from the parent group. Every company here carries a
+        // group_id; the code itself lives on `groups`, so it is read rather
+        // than assumed. If the chosen companies ever span two groups the first
+        // one wins — the shared code is a person key, and the prefix is only
+        // there to stop it being mistaken for a company sequence.
+        const gid = (chosen[0] as any)?.group_id
+        const { data: grp } = gid
+          ? await supabase.from('groups').select('group_code').eq('id', gid).maybeSingle()
+          : { data: null }
+        const shared = await nextCommonCode((grp as any)?.group_code || 'GRP')
+
+        const rows: any[] = []
+        for (const co of chosen) {
+          const c = await nextEmpCode(co.company_code || 'EZ', co.id, f.employment_type)
+          const { data: clash } = await supabase.from('employees').select('id').eq('emp_code', c).maybeSingle()
+          if (clash) { setErr(`Code ${c} already exists — nothing was created.`); setBusy(false); return }
+          rows.push({ ...common, emp_code: c, common_code: shared, company_id: co.id,
+                      location_id: null, department_id: null })
+        }
+        // One insert, so a failure on the third company cannot leave the first
+        // two behind with a common_code pointing at a person who half exists.
+        const { error } = await supabase.from('employees').insert(rows)
+        if (error) { setErr(error.message); setBusy(false); return }
+        onSaved(`${f.full_name.trim()} added to ${rows.length} companies as ${shared} (${rows.map(r => r.emp_code).join(', ')}).`)
+        return
+      }
+
+      const row = {
+        ...common,
+        // One company: common_code stays equal to emp_code, which is what
+        // onboarding already does for everybody else.
+        emp_code: code, common_code: code,
+        company_id: soleCompany, location_id: f.location_id || null, department_id: f.department_id || null,
       }
       const { error } = await supabase.from('employees').insert(row)
       if (error) { setErr(error.message); setBusy(false); return }
@@ -186,24 +532,199 @@ function AddEmployeeModal({ companies, locations, departments, onClose, onSaved 
     } catch (e: any) { setErr(e?.message || 'Failed'); setBusy(false) }
   }
 
+  const grid: React.CSSProperties = { display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px' }
+
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }} onClick={onClose}>
-      <div style={{ background:C.surface, borderRadius:'14px', padding:'20px', maxWidth:'620px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'14px', color:C.ink }}>Add Employee</div>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px', marginBottom:'12px' }}>
-          <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} placeholder="Rahul Sharma" /></div>
-          <div><label style={mc.lbl}>Employment type</label><select style={mc.inp} value={f.employment_type} onChange={e => set('employment_type', e.target.value)}>{EMP_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
-          <div><label style={mc.lbl}>Company *</label><select style={mc.inp} value={f.company_id} onChange={e => { set('company_id', e.target.value); set('location_id',''); set('department_id','') }}><option value="">— Select —</option>{companies.map(c => <option key={c.id} value={c.id}>{c.company_name || c.company_code}</option>)}</select></div>
-          <div><label style={mc.lbl}>Location / Branch</label><select style={mc.inp} value={f.location_id} onChange={e => set('location_id', e.target.value)} disabled={!f.company_id}><option value="">— Select —</option>{locs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}</select></div>
-          <div><label style={mc.lbl}>Department</label><select style={mc.inp} value={f.department_id} onChange={e => set('department_id', e.target.value)} disabled={!f.company_id}><option value="">— Select —</option>{depts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}</select></div>
-          <div><label style={mc.lbl}>Designation</label><input style={mc.inp} value={f.designation} onChange={e => set('designation', e.target.value)} /></div>
-          <div><label style={mc.lbl}>Mobile</label><input style={mc.inp} value={f.mobile} onChange={e => set('mobile', e.target.value)} /></div>
-          <div><label style={mc.lbl}>Personal email</label><input style={mc.inp} value={f.personal_email} onChange={e => set('personal_email', e.target.value)} /></div>
-          <div><label style={mc.lbl}>Date of joining</label><input type="date" style={mc.inp} value={f.company_doj} onChange={e => set('company_doj', e.target.value)} /></div>
-          <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Employee code (auto)</label><input style={mc.inp} value={f.emp_code} onChange={e => set('emp_code', e.target.value.toUpperCase())} placeholder="auto" /></div>
+      <div style={{ background:C.surface, borderRadius:'14px', padding:'20px', maxWidth:'820px', width:'100%', maxHeight:'92vh', overflowY:'auto' }} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:'16px', fontWeight:600, marginBottom:'4px', color:C.ink }}>Add Employee</div>
+        <div style={{ fontSize:'12px', color:C.muted, marginBottom:'14px' }}>
+          Fields marked * are required to submit onboarding. Only name, company and code are needed to create the record.
         </div>
-        {err && <div style={{ background:C.criticalTint, color:C.critical, fontSize:'12px', padding:'8px 12px', borderRadius:'7px', marginBottom:'12px' }}>{err}</div>}
-        <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+
+        {/* HR-assigned — the original nine, unchanged */}
+        <div style={{ ...grid, marginBottom:'6px' }}>
+          <div style={{ gridColumn:'1 / 3' }}><label style={mc.lbl}>Full name *</label><input style={mc.inp} value={f.full_name} onChange={e => set('full_name', e.target.value)} /></div>
+          <div><label style={mc.lbl}>Employment type</label><select style={mc.inp} value={f.employment_type} onChange={e => set('employment_type', e.target.value)}>{EMP_TYPES.map(t => <option key={t} value={t}>{t}</option>)}</select></div>
+          {/* Companies — checkboxes inside a dropdown.
+              One person can be carried in several of the group's companies, so
+              this is a multi-select. Closed, it reads like the other fields and
+              summarises the choice; open, it is a short list of tick-boxes with
+              an "all" row on top. */}
+          <div style={{ gridColumn:'1 / 3', position:'relative' }} ref={coRef}>
+            <label style={mc.lbl}>Company *</label>
+            <button type="button" onClick={() => setCoOpen(o => !o)}
+              aria-haspopup="listbox" aria-expanded={coOpen}
+              style={{ ...mc.inp, textAlign:'left', cursor:'pointer', display:'flex',
+                       alignItems:'center', gap:8,
+                       borderColor: coOpen ? C.brand : undefined }}>
+              <span style={{ flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis',
+                             whiteSpace:'nowrap', color: picked.length ? C.ink : C.faint }}>
+                {picked.length === 0 ? 'Select company'
+                  : picked.length === companies.length && companies.length > 1 ? `All companies (${picked.length})`
+                  : companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')}
+              </span>
+              {picked.length > 1 && (
+                <span style={{ flex:'none', fontSize:11, fontWeight:700, padding:'1px 7px',
+                               borderRadius:999, background:C.brand, color:C.onAccent }}>
+                  {picked.length}
+                </span>
+              )}
+              <span aria-hidden style={{ flex:'none', color:C.muted, fontSize:10,
+                                         transform: coOpen ? 'rotate(180deg)' : 'none' }}>▼</span>
+            </button>
+
+            {coOpen && (
+              <div role="listbox" aria-multiselectable
+                style={{ position:'absolute', zIndex:10, left:0, right:0, top:'100%', marginTop:4,
+                         background:C.surface, border:`1px solid ${C.line}`, borderRadius:9,
+                         boxShadow:'0 10px 28px rgba(15,23,42,.18)', padding:'4px',
+                         maxHeight:240, overflowY:'auto' }}>
+                {companies.length > 1 && (
+                  <>
+                    <label style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px',
+                                    borderRadius:7, cursor:'pointer', fontSize:13, fontWeight:600,
+                                    color:C.brandDeep }}
+                           onMouseDown={e => e.preventDefault()}>
+                      <input type="checkbox"
+                             checked={picked.length === companies.length}
+                             ref={el => { if (el) el.indeterminate = picked.length > 0 && picked.length < companies.length }}
+                             onChange={toggleAll} />
+                      All companies
+                    </label>
+                    <div style={{ height:1, background:C.line, margin:'3px 8px' }} />
+                  </>
+                )}
+                {companies.map(c => {
+                  const on = picked.includes(c.id)
+                  return (
+                    <label key={c.id} role="option" aria-selected={on}
+                      onMouseDown={e => e.preventDefault()}
+                      style={{ display:'flex', alignItems:'center', gap:9, padding:'8px 10px',
+                               borderRadius:7, cursor:'pointer', fontSize:13,
+                               background: on ? C.brandTint : 'transparent', color:C.ink }}>
+                      <input type="checkbox" checked={on} onChange={() => toggleCompany(c.id)} />
+                      <span style={{ flex:'none', fontSize:11, fontWeight:700, padding:'1px 6px',
+                                     borderRadius:5, background: on ? C.brand : C.sunken,
+                                     color: on ? C.onAccent : C.muted }}>{c.company_code}</span>
+                      <span style={{ minWidth:0, overflow:'hidden', textOverflow:'ellipsis',
+                                     whiteSpace:'nowrap' }}>{c.company_name}</span>
+                    </label>
+                  )
+                })}
+                {companies.length === 0 && (
+                  <div style={{ fontSize:12, color:C.faint, padding:'10px' }}>No active companies</div>
+                )}
+              </div>
+            )}
+          </div>
+
+
+          <div>
+            <label style={mc.lbl}>Location / Branch</label>
+            <select style={mc.inp} value={f.location_id} disabled={multi}
+                    onChange={e => set('location_id', e.target.value)}>
+              <option value="">{multi ? 'Set per company' : 'Select'}</option>
+              {!multi && locs.map(l => <option key={l.id} value={l.id}>{l.location_name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={mc.lbl}>Department</label>
+            <select style={mc.inp} value={f.department_id} disabled={multi}
+                    onChange={e => set('department_id', e.target.value)}>
+              <option value="">{multi ? 'Set per company' : 'Select'}</option>
+              {!multi && depts.map(d => <option key={d.id} value={d.id}>{d.dept_name}</option>)}
+            </select>
+          </div>
+          <div><label style={mc.lbl}>Designation</label><input style={mc.inp} value={f.designation} onChange={e => set('designation', e.target.value)} /></div>
+          <div>
+            <label style={mc.lbl}>Mobile *</label>
+            <input style={{ ...mc.inp, ...(fieldError('mobile', f.mobile) ? { borderColor:C.critical } : null) }}
+                   aria-invalid={!!fieldError('mobile', f.mobile)}
+                   value={f.mobile} onChange={e => set('mobile', e.target.value)} />
+            {fieldError('mobile', f.mobile) &&
+              <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>{fieldError('mobile', f.mobile)}</div>}
+          </div>
+          <div>
+            <label style={mc.lbl}>Personal email *</label>
+            <input style={{ ...mc.inp, ...(fieldError('personal_email', f.personal_email) ? { borderColor:C.critical } : null) }}
+                   aria-invalid={!!fieldError('personal_email', f.personal_email)}
+                   value={f.personal_email} onChange={e => set('personal_email', e.target.value)} />
+            {fieldError('personal_email', f.personal_email) &&
+              <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>{fieldError('personal_email', f.personal_email)}</div>}
+          </div>
+          <div><label style={mc.lbl}>Date of joining</label><input type="date" style={mc.inp} value={f.company_doj} onChange={e => set('company_doj', e.target.value)} /></div>
+          <div style={{ gridColumn:'1 / 3' }}>
+            <label style={mc.lbl}>Employee code (auto)</label>
+            <input style={mc.inp} value={f.emp_code} disabled={multi}
+                   placeholder={multi ? 'One per company, generated on save' : ''}
+                   onChange={e => set('emp_code', e.target.value)} />
+          </div>
+        </div>
+
+        {/* Selecting every company creates a record in each. Said plainly here,
+            because three rows appearing from one click would otherwise be a
+            surprise. */}
+        {multi && (
+          <div style={{ display:'flex', gap:10, alignItems:'flex-start',
+                        background:C.brandTint, border:`1px solid ${C.brandEdge}`,
+                        borderRadius:10, padding:'10px 12px', marginTop:2 }}>
+            <span aria-hidden style={{ flex:'none', width:20, height:20, borderRadius:'50%',
+                                       background:C.brand, color:C.onAccent, display:'grid',
+                                       placeItems:'center', fontSize:12, fontWeight:700 }}>
+              {picked.length}
+            </span>
+            <div style={{ fontSize:12, color:C.ink, lineHeight:1.65 }}>
+              <b>{picked.length} records will be created</b> — one in{' '}
+              {companies.filter(c => picked.includes(c.id)).map(c => c.company_code).join(', ')} — each with
+              its own employee code, tied together by a single group code so the system treats them as
+              one person.
+              <div style={{ color:C.muted, marginTop:2 }}>
+                Location and department belong to one company, so they are set on each record afterwards.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {ONBOARDING_SECTIONS.map(sec => (
+          <div key={sec.title} style={{ marginTop:'18px' }}>
+            <div style={{ display:'flex', alignItems:'baseline', gap:10, borderTop:`1px solid ${C.line}`, paddingTop:'12px', marginBottom:'10px' }}>
+              <div style={{ ...eyebrow, color:C.ink }}>{sec.title}</div>
+              {sec.note && <div style={{ fontSize:11, color:C.faint }}>{sec.note}</div>}
+              {sec.title === 'Permanent address' && (
+                <label style={{ marginLeft:'auto', fontSize:12, color:C.muted, display:'flex', alignItems:'center', gap:6 }}>
+                  <input type="checkbox" checked={sameAddr} onChange={e => setSameAddr(e.target.checked)} />
+                  Same as current
+                </label>
+              )}
+            </div>
+            <div style={grid}>
+              {sec.fields.map(d => (
+                <Field key={d.k} d={d} value={f[d.k]} onChange={v => set(d.k, v)} />
+              ))}
+            </div>
+          </div>
+        ))}
+
+        {/* 11 and 12 on the checklist are uploads, not inputs. */}
+        <div style={{ marginTop:'18px', borderTop:`1px solid ${C.line}`, paddingTop:'12px' }}>
+          <div style={{ ...eyebrow, color:C.ink, marginBottom:6 }}>Photo and documents</div>
+          <div style={{ fontSize:12, color:C.muted, lineHeight:1.6 }}>
+            The passport photo and the twelve document uploads — PAN, Aadhaar, cancelled cheque,
+            education and experience certificates — are collected after the record exists, from the
+            employee&rsquo;s profile. They are files rather than fields and do not belong in this form.
+          </div>
+        </div>
+
+        {problems.length > 0 && (
+          <div style={{ background:C.criticalTint, color:C.critical, fontSize:12,
+                        padding:'9px 12px', borderRadius:8, marginTop:14, lineHeight:1.6 }}>
+            <b>{problems.length} field{problems.length === 1 ? '' : 's'} need{problems.length === 1 ? 's' : ''} checking</b>
+            {' — '}{problems.map(([k]) => k.replace(/_/g, ' ').replace('input', '')).join(', ')}
+          </div>
+        )}
+        {err && <div style={{ background:C.criticalTint, color:C.critical, fontSize:'12px', padding:'8px 12px', borderRadius:'7px', margin:'14px 0' }}>{err}</div>}
+        <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end', marginTop:'16px', position:'sticky', bottom:0, background:C.surface, paddingTop:'12px' }}>
           <button style={mc.out} onClick={onClose}>Cancel</button>
           <button style={{ ...mc.pri, opacity: ready && !busy ? 1 : 0.5 }} disabled={!ready || busy} onClick={save}>{busy ? 'Saving…' : 'Add employee'}</button>
         </div>
@@ -360,7 +881,7 @@ export default function EmployeeMaster() {
 
   const fetchMeta = async () => {
     const [co,lo,de] = await Promise.all([
-      supabase.from('companies').select('id,company_name,company_code').eq('status','Active'),
+      supabase.from('companies').select('id,company_name,company_code,group_id').eq('status','Active'),
       supabase.from('locations').select('id,location_name,city,company_id').eq('status','Active'),
       supabase.from('departments').select('id,dept_name,company_id').eq('status','Active'),
     ])
@@ -391,7 +912,7 @@ export default function EmployeeMaster() {
       if (filterType)     q = q.eq('employment_type', filterType)
       if (filterStatus)   q = q.eq('employment_status', filterStatus)
       if (filterGrade)    q = q.eq('grade', filterGrade)
-      if (search.trim())  q = q.or(`full_name.ilike.%${search}%,emp_code.ilike.%${search}%,common_code.ilike.%${search}%,designation.ilike.%${search}%,mobile.ilike.%${search}%`)
+      if (search.trim())  q = q.or(orIlike(['full_name', 'emp_code', 'common_code', 'designation', 'mobile'], search.trim()))
 
       const from = (page-1)*PER_PAGE
       q = q.range(from, from+PER_PAGE-1)
@@ -416,7 +937,7 @@ export default function EmployeeMaster() {
       if (filterType)     q = q.eq('employment_type', filterType)
       if (filterStatus)   q = q.eq('employment_status', filterStatus)
       if (filterGrade)    q = q.eq('grade', filterGrade)
-      if (search.trim())  q = q.or(`full_name.ilike.%${search}%,emp_code.ilike.%${search}%,common_code.ilike.%${search}%,designation.ilike.%${search}%,mobile.ilike.%${search}%`)
+      if (search.trim())  q = q.or(orIlike(['full_name', 'emp_code', 'common_code', 'designation', 'mobile'], search.trim()))
       const { data, error: err } = await q
       if (err) throw err
       const list = (data as any[] || [])

@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, fyOf } from '@/lib/ess/session'
 import { buildPending } from '@/lib/ess/pending'
+import { leaveYearOf } from '@/lib/ess/leave-year'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,12 @@ export async function GET(req: NextRequest) {
   const { ctx } = r
   const me = ctx.caller.employeeId
   const fy = fyOf()
-  const year = new Date().getFullYear()
+  // The Leave tab queried leave_balances with the hardcoded string '2026' while
+  // this route used new Date().getFullYear() — a number. Both resolved to 2026
+  // in 2026, so the divergence was invisible; on 1 Jan 2027 this KPI would have
+  // silently moved to 2027 while the Leave tab stayed on 2026. leaveYearOf()
+  // derives the FY's starting year, so both agree and "FY 2026-27" is true.
+  const year = leaveYearOf()
 
   const [pending, { data: bal }, { data: run }, { data: decl }, { data: proofLines }] = await Promise.all([
     buildPending(ctx),

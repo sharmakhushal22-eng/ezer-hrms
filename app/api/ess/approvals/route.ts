@@ -45,11 +45,31 @@ export async function POST(req: NextRequest) {
   const { data: meRow } = await sb.from('employees').select('full_name').eq('id', me).maybeSingle()
 
   if (kind === 'LEAVE') {
-    const { data: l } = await sb.from('leave_applications').select('id, employee_id, status, current_approver_id, from_date, to_date, days').eq('id', id).maybeSingle()
+    const { data: l } = await sb.from('leave_applications').select('id, employee_id, status, current_approver_id, approval_stage, from_date, to_date, days, leave_types(approval_by, name)').eq('id', id).maybeSingle()
     if (!l) return NextResponse.json({ error: 'Leave request not found' }, { status: 404 })
     if (l.current_approver_id !== me && !ctx.grant.isSuperAdmin) return forbidden('This request is not waiting on you.')
     if (l.status !== 'PENDING') return NextResponse.json({ error: `Already ${String(l.status).toLowerCase()}.` }, { status: 409 })
     const approve = action === 'Approve' || action === 'APPROVE'
+
+    // approval_by = 'BOTH' means L1 THEN HR (migration 121). An L1 approval on
+    // such a type is not a decision — it advances the request to its second
+    // leg. Writing approval_stage re-fires the stamping trigger, which
+    // re-points current_approver_id at the HR manager.
+    const mode = String((l as any).leave_types?.approval_by || 'L1').toUpperCase()
+    if (approve && mode === 'BOTH' && (l as any).approval_stage === 'L1') {
+      const { error: adv } = await sb.from('leave_applications').update({ approval_stage: 'HR' }).eq('id', id)
+      if (adv) return NextResponse.json({ error: adv.message }, { status: 500 })
+      const { data: next } = await sb.from('leave_applications').select('current_approver_id').eq('id', id).maybeSingle()
+      if (next?.current_approver_id) {
+        await notify(next.current_approver_id, 'Leave request awaiting you',
+          `A ${(l as any).leave_types?.name || 'leave'} request needs HR approval after the reporting manager signed off.`, '/ess?tab=approvals')
+      }
+      await notify(l.employee_id, 'Leave passed to HR',
+        `Your manager approved ${Number(l.days)} day${Number(l.days) === 1 ? '' : 's'} from ${fmtDate(l.from_date)}; it now needs HR approval.`)
+      await audit(ctx.caller, 'LEAVE_L1_APPROVED', l.employee_id, { leave_id: id, note: body.note || null })
+      return NextResponse.json({ ok: true, status: 'PENDING', stage: 'HR' })
+    }
+
     const { error } = await sb.from('leave_applications').update({
       status: approve ? 'APPROVED' : 'REJECTED', resolved_at: new Date().toISOString(),
       approver: meRow?.full_name || null, approver_employee_id: me, remark: body.note || null,

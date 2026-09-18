@@ -8,12 +8,11 @@
 // Anything not built yet renders a labelled placeholder naming the module it waits on,
 // rather than a screen that looks finished and does nothing.
 // All sub-components are defined OUTSIDE the parent (no focus-loss).
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, startTransition } from 'react'
 import {
   loadEmployeeDetail, updateEmployeePhoto, loadDirectory, loadNotifications, markNotification, markAllNotifications,
   loadServiceRequests, createServiceRequest, loadLetterRequests, createLetterRequest,
   loadAnnouncements, loadKudos,
-  loadLeaveBalances, loadLeaveApplications, applyLeave, loadEmployeeHolidays,
   type EmployeeDetail, type DirectoryEntry, type EssNotification,
   type ServiceRequest, type LetterRequest, type Announcement, type Kudo,
 } from '@/lib/supabase-ess'
@@ -26,25 +25,17 @@ import {
 import * as HR from '@/lib/employees/hr-actions'
 import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
-import { loadLeaveTypes } from '@/lib/supabase-leave-config'
-import Inbox from './Inbox'
-import InboxTabs from './InboxTabs'
+import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
-import FlexiTdsCalculator from '@/components/ess/FlexiTdsCalculator'
-import FunZone from '@/components/ess/FunZone'
-import FlexiClaims from '@/components/ess/FlexiClaims'
-import InvestmentDeclaration from '@/components/ess/InvestmentDeclaration'
-import InvestmentProofs from '@/components/ess/InvestmentProofs'
-import TravelClaims from '@/components/ess/TravelClaims'
-import Performance from '@/components/ess/Performance'
 import Celebrations from '@/components/ess/Celebrations'
-import WallOfFame from '@/components/ess/WallOfFame'
-import Profile360 from '@/components/profile/Profile360'
+// Today is the landing tab, so it stays a static import. Splitting it would
+// trade bundle size for a spinner on the one screen everybody sees first.
+import Today from '@/components/ess/today/Today'
 import { ThemeToggle } from '@/lib/ui/ThemeToggle'
 import { Logo, LogoStyles } from '@/lib/ui/Logo'
 
-import { useEssMenu, PendingOnYou, TeamRoster, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
+import { useEssMenu, PendingOnYou, ApprovalsSection, RaiseMrfSection, CompanySection, ReportsSection, ExitSection } from '@/components/ess/RoleTabs'
 import { ADMIN_NAV_GROUPS, NAV_ENTRY_BY_KEY, type NavEntry } from '@/lib/rms/nav'
 import { atLeast, type AccessLevel } from '@/lib/rms/modules'
 import { AdminModuleHost } from '@/components/ess/AdminModules'
@@ -55,9 +46,53 @@ import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/co
 import {
   C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
-  IconLetters, IconReports, IconRecruitment, IconAi, IconBell,
+  IconLetters, IconReports, IconAi, IconBell, IconMail,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
+
+// ── Sections load on demand ────────────────────────────────────────
+//
+// Every one of these is reached only through a case in renderView(), yet each
+// was a static import — so opening ESS downloaded, parsed and hydrated all of
+// them before the first click. Measured: 2.14 MB of JavaScript across 22
+// script tags for /ess-portal, most of it for tabs an employee never opens.
+// Social alone drags in the whole 3,383-line wall module.
+//
+// Same pattern AdminModules.tsx already uses, and for the same stated reason:
+// "an employee who holds nothing downloads none of it". ssr:false because
+// these read localStorage and the Supabase browser client on mount, which is
+// also what the portal itself does.
+//
+// Today is NOT here, on purpose — see its import above.
+const SectionLoading = () => (
+  <div style={{ padding: 40, textAlign: 'center', color: C.muted, fontSize: F.small,
+                fontFamily: '"DM Sans","Segoe UI",sans-serif' }}>
+    Loading…
+  </div>
+)
+// The options MUST be an inline object literal at every call site — Turbopack
+// analyses them statically, and hoisting them into a shared const fails the
+// build with "next/dynamic options must be an object literal" once per call.
+
+const FlexiTdsCalculator   = dynamic(() => import('@/components/ess/FlexiTdsCalculator'), { ssr: false, loading: SectionLoading })
+const FunZone              = dynamic(() => import('@/components/ess/FunZone'), { ssr: false, loading: SectionLoading })
+const FlexiClaims          = dynamic(() => import('@/components/ess/FlexiClaims'), { ssr: false, loading: SectionLoading })
+const InvestmentDeclaration= dynamic(() => import('@/components/ess/InvestmentDeclaration'), { ssr: false, loading: SectionLoading })
+const InvestmentProofs     = dynamic(() => import('@/components/ess/InvestmentProofs'), { ssr: false, loading: SectionLoading })
+const TravelClaims         = dynamic(() => import('@/components/ess/TravelClaims'), { ssr: false, loading: SectionLoading })
+const Performance          = dynamic(() => import('@/components/ess/Performance'), { ssr: false, loading: SectionLoading })
+const Profile360           = dynamic(() => import('@/components/profile/Profile360'), { ssr: false, loading: SectionLoading })
+const MyTeam               = dynamic(() => import('@/components/ess/team/MyTeam'), { ssr: false, loading: SectionLoading })
+// Social (118) — birthdays, work anniversaries, new joiners, and the Wall of
+// Fame under one tab. WallOfFame is not imported here: Social renders it for
+// its own first sub-tab, so splitting Social splits the wall module with it.
+const Social               = dynamic(() => import('@/components/ess/social/Social'), { ssr: false, loading: SectionLoading })
+// Named exports, so they need unwrapping.
+const InboxShell = dynamic(() => import('./inbox/InboxShell').then(m => m.InboxShell), { ssr: false, loading: SectionLoading })
+const HrisShell  = dynamic(() => import('./hris/HrisShell').then(m => m.HrisShell), { ssr: false, loading: SectionLoading })
+// Leave (121). Extracted from this file into its own component and split
+// like the rest: an employee who never opens Leave no longer downloads it.
+const LeaveSection         = dynamic(() => import('@/components/ess/LeaveSection'), { ssr: false, loading: SectionLoading })
 
 // ── Styles ─────────────────────────────────────────────────────────
 // Bound to the design system. See lib/ui/tokens.ts.
@@ -1086,97 +1121,6 @@ const DIR_TINTS = [
 ]
 const dirTint = (s: string) => DIR_TINTS[Array.from(s || '?').reduce((a, c) => a + c.charCodeAt(0), 0) % DIR_TINTS.length]
 
-function MyTeam({ emp, isMobile }: { emp: EmployeeDetail; isMobile: boolean }) {
-  const { managers, reportCount, loading: chainLoading } = useManagerChain(emp.id)
-  // Scope-aware roster with status pills for an RM / HOD; renders nothing otherwise.
-  const { menu: essMenu } = useEssMenu(emp.id)
-  const [peers, setPeers] = useState<{ id: string; full_name: string; designation: string | null; department: string | null; isSelf: boolean; direct_reports: number }[]>([])
-  const [reports, setReports] = useState<{ id: string; emp_code: string | null; full_name: string | null; designation: string | null; department: string | null }[]>([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let live = true
-    setLoading(true)
-    ;(async () => {
-      const token = await authToken()
-      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {}
-      const [peersRes, reportsRes] = await Promise.all([
-        fetch(`/api/rms/orgchart?view=peers&employee_id=${emp.id}`, { headers, cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
-        fetch(`/api/rms/hierarchy?employee_id=${emp.id}&view=reports`, { headers, cache: 'no-store' }).then(r => r.json()).catch(() => ({})),
-      ])
-      if (!live) return
-      setPeers((peersRes.peers || []).map((p: any) => ({ id: p.employee_id, full_name: p.full_name, designation: p.designation, department: p.department, isSelf: p.is_self, direct_reports: p.direct_reports })))
-      setReports(reportsRes.reports || [])
-      setLoading(false)
-    })()
-    return () => { live = false }
-  }, [emp.id])
-
-  // The same screen for everyone — an individual contributor, a manager and the person
-  // at the top of a chain all see chain-above / peers / people-below. Only the contents
-  // move: the MD case is not special-cased, it just has an empty chain and no peers.
-  const CardRow = ({ id, name, sub, right }: { id: string; name: string | null; sub: string | null; right?: string }) => (
-    <div key={id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: '1px solid #F3F0FF' }}>
-      <div style={{ width: 32, height: 32, borderRadius: 99, background: C.brandTint, color: C.brand, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-        {(name || '?').split(' ').filter(Boolean).slice(0, 2).map(s => s[0]).join('').toUpperCase()}
-      </div>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 600, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{name || '—'}</div>
-        <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{sub || '—'}</div>
-      </div>
-      {right && <span style={{ fontSize: 10.5, color: C.brand, fontWeight: 700, background: C.brandTint, borderRadius: 99, padding: '2px 8px', flexShrink: 0 }}>{right}</span>}
-    </div>
-  )
-
-  const Section = ({ title, icon, empty, children }: { title: string; icon: string; empty: string; children: React.ReactNode }) => (
-    <div style={{ background: C.surface, borderRadius: 10, border: `1px solid ${C.brandEdge}`, padding: '14px 16px', marginBottom: 10, boxShadow: E.flat }}>
-      <div style={{ fontSize: 11, fontWeight: 600, color: C.brand, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 8 }}>{icon} {title}</div>
-      {loading || chainLoading ? <div style={{ fontSize: 12, color: C.faint, padding: '6px 0' }}>Loading…</div> : children}
-    </div>
-  )
-
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12, alignItems: 'start' }}>
-      {(essMenu.is_rm || essMenu.is_hod) && (
-        <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
-          <TeamRoster employeeId={emp.id} isRm={essMenu.is_rm} isHod={essMenu.is_hod} />
-        </div>
-      )}
-      <Section title="Reporting line above you" icon="🧭" empty="Nobody above you — you are at the top of your chain.">
-        {managers.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody above you — you are at the top of your chain.</div>
-        ) : managers.map(m => (
-          <CardRow key={m.relationship_type} id={m.relationship_type}
-            name={m.manager?.full_name ?? null}
-            sub={[m.relationship_type === 'HOD' ? 'Head of Department' : m.relationship_type, m.manager?.designation].filter(Boolean).join(' · ')} />
-        ))}
-      </Section>
-
-      <Section title="Your team" icon="👥" empty="Nobody reports to you yet.">
-        {reports.length === 0 ? (
-          <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody reports to you directly.</div>
-        ) : reports.map(r => (
-          <CardRow key={r.id} id={r.id} name={r.full_name} sub={[r.designation, r.department].filter(Boolean).join(' · ')} />
-        ))}
-      </Section>
-
-      <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
-        <Section title={`Your team-mates${peers.length ? ' (' + peers.length + ')' : ''}`} icon="🤝" empty="Nobody else shares your reporting manager.">
-          {peers.filter(p => !p.isSelf).length === 0 ? (
-            <div style={{ fontSize: 12.5, color: C.muted, lineHeight: 1.6 }}>Nobody else shares your reporting manager — or you have no manager on record.</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: '0 16px' }}>
-              {peers.filter(p => !p.isSelf).map(p => (
-                <CardRow key={p.id} id={p.id} name={p.full_name} sub={p.designation} right={p.direct_reports > 0 ? String(p.direct_reports) + ' reports' : undefined} />
-              ))}
-            </div>
-          )}
-        </Section>
-      </div>
-    </div>
-  )
-}
-
 function Directory({ isMobile }: { isMobile: boolean }) {
   const [rows, setRows] = useState<DirectoryEntry[]>([])
   const [q, setQ] = useState('')
@@ -1382,121 +1326,6 @@ function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () =
 }
 
 // ── Leave & Holidays (ESS) — balances, apply, history, upcoming holidays ──
-function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const [balances, setBalances] = useState<any[]>([])
-  const [types, setTypes] = useState<any[]>([])
-  const [apps, setApps] = useState<any[]>([])
-  const [hols, setHols] = useState<any[]>([])
-  const [form, setForm] = useState({ leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' })
-  const [busy, setBusy] = useState(false)
-  // Half-day is offered only for these leave types.
-  const HALF_DAY_TYPES = ['EL', 'CL', 'SL', 'LWP', 'CP']
-  useEffect(() => {
-    loadLeaveBalances(emp.id).then(setBalances)
-    loadLeaveApplications(emp.id).then(setApps)
-    loadEmployeeHolidays(emp.id).then(setHols)
-    // Leave-type catalog (EL, CL, …) — the apply dropdown lists every active,
-    // employee-applicable type, not only the ones the employee has a balance row for.
-    loadLeaveTypes().then(all => setTypes((all || []).filter((t: any) => t.is_active && t.application_mode !== 'HR_MARK')))
-  }, [emp.id])
-  // Balance lookup by leave_type_id → shows "(N left)" next to a type when seeded.
-  const balByType = useMemo(() => { const m: Record<string, any> = {}; balances.forEach((b: any) => { m[b.leave_type_id] = b }); return m }, [balances])
-  const avail = (b: any) => (Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)
-  const barColor = (pct: number) => pct > 60 ? C.positive : pct > 30 ? C.warning : C.critical
-  const submit = async () => {
-    if (!form.leave_type_id || !form.from_date || !form.to_date) { notify('Select leave type and dates', 'error'); return }
-    if (form.half_day && !form.half_session) { notify('Select 1st half or 2nd half', 'error'); return }
-    const days = form.half_day ? 0.5 : Math.max(1, Math.round((new Date(form.to_date).getTime() - new Date(form.from_date).getTime()) / 86400000) + 1)
-    setBusy(true)
-    const { error } = await applyLeave({ employee_id: emp.id, leave_type_id: form.leave_type_id, from_date: form.from_date, to_date: form.to_date, half_day: form.half_day, half_session: form.half_day ? form.half_session : '', days, reason: form.reason }) as any
-    setBusy(false)
-    if (error) { notify('Failed: ' + error.message, 'error'); return }
-    notify('Leave request submitted ✓'); setForm({ leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' })
-    loadLeaveApplications(emp.id).then(setApps)
-  }
-  const STATUS: Record<string, [string, string]> = { PENDING: [C.warningTint, C.warning], APPROVED: [C.positiveTint, C.positive], REJECTED: [C.criticalTint, C.critical], CANCELLED: [C.sunken, C.muted] }
-  const HOL_STYLE: Record<string, [string, string]> = { NATIONAL: [C.infoTint, C.brand], FESTIVAL: [C.brandTint, C.muted], OPTIONAL: [C.warningTint, C.warning], REGIONAL: [C.brandTint, C.brand] }
-  const today = new Date().toISOString().slice(0, 10)
-  const upcoming = hols.filter((h: any) => h.holiday_date >= today)
-  return (
-    <div>
-      <div style={T.card}>
-        <div style={T.section}>Leave Balance · FY 2026-27</div>
-        {balances.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No leave balances yet — contact HR.</div> :
-          balances.map((b: any) => { const total = Number(b.opening || 0) + Number(b.accrued || 0); const av = avail(b); const pct = total > 0 ? Math.round(av / total * 100) : 0; return (
-            <div key={b.id} style={{ background: C.sunken, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10, background: C.brandTint, color: C.brandDeep, padding: '2px 7px', borderRadius: 99, marginRight: 6 }}>{b.leave_types?.short_name}</span>{b.leave_types?.name}</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: barColor(pct) }}>{av}<span style={{ fontSize: 11, color: C.faint, fontWeight: 400 }}> / {total}</span></span>
-              </div>
-              <div style={{ height: 5, borderRadius: 99, background: C.line, overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: barColor(pct) }} /></div>
-            </div>
-          )})}
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>Apply for Leave</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Leave type</label>
-            <select style={T.input} value={form.leave_type_id} onChange={e => setForm(f => ({ ...f, leave_type_id: e.target.value, half_day: false, half_session: '' }))}>
-              <option value="">Select</option>
-              {(types.length ? types : balances.map((b: any) => ({ id: b.leave_type_id, short_name: b.leave_types?.short_name, name: b.leave_types?.name }))).map((t: any) => {
-                const bal = balByType[t.id]
-                return <option key={t.id} value={t.id}>{t.short_name} · {t.name}{bal ? ` (${avail(bal)} left)` : ''}</option>
-              })}
-            </select></div>
-          <div><label style={T.label}>From</label><input type="date" style={T.input} value={form.from_date} onChange={e => setForm(f => ({ ...f, from_date: e.target.value }))} /></div>
-          <div><label style={T.label}>To</label><input type="date" style={T.input} value={form.to_date} onChange={e => setForm(f => ({ ...f, to_date: e.target.value }))} /></div>
-          {(() => {
-            const selShort = types.find((t: any) => t.id === form.leave_type_id)?.short_name || balByType[form.leave_type_id]?.leave_types?.short_name || ''
-            if (!HALF_DAY_TYPES.includes(selShort)) return null
-            return (
-              <div style={{ gridColumn: '1/-1' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={form.half_day} onChange={e => setForm(f => ({ ...f, half_day: e.target.checked, half_session: e.target.checked ? f.half_session : '' }))} /> Half day
-                </label>
-                {form.half_day && (
-                  <div style={{ display: 'flex', gap: 18, marginTop: 8, paddingLeft: 24 }}>
-                    {[['1st', '1st Half'], ['2nd', '2nd Half']].map(([val, lbl]) => (
-                      <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={form.half_session === val} onChange={e => setForm(f => ({ ...f, half_session: e.target.checked ? val : '' }))} /> {lbl}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-          <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason</label><input style={T.input} value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Brief reason" /></div>
-        </div>
-        <button onClick={submit} disabled={busy} style={{ ...T.btnP, marginTop: 10, opacity: busy ? .6 : 1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>Recent Requests</div>
-        {apps.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No leave applications yet.</div> :
-          apps.map((a: any) => { const [bg, c] = STATUS[a.status] || [C.sunken, C.muted]; return (
-            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.brandEdge}`, fontSize: 12 }}>
-              <span style={{ fontSize: 10, background: C.brandTint, color: C.brandDeep, padding: '2px 7px', borderRadius: 99, fontWeight: 600 }}>{a.leave_types?.short_name}</span>
-              <span style={{ flex: 1 }}>{a.from_date}{a.to_date !== a.from_date ? ` → ${a.to_date}` : ''}{a.half_day ? ' (½)' : ''}</span>
-              <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: bg, color: c, fontWeight: 600 }}>{a.status}</span>
-            </div>
-          )})}
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>Upcoming Holidays</div>
-        {upcoming.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No upcoming holidays.</div> :
-          upcoming.map((h: any) => { const [bg, c] = HOL_STYLE[h.holiday_type] || [C.sunken, C.muted]; return (
-            <div key={h.holiday_date + h.description} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.brandEdge}`, fontSize: 12 }}>
-              <span style={{ minWidth: 64, fontWeight: 600 }}>{new Date(h.holiday_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
-              <span style={{ flex: 1 }}>{h.description}</span>
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: bg, color: c, fontWeight: 600 }}>{h.holiday_type}</span>
-              {h.is_optional && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: C.warningTint, color: C.warning }}>Optional</span>}
-            </div>
-          )})}
-      </div>
-    </div>
-  )
-}
-
 // ════════════════════════════════════════════════════════════════
 // ATTENDANCE (B3)
 // ════════════════════════════════════════════════════════════════
@@ -3241,9 +3070,11 @@ interface NavSection {
  */
 const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => React.ReactElement> = {
   home: IconHome, profile: IconEmployees, team: IconEmployees, payroll: IconPayroll,
-  inbox: IconBell,
+  // An envelope, not a bell: this is the Inbox, and the bell in the header
+  // is a different thing that still uses IconBell.
+  inbox: IconMail,
   attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconReports,
-  wall: IconRecruitment, rnr: IconAi, funzone: IconAi,
+  social: IconEmployees, rnr: IconAi, funzone: IconAi,
 }
 function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number; strokeWidth?: number }) {
   const I = ESS_ICON[k]
@@ -3253,7 +3084,7 @@ function EssIcon({ k, size = 16, strokeWidth = 1.6 }: { k: string; size?: number
 const SECTIONS: NavSection[] = [
   { k:'home', label:'Home', short:'Home', icon:'', status:'ready',
     desc:'The landing dashboard — everything at a glance',
-    items:[{ k:'home', label:'Dashboard' }] },
+    items:[{ k:'home', label:'Home' }] },
 
   { k:'profile', label:'Profile', short:'Profile', icon:'', status:'ready',
     desc:'Your personal details, documents and letters',
@@ -3333,17 +3164,17 @@ const SECTIONS: NavSection[] = [
     desc:'Your KRAs, and the reviews you owe',
     items:[{ k:'performance', label:'Performance' }] },
 
-  // Was a 'soon' placeholder. Promoted rather than duplicated — adding a
-  // second entry with the same key is what produced React's "two children
-  // with the same key" warning, and duplicate keys let React drop or swap
-  // siblings silently.
-  { k:'wall', label:'Wall of Fame', short:'Wall', icon:'', status:'ready',
-    desc:'What your colleagues have noticed — shoutouts, awards, badges and service milestones. Thanks, never pay.',
-    items:[{ k:'wall', label:'Wall of Fame' }],
-    features:[
-      { icon:'', name:'Give a Shoutout', note:'Quick appreciation post' },
-      { icon:'', name:'Company Feed',    note:'See everyone’s shoutouts' },
-    ]},
+  // Social (118). Wall of Fame used to be a top-level section here and is now
+  // the first sub-tab inside this one, so the rail has one door to everything
+  // social rather than four.
+  //
+  // ONE ITEM ON PURPOSE. A section with a single entry draws no pill row (see
+  // SubTabs), and Social renders its own four tabs — the same ones the design
+  // preview shows. Listing them here as well would put two tab rows on one
+  // screen, which is what the Inbox and HRIS shells already avoid.
+  { k:'social', label:'Social', short:'Social', icon:'', status:'ready',
+    desc:'Birthdays, work anniversaries, new joiners and the Wall of Fame — everyone across your group, in one place',
+    items:[{ k:'social', label:'Social' }]},
 
   { k:'rnr', label:'RNR', short:'RNR', icon:'', status:'soon',
     desc:'Structured Reward & Recognition, points-based',
@@ -3704,7 +3535,20 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
   // have to cross into /dashboard — the Admin button stays as the door for those
   // who prefer the old shell.
   const [adminKey, setAdminKey] = useState<string | null>(null)
-  const go = (k: string) => { setAdminKey(null); setView(k); setBellOpen(false); setMoreOpen(false) }
+  // The affordances close URGENTLY; only the section swap is a transition.
+  //
+  // A tab click was costing 139ms of render (Vercel INP trace: 70ms input
+  // delay + 139ms render = 214ms) because `view` lives in this 3,900-line
+  // component beside 121 other useStates, so setView re-renders all of it.
+  // Marking that update as a transition lets React keep the interaction
+  // responsive and paint the nav change first.
+  //
+  // setBellOpen/setMoreOpen stay urgent deliberately: a menu that waits for a
+  // heavy section to finish rendering before it closes feels broken.
+  const go = (k: string) => {
+    setAdminKey(null); setBellOpen(false); setMoreOpen(false)
+    startTransition(() => setView(k))
+  }
   const goAdmin = (k: string) => { setAdminKey(k); setBellOpen(false); setMoreOpen(false); window.scrollTo({ top: 0 }) }
   // Clicking a section lands on its first item — the section itself is never a
   // destination, so there is no empty "section landing page" to design or maintain.
@@ -3743,7 +3587,14 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     // A tab with nothing behind it shows what it will hold, not an empty screen.
     if (section.status === 'soon' && section.features) return <FeatureGrid features={section.features} />
     switch (view) {
-      case 'home':          return <Home emp={emp} isMobile={isMobile} go={go} salaryVisible={salaryVisible} notify={notify} reload={reload} />
+      // The landing tab (migration 111), labelled "Home". The KEY stays 'home' —
+      // MOBILE_PRIMARY, the default view and the "← My portal" button all
+      // reference it, and a deep link should not break for a nav word. The
+      // component and its files keep the Today name: that is what the drop, the
+      // payload function and lib/today are all called.
+      // go(), not setView — Today's shortcuts are navigation too, and passing
+      // the raw setter would skip the transition and keep the blocking render.
+      case 'home':          return <Today onOpenTab={go} />
       // Profile 360. The portal owner's code is passed, not the viewer's —
       // the route resolves WHO IS LOOKING from the session and masks
       // accordingly, so an admin opening a colleague's portal sees that
@@ -3752,7 +3603,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'leave':         return <LeaveSection emp={emp} notify={notify} />
       // The inbox reports its own unread straight into the bell's state, so
       // the badge and the screen can never show two different numbers.
-      case 'inbox':         return <InboxTabs employeeId={emp.id} onUnread={setUnread} />
+      // The bell gets the MESSAGES count only. Wall and Broadcast carry their
+      // own badges inside the shell and are never added to it.
+      case 'inbox':         return <InboxShell employeeId={emp.id}
+                                              firstName={emp.first_name || emp.full_name.split(' ')[0]}
+                                              onUnread={setUnread} />
       case 'vpf':           return <VpfSection emp={emp} notify={notify} />
       case 'nps':           return <NpsSection emp={emp} notify={notify} />
       case 'loans':         return <LoansSection emp={emp} notify={notify} />
@@ -3764,17 +3619,37 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       case 'attendance':    return <AttendanceModule emp={emp} />
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
-      case 'requests':      return <Requests emp={emp} notify={notify} />
+
       case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
       case 'orgchart':      return <AdminModuleHost moduleKey="org-chart" />
-      case 'directory':     return <Directory isMobile={isMobile} />
-      case 'approvals':     return <ApprovalsSection employeeId={emp.id} go={go} notify={notify} />
-      case 'raise-mrf':     return <RaiseMrfSection employeeId={emp.id} go={go} notify={notify} />
-      case 'exit':          return <ExitSection employeeId={emp.id} notify={notify} />
+      // HRIS — one shell for all five screens. It draws its own sub-tabs (the
+      // design calls for a sliding indicator and per-tab counts) but `view` is
+      // still the portal's, and picking a tab calls go() — so the sidebar, the
+      // deep link from Home's "pending on you", and the travel-claims hand-off
+      // all keep working off one source of truth.
+      //
+      // Raise MRF arrived on main while this was being built. It is routed
+      // through the shell rather than beside it: the shell suppresses the
+      // portal's sub-tab row, so a case rendered outside it would have no way
+      // to be reached.
+      case 'directory':
+      case 'requests':
+      case 'approvals':
+      case 'raise-mrf':
+      case 'exit':          return <HrisShell employeeId={emp.id} tab={view} go={go}
+                                              canApprove={essMenu.can.approvals}
+                                              canRaiseMrf={canRaiseMrf}
+                                              notify={notify} />
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />
           case 'performance':   return <Performance employeeId={emp.id} />
-      case 'wall':          return <WallOfFame employeeId={emp.id} />
+      // Social owns the Wall now and renders <WallOfFame/> itself for its first
+      // sub-tab, so there is no 'wall' case any more: 'wall' is not a view key
+      // in VIEWS, and a case for it would render the Wall under the Home header
+      // (viewMeta falls back to VIEWS[0] for an unknown key). The two routes
+      // that pointed at it — ROUTES.wall and ROUTES.appreciate in
+      // lib/today/schema.ts — now say 'tab:social'.
+      case 'social':        return <Social employeeId={emp.id} />
       case 'funzone':       return <FunZone employeeId={emp.id} />
       default:              return <Placeholder title={m.label} phase={m.phase || 4} needs={m.needs || '—'} />
     }
@@ -3866,11 +3741,40 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           // their own <Page> padding and expect the full width.
           <AdminModuleHost moduleKey={adminKey} />
         ) : (
-          <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
-            <TabHeader s={section} />
-            <SubTabs items={sectionItems} view={view} go={go} />
-            {renderView()}
-          </div>
+          view === 'inbox' || section.k === 'hris' || section.k === 'funzone' ? (
+            section.k === 'hris' || section.k === 'funzone' ? (
+              // HRIS draws its own header band (title, badge, search) and its own
+              // sub-tabs, so the portal's TabHeader and SubTabs would be a second
+              // copy of both.
+              //
+              // Fun Zone is the same case since the September 2026 redesign. It
+              // opens with its own hero — the title, the blurb, Surprise me and
+              // the filter chips — so the band above it was a second header
+              // saying the same thing in plainer words: "Fun Zone", "Available",
+              // "Take a break — play a quick game with your team".
+              //
+              // SubTabs is no loss either: it returns null below two items, and
+              // Fun Zone has exactly one.
+              <div>{renderView()}</div>
+            ) : (
+            // The inbox is a full-bleed tab: three panes that fill the viewport
+            // and scroll independently. Capping it at 1100px would put it in its
+            // own narrow breakpoint on every desktop, so only the header band
+            // keeps the standard measure — .ib brings its own width and padding.
+            <div style={{ paddingTop: isMobile ? 14 : 18 }}>
+              <div style={{ padding: isMobile ? '0 12px' : '0 22px', maxWidth:1100 }}>
+                <TabHeader s={section} />
+              </div>
+              {renderView()}
+            </div>
+            )
+          ) : (
+            <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
+              <TabHeader s={section} />
+              <SubTabs items={sectionItems} view={view} go={go} />
+              {renderView()}
+            </div>
+          )
         )}
       </div>
 

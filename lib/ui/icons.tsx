@@ -161,6 +161,18 @@ export const IconAlert = (p: IconProps) => (
 export const IconBell = (p: IconProps) => (
   <Svg {...p}><path d="M5.5 8a4.5 4.5 0 0 1 9 0c0 3.2.9 4.6 1.5 5.3H4c.6-.7 1.5-2.1 1.5-5.3Z" /><path d="M8.2 16a1.9 1.9 0 0 0 3.6 0" /></Svg>
 );
+/** An envelope, for the Inbox. Distinct from IconBell, which stays with the
+ *  notification bell in the header — the two sat on the same glyph and a bell
+ *  reads as "alerts", not "messages".
+ *
+ *  Drawn on the same 1px grid as the rest: a 14x10 body inset 3 from the left
+ *  and 5 from the top, so it is optically centred in the 20x20 box, and a flap
+ *  that meets the body's top corners. The V tip needs no curve of its own —
+ *  Svg sets a round linejoin, so it softens exactly like every other corner in
+ *  the set. */
+export const IconMail = (p: IconProps) => (
+  <Svg {...p}><rect x="3" y="5" width="14" height="10" rx="2" /><path d="M3.6 6.4 10 11l6.4-4.6" /></Svg>
+);
 export const IconLogout = (p: IconProps) => (
   <Svg {...p}><path d="M7.5 3.5H5A1.5 1.5 0 0 0 3.5 5v10A1.5 1.5 0 0 0 5 16.5h2.5" /><path d="M12 6.5 15.5 10 12 13.5M15.5 10h-8" /></Svg>
 );

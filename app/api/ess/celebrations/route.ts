@@ -94,6 +94,10 @@ export async function GET(req: NextRequest) {
   })
 }
 
+// JOINING is the badge 116's ledger keys `already_congratulated` on
+// (ess_new_joiners_feed checks `k.badge = 'JOINING'`), so a congratulation has
+// to be stored under it or the button never flips. Note its duplicate rule is
+// not the others' — see the POST handler below.
 const KINDS = new Set(['BIRTHDAY', 'ANNIVERSARY', 'KUDOS', 'JOINING'])
 
 export async function POST(req: NextRequest) {

@@ -21,7 +21,7 @@ After this, every `git push origin main` auto-deploys to production. No CLI depl
 ## A. Run locally (everyday)
 
 ```bash
-cd ~/Desktop/HRMS/ezer-hrms
+cd ~/Developer/ezer-hrms
 nvm use 22          # first time in a new terminal
 npm run dev         # open http://localhost:3000
 ```

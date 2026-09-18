@@ -527,32 +527,19 @@ export async function resolveApproval(item: PendingItem, action: 'APPROVED' | 'R
   return resolveRequest(item.id, action, remark, byName)
 }
 
-// ── ESS employee Leave + Holidays (schema-accurate: leave_balances/leave_applications, resolve_holidays) ──
-export async function loadLeaveBalances(employeeId: string) {
-  const { data } = await supabase.from('leave_balances')
-    .select('*, leave_types(short_name, name)')
-    .eq('employee_id', employeeId).eq('year', '2026')
-  return data || []
-}
-export async function loadLeaveApplications(employeeId: string) {
-  const { data } = await supabase.from('leave_applications')
-    .select('*, leave_types(short_name, name)')
-    .eq('employee_id', employeeId).order('applied_at', { ascending: false }).limit(10)
-  return data || []
-}
-export async function applyLeave(row: { employee_id: string; leave_type_id: string; from_date: string; to_date: string; half_day: boolean; days: number; reason: string; half_session?: string }) {
-  const { half_session, ...base } = row
-  const payload: any = { ...base, status: 'PENDING' }
-  if (half_session) payload.half_session = half_session
-  let res = await supabase.from('leave_applications').insert(payload)
-  // Graceful fallback if the half_session column isn't migrated yet (sql56).
-  if (res.error && /half_session/i.test(res.error.message || '')) {
-    delete payload.half_session
-    res = await supabase.from('leave_applications').insert(payload)
-  }
-  return res
-}
-export async function loadEmployeeHolidays(employeeId: string) {
-  const { data } = await supabase.rpc('resolve_holidays', { p_employee_id: employeeId })
-  return (data || []) as { holiday_date: string; description: string; holiday_type: string; is_optional: boolean }[]
-}
+// ── ESS employee Leave + Holidays — MOVED to /api/ess/leave ──
+//
+// loadLeaveBalances / loadLeaveApplications / applyLeave / loadEmployeeHolidays
+// used to live here and were called straight from the browser on the anon key.
+// The leave tables carry the house permissive RLS policy (030:119-126), so
+// `applyLeave` was a bare insert with employee_id supplied by the client and
+// status hardcoded to 'PENDING' — nothing verified the row belonged to the
+// caller, and every eligibility rule (gender, tenure, probation, overlap,
+// balance, lifetime cap) was enforced only in the component, where it was
+// advice rather than a guarantee.
+//
+// They now live in app/api/ess/leave/route.ts behind essRoute(req), which
+// resolves the employee from the ESS session. See components/ess/LeaveSection.tsx.
+//
+// loadLeaveTypes is NOT here — it stays in lib/supabase-leave-config.ts, which
+// the admin leave-configuration workspace still uses.

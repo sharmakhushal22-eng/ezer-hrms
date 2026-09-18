@@ -62,6 +62,30 @@ const ACTIONS: Record<string, { fn: string; params: readonly string[]; write: bo
   rotate_screen_pair_code:{ fn: 'rotate_screen_pair_code_as',params: ['p_screen'] , write: true },
   set_screen_active:      { fn: 'set_screen_active_as',      params: ['p_screen', 'p_active'] , write: true },
   list_board_screens:     { fn: 'list_board_screens_as',     params: ['p_company'] , write: false },
+
+  // ── Screens, the 101 names the console actually calls ─────────────────────
+  //
+  // AdminConsole has always called migration 101's four names; the route
+  // exposed only 106's three, with different parameters, so every Screens
+  // write answered "Unknown action" and Remove had no route at all — 106 has
+  // no delete. Renaming in the component could not have fixed it: 106's
+  // pair_board_screen takes seven parameters the console never sends.
+  //
+  // These four map to 101's wrappers, whose signatures are
+  //   create_board_screen_as(uuid,uuid,text,int,text)
+  //   set_board_screen_active_as(uuid,uuid,boolean)
+  //   rotate_board_pair_code_as(uuid,uuid)
+  //   delete_board_screen_as(uuid,uuid)
+  // all service_role-only and all opening with wof_act_as(p_actor), which is
+  // why p_actor is absent here: the loop below assigns it from the ESS token,
+  // last, so a request body can never name the actor.
+  //
+  // p_rotate and p_scope are declared but the console sends only p_rotate;
+  // undefined is dropped, so 101's own defaults (8 seconds, 'branch') apply.
+  create_board_screen:     { fn: 'create_board_screen_as',     params: ['p_location', 'p_name', 'p_rotate', 'p_scope'] , write: true },
+  set_board_screen_active: { fn: 'set_board_screen_active_as', params: ['p_screen', 'p_active'] , write: true },
+  rotate_board_pair_code:  { fn: 'rotate_board_pair_code_as',  params: ['p_screen'] , write: true },
+  delete_board_screen:     { fn: 'delete_board_screen_as',     params: ['p_screen'] , write: true },
   grant_wall_admin:       { fn: 'grant_wall_admin_as',       params: ['p_employee', 'p_level', 'p_reason', 'p_branch', 'p_valid_until'] , write: true },
   revoke_wall_admin:      { fn: 'revoke_wall_admin_as',      params: ['p_grant_id', 'p_reason'] , write: true },
   list_wall_admins:       { fn: 'list_wall_admins_as',       params: ['p_company'] , write: false },

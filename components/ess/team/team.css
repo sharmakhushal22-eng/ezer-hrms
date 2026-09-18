@@ -1,0 +1,781 @@
+/* ============================================================================
+   EZER ESS — Team  ·  team.css
+   Scoped to .tm, following the convention Today (.ezt), Inbox (.ib) and
+   HRIS (.hx) already use. Team had no stylesheet at all; every colour came
+   from inline `lib/ui/tokens.ts` reads, which is why nothing on the screen
+   could be restyled without editing components.
+
+   RULES THIS FILE KEEPS
+   · Every colour is a --ez-* custom property. No literals, so dark mode is
+     free and the one hardcoded #F3F0FF divider is gone.
+   · Nothing here knows about data. Panels, rows, table, pills — shapes only.
+   · Motion answers a pointer or a load, never runs on its own, and stops
+     entirely under prefers-reduced-motion.
+
+   THE IDEA
+   The old screen was four identical bordered cards with uppercase emoji
+   labels — same weight, same radius, same blue outline, so the eye had no
+   idea which one mattered. Here the panels are quiet (neutral hairline, one
+   shadow) and exactly one thing is loud: the reporting chain, which gets a
+   real connector spine running from a filled "you" node up through L1, L2,
+   HOD. That is the only decoration on the screen, and it encodes the one
+   genuinely sequential relationship in the data.
+   ============================================================================ */
+
+/* ── Frame ─────────────────────────────────────────────────────────────── */
+
+.tm {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.tm-wide { grid-column: 1 / -1; }
+
+/* The React prop drives this; the media query covers a desktop window that
+   is narrow anyway. Both say the same thing so they cannot disagree. */
+.tm--mobile { grid-template-columns: minmax(0, 1fr); }
+.tm--mobile .tm-wide { grid-column: auto; }
+
+@media (max-width: 880px) {
+  .tm { grid-template-columns: minmax(0, 1fr); }
+  .tm-wide { grid-column: auto; }
+}
+
+.tm :focus-visible {
+  outline: 2px solid var(--ez-brand);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/* ── Panel ─────────────────────────────────────────────────────────────── */
+
+.tm-panel {
+  background: var(--ez-surface);
+  border: 1px solid var(--ez-line);
+  border-radius: 14px;
+  box-shadow: var(--ez-shadow-flat);
+  overflow: hidden;
+}
+
+/* The chain is the one panel allowed to raise its voice. */
+.tm-panel--lead { border-color: var(--ez-brand-edge); }
+
+.tm-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 11px;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--ez-line);
+}
+
+.tm-panel--lead .tm-head {
+  background: var(--ez-brand-tint);
+  border-bottom-color: var(--ez-brand-edge);
+}
+
+.tm-ico {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  background: var(--ez-brand-tint);
+  border: 1px solid var(--ez-brand-edge);
+  color: var(--ez-brand);
+}
+
+.tm-panel--lead .tm-ico {
+  background: var(--ez-brand);
+  border-color: var(--ez-brand);
+  color: var(--ez-on-accent);
+}
+
+.tm-htext { min-width: 0; flex: 1 1 170px; }
+
+.tm-h {
+  font-size: 13.5px;
+  font-weight: 650;
+  line-height: 1.25;
+  letter-spacing: -0.012em;
+  color: var(--ez-ink);
+}
+
+.tm-hsub {
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--ez-faint);
+}
+
+.tm-count {
+  margin-left: auto;
+  flex: none;
+  padding: 3px 10px;
+  border-radius: 99px;
+  background: var(--ez-sunken);
+  border: 1px solid var(--ez-line);
+  color: var(--ez-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.tm-panel--lead .tm-count {
+  background: var(--ez-surface);
+  border-color: var(--ez-brand-edge);
+  color: var(--ez-brand);
+}
+
+.tm-body { padding: 6px; }
+
+.tm-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 15px;
+  color: var(--ez-muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+  max-width: 62ch;
+}
+
+.tm-empty > :last-child { margin-top: 4px; }
+
+.tm-empty__ico {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--ez-sunken);
+  border: 1px solid var(--ez-line);
+  color: var(--ez-faint);
+}
+
+/* ── Person row ────────────────────────────────────────────────────────── */
+
+.tm-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px;
+  border-radius: 11px;
+  background: transparent;
+  transition: background 120ms ease;
+}
+
+.tm-row + .tm-row::before {
+  content: "";
+  position: absolute;
+  left: 9px;
+  right: 9px;
+  top: 0;
+  height: 1px;
+  background: var(--ez-line);
+}
+
+.tm-row:hover { background: var(--ez-brand-tint); }
+.tm-row:hover + .tm-row::before,
+.tm-row:hover::before { background: transparent; }
+
+/* Avatar discs carry the person's own hue, the way theme.css's avatar tokens
+   intend — twenty identical blue circles is a wall, twenty hues is a list you
+   can find someone in without reading.
+
+   --ez-avatar-sat / --ez-avatar-light already flip per theme: dark initials in
+   light (62% / 28%), lifted initials in dark (58% / 82%). The disc behind them
+   is a fixed 12% of the pure hue mixed into the card, which lands as a clean
+   pastel on white and a deep tint on a dark card without a second rule.
+   Mixing the *initials'* colour instead was the first attempt and it came out
+   dusty — a 28%-light colour thinned to 12% is grey with a hint, not a hue.
+   (--ez-avatar-tint-mix is not used here: it belongs to the app's own avatar
+   component and its own formula.) */
+.tm-av {
+  --tm-h: 221;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  --tm-pure: hsl(var(--tm-h) 82% 52%);
+  color: hsl(var(--tm-h) var(--ez-avatar-sat) var(--ez-avatar-light));
+  background: color-mix(in srgb, var(--tm-pure) 12%, var(--ez-surface));
+  border: 1px solid color-mix(in srgb, var(--tm-pure) 26%, transparent);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.tm-txt { min-width: 0; flex: 1; }
+
+.tm-nameline {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.tm-name {
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.3;
+  color: var(--ez-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tm-sub {
+  margin-top: 1px;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--ez-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tm-badge {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 99px;
+  background: var(--ez-sunken);
+  border: 1px solid var(--ez-line);
+  color: var(--ez-muted);
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── The chain ─────────────────────────────────────────────────────────── */
+
+.tm-chain {
+  position: relative;
+  padding: 8px 6px 10px;
+}
+
+/* The spine. Starts at the "you" node and fades as it climbs, because the
+   further up the chain you go the less it has to do with your day. Sits
+   behind the avatars: 6px body padding + 9px row padding + 17px half-avatar. */
+.tm-chain::before {
+  content: "";
+  position: absolute;
+  left: 31px;
+  top: 34px;
+  bottom: 38px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--ez-brand);
+  opacity: 0.38;
+}
+
+/* Inside the chain the spine does the separating, so the row hairlines would
+   only cut across it. */
+.tm-chain .tm-row + .tm-row::before { display: none; }
+
+.tm-chain .tm-row,
+.tm-chain .tm-you { position: relative; z-index: 1; }
+
+.tm-chain .tm-row { padding: 11px 9px; }
+
+.tm-you {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px;
+}
+
+.tm-youdot {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--ez-brand);
+  border: 1px solid var(--ez-brand);
+  color: var(--ez-on-accent);
+  box-shadow: 0 0 0 4px var(--ez-brand-tint);
+}
+
+.tm-youname {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ez-ink);
+  line-height: 1.3;
+}
+
+.tm-rank {
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 7px;
+  background: var(--ez-brand-tint);
+  border: 1px solid var(--ez-brand-edge);
+  color: var(--ez-brand);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+/* ── Team-mates ────────────────────────────────────────────────────────── */
+
+.tm-peers {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 8px;
+  padding: 10px;
+}
+
+.tm--mobile .tm-peers { grid-template-columns: minmax(0, 1fr); }
+
+/* Bordered cards inside a bordered panel read as boxes in a box. These are
+   filled instead, with the border held transparent so the hover does not
+   shift anything by a pixel. */
+.tm-peer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  /* Light enough not to read as a box inside a box, present enough that the
+     card still has an edge on a dark card where sunken and surface sit one
+     step apart. */
+  border: 1px solid color-mix(in srgb, var(--ez-line-strong) 50%, transparent);
+  border-radius: 12px;
+  background: var(--ez-sunken);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.tm-peer:hover {
+  background: var(--ez-brand-tint);
+  border-color: var(--ez-brand-edge);
+}
+
+/* ── Roster table ──────────────────────────────────────────────────────── */
+
+.tm-seg {
+  margin-left: auto;
+  flex: none;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--ez-sunken);
+  border: 1px solid var(--ez-line);
+}
+
+.tm-seg button {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ez-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.tm-seg button:hover { color: var(--ez-ink); }
+
+.tm-seg button[aria-pressed="true"] {
+  background: var(--ez-surface);
+  color: var(--ez-brand);
+  box-shadow: var(--ez-shadow-flat);
+}
+
+.tm-tablewrap { overflow-x: auto; }
+
+.tm-table {
+  width: 100%;
+  /* Below this the columns squeeze instead of scrolling, and the status pill
+     is the one that loses. The wrapper scrolls; the table does not compress. */
+  min-width: 540px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.tm-table th {
+  padding: 9px 15px;
+  text-align: left;
+  white-space: nowrap;
+  background: var(--ez-sunken);
+  border-bottom: 1px solid var(--ez-line);
+  color: var(--ez-muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.005em;
+}
+
+.tm-table td {
+  padding: 10px 15px;
+  border-bottom: 1px solid var(--ez-line);
+  color: var(--ez-ink-soft);
+  font-size: 12.5px;
+  vertical-align: middle;
+}
+
+/* Status is the column people scan, so it gets the edge to itself. */
+.tm-table th:last-child,
+.tm-table td:last-child { text-align: right; }
+
+.tm-table tbody tr:last-child td { border-bottom: 0; }
+.tm-table tbody tr { transition: background 120ms ease; }
+.tm-table tbody tr:hover td { background: var(--ez-brand-tint); }
+
+.tm-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11.5px;
+  letter-spacing: -0.01em;
+  color: var(--ez-faint);
+}
+
+.tm-nm { font-weight: 650; color: var(--ez-ink); }
+
+.tm-dim { color: var(--ez-faint); }
+
+.tm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 99px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.tm-pill::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: currentColor;
+  flex: none;
+}
+
+.tm-pill.ok {
+  background: var(--ez-positive-tint);
+  color: var(--ez-positive);
+  border-color: color-mix(in srgb, var(--ez-positive) 26%, transparent);
+}
+
+.tm-pill.warn {
+  background: var(--ez-warning-tint);
+  color: var(--ez-warning);
+  border-color: color-mix(in srgb, var(--ez-warning) 30%, transparent);
+}
+
+.tm-pill.info {
+  background: var(--ez-info-tint);
+  color: var(--ez-info);
+  border-color: color-mix(in srgb, var(--ez-info) 30%, transparent);
+}
+
+.tm-note {
+  margin: 11px 15px 13px;
+  padding: 10px 13px;
+  /* In dark, sunken sits within one step of surface, so a fill alone leaves
+     the strip invisible. The hairline is what makes it a strip. */
+  border: 1px solid var(--ez-line);
+  border-left: 3px solid var(--ez-brand-edge);
+  border-radius: 0 10px 10px 0;
+  background: var(--ez-sunken);
+  color: var(--ez-muted);
+  font-size: 12px;
+  line-height: 1.55;
+  max-width: 78ch;
+}
+
+.tm-note.warn {
+  border-color: color-mix(in srgb, var(--ez-warning) 30%, transparent);
+  border-left-color: var(--ez-warning);
+  background: var(--ez-warning-tint);
+  color: var(--ez-warning);
+}
+
+/* ── Loading ───────────────────────────────────────────────────────────── */
+
+.tm-skel { padding: 6px; }
+
+.tm-skelrow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px;
+}
+
+.tm-sk {
+  position: relative;
+  overflow: hidden;
+  background: var(--ez-sunken);
+  border-radius: 8px;
+}
+
+.tm-sk--av { width: 34px; height: 34px; border-radius: 11px; flex: none; }
+.tm-sk--a { height: 10px; width: 44%; }
+.tm-sk--b { height: 9px; width: 62%; margin-top: 6px; }
+
+.tm-sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ez-surface) 70%, transparent),
+    transparent
+  );
+  animation: tm-sheen 1.25s ease-in-out infinite;
+}
+
+@keyframes tm-sheen {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm *,
+  .tm *::before,
+  .tm *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* ============================================================================
+   DIRECTION B — one continuous line  ·  .tm--line
+   ----------------------------------------------------------------------------
+   Direction A keeps the four panels and makes one of them loud. This one stops
+   treating "above you", "beside you" and "below you" as three lists that happen
+   to sit near each other, and draws them as what they are: one structure with
+   you in the middle of it.
+
+   The whole neighbourhood is a single panel. Managers stack upward from a
+   highlighted YOU band, team-mates sit inside that band because they are at
+   your level, and your reports branch off it. Nothing is repeated, nothing has
+   to be cross-referenced between cards, and the empty cases read as facts about
+   the structure rather than as three empty boxes.
+
+   Geometry, so edits do not drift: .tl pads 16 and the avatar is 36, so every
+   avatar centre lands at x=34 from the panel edge. The rail is 2px, drawn from
+   inside .tl-up / .tl-down whose own left edge is already x=16 — hence
+   left: 17px, not 33px. Getting that wrong puts the rail 16px to the right of
+   the discs it is supposed to thread.
+   ============================================================================ */
+
+.tm--line { grid-template-columns: minmax(0, 1fr); }
+.tm--line .tm-wide { grid-column: auto; }
+
+.tl { position: relative; padding: 4px 16px 16px; }
+
+/* A rule carrying the relationship, not an eyebrow carrying nothing.
+   Reads at --ez-ink-soft rather than --ez-muted: these two labels are the only
+   thing naming what each part of the line IS, and at muted they sank into the
+   hairline beside them and got missed. */
+.tl-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 16px 0 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ez-ink-soft);
+}
+
+/* THE BRANCH LABEL IS INDENTED PAST THE RAIL, AND HAS TO BE.
+   .tl-down::before reaches UP past this label (top: -40px) so the rail reads as
+   one line you are standing in. But the rail sits at x=33 and the label text
+   starts at x=16, so it was drawn straight through the middle of the words.
+   36px puts the text at x=52 — the same column the report avatars start in —
+   which clears the rail and aligns the label with what it labels. */
+.tl-label--branch { padding-left: 36px; }
+
+.tl-label::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--ez-line);
+}
+
+.tl-label:first-child { margin-top: 6px; }
+
+.tl-up,
+.tl-down { position: relative; }
+
+/* The rail. Runs from the topmost manager down into the YOU band, and out the
+   other side to the reports. Same colour, same opacity, so it reads as one
+   line interrupted by you rather than two decorations. */
+.tl-up::before,
+.tl-down::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--ez-brand);
+  opacity: 0.34;
+}
+
+.tl-up::before { top: 28px; bottom: -16px; }
+/* Reaches back past the section label to the band, so the rail reads as one
+   line you are standing in rather than two that happen to align. */
+.tl-down::before { top: -40px; bottom: 28px; }
+
+.tl-node {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-radius: 11px;
+  transition: background 120ms ease;
+}
+
+.tl-node:hover { background: var(--ez-brand-tint); }
+
+.tl .tm-av {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+/* Reports hang off the rail, they do not continue it — so they are indented
+   and joined by a stub. That is the whole difference between "my chain" and
+   "my branch", and it is drawn rather than labelled. */
+.tl-down { padding-left: 36px; }
+
+.tl-down .tl-node::before {
+  content: "";
+  position: absolute;
+  left: -19px;
+  top: 50%;
+  width: 19px;
+  height: 2px;
+  background: var(--ez-brand);
+  opacity: 0.32;
+}
+
+/* The YOU band. Pulled 14px wider than the text column on both sides, so it
+   reads as a band across the panel while its disc stays on the rail. */
+.tl-you {
+  position: relative;
+  z-index: 1;
+  /* -14 out, 1px border, 13 in = the disc lands back on the rail at x=34. */
+  margin: 8px -14px;
+  padding: 12px 14px 12px 13px;
+  border: 1px solid var(--ez-brand-edge);
+  border-radius: 14px;
+  background: var(--ez-brand-tint);
+}
+
+.tl-you__head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tl-youdot {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  background: var(--ez-brand);
+  color: var(--ez-on-accent);
+  box-shadow: 0 0 0 4px var(--ez-surface);
+}
+
+.tl-youname {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ez-ink);
+  line-height: 1.3;
+}
+
+/* Team-mates live inside the band because they are at your level. */
+.tl-beside {
+  margin: 12px 0 0;
+  padding-left: 48px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--ez-muted);
+}
+
+.tl-mates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding-left: 48px;
+}
+
+.tl-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 5px;
+  border: 1px solid var(--ez-brand-edge);
+  border-radius: 99px;
+  background: var(--ez-surface);
+  font-size: 12.5px;
+  font-weight: 620;
+  color: var(--ez-ink);
+  transition: border-color 120ms ease;
+}
+
+.tl-chip:hover { border-color: var(--ez-brand); }
+
+.tl-chip .tm-av {
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  font-size: 9.5px;
+}
+
+.tl-chip small {
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--ez-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* An absence is a fact about the structure, so it sits on the line where the
+   people would have been. */
+.tl-empty {
+  margin: 0;
+  padding: 10px 0 10px 48px;
+  color: var(--ez-muted);
+  font-size: 12.5px;
+  line-height: 1.6;
+  max-width: 62ch;
+}
+
+.tl-you .tl-empty { padding-top: 6px; padding-bottom: 0; }
+
+@media (max-width: 620px) {
+  .tl { padding: 4px 12px 14px; }
+  .tl-up::before,
+  .tl-down::before { left: 15px; }
+  .tl-down { padding-left: 30px; }
+  .tl-label--branch { padding-left: 30px; }
+  .tl-down .tl-node::before { left: -15px; width: 15px; }
+  .tl-beside,
+  .tl-mates,
+  .tl-empty { padding-left: 44px; }
+  .tl-you { margin-left: -10px; margin-right: -10px; padding: 12px 10px; }
+  .tl .tm-av { width: 32px; height: 32px; border-radius: 11px; }
+}

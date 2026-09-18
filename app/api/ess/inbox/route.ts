@@ -34,31 +34,56 @@ export async function GET(req: NextRequest) {
   if (error) return error
   const me = ctx.caller.employeeId
 
-  const probe = await sb.from('inbox_conversations').select('id').limit(1)
-  if (probe.error) {
-    if (notInstalled(probe.error)) return notReady()
-    return NextResponse.json({ error: probe.error.message }, { status: 500 })
+  // FOUR ROUND-TRIPS, NOT ELEVEN.
+  //
+  // Every step below used to be awaited in sequence: probe, sync, policy +
+  // desks, participants, desk conversations, conversations, the unread RPC,
+  // participants AGAIN, people, allDesks, unreadCount. Measured warm, not one
+  // of them is slow — ~20ms a select, ~70-95ms an RPC. They were simply queued,
+  // and the route paid a network latency for each. Grouped here into the four
+  // phases the data actually requires.
+  //
+  // The standalone probe goes with them: the participants read in phase B
+  // raises the same "tables are missing" error, so noticing an unrun migration
+  // no longer costs a round trip of its own.
+
+  // ── A ── depends on nothing.
+  //
+  // syncNotifications stays AHEAD of the reads rather than beside them: it
+  // mirrors the bell into stream threads, and the list below has to see what it
+  // creates — that is the whole reason it runs on open rather than on a cron.
+  const [, pol, desks, deskRows] = await Promise.all([
+    syncNotifications(me),
+    policy(),
+    myDesks(me),
+    allDesks(),
+  ])
+
+  // ── B ── depends only on `desks`. Both unread figures are fetched here, so
+  // they are still counted AFTER the sync above, exactly as before.
+  const [mineRes, unreadTotal, countsRes, deskConvRes] = await Promise.all([
+    sb.from('inbox_participants')
+      .select('conversation_id, last_read_at, is_muted, is_starred')
+      .eq('employee_id', me).is('left_at', null),
+    unreadCount(me),
+    sb.rpc('inbox_unread_by_conversation', { p_employee: me }),
+    desks.length
+      ? sb.from('inbox_conversations').select('id').in('desk_id', desks.map(d => d.id)).limit(500)
+      : null,
+  ])
+
+  // This read is what now reports migration 080 as missing.
+  if (mineRes.error) {
+    if (notInstalled(mineRes.error)) return notReady()
+    return NextResponse.json({ error: mineRes.error.message }, { status: 500 })
   }
-
-  // Pull the bell's notifications into their department threads first, so the
-  // inbox is right on first open rather than after the next event — the same
-  // reasoning the bell itself uses.
-  await syncNotifications(me)
-
-  const [pol, desks] = await Promise.all([policy(), myDesks(me)])
 
   // Threads I am in, plus threads addressed to a desk I staff.
-  const { data: mine } = await sb.from('inbox_participants')
-    .select('conversation_id, last_read_at, is_muted, is_starred')
-    .eq('employee_id', me).is('left_at', null)
+  const mine = mineRes.data
   const ids = new Set((mine ?? []).map(r => r.conversation_id))
   const byConv = new Map((mine ?? []).map(r => [r.conversation_id, r]))
+  for (const c of deskConvRes?.data ?? []) ids.add(c.id)
 
-  if (desks.length) {
-    const { data: deskConvs } = await sb.from('inbox_conversations')
-      .select('id').in('desk_id', desks.map(d => d.id)).limit(500)
-    for (const c of deskConvs ?? []) ids.add(c.id)
-  }
   if (!ids.size) {
     return NextResponse.json({
       installed: true, folders: foldersFrom([], desks), conversations: [],
@@ -66,26 +91,31 @@ export async function GET(req: NextRequest) {
     })
   }
 
-  const { data: convs } = await sb.from('inbox_conversations')
-    .select('*').in('id', [...ids])
-    .order('last_message_at', { ascending: false, nullsFirst: false })
-    .limit(300)
+  // ── C ── depends on the id set, and these two do not depend on each other.
+  const [convRes, partsRes] = await Promise.all([
+    sb.from('inbox_conversations')
+      .select('*').in('id', [...ids])
+      .order('last_message_at', { ascending: false, nullsFirst: false })
+      .limit(300),
+    // Who else is in each thread, so a DIRECT row can be titled by the person
+    // rather than by a subject line nobody writes.
+    sb.from('inbox_participants')
+      .select('conversation_id, employee_id').in('conversation_id', [...ids]).limit(2000),
+  ])
+  const convs = convRes.data
 
-  // Per-thread unread, from the same function the badge uses.
-  const { data: counts } = await sb.rpc('inbox_unread_by_conversation', { p_employee: me })
-  const unreadBy = new Map((counts ?? []).map((r: any) => [r.conversation_id, Number(r.unread) || 0]))
+  // Per-thread unread, from the same function the badge uses (fetched in B).
+  const unreadBy = new Map((countsRes.data ?? []).map((r: any) => [r.conversation_id, Number(r.unread) || 0]))
 
-  // Who else is in each thread, so a DIRECT row can be titled by the person
-  // rather than by a subject line nobody writes.
-  const { data: parts } = await sb.from('inbox_participants')
-    .select('conversation_id, employee_id').in('conversation_id', [...ids]).limit(2000)
   const others = new Map<string, string[]>()
-  for (const p of parts ?? []) {
+  for (const p of partsRes.data ?? []) {
     if (p.employee_id === me) continue
     others.set(p.conversation_id, [...(others.get(p.conversation_id) ?? []), p.employee_id])
   }
+
+  // ── D ── names for the people phase C just turned up.
   const dir = await people([...others.values()].flat())
-  const deskById = new Map((await allDesks()).map(d => [d.id, d]))
+  const deskById = new Map(deskRows.map(d => [d.id, d]))
 
   const rows = (convs ?? []).map(c => {
     const mem = (others.get(c.id) ?? []).map(id => dir.get(id)).filter(Boolean)
@@ -122,7 +152,7 @@ export async function GET(req: NextRequest) {
     installed: true,
     folders: foldersFrom(rows, desks),
     conversations: rows,
-    unread: await unreadCount(me),
+    unread: unreadTotal,
     desks, policy: pol,
   })
 }
@@ -188,12 +218,28 @@ export async function POST(req: NextRequest) {
       const { data: existing } = await sb.from('inbox_conversations')
         .select('id, inbox_participants!inner(employee_id)')
         .eq('kind', 'DIRECT').eq('inbox_participants.employee_id', me).limit(200)
-      for (const c of existing ?? []) {
-        const { data: p } = await sb.from('inbox_participants')
-          .select('employee_id').eq('conversation_id', c.id).is('left_at', null)
-        const set = new Set((p ?? []).map((x: any) => x.employee_id))
-        if (set.size === 2 && set.has(me) && set.has(to[0])) {
-          return NextResponse.json({ id: c.id, reused: true })
+      // ONE query for all the candidates, not one query per candidate.
+      //
+      // This was a loop with an await inside it, so starting a conversation
+      // cost an extra round trip for every DIRECT thread the sender already
+      // had — a price that grew the more somebody used their inbox.
+      const candidates = (existing ?? []).map(c => c.id)
+      if (candidates.length) {
+        const { data: members } = await sb.from('inbox_participants')
+          .select('conversation_id, employee_id')
+          .in('conversation_id', candidates).is('left_at', null)
+
+        const byConv = new Map<string, Set<string>>()
+        for (const m of members ?? []) {
+          const s = byConv.get(m.conversation_id) ?? new Set<string>()
+          s.add(m.employee_id)
+          byConv.set(m.conversation_id, s)
+        }
+        for (const cid of candidates) {
+          const set = byConv.get(cid)
+          if (set && set.size === 2 && set.has(me) && set.has(to[0])) {
+            return NextResponse.json({ id: cid, reused: true })
+          }
         }
       }
     }

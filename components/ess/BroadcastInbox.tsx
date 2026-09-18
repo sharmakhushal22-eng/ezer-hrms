@@ -10,9 +10,15 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { C, F, W, S, R } from '@/lib/ui'
-import Channel from '@/components/broadcast/Channel'
-import { ordered, unreadCount, type Broadcast, type Priority } from '@/lib/broadcast/channel'
+// The render layer is BroadcastView (components/ess/inbox). Everything below
+// — the direct read, the read marks, the private response — is unchanged:
+// this file was re-skinned, not rewritten.
+import { BroadcastView } from '@/components/ess/inbox/BroadcastView'
+import type { BroadcastVM } from '@/components/ess/inbox/types'
+import {
+  ordered, unreadCount, canRespond, PRIORITY_LABEL,
+  type Broadcast, type Priority,
+} from '@/lib/broadcast/channel'
 
 const MISSING_TABLE = 'PGRST205'
 const MISSING_COLUMN = '42703'
@@ -94,41 +100,39 @@ export default function BroadcastInbox({ employeeId, onUnread }: {
     setNote(error ? `That did not send — ${error.message}` : 'Sent. Only they can see it.')
   }
 
-  if (loading) return <Muted>Loading…</Muted>
-  if (ready === false) return <NotYet />
-
   return (
-    <div>
-      {note && (
-        <div style={{ fontSize: F.small, color: C.inkSoft, background: C.brandTint,
-                      border: `1px solid ${C.brandEdge}`, borderRadius: R.sm,
-                      padding: '9px 12px', marginBottom: S.sm }}>{note}</div>
-      )}
-      <Channel employeeId={employeeId} items={ordered(items)} readIds={readIds}
-               onRead={markRead} onRespond={respond} busy={busy} />
-    </div>
+    <BroadcastView
+      status={loading ? 'loading' : ready === false ? 'absent' : 'ready'}
+      reason="088_broadcast_channel.sql"
+      items={ordered(items).map(b => toVM(b, employeeId, readIds))}
+      onRead={markRead}
+      onReplyPrivately={respond}
+      busyId={busy}
+      notice={note ?? undefined}
+    />
   )
 }
 
-function Muted({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: F.small, color: C.muted }}>{children}</div>
+/**
+ * One notice, in the shape the view renders. canRespond() is asked here rather
+ * than in the view, because it is the rule — a withdrawn notice and one you
+ * published yourself are both "no", and each says why.
+ */
+function toVM(b: Broadcast, employeeId: string, readIds: Set<string>): BroadcastVM {
+  const verdict = canRespond(employeeId, b)
+  return {
+    id: b.id,
+    title: b.title,
+    body: b.body,
+    publisher: b.publisherName ?? 'Your company',
+    publishedAt: b.publishedAt,
+    pinned: b.isPinned,
+    unread: !readIds.has(b.id),
+    priority: b.priority,
+    priorityLabel: PRIORITY_LABEL[b.priority],
+    canRespond: verdict.allowed,
+    cannotRespondBecause: verdict.allowed ? undefined : verdict.because,
+  }
 }
 
-function NotYet() {
-  return (
-    <div style={{ background: C.warningTint, border: `1px solid ${C.warning}`,
-                  borderRadius: R.lg, padding: '16px 18px' }}>
-      <div style={{ fontSize: F.body, fontWeight: W.bold, color: C.ink }}>
-        The broadcast channel is not switched on yet
-      </div>
-      <div style={{ fontSize: F.small, color: C.muted, marginTop: 8, lineHeight: 1.7,
-                    maxWidth: 640 }}>
-        The screens are built and waiting on{' '}
-        <code style={{ background: C.sunken, padding: '1px 6px', borderRadius: 6,
-                       fontSize: F.micro }}>088_broadcast_channel.sql</code>, which
-        adds the channel to the announcements table. It is handed to Nayan rather than
-        run from here — this project does not apply schema changes itself.
-      </div>
-    </div>
-  )
-}
+

@@ -1,5 +1,5 @@
 import pathlib, os, re
-ROOT='/Users/tusharpanwar/Desktop/HRMS/ezer-hrms'; SP=os.environ['SP']
+ROOT='/Users/tusharpanwar/Developer/ezer-hrms'; SP=os.environ['SP']
 lay=pathlib.Path(ROOT,'app/dashboard/layout.tsx').read_text()
 theme=pathlib.Path(ROOT,'lib/ui/theme.css').read_text()
 a=lay.index('<style>{`',lay.index('const HUE')); b=lay.index('`}</style>',a)

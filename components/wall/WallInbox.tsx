@@ -22,16 +22,14 @@
 import { useCallback, useEffect, useState } from 'react'
 import { wallRpc } from '@/lib/wall/rpc'
 import {
-  STREAMS, STREAM_OF, headlineFor, glyphFor, countFor, countsReconcile,
+  STREAM_OF, headlineFor, countsReconcile,
   type Stream, type WallEvent, type Counts,
 } from '@/lib/wall/inbox'
-// WHITE ON THE BRAND FILL IS A TRAP THIS CODEBASE ALREADY DOCUMENTED.
-//
-// tokens.ts says it plainly next to onAccent: the brand blue lightens in dark
-// mode and white on it falls to 2.5:1. Measured here at 2.54 on the Send
-// button. C.onAccent is the theme-aware ink for an accent fill and is what
-// every one of these should have used from the start.
-import { C, F, W, S, R } from '@/lib/ui'
+// The render layer is WallInboxView (components/ess/inbox). Everything below
+// — the RPCs, the counts, the read marks, the thank-back — is unchanged: this
+// file was re-skinned, not rewritten.
+import { WallInboxView } from '@/components/ess/inbox/WallInboxView'
+import type { WallItemVM } from '@/components/ess/inbox/types'
 
 const MISSING = 'PGRST205'
 const missing = (e: unknown) =>
@@ -60,90 +58,8 @@ export interface InboxRow {
 
 // ── module scope ─────────────────────────────────────────────────────────
 
-function Tab({ s, on, n, onPick }: {
-  s: (typeof STREAMS)[number]; on: boolean; n: number; onPick: () => void
-}) {
-  return (
-    <button type="button" onClick={onPick} aria-pressed={on} title={s.blurb}
-      style={{ display: 'inline-flex', alignItems: 'center', gap: 7, cursor: 'pointer',
-               fontFamily: 'inherit', padding: '7px 13px', borderRadius: R.sm,
-               fontSize: F.small, fontWeight: on ? W.bold : W.semi,
-               border: `1px solid ${on ? C.brand : C.line}`,
-               background: on ? C.brand : C.surface,
-               color: on ? C.onAccent : C.inkSoft }}>
-      {s.label}
-      {n > 0 && (
-        <span style={{ fontSize: F.micro, fontWeight: W.bold, padding: '1px 7px', borderRadius: 999,
-                       background: on ? 'rgba(255,255,255,.24)' : C.brandTint,
-                       color: on ? C.onAccent : C.brand }}>{n}</span>
-      )}
-    </button>
-  )
-}
 
-function Row({ r, onThank, onOpen }: {
-  r: InboxRow; onThank: (id: string) => void; onOpen: (r: InboxRow) => void
-}) {
-  const ev = r.event_type as WallEvent
-  const who = r.actor_name ?? 'A colleague'
-  const when = r.created_at
-    ? new Date(r.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })
-    : ''
-  return (
-    <article onClick={() => onOpen(r)}
-      style={{ display: 'flex', gap: S.md, padding: `${S.md}px`, cursor: 'pointer',
-               borderRadius: R.sm, background: r.is_read ? C.surface : C.brandTint,
-               border: `1px solid ${r.is_read ? C.line : C.brandEdge}` }}>
-      <span aria-hidden style={{ width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
-                                 display: 'grid', placeItems: 'center', fontSize: 14,
-                                 background: C.surface, border: `1px solid ${C.line}` }}>
-        {glyphFor(ev)}
-      </span>
-      <div style={{ minWidth: 0, flex: 1 }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink }}>
-            {headlineFor(ev, who)}
-          </span>
-          {when && <span style={{ fontSize: F.micro, color: C.faint }}>{when}</span>}
-          {!r.is_read && (
-            // Unread said in a word as well as a colour, so it survives a
-            // reader who cannot distinguish the tint.
-            <span style={{ fontSize: F.micro, fontWeight: W.bold, color: C.brand }}>new</span>
-          )}
-        </div>
-        {r.actor_designation && (
-          <div style={{ fontSize: F.micro, color: C.muted, marginTop: 1 }}>{r.actor_designation}</div>
-        )}
-        {r.category_label && (
-          <div style={{ fontSize: F.micro, color: C.muted, marginTop: 4 }}>
-            {r.category_glyph ? `${r.category_glyph} ` : ''}{r.category_label}
-          </div>
-        )}
-        {(r.body || r.preview) && (
-          // Quoted, so it reads as their words rather than the system's.
-          <blockquote style={{ margin: '7px 0 0', paddingLeft: S.sm,
-                               borderLeft: `2px solid ${C.line}`, fontSize: F.small,
-                               color: C.inkSoft, lineHeight: 1.6 }}>
-            {r.body || r.preview}
-          </blockquote>
-        )}
-        {r.can_thank && (
-          <button type="button"
-            onClick={e => { e.stopPropagation(); onThank(r.message_id ?? r.id) }}
-            style={{ marginTop: 9, fontFamily: 'inherit', fontSize: F.micro, fontWeight: W.bold,
-                     padding: '6px 13px', borderRadius: R.sm, cursor: 'pointer',
-                     border: `1px solid ${C.brand}`, background: C.surface, color: C.brand }}>
-            Say thank you
-          </button>
-        )}
-      </div>
-    </article>
-  )
-}
 
-function Note({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.6 }}>{children}</div>
-}
 
 // ── the inbox ────────────────────────────────────────────────────────────
 
@@ -188,51 +104,63 @@ export default function WallInbox({ employeeId, onUnread }: {
     load()
   }
 
-  if (ready === null) return <Note>Loading…</Note>
-
+  // The wall not being switched on is a state to render, not an error to
+  // swallow — the same rule the rest of the inbox follows.
   if (ready === false) {
     return (
-      <Note>
-        {err ?? 'The Wall of Fame is not switched on for this company yet. Once it is, notes, '
-              + 'comments and replies from colleagues will appear here — separately from your approvals.'}
-      </Note>
+      <div className="absent">
+        <div className="glyph" aria-hidden>★</div>
+        <h3>Not switched on yet</h3>
+        <p>
+          {err ?? 'The Wall of Fame is not switched on for this company yet. Once it is, notes, '
+                + 'comments and replies from colleagues will appear here — separately from your approvals.'}
+        </p>
+      </div>
     )
   }
 
   return (
-    <div style={{ display: 'grid', gap: S.md }}>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {STREAMS.map(s => (
-          <Tab key={s.k} s={s} on={stream === s.k} n={countFor(s.k, counts)}
-               onPick={() => setStream(s.k)} />
-        ))}
-      </div>
-      <div style={{ fontSize: F.micro, color: C.faint }}>
-        {STREAMS.find(s => s.k === stream)?.blurb}
-      </div>
-
-      {/* A badge nobody can clear by opening anything is worse than a wrong
-          number — it is a number with no explanation. Say so. */}
-      {!countsReconcile(counts) && (
-        <div style={{ fontSize: F.micro, color: C.warning, fontWeight: W.semi }}>
-          The unread totals do not add up. Some events are not in any stream — worth telling HR.
-        </div>
-      )}
-
-      {rows.length === 0 ? (
-        <Note>
-          Nothing here. This is only what colleagues have said to you — approvals stay in their
-          own queue.
-        </Note>
-      ) : (
-        <div style={{ display: 'grid', gap: S.sm }}>
-          {rows.map(r => <Row key={r.id} r={r} onThank={thank} onOpen={open} />)}
-        </div>
-      )}
-
-      {err && (
-        <div role="alert" style={{ fontSize: F.micro, color: C.critical, fontWeight: W.semi }}>{err}</div>
-      )}
-    </div>
+    <WallInboxView
+      items={rows.map(toItem)}
+      stream={stream}
+      onStream={setStream}
+      loading={ready === null}
+      // A badge nobody can clear by opening anything is worse than a wrong
+      // number — it is a number with no explanation. Say so.
+      notice={countsReconcile(counts) ? undefined
+        : 'The unread totals do not add up. Some events are not in any stream — worth telling HR.'}
+      error={err ?? undefined}
+      onThankBack={w => thank(w.thankId)}
+      onMarkRead={w => { const r = rows.find(x => x.id === w.id); if (r) open(r) }}
+    />
   )
+}
+
+/**
+ * One row, in the shape the view renders. Every value here already existed on
+ * InboxRow or comes from lib/wall/inbox.ts — nothing is fetched for the redesign
+ * and nothing is dropped: the headline, the designation, the category label and
+ * the quoted text are all still on screen, in the card instead of the list row.
+ */
+function toItem(r: InboxRow): WallItemVM {
+  const ev = r.event_type as WallEvent
+  const who = r.actor_name ?? 'A colleague'
+  return {
+    id: r.id,
+    type: STREAM_OF[ev] ?? 'appreciation',
+    actorName: who,
+    actorDesignation: r.actor_designation ?? '',
+    headline: headlineFor(ev, who),
+    // The glyph rides with the label, as it does today.
+    badge: r.category_label
+      ? `${r.category_glyph ? `${r.category_glyph} ` : ''}${r.category_label}`
+      : undefined,
+    text: r.body ?? r.preview ?? '',
+    sentAt: r.created_at ?? '',
+    unread: !r.is_read,
+    canThankBack: !!r.can_thank,
+    // thank_for_appreciation takes the message; the row id is the fallback the
+    // old button already used.
+    thankId: r.message_id ?? r.id,
+  }
 }

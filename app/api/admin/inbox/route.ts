@@ -14,6 +14,7 @@
 // verb here resolves the caller's grant server-side first.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { orIlike } from '@/lib/pg-search'
 import { rmsServiceClient as sb, grantForRequest } from '@/lib/rms/server'
 import { notInstalled } from '@/lib/inbox/server'
 
@@ -64,7 +65,7 @@ export async function GET(req: NextRequest) {
   if (q) {
     const { data } = await sb.from('employees')
       .select('id, full_name, emp_code, designation')
-      .or(`full_name.ilike.%${q}%,emp_code.ilike.%${q}%`)
+      .or(orIlike(['full_name', 'emp_code'], q))
       .limit(20).order('full_name')
     return NextResponse.json({ people: data ?? [] })
   }

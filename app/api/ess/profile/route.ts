@@ -97,7 +97,41 @@ export async function GET(req: NextRequest) {
   // omitted. Attendance, leave, shifts and holidays have no tables in this
   // database at all — those stay named but unbuilt.
   const extras = await sideBlocks(subject)
-  return NextResponse.json({ ...(payload as object), ...extras })
+
+  // The photo is signed HERE rather than handed over as a bucket path.
+  // employee-photos is private, so a path is useless to the browser, and
+  // giving the client the bucket would mean giving it a key. Eight hours
+  // comfortably outlives a session without becoming a durable link.
+  //
+  // This is why the profile showed initials and nothing else: the payload it
+  // reads never carried a photo at all. /api/ess/profile/[code] signs one, but
+  // nothing renders the component that calls it.
+  const photoUrl = await signPhoto(subject)
+
+  // IS THIS MY OWN RECORD — an identity question, answered by identity.
+  //
+  // get_employee_profile reports a POSITIONAL role, and for an HR person
+  // looking at their own profile that role is 'hr', not 'self'. The screen was
+  // reading viewer_role === 'self' to mean "mine", so an HR user opening their
+  // own profile was treated as a visitor: no ID card, no QR, and no way to set
+  // their photo. viewer_role stays exactly as it was — it still decides what
+  // may be READ — this only answers whose record it is.
+  const isSelf = subject === me
+
+  return NextResponse.json({ ...(payload as object), ...extras, photoUrl, isSelf })
+}
+
+/** A signed URL for this employee's avatar, or null when they have none. */
+async function signPhoto(employeeId: string): Promise<string | null> {
+  const { data: row } = await sb.from('employees')
+    .select('photo_path').eq('id', employeeId).maybeSingle()
+  const path = (row as { photo_path?: string | null } | null)?.photo_path
+  if (!path) return null
+  // A failure here is a missing picture, not a broken profile — the card falls
+  // back to initials and the rest of the payload is unaffected.
+  const { data } = await sb.storage.from('employee-photos')
+    .createSignedUrl(path, 60 * 60 * 8)
+  return data?.signedUrl ?? null
 }
 
 interface Extras {

@@ -52,8 +52,15 @@ const SWITCH_MS = 300;
  * length of the switch and comes straight off, so it never becomes the
  * permanent tax on hover states that the old rule was.
  */
-export function applyTheme(choice: ThemeChoice) {
+export function applyTheme(choice: ThemeChoice, opts: { animate?: boolean } = {}) {
   const root = document.documentElement;
+  // A cross-fade belongs to a user gesture. Restoring a stored preference on
+  // mount is not one — it fires before the reader has looked at anything, and
+  // when two run close together (Today applies its default, then the saved
+  // preference arrives from the payload) the second aborts the first and the
+  // rejected transition surfaces as a runtime AbortError. Callers applying a
+  // remembered choice pass animate:false.
+  const animate = opts.animate ?? true;
 
   const swap = () => {
     if (choice === 'system') {
@@ -67,10 +74,19 @@ export function applyTheme(choice: ThemeChoice) {
 
   // Someone who has asked for less motion is asking not to be cross-faded
   // either; the swap still happens, just immediately.
-  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { swap(); return; }
+  if (!animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches) { swap(); return; }
 
-  const doc = document as Document & { startViewTransition?: (cb: () => void) => unknown };
-  if (typeof doc.startViewTransition === 'function') { doc.startViewTransition(swap); return; }
+  type Transition = { ready?: Promise<unknown>; finished?: Promise<unknown> };
+  const doc = document as Document & { startViewTransition?: (cb: () => void) => Transition };
+  if (typeof doc.startViewTransition === 'function') {
+    const t = doc.startViewTransition(swap);
+    // Starting a second transition aborts the first, which REJECTS these. The
+    // swap itself still happens — the rejection is only about the animation —
+    // so it is swallowed rather than surfaced.
+    t?.ready?.catch(() => {});
+    t?.finished?.catch(() => {});
+    return;
+  }
 
   root.classList.add('ez-theming');
   swap();

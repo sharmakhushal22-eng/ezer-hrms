@@ -1,0 +1,373 @@
+/* ============================================================================
+   EZER ESS · HRIS redesign — component styles, scoped under `.hx`.
+   Ported from the handover package (ezer-hris-redesign/css/hris.css).
+
+   COLOUR COMES FROM lib/ui/theme.css. The package shipped its own theme.css
+   mirroring that file; it is not duplicated here. What IS defined below is the
+   handful of tokens the redesign introduces and the product set does not have:
+   the header band's own plane (--ez-head-*) and the oklch avatar planes
+   (--hx-av-*). They are scoped to `.hx` rather than :root, so nothing outside
+   HRIS can pick them up by accident — the same containment the Inbox uses for
+   --ez-gold.
+   ============================================================================ */
+.hx{
+  /* The command header sits on its own hue plane, a shade off the canvas, so
+     the band reads as chrome rather than as the first card. */
+  --ez-head-from:#E4EDFA; --ez-head-to:#CFDEF3; --ez-head-edge:#B4CCEB;
+  --ez-head-muted:#3D4757; --ez-head-faint:#4A5567; --ez-head-brand:#1D4ED8;
+  --ez-head-elev:0 1px 2px rgba(15,23,42,.06);
+  /* Avatar tints are generated per name via oklch(), so 400 colleagues get
+     stable, evenly-spread hues without a palette to maintain. */
+  --hx-av-bg-l:94%; --hx-av-bg-c:.045; --hx-av-fg-l:34%; --hx-av-fg-c:.14;
+}
+:root[data-ez-theme="dark"] .hx{
+  --ez-head-from:#1E2E4E; --ez-head-to:#141D31; --ez-head-edge:#2C4370;
+  --ez-head-muted:#AAB4C2; --ez-head-faint:#99A4B4; --ez-head-brand:#8CC0FC;
+  --ez-head-elev:inset 0 1px 0 rgba(255,255,255,.07);
+  --hx-av-bg-l:26%; --hx-av-bg-c:.05; --hx-av-fg-l:86%; --hx-av-fg-c:.11;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-ez-theme="light"]) .hx{
+    --ez-head-from:#1E2E4E; --ez-head-to:#141D31; --ez-head-edge:#2C4370;
+    --ez-head-muted:#AAB4C2; --ez-head-faint:#99A4B4; --ez-head-brand:#8CC0FC;
+    --ez-head-elev:inset 0 1px 0 rgba(255,255,255,.07);
+    --hx-av-bg-l:26%; --hx-av-bg-c:.05; --hx-av-fg-l:86%; --hx-av-fg-c:.11;
+  }
+}
+.hx{
+  --r-lg:16px; --r-md:11px; --r-sm:9px;
+  --gap:14px; --col:1160px;
+  --ease:cubic-bezier(.4,0,.2,1); --ease-out:cubic-bezier(.16,1,.3,1);
+  font-family:"DM Sans","Segoe UI",system-ui,sans-serif;
+  color:var(--ez-ink); -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+.hx *{box-sizing:border-box}
+.hx button,.hx input,.hx select,.hx textarea{font-family:inherit}
+.hx :focus-visible{outline:2px solid var(--ez-brand);outline-offset:2px;border-radius:6px}
+
+/* ---- page shell ---- */
+/* The prototype owned the viewport (min-height:100vh). Here it is a tab
+   inside a page that already scrolls, so it takes its own height. */
+.hx-app{display:flex;flex-direction:column;background:
+  radial-gradient(1200px 420px at 82% -8%, color-mix(in srgb,var(--ez-brand) 8%,transparent), transparent 60%),
+  var(--ez-canvas);}
+
+/* ---- command header band (the hue-distinct plane) ---- */
+/* Scrolls away with the content, by choice. The handover package had this
+   sticky; inside the portal there is already a sticky bar above it, and a
+   second band pinned under the first ate a chunk of a screen that is mostly
+   list. */
+.hx-head{z-index:20;
+  background:linear-gradient(180deg,var(--ez-head-from),var(--ez-head-to));
+  border-bottom:1px solid var(--ez-head-edge);box-shadow:var(--ez-head-elev)}
+.hx-head-in{max-width:var(--col);margin:0 auto;padding:16px 22px 0}
+.hx-head-top{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.hx-mark{width:38px;height:38px;border-radius:11px;flex-shrink:0;display:grid;place-items:center;
+  background:linear-gradient(145deg,var(--ez-brand),var(--ez-brand-deep));color:#fff;
+  box-shadow:var(--ez-shadow-brand)}
+.hx-mark svg{width:20px;height:20px;display:block}
+.hx-title{display:flex;flex-direction:column;gap:2px;min-width:0}
+.hx-title h1{margin:0;font-size:23px;font-weight:700;letter-spacing:-.02em;line-height:1;color:var(--ez-head-muted);
+  display:flex;align-items:center;gap:10px}
+.hx-title .desc{font-size:12.5px;color:var(--ez-head-faint)}
+.hx-badge{font-size:10.5px;font-weight:700;padding:4px 11px;border-radius:999px;letter-spacing:.01em;
+  background:var(--ez-warning-tint);color:var(--ez-warning);
+  border:1px solid color-mix(in srgb,var(--ez-warning) 32%,transparent);white-space:nowrap}
+.hx-head-tools{margin-left:auto;display:flex;align-items:center;gap:8px}
+.hx-search{display:flex;align-items:center;gap:7px;height:36px;padding:0 12px;border-radius:999px;
+  background:color-mix(in srgb,var(--ez-surface) 72%,transparent);border:1px solid var(--ez-head-edge);
+  color:var(--ez-head-faint);font-size:12.5px;min-width:150px;transition:box-shadow .16s var(--ease)}
+.hx-search svg{width:15px;height:15px;flex-shrink:0}
+.hx-search input{border:0;background:transparent;outline:none;color:var(--ez-ink);font-size:12.5px;width:100%}
+.hx-search:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 22%,transparent)}
+.hx-icbtn{height:36px;min-width:36px;padding:0 11px;border-radius:999px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:600;
+  background:color-mix(in srgb,var(--ez-surface) 72%,transparent);border:1px solid var(--ez-head-edge);
+  color:var(--ez-head-muted);transition:transform .12s var(--ease),box-shadow .16s var(--ease)}
+.hx-icbtn svg{width:16px;height:16px}
+.hx-icbtn:hover{box-shadow:var(--ez-shadow-flat);transform:translateY(-1px)}
+.hx-icbtn:active{transform:translateY(0)}
+
+/* ---- segmented sub-tab navigator with sliding indicator ---- */
+.hx-nav{position:relative;display:flex;gap:2px;margin-top:15px;padding:4px 4px 0}
+.hx-nav-track{position:relative;display:flex;gap:4px;width:100%}
+.hx-tab{position:relative;z-index:1;appearance:none;border:0;background:transparent;cursor:pointer;
+  display:flex;align-items:center;gap:8px;padding:11px 16px 13px;border-radius:10px 10px 0 0;
+  font-size:13.5px;font-weight:600;color:var(--ez-head-faint);white-space:nowrap;
+  transition:color .2s var(--ease)}
+.hx-tab:hover{color:var(--ez-head-muted)}
+.hx-tab[aria-selected="true"]{color:var(--ez-head-brand)}
+.hx-tab .ct{font-size:10.5px;font-weight:700;line-height:1;padding:3px 7px;border-radius:999px;
+  background:color-mix(in srgb,var(--ez-brand) 15%,transparent);color:var(--ez-head-brand);
+  font-variant-numeric:tabular-nums}
+.hx-tab .ct.warn{background:color-mix(in srgb,var(--ez-warning) 20%,transparent);color:var(--ez-warning)}
+.hx-ind{position:absolute;bottom:0;height:3px;border-radius:3px 3px 0 0;
+  background:linear-gradient(90deg,var(--ez-brand),var(--ez-brand-deep));
+  transition:transform .34s var(--ease-out),width .34s var(--ease-out);will-change:transform,width}
+
+/* ---- content column ---- */
+.hx-main{max-width:var(--col);margin:0 auto;width:100%;padding:20px 22px 64px}
+.hx-pane{display:none}
+.hx-pane.on{display:block}
+.hx-pane.enter{animation:hxPane .42s var(--ease-out) both}
+@keyframes hxPane{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+/* staggered reveal — applied only on a screen's first paint */
+.hx-rise{animation:hxRise .52s var(--ease-out) both;animation-delay:calc(min(var(--i,0),11)*42ms)}
+@keyframes hxRise{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:none}}
+.hx [hidden]{display:none!important}
+
+/* ---- panels & primitives ---- */
+.hx-card{background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--r-lg);
+  box-shadow:var(--ez-shadow-raised)}
+.hx-card.pad{padding:16px 18px}
+.hx-sec{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+.hx-sec::before{content:"";width:3px;height:15px;border-radius:2px;background:linear-gradient(var(--ez-brand),var(--ez-brand-deep))}
+.hx-sec h2{margin:0;font-size:14px;font-weight:700;letter-spacing:-.01em;color:var(--ez-ink)}
+.hx-sec .grow{margin-left:auto}
+
+.hx-input,.hx-select,.hx-area{width:100%;height:38px;padding:0 12px;font-size:13px;color:var(--ez-ink);
+  background:var(--ez-surface);border:1px solid var(--ez-line-strong);border-radius:var(--r-md);outline:none;
+  transition:border-color .15s var(--ease),box-shadow .15s var(--ease)}
+.hx-area{height:auto;min-height:92px;padding:10px 12px;resize:vertical;line-height:1.5}
+.hx-input::placeholder,.hx-area::placeholder{color:var(--ez-faint)}
+.hx-input:focus,.hx-select:focus,.hx-area:focus{border-color:var(--ez-brand);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 20%,transparent)}
+.hx-label{display:block;font-size:11.5px;font-weight:600;color:var(--ez-muted);margin-bottom:6px}
+
+.hx-btn{height:38px;padding:0 16px;border-radius:var(--r-md);cursor:pointer;font-size:13px;font-weight:600;
+  border:1px solid var(--ez-brand-deep);color:var(--ez-on-accent);
+  background:linear-gradient(180deg,var(--ez-brand),var(--ez-brand-deep));box-shadow:var(--ez-shadow-brand);
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  transition:transform .12s var(--ease),box-shadow .16s var(--ease),opacity .16s}
+.hx-btn:hover{transform:translateY(-1px)}
+.hx-btn:active{transform:translateY(0)}
+.hx-btn[disabled]{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.hx-btn.o{background:var(--ez-surface);color:var(--ez-ink);border-color:var(--ez-line-strong);box-shadow:var(--ez-shadow-flat)}
+.hx-btn.o:hover{border-color:var(--ez-brand);color:var(--ez-brand)}
+.hx-btn.d{background:var(--ez-critical-tint);color:var(--ez-critical);
+  border-color:color-mix(in srgb,var(--ez-critical) 34%,transparent);box-shadow:none}
+.hx-btn.d:hover{border-color:var(--ez-critical)}
+.hx-btn.sm{height:32px;padding:0 12px;font-size:12px}
+.hx-btn.solidred{background:var(--ez-critical);border-color:var(--ez-critical);color:#fff;box-shadow:none}
+.hx-btn svg{width:16px;height:16px;flex-shrink:0}
+
+.hx-chip{height:30px;padding:0 13px;border-radius:999px;cursor:pointer;font-size:12px;font-weight:600;
+  background:var(--ez-surface);color:var(--ez-ink-soft);border:1px solid var(--ez-line);
+  transition:all .16s var(--ease);display:inline-flex;align-items:center;gap:6px}
+.hx-chip:hover{border-color:var(--ez-brand-edge);color:var(--ez-brand)}
+.hx-chip[aria-pressed="true"]{background:var(--ez-brand);color:var(--ez-on-accent);border-color:var(--ez-brand);box-shadow:var(--ez-shadow-brand)}
+.hx-chip .n{font-variant-numeric:tabular-nums;opacity:.85}
+
+.hx-pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:10.5px;font-weight:700;white-space:nowrap}
+.hx-pill.ok{background:var(--ez-positive-tint);color:var(--ez-positive)}
+.hx-pill.warn{background:var(--ez-warning-tint);color:var(--ez-warning)}
+.hx-pill.dang{background:var(--ez-critical-tint);color:var(--ez-critical)}
+.hx-pill.info{background:var(--ez-info-tint);color:var(--ez-info)}
+.hx-pill.mut{background:var(--ez-sunken);color:var(--ez-muted);border:1px solid var(--ez-line)}
+
+.hx-note{font-size:12px;line-height:1.6;padding:11px 13px;border-radius:10px;border-left:3px solid var(--ez-brand);
+  background:var(--ez-brand-tint);color:var(--ez-ink-soft)}
+.hx-note.w{background:var(--ez-warning-tint);color:var(--ez-warning);border-left-color:var(--ez-warning)}
+.hx-note.d{background:var(--ez-critical-tint);color:var(--ez-critical);border-left-color:var(--ez-critical)}
+.hx-note b{color:inherit}
+/* Inline on purpose — see the note on .hx-tag svg. Without this the lock in
+   the POSH panel sits on its own line above the sentence. */
+.hx-note svg{display:inline-block;width:15px;height:15px;flex-shrink:0;vertical-align:-3px;margin-right:4px}
+
+/* ---- KPI strip (connected cells, not floating cards) ---- */
+.hx-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--r-lg);
+  overflow:hidden;box-shadow:var(--ez-shadow-raised);margin-bottom:var(--gap)}
+.hx-kpi{padding:15px 17px;border-right:1px solid var(--ez-line);position:relative}
+.hx-kpi:last-child{border-right:0}
+.hx-kpi .k{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ez-muted)}
+.hx-kpi .v{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-top:5px;line-height:1;
+  font-variant-numeric:tabular-nums;color:var(--ez-ink)}
+.hx-kpi .v.ok{color:var(--ez-positive)} .hx-kpi .v.warn{color:var(--ez-warning)} .hx-kpi .v.dang{color:var(--ez-critical)}
+.hx-kpi .n{font-size:11px;color:var(--ez-faint);margin-top:3px}
+.hx-kpi .spark{position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent}
+.hx-kpi .v.warn ~ .spark,.hx-kpi.warn .spark{background:linear-gradient(var(--ez-warning),transparent)}
+@media (max-width:640px){.hx-kpi{border-right:0;border-bottom:1px solid var(--ez-line)}.hx-kpi:last-child{border-bottom:0}}
+
+/* ================= TEAM DIRECTORY ================= */
+.hx-dir-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.hx-dir-ic{width:42px;height:42px;border-radius:12px;flex-shrink:0;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(145deg,var(--ez-brand),var(--ez-brand-deep));box-shadow:var(--ez-shadow-brand)}
+.hx-dir-ic svg{width:21px;height:21px}
+.hx-dir-head .t{font-size:16px;font-weight:700;color:var(--ez-ink);line-height:1.2}
+.hx-dir-head .c{font-size:11.5px;color:var(--ez-faint);margin-top:1px}
+.hx-filters{display:flex;gap:9px;flex-wrap:wrap}
+.hx-filters .grow{flex:1 1 240px;min-width:180px}
+.hx-filters .hx-select{width:auto;min-width:160px;flex:0 0 auto}
+
+.hx-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-top:14px}
+/* A column, so the contact row can be pushed to the bottom. The grid already
+   made every card in a row the same height; without this the footers sat at
+   whatever height the content above them ended, so a colleague with no
+   department tag put its buttons 43px higher than its neighbours'. */
+.hx-person{position:relative;display:flex;flex-direction:column;
+  background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--r-lg);
+  gap:11px;padding:15px 16px 14px 18px;box-shadow:var(--ez-shadow-flat);cursor:pointer;overflow:hidden;
+  transition:transform .16s var(--ease),box-shadow .18s var(--ease),border-color .18s var(--ease)}
+.hx-person::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;
+  background:linear-gradient(var(--ez-brand),var(--ez-brand-deep));opacity:.85}
+.hx-person:hover{transform:translateY(-3px);box-shadow:var(--ez-shadow-floating);border-color:var(--ez-brand-edge)}
+.hx-person .row1{display:flex;align-items:center;gap:12px}
+.hx-av{width:46px;height:46px;border-radius:50%;flex-shrink:0;display:grid;place-items:center;font-weight:700;font-size:14.5px;
+  background:oklch(var(--hx-av-bg-l) var(--hx-av-bg-c) var(--h));
+  color:oklch(var(--hx-av-fg-l) var(--hx-av-fg-c) var(--h));
+  box-shadow:inset 0 0 0 1px color-mix(in srgb,currentColor 22%,transparent)}
+.hx-person .nm{font-size:14.5px;font-weight:700;color:var(--ez-ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hx-person .dg{font-size:12px;font-weight:500;color:var(--ez-ink-soft);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The employee code is a pill in the metadata row now, not a chip stacked under
+   the designation — see the note in TeamDirectory.tsx. */
+.hx-tag.code{color:var(--ez-muted);background:var(--ez-sunken);border:1px solid var(--ez-line);
+  letter-spacing:.04em;font-variant-numeric:tabular-nums}
+/* align-items:center, or a taller pill stretches the shorter one beside it. */
+.hx-tags{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+/* inline-flex with a set height, so every pill is the same size whether or
+   not it carries an icon. Tailwind's preflight makes every <svg> block, so
+   an icon in a plain inline pill stacks ABOVE its label instead of sitting
+   beside it — which is what made the location pill 34px and the department
+   pill stretch to match. */
+.hx-tag{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;
+  font-size:10.5px;font-weight:600;line-height:1;border-radius:999px;white-space:nowrap;
+  max-width:100%;overflow:hidden}
+.hx-tag span{overflow:hidden;text-overflow:ellipsis}
+.hx-tag svg{width:11px;height:11px;flex-shrink:0;opacity:.75}
+.hx-tag.dept{background:var(--ez-brand-tint);color:var(--ez-brand-deep);border:1px solid var(--ez-brand-edge)}
+.hx-tag.loc{background:var(--ez-sunken);color:var(--ez-ink-soft);border:1px solid var(--ez-line)}
+.hx-contacts{display:flex;gap:7px;flex-wrap:wrap;border-top:1px solid var(--ez-line);margin-top:auto;padding-top:11px}
+.hx-contacts a{height:32px;padding:0 12px;border-radius:var(--r-md);display:inline-flex;align-items:center;gap:6px;
+  font-size:12px;font-weight:600;text-decoration:none;color:var(--ez-ink-soft);
+  background:var(--ez-surface);border:1px solid var(--ez-line-strong);transition:all .15s var(--ease)}
+.hx-contacts a:hover{border-color:var(--ez-brand);color:var(--ez-brand);background:var(--ez-brand-tint)}
+.hx-contacts svg{width:14px;height:14px}
+.hx-empty{grid-column:1/-1;text-align:center;padding:40px 16px;color:var(--ez-faint)}
+.hx-empty .hd{font-size:14px;font-weight:600;color:var(--ez-ink);margin:8px 0 4px}
+.hx-empty svg{width:34px;height:34px;color:var(--ez-line-strong)}
+/* skeleton */
+.hx-skel{background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--r-lg);padding:15px 16px}
+.hx-skel .b{background:linear-gradient(90deg,var(--ez-sunken),color-mix(in srgb,var(--ez-brand) 8%,var(--ez-sunken)),var(--ez-sunken));
+  background-size:200% 100%;border-radius:7px;animation:hxsh 1.3s var(--ease) infinite}
+@keyframes hxsh{from{background-position:200% 0}to{background-position:-200% 0}}
+
+/* ================= RAISE A REQUEST ================= */
+.hx-types{display:grid;grid-template-columns:repeat(auto-fill,minmax(184px,1fr));gap:9px;margin-bottom:14px}
+.hx-type{position:relative;text-align:left;cursor:pointer;padding:12px 13px;border-radius:var(--r-md);
+  background:var(--ez-surface);border:1px solid var(--ez-line-strong);color:var(--ez-ink);
+  /* stretch, not flex-start: the text column has to fill the tile before
+     margin-top:auto on the routing line has any slack to work with. */
+  transition:all .16s var(--ease);display:flex;gap:10px;align-items:stretch}
+.hx-type:hover{border-color:var(--ez-brand-edge);transform:translateY(-2px);box-shadow:var(--ez-shadow-flat)}
+.hx-type[aria-pressed="true"]{border-color:var(--ez-brand);background:var(--ez-brand-tint);box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 16%,transparent)}
+.hx-type[data-posh="1"][aria-pressed="true"]{border-color:var(--ez-critical);background:var(--ez-critical-tint);box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-critical) 14%,transparent)}
+.hx-type .ic{width:30px;height:30px;border-radius:9px;flex-shrink:0;display:grid;place-items:center;
+  background:var(--ez-brand-tint);color:var(--ez-brand);border:1px solid var(--ez-brand-edge)}
+.hx-type[data-posh="1"] .ic{background:var(--ez-critical-tint);color:var(--ez-critical);border-color:color-mix(in srgb,var(--ez-critical) 30%,transparent)}
+.hx-type .ic svg{width:16px;height:16px}
+/* Both were inline in the reference, so the label and the routing line ran
+   together — "Loan / Advance SalaryRouted to HR". They are separate lines, and
+   the routing line is pinned to the bottom: two of the eight labels wrap, and
+   without this their "Routed to …" sat lower than every other tile in the row. */
+.hx-type > span:last-child{flex:1;min-width:0;display:flex;flex-direction:column}
+.hx-type .lb{display:block;font-size:12.5px;font-weight:600;line-height:1.3}
+.hx-type .sub{display:block;font-size:10.5px;color:var(--ez-faint);margin-top:auto;padding-top:2px}
+.hx-reveal{overflow:hidden;max-height:0;opacity:0;transition:max-height .34s var(--ease),opacity .3s var(--ease),margin .3s var(--ease)}
+.hx-reveal.show{max-height:200px;opacity:1;margin-bottom:12px}
+.hx-req-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ez-line)}
+.hx-req-row:last-child{border-bottom:0}
+.hx-req-row .ty{font-size:13px;font-weight:600;color:var(--ez-ink);display:flex;align-items:center;gap:6px}
+.hx-req-row .mt{font-size:11px;color:var(--ez-faint);margin-top:2px}
+.hx-lock{font-size:11px}
+
+/* ================= TASKS & APPROVALS ================= */
+.hx-appr{display:flex;flex-direction:column;gap:10px}
+.hx-pcard{position:relative;background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--r-md);
+  padding:14px 15px 13px 17px;overflow:hidden;transition:box-shadow .18s var(--ease),transform .12s var(--ease)}
+.hx-pcard::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px}
+.hx-pcard.mine::before{background:linear-gradient(var(--ez-brand),var(--ez-brand-deep))}
+.hx-pcard.scope::before{background:repeating-linear-gradient(var(--ez-line-strong) 0 6px,transparent 6px 11px)}
+.hx-pcard.mine{box-shadow:var(--ez-shadow-flat)}
+.hx-pcard.busy{opacity:.55;pointer-events:none}
+.hx-pcard .top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.hx-pcard .who{font-size:14px;font-weight:700;color:var(--ez-ink)}
+.hx-pcard .what{font-size:12.5px;color:var(--ez-muted);margin-top:2px}
+.hx-pcard .meta{font-size:11.5px;color:var(--ez-faint);margin-top:7px;line-height:1.5}
+.hx-kind{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;padding:3px 8px;border-radius:6px;background:var(--ez-sunken);color:var(--ez-muted);margin-right:8px}
+.hx-kind svg{width:12px;height:12px}
+.hx-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:12px}
+.hx-form{margin-top:11px;padding:12px;border-radius:10px;background:var(--ez-brand-tint);
+  border:1px solid var(--ez-brand-edge);display:grid;gap:10px}
+.hx-toggle{display:flex;gap:7px}
+.hx-chain{margin-top:12px;border-top:1px solid var(--ez-line);padding-top:11px}
+.hx-chain .r{font-size:12px;padding:5px 0;color:var(--ez-ink-soft);line-height:1.5}
+.hx-chain .r b{color:var(--ez-ink)} .hx-chain .r .tm{color:var(--ez-faint);margin-left:6px;font-size:11px}
+.hx-chain .r .nt{color:var(--ez-muted);font-style:italic;margin-top:2px}
+.hx-foot{font-size:12px;line-height:1.6;padding:12px 14px;border-radius:10px;margin-top:12px;
+  background:var(--ez-brand-tint);color:var(--ez-ink-soft);border-left:3px solid var(--ez-brand)}
+
+/* ================= EXIT PROCESS — timeline ================= */
+.hx-exit-toggle{display:flex;gap:6px;align-items:center;font-size:11.5px;color:var(--ez-faint)}
+.hx-tl{margin-top:6px;position:relative;padding-left:4px}
+.hx-tl-item{position:relative;padding:0 0 18px 30px}
+.hx-tl-item:last-child{padding-bottom:0}
+.hx-tl-item::before{content:"";position:absolute;left:8px;top:20px;bottom:-2px;width:2px;background:var(--ez-line)}
+.hx-tl-item:last-child::before{display:none}
+.hx-tl-dot{position:absolute;left:0;top:3px;width:18px;height:18px;border-radius:50%;display:grid;place-items:center;
+  background:var(--ez-surface);border:2px solid var(--ez-line-strong)}
+.hx-tl-dot svg{width:10px;height:10px;color:#fff}
+.hx-tl-item.done .hx-tl-dot{background:var(--ez-brand);border-color:var(--ez-brand)}
+.hx-tl-item.done::before{background:linear-gradient(var(--ez-brand),var(--ez-line))}
+.hx-tl-item.cur .hx-tl-dot{background:var(--ez-warning);border-color:var(--ez-warning);
+  box-shadow:0 0 0 4px color-mix(in srgb,var(--ez-warning) 22%,transparent);animation:hxpulse 2s var(--ease) infinite}
+@keyframes hxpulse{0%,100%{box-shadow:0 0 0 4px color-mix(in srgb,var(--ez-warning) 22%,transparent)}50%{box-shadow:0 0 0 7px color-mix(in srgb,var(--ez-warning) 8%,transparent)}}
+.hx-tl-item .st{font-size:13px;font-weight:700;color:var(--ez-ink)}
+.hx-tl-item .ac{font-size:12px;color:var(--ez-muted);margin-top:2px}
+.hx-tl-item .tm{font-size:11px;color:var(--ez-faint);margin-top:2px}
+.hx-tl-item .nt{font-size:12px;color:var(--ez-muted);font-style:italic;margin-top:4px;
+  padding-left:10px;border-left:2px solid var(--ez-line)}
+
+/* ================= modal ================= */
+.hx-scrim{position:fixed;inset:0;z-index:80;background:color-mix(in srgb,#0b1020 55%,transparent);
+  backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px;
+  opacity:0;pointer-events:none;transition:opacity .22s var(--ease)}
+.hx-scrim.open{opacity:1;pointer-events:auto}
+.hx-modal{width:min(460px,100%);max-height:88vh;overflow:auto;background:var(--ez-surface);
+  border:1px solid var(--ez-line);border-radius:18px;box-shadow:var(--ez-shadow-overlay);
+  transform:translateY(14px) scale(.98);opacity:0;transition:transform .28s var(--ease-out),opacity .22s var(--ease)}
+.hx-scrim.open .hx-modal{transform:none;opacity:1}
+.hx-modal .mh{display:flex;align-items:center;gap:13px;padding:18px 18px 14px}
+.hx-modal .mb{padding:2px 18px 18px}
+.hx-modal .cl{margin-left:auto;width:32px;height:32px;border-radius:9px;border:1px solid var(--ez-line);
+  background:var(--ez-surface);cursor:pointer;display:grid;place-items:center;color:var(--ez-muted)}
+.hx-modal .cl:hover{border-color:var(--ez-brand);color:var(--ez-brand)}
+.hx-modal .cl svg{width:16px;height:16px}
+.hx-drow{display:flex;justify-content:space-between;gap:14px;padding:11px 0;border-bottom:1px solid var(--ez-line)}
+.hx-drow:last-child{border-bottom:0}
+.hx-drow .l{font-size:11px;font-weight:600;color:var(--ez-muted);text-transform:uppercase;letter-spacing:.04em;white-space:nowrap}
+.hx-drow .v{font-size:13px;color:var(--ez-ink);text-align:right;word-break:break-word}
+
+/* ================= toast ================= */
+.hx-toasts{position:fixed;right:18px;bottom:18px;z-index:90;display:flex;flex-direction:column;gap:8px}
+.hx-toast{background:var(--ez-surface);border:1px solid var(--ez-line);border-left:3px solid var(--ez-positive);
+  border-radius:11px;box-shadow:var(--ez-shadow-overlay);padding:11px 14px;font-size:12.5px;color:var(--ez-ink);
+  min-width:210px;max-width:320px;display:flex;gap:9px;align-items:center;
+  animation:hxToast .3s var(--ease-out) both}
+.hx-toast.err{border-left-color:var(--ez-critical)}
+.hx-toast svg{width:16px;height:16px;flex-shrink:0;color:var(--ez-positive)}
+.hx-toast.err svg{color:var(--ez-critical)}
+@keyframes hxToast{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:none}}
+
+.hx-grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+
+@media (max-width:560px){
+  .hx-head-in{padding:14px 16px 0}.hx-main{padding:16px 16px 48px}
+  .hx-title h1{font-size:20px}.hx-grid{grid-template-columns:1fr}
+  .hx-head-tools .hx-search{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .hx *,.hx *::before,.hx *::after{animation-duration:.001ms!important;transition-duration:.001ms!important}
+  .hx-ind{transition:none}
+}

@@ -1,0 +1,548 @@
+/* components/ess/social/social.css — the Social section, scoped under .soc
+   ---------------------------------------------------------------------------
+   SCOPE. Everything lives under `.soc`, the same convention as .ezt (Today),
+   .ib (Inbox) and .wof (Wall). Not a preference: app/globals.css imports
+   Tailwind, so a bare `.card` or `.ring` can collide with a utility and win —
+   today.css carries a note about exactly that painting a square box around
+   every progress circle.
+
+   NO HEADER HERE. The portal draws one for every section (TabHeader →
+   .ez-page-head). This file used to add a second, taller, purple-to-magenta
+   one below it. That was the "two headers" complaint and most of why the
+   section looked like a different product bolted on.
+
+   COLOUR — THE WALL'S GRADE RAMP, NOT INVENTED HUES AND NOT THE SEMANTIC SET.
+
+   Three versions of this, and the middle one was wrong in both directions.
+
+   First it invented four hues (magenta, burnt orange, green, blue), which
+   ignored lib/ui/tokens.ts — "No colour is chosen in a component" — and
+   reached for colours that are spoken for: theme.css says plainly that green
+   means only "done", amber only "waiting", red only "wrong".
+
+   Then it went all-blue, using the --ez-grade-* pairs. That respected the
+   tokens but cost the thing the sections needed most: four panes that could be
+   told apart at a glance.
+
+   Both were false choices. lib/wall/theme.ts already defines GRADE — six
+   distinct hues, each with measured light AND dark fg/bg pairs, described
+   there as "reused from the app's data ramp". They are decorative rather than
+   semantic, and the Wall module already uses them in this product. So the
+   accents below are GRADE values, quoted from that file:
+
+     Wall of Fame      blue    Birthdays       rose
+     Work anniversaries gold   New joiners     cyan
+
+   One honest overlap to know about: GRADE's gold fg (#B45309) is the same hex
+   as --ez-warning. It is not being used as a status here — it sits behind a
+   medal icon under the words "Work anniversaries", and the Wall already
+   establishes gold as celebratory in this product.
+
+   The "-2" values are the mid-tone gradient partner for each hue, which GRADE
+   does not define; they are the same family, used only for the filled tab and
+   the primary button.
+
+   Because these are hex rather than --ez-* tokens, this file carries its own
+   dark block again. Changing the palette is still one edit: the four triples
+   below, mapped onto --kind-* by kindStyle() in PostCard.tsx.
+
+   BUTTON RADII. lib/ui/index.tsx sets `button { border-radius:10px !important }`
+   product-wide and exempts only an INLINE `border-radius:99…`. Shapes declared
+   in a stylesheet lose to it — that is what made the punch dial render square.
+   The block at the very bottom re-asserts every shape this file needs.
+   --------------------------------------------------------------------------- */
+
+.soc {
+  /* Per-section accents — GRADE, from lib/wall/theme.ts. See the header note.
+     kindStyle() in PostCard.tsx maps each triple onto --kind-ink / --kind-2 /
+     --kind-tint for the pane and every post inside it. */
+  --soc-wall:      #1D4ED8;   --soc-wall-2:      #60A5FA;   --soc-wall-tint:      #DBEAFE;  /* blue  */
+  --soc-birthday:  #BE123C;   --soc-birthday-2:  #FB7185;   --soc-birthday-tint:  #FFE4E6;  /* rose  */
+  --soc-anniv:     #B45309;   --soc-anniv-2:     #F59E0B;   --soc-anniv-tint:     #FEF3C7;  /* gold  */
+  --soc-joiner:    #0E7490;   --soc-joiner-2:    #22D3EE;   --soc-joiner-tint:    #CFFAFE;  /* cyan  */
+
+  /* Elevation comes from the product's own scale rather than a local shadow. */
+  --soc-card: var(--ez-shadow-raised);
+  --soc-card-hover: var(--ez-shadow-floating);
+}
+
+/* Dark. GRADE's own fgDark/bgDark pairs — a pale rose block on a dark page
+   reads as a hole punched in it, which is why these are not the light values
+   dimmed. Both attributes are matched because this app grew two theme controls
+   (data-ez-theme from ThemeToggle, data-theme from the ESS Today preference);
+   guarding only one leaves the section light on a dark page, the exact bug
+   today.css documents. */
+:root[data-ez-theme="dark"] .soc,
+:root[data-theme="dark"] .soc {
+  --soc-wall:      #60A5FA;   --soc-wall-2:      #93C5FD;   --soc-wall-tint:      #152A4A;
+  --soc-birthday:  #FDA4AF;   --soc-birthday-2:  #FB7185;   --soc-birthday-tint:  #3A0D1A;
+  --soc-anniv:     #FCD34D;   --soc-anniv-2:     #F59E0B;   --soc-anniv-tint:     #3A2A08;
+  --soc-joiner:    #67E8F9;   --soc-joiner-2:    #22D3EE;   --soc-joiner-tint:    #062B33;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]):not([data-ez-theme="light"]) .soc {
+    --soc-wall:      #60A5FA;   --soc-wall-2:      #93C5FD;   --soc-wall-tint:      #152A4A;
+    --soc-birthday:  #FDA4AF;   --soc-birthday-2:  #FB7185;   --soc-birthday-tint:  #3A0D1A;
+    --soc-anniv:     #FCD34D;   --soc-anniv-2:     #F59E0B;   --soc-anniv-tint:     #3A2A08;
+    --soc-joiner:    #67E8F9;   --soc-joiner-2:    #22D3EE;   --soc-joiner-tint:    #062B33;
+  }
+}
+
+.soc * { box-sizing: border-box; }
+.soc {
+  position: relative;
+  font-family: var(--ezt-sans, "DM Sans"), "Segoe UI", system-ui, sans-serif;
+  color: var(--ez-ink); font-size: 14px; line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: 32px;
+}
+.soc button { font-family: inherit; cursor: pointer; }
+.soc :focus-visible { outline: 2px solid var(--kind-ink, var(--ez-brand)); outline-offset: 2px; }
+
+/* The portal already caps its content column at 1100px and pads it, so this
+   adds width of its own only in the preview harness. container-type is what
+   the breakpoints at the bottom measure against — the section renders beside a
+   200-260px rail, where a viewport query still reads "large". */
+.soc .page { container-type: inline-size; container-name: soc; max-width: 1100px; margin: 0 auto; }
+
+/* ── ENTRANCE ──────────────────────────────────────────────────────────────
+   Short and without stagger. At .5s with 70/140/200ms delays this re-ran on
+   every tab switch — the panes are React state, so switching remounts the
+   cards — and screenshots caught text sitting at partial opacity. A card still
+   fading in when you have started reading it is worse than one that appears. */
+@keyframes socIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.soc .card { animation: socIn .28s cubic-bezier(.22,1,.36,1) both; }
+
+/* ── SCOPE CHIP ────────────────────────────────────────────────────────────
+   What the hero used to carry. In a group-wide feed this is the line that
+   explains why people from other companies appear, so it stays — as a chip
+   above the tabs rather than a banner. */
+.soc .scoperow { display: flex; align-items: center; gap: 9px; margin: 2px 0 14px; flex-wrap: wrap; }
+/* The chip takes the open section's accent too, so the whole page — chip, tab,
+   card edge, icon tile, button — moves together when you switch tab. */
+.soc .scope {
+  display: inline-flex; align-items: center; gap: 8px;
+  height: 27px; padding: 0 12px;
+  background: var(--kind-tint); border: 1px solid color-mix(in srgb, var(--kind-ink) 26%, transparent);
+  color: var(--kind-ink); font-size: 12px; font-weight: 600;
+  transition: background .3s, color .3s, border-color .3s;
+}
+.soc .scope::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--ez-positive); flex: none;
+}
+
+/* ── SUB-TABS ──────────────────────────────────────────────────────────────
+   THE LABELS NEVER WRAP. At a fixed height with wrapping allowed, "Wall of
+   Fame" broke onto three lines and burst its own pill while the other three
+   stayed on one. Height is intrinsic now, the label is nowrap, and on a narrow
+   container the row scrolls sideways instead of stacking raggedly. */
+.soc .tabs {
+  display: flex; gap: 8px; margin: 0 0 16px; padding: 2px 0 6px;
+  overflow-x: auto; scrollbar-width: none;
+}
+.soc .tabs::-webkit-scrollbar { display: none; }
+.soc .tab {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 8px;
+  padding: 8px 14px 8px 8px; white-space: nowrap;
+  background: var(--ez-surface); color: var(--ez-ink-soft);
+  border: 1px solid var(--ez-line); font-size: 13px; font-weight: 600;
+  box-shadow: var(--ez-shadow-flat);
+  transition: transform .16s cubic-bezier(.22,1,.36,1), border-color .16s, color .16s, background .16s, box-shadow .16s;
+}
+.soc .tab:hover { transform: translateY(-1px); border-color: var(--ez-line-strong); color: var(--ez-ink); }
+.soc .tab .tico {
+  width: 27px; height: 27px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  background: var(--tab-tint); color: var(--tab-ink);
+  transition: background .2s, color .2s;
+}
+.soc .tab .tico svg { width: 15px; height: 15px; }
+.soc .tab[data-on="1"] {
+  color: var(--ez-on-accent); border-color: transparent;
+  background: linear-gradient(135deg, var(--tab-ink), var(--tab-ink-2));
+  box-shadow: var(--ez-shadow-brand);
+}
+.soc .tab[data-on="1"] .tico { background: rgba(255,255,255,.22); color: var(--ez-on-accent); }
+.soc .tab .n {
+  min-width: 21px; height: 21px; padding: 0 7px; border-radius: 999px;
+  display: inline-grid; place-items: center;
+  background: var(--ez-sunken); color: var(--ez-muted);
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  transition: background .2s, color .2s;
+}
+.soc .tab[data-on="1"] .n { background: rgba(255,255,255,.24); color: var(--ez-on-accent); }
+
+/* ── CARDS ─────────────────────────────────────────────────────────────── */
+.soc .card {
+  position: relative; overflow: hidden;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 14px; padding: 18px 20px; box-shadow: var(--soc-card);
+  margin-bottom: 14px; min-width: 0;
+  transition: box-shadow .24s cubic-bezier(.22,1,.36,1), transform .24s cubic-bezier(.22,1,.36,1), border-color .24s;
+}
+.soc .card:hover { box-shadow: var(--soc-card-hover); transform: translateY(-2px); }
+/* A hairline of the section's accent along the top edge — enough to tell four
+   panes apart without four layouts, and the one decorative flourish kept. */
+.soc .card::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+  background: linear-gradient(90deg, var(--kind-ink), var(--kind-2), transparent 80%);
+}
+.soc .card > h2 {
+  margin: 0 0 5px; font-size: 17px; font-weight: 600; letter-spacing: -.012em;
+  display: flex; align-items: center; gap: 10px; color: var(--ez-ink);
+}
+.soc .card > h2 .ic {
+  width: 32px; height: 32px; border-radius: 10px; flex: none;
+  display: grid; place-items: center;
+  background: var(--kind-tint); color: var(--kind-ink);
+}
+.soc .card > h2 .ic svg { width: 17px; height: 17px; }
+.soc .card .hint { font-size: 12.5px; color: var(--ez-muted); margin: 0 0 15px 42px; max-width: 64ch; }
+
+/* Today's card carries the accent properly rather than only a rail. */
+.soc .card.is-today {
+  border-color: color-mix(in srgb, var(--kind-ink) 26%, var(--ez-line));
+  background:
+    radial-gradient(120% 100% at 0% 0%, var(--kind-tint) 0%, transparent 52%),
+    var(--ez-surface);
+}
+.soc .card.is-today::before { height: 3px; }
+
+/* ── POST ──────────────────────────────────────────────────────────────── */
+.soc .post { display: grid; gap: 12px; }
+.soc .post + .post { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--ez-line); }
+.soc .who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.soc .who .meta { min-width: 0; flex: 1; }
+.soc .who .nm { font-size: 14.5px; font-weight: 600; color: var(--ez-ink); letter-spacing: -.006em; }
+.soc .who .rl {
+  font-size: 12.5px; color: var(--ez-muted); margin-top: 2px;
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+}
+/* In a group-wide feed, which company someone belongs to is part of knowing
+   who they are, so it sits with the role rather than in a tooltip. */
+.soc .co {
+  display: inline-flex; align-items: center; height: 19px; padding: 0 8px;
+  border-radius: 999px; font-size: 10.5px; font-weight: 700; letter-spacing: .02em;
+  background: var(--ez-sunken); color: var(--ez-muted); white-space: nowrap;
+  border: 1px solid var(--ez-line);
+}
+.soc .when { font-size: 11.5px; color: var(--ez-faint); white-space: nowrap; flex: none; }
+
+.soc .av {
+  width: 44px; height: 44px; border-radius: 50%; flex: none;
+  display: grid; place-items: center; font-weight: 700; font-size: 14.5px;
+  letter-spacing: -.01em; position: relative;
+  box-shadow: 0 0 0 1px var(--ez-line);
+  transition: box-shadow .22s cubic-bezier(.22,1,.36,1);
+}
+.soc .post:hover > .who .av { box-shadow: 0 0 0 2px var(--kind-ink); }
+.soc .av.lg { width: 56px; height: 56px; font-size: 18px; }
+.soc .av .mark {
+  position: absolute; right: -4px; bottom: -4px; width: 21px; height: 21px;
+  border-radius: 50%; display: grid; place-items: center;
+  background: var(--ez-surface); color: var(--kind-ink);
+  box-shadow: 0 0 0 1px var(--ez-line);
+}
+.soc .av .mark svg { width: 11px; height: 11px; }
+
+/* MEASURE. Body text ran the full 1030px of the card — over 100 characters a
+   line, where 60-75 is comfortable. Capped in ch so it holds at every size. */
+.soc .body {
+  margin: 0; font-size: 13.5px; color: var(--ez-ink-soft); line-height: 1.62;
+  max-width: 68ch; overflow-wrap: anywhere;
+}
+.soc .chiprow { display: flex; gap: 6px; flex-wrap: wrap; }
+.soc .chip {
+  display: inline-flex; align-items: center; gap: 5px; height: 25px; padding: 0 10px;
+  border-radius: 999px; font-size: 11.5px; font-weight: 600;
+  background: var(--ez-sunken); color: var(--ez-ink-soft); border: 1px solid var(--ez-line);
+  transition: border-color .16s;
+}
+.soc .chip:hover { border-color: var(--ez-line-strong); }
+.soc .chip.kind {
+  background: var(--kind-tint); color: var(--kind-ink);
+  border-color: color-mix(in srgb, var(--kind-ink) 24%, transparent);
+}
+
+/* ── ACTION ROW ────────────────────────────────────────────────────────────
+   Reactions, comment count and the call to action share one line with a rule
+   above them, so the CTA reads as part of the post rather than floating a
+   third of a metre away from everything else. */
+.soc .bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding-top: 11px; border-top: 1px solid var(--ez-line);
+}
+.soc .rx {
+  display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px;
+  border: 1px solid var(--ez-line); background: var(--ez-surface);
+  font-size: 13px; font-weight: 600; color: var(--ez-muted);
+  transition: transform .14s cubic-bezier(.34,1.56,.64,1), border-color .14s, background .14s, color .14s;
+}
+.soc .rx:hover { transform: translateY(-1px); border-color: var(--kind-ink); }
+.soc .rx:active { transform: scale(.95); }
+.soc .rx[data-mine="1"] {
+  background: var(--kind-tint); border-color: var(--kind-ink); color: var(--kind-ink);
+  animation: socPop .3s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes socPop { 0% { transform: scale(1) } 45% { transform: scale(1.13) } 100% { transform: scale(1) } }
+.soc .rx .n { font-variant-numeric: tabular-nums; font-size: 12px; }
+.soc .rx.add { color: var(--ez-faint); padding: 0 9px; }
+.soc .rx.add svg { width: 16px; height: 16px; }
+
+.soc .pick {
+  position: absolute; z-index: 20; bottom: calc(100% + 9px); left: 0;
+  display: flex; gap: 3px; padding: 7px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 14px; box-shadow: var(--ez-shadow-floating);
+  animation: socPickIn .2s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes socPickIn { from { opacity: 0; transform: translateY(6px) scale(.95) } to { opacity: 1; transform: none } }
+.soc .pick button {
+  width: 36px; height: 36px; display: grid; place-items: center;
+  font-size: 19px; background: none; border: 0;
+  transition: transform .14s cubic-bezier(.34,1.56,.64,1), background .14s;
+}
+.soc .pick button:hover { transform: scale(1.2); background: var(--ez-sunken); }
+.soc .rxwrap { position: relative; }
+
+/* ── COMMENTS ──────────────────────────────────────────────────────────── */
+.soc .thread {
+  display: grid; gap: 11px; padding-left: 15px; margin-left: 5px;
+  border-left: 2px solid var(--ez-line);
+}
+.soc .cm { display: flex; gap: 10px; align-items: flex-start; }
+.soc .cm .av { width: 31px; height: 31px; font-size: 11px; }
+.soc .cm .bub {
+  flex: 1; min-width: 0; background: var(--ez-sunken);
+  border: 1px solid var(--ez-line);
+  border-radius: 4px 14px 14px 14px; padding: 10px 13px;
+  transition: border-color .2s;
+}
+.soc .cm:hover .bub { border-color: var(--ez-line-strong); }
+.soc .cm .cmhead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.soc .cm .cmhead .nm { font-size: 12.5px; font-weight: 600; color: var(--ez-ink); }
+.soc .cm .tx { font-size: 13px; color: var(--ez-ink-soft); margin-top: 3px; line-height: 1.58; max-width: 66ch; overflow-wrap: anywhere; }
+.soc .cm .mini { display: flex; gap: 5px; margin-top: 8px; flex-wrap: wrap; }
+.soc .cm .mini .rx { height: 25px; padding: 0 8px; font-size: 12px; }
+
+.soc .write { display: flex; gap: 9px; align-items: flex-start; margin-top: 13px; }
+.soc .write textarea {
+  flex: 1; min-width: 0; min-height: 40px; max-height: 170px; resize: vertical;
+  padding: 10px 13px; font-family: inherit; font-size: 13px; line-height: 1.55;
+  color: var(--ez-ink); background: var(--ez-surface);
+  border: 1px solid var(--ez-line-strong); border-radius: 10px; outline: none;
+  transition: border-color .18s, box-shadow .18s;
+}
+.soc .write textarea:focus {
+  border-color: var(--ez-brand);
+  box-shadow: 0 0 0 3px var(--ez-brand-tint);
+}
+
+/* ── BUTTONS ───────────────────────────────────────────────────────────────
+   Shaped like the product's own: lib/ui's Button is 36px tall, 10px radius,
+   a brand gradient for primary and a surface/lineStrong pair for secondary. */
+.soc .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  height: 36px; padding: 0 15px; font-size: 13px; font-weight: 600;
+  white-space: nowrap;
+  border: 1px solid var(--ez-line-strong); background: var(--ez-surface); color: var(--ez-ink);
+  box-shadow: var(--ez-shadow-flat);
+  transition: transform .14s cubic-bezier(.22,1,.36,1), border-color .14s, background .14s, color .14s;
+}
+.soc .btn:hover { transform: translateY(-1px); border-color: var(--kind-ink); color: var(--kind-ink); }
+.soc .btn:active { transform: none; }
+.soc .btn svg { width: 15px; height: 15px; }
+.soc .btn.primary {
+  background: linear-gradient(180deg, var(--kind-2), var(--kind-ink));
+  border-color: var(--kind-ink); color: var(--ez-on-accent);
+  box-shadow: var(--ez-shadow-brand);
+}
+.soc .btn.primary:hover { color: var(--ez-on-accent); filter: brightness(1.04); }
+.soc .btn.done {
+  background: var(--ez-positive-tint); border-color: var(--ez-positive); color: var(--ez-positive);
+  cursor: default; box-shadow: none;
+}
+.soc .btn.done:hover { transform: none; color: var(--ez-positive); }
+.soc .btn.sm { height: 30px; padding: 0 12px; font-size: 12.5px; }
+.soc .btn.quiet { border-color: transparent; background: transparent; color: var(--ez-muted); box-shadow: none; }
+.soc .btn.quiet:hover { background: var(--ez-sunken); color: var(--ez-ink); }
+
+/* ── WISH SHEET ────────────────────────────────────────────────────────── */
+.soc .sheet {
+  margin-top: 13px; padding: 16px; border-radius: 14px;
+  background: var(--ez-sunken);
+  border: 1px solid var(--ez-line);
+  display: grid; gap: 14px;
+  animation: socSheet .28s cubic-bezier(.22,1,.36,1) both;
+}
+@keyframes socSheet { from { opacity: 0; transform: translateY(-8px) } to { opacity: 1; transform: none } }
+.soc .lbl {
+  font-size: 11px; font-weight: 700; letter-spacing: .09em;
+  text-transform: uppercase; color: var(--ez-muted);
+}
+.soc .sheet textarea {
+  width: 100%; min-height: 80px; resize: vertical; padding: 12px 14px;
+  font-family: inherit; font-size: 13.5px; line-height: 1.58; color: var(--ez-ink);
+  background: var(--ez-surface); border: 1px solid var(--ez-line-strong);
+  border-radius: 10px; outline: none; transition: border-color .18s, box-shadow .18s;
+}
+.soc .sheet textarea:focus {
+  border-color: var(--kind-ink);
+  box-shadow: 0 0 0 3px var(--kind-tint);
+}
+.soc .sug { display: flex; gap: 6px; flex-wrap: wrap; }
+.soc .sug button {
+  height: 29px; padding: 0 11px; font-size: 12px; font-weight: 600;
+  background: var(--ez-surface); border: 1px dashed var(--ez-line-strong); color: var(--ez-muted);
+  transition: border-color .14s, color .14s;
+}
+.soc .sug button:hover { border-style: solid; border-color: var(--kind-ink); color: var(--kind-ink); }
+
+.soc .gifs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 9px; }
+.soc .gift {
+  position: relative; aspect-ratio: 1; overflow: hidden;
+  border: 1px solid var(--ez-line); background: var(--ez-surface); padding: 0;
+  display: grid; place-items: center;
+  transition: transform .18s cubic-bezier(.34,1.56,.64,1), border-color .18s, box-shadow .18s;
+}
+.soc .gift:hover { transform: translateY(-2px); border-color: var(--kind-ink); box-shadow: var(--soc-card); }
+.soc .gift[data-on="1"] {
+  border-color: var(--kind-ink);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--kind-ink) 30%, transparent);
+}
+.soc .gift .glyph { font-size: 26px; line-height: 1; animation: socBob 2.4s ease-in-out infinite; }
+@keyframes socBob { 0%,100% { transform: translateY(-2px) rotate(-4deg) } 50% { transform: translateY(2px) rotate(4deg) } }
+.soc .gift .cap {
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 5px;
+  font-size: 9.5px; font-weight: 700; color: var(--ez-muted);
+  background: var(--ez-surface); border-top: 1px solid var(--ez-line);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.soc .media {
+  width: 128px; height: 128px; border-radius: 12px; display: grid; place-items: center;
+  border: 1px solid var(--ez-line); background: var(--ez-sunken); font-size: 42px;
+}
+
+/* ── REMOVED ───────────────────────────────────────────────────────────────
+   States the reason, quotes the remark, and says nothing about who acted —
+   which is the entire point of the wording. Restrained on purpose: it is
+   addressed to one person and should not shout at every reader of the feed. */
+.soc .removed {
+  display: flex; gap: 11px; align-items: flex-start;
+  padding: 12px 14px; border-radius: 12px;
+  background: var(--ez-critical-tint);
+  border: 1px solid color-mix(in srgb, var(--ez-critical) 24%, transparent);
+}
+.soc .removed .ic { color: var(--ez-critical); flex: none; margin-top: 1px; }
+.soc .removed .ic svg { width: 16px; height: 16px; }
+.soc .removed .t { font-size: 13px; font-weight: 600; color: var(--ez-ink); }
+.soc .removed .d { font-size: 12.5px; color: var(--ez-ink-soft); margin-top: 4px; line-height: 1.58; max-width: 62ch; }
+.soc .removed .q {
+  margin-top: 8px; padding-left: 11px;
+  border-left: 2px solid color-mix(in srgb, var(--ez-critical) 40%, transparent);
+  font-size: 12.5px; color: var(--ez-muted); font-style: italic; max-width: 60ch;
+}
+.soc .cm .removed { padding: 9px 11px; border-radius: 4px 12px 12px 12px; }
+
+/* The notice strip, below the tabs. Collapsed by default. */
+.soc .notices { display: grid; gap: 8px; margin-bottom: 14px; }
+.soc .notice {
+  border: 1px solid color-mix(in srgb, var(--ez-critical) 20%, transparent);
+  background: var(--ez-critical-tint);
+  border-radius: 12px; overflow: hidden;
+}
+.soc .notice > summary {
+  display: flex; align-items: center; gap: 10px; cursor: pointer; list-style: none;
+  padding: 10px 13px; font-size: 12.5px;
+}
+.soc .notice > summary::-webkit-details-marker { display: none; }
+.soc .notice > summary .ic { color: var(--ez-critical); display: grid; place-items: center; flex: none; }
+.soc .notice > summary .ic svg { width: 15px; height: 15px; }
+.soc .notice > summary .nt { font-weight: 600; color: var(--ez-ink); }
+.soc .notice > summary .nx {
+  color: var(--ez-muted); min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.soc .notice > summary::after {
+  content: "▾"; margin-left: auto; color: var(--ez-faint); flex: none;
+  transition: transform .2s ease;
+}
+.soc .notice[open] > summary::after { transform: rotate(180deg); }
+.soc .notice .removed { border: 0; border-radius: 0; background: transparent; }
+
+/* ── EMPTY ─────────────────────────────────────────────────────────────── */
+.soc .empty {
+  padding: 26px 18px; text-align: center; font-size: 13px; color: var(--ez-muted);
+  line-height: 1.6; border: 1px dashed var(--ez-line-strong); border-radius: 12px;
+  background: var(--ez-sunken);
+}
+.soc .empty b { display: block; color: var(--ez-ink); font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+
+/* ── ROWS (the compact upcoming lists) ─────────────────────────────────── */
+.soc .rows { display: grid; gap: 8px; }
+.soc .row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px; border-radius: 12px; background: var(--ez-sunken);
+  border: 1px solid transparent;
+  transition: border-color .18s, background .18s;
+}
+.soc .row:hover {
+  border-color: color-mix(in srgb, var(--kind-ink) 28%, transparent);
+  background: var(--kind-tint);
+}
+.soc .row .av { width: 36px; height: 36px; font-size: 12.5px; }
+.soc .row .meta { flex: 1; min-width: 0; }
+.soc .row .dt {
+  flex: none; text-align: center; min-width: 54px; padding: 5px 8px; border-radius: 10px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+}
+.soc .row .dt b { display: block; font-size: 16px; font-weight: 700; line-height: 1.05; color: var(--kind-ink); font-variant-numeric: tabular-nums; }
+.soc .row .dt span { font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--ez-muted); }
+
+/* ── RESPONSIVE ────────────────────────────────────────────────────────── */
+@container soc (max-width: 780px) {
+  .soc .gifs { grid-template-columns: repeat(4, 1fr); }
+  .soc .card .hint { margin-left: 0; }
+}
+@container soc (max-width: 540px) {
+  .soc .card { padding: 15px 14px; border-radius: 12px; }
+  .soc .card > h2 { font-size: 15.5px; gap: 9px; }
+  .soc .card > h2 .ic { width: 29px; height: 29px; border-radius: 9px; }
+  .soc .gifs { grid-template-columns: repeat(3, 1fr); }
+  .soc .av { width: 40px; height: 40px; font-size: 13.5px; }
+  .soc .media { width: 108px; height: 108px; font-size: 36px; }
+  /* The CTA takes its own line rather than being squeezed against the
+     reactions and wrapping mid-label. */
+  .soc .bar > span:last-child { width: 100%; }
+  .soc .bar > span:last-child .btn { width: 100%; }
+  .soc .thread { padding-left: 10px; }
+}
+/* .soc sizes itself, so this one stays on the viewport — an element cannot be
+   restyled by a query against its own container. */
+@media (max-width: 540px) { .soc { font-size: 13.5px; } }
+
+/* ── REDUCED MOTION ──────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .soc .card, .soc .sheet, .soc .pick { animation: none !important; }
+  .soc .gift .glyph { animation: none !important; }
+  .soc .card:hover, .soc .tab:hover, .soc .btn:hover, .soc .rx:hover,
+  .soc .gift:hover { transform: none !important; }
+  .soc .rx[data-mine="1"] { animation: none !important; }
+  .soc * { transition-duration: .01ms !important; }
+}
+
+/* ── CORNER RADII, RE-ASSERTED ─────────────────────────────────────────────
+   lib/ui/index.tsx sets `button { border-radius:10px !important }` across the
+   product and exempts only an inline `border-radius:99…`. Every shape below is
+   declared in this stylesheet and would otherwise lose to it. Same !important,
+   higher specificity, so the global rule still governs every button this file
+   does not name. Anything added later that is not a 10px rectangle needs a
+   line here. */
+.soc .tab          { border-radius: 999px !important; }
+.soc .rx           { border-radius: 999px !important; }
+.soc .scope        { border-radius: 999px !important; }
+.soc .pick button  { border-radius: 10px  !important; }
+.soc .btn          { border-radius: 10px  !important; }
+.soc .sug button   { border-radius: 999px !important; }
+.soc .gift         { border-radius: 12px  !important; }

@@ -69,7 +69,34 @@ interface Cred {
 }
 
 /** Called by /api/ess/id-card/token every REFRESH_SECONDS. */
-export async function issueToken(employeeId: string): Promise<IssuedToken> {
+/** A scannable absolute URL, always.
+ *
+ *  This used to be `process.env.NEXT_PUBLIC_APP_URL ?? ''`, which fails two
+ *  ways that both look like "the QR does not work":
+ *
+ *    1. Env unset -> base is '' and the QR encodes `/verify/<token>`, a bare
+ *       PATH. A camera cannot resolve that against anything, so it offers a
+ *       web search instead of opening the card.
+ *    2. Env set to a loopback host -> the QR encodes localhost. Scanned from a
+ *       phone that resolves to the PHONE, not this machine, so it is
+ *       unreachable by construction. That is the dev case, and it is exactly
+ *       what "the QR is not working" looks like on a desk.
+ *
+ *  So a loopback env value is treated as absent and the request's own origin
+ *  wins: open the portal on a LAN address and the code points back at the same
+ *  address the browser already reached. A real deployment sets the env to its
+ *  domain and that keeps winning, which is what it is for. */
+const LOOPBACK = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(:|\/|$)/i
+
+export function verifyBase(requestOrigin?: string | null): string {
+  const env = (process.env.NEXT_PUBLIC_APP_URL ?? '').trim().replace(/\/+$/, '')
+  if (env && !LOOPBACK.test(env)) return env
+  const origin = (requestOrigin ?? '').trim().replace(/\/+$/, '')
+  if (origin) return origin
+  return env                       // loopback is still better than a bare path
+}
+
+export async function issueToken(employeeId: string, requestOrigin?: string | null): Promise<IssuedToken> {
   let { data: cred } = await sb.from('id_card_credentials')
     .select('secret, card_version, card_no, state, valid_till, access_zones')
     .eq('employee_id', employeeId).maybeSingle()
@@ -111,7 +138,7 @@ export async function issueToken(employeeId: string): Promise<IssuedToken> {
   })
   if (regErr) throw new Error(regErr.message)
 
-  const base = process.env.NEXT_PUBLIC_APP_URL ?? ''
+  const base = verifyBase(requestOrigin)
   return {
     token,
     url: `${base}/verify/${token}`,
