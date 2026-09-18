@@ -1,53 +1,54 @@
 'use client'
-// components/ess/FunZone.tsx — ESS Fun Zone: four break-time games.
-// Ported from the tested prototype EZER_FunZone.html, per FunZone_Feature_Brief.md.
+// components/ess/FunZone.tsx — ESS Fun Zone: fourteen break-time games.
+// Redesigned September 2026. The flow and every rule are unchanged; the look,
+// the motion and ten solo mind games are new. See REDESIGN-NOTES.md.
 //
 // Nothing here touches the database, deliberately (brief §3 and §7): a refresh resets
 // every game and no score history is kept. That is the current design, not an oversight
 // — a leaderboard or personal history would need a new table and is an open question.
+// The ten new games follow the same rule: lib/funzone/mindgames.ts is pure, and
+// nothing in this file or components/funzone/MindGames.tsx calls the network.
 //
-// Hub-and-spoke (brief §8): a grid of four cards, each opening its game in the same
+// Hub-and-spoke (brief §8): a grid of cards, each opening its game in the same
 // panel behind a "Back" button. Open to every employee, no role check (brief §9).
 //
 // All sub-components are defined OUTSIDE the parent (no focus-loss).
-import { useState, useEffect, useRef, useCallback } from 'react'
-// Design tokens, aliased as TK — many of these files already declare
-// their own C. See lib/ui/tokens.ts.
-import { C as TK } from '@/lib/ui'
+import { useState, useEffect, useRef, useCallback, useMemo, type CSSProperties, type ReactNode } from 'react'
 import PlayTogether from '@/components/funzone/PlayTogether'
 // One copy of the questions and the card faces, shared with the live modes.
 // Both were duplicated here and both drifted — see the notes in games.ts.
 import { QUIZ, MEM_FACES } from '@/lib/funzone/games'
 import { TicTacToeVsBot, MemoryVsBot, TriviaVsBot } from '@/components/funzone/VsComputer'
+import { MIND_GAMES, CATEGORY_LABEL, type Category } from '@/lib/funzone/mindgames'
+import { MindGame } from '@/components/funzone/MindGames'
+import { FzStyles, Stage, Status, Stat, cx, type Cat } from '@/components/funzone/ui'
 
-const F = {
-  navy:TK.ink, purple:TK.brand, purpleDark:TK.brandDeep, purpleSoft: TK.brandTint,
-  muted:TK.muted, border: TK.brandEdge, green:TK.positive, greenBg:TK.positiveTint,
-  pink: TK.critical, pinkBg: TK.criticalTint, blue:TK.info, blueBg:TK.infoTint, red:TK.critical,
-}
-const panel: React.CSSProperties = { background:TK.surface, borderRadius:14, padding:24, boxShadow: 'var(--ez-shadow-flat)' }
-const btnPrimary: React.CSSProperties = { fontFamily:'inherit', fontSize:14, fontWeight:700, color:TK.onAccent, background:F.purple, border:'none', borderRadius:10, padding:'10px 24px', cursor:'pointer' }
-const gameTitle: React.CSSProperties = { fontSize:18, fontWeight:700, marginBottom:4 }
-const gameSub: React.CSSProperties = { fontSize:12, color:F.muted, marginBottom:18 }
+// ── the catalogue ───────────────────────────────────────────────
+// The first four are the originals — same keys, names and copy as before.
+// `live` marks the ones that can be played with a colleague.
+interface Tile { k: string; icon: string; name: string; desc: string; badge: string; cat: Cat; live?: boolean; bot?: boolean }
 
-const GAMES = [
-  { k:'ttt',   icon:'⭕', name:'Tic-Tac-Toe',    desc:'Against the computer, or a colleague', badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
-  { k:'mem',   icon:'🧩', name:'Memory Match',   desc:'Find the pairs — alone or head to head',              badge:'Arcade', bg:F.purpleSoft, fg:F.purpleDark },
-  { k:'quiz',  icon:'💡', name:'EZER Trivia',    desc:'Company policy, solo or against somebody',        badge:'Quiz',   bg:F.blueBg,     fg:F.blue },
-  { k:'wheel', icon:'🎡', name:'Spin the Wheel', desc:'Daily spin — win a fun shoutout or a treat',  badge:'Social', bg:F.pinkBg,     fg:F.pink },
+const GAMES: Tile[] = [
+  { k:'ttt',   icon:'⭕', name:'Tic-Tac-Toe',    desc:'Against the computer, or a colleague',      badge:'Arcade', cat:'arcade', live:true, bot:true },
+  { k:'mem',   icon:'🧩', name:'Memory Match',   desc:'Find the pairs — alone or head to head',    badge:'Arcade', cat:'memory', live:true, bot:true },
+  { k:'quiz',  icon:'💡', name:'EZER Trivia',    desc:'Company policy, solo or against somebody',  badge:'Quiz',   cat:'quiz',   live:true, bot:true },
+  { k:'wheel', icon:'🎡', name:'Spin the Wheel', desc:'Daily spin — win a fun shoutout or a treat', badge:'Social', cat:'social' },
 ]
 
-function BackBtn({ onClick }: { onClick: () => void }) {
-  return <button onClick={onClick} style={{ fontFamily:'inherit', fontSize:12, fontWeight:700, color:F.purpleDark, background:F.purpleSoft, border:'none', borderRadius:10, padding:'7px 14px', cursor:'pointer', marginBottom:16 }}>Back</button>
-}
+const MIND_TILES: Tile[] = MIND_GAMES.map(g => ({
+  k: g.code, icon: g.icon, name: g.name, desc: g.desc, badge: CATEGORY_LABEL[g.cat], cat: g.cat,
+}))
+
+const ALL_TILES = [...GAMES, ...MIND_TILES]
 
 // ── Tic-Tac-Toe ─────────────────────────────────────────────────
-// Standard 2-player, same-screen turns (brief §4). Cross-device play would need a
-// backend, and is an open question — this is the break-room version.
+// Standard 2-player, same-screen turns (brief §4). Cross-device play is the
+// "With a colleague" mode — this is the break-room version.
 const WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]
 function TicTacToe({ onBack }: { onBack: () => void }) {
   const [board, setBoard] = useState<string[]>(Array(9).fill(''))
   const [turn, setTurn] = useState<'X'|'O'>('X')
+  const [tally, setTally] = useState({ X: 0, O: 0 })
 
   // Winner is derived from the board rather than tracked in its own state, so the
   // status line can never disagree with the squares it is describing.
@@ -59,33 +60,40 @@ function TicTacToe({ onBack }: { onBack: () => void }) {
   const move = (i: number) => {
     if (board[i] || over) return
     const next = [...board]; next[i] = turn
+    const l = WIN_LINES.find(([a,b,c]) => next[a] && next[a] === next[b] && next[a] === next[c])
+    if (l) setTally(t => ({ ...t, [turn]: t[turn] + 1 }))
     setBoard(next); setTurn(t => t === 'X' ? 'O' : 'X')
   }
   const reset = () => { setBoard(Array(9).fill('')); setTurn('X') }
   const status = win ? `🎉 Player ${win} wins!` : draw ? "It's a draw!" : `Player ${turn}'s turn`
 
   return (
-    <div style={panel}>
-      <BackBtn onClick={onBack} />
-      <div style={gameTitle}>⭕ Tic-Tac-Toe</div>
-      <div style={gameSub}>Two players, take turns tapping a square</div>
-      <div style={{ textAlign:'center', fontWeight:700, marginBottom:12, fontSize:15, color: win ? F.green : F.navy }}>{status}</div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(3,80px)', gridTemplateRows:'repeat(3,80px)', gap:6, margin:'0 auto 16px', justifyContent:'center' }}>
-        {board.map((v, i) => {
-          const inWin = !!line && line.includes(i)
-          return (
-            <button key={i} onClick={() => move(i)} style={{ background: inWin ? F.greenBg : F.purpleSoft, border: inWin ? `2px solid ${F.green}` : 'none', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', fontSize:32, fontWeight:700, cursor: (v || over) ? 'default' : 'pointer', color: inWin ? F.green : F.purpleDark, fontFamily:'inherit' }}>{v}</button>
-          )
-        })}
+    <Stage cat="arcade" icon="⭕" title="Tic-Tac-Toe" sub="Two players, take turns tapping a square"
+           onBack={onBack} confetti={win ? tally.X + tally.O : 0}>
+      <div className="fz-vs">
+        <div className={cx('side', !over && turn === 'X' && 'on')}><span className="pts">{tally.X}</span><span className="who">Player X</span></div>
+        <span className="mid">wins</span>
+        <div className={cx('side', !over && turn === 'O' && 'on')}><span className="pts">{tally.O}</span><span className="who">Player O</span></div>
       </div>
-      <div style={{ textAlign:'center' }}><button onClick={reset} style={btnPrimary}>New Game</button></div>
-    </div>
+      <Status text={status} tone={win ? 'win' : draw ? 'draw' : undefined} />
+      <div className="ttt">
+        {board.map((v, i) => (
+          <button key={i} type="button" onClick={() => move(i)} disabled={!!v || over}
+            data-ghost={turn}
+            aria-label={v ? `Square ${i + 1}, ${v}` : `Square ${i + 1}, empty`}
+            className={cx('ttt-sq', line?.includes(i) && 'win')}>
+            {v && <span className={cx('m', v.toLowerCase())}>{v}</span>}
+          </button>
+        ))}
+      </div>
+      <button type="button" className="fz-key" onClick={reset}>New Game</button>
+    </Stage>
   )
 }
 
 // ── Memory Match ────────────────────────────────────────────────
-// Eight DISTINCT faces. They were eight empty strings, which meant
-// Fisher–Yates. sort(() => Math.random() - 0.5) — what the prototype used — is not a
+// Eight DISTINCT faces, shuffled with Fisher–Yates.
+// sort(() => Math.random() - 0.5) — what the prototype used — is not a
 // uniform shuffle; some layouts come up far more often than others.
 function shuffleDeck(): string[] {
   const d = [...MEM_FACES, ...MEM_FACES]
@@ -99,11 +107,13 @@ function MemoryMatch({ onBack }: { onBack: () => void }) {
   const [flipped, setFlipped] = useState<number[]>([])
   const [matched, setMatched] = useState<number[]>([])
   const [lock, setLock] = useState(false)
+  const [turns, setTurns] = useState(0)
+  const [deal, setDeal] = useState(0)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const reset = useCallback(() => {
     if (timer.current) clearTimeout(timer.current)
-    setCards(shuffleDeck()); setFlipped([]); setMatched([]); setLock(false)
+    setCards(shuffleDeck()); setFlipped([]); setMatched([]); setLock(false); setTurns(0); setDeal(d => d + 1)
   }, [])
   useEffect(() => { reset(); return () => { if (timer.current) clearTimeout(timer.current) } }, [reset])
 
@@ -112,6 +122,7 @@ function MemoryMatch({ onBack }: { onBack: () => void }) {
     const next = [...flipped, i]
     setFlipped(next)
     if (next.length < 2) return
+    setTurns(t => t + 1)
     const [a, b] = next
     if (cards[a] === cards[b]) { setMatched(m => [...m, a, b]); setFlipped([]); return }
     // Board locks during the flip-back so a third card can't be turned mid-check.
@@ -120,37 +131,44 @@ function MemoryMatch({ onBack }: { onBack: () => void }) {
   }
 
   const pairs = matched.length / 2
+  const done = pairs === MEM_FACES.length
   return (
-    <div style={panel}>
-      <BackBtn onClick={onBack} />
-      <div style={gameTitle}>Memory Match</div>
-      <div style={gameSub}>{pairs === MEM_FACES.length ? 'You found them all!' : `Find all 8 pairs — ${pairs} found`}</div>
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,70px)', gap:8, margin:'0 auto 16px', justifyContent:'center' }}>
+    <Stage cat="memory" icon="🧩" title="Memory Match"
+           sub={done ? 'You found them all!' : `Find all 8 pairs — ${pairs} found`}
+           aside={<><Stat label="pairs" value={`${pairs}/8`} hot bump /><Stat label="turns" value={turns} /></>}
+           onBack={onBack} confetti={done ? deal : 0}>
+      <div className="fz-progress" aria-hidden="true"><i style={{ '--p': `${pairs / 8 * 100}%` } as CSSProperties} /></div>
+      {done && <Status text={`Cleared in ${turns} turns`} tone="win" />}
+      <div className="mem" key={deal}>
         {cards.map((emoji, i) => {
           const isUp = flipped.includes(i), isDone = matched.includes(i)
           return (
-            <button key={i} onClick={() => flip(i)} style={{ width:70, height:70, border:'none', borderRadius:10, display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, cursor: isDone ? 'default' : 'pointer', fontFamily:'inherit', transition:'background .2s', background: isDone ? F.greenBg : isUp ? F.purpleSoft : F.purple, opacity: isDone ? .6 : 1 }}>
-              {(isUp || isDone) ? emoji : ''}
+            <button key={i} type="button" onClick={() => flip(i)}
+              aria-label={isUp || isDone ? `Card ${i + 1}, ${emoji}` : `Card ${i + 1}, face down`}
+              className={cx('mcard', isDone ? 'done' : isUp && 'up')}>
+              <span className="face">{(isUp || isDone) ? emoji : ''}</span>
             </button>
           )
         })}
       </div>
-      <div style={{ textAlign:'center' }}><button onClick={reset} style={btnPrimary}>New Game</button></div>
-    </div>
+      <button type="button" className="fz-key" onClick={reset}>New Game</button>
+    </Stage>
   )
 }
 
 // ── EZER Trivia ─────────────────────────────────────────────────
 // Questions are hardcoded (brief §5). Making them HR-editable is an open question —
 // it would need a table and a config screen.
+const KEYS = ['A', 'B', 'C', 'D', 'E']
 function Trivia({ onBack }: { onBack: () => void }) {
   const [idx, setIdx] = useState(0)
   const [score, setScore] = useState(0)
   const [picked, setPicked] = useState<number | null>(null)
+  const [round, setRound] = useState(1)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
 
-  const restart = () => { if (timer.current) clearTimeout(timer.current); setIdx(0); setScore(0); setPicked(null) }
+  const restart = () => { if (timer.current) clearTimeout(timer.current); setIdx(0); setScore(0); setPicked(null); setRound(r => r + 1) }
   const answer = (i: number) => {
     if (picked !== null) return   // one answer per question — ignore double taps
     setPicked(i)
@@ -160,40 +178,53 @@ function Trivia({ onBack }: { onBack: () => void }) {
 
   const done = idx >= QUIZ.length
   const item = done ? null : QUIZ[idx]
+  const perfect = done && score === QUIZ.length
   return (
-    <div style={panel}>
-      <BackBtn onClick={onBack} />
-      <div style={gameTitle}>EZER Trivia</div>
-      <div style={{ textAlign:'right', fontWeight:700, color:F.purple, fontSize:13, marginBottom:14 }}>Score: {score} / {QUIZ.length}</div>
+    <Stage cat="quiz" icon="💡" title="EZER Trivia" sub="Four questions on how things work here"
+           aside={<Stat label="correct" value={score} hot bump />}
+           onBack={onBack} confetti={perfect ? round : 0}>
+      <div className="fz-progress" aria-hidden="true"><i style={{ '--p': `${Math.min(idx, QUIZ.length) / QUIZ.length * 100}%` } as CSSProperties} /></div>
+      <div className="fz-hint">Score: {score} / {QUIZ.length}</div>
       {done ? (
         <>
-          <div style={{ textAlign:'center', fontSize:16, fontWeight:700, color:F.purpleDark, margin:'10px 0 16px' }}>Quiz done! You scored {score}/{QUIZ.length}</div>
-          <div style={{ textAlign:'center' }}><button onClick={restart} style={btnPrimary}>Play Again</button></div>
+          <div className="fz-result">
+            <span className="big">{score}/{QUIZ.length}</span>
+            <span className="what">Quiz done! You scored {score}/{QUIZ.length}</span>
+            <span className="sub">{perfect ? 'Every one right.' : 'Play again — the questions stay the same.'}</span>
+          </div>
+          <button type="button" className="fz-key" onClick={restart}>Play Again</button>
         </>
       ) : (
-        <>
-          <div style={{ fontSize:15, fontWeight:700, marginBottom:14 }}>Q{idx + 1}. {item!.q}</div>
+        <div className="quiz" key={idx}>
+          <p className="quiz-q"><small>Question {idx + 1} of {QUIZ.length}</small>Q{idx + 1}. {item!.q}</p>
           {item!.opts.map((o, i) => {
             const reveal = picked !== null
             const isCorrect = reveal && i === item!.correct
             const isWrong = reveal && i === picked && i !== item!.correct
             return (
-              <button key={i} onClick={() => answer(i)} style={{ display:'block', width:'100%', textAlign:'left', borderRadius:10, padding:'10px 14px', marginBottom:8, cursor: reveal ? 'default' : 'pointer', fontFamily:'inherit', fontSize:13, color:F.navy, background: isCorrect ? F.greenBg : isWrong ? TK.criticalTint : F.purpleSoft, border:`2px solid ${isCorrect ? F.green : isWrong ? F.red : 'transparent'}` }}>{o}</button>
+              <button key={i} type="button" onClick={() => answer(i)} data-key={KEYS[i]}
+                aria-disabled={reveal}
+                // display:block stays inline: scripts/smoke-funzone.py finds options by it.
+                style={{ display: 'block', '--i': i } as CSSProperties}
+                className={cx('quiz-opt', isCorrect && 'right', isWrong && 'wrong')}>{o}</button>
             )
           })}
-        </>
+        </div>
       )}
-    </div>
+    </Stage>
   )
 }
 
 // ── Spin the Wheel ──────────────────────────────────────────────
 const PRIZES = ['Free Coffee ☕','Shoutout 📣','Extra Break ⏰','High-Five 🙌','WFH Day 🏠','Snack Treat 🍪']
 const SEG = 360 / PRIZES.length
+const SEG_COLOURS = ['#7C3AED', '#DB2777', '#0F766E', '#C2410C', '#1D4ED8', '#B45309']
+const WHEEL_BG = `conic-gradient(${SEG_COLOURS.map((c, i) => `${c} ${i * SEG}deg ${(i + 1) * SEG}deg`).join(',')})`
 function SpinWheel({ onBack }: { onBack: () => void }) {
   const [deg, setDeg] = useState(0)
   const [spinning, setSpinning] = useState(false)
   const [result, setResult] = useState('')
+  const [spins, setSpins] = useState(0)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
 
@@ -208,43 +239,53 @@ function SpinWheel({ onBack }: { onBack: () => void }) {
     timer.current = setTimeout(() => {
       const resting = (360 - (next % 360)) % 360
       setResult(PRIZES[Math.floor(resting / SEG)])
-      setSpinning(false)
+      setSpinning(false); setSpins(s => s + 1)
     }, 4100)
   }
 
   return (
-    <div style={panel}>
-      <BackBtn onClick={onBack} />
-      <div style={gameTitle}>Spin the Wheel</div>
-      <div style={gameSub}>Tap spin for today&apos;s surprise</div>
-      <div style={{ display:'flex', flexDirection:'column', alignItems:'center' }}>
-        <div style={{ width:0, height:0, borderLeft:'14px solid transparent', borderRight:'14px solid transparent', borderTop:`22px solid ${F.navy}`, marginBottom:-6, zIndex:2 }} />
-        <div style={{ width:260, height:260, borderRadius:'50%', position:'relative', marginBottom:20, transform:`rotate(${deg}deg)`, transition:'transform 4s cubic-bezier(0.17,0.67,0.12,0.99)', background: `conic-gradient(${TK.brand} 0deg 60deg,${TK.critical} 60deg 120deg,${TK.brand} 120deg 180deg,${TK.positive} 180deg 240deg,${TK.warning} 240deg 300deg,${TK.brand} 300deg 360deg)` }}>
+    <Stage cat="social" icon="🎡" title="Spin the Wheel" sub="Tap spin for today's surprise"
+           onBack={onBack} confetti={result ? spins : 0}>
+      <div className="wheel-box" style={{ margin: '18px 0 8px' }}>
+        <div className={cx('wheel-rim', spinning && 'fast')} aria-hidden="true">
+          {Array.from({ length: 18 }, (_, k) => <i key={k} style={{ '--r': `${k * 20}deg`, '--k': k % 2 } as CSSProperties} />)}
+        </div>
+        <div className={cx('wheel-pin', spinning && 'tick')} aria-hidden="true" />
+        <div className="wheel" style={{ transform: `rotate(${deg}deg)`, background: WHEEL_BG }}>
           {PRIZES.map((p, i) => (
-            <div key={p} style={{ position:'absolute', top:'50%', left:'50%', color:TK.onAccent, fontWeight:700, fontSize:10, width:90, textAlign:'center', transformOrigin:'left center', transform:`rotate(${i * SEG + SEG / 2}deg) translateX(30px)` }}>{p.split(' ')[0]}</div>
+            // Label sits along the segment's centre line, pointing outwards.
+            <div key={p} style={{ transform: `rotate(${i * SEG + SEG / 2 - 90}deg)` }}>{p.split(' ')[0]}</div>
           ))}
         </div>
-        <button onClick={spin} disabled={spinning} style={{ ...btnPrimary, opacity: spinning ? .6 : 1, cursor: spinning ? 'wait' : 'pointer' }}>{spinning ? 'Spinning…' : 'Spin!'}</button>
-        {result && <div style={{ textAlign:'center', fontSize:16, fontWeight:700, color:F.purpleDark, marginTop:10 }}>You got: {result}</div>}
+        <div className="wheel-hub" aria-hidden="true">{result ? result.split(' ').pop() : '🎁'}</div>
       </div>
-    </div>
+      <button type="button" onClick={spin} disabled={spinning} className="fz-key lg">
+        {spinning ? 'Spinning…' : 'Spin!'}
+      </button>
+      <div role="status" aria-live="polite">
+        {result && (
+          <div className="prize-card">
+            <small>You got:</small>
+            <span className="p">{result}</span>
+          </div>
+        )}
+      </div>
+    </Stage>
   )
 }
 
 // ── Hub ─────────────────────────────────────────────────────────
 /**
- * The hub. `employeeId` is optional so the four solo games still render for
- * any caller that has not got one — playing together is what needs to know
- * who you are, not Memory Match.
- */
-/**
  * The hub, and the mode each game is played in.
  *
- * Every game now asks HOW before it starts, rather than one card meaning
+ * Every original game asks HOW before it starts, rather than one card meaning
  * "solo" and a separate card meaning "with somebody". Which modes exist
  * differs per game and the screen says so: the wheel is a solo spin and
  * there is nothing for a second player or a bot to do, so it opens straight
  * into the game instead of offering a choice it cannot honour.
+ *
+ * The ten mind games follow the wheel's rule for the same reason — each is a
+ * solo game with one way to play, so they open straight in.
  *
  * `employeeId` is optional so the solo and bot modes still work for a caller
  * that has not got one — only inviting a colleague needs to know who you are.
@@ -252,6 +293,8 @@ function SpinWheel({ onBack }: { onBack: () => void }) {
 type Mode = 'solo' | 'bot' | 'live'
 
 interface ModeDef { k: Mode; label: string; hint: string }
+
+const MODE_ICON: Record<Mode, string> = { bot: '🤖', solo: '🎮', live: '🤝' }
 
 const MODES: Record<string, ModeDef[]> = {
   ttt: [
@@ -270,6 +313,142 @@ const MODES: Record<string, ModeDef[]> = {
     { k: 'live', label: 'With a colleague', hint: 'Head to head on the same questions.' },
   ],
   wheel: [],
+  // every mind game: no modes, opens straight in
+}
+
+type Filter = 'all' | 'live' | Category
+
+const FILTERS: { k: Filter; label: string }[] = [
+  { k: 'all', label: 'All' },
+  { k: 'live', label: 'With a colleague' },
+  { k: 'puzzle', label: 'Puzzle' },
+  { k: 'memory', label: 'Memory' },
+  { k: 'logic', label: 'Logic' },
+  { k: 'brain', label: 'Brain' },
+  { k: 'words', label: 'Words' },
+  { k: 'reflex', label: 'Reflex' },
+]
+
+const matches = (t: Tile, f: Filter) =>
+  f === 'all' ? true : f === 'live' ? !!t.live : t.cat === f
+
+function GameTile({ t, i, onOpen }: { t: Tile; i: number; onOpen: (k: string) => void }) {
+  return (
+    <button type="button" onClick={() => onOpen(t.k)}
+      className={cx('fz-tile', `cat-${t.cat}`)} style={{ '--i': i } as CSSProperties}>
+      <span className="scr"><span className="glyph">{t.icon}</span></span>
+      <span className="lbl">
+        <span className="name">{t.name}</span>
+        <span className="desc">{t.desc}</span>
+        <span className="tags">
+          <span className="fz-tag">{t.badge}</span>
+          {t.bot && <span className="fz-tag plain">🤖 Bot</span>}
+          {t.live && <span className="fz-tag plain">🤝 Live</span>}
+        </span>
+      </span>
+    </button>
+  )
+}
+
+
+function Hub({ employeeId, onOpen }: { employeeId?: string; onOpen: (k: string) => void }) {
+  const [filter, setFilter] = useState<Filter>('all')
+  const shown = useMemo(() => ALL_TILES.filter(t => matches(t, filter)), [filter])
+  const surprise = () => {
+    const pool = shown.length ? shown : ALL_TILES
+    onOpen(pool[Math.floor(Math.random() * pool.length)].k)
+  }
+  const count = (f: Filter) => ALL_TILES.filter(t => matches(t, f)).length
+
+  return (
+    <div className="fz-view">
+      {/* NO HERO BAND.
+          The portal already draws one: TabHeader renders "Fun Zone" with its
+          icon, status badge and description directly above this component, so a
+          second title and blurb here read as two headers stacked on one screen —
+          the same fault the Social tab had.
+          What stayed is what you can press. Surprise me and the filters are
+          controls, not chrome, so they moved out of the removed band into a
+          plain row on the canvas. */}
+      <div className="fz-bar">
+        <div className="fz-chips" role="group" aria-label="Show games">
+          {FILTERS.map(f => (
+            <button key={f.k} type="button" className="fz-chip" aria-pressed={filter === f.k}
+                    onClick={() => setFilter(f.k)}>
+              {f.label} <span className="n">{count(f.k)}</span>
+            </button>
+          ))}
+        </div>
+        <div className="fz-bar-end">
+          <button type="button" className="fz-key lg" onClick={surprise}>
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <rect x="2.5" y="2.5" width="15" height="15" rx="3.5" stroke="currentColor" strokeWidth="2" />
+              <circle cx="7" cy="7" r="1.4" fill="currentColor" /><circle cx="13" cy="13" r="1.4" fill="currentColor" />
+              <circle cx="10" cy="10" r="1.4" fill="currentColor" />
+            </svg>
+            Surprise me
+          </button>
+          <div className="fz-hero-meta">{ALL_TILES.length} games, {GAMES.filter(g => g.live).length} of them live</div>
+        </div>
+      </div>
+
+      {filter === 'all' ? (
+        <>
+          <div className="fz-shelf">
+            <div className="fz-shelf-h">
+              <h3>Classics</h3>
+              <p>On your own, against the computer, or head to head with a colleague{employeeId ? '' : ' once you are signed in'}.</p>
+            </div>
+            <div className="fz-grid big">
+              {GAMES.map((t, i) => <GameTile key={t.k} t={t} i={i} onOpen={onOpen} />)}
+            </div>
+          </div>
+          <div className="fz-shelf">
+            <div className="fz-shelf-h">
+              <h3>Mind games</h3>
+              <p>Quick solo puzzles for a five-minute break.</p>
+            </div>
+            <div className="fz-grid">
+              {MIND_TILES.map((t, i) => <GameTile key={t.k} t={t} i={i + 4} onOpen={onOpen} />)}
+            </div>
+          </div>
+        </>
+      ) : (
+        <div className="fz-shelf">
+          <div className="fz-grid" key={filter}>
+            {shown.map((t, i) => <GameTile key={t.k} t={t} i={i} onOpen={onOpen} />)}
+          </div>
+        </div>
+      )}
+      <p className="fz-foot">Scores reset when you leave a game. Nothing here is saved or ranked.</p>
+    </div>
+  )
+}
+
+function ModeScreen({ game, employeeId, onPick, onBack }: {
+  game: string; employeeId?: string; onPick: (m: Mode) => void; onBack: () => void
+}) {
+  const g = GAMES.find(x => x.k === game)!
+  const opts = (MODES[game] ?? []).filter(m => m.k !== 'live' || employeeId)
+  return (
+    <Stage cat={g.cat} icon={g.icon} title={g.name} sub="How do you want to play?" onBack={onBack}>
+      <div className="fz-modes">
+        {opts.map((m, i) => (
+          <button key={m.k} type="button" className="fz-mode" onClick={() => onPick(m.k)}
+                  style={{ '--i': i } as CSSProperties}>
+            <span className="ic" aria-hidden="true">{MODE_ICON[m.k]}</span>
+            <span className="label">{m.label}</span>
+            <span className="hint">{m.hint}</span>
+          </button>
+        ))}
+      </div>
+      {!employeeId && (
+        <div className="signin-note">
+          Playing with a colleague needs you to be signed in to ESS.
+        </div>
+      )}
+    </Stage>
+  )
 }
 
 export default function FunZone({ employeeId }: { employeeId?: string }) {
@@ -277,88 +456,49 @@ export default function FunZone({ employeeId }: { employeeId?: string }) {
   const [mode, setMode] = useState<Mode | null>(null)
   const back = () => { setGame(null); setMode(null) }
   const backToModes = () => setMode(null)
+  const top = useRef<HTMLDivElement>(null)
 
-  // The wheel has no modes — opening it opens the game.
-  if (game === 'wheel') return <SpinWheel onBack={back} />
+  // Every screen change starts at the top of the panel, not wherever the
+  // hub was scrolled to.
+  useEffect(() => {
+    const el = top.current
+    if (!el || typeof el.getBoundingClientRect !== 'function') return
+    if (el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start' })
+  }, [game, mode])
 
-  if (game && !mode) {
-    const g = GAMES.find(x => x.k === game)
-    const opts = (MODES[game] ?? []).filter(m => m.k !== 'live' || employeeId)
-    return (
-      <div style={panel}>
-        <BackBtn onClick={back} />
-        <div style={gameTitle}>{g?.icon} {g?.name}</div>
-        <div style={gameSub}>How do you want to play?</div>
-        <div style={{ display: 'grid', gap: 10 }}>
-          {opts.map(m => (
-            <button key={m.k} onClick={() => setMode(m.k)}
-              style={{ textAlign: 'left', fontFamily: 'inherit', cursor: 'pointer',
-                       border: `1px solid ${TK.line}`, background: TK.surface,
-                       borderRadius: 12, padding: '13px 16px', color: F.navy }}>
-              <div style={{ fontWeight: 700, fontSize: 14 }}>{m.label}</div>
-              <div style={{ fontSize: 12, color: F.muted, marginTop: 3, lineHeight: 1.5 }}>
-                {m.hint}
-              </div>
-            </button>
-          ))}
-          {!employeeId && (
-            <div style={{ fontSize: 11, color: F.muted, lineHeight: 1.6 }}>
-              Playing with a colleague needs you to be signed in to ESS.
-            </div>
-          )}
-        </div>
-      </div>
-    )
-  }
+  let screen: ReactNode
 
-  if (game && mode) {
-    const wrap = (node: React.ReactNode) => (
-      <div>
-        <BackBtn onClick={backToModes} />
-        {node}
-      </div>
-    )
+  if (game === 'wheel') {
+    // The wheel has no modes — opening it opens the game.
+    screen = <SpinWheel onBack={back} />
+  } else if (game && MIND_GAMES.some(m => m.code === game)) {
+    // Nor do the mind games.
+    screen = <MindGame code={game} onBack={back} />
+  } else if (game && !mode) {
+    screen = <ModeScreen game={game} employeeId={employeeId} onPick={setMode} onBack={back} />
+  } else if (game && mode) {
+    const g = GAMES.find(x => x.k === game)!
     if (mode === 'live' && employeeId) {
-      return wrap(
-        <div>
-          <div style={gameTitle}>Play together</div>
-          <div style={gameSub}>Invite a colleague and play on two screens, live.</div>
-          <PlayTogether meId={employeeId} />
-        </div>
+      screen = (
+        <Stage cat={g.cat} icon="🤝" title="Play together"
+               sub="Invite a colleague and play on two screens, live." onBack={backToModes}
+               bodyClass="left">
+          <div className="fz-live"><PlayTogether meId={employeeId} /></div>
+        </Stage>
       )
-    }
-    if (mode === 'bot') {
-      if (game === 'ttt')  return wrap(<TicTacToeVsBot />)
-      if (game === 'mem')  return wrap(<MemoryVsBot />)
-      if (game === 'quiz') return wrap(<TriviaVsBot />)
-    }
-    if (game === 'ttt')  return <TicTacToe onBack={backToModes} />
-    if (game === 'mem')  return <MemoryMatch onBack={backToModes} />
-    if (game === 'quiz') return <Trivia onBack={backToModes} />
+    } else if (mode === 'bot' && game === 'ttt')  screen = <TicTacToeVsBot onBack={backToModes} />
+    else if (mode === 'bot' && game === 'mem')    screen = <MemoryVsBot onBack={backToModes} />
+    else if (mode === 'bot' && game === 'quiz')   screen = <TriviaVsBot onBack={backToModes} />
+    else if (game === 'ttt')  screen = <TicTacToe onBack={backToModes} />
+    else if (game === 'mem')  screen = <MemoryMatch onBack={backToModes} />
+    else if (game === 'quiz') screen = <Trivia onBack={backToModes} />
   }
 
   return (
-    <div>
-      <div style={{ fontSize: 13, color: F.muted, marginBottom: 16 }}>
-        Take a break. Play on your own, against the computer, or with a colleague
-        on two screens — nothing here is scored towards anything.
-      </div>
-      <div style={{ display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 14 }}>
-        {GAMES.map(g => (
-          <button key={g.k} onClick={() => setGame(g.k)}
-            style={{ ...panel, padding: 20, cursor: 'pointer',
-                     border: `2px solid ${F.border}`, textAlign: 'left',
-                     fontFamily: 'inherit', color: F.navy }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>{g.icon}</div>
-            <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 3 }}>{g.name}</div>
-            <div style={{ fontSize: 12, color: F.muted }}>{g.desc}</div>
-            <span style={{ display: 'inline-block', fontSize: 10, fontWeight: 700,
-                           padding: '2px 8px', borderRadius: 999, marginTop: 8,
-                           background: g.bg, color: g.fg }}>{g.badge}</span>
-          </button>
-        ))}
-      </div>
+    <div className="fz" ref={top}>
+      <FzStyles />
+      {screen ?? <Hub employeeId={employeeId} onOpen={k => { setGame(k); setMode(null) }} />}
     </div>
   )
 }
+
