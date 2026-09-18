@@ -13,7 +13,6 @@ import {
   loadEmployeeDetail, updateEmployeePhoto, loadDirectory, loadNotifications, markNotification, markAllNotifications,
   loadServiceRequests, createServiceRequest, loadLetterRequests, createLetterRequest,
   loadAnnouncements, loadKudos,
-  loadLeaveBalances, loadLeaveApplications, applyLeave, loadEmployeeHolidays,
   type EmployeeDetail, type DirectoryEntry, type EssNotification,
   type ServiceRequest, type LetterRequest, type Announcement, type Kudo,
 } from '@/lib/supabase-ess'
@@ -26,7 +25,6 @@ import {
 import * as HR from '@/lib/employees/hr-actions'
 import { useGrant, useManagerChain, authToken } from '@/lib/rms/client'
 import { hasAdminAccess } from '@/lib/rms/resolve'
-import { loadLeaveTypes } from '@/lib/supabase-leave-config'
 import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
@@ -92,6 +90,9 @@ const Social               = dynamic(() => import('@/components/ess/social/Socia
 // Named exports, so they need unwrapping.
 const InboxShell = dynamic(() => import('./inbox/InboxShell').then(m => m.InboxShell), { ssr: false, loading: SectionLoading })
 const HrisShell  = dynamic(() => import('./hris/HrisShell').then(m => m.HrisShell), { ssr: false, loading: SectionLoading })
+// Leave (121). Extracted from this file into its own component and split
+// like the rest: an employee who never opens Leave no longer downloads it.
+const LeaveSection         = dynamic(() => import('@/components/ess/LeaveSection'), { ssr: false, loading: SectionLoading })
 
 // ── Styles ─────────────────────────────────────────────────────────
 // Bound to the design system. See lib/ui/tokens.ts.
@@ -1325,121 +1326,6 @@ function Notifications({ emp, onChange }: { emp: EmployeeDetail; onChange?: () =
 }
 
 // ── Leave & Holidays (ESS) — balances, apply, history, upcoming holidays ──
-function LeaveSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, t?: 'success'|'error') => void }) {
-  const [balances, setBalances] = useState<any[]>([])
-  const [types, setTypes] = useState<any[]>([])
-  const [apps, setApps] = useState<any[]>([])
-  const [hols, setHols] = useState<any[]>([])
-  const [form, setForm] = useState({ leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' })
-  const [busy, setBusy] = useState(false)
-  // Half-day is offered only for these leave types.
-  const HALF_DAY_TYPES = ['EL', 'CL', 'SL', 'LWP', 'CP']
-  useEffect(() => {
-    loadLeaveBalances(emp.id).then(setBalances)
-    loadLeaveApplications(emp.id).then(setApps)
-    loadEmployeeHolidays(emp.id).then(setHols)
-    // Leave-type catalog (EL, CL, …) — the apply dropdown lists every active,
-    // employee-applicable type, not only the ones the employee has a balance row for.
-    loadLeaveTypes().then(all => setTypes((all || []).filter((t: any) => t.is_active && t.application_mode !== 'HR_MARK')))
-  }, [emp.id])
-  // Balance lookup by leave_type_id → shows "(N left)" next to a type when seeded.
-  const balByType = useMemo(() => { const m: Record<string, any> = {}; balances.forEach((b: any) => { m[b.leave_type_id] = b }); return m }, [balances])
-  const avail = (b: any) => (Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)
-  const barColor = (pct: number) => pct > 60 ? C.positive : pct > 30 ? C.warning : C.critical
-  const submit = async () => {
-    if (!form.leave_type_id || !form.from_date || !form.to_date) { notify('Select leave type and dates', 'error'); return }
-    if (form.half_day && !form.half_session) { notify('Select 1st half or 2nd half', 'error'); return }
-    const days = form.half_day ? 0.5 : Math.max(1, Math.round((new Date(form.to_date).getTime() - new Date(form.from_date).getTime()) / 86400000) + 1)
-    setBusy(true)
-    const { error } = await applyLeave({ employee_id: emp.id, leave_type_id: form.leave_type_id, from_date: form.from_date, to_date: form.to_date, half_day: form.half_day, half_session: form.half_day ? form.half_session : '', days, reason: form.reason }) as any
-    setBusy(false)
-    if (error) { notify('Failed: ' + error.message, 'error'); return }
-    notify('Leave request submitted ✓'); setForm({ leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' })
-    loadLeaveApplications(emp.id).then(setApps)
-  }
-  const STATUS: Record<string, [string, string]> = { PENDING: [C.warningTint, C.warning], APPROVED: [C.positiveTint, C.positive], REJECTED: [C.criticalTint, C.critical], CANCELLED: [C.sunken, C.muted] }
-  const HOL_STYLE: Record<string, [string, string]> = { NATIONAL: [C.infoTint, C.brand], FESTIVAL: [C.brandTint, C.muted], OPTIONAL: [C.warningTint, C.warning], REGIONAL: [C.brandTint, C.brand] }
-  const today = new Date().toISOString().slice(0, 10)
-  const upcoming = hols.filter((h: any) => h.holiday_date >= today)
-  return (
-    <div>
-      <div style={T.card}>
-        <div style={T.section}>Leave Balance · FY 2026-27</div>
-        {balances.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No leave balances yet — contact HR.</div> :
-          balances.map((b: any) => { const total = Number(b.opening || 0) + Number(b.accrued || 0); const av = avail(b); const pct = total > 0 ? Math.round(av / total * 100) : 0; return (
-            <div key={b.id} style={{ background: C.sunken, borderRadius: 10, padding: '10px 12px', marginBottom: 8 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 600 }}><span style={{ fontSize: 10, background: C.brandTint, color: C.brandDeep, padding: '2px 7px', borderRadius: 99, marginRight: 6 }}>{b.leave_types?.short_name}</span>{b.leave_types?.name}</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: barColor(pct) }}>{av}<span style={{ fontSize: 11, color: C.faint, fontWeight: 400 }}> / {total}</span></span>
-              </div>
-              <div style={{ height: 5, borderRadius: 99, background: C.line, overflow: 'hidden' }}><div style={{ height: '100%', width: `${pct}%`, background: barColor(pct) }} /></div>
-            </div>
-          )})}
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>Apply for Leave</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Leave type</label>
-            <select style={T.input} value={form.leave_type_id} onChange={e => setForm(f => ({ ...f, leave_type_id: e.target.value, half_day: false, half_session: '' }))}>
-              <option value="">Select</option>
-              {(types.length ? types : balances.map((b: any) => ({ id: b.leave_type_id, short_name: b.leave_types?.short_name, name: b.leave_types?.name }))).map((t: any) => {
-                const bal = balByType[t.id]
-                return <option key={t.id} value={t.id}>{t.short_name} · {t.name}{bal ? ` (${avail(bal)} left)` : ''}</option>
-              })}
-            </select></div>
-          <div><label style={T.label}>From</label><input type="date" style={T.input} value={form.from_date} onChange={e => setForm(f => ({ ...f, from_date: e.target.value }))} /></div>
-          <div><label style={T.label}>To</label><input type="date" style={T.input} value={form.to_date} onChange={e => setForm(f => ({ ...f, to_date: e.target.value }))} /></div>
-          {(() => {
-            const selShort = types.find((t: any) => t.id === form.leave_type_id)?.short_name || balByType[form.leave_type_id]?.leave_types?.short_name || ''
-            if (!HALF_DAY_TYPES.includes(selShort)) return null
-            return (
-              <div style={{ gridColumn: '1/-1' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={form.half_day} onChange={e => setForm(f => ({ ...f, half_day: e.target.checked, half_session: e.target.checked ? f.half_session : '' }))} /> Half day
-                </label>
-                {form.half_day && (
-                  <div style={{ display: 'flex', gap: 18, marginTop: 8, paddingLeft: 24 }}>
-                    {[['1st', '1st Half'], ['2nd', '2nd Half']].map(([val, lbl]) => (
-                      <label key={val} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={form.half_session === val} onChange={e => setForm(f => ({ ...f, half_session: e.target.checked ? val : '' }))} /> {lbl}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          })()}
-          <div style={{ gridColumn: '1/-1' }}><label style={T.label}>Reason</label><input style={T.input} value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Brief reason" /></div>
-        </div>
-        <button onClick={submit} disabled={busy} style={{ ...T.btnP, marginTop: 10, opacity: busy ? .6 : 1 }}>{busy ? 'Submitting…' : 'Submit request'}</button>
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>Recent Requests</div>
-        {apps.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No leave applications yet.</div> :
-          apps.map((a: any) => { const [bg, c] = STATUS[a.status] || [C.sunken, C.muted]; return (
-            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.brandEdge}`, fontSize: 12 }}>
-              <span style={{ fontSize: 10, background: C.brandTint, color: C.brandDeep, padding: '2px 7px', borderRadius: 99, fontWeight: 600 }}>{a.leave_types?.short_name}</span>
-              <span style={{ flex: 1 }}>{a.from_date}{a.to_date !== a.from_date ? ` → ${a.to_date}` : ''}{a.half_day ? ' (½)' : ''}</span>
-              <span style={{ fontSize: 10, padding: '2px 9px', borderRadius: 99, background: bg, color: c, fontWeight: 600 }}>{a.status}</span>
-            </div>
-          )})}
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>Upcoming Holidays</div>
-        {upcoming.length === 0 ? <div style={{ fontSize: 12, color: C.faint }}>No upcoming holidays.</div> :
-          upcoming.map((h: any) => { const [bg, c] = HOL_STYLE[h.holiday_type] || [C.sunken, C.muted]; return (
-            <div key={h.holiday_date + h.description} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: `1px solid ${C.brandEdge}`, fontSize: 12 }}>
-              <span style={{ minWidth: 64, fontWeight: 600 }}>{new Date(h.holiday_date + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
-              <span style={{ flex: 1 }}>{h.description}</span>
-              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 99, background: bg, color: c, fontWeight: 600 }}>{h.holiday_type}</span>
-              {h.is_optional && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 99, background: C.warningTint, color: C.warning }}>Optional</span>}
-            </div>
-          )})}
-      </div>
-    </div>
-  )
-}
-
 // ════════════════════════════════════════════════════════════════
 // ATTENDANCE (B3)
 // ════════════════════════════════════════════════════════════════
