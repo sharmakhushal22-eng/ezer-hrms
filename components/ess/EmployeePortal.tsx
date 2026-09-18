@@ -3855,11 +3855,20 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
           // their own <Page> padding and expect the full width.
           <AdminModuleHost moduleKey={adminKey} />
         ) : (
-          view === 'inbox' || section.k === 'hris' ? (
-            section.k === 'hris' ? (
+          view === 'inbox' || section.k === 'hris' || section.k === 'funzone' ? (
+            section.k === 'hris' || section.k === 'funzone' ? (
               // HRIS draws its own header band (title, badge, search) and its own
               // sub-tabs, so the portal's TabHeader and SubTabs would be a second
               // copy of both.
+              //
+              // Fun Zone is the same case since the September 2026 redesign. It
+              // opens with its own hero — the title, the blurb, Surprise me and
+              // the filter chips — so the band above it was a second header
+              // saying the same thing in plainer words: "Fun Zone", "Available",
+              // "Take a break — play a quick game with your team".
+              //
+              // SubTabs is no loss either: it returns null below two items, and
+              // Fun Zone has exactly one.
               <div>{renderView()}</div>
             ) : (
             // The inbox is a full-bleed tab: three panes that fill the viewport
