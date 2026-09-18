@@ -122,7 +122,20 @@ export async function GET(req: NextRequest) {
 
   const annotated = (types || []).map((t: any) => {
     const reasons: string[] = []
-    if (t.gender !== 'ANY' && gender && t.gender !== gender) reasons.push('Not available for your gender')
+    // A gendered type (ML is 'F', PL is 'M') needs a POSITIVE match.
+    //
+    // This read `t.gender !== 'ANY' && gender && t.gender !== gender`. When the
+    // employee had no gender on file, normGender() returned null and that middle
+    // clause short-circuited, skipping the check altogether — so all 5 active
+    // employees whose gender column is NULL were offered BOTH Maternity and
+    // Paternity leave. That was a deliberate "don't punish an HR data gap"
+    // choice on my part, and it was the wrong call: for a statutory gendered
+    // entitlement, defaulting to "allow" is the unsafe direction.
+    //
+    // Blocking also surfaces the missing record instead of hiding it.
+    if (t.gender !== 'ANY' && t.gender !== gender) {
+      reasons.push(gender ? 'Not available for your gender' : 'Your gender is not on file — ask HR to update it')
+    }
     // Probation does NOT block every leave type.
     //
     // This previously read `onProbation && !t.probation_eligible`, which looked
@@ -226,8 +239,14 @@ export async function POST(req: NextRequest) {
   if (!emp) return bad('Employee record not found.', 404)
 
   const gender = normGender(emp.gender)
-  if (type.gender !== 'ANY' && gender && type.gender !== gender) {
-    return forbidden(`${type.name} is not available for your gender record.`)
+  // Positive match required — see the long note in GET. The `&& gender &&` that
+  // stood here skipped the check entirely for anyone with no gender recorded, so
+  // Maternity leave could be filed for them by the UI (which reads the same
+  // annotation) or by a crafted POST.
+  if (type.gender !== 'ANY' && type.gender !== gender) {
+    return forbidden(gender
+      ? `${type.name} is not available for your gender record.`
+      : `${type.name} requires your gender on file. Please ask HR to update your record.`)
   }
 
   // Probation is NOT a blanket bar — see the long note in GET.
