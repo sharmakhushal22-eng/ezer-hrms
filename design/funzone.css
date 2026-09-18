@@ -221,7 +221,17 @@
 .fz .fz-shelf-h p { margin: 0; font-size: 13px; color: var(--fz-muted); }
 
 .fz .fz-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
-.fz .fz-grid.big { grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); }
+
+/* CLASSICS: FOUR TILES, NEVER THREE COLUMNS.
+   auto-fill with minmax(230px) resolves to 3 at the portal's ~852px content
+   width, so the fourth tile (Spin the Wheel) sat alone on the next row beside
+   two empty cells. Lowering the minimum is not the fix: at 1056px it yields 5
+   and orphans again, and it would cost .big its larger screen and glyph
+   (see .fz-grid.big .scr / .glyph below).
+   Four columns while there is room, two when there is not. Mind games keeps
+   auto-fill — ten tiles cannot divide evenly into four, and a short last row
+   there is normal rather than a fault. */
+.fz .fz-grid.big { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 
 /* ── a tile is a game cartridge: screen on top, label below ─────────────── */
 .fz .fz-tile {
