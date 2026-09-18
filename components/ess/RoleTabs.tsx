@@ -506,7 +506,7 @@ export function RaiseMrfSection({ employeeId, notify, go }: { employeeId: string
 // A row per interview this employee has been added to. Acknowledge first (the
 // button then turns into a blue "Give feedback"); giving feedback opens the
 // 8-parameter form and, once submitted, the row is marked done.
-function InterviewInvites({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+export function InterviewInvites({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
   const [invites, setInvites] = useState<any[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [fbFor, setFbFor] = useState<any | null>(null)
