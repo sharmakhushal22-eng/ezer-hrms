@@ -246,9 +246,16 @@ export default function RecruitmentPage() {
       const myId = grant.employeeId
       const oversight = grant.legacy || grant.isSuperAdmin || grant.crossCompany || (grant.roles || []).some((r: any) => OVERSIGHT_CODES.includes(r.role_code))
       if (!oversight && myId) {
-        const mine = new Set(mrf2.filter(m => Array.isArray(m.assigned_recruiter_ids) && m.assigned_recruiter_ids.includes(myId)).map(m => m.id))
-        mrf2 = mrf2.filter(m => mine.has(m.id))
-        cand2 = cand2.filter(c => c.mrf_id && mine.has(c.mrf_id))
+        const assigned = (m: any) => Array.isArray(m.assigned_recruiter_ids) && m.assigned_recruiter_ids.includes(myId)
+        const approver = (m: any) => Array.isArray(m.approval_chain) && m.approval_chain.some((s: any) => s.approver_id === myId)
+        // MRFs this person may see in the list: ones assigned to them to hire, ones THEY
+        // raised (so a raiser sees their own requisitions here too, not only in HRIS), and
+        // ones awaiting their approval.
+        const mrfMine = new Set(mrf2.filter(m => assigned(m) || m.requested_by === myId || approver(m)).map(m => m.id))
+        // Candidates stay scoped to the MRFs they actually run as the assigned recruiter.
+        const assignedIds = new Set(mrf2.filter(assigned).map(m => m.id))
+        mrf2 = mrf2.filter(m => mrfMine.has(m.id))
+        cand2 = cand2.filter(c => c.mrf_id && assignedIds.has(c.mrf_id))
       }
       setMrfs(mrf2); setCandidates(cand2)
     } catch(e) { showNotify('Data load error','error') }
