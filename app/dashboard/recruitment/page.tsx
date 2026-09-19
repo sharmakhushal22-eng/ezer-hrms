@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
 import CandidateInterviewModal from '@/components/recruitment/CandidateInterviewModal'
+import MrfForm from '@/components/ess/MrfForm'
 
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
@@ -1782,7 +1783,19 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         </div>
       )}
 
-      {showForm && (
+      {/* New MRF → the same auto-filling form as ESS "Raise MRF" (MrfForm): company,
+          department and reporting line (RM1/RM2/HOD) prefill from the raiser, and it
+          routes through the reporting chain to the HR Head. Editing an existing MRF (or a
+          legacy login with no employee record) still uses the detailed form below. */}
+      {showForm && !editMRF && employeeId && (
+        <div style={T.cardPurple}>
+          <MrfForm employeeId={employeeId} notify={showNotify}
+            onDone={() => { setShowForm(false); onRefresh() }}
+            onCancel={() => setShowForm(false)} />
+        </div>
+      )}
+
+      {showForm && (editMRF || !employeeId) && (
         <div style={T.cardPurple}>
           <div style={{ display:'flex', gap:10, marginBottom:16 }}>
             {['Quick Hire','Full MRF'].map(type=>(
