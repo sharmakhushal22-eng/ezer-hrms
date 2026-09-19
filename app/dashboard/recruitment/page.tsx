@@ -1434,7 +1434,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
 }
 
 // ── MRF TAB ───────────────────────────────────────────────────────
-function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify }:any) {
+function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify, employeeId }:any) {
   const EMPTY = {
     // §1 Requisition Meta
     mrf_type:'Full MRF', hiring_type:'New Hire', urgency:'MEDIUM',
@@ -1496,6 +1496,21 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   async function addSkill(name:string) {
     const { error } = await supabase.from('skills').insert({ name })
     if (!error) setSkills(s=>[...s, name].sort((a,b)=>a.localeCompare(b)))
+  }
+
+  // The HR Head for a company — the final MRF approver, resolved the same way the
+  // ESS server does: whoever holds the HR_HEAD role, preferring the same company.
+  async function resolveHrHead(companyId:string) {
+    const { data:role } = await supabase.from('ess_roles').select('id').eq('role_code','HR_HEAD').maybeSingle()
+    if (!role) return null
+    const { data:urs } = await supabase.from('ess_user_roles').select('ess_account_id').eq('role_id',role.id).eq('is_active',true)
+    const acctIds = (urs||[]).map((u:any)=>u.ess_account_id)
+    if (!acctIds.length) return null
+    const { data:accts } = await supabase.from('ess_accounts').select('employee_id').in('id',acctIds)
+    const empIds = (accts||[]).map((a:any)=>a.employee_id)
+    if (!empIds.length) return null
+    const { data:emps } = await supabase.from('employees').select('id, full_name, emp_code, company_id').in('id',empIds).is('date_of_leaving',null)
+    return (emps||[]).find((e:any)=>e.company_id===companyId) || (emps||[])[0] || null
   }
 
   const filtLocs = form.company_id ? locations.filter((l:Location)=>l.company_id===form.company_id) : locations
@@ -1579,6 +1594,28 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     const eduReq = form.education_max || form.education_min || form.education_required || null
     // Derived so the requisition still reads correctly if that manager later moves on.
     const mgr = people.find((p:any)=>p.id===form.reporting_manager_id)
+
+    // ── Approval routing — same flow as ESS "Raise MRF" ──────────────────────
+    // On SUBMIT, build an approver-resolved chain (RM2 → HR Head) so the task
+    // lands in each approver's ESS → Tasks & Approvals, exactly like Raise MRF.
+    // RM2 = the manager picked on this form (RM2, else the Reporting Manager);
+    // HR Head = whoever holds HR_HEAD for this company.
+    let approvalChain: any[] = form.approval_chain || []
+    if (status === 'SUBMITTED') {
+      const rm2p = people.find((p:any)=>p.id===(form.rm2_id||form.reporting_manager_id))
+      const hh = await resolveHrHead(form.company_id)
+      const chain:any[] = []
+      if (rm2p) chain.push({ order:1, role:'RM2', approver_id:rm2p.id, approver_name:rm2p.full_name, approver_code:rm2p.emp_code, status:'PENDING', acted_at:null, comment:null })
+      if (hh && hh.id !== (form.rm2_id||form.reporting_manager_id))
+        chain.push({ order:chain.length+1, role:'HR_HEAD', approver_id:hh.id, approver_name:hh.full_name, approver_code:hh.emp_code, status: chain.length ? 'WAITING' : 'PENDING', acted_at:null, comment:null })
+      if (!chain.length) {
+        setSaving(false)
+        showNotify('No approver could be routed — pick a Reporting Manager / RM2 on the form, or set an HR Head for this company.','error')
+        return
+      }
+      approvalChain = chain
+    }
+
     const payload:any = {
       company_id:form.company_id, location_id:form.location_id||null, department_id:form.department_id||null,
       designation:form.designation, position:form.designation,
@@ -1615,8 +1652,11 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       business_justification:form.business_justification||null,
       target_joining_date:form.target_joining_date||null, validity_date:form.validity_date||null,
       good_to_have_skills:form.good_to_have_skills||null,
-      ctq_questions:form.ctq_questions||[], approval_chain:form.approval_chain||[],
+      ctq_questions:form.ctq_questions||[], approval_chain:approvalChain,
       sourcing_mode:form.sourcing_mode||null, sourcing_channels:form.sourcing_channels||[],
+      // Attribute the requisition to the raiser so it shows in their ESS "My requests",
+      // and so ESS approval treats it identically to a Raise-MRF submission.
+      ...(editMRF ? {} : { requested_by: employeeId || null }),
     }
     let error:any, savedId = editMRF?.id
     if (editMRF) {
@@ -2062,11 +2102,19 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </>
           )}
 
-          {/* ── §8 Approval Workflow ── */}
+          {/* ── §8 Approval Workflow — auto-routed, same as ESS Raise MRF ── */}
           <SectionLine title="8 · Approval Workflow" />
-          <div style={{ marginBottom:14 }}>
-            <label style={T.label}>Approval Hierarchy</label>
-            <ApprovalChainEditor chain={form.approval_chain} onChange={(v:any[])=>F('approval_chain',v)} />
+          <div style={{ ...T.card, background:C.sunken, marginBottom:14 }}>
+            <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.6 }}>
+              On <b>Submit</b>, this requisition is routed for approval automatically — the same flow as ESS “Raise MRF”. Each approver sees it in their <b>ESS → Tasks &amp; Approvals</b>.
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const, marginTop:10, fontSize:12.5 }}>
+              <span style={{ fontWeight:600, padding:'4px 10px', borderRadius:99, background:C.brandTint, color:C.brandDeep }}>
+                1 · RM2 — {people.find((p:any)=>p.id===(form.rm2_id||form.reporting_manager_id))?.full_name || <span style={{ color:C.critical }}>pick RM2 / Reporting Manager in §2</span>}
+              </span>
+              <span style={{ color:C.faint }}>→</span>
+              <span style={{ fontWeight:600, padding:'4px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>2 · HR Head (auto)</span>
+            </div>
           </div>
 
           {/* ── §9 Sourcing ── */}
