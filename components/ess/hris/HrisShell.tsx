@@ -32,7 +32,8 @@ const TABS: { k: HrisTab; label: string }[] = [
   { k: 'directory', label: 'Team Directory' },
   { k: 'requests', label: 'Raise a Request' },
   { k: 'approvals', label: 'Tasks & Approvals' },
-  { k: 'raise-mrf', label: 'Raise MRF' },
+  // Raise MRF removed from HRIS — an MRF is now raised from Recruitment → MRF tab
+  // (same auto-filling form). Kept the pane import guarded below in case it is re-enabled.
   { k: 'exit', label: 'Exit Process' },
 ]
 

@@ -3142,9 +3142,8 @@ const SECTIONS: NavSection[] = [
       // Approvals appears only for a login the menu says can approve (RM, HOD, or a
       // functional approver) — decided from /api/ess/menu, not from a role name here.
       { k:'approvals',   label:'Tasks & Approvals' },
-      // Raise MRF — a dedicated section beside Approvals. Shown only for a login that can
-      // raise one (RM / HOD / approver), gated below from /api/ess/menu.
-      { k:'raise-mrf',   label:'Raise MRF' },
+      // Raise MRF removed from HRIS — an MRF is now raised from Recruitment → MRF tab
+      // (the same auto-filling form), so it no longer appears here.
       { k:'exit',        label:'Exit Process' },
     ]},
 
