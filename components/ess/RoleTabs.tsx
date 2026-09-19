@@ -542,6 +542,7 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
               <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>
                 {when}{i.scheduled_by_name ? ` · by ${i.scheduled_by_name}` : ''}
                 {i.meet_link ? <> · <a href={i.meet_link} target="_blank" rel="noreferrer" style={{ color: C.blue, fontWeight: 600 }}>Join link</a></> : ''}
+                {i.meet_passcode ? <> · Passcode: <b style={{ color: C.ink }}>{i.meet_passcode}</b></> : ''}
               </div>
             </div>
             {i.status === 'submitted' ? (

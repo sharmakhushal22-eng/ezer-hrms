@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   if (!body || body.action !== 'schedule')
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 
-  const { candidate_id, mrf_id, company_id, round, interviewer_ids, scheduled_at, meet_link, scheduled_by } = body
+  const { candidate_id, mrf_id, company_id, round, interviewer_ids, scheduled_at, meet_link, meet_passcode, scheduled_by } = body
   if (!candidate_id || !round) return NextResponse.json({ error: 'candidate_id and round are required' }, { status: 400 })
   const ids: string[] = Array.isArray(interviewer_ids) ? interviewer_ids.filter(Boolean) : []
   if (!ids.length) return NextResponse.json({ error: 'Select at least one interviewer' }, { status: 400 })
@@ -55,15 +55,20 @@ export async function POST(req: NextRequest) {
       candidate_id, mrf_id: mrf_id || null, company_id: company_id || null, round,
       interviewer_id: id, interviewer_emp_code: e?.emp_code || null,
       interviewer_name: e?.full_name || null, interviewer_email: empEmail(e),
-      scheduled_at: scheduled_at || null, meet_link: meet_link || null,
+      scheduled_at: scheduled_at || null, meet_link: meet_link || null, meet_passcode: meet_passcode || null,
       scheduled_by: scheduled_by || null, scheduled_by_name: schedName,
       candidate_name: cand?.full_name || null, candidate_email: cand?.email || null,
       status: 'invited',
     }
   })
 
-  const { data: inserted, error } = await sb.from('interview_invites').insert(rows).select('id, interviewer_id')
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  let ins = await sb.from('interview_invites').insert(rows).select('id, interviewer_id')
+  // Resilient if migration 127 (meet_passcode) isn't applied yet — schedule without it.
+  if (ins.error && (ins.error.code === '42703' || /meet_passcode/i.test(ins.error.message))) {
+    ins = await sb.from('interview_invites').insert(rows.map(({ meet_passcode: _p, ...r }) => r)).select('id, interviewer_id')
+  }
+  const inserted = ins.data
+  if (ins.error) return NextResponse.json({ error: ins.error.message }, { status: 500 })
 
   // In-app ESS acknowledge task for every interviewer (surfaces in Tasks & Approvals + bell).
   const when = scheduled_at ? new Date(scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'a time to be confirmed'
@@ -71,7 +76,7 @@ export async function POST(req: NextRequest) {
     essNotify(
       id,
       `Interview to conduct — ${cand?.full_name || 'a candidate'} (${round})`,
-      `You've been added as an interviewer for the ${round} round on ${when}. Acknowledge it in Tasks & Approvals, then give your feedback.`,
+      `You've been added as an interviewer for the ${round} round on ${when}.${meet_link ? ` Join: ${meet_link}` : ''}${meet_passcode ? ` · Passcode: ${meet_passcode}` : ''} Acknowledge it in Tasks & Approvals, then give your feedback.`,
       '/ess?tab=approvals',
       'INTERVIEW',
     ).catch(() => null),
@@ -83,7 +88,7 @@ export async function POST(req: NextRequest) {
   if (user && pass) {
     const t = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } })
     const from = `"${process.env.GMAIL_FROM_NAME || 'EZER HR Team'}" <${user}>`
-    const linkLine = meet_link ? `\nJoin link: ${meet_link}` : ''
+    const linkLine = (meet_link ? `\nJoin link: ${meet_link}` : '') + (meet_passcode ? `\nPasscode: ${meet_passcode}` : '')
     const role = cand?.designation ? ` for the ${cand.designation} role` : ''
     const tasks: Promise<any>[] = []
     // candidate

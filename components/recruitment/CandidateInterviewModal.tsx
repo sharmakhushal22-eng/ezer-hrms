@@ -33,7 +33,7 @@ const DEFAULT_ROUNDS = ['Telephonic']
 
 interface Invite {
   id: string; round: string; interviewer_id: string; interviewer_emp_code: string | null
-  interviewer_name: string | null; scheduled_at: string | null; meet_link: string | null
+  interviewer_name: string | null; scheduled_at: string | null; meet_link: string | null; meet_passcode?: string | null
   scheduled_by_name: string | null; status: string; feedback: Feedback | null; submitted_at: string | null
 }
 interface Emp { id: string; emp_code: string | null; full_name: string; designation: string | null; company_id: string | null }
@@ -67,6 +67,7 @@ export default function CandidateInterviewModal({
   const [date, setDate] = useState('')
   const [time, setTime] = useState('')
   const [link, setLink] = useState('')
+  const [passcode, setPasscode] = useState('')
   const [sending, setSending] = useState(false)
 
   const loadInvites = useCallback(async () => {
@@ -124,7 +125,7 @@ export default function CandidateInterviewModal({
 
   const openScheduleFor = (r: string) => {
     setOpenRound(r); setViewing(null)
-    setPicked([]); setQ(''); setLink('')
+    setPicked([]); setQ(''); setLink(''); setPasscode('')
     setDate(''); setTime('10:00')
   }
 
@@ -151,7 +152,7 @@ export default function CandidateInterviewModal({
         body: JSON.stringify({
           action: 'schedule', candidate_id: candidate.id, mrf_id: candidate.mrf_id || null,
           company_id: candidate.company_id || mrf?.company_id || null, round: openRound,
-          interviewer_ids: picked.map(p => p.id), scheduled_at, meet_link: link.trim() || null,
+          interviewer_ids: picked.map(p => p.id), scheduled_at, meet_link: link.trim() || null, meet_passcode: passcode.trim() || null,
           scheduled_by: schedulerId || null,
         }),
       })
@@ -250,7 +251,7 @@ export default function CandidateInterviewModal({
                     <div key={i.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'7px 0', borderTop:`1px solid ${C.line}` }}>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontSize:12.5, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{i.interviewer_name || i.interviewer_emp_code || 'Interviewer'}</div>
-                        <div style={{ fontSize:10.5, color:C.faint }}>{i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : 'time TBC'}{i.meet_link ? ' · link sent' : ''}</div>
+                        <div style={{ fontSize:10.5, color:C.faint }}>{i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle:'medium', timeStyle:'short' }) : 'time TBC'}{i.meet_link ? ' · link sent' : ''}{i.meet_passcode ? ` · passcode ${i.meet_passcode}` : ''}</div>
                       </div>
                       {i.status === 'submitted' && i.feedback ? (
                         <>
@@ -304,6 +305,8 @@ export default function CandidateInterviewModal({
                   <div style={{ marginTop:10 }}>
                     <label style={lbl}>Meeting link <span style={{ color:C.faint, fontWeight:500 }}>— Google Meet / Zoom / Teams</span></label>
                     <input value={link} onChange={e => setLink(e.target.value)} placeholder="https://meet.google.com/…" style={inp} />
+                    <label style={{ ...lbl, marginTop:10 }}>Meeting passcode <span style={{ color:C.faint, fontWeight:500 }}>— optional (Zoom/Teams)</span></label>
+                    <input value={passcode} onChange={e => setPasscode(e.target.value)} placeholder="e.g. 4821" style={inp} />
                   </div>
                   <div style={{ display:'flex', gap:8, marginTop:12 }}>
                     <button onClick={sendSchedule} disabled={sending} style={{ ...btn.pri, opacity: sending ? .6 : 1 }}>{sending ? 'Sending…' : 'Send invite'}</button>
