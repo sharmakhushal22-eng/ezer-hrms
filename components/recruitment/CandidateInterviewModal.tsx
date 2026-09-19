@@ -26,9 +26,10 @@ const C = {
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
-// The interview rounds among the pipeline stages, and which of them gate progress.
-const INTERVIEW_ROUNDS = ['Telephonic', 'L1', 'L2', 'Optional Round']
-const CORE_ROUNDS = ['Telephonic', 'L1', 'L2']  // must have feedback before the candidate moves past them
+// Rounds are dynamic now: Telephonic is the default first round; the hiring manager adds
+// any further rounds (with their own names) via "+ Add round". Rounds already scheduled on
+// the candidate (from interview_invites) always show too, so old L1/L2 rounds still appear.
+const DEFAULT_ROUNDS = ['Telephonic']
 
 interface Invite {
   id: string; round: string; interviewer_id: string; interviewer_emp_code: string | null
@@ -56,6 +57,9 @@ export default function CandidateInterviewModal({
   const [emps, setEmps] = useState<Emp[]>([])
   const [openRound, setOpenRound] = useState<string | null>(null)
   const [viewing, setViewing] = useState<Invite | null>(null)
+  const [addedRounds, setAddedRounds] = useState<string[]>([])   // HM-added rounds not yet scheduled
+  const [showAddRound, setShowAddRound] = useState(false)
+  const [newRound, setNewRound] = useState('')
 
   // schedule form state
   const [picked, setPicked] = useState<Emp[]>([])
@@ -89,14 +93,34 @@ export default function CandidateInterviewModal({
 
   const roundComplete = useCallback((r: string) => (invitesByRound[r] || []).some(i => i.status === 'submitted'), [invitesByRound])
 
-  // Gating: a stage is blocked while any CORE round strictly before it lacks feedback.
+  // The rounds to show: the default first round, every round already scheduled on the
+  // candidate, and any the hiring manager has added — in a stable order, no duplicates.
+  const rounds = useMemo(() => {
+    const seen = new Set<string>(); const out: string[] = []
+    for (const r of [...DEFAULT_ROUNDS, ...Object.keys(invitesByRound), ...addedRounds]) {
+      if (r && !seen.has(r)) { seen.add(r); out.push(r) }
+    }
+    return out
+  }, [invitesByRound, addedRounds])
+
+  const addRound = () => {
+    const name = newRound.trim()
+    if (!name) return
+    if (!rounds.some(r => r.toLowerCase() === name.toLowerCase())) setAddedRounds(a => [...a, name])
+    setNewRound(''); setShowAddRound(false)
+    openScheduleFor(name)   // straight into scheduling, per the flow
+  }
+
+  // Gating: can't move a candidate to Shortlisted (or beyond) while any round that has been
+  // scheduled is still waiting on interviewer feedback.
   const blockedReason = useCallback((target: string): string | null => {
-    const ti = stages.indexOf(target)
-    for (const r of CORE_ROUNDS) {
-      if (stages.indexOf(r) < ti && !roundComplete(r)) return r
+    const shortlistIdx = stages.indexOf('Shortlisted')
+    if (shortlistIdx === -1 || stages.indexOf(target) < shortlistIdx) return null
+    for (const r of Object.keys(invitesByRound)) {
+      if ((invitesByRound[r] || []).length && !roundComplete(r)) return r
     }
     return null
-  }, [stages, roundComplete])
+  }, [stages, invitesByRound, roundComplete])
 
   const openScheduleFor = (r: string) => {
     setOpenRound(r); setViewing(null)
@@ -192,9 +216,12 @@ export default function CandidateInterviewModal({
       </div>
 
       {/* rounds */}
-      <SectionTitle>Interview rounds</SectionTitle>
+      <div style={{ display:'flex', alignItems:'center', gap:10, margin:'2px 0 9px' }}>
+        <SectionTitle>Interview rounds</SectionTitle>
+        <button onClick={() => { setNewRound(''); setShowAddRound(true) }} style={{ ...btn.small, marginLeft:'auto', background:C.brandTint, color:C.pdark, border:`1px solid ${C.purple}44` }}>+ Add round</button>
+      </div>
       <div style={{ display:'grid', gap:10, marginBottom:18 }}>
-        {INTERVIEW_ROUNDS.map(r => {
+        {rounds.map(r => {
           const rows = invitesByRound[r] || []
           const complete = rows.some(i => i.status === 'submitted')
           const scheduled = rows.length > 0
@@ -203,9 +230,9 @@ export default function CandidateInterviewModal({
           return (
             <div key={r} style={{ border:`1px solid ${isOpen ? C.purple : C.line}`, borderRadius:12, overflow:'hidden' }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 13px', background: complete ? C.okbg : C.card }}>
-                <div style={{ width:30, height:30, borderRadius:8, background: complete ? C.ok : scheduled ? C.info : C.sunken, color: scheduled || complete ? '#fff' : C.muted, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>{CORE_ROUNDS.includes(r) ? '★' : '○'}</div>
+                <div style={{ width:30, height:30, borderRadius:8, background: complete ? C.ok : scheduled ? C.info : C.sunken, color: scheduled || complete ? '#fff' : C.muted, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>{complete ? '✓' : '○'}</div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13.5, fontWeight:700 }}>{r} {CORE_ROUNDS.includes(r) && <span style={{ fontSize:10, color:C.faint, fontWeight:600 }}>· required</span>}</div>
+                  <div style={{ fontSize:13.5, fontWeight:700 }}>{r}</div>
                   <div style={{ fontSize:11, color:C.muted }}>
                     {scheduled ? `${rows.length} interviewer${rows.length > 1 ? 's' : ''} · ${rows.filter(i => i.status === 'submitted').length} feedback in` : 'No interview scheduled yet'}
                   </div>
@@ -311,7 +338,26 @@ export default function CandidateInterviewModal({
           )
         })}
       </div>
-      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>🔒 A required round (★ Telephonic, L1, L2) needs interviewer feedback before the candidate can move past it.</div>
+      <div style={{ fontSize:11, color:C.faint, marginTop:8 }}>🔒 Every scheduled round must have interviewer feedback before the candidate can move to Shortlisted or beyond.</div>
+
+      {/* Add-round popup — name the round, then it opens straight into scheduling */}
+      {showAddRound && (
+        <div onMouseDown={e => { if (e.target === e.currentTarget) setShowAddRound(false) }}
+          style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:C.card, borderRadius:14, width:'min(420px, 100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.35)' }}>
+            <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>Add an interview round</div>
+            <div style={{ fontSize:12, color:C.muted, marginBottom:12 }}>Name the round (e.g. “Technical L1”, “HR Round”, “Panel”). You’ll schedule the interviewers next.</div>
+            <label style={lbl}>Round name</label>
+            <input autoFocus value={newRound} onChange={e => setNewRound(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addRound() }}
+              placeholder="e.g. Technical L1" style={inp} />
+            <div style={{ display:'flex', gap:8, marginTop:14 }}>
+              <button onClick={addRound} disabled={!newRound.trim()} style={{ ...btn.pri, opacity: newRound.trim() ? 1 : .5 }}>Add</button>
+              <button onClick={() => setShowAddRound(false)} style={btn.ghost}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
     </Shell>
   )
 }
