@@ -1053,6 +1053,12 @@ function MrfTable({ rows, orgOf, candidates, onOpen, onReview }:any) {
 }
 
 // ── MRF CARD ──────────────────────────────────────────────────────
+// Friendly labels for the roles that appear in an MRF's approval chain.
+const ROLE_LABEL: Record<string,string> = {
+  RM1:'Reporting Manager', RM2:'RM2 / Skip-level', HOD:'HOD', HR_HEAD:'HR Head', HR_MANAGER:'HR Manager',
+  'Reporting Manager':'Reporting Manager', 'Department Head':'Department Head', HR:'HR', Finance:'Finance',
+}
+
 function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, onReopen }:any) {
   const openings = m.no_of_openings || m.openings || 0
   const filled = cands.filter((c:Candidate)=>c.stage==='Offer Sent'||c.stage==='Joined').length
@@ -1097,13 +1103,30 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
             <div style={{ fontSize:11, color:C.critical, marginTop:5 }}>Rejected: {m.remarks}</div>
           )}
           {chain.length>0 && m.status!=='CLOSED' && (
-            <div style={{ fontSize:11, color:C.muted, marginTop:5 }}>
-              Approvals: {doneSteps}/{chain.length}
-              {chain.map((s:any,i:number)=>(
-                <span key={i} style={{ marginLeft:5, color: s.status==='APPROVED'?C.positive: s.status==='REJECTED'?C.critical:C.lineStrong }}>
-                  {s.status==='APPROVED'?'':s.status==='REJECTED'?'':''}
-                </span>
-              ))}
+            <div style={{ marginTop:6 }}>
+              {(() => {
+                const pending = chain.find((s:any)=>s.status==='PENDING')
+                return pending ? (
+                  <div style={{ fontSize:11.5, color:C.warning, fontWeight:600, marginBottom:4 }}>
+                    ⏳ Waiting on: {pending.approver_name || pending.actor || '—'}{pending.approver_code?` (${pending.approver_code})`:''} — {ROLE_LABEL[pending.role]||pending.role}
+                  </div>
+                ) : m.status==='APPROVED' ? (
+                  <div style={{ fontSize:11.5, color:C.positive, fontWeight:600, marginBottom:4 }}>✓ Fully approved</div>
+                ) : null
+              })()}
+              <div style={{ fontSize:10.5, color:C.faint, marginBottom:3 }}>Approval chain · {doneSteps}/{chain.length} done</div>
+              <div style={{ display:'flex', flexWrap:'wrap' as const, gap:5 }}>
+                {chain.map((s:any,i:number)=>{
+                  const col = s.status==='APPROVED'?C.positive : s.status==='REJECTED'?C.critical : s.status==='PENDING'?C.warning : C.muted
+                  const bg  = s.status==='APPROVED'?C.positiveTint : s.status==='REJECTED'?C.criticalTint : s.status==='PENDING'?C.warningTint : C.sunken
+                  const mark= s.status==='APPROVED'?'✓' : s.status==='REJECTED'?'✗' : s.status==='PENDING'?'⏳' : '•'
+                  return (
+                    <span key={i} style={{ fontSize:10, padding:'3px 9px', borderRadius:99, background:bg, color:col, fontWeight:600, border:`1px solid ${col}22` }}>
+                      {mark} {ROLE_LABEL[s.role]||s.role}: {s.approver_name || s.actor || '—'} · {s.status||'PENDING'}
+                    </span>
+                  )
+                })}
+              </div>
             </div>
           )}
           {openings > 0 && (m.status==='APPROVED'||m.status==='CLOSED') && (
