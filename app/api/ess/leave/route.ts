@@ -58,34 +58,57 @@ function eachDay(from: Date, to: Date): string[] {
 const availOf = (b: any) =>
   (Number(b?.opening || 0) + Number(b?.accrued || 0)) - Number(b?.used || 0) - Number(b?.encashed || 0)
 
+/** A date that cannot be claimed as leave, and why. */
+type NonWorking = { date: string; kind: 'WEEKLY_OFF' | 'HOLIDAY'; label: string }
+
 /**
- * Working days in a range: calendar days minus weekly-offs minus holidays.
+ * Every non-working date in a range, from the configured calendar.
  *
- * The old client counted calendar days, so a Friday-to-Monday request was
- * billed as 4. resolve_weekly_offs() has existed since migration 026 and was
- * never called from Leave. Verified live: it returns the four Sundays for
- * September 2026 from a single global `weekday 0 / EVERY` config row.
+ * This is the join between ESS Leave and Holiday & Weekly-off Configuration.
+ * Both resolvers have existed since migration 026:
+ *   resolve_weekly_offs() reads weekly_off_config, scoped company/branch/
+ *     employment_type, and understands EVERY and NTH modes.
+ *   resolve_holidays()    reads the employee's mapped PUBLISHED calendar,
+ *     scoped by holiday_applicability (company × branch).
+ * Nothing here is hardcoded — no weekday constant, no holiday list.
  *
- * Falls back to calendar days if either resolver errors — under-counting a
- * request is worse than over-counting it, but silently failing the whole
- * application because a holiday table is misconfigured is worse than both.
+ * OPTIONAL HOLIDAYS COUNT AS HOLIDAYS.
+ * This reverses the previous rule. A day the company has declared a holiday is
+ * not a day an employee can spend leave on, and the config UI's "employee
+ * picks" promise was never implemented — there is no pick table, route or
+ * screen anywhere, so an optional holiday was simply a working day wearing a
+ * holiday's label. Treating it as a real holiday is what the configuration
+ * actually says.
+ *
+ * ERRORS ARE NOT SWALLOWED.
+ * supabase-js .rpc() resolves with { data: null, error } rather than throwing,
+ * so the previous `try/catch` never fired for a Postgres error — it destructured
+ * `data` only, got null, built an empty off-set and counted EVERY calendar day
+ * as working. A Friday-to-Monday request was then billed as 4 days instead of 2
+ * and the employee was silently over-charged. A resolver that cannot be read is
+ * now a refusal, not a guess.
  */
-async function workingDays(employeeId: string, from: Date, to: Date): Promise<{ days: number; offs: string[] }> {
-  const all = eachDay(from, to)
-  try {
-    const [{ data: offRows }, { data: holRows }] = await Promise.all([
-      sb.rpc('resolve_weekly_offs', { p_employee_id: employeeId, p_from: iso(from), p_to: iso(to) }),
-      sb.rpc('resolve_holidays', { p_employee_id: employeeId }),
-    ])
-    const off = new Set<string>((offRows || []).map((r: any) => String(r.off_date)))
-    // Optional holidays are the employee's to take or skip, so they still cost
-    // a leave day. Only mandatory ones are excluded.
-    for (const h of (holRows || []) as any[]) if (!h.is_optional) off.add(String(h.holiday_date))
-    const working = all.filter(d => !off.has(d))
-    return { days: working.length, offs: all.filter(d => off.has(d)) }
-  } catch {
-    return { days: all.length, offs: [] }
+async function nonWorkingDays(
+  employeeId: string, from: Date, to: Date,
+): Promise<{ map: Map<string, NonWorking>; failed: boolean }> {
+  const [offRes, holRes] = await Promise.all([
+    sb.rpc('resolve_weekly_offs', { p_employee_id: employeeId, p_from: iso(from), p_to: iso(to) }),
+    sb.rpc('resolve_holidays', { p_employee_id: employeeId }),
+  ])
+  const map = new Map<string, NonWorking>()
+  if (offRes.error || holRes.error) return { map, failed: true }
+
+  for (const r of (offRes.data || []) as any[]) {
+    const d = String(r.off_date)
+    map.set(d, { date: d, kind: 'WEEKLY_OFF', label: 'a weekly off' })
   }
+  // A holiday overwrites a weekly off for the same date: if the company has
+  // named the day, the name is the more useful thing to tell the employee.
+  for (const h of (holRes.data || []) as any[]) {
+    const d = String(h.holiday_date)
+    map.set(d, { date: d, kind: 'HOLIDAY', label: String(h.description || 'a holiday') })
+  }
+  return { map, failed: false }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -97,7 +120,14 @@ export async function GET(req: NextRequest) {
   const me = r.ctx.caller.employeeId
   const year = leaveYearOf()
 
-  const [{ data: emp }, { data: balances }, { data: types }, { data: apps }, { data: hols }] = await Promise.all([
+  // The calendar the tab draws needs the employee's REAL weekly offs, not a
+  // weekday constant. resolve_weekly_offs takes a range, so this asks for a
+  // rolling year from today — comfortably past any date somebody can apply for,
+  // and a few dozen dates on the wire.
+  const winFrom = iso(new Date())
+  const winTo = iso(new Date(Date.now() + 366 * 86400000))
+
+  const [{ data: emp }, { data: balances }, { data: types }, { data: apps }, { data: hols }, { data: offRows }] = await Promise.all([
     sb.from('employees')
       .select('gender, company_doj, group_doj, confirmation_status, l1_manager_id, hr_manager_id')
       .eq('id', me).maybeSingle(),
@@ -107,7 +137,14 @@ export async function GET(req: NextRequest) {
       .select('*, leave_types(short_name, name)')
       .eq('employee_id', me).order('applied_at', { ascending: false }).limit(10),
     sb.rpc('resolve_holidays', { p_employee_id: me }),
+    sb.rpc('resolve_weekly_offs', { p_employee_id: me, p_from: winFrom, p_to: winTo }),
   ])
+
+  const weeklyOffs = ((offRows || []) as { off_date: string }[]).map(r => String(r.off_date)).sort()
+  // The weekdays those dates land on, so the client can shade a month outside
+  // the window without a second call. Derived from the resolver, never assumed:
+  // a branch configured Fri+Sat, or an NTH rule, shows up here correctly.
+  const weeklyOffWeekdays = [...new Set(weeklyOffs.map((d: string) => new Date(d + 'T00:00:00Z').getUTCDay()))].sort()
 
   const balByType = new Map<string, any>()
   for (const b of balances || []) balByType.set(b.leave_type_id, b)
@@ -178,12 +215,22 @@ export async function GET(req: NextRequest) {
     types: annotated,
     applications: apps || [],
     holidays: hols || [],
+    // The employee's own configured weekly offs, for the calendar. The tab used
+    // to hardcode Sunday, which was right only because the single live rule is a
+    // global "weekday 0 / EVERY" row — it would have shaded the wrong days the
+    // moment a branch was configured differently.
+    weekly_offs: weeklyOffs,
+    weekly_off_weekdays: weeklyOffWeekdays,
     // Surfaced so the tab can say WHY a card is empty instead of implying the
     // employee simply has nothing — the two are indistinguishable today.
     diagnostics: {
       noBalances: !(balances || []).length,
       noHolidays: !(hols || []).length,
       noApprover: !emp?.l1_manager_id && !emp?.hr_manager_id,
+      // True when no weekly-off rule matches this employee at all. Distinct
+      // from "no holidays": one means HR has published no calendar, the other
+      // means every day of the week is a working day for them.
+      noWeeklyOffs: !weeklyOffs.length,
     },
   })
 }
@@ -292,8 +339,35 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // ── 7. Days — working days, not calendar days ───────────────────────────
-  const { days: wd, offs } = await workingDays(me, from, to)
+  // ── 7. Days — working days, and the days that may not be claimed ────────
+  //
+  // Holidays and weekly offs are the company's own configuration, so a leave
+  // request may SPAN them (a Friday-to-Monday absence legitimately covers the
+  // weekend) but may not BEGIN or END on one. That is the whole rule: an
+  // employee cannot claim as leave a day the company has already given them.
+  const { map: nonWorking, failed } = await nonWorkingDays(me, from, to)
+
+  // A resolver that cannot be read must not be treated as "no holidays" — that
+  // silently over-charges the employee. Refuse and say so.
+  if (failed) {
+    return bad('The holiday and weekly-off calendar could not be read just now, so this request cannot be counted correctly. Please try again in a moment.', 503)
+  }
+
+  const startsOn = nonWorking.get(iso(from))
+  if (startsOn) {
+    return bad(`${fmtDate(iso(from))} is ${startsOn.label}, so leave cannot start on it.${halfDay ? '' : ' Pick the next working day.'}`)
+  }
+  // A half day always has from === to, so the check above already covers it —
+  // which is the hole this closes. `days` used to be forced to 0.5 BEFORE the
+  // emptiness guard, so a half day on a Sunday or on Diwali passed every check
+  // and was filed and billed at 0.5.
+  const endsOn = nonWorking.get(iso(to))
+  if (endsOn) {
+    return bad(`${fmtDate(iso(to))} is ${endsOn.label}, so leave cannot end on it. Pick the previous working day.`)
+  }
+
+  const offs = eachDay(from, to).filter(d => nonWorking.has(d))
+  const wd = daysBetween(from, to) + 1 - offs.length
   const days = halfDay ? 0.5 : wd
   if (days <= 0) return bad('That range contains only weekly-offs and holidays.')
 
