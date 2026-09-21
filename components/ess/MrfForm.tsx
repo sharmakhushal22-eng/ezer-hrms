@@ -11,18 +11,36 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { authToken } from '@/lib/rms/client'
+import { C as TK } from '@/lib/ui'
 
-// ── ESS-portal palette (matches components/ess/RoleTabs.tsx) ─────────────────
+// ── Palette ──────────────────────────────────────────────────────────────────
+//
+// THESE WERE HEX LITERALS, AND THAT WAS THE BUG. Opening "New MRF" while the
+// product was in dark mode gave a white form with near-black text on it: the
+// page around it repainted and this did not, because a literal cannot respond
+// to anything.
+//
+// Every value now resolves through lib/ui/theme.css, so one attribute on <html>
+// repaints this form with everything else. The names are kept — `purple`,
+// `card`, `locked` — so the ~200 call sites below did not have to change, and
+// the diff stays reviewable.
+//
+// NOTE: these are `var(...)` strings, not hex. Do not concatenate an alpha
+// suffix onto one (`C.purple + '20'` produces nothing) — use a tint token.
 const C = {
-  ink: '#1E1B4B', muted: '#6B7280', faint: '#9CA3AF', border: 'rgba(124,58,237,0.12)', card: '#FFFFFF',
-  purple: '#7C3AED', purpleD: '#6D28D9', soft: 'rgba(124,58,237,0.08)', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', red: '#DC2626', redBg: '#FEF2F2', bg: '#F5F3FF', locked: '#F3F1FB',
+  ink: TK.ink, muted: TK.muted, faint: TK.faint, border: TK.line, card: TK.surface,
+  purple: TK.brand, purpleD: TK.brandDeep, soft: TK.brandTint, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, red: TK.critical, redBg: TK.criticalTint, bg: TK.canvas, locked: TK.sunken,
 }
 const st = {
   label: { fontSize: 11, fontWeight: 600, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  input: { width: '100%', padding: '9px 11px', background: '#FAFAF8', border: '1px solid #DDD6FE', borderRadius: 7, color: C.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
-  btn: { padding: '9px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: C.purple, color: '#fff', whiteSpace: 'nowrap' } as React.CSSProperties,
-  btnO: { padding: '9px 16px', borderRadius: 7, border: '1px solid #DDD6FE', cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: C.purpleD, whiteSpace: 'nowrap' } as React.CSSProperties,
+  // sunken, not '#FAFAF8': an input well is one step back from the card in both
+  // themes. brandEdge replaces '#DDD6FE', which was a light-mode lilac.
+  input: { width: '100%', padding: '9px 11px', background: TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, color: C.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
+  // onAccent, not '#fff'. White on a filled button is correct in light and
+  // fails in dark, where every accent lightens and white falls to ~2.5:1.
+  btn: { padding: '9px 16px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: C.purple, color: TK.onAccent, whiteSpace: 'nowrap' } as React.CSSProperties,
+  btnO: { padding: '9px 16px', borderRadius: 7, border: `1px solid ${TK.brandEdge}`, cursor: 'pointer', fontSize: 13, fontWeight: 500, fontFamily: 'inherit', background: C.card, color: C.purpleD, whiteSpace: 'nowrap' } as React.CSSProperties,
 }
 const g2: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }
 
@@ -116,7 +134,7 @@ function ChannelPicker({ value, onChange, opts }: { value: string[]; onChange: (
       {opts.map(o => (
         <button key={o.code} type="button" onClick={() => toggle(o.label)}
           style={{ padding: '5px 11px', borderRadius: 99, fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
-            border: `1px solid ${on(o.label) ? C.purple : '#DDD6FE'}`, background: on(o.label) ? C.purple : '#fff', color: on(o.label) ? '#fff' : C.purpleD }}>
+            border: `1px solid ${on(o.label) ? C.purple : TK.brandEdge}`, background: on(o.label) ? C.purple : C.card, color: on(o.label) ? TK.onAccent : C.purpleD }}>
           {o.label}
         </button>
       ))}
@@ -159,10 +177,10 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill, placeholder
           placeholder={placeholder || "Click to pick a skill, or type to search / add custom"}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (matches[0]) add(matches[0]); else if (q.trim() && !exact) addCustom() } }} />
         {open && (matches.length > 0 || q.trim()) && (
-          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid #DDD6FE', borderRadius: 7, marginTop: 2, zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 6px 18px rgba(0,0,0,.14)' }}>
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: C.card, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, marginTop: 2, zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 6px 18px rgba(0,0,0,.14)' }}>
             {matches.map(s => <div key={s} onClick={() => add(s)} style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: C.ink }}>{s}</div>)}
             {q.trim() && !exact && (
-              <div onClick={addCustom} style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: C.purple, fontWeight: 600, borderTop: matches.length ? '1px solid #F3F0FF' : 'none' }}>+ Add custom: “{q.trim()}”</div>
+              <div onClick={addCustom} style={{ padding: '8px 11px', cursor: 'pointer', fontSize: 13, color: C.purple, fontWeight: 600, borderTop: matches.length ? `1px solid ${C.border}` : 'none' }}>+ Add custom: “{q.trim()}”</div>
             )}
             {matches.length === 0 && !q.trim() && <div style={{ padding: '8px 11px', fontSize: 12, color: C.faint }}>Type to search or add a skill…</div>}
           </div>
@@ -357,7 +375,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   // ── Success screen ─────────────────────────────────────────────────────────
   if (done) return (
     <div style={{ border: `2px solid ${C.green}`, borderRadius: 12, padding: '32px 24px', marginBottom: 12, background: C.greenBg, textAlign: 'center' }}>
-      <div style={{ width: 64, height: 64, borderRadius: '50%', background: C.green, color: '#fff', fontSize: 36, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>✓</div>
+      <div style={{ width: 64, height: 64, borderRadius: '50%', background: C.green, color: TK.onAccent, fontSize: 36, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>✓</div>
       <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>You have successfully raised the MRF</div>
       <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
         It’s been sent for approval through your reporting chain (RM2 → HR Head).
@@ -372,9 +390,9 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   )
 
   return (
-    <div style={{ border: `2px solid ${C.purple}`, borderRadius: 10, padding: '14px 16px', marginBottom: 12, background: '#fff' }}>
+    <div style={{ border: `2px solid ${C.purple}`, borderRadius: 10, padding: '14px 16px', marginBottom: 12, background: C.card }}>
       {replaceRef && (
-        <div style={{ fontSize: 12, color: C.amber, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '8px 11px', marginBottom: 10, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 12, color: C.amber, background: TK.warningTint, border: `1px solid ${C.border}`, borderRadius: 7, padding: '8px 11px', marginBottom: 10, lineHeight: 1.5 }}>
           <b>Editing / resubmitting.</b> When you submit, the previous requisition is scrapped and this corrected one goes for approval afresh.
         </div>
       )}
@@ -383,7 +401,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         {(['Quick Hire', 'Full MRF'] as const).map(t => (
           <button key={t} type="button" onClick={() => F('mrf_type', t)}
             style={{ flex: 1, padding: '9px 8px', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-              background: form.mrf_type === t ? C.purple : '#F5F3FF', color: form.mrf_type === t ? '#fff' : C.purpleD }}>
+              background: form.mrf_type === t ? C.purple : TK.sunken, color: form.mrf_type === t ? TK.onAccent : C.purpleD }}>
             {t} ({t === 'Quick Hire' ? 'CTC ≤ ₹6L' : 'CTC > ₹6L'})
           </button>
         ))}

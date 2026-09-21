@@ -33,7 +33,7 @@ const S = {
   h: { fontSize: 14, fontWeight: 700, color: C.navy, marginBottom: 3 } as React.CSSProperties,
   sub: { fontSize: 12, color: C.muted, lineHeight: 1.5 } as React.CSSProperties,
   lbl: { fontSize: 12, color: C.navy, display: 'block', marginBottom: 5 } as React.CSSProperties,
-  inp: { width: '100%', padding: '9px 11px', background: C.soft, border: `1px solid #DDD6FE`, borderRadius: 7, color: C.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
+  inp: { width: '100%', padding: '9px 11px', background: C.soft, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, color: C.navy, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
   row: { display: 'grid', gridTemplateColumns: '1fr 200px', gap: 14, alignItems: 'center', padding: '10px 0', borderTop: `1px solid ${C.border}` } as React.CSSProperties,
   btnP: { padding: '11px 24px', borderRadius: 10, border: 'none', background: C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
   btnO: { padding: '11px 20px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.purpleD, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' } as React.CSSProperties,
@@ -55,7 +55,7 @@ function RegimeCard({ code, title, blurb, active, disabled, onPick }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span style={{
           width: 15, height: 15, borderRadius: '50%', border: `2px solid ${active ? C.purple: TK.brandTint}`,
-          background: active ? C.purple: TK.surface, boxShadow: active ? 'inset 0 0 0 3px #fff' : 'none', flexShrink: 0,
+          background: active ? C.purple: TK.surface, boxShadow: active ? `inset 0 0 0 3px ${TK.surface}` : 'none', flexShrink: 0,
         }} />
         <span style={{ fontSize: 14, fontWeight: 700, color: C.navy }}>{title}</span>
       </div>
@@ -376,7 +376,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         </div>
       </div>
 
-      <div style={{ ...S.card, background: C.purpleBg, border: `1px solid #DDD6FE` }}>
+      <div style={{ ...S.card, background: C.purpleBg, border: `1px solid ${TK.brandEdge}` }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.purpleD }}>Applies for the whole financial year.</div>
         <div style={{ ...S.sub, color: C.purpleD, marginTop: 3 }}>
           Ye kisi ek payroll month se juda nahi hai — har month ka TDS seedha isi se calculate hota hai.

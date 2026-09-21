@@ -21,19 +21,23 @@ import MrfForm, { mrfToForm } from './MrfForm'
 import InterviewFeedbackForm, { type Feedback as InterviewFeedback } from '@/components/recruitment/InterviewFeedbackForm'
 
 const C = {
-  ink: '#1E1B4B', muted: '#6B7280', faint: '#9CA3AF', border: 'rgba(124,58,237,0.12)', card: '#FFFFFF',
-  purple: '#7C3AED', purpleD: '#6D28D9', soft: 'rgba(124,58,237,0.08)', green: '#059669', greenBg: '#ECFDF5',
-  amber: '#B45309', amberBg: '#FFFBEB', red: '#DC2626', redBg: '#FEF2F2', blue: '#2563EB', blueBg: '#EFF6FF', bg: '#F5F3FF',
+  // Was a hex palette, and that was the bug: a literal cannot follow the
+  // theme, so every screen this file draws stayed light when the product went
+  // dark. Same fix as components/ess/MrfForm.tsx — the names are kept so the
+  // call sites below did not have to change.
+  ink: TK.ink, muted: TK.muted, faint: TK.faint, border: TK.line, card: TK.surface,
+  purple: TK.brand, purpleD: TK.brandDeep, soft: TK.brandTint, green: TK.positive, greenBg: TK.positiveTint,
+  amber: TK.warning, amberBg: TK.warningTint, red: TK.critical, redBg: TK.criticalTint, blue: TK.info, blueBg: TK.infoTint, bg: TK.canvas,
 }
 const S = {
   card: { background: C.card, borderRadius: 10, border: `1px solid ${C.border}`, padding: '14px 16px', marginBottom: 10, boxShadow: '0 1px 4px rgba(124,58,237,0.06)' } as React.CSSProperties,
   section: { fontSize: 12, fontWeight: 600, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 } as React.CSSProperties,
-  btn: { padding: '7px 13px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap', background: C.purple, color: '#fff' } as React.CSSProperties,
-  btnO: { padding: '6px 12px', borderRadius: 7, border: '1px solid #DDD6FE', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: '#fff', color: C.purpleD, whiteSpace: 'nowrap' } as React.CSSProperties,
+  btn: { padding: '7px 13px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', whiteSpace: 'nowrap', background: C.purple, color: TK.onAccent } as React.CSSProperties,
+  btnO: { padding: '6px 12px', borderRadius: 7, border: `1px solid ${TK.brandEdge}`, cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: C.card, color: C.purpleD, whiteSpace: 'nowrap' } as React.CSSProperties,
   btnD: { padding: '6px 12px', borderRadius: 7, border: '1px solid rgba(220,38,38,.2)', cursor: 'pointer', fontSize: 12, fontWeight: 600, fontFamily: 'inherit', background: C.redBg, color: C.red, whiteSpace: 'nowrap' } as React.CSSProperties,
-  input: { width: '100%', padding: '9px 11px', background: '#FAFAF8', border: '1px solid #DDD6FE', borderRadius: 7, color: C.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
+  input: { width: '100%', padding: '9px 11px', background: TK.sunken, border: `1px solid ${TK.brandEdge}`, borderRadius: 7, color: C.ink, fontSize: 13, outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' } as React.CSSProperties,
   label: { fontSize: 11, fontWeight: 600, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.06em', display: 'block', marginBottom: 4 } as React.CSSProperties,
-  th: { background: C.ink, color: '#fff', textAlign: 'left', padding: '8px 10px', fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' } as React.CSSProperties,
+  th: { background: C.ink, color: TK.canvas, textAlign: 'left', padding: '8px 10px', fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', whiteSpace: 'nowrap' } as React.CSSProperties,
   td: { padding: '8px 10px', borderBottom: `1px solid ${C.border}`, fontSize: 12.5, verticalAlign: 'middle' } as React.CSSProperties,
   num: { textAlign: 'right', fontVariantNumeric: 'tabular-nums' } as React.CSSProperties,
   note: (tone: 'w' | 'd' | 'g' | 'i' = 'i') => ({
@@ -319,7 +323,7 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
               </span>
             </div>
             {needsRevision && (
-              <div style={{ marginTop: 6, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '8px 10px' }}>
+              <div style={{ marginTop: 6, background: C.amberBg, border: `1px solid ${C.amber}`, borderRadius: 7, padding: '8px 10px' }}>
                 {m.remarks && <div style={{ fontSize: 12, color: '#8a5a08', marginBottom: 6 }}>“{m.remarks}”</div>}
                 <button style={{ ...S.btn, background: C.amber }} onClick={() => setEditMrf(m)}>✎ Edit &amp; resubmit</button>
               </div>
@@ -359,7 +363,7 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
         const wide = new Set(['Mandatory Skills', 'Good-to-have Skills', 'Reason for Hire'])
         return (
           <div onClick={closeReview} style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,.5)', backdropFilter: 'blur(2px)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-            <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, width: 'min(620px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,.4)', overflow: 'hidden' }}>
+            <div onClick={e => e.stopPropagation()} style={{ background: C.card, borderRadius: 14, width: 'min(620px,96vw)', maxHeight: '92vh', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 70px rgba(30,27,75,.4)', overflow: 'hidden' }}>
               {/* Header */}
               <div style={{ padding: '16px 22px 14px', background: `linear-gradient(135deg, ${C.purple}, #4F46E5)`, color: '#fff' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
@@ -417,9 +421,9 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
                       {(d.hrOptions || []).map((h: any, i: number) => {
                         const on = selHr.includes(h.id)
                         return (
-                          <label key={h.id} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '11px 14px', cursor: 'pointer', background: on ? C.greenBg : '#fff', borderTop: i ? `1px solid ${C.border}` : 'none' }}>
+                          <label key={h.id} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '11px 14px', cursor: 'pointer', background: on ? C.greenBg : C.card, borderTop: i ? `1px solid ${C.border}` : 'none' }}>
                             <input type="checkbox" checked={on} onChange={e => setSelHr(s => e.target.checked ? [...s, h.id] : s.filter(x => x !== h.id))} />
-                            <span style={{ width: 30, height: 30, borderRadius: '50%', background: on ? C.green : C.soft, color: on ? '#fff' : C.purpleD, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{(h.name || '?').split(' ').slice(0, 2).map((x: string) => x[0]).join('').toUpperCase()}</span>
+                            <span style={{ width: 30, height: 30, borderRadius: '50%', background: on ? C.green : C.soft, color: on ? TK.onAccent : C.purpleD, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{(h.name || '?').split(' ').slice(0, 2).map((x: string) => x[0]).join('').toUpperCase()}</span>
                             <span style={{ flex: 1 }}>
                               <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{h.name}</div>
                               <div style={{ fontSize: 11, color: C.faint }}>{h.code} · Hiring Manager</div>
@@ -445,7 +449,7 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
               )}
 
               {/* Footer */}
-              <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '13px 22px', borderTop: `1px solid ${C.border}`, background: '#fff', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '13px 22px', borderTop: `1px solid ${C.border}`, background: C.card, flexWrap: 'wrap' }}>
                 {onAssignStep ? (
                   <>
                     <button style={S.btnO} disabled={busy} onClick={() => setReviewStep('details')}>← Back</button>
@@ -465,7 +469,7 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
                 ) : (
                   <>
                     <button style={S.btnO} disabled={busy} onClick={closeReview}>Cancel</button>
-                    <button style={{ ...S.btnO, marginLeft: 'auto', borderColor: '#FDE68A', color: C.amber }} disabled={busy} onClick={() => setShowRemark(true)}>↩ Send back</button>
+                    <button style={{ ...S.btnO, marginLeft: 'auto', borderColor: C.amber, color: C.amber }} disabled={busy} onClick={() => setShowRemark(true)}>↩ Send back</button>
                     <button style={S.btnD} disabled={busy} onClick={() => decide(m.id, 'reject', { note: '' })}>Reject</button>
                     <button style={{ ...S.btn, background: C.green }} disabled={busy}
                       onClick={() => { if (isHrHead) setReviewStep('assign'); else decide(m.id, 'approve') }}>
