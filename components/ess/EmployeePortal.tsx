@@ -3757,18 +3757,26 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
               <div>{renderView()}</div>
             ) : (
             // The inbox is a full-bleed tab: three panes that fill the viewport
-            // and scroll independently. Capping it at 1100px would put it in its
-            // own narrow breakpoint on every desktop, so only the header band
-            // keeps the standard measure — .ib brings its own width and padding.
+            // and scroll independently. .ib brings its own width and padding, so
+            // only the header band is padded here — and it now spans the window
+            // like every other section's does.
             <div style={{ paddingTop: isMobile ? 14 : 18 }}>
-              <div style={{ padding: isMobile ? '0 12px' : '0 22px', maxWidth:1100 }}>
+              <div style={{ padding: isMobile ? '0 12px' : '0 22px' }}>
                 <TabHeader s={section} />
               </div>
               {renderView()}
             </div>
             )
           ) : (
-            <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
+            // Full width, padded. This carried maxWidth:1100 — but it was only
+            // one of FOUR different caps: Today and Social also set 1100 in their
+            // own stylesheets, HRIS used --col:1160px and the Inbox 1480px. Four
+            // numbers meant the portal visibly changed shape from tab to tab on
+            // anything wider than about 1150px. All four are gone; Fun Zone was
+            // the only section that genuinely never had one.
+            // Line length is still protected where it matters, inside the
+            // sections that render prose (Wall of Fame's 70ch, and so on).
+            <div style={{ padding: isMobile ? '14px 12px' : '18px 22px' }}>
               <TabHeader s={section} />
               <SubTabs items={sectionItems} view={view} go={go} />
               {renderView()}

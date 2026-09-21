@@ -36,7 +36,12 @@
 }
 .hx{
   --r-lg:16px; --r-md:11px; --r-sm:9px;
-  --gap:14px; --col:1160px;
+  /* --col was 1160px: HRIS's own content cap, a third value alongside the
+     portal's old 1100 and the inbox's 1480, which is why the portal visibly
+     changed shape from tab to tab. `none` makes .hx-head-in and .hx-main fill
+     the window like every other section; the variable stays so the two rules
+     below need no edit and a cap can be restored in one place. */
+  --gap:14px; --col:none;
   --ease:cubic-bezier(.4,0,.2,1); --ease-out:cubic-bezier(.16,1,.3,1);
   font-family:"DM Sans","Segoe UI",system-ui,sans-serif;
   color:var(--ez-ink); -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
