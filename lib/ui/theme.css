@@ -191,7 +191,12 @@
    --------------------------------------------------------------------------- */
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-ez-theme="light"]) {
+  /* BOTH attributes must be able to turn dark OFF, not just on.
+     The explicit-dark block below honours data-ez-theme AND data-theme, but
+     this guard only ever excluded data-ez-theme — so a light choice written to
+     the other attribute alone could never defeat it, and the OS won anyway.
+     That asymmetry is half of "light is selected but the screen is dark". */
+  :root:not([data-ez-theme="light"]):not([data-theme="light"]) {
     color-scheme: dark;
 
     --ez-ink:           #F3F4F6;

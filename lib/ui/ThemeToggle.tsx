@@ -7,9 +7,14 @@
 
 import * as React from 'react';
 import { C, F, W, R, M } from './tokens';
+import {
+  STORAGE_KEY, DEFAULT_CHOICE, readChoice, resolveTheme,
+  onThemeChange, notifyThemeChange, toTodayTheme, type ThemeChoice,
+} from './theme-resolve';
+import { essToken } from '@/lib/ess-session-client';
 
-export type ThemeChoice = 'light' | 'dark' | 'system';
-const KEY = 'ezer_theme';
+export type { ThemeChoice };
+const KEY = STORAGE_KEY;
 
 /**
  * Runs before React hydrates, from a <script> in the document head.
@@ -17,18 +22,41 @@ const KEY = 'ezer_theme';
  * Without this the page paints with the default theme and then corrects
  * itself once JS runs — a white flash on every load for anyone using dark.
  * It is inlined as a string precisely so it can run that early.
+ *
+ * It now ALWAYS writes a resolved 'light' or 'dark', never nothing.
+ *
+ * It used to write only when the stored value was already 'light' or 'dark',
+ * leaving the attribute absent otherwise. Absent is not neutral: every dark
+ * rule in the product is a negative guard, :root:not([data-ez-theme="light"]),
+ * so an absent attribute means "dark if the OS says so". That is how a default
+ * installation went dark on a dark-OS machine without anyone choosing it.
+ *
+ * It must never write 'auto' — see the note in theme-resolve.ts about the dead
+ * [data-ez-theme="auto"].is-dark rules in inbox.css.
+ *
+ * Kept in sync with theme-resolve.ts by lib/ui/__tests__/theme-resolve.test.ts.
+ * It cannot import the module (it is a string that runs before any bundle), so
+ * the logic is duplicated here deliberately and the tests pin the contract.
  */
 export const themeBootScript = `
 (function(){try{
-  var c = localStorage.getItem('${KEY}');
-  if (c === 'light' || c === 'dark') document.documentElement.setAttribute('data-ez-theme', c);
+  var raw = localStorage.getItem('${KEY}');
+  var c = (raw === 'light' || raw === 'dark' || raw === 'system') ? raw : '${DEFAULT_CHOICE}';
+  var dark = c === 'dark' || (c === 'system' &&
+    window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  document.documentElement.setAttribute('data-ez-theme', dark ? 'dark' : 'light');
 }catch(e){}})();`;
 
-/** Read the stored choice. 'system' when nothing has been chosen. */
+/**
+ * The stored choice. LIGHT when nothing has been chosen — not 'system'.
+ *
+ * This used to return 'system' for an absent key, which made "I follow my OS"
+ * and "I have never picked anything" the same state. They are different
+ * preferences and are now stored differently.
+ */
 export function getThemeChoice(): ThemeChoice {
-  if (typeof window === 'undefined') return 'system';
-  const v = localStorage.getItem(KEY);
-  return v === 'light' || v === 'dark' ? v : 'system';
+  if (typeof window === 'undefined') return DEFAULT_CHOICE;
+  return readChoice(localStorage.getItem(KEY));
 }
 
 /** How long the fallback keeps its transition class on. Matches the CSS. */
@@ -63,14 +91,29 @@ export function applyTheme(choice: ThemeChoice, opts: { animate?: boolean } = {}
   const animate = opts.animate ?? true;
 
   const swap = () => {
-    if (choice === 'system') {
-      root.removeAttribute('data-ez-theme');
-      localStorage.removeItem(KEY);
-    } else {
-      root.setAttribute('data-ez-theme', choice);
-      localStorage.setItem(KEY, choice);
-    }
+    // 'system' is now STORED, not represented by deleting the key.
+    //
+    // It used to removeItem() + removeAttribute(), which made an explicit
+    // "follow my OS" indistinguishable from "never chose" — and, worse, gave
+    // any caller passing 'system' the power to silently destroy a real choice.
+    // The ESS Today preference did exactly that on every load: it mounted with
+    // a default of 'auto', mapped that to 'system', and wiped the key before
+    // the saved preference had arrived.
+    localStorage.setItem(KEY, choice);
+    // Always an explicit resolved value on <html>. Never absent (the negative
+    // CSS guards treat absent as "dark if the OS says so") and never 'auto'
+    // (inbox.css has dead rules keyed on it — see theme-resolve.ts).
+    const osDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    root.setAttribute('data-ez-theme', resolveTheme(choice, osDark));
+    // The second attribute the app grew (ESS Today writes data-theme, and
+    // today.css / social.css still select on it). Kept in step so the two
+    // controls cannot disagree — theme.css honours both.
+    root.setAttribute('data-theme', resolveTheme(choice, osDark));
   };
+  // Inside applyTheme rather than in the toggle's click handler, so EVERY route
+  // to a theme change notifies — including Today's button, which comes through
+  // applyThemeAttr() and never touches this component.
+  notifyThemeChange(choice);
 
   // Someone who has asked for less motion is asking not to be cross-faded
   // either; the swap still happens, just immediately.
@@ -91,6 +134,33 @@ export function applyTheme(choice: ThemeChoice, opts: { animate?: boolean } = {}
   root.classList.add('ez-theming');
   swap();
   window.setTimeout(() => root.classList.remove('ez-theming'), SWITCH_MS + 20);
+}
+
+/**
+ * Save the choice to the employee's record, so the nav toggle and the Today
+ * button cannot disagree after a reload.
+ *
+ * Today's button already wrote here; the nav toggle wrote only to localStorage.
+ * So a theme picked in the nav bar was overridden on the next ESS load, when
+ * Today fetched the saved preference and applied it. Both write both now.
+ *
+ * Gated on a usable ESS token rather than fired blindly: this control also
+ * renders on the sign-in page and in the admin dashboard, where there is no
+ * employee to save against and the PUT would be a pointless 401. essToken()
+ * returns null for absent, malformed and expired alike, which is the same
+ * answer for all three — do not send it.
+ */
+function persistThemeToServer(choice: ThemeChoice) {
+  const token = essToken();
+  if (!token) return;
+  void fetch('/api/ess/preferences', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    // Theme only — this control genuinely does not know the employee's time or
+    // date format. The route merges partial bodies against the stored row, so
+    // the other two preferences are preserved rather than reset to defaults.
+    body: JSON.stringify({ theme: toTodayTheme(choice) }),
+  }).catch(() => { /* best-effort; the UI has already moved */ });
 }
 
 // Declared at module level: a component defined inside another is a new type
@@ -191,13 +261,24 @@ const Auto = () => (
  * track needs to read against a dark ground rather than a card.
  */
 export function ThemeToggle({ onDark, compact }: { onDark?: boolean; compact?: boolean }) {
-  const [choice, setChoice] = React.useState<ThemeChoice>('system');
+  const [choice, setChoice] = React.useState<ThemeChoice>(DEFAULT_CHOICE);
 
   // Read after mount. Reading during render would disagree with the server
   // output and hydrate mismatched.
-  React.useEffect(() => { setChoice(getThemeChoice()); }, []);
+  //
+  // The subscription is what keeps this control honest afterwards. It used to
+  // read once and never again, so a theme changed from Today's button left this
+  // showing the previous mode until the page was reloaded.
+  React.useEffect(() => {
+    setChoice(getThemeChoice());
+    return onThemeChange(setChoice);
+  }, []);
 
-  const pick = (c: ThemeChoice) => { applyTheme(c); setChoice(c); };
+  const pick = (c: ThemeChoice) => {
+    applyTheme(c);          // notifies every subscriber, including this one
+    setChoice(c);           // immediate, so the press feels instant
+    persistThemeToServer(c);
+  };
 
   if (compact) {
     // One button that cycles, for a collapsed rail or a phone header.
