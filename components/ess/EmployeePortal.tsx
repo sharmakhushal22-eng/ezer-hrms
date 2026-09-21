@@ -44,7 +44,7 @@ import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/co
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
 import {
-  C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle, UIKeyframes,
+  C, F, W, R, E, S, Z, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
   IconLetters, IconReports, IconAi, IconBell, IconMail,
 } from '@/lib/ui'
@@ -3343,7 +3343,7 @@ function ManageMenu({ group, items, open, activeKey, alignRight, onToggle, onClo
       {open && (
         <div ref={pop} role="menu"
           style={{ position:'absolute', top:'calc(100% + 4px)', ...(alignRight ? { right:0 } : { left:0 }),
-                   minWidth:220, zIndex:40,
+                   minWidth:220, zIndex:Z.navMenu,
                    background:C.surface, border:`1px solid ${C.brandEdge}`, borderRadius:R.lg,
                    boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:6 }}>
           {items.map(i => {
@@ -3698,7 +3698,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
       <div style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 70 : 0 }}>
         {/* Top bar */}
-        <div style={{ background:C.surface, borderBottom: `1px solid ${C.brandEdge}`, padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:25 }}>
+        <div style={{ background:C.surface, borderBottom: `1px solid ${C.brandEdge}`, padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:Z.nav }}>
           {/* The tab's own name and badge live in TabHeader below, so this bar carries
               only what that header can't: the sub-tab you're on, and who you are. */}
           <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flexShrink:0 }}>
@@ -3792,7 +3792,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         // The panel was absolutely positioned inside that catcher, which
         // covered the viewport — so `fixed` with the same offsets puts it in
         // exactly the same place, now that the catcher is gone.
-        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:41, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
+        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:Z.navMenu, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
           <Notifications emp={emp} onChange={refreshUnread} />
         </div>
       )}
@@ -3800,7 +3800,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {/* Mobile bottom bar — eleven tabs don't fit a thumb bar, so the four an employee
           opens daily sit here and the rest are one tap away under More. */}
       {isMobile && (
-        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:C.surface, borderTop: `1px solid ${C.brandEdge}`, display:'flex', zIndex:20 }}>
+        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:C.surface, borderTop: `1px solid ${C.brandEdge}`, display:'flex', zIndex:Z.nav }}>
           {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
             <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? C.brand : C.faint, fontWeight: on ? 600 : 500 }}>
               <EssIcon k={s.k} size={16} />{s.short}
@@ -3815,7 +3815,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {/* Mobile "More" sheet — every tab, including the four in the bar, so nothing
           is reachable from only one place. */}
       {isMobile && moreOpen && (
-        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:30, display:'flex', alignItems:'flex-end' }}>
+        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:Z.overlay, display:'flex', alignItems:'flex-end' }}>
           <div onClick={e => e.stopPropagation()} style={{ background:C.surface, width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
             <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
@@ -3851,7 +3851,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         </div>
       )}
 
-      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
+      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:Z.toast, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
     </div>
   )
 }
