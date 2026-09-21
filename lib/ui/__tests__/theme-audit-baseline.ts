@@ -14,7 +14,18 @@
 //                              white paper and has no --ez-* variables in scope.
 //   * LeaveSection 7           white and pastel meter colours on the saturated
 //                              hero fill, which is coloured in BOTH themes.
-//   * EmployeePortal 3         fixed brand gradients.
+//   * EmployeePortal 6         two fixed brand gradients, a progress bar, a
+//                              status tint and one on-dark ink. NOTE: "it is a
+//                              gradient, so it is deliberate" was wrong once
+//                              already. The attendance month band was built
+//                              from C.ink/C.inkSoft — TEXT tokens — so in dark
+//                              mode it inverted to near-white and became the
+//                              brightest thing on the screen. It contained no
+//                              hex, so this scanner never saw it.
+//
+// THIS TOOL FINDS FROZEN LITERALS, NOT WRONG TOKENS. A file at zero can still
+// render badly in dark mode: a text token used as a surface, a hairline token
+// used as ink, a tint used where a colour belongs. Those need eyes on a screen.
 //   * PunchDial / Toast        SVG colours inside deliberately-coloured shapes.
 // Before 'fixing' an entry, check it is actually frozen rather than intended.
 export const THEME_AUDIT_BASELINE: Record<string, number> = {
@@ -45,7 +56,7 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/company/GroupHeader.tsx': 1,
   'components/company/Sections.tsx': 1,
   'components/employees/EmployeeProfileView.tsx': 7,
-  'components/ess/EmployeePortal.tsx': 8,
+  'components/ess/EmployeePortal.tsx': 6,
   'components/ess/FlexiTdsCalculator.tsx': 21,
   'components/ess/LeaveSection.tsx': 7,
   'components/ess/RoleTabs.tsx': 4,
@@ -80,4 +91,4 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
 };
 
 /** Total at the time of generation: 253. */
-export const THEME_AUDIT_TOTAL = 253;
+export const THEME_AUDIT_TOTAL = 251;
