@@ -115,6 +115,53 @@ function brandBand(x: CanvasRenderingContext2D, y0: number, y1: number): CanvasG
   return g
 }
 
+/**
+ * A guilloche wash — the interfering wave pattern on banknotes and passports.
+ *
+ * Not security in itself; a determined forger reproduces it. What it does is
+ * make a photocopy look obviously like a photocopy, because the fine lines
+ * moire badly, and it stops a blank white card reading as something printed
+ * off a home printer. Kept very low contrast so it never competes with text.
+ */
+function guilloche(x: CanvasRenderingContext2D, top: number, bottom: number) {
+  x.save()
+  x.strokeStyle = 'rgba(124,58,237,.055)'
+  x.lineWidth = 1
+  for (let i = 0; i < 26; i++) {
+    const amp = 16 + (i % 5) * 7
+    const yBase = top + ((bottom - top) / 26) * i
+    x.beginPath()
+    for (let px = -10; px <= CW + 10; px += 6) {
+      const y = yBase + Math.sin((px / CW) * Math.PI * 4 + i * 0.7) * amp
+      if (px === -10) x.moveTo(px, y)
+      else x.lineTo(px, y)
+    }
+    x.stroke()
+  }
+  x.restore()
+}
+
+/**
+ * Repeated hairline text. Legible under a loupe, a grey smear to a scanner —
+ * the cheapest anti-copy mark there is, and the reason real cards carry it.
+ */
+function microtext(x: CanvasRenderingContext2D, phrase: string, y: number) {
+  x.save()
+  x.fillStyle = 'rgba(30,27,75,.16)'
+  x.font = F(600, 5)
+  x.textAlign = 'left'
+  const unit = `${phrase.toUpperCase()} · `
+  let s = ''
+  // HARD CAP, not decoration. This loop grows a string until it measures wider
+  // than the card — and measureText returns 0 for a font that failed to load or
+  // a context with no metrics available, in which case the condition is never
+  // satisfied and the tab hangs the moment somebody clicks Download. A missing
+  // watermark is a blemish; a frozen browser is a broken feature.
+  for (let i = 0; i < 200 && x.measureText(s).width < CW + 40; i++) s += unit
+  if (s) x.fillText(s, -12, y)
+  x.restore()
+}
+
 function newCanvas(): HTMLCanvasElement {
   const c = document.createElement('canvas')
   c.width = CW; c.height = CH
@@ -170,11 +217,15 @@ export async function drawFront(d: IdCardData): Promise<HTMLCanvasElement> {
   x.save()
   rounded(x, 0, 0, CW, CH, 30); x.clip()
   x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, CW, CH)
+  guilloche(x, 300, CH - 90)
 
   x.fillStyle = brandBand(x, 0, 260); x.fillRect(0, 0, CW, 250)
   x.fillStyle = 'rgba(255,255,255,.07)'
   x.beginPath(); x.arc(CW - 30, 20, 150, 0, Math.PI * 2); x.fill()
   x.beginPath(); x.arc(CW - 150, 230, 70, 0, Math.PI * 2); x.fill()
+  // A hairline of light where the band ends, so the photo sits on an edge
+  // rather than floating on a colour change.
+  x.fillStyle = 'rgba(255,255,255,.22)'; x.fillRect(0, 248, CW, 2)
 
   // logo tile + company
   x.fillStyle = '#FFFFFF'; rounded(x, 44, 42, 60, 60, 16); x.fill()
@@ -238,10 +289,15 @@ export async function drawFront(d: IdCardData): Promise<HTMLCanvasElement> {
     x.strokeStyle = '#C4B5FD'; x.setLineDash([6, 6]); rounded(x, 56, qy, qs, qs, 10); x.stroke(); x.setLineDash([])
   }
   x.textAlign = 'left'
-  x.fillStyle = '#1E1B4B'; x.font = F(800, 19); x.fillText('Entry QR not printable', 214, qy + 34)
+  x.fillStyle = '#1E1B4B'; x.font = F(800, 19); x.fillText('Entry pass', 214, qy + 36)
   x.fillStyle = '#6B6890'; x.font = F(600, 15)
-  wrap(x, d.qrHint || 'For your entry QR, open your digital ID in ESS. The code changes every few seconds.',
-    214, qy + 60, CW - 214 - 48, 22)
+  // NOTHING about how the live code works. A printed card explaining its own
+  // security model hands that model to whoever picks the card up; "use the app"
+  // is all the holder needs, and all a finder should learn.
+  wrap(x, d.qrHint || 'Open your digital ID in ESS to scan at the gate.',
+    214, qy + 64, CW - 214 - 48, 22)
+
+  microtext(x, `${d.company} · ${d.code}`, CH - 72)
 
   // footer
   x.fillStyle = brandBand(x, CH - 62, CH); x.fillRect(0, CH - 62, CW, 62)
@@ -257,7 +313,9 @@ export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
   x.save()
   rounded(x, 0, 0, CW, CH, 30); x.clip()
   x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, CW, CH)
+  guilloche(x, 170, CH - 90)
   x.fillStyle = brandBand(x, 0, 140); x.fillRect(0, 0, CW, 130)
+  x.fillStyle = 'rgba(255,255,255,.22)'; x.fillRect(0, 128, CW, 2)
 
   x.textAlign = 'center'; x.fillStyle = '#FFFFFF'; x.font = F(800, 27)
   x.fillText('IN CASE OF EMERGENCY', CW / 2, 72)
@@ -295,10 +353,13 @@ export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
   x.strokeStyle = '#E9E7F5'; x.lineWidth = 2
   x.beginPath(); x.moveTo(56, 382); x.lineTo(CW - 56, 382); x.stroke()
 
+  // "Issued on" is deliberately absent. It would have to be the download date,
+  // and a card that claims a new issue date every time it is saved is worse
+  // than one that makes no claim at all. Valid-till below is the real bound.
   const rows: [string, string][] = [
     ['DATE OF JOINING', prettyDate(d.doj)],
     ['CARD NUMBER', dash(d.cardNo)],
-    ['ISSUED ON', prettyDate(new Date().toISOString())],
+    ['VALID TILL', prettyDate(d.validTill)],
   ]
   let y = 430
   for (const [k, v] of rows) {
@@ -310,16 +371,32 @@ export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
 
   x.strokeStyle = '#E9E7F5'; x.beginPath(); x.moveTo(56, 584); x.lineTo(CW - 56, 584); x.stroke()
   x.textAlign = 'left'; x.fillStyle = '#9C99B8'; x.font = F(700, 15)
-  x.fillText('IF FOUND, PLEASE RETURN TO', 56, 630)
-  x.fillStyle = '#1E1B4B'; fit(x, d.company, 800, 22, CW - 112); x.fillText(d.company, 56, 668)
+  x.fillText('IF FOUND, PLEASE RETURN TO', 56, 626)
+  x.fillStyle = '#1E1B4B'; fit(x, d.company, 800, 21, CW - 112); x.fillText(d.company, 56, 660)
 
-  x.fillStyle = '#9C99B8'; x.font = F(700, 15); x.fillText('VALID TILL', 56, 760)
-  x.fillStyle = '#1E1B4B'; x.font = F(800, 24); x.fillText(prettyDate(d.validTill), 56, 796)
+  // Authorised signatory — the mark that makes a card read as issued by
+  // somebody rather than printed by anybody. Drawn, not an image, so the PDF
+  // carries no asset and nothing to go missing.
+  const sx = 56, sy = 760
+  x.save()
+  x.strokeStyle = '#3C3489'; x.lineWidth = 3; x.lineCap = 'round'
+  x.beginPath(); x.moveTo(sx, sy)
+  x.bezierCurveTo(sx + 26, sy - 40, sx + 46, sy + 16, sx + 74, sy - 10)
+  x.bezierCurveTo(sx + 96, sy - 30, sx + 112, sy + 12, sx + 142, sy - 16)
+  x.bezierCurveTo(sx + 162, sy - 32, sx + 178, sy + 2, sx + 202, sy - 8)
+  x.stroke()
+  x.restore()
+  x.strokeStyle = '#C9C5DD'; x.lineWidth = 2
+  x.beginPath(); x.moveTo(56, 786); x.lineTo(56 + 240, 786); x.stroke()
+  x.fillStyle = '#9C99B8'; x.font = F(600, 14); x.textAlign = 'left'
+  x.fillText('Authorised Signatory', 56, 808)
 
-  // This card is not a credential, and says so.
+  // This card is not a credential, and says so — without describing why.
   x.fillStyle = '#9C99B8'; x.font = F(600, 14)
-  wrap(x, 'This printed card is for identification only. It does not open doors.',
-    56, 838, CW - 112, 20)
+  wrap(x, 'For identification only. This card does not grant entry.',
+    56, 848, CW - 112, 20)
+
+  microtext(x, `${d.company} · ${d.code}`, CH - 72)
 
   x.fillStyle = brandBand(x, CH - 62, CH); x.fillRect(0, CH - 62, CW, 62)
   x.fillStyle = '#FFFFFF'; x.textAlign = 'center'; x.font = F(600, 15)

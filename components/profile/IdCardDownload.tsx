@@ -113,9 +113,12 @@ export default function IdCardDownload(props: {
       <button className="btn ghost wide" onClick={run} disabled={busy}>
         {busy ? 'Preparing…' : 'Download ID card (PDF)'}
       </button>
+      {/* Says what you get, not how the gate code works. Describing the
+          rotation would put the security model on a card anyone can pick up,
+          and in help text anyone can read. */}
       <div style={{ fontSize: 10.5, color: 'var(--ez-muted)', marginTop: 6, lineHeight: 1.5 }}>
-        Two pages at card size, 54 × 85.6 mm. The entry QR is not printed — it
-        changes every few seconds, so it only works from your digital ID here.
+        Two pages at card size, 54 × 85.6 mm. For identification only — scan at
+        the gate from your digital ID above.
       </div>
       {err && (
         <div style={{ fontSize: 11, color: 'var(--ez-critical)', marginTop: 6 }}>{err}</div>
