@@ -39,6 +39,14 @@ const PX_PER_MM = 12
 const CW = Math.round(CARD_MM.w * PX_PER_MM)
 const CH = Math.round(CARD_MM.h * PX_PER_MM)
 
+/**
+ * Corner radius, from ISO/IEC 7810 ID-1: 3.18 mm (the standard allows
+ * 2.88-3.48). The same curve every bank card and driving licence uses, so a
+ * card cut to this line sits right in a wallet slot and looks like a card
+ * rather than a trimmed rectangle. Was 30px / 2.5mm, which was inside no spec.
+ */
+const CARD_R = Math.round(3.18 * PX_PER_MM)
+
 const FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif'
 const F = (weight: number, size: number) => `${weight} ${size}px ${FONT}`
 
@@ -215,7 +223,7 @@ export async function drawFront(d: IdCardData): Promise<HTMLCanvasElement> {
   const c = newCanvas()
   const x = c.getContext('2d')!
   x.save()
-  rounded(x, 0, 0, CW, CH, 30); x.clip()
+  rounded(x, 0, 0, CW, CH, CARD_R); x.clip()
   x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, CW, CH)
   guilloche(x, 300, CH - 90)
 
@@ -311,7 +319,7 @@ export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
   const c = newCanvas()
   const x = c.getContext('2d')!
   x.save()
-  rounded(x, 0, 0, CW, CH, 30); x.clip()
+  rounded(x, 0, 0, CW, CH, CARD_R); x.clip()
   x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, CW, CH)
   guilloche(x, 170, CH - 90)
   x.fillStyle = brandBand(x, 0, 140); x.fillRect(0, 0, CW, 130)
@@ -335,8 +343,12 @@ export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
     x.fillStyle = '#1E1B4B'; const ph = d.emergencyPhone || NA
     fit(x, ph, 800, 34, CW - 56 - 200); x.fillText(ph, 56, 322)
   } else {
+    // Just "Not available". It used to add "Add one in ESS › Profile" — an
+    // instruction to the holder, printed on a card whose whole audience is
+    // whoever is READING it: security at a gate, a paramedic. They cannot act
+    // on it, and it spends a line telling them about a form they will never
+    // open. The prompt to fill the field belongs in ESS, where the employee is.
     x.fillStyle = '#9C99B8'; x.font = F(800, 24); x.fillText(NA, 56, 236)
-    x.font = F(600, 16); x.fillText('Add one in ESS › Profile', 56, 268)
   }
 
   // blood group disc
@@ -407,6 +419,29 @@ export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
 
 // ── assembly ───────────────────────────────────────────────────────────────
 
+/**
+ * The card outline, and the reason the corners were not visibly round.
+ *
+ * Both faces already clip to a rounded rectangle — but flatten() paints white
+ * across the whole canvas and the PDF page is cut to exactly card size, so a
+ * white rounded corner lands on a white page and disappears. The radius only
+ * showed where the dark header and footer bands happened to cross the edge,
+ * which is why the middle of the card read as a plain rectangle.
+ *
+ * This hairline is what actually makes the shape visible, and it doubles as
+ * the cut line for anyone trimming a printed sheet by hand. Drawn after
+ * drawImage so it sits above the artwork, and inset by 1px because a stroke
+ * straddles its path — centred on the edge, half of it would fall off canvas.
+ */
+function cardEdge(x: CanvasRenderingContext2D) {
+  x.save()
+  rounded(x, 1, 1, CW - 2, CH - 2, CARD_R - 1)
+  x.strokeStyle = 'rgba(30,27,75,.30)'
+  x.lineWidth = 2
+  x.stroke()
+  x.restore()
+}
+
 /** White behind the card, so a transparent corner does not print black. */
 function flatten(src: HTMLCanvasElement): HTMLCanvasElement {
   const c = document.createElement('canvas')
@@ -414,6 +449,7 @@ function flatten(src: HTMLCanvasElement): HTMLCanvasElement {
   const x = c.getContext('2d')!
   x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, c.width, c.height)
   x.drawImage(src, 0, 0)
+  cardEdge(x)
   return c
 }
 
