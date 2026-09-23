@@ -749,9 +749,13 @@ export default function Profile360({ code, employeeId, initial }: {
 
       {/* Inside .ezp deliberately: PhotoUploader's classes are un-namespaced,
           so profile.css scopes them under .ezp and they only bite here. */}
-      {self && (
+      {/* Mounted only while open, so every open starts from fresh state. It
+          used to be mounted permanently with `open` merely toggled, so state
+          survived closing — which is why no second photo could be chosen
+          after the first upload. */}
+      {self && photoOpen && (
         <PhotoUploader
-          open={photoOpen}
+          open
           onClose={() => setPhotoOpen(false)}
           onDone={url => {
             setPhoto(url)

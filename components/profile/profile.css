@@ -450,8 +450,13 @@
   pointer-events: none;
   border-radius: 14px;
   box-shadow: inset 0 0 0 999px rgba(15, 23, 42, .34);
-  -webkit-mask: radial-gradient(circle at 50% 50%, #000 66px, rgba(0,0,0,.55) 67px);
-          mask: radial-gradient(circle at 50% 50%, #000 66px, rgba(0,0,0,.55) 67px);
+  /* 92px = half the 184px stage, i.e. the circle inscribed in exactly what
+     gets saved. It used to be 66px — a 132px circle inside a 184px crop — so
+     the ring under-promised by 39%: you framed a face to fill the circle and
+     got it back at 72% size with a ring of background around it. The ring is
+     supposed to be a promise about the output, so it has to match it. */
+  -webkit-mask: radial-gradient(circle at 50% 50%, #000 92px, rgba(0,0,0,.55) 93px);
+          mask: radial-gradient(circle at 50% 50%, #000 92px, rgba(0,0,0,.55) 93px);
 }
 
 .ezp .ez-slider { width: 100%; margin-top: 14px; accent-color: var(--ez-brand); }
