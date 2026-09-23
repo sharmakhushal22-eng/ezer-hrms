@@ -1,29 +1,31 @@
 'use client';
 import { uploadAuthHeaders } from '@/lib/auth-headers';
-import { coverScale, cropDest, workScale } from '@/lib/profile/crop-math';
+import {
+  rotatedCover, clampPan, anchoredPan, exportTransform, workScale, rad as toRad,
+  type Pt,
+} from '@/lib/profile/crop-math';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 
 /** Crops to a real square JPEG on the client, then posts it.
  *
+ *  PAN, PINCH, WHEEL, ROTATE, STRAIGHTEN, FLIP. The frame stays square
+ *  because the output feeds a square avatar and the ID card's photo box —
+ *  an aspect preset would produce an image neither can use — but everything
+ *  inside the square is yours to move.
+ *
  *  FIT, NOT NATURAL SIZE. This used to scale the image by `zoom / 100` of its
  *  NATURAL size with no fit step, so a 4000px phone photo opened showing a
- *  147-pixel sliver of itself inside the 184px stage — and the slider stopped
- *  at 100%, so you could not zoom out to find your own face. The crop looked
- *  wrong, the export was soft (a ~147px region blown up to 512), and dragging
- *  a 5000px bitmap is what made it judder. Zoom is now a multiplier on a cover
- *  fit: 100% means "fills the frame". See lib/profile/crop-math.ts.
+ *  147-pixel sliver of itself inside the stage — and the slider stopped at
+ *  100%, so you could not zoom out to find your own face. Zoom is now a
+ *  multiplier on a cover fit: 100% means "fills the frame", at any rotation.
  *
- *  ZOOM (the other kind). UiScale sets CSS `zoom` on <html> (1.25 at 1440px),
- *  and getBoundingClientRect() reports ZOOMED pixels while CSS lengths, the
- *  element's transform and BOX below are all unzoomed. Mixing the two put
- *  `cx - BOX / 2` at 23 instead of 0 and threw the saved crop about 64px off
- *  inside the image — you dragged a face into the circle and got its ear.
- *  Pointer deltas have the same problem from the other end: clientX is zoomed,
- *  so a drag moved the picture 1.25x further than the cursor.
- *
- *  Everything below therefore works in CSS pixels, converting at the two
- *  boundaries where zoomed values enter: the stage rect and the pointer. */
+ *  ZOOM (the browser kind). UiScale sets CSS `zoom` on <html> (1.25 at
+ *  1440px), and getBoundingClientRect() reports ZOOMED pixels while CSS
+ *  lengths and the element's transform do not. Mixing the two threw the saved
+ *  crop about 64px off — you dragged a face into the circle and got its ear.
+ *  Every zoomed value is divided by docZoom() at the boundary it enters:
+ *  the stage rect and the pointer. */
 const docZoom = () =>
   parseFloat(getComputedStyle(document.documentElement).zoom || '1') || 1
 
@@ -37,19 +39,14 @@ const UNREADABLE =
  *  Sniffed from the BYTES, never from file.type. iOS reports HEIC
  *  inconsistently: sometimes image/heic, sometimes an empty string when the
  *  file came through a share sheet or a sync folder, and a type-based test
- *  misses exactly the cases that need this most.
- *
- *  Layout: [4 bytes box size][ftyp][4-byte major brand]. The brands below are
- *  the still-image ones; mif1/msf1 are the generic HEIF containers Apple also
- *  emits. */
+ *  misses exactly the cases that need this most. */
 const BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1', 'msf1', 'avif'])
 
 async function isHeif(f: File): Promise<boolean> {
   try {
     const head = new Uint8Array(await f.slice(0, 12).arrayBuffer())
     if (head.length < 12) return false
-    const tag = String.fromCharCode(...head.subarray(4, 8))
-    if (tag !== 'ftyp') return false
+    if (String.fromCharCode(...head.subarray(4, 8)) !== 'ftyp') return false
     return BRANDS.has(String.fromCharCode(...head.subarray(8, 12)).toLowerCase())
   } catch { return false }
 }
@@ -57,21 +54,16 @@ async function isHeif(f: File): Promise<boolean> {
 /** Decode HEIC in the browser, with libheif compiled to WebAssembly.
  *
  *  THE SERVER CANNOT DO THIS, which is worth writing down because it looks
- *  like it should. sharp is installed and sharp reads the HEIC container
- *  happily — metadata() answers "heif 600x400" and looks like success. It is
- *  not a decode. Ask it for pixels and libvips says:
- *
- *      heif: Error while loading plugin: Support for this compression format
- *      has not been built in
- *
- *  HEIC pixels are H.265, and the decoder for it is patent-encumbered, so no
- *  stock libvips build ships one. Neither does any browser except Safari.
- *  That leaves a WASM decoder, which is what this is.
+ *  like it should. sharp is installed and reads the HEIC container happily —
+ *  metadata() answers "heif 600x400" and looks like success. It is not a
+ *  decode. Ask it for pixels and libvips says the compression format was not
+ *  built in: HEIC pixels are H.265, the decoder is patent-encumbered, and no
+ *  stock libvips ships one. Neither does any browser except Safari.
  *
  *  IMPORTED DYNAMICALLY, AND ONLY HERE. The bundle is 1.35 MB. Loading it up
  *  front would charge every person who opens their profile for a format most
- *  of them will never upload; inside this branch, only somebody who actually
- *  picked a HEIC pays, once, while a progress bar is already running. */
+ *  will never upload; inside this branch only somebody who actually picked a
+ *  HEIC pays, once, while a progress bar is already running. */
 async function decodeHeic(f: File): Promise<Blob> {
   const heic2any = (await import('heic2any')).default
   // A HEIC can legally hold a burst or a Live Photo, i.e. several images.
@@ -80,17 +72,12 @@ async function decodeHeic(f: File): Promise<Blob> {
   return Array.isArray(out) ? out[0] : out
 }
 
-/** An object URL, not a data URL.
- *
- *  readAsDataURL base64-encodes the whole file into a JavaScript string — a
- *  33% blow-up held in memory on top of the file and the decoded bitmap. For
- *  a JPEG nobody notices; for a PNG, which is lossless and routinely tens of
- *  megabytes, it is the difference between working and not. An object URL is
- *  a pointer to the blob the browser already has. */
+/** An object URL, not a data URL. readAsDataURL base64-encodes the whole file
+ *  into a JavaScript string — a 33% blow-up held in memory on top of the file
+ *  and the decoded bitmap. An object URL is a pointer to the blob the browser
+ *  already has. */
 const blobUrl = (b: Blob): string => URL.createObjectURL(b)
 
-/** Resolves with the decoded element, or null. The caller wants the element
- *  and not just a yes/no, because the working copy is drawn from it. */
 const loadImage = (url: string): Promise<HTMLImageElement | null> =>
   new Promise(resolve => {
     const probe = new Image()
@@ -101,9 +88,8 @@ const loadImage = (url: string): Promise<HTMLImageElement | null> =>
 
 /** BYTES. Was 8 MB, which quietly made PNG a second-class format: PNG is
  *  lossless, so a plain screenshot clears 8 MB without being a large picture
- *  in any sense that matters, and the person got "compress it and try again"
- *  for a perfectly ordinary file. Nothing downstream cares — the crop leaves
- *  here as a square JPEG of about 120 KB whatever arrives. */
+ *  in any sense that matters. Nothing downstream cares — the crop leaves here
+ *  as a square JPEG of about 120 KB whatever arrives. */
 const MAX_BYTES = 40 * 1024 * 1024
 
 /** PIXELS, which is the limit that actually protects anything. Bytes say
@@ -116,6 +102,9 @@ const MAX_PIXELS = 60_000_000
  *  stays well inside the route's 2 MB ceiling. */
 const OUT = 768
 
+const MAX_ZOOM = 500          // per cent of the fit
+const MAX_STRAIGHT = 45       // degrees either way, as on a phone
+
 export default function PhotoUploader({
   open, onClose, onDone,
 }: {
@@ -124,63 +113,78 @@ export default function PhotoUploader({
   onDone: (url: string) => void;
 }) {
   const [src, setSrc] = useState<string | null>(null);
-  const [zoom, setZoom] = useState(100);
-  const [fit, setFit] = useState(1);
+  const [zoom, setZoom] = useState(100);          // per cent of the fit
+  const [quarter, setQuarter] = useState(0);      // 90-degree steps
+  const [straight, setStraight] = useState(0);    // fine angle, degrees
+  const [flip, setFlip] = useState(false);
+  const [live, setLive] = useState(false);        // an interaction is in flight
   const [busy, setBusy] = useState(0);
-  // Only true once the bytes have actually decoded — see load().
   const [ready, setReady] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const drag = useRef<{ x: number; y: number } | null>(null);
+
   const img = useRef<HTMLImageElement | null>(null);
   const stage = useRef<HTMLDivElement | null>(null);
-  const BOX = 184;
 
-  /** Position lives in a ref, not state.
+  /** Interaction state lives in refs, not React state.
    *
-   *  It used to call setPos on every pointermove, re-rendering the whole modal
-   *  for each event while the browser composited a multi-megapixel image. That
-   *  is the lag. The transform is now written straight to the node inside a
-   *  rAF, so a drag costs one style write per frame and no React work at all. */
-  const pos = useRef({ x: 0, y: 0 });
-  const frame = useRef<number | null>(null);
-  /** Mirrors `fit * zoom / 100` for the pointer handlers, which must not go
-   *  through React on every move. Written in the layout effect below, never
-   *  during render: a ref mutated while rendering tears under concurrent
-   *  rendering, and React's own lint says so. */
+   *  setPos used to run on every pointermove, re-rendering the whole modal per
+   *  event while the browser composited a multi-megapixel image. That is the
+   *  lag. The transform is now written straight to the node inside a rAF: one
+   *  style write per frame, and React does no work at all during a drag. */
+  const pan = useRef<Pt>({ x: 0, y: 0 });
   const eff = useRef(1);
+  const fit = useRef(1);
+  const ang = useRef(0);                          // total degrees
   const nat = useRef({ w: 0, h: 0 });
+  const box = useRef(260);                        // measured; CSS owns it
+  const frame = useRef<number | null>(null);
 
-  /** Keep the picture over the hole. Dragging used to be free to pull the
-   *  image off the stage, and the export then drew the canvas's white fill as
-   *  a hard wedge down one side of somebody's avatar. */
-  const clamp = useCallback((p: { x: number; y: number }) => {
-    const mx = Math.max(0, (nat.current.w * eff.current - BOX) / 2);
-    const my = Math.max(0, (nat.current.h * eff.current - BOX) / 2);
-    return { x: Math.min(mx, Math.max(-mx, p.x)), y: Math.min(my, Math.max(-my, p.y)) };
-  }, []);
+  /** Live pointers, by id. Two of them is a pinch. */
+  const pts = useRef(new Map<number, Pt>());
+  const dragFrom = useRef<Pt | null>(null);
+  const pinch = useRef<{ dist: number; eff: number; pan: Pt } | null>(null);
 
   const paint = useCallback(() => {
     frame.current = null;
     const el = img.current;
-    if (el) el.style.transform =
-      `translate(${pos.current.x}px, ${pos.current.y}px) scale(${eff.current})`;
-  }, []);
+    if (!el) return;
+    const sx = eff.current * (flip ? -1 : 1);
+    el.style.transform =
+      `translate(${pan.current.x}px, ${pan.current.y}px) rotate(${ang.current}deg) scale(${sx}, ${eff.current})`;
+  }, [flip]);
 
   const schedule = useCallback(() => {
     if (frame.current == null) frame.current = requestAnimationFrame(paint);
   }, [paint]);
 
-  // Zoom changes come through React, so re-clamp and repaint when it settles.
-  //
-  // LAYOUT effect, not a plain one: a plain effect runs AFTER the browser has
-  // painted, so a freshly mounted image would show for one frame at its
-  // natural size — which for a phone photo is several thousand pixels wide
-  // bursting out of a 184px box. This lands the transform before that paint.
+  /** Recompute the derived geometry whenever anything React knows changes.
+   *
+   *  LAYOUT effect, not a plain one: a plain effect runs AFTER the browser has
+   *  painted, so a freshly mounted image would show for one frame at its
+   *  natural size — several thousand pixels bursting out of the stage. This
+   *  lands the transform before that paint.
+   *
+   *  `fit` is a ref rather than state deliberately: it is derived from the
+   *  image, the angle and the measured stage, so making it state would mean
+   *  calling setState from inside this effect and cascading a second render
+   *  on every drag-adjacent change. */
   useLayoutEffect(() => {
-    eff.current = fit * zoom / 100;
-    pos.current = clamp(pos.current);
+    const st = stage.current;
+    // clientWidth, NOT getBoundingClientRect(). The stage carries a 1px dashed
+    // border and is not border-box, so the rect measures 262 where the crop
+    // area — and the ring's 130px mask radius — are 260. Measuring the rect
+    // made the export cover 262 stage pixels of picture while the ring
+    // promised 260: a 0.8% lie, the same species as the 39% one this ring used
+    // to tell, and caught by rendering it rather than by reading it.
+    // clientWidth is a CSS length, so it is also already unzoomed.
+    if (st && st.clientWidth) box.current = st.clientWidth;
+    ang.current = quarter * 90 + straight;
+    fit.current = rotatedCover(nat.current.w, nat.current.h, box.current, toRad(ang.current));
+    eff.current = fit.current * zoom / 100;
+    pan.current = clampPan(pan.current, nat.current.w, nat.current.h, eff.current, toRad(ang.current), box.current);
     paint();
-  }, [zoom, fit, src, clamp, paint]);
+  }, [zoom, quarter, straight, flip, src, paint]);
+
   useEffect(() => () => { if (frame.current != null) cancelAnimationFrame(frame.current); }, []);
 
   /** The object URL currently on screen, so it can be revoked when replaced.
@@ -203,10 +207,120 @@ export default function PhotoUploader({
    * upload a new picture" report: not a failed upload, a cropper you could not
    * get a second photo into.
    *
-   * It is now mounted only while open, so every open is a fresh component with
-   * fresh state. Resetting by hand in an effect would work too, but it means
-   * remembering to clear each new piece of state forever, and it cascades a
-   * second render every time the modal opens. Unmounting cannot be forgotten. */
+   * It is now mounted only while open, so every open is a fresh component.
+   * Resetting by hand in an effect would work too, but it means remembering to
+   * clear each new piece of state forever. Unmounting cannot be forgotten. */
+
+  /** Stage-centre coordinates, in CSS pixels, from a client point. */
+  const local = useCallback((cx: number, cy: number): Pt => {
+    const st = stage.current;
+    if (!st) return { x: 0, y: 0 };
+    const z = docZoom();
+    const r = st.getBoundingClientRect();
+    return { x: (cx - r.left) / z - box.current / 2, y: (cy - r.top) / z - box.current / 2 };
+  }, []);
+
+  /** Apply a new scale about an anchor, clamped, and repaint. Shared by the
+   *  wheel, the pinch and the double-click, so all three feel identical. */
+  const zoomTo = useCallback((next: number, anchor: Pt) => {
+    const lo = fit.current, hi = fit.current * MAX_ZOOM / 100;
+    const to = Math.min(hi, Math.max(lo, next));
+    pan.current = clampPan(
+      anchoredPan(pan.current, anchor, eff.current, to),
+      nat.current.w, nat.current.h, to, toRad(ang.current), box.current,
+    );
+    eff.current = to;
+    setZoom(to / fit.current * 100);
+    schedule();
+  }, [schedule]);
+
+  /** Wheel and trackpad pinch.
+   *
+   *  Bound by hand rather than with onWheel because React's wheel listener is
+   *  passive, and a passive listener may not preventDefault — so the page
+   *  would scroll behind the modal while you tried to zoom. */
+  useEffect(() => {
+    const st = stage.current;
+    if (!st) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!nat.current.w) return;
+      e.preventDefault();
+      // ctrlKey is how a trackpad pinch arrives; it deserves a firmer ratio.
+      const k = Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0015));
+      zoomTo(eff.current * k, local(e.clientX, e.clientY));
+    };
+    st.addEventListener('wheel', onWheel, { passive: false });
+    return () => st.removeEventListener('wheel', onWheel);
+  }, [src, zoomTo, local]);
+
+  const onDown = (e: React.PointerEvent) => {
+    if (!src) return;
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    setLive(true);
+    if (pts.current.size === 1) {
+      const p = local(e.clientX, e.clientY);
+      dragFrom.current = { x: p.x - pan.current.x, y: p.y - pan.current.y };
+    } else if (pts.current.size === 2) {
+      const [a, b] = [...pts.current.values()];
+      pinch.current = {
+        dist: Math.hypot(a.x - b.x, a.y - b.y) || 1,
+        eff: eff.current,
+        pan: { ...pan.current },
+      };
+      dragFrom.current = null;
+    }
+  };
+
+  const onMove = (e: React.PointerEvent) => {
+    if (!pts.current.has(e.pointerId)) return;
+    pts.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pts.current.size >= 2 && pinch.current) {
+      const [a, b] = [...pts.current.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y) || 1;
+      const mid = local((a.x + b.x) / 2, (a.y + b.y) / 2);
+      // Anchored on the midpoint from the pinch's OWN starting scale and pan,
+      // so the gesture stays reversible: pinch out and back in and the picture
+      // returns to where it was, instead of drifting a little each frame.
+      const to = Math.min(fit.current * MAX_ZOOM / 100,
+        Math.max(fit.current, pinch.current.eff * (dist / pinch.current.dist)));
+      pan.current = clampPan(
+        anchoredPan(pinch.current.pan, mid, pinch.current.eff, to),
+        nat.current.w, nat.current.h, to, toRad(ang.current), box.current,
+      );
+      eff.current = to;
+      setZoom(to / fit.current * 100);
+      schedule();
+      return;
+    }
+
+    if (!dragFrom.current) return;
+    const p = local(e.clientX, e.clientY);
+    pan.current = clampPan(
+      { x: p.x - dragFrom.current.x, y: p.y - dragFrom.current.y },
+      nat.current.w, nat.current.h, eff.current, toRad(ang.current), box.current,
+    );
+    schedule();
+  };
+
+  const onUp = (e: React.PointerEvent) => {
+    pts.current.delete(e.pointerId);
+    if (pts.current.size < 2) pinch.current = null;
+    if (pts.current.size === 1) {
+      // A finger lifted mid-pinch: re-anchor the drag to the one still down,
+      // or the picture jumps by the difference on the next move.
+      const [only] = [...pts.current.values()];
+      const p = local(only.x, only.y);
+      dragFrom.current = { x: p.x - pan.current.x, y: p.y - pan.current.y };
+    }
+    if (pts.current.size === 0) { dragFrom.current = null; setLive(false); }
+  };
+
+  const reset = () => {
+    pan.current = { x: 0, y: 0 };
+    setQuarter(0); setStraight(0); setFlip(false); setZoom(100);
+  };
 
   const load = useCallback((f?: File | null) => {
     if (!f) return;
@@ -234,7 +348,6 @@ export default function PhotoUploader({
         if (!el) {
           URL.revokeObjectURL(url);
           if (!heif) { setErr(UNREADABLE); setBusy(0); return; }
-          // Chrome, Firefox, Edge: no HEIC decoder. Decode it here instead.
           setBusy(35);
           url = blobUrl(await decodeHeic(f));
           el = await loadImage(url);
@@ -248,9 +361,9 @@ export default function PhotoUploader({
           setBusy(0); return;
         }
 
-        // Downscale once, up front. Nothing needs a 48-megapixel bitmap live in
-        // the DOM to pick a square out of it, and this is most of the reason
-        // the drag used to judder.
+        // Downscale once, up front. Nothing needs a 48-megapixel bitmap live
+        // in the DOM to pick a square out of it, and this is most of the
+        // reason the drag used to judder.
         const s = workScale(w, h);
         if (s < 1) {
           setBusy(60);
@@ -270,9 +383,9 @@ export default function PhotoUploader({
         }
 
         nat.current = { w, h };
-        setFit(coverScale(w, h, BOX));
-        pos.current = { x: 0, y: 0 };
-        show(url); setZoom(100); setReady(true); setBusy(0);
+        pan.current = { x: 0, y: 0 };
+        setQuarter(0); setStraight(0); setFlip(false); setZoom(100);
+        show(url); setReady(true); setBusy(0);
       } catch (e: unknown) {
         setBusy(0);
         setErr(e instanceof Error ? e.message : UNREADABLE);
@@ -292,27 +405,24 @@ export default function PhotoUploader({
 
   const crop = (): Promise<Blob> =>
     new Promise((resolve, reject) => {
-      const el = img.current, st = stage.current;
-      if (!el || !st) return reject(new Error('no image'));
-      // Belt and braces: load() should have caught this, but a canvas throw
-      // here is unreadable and this is one line.
+      const el = img.current;
+      if (!el) return reject(new Error('no image'));
       if (!el.complete || !el.naturalWidth) return reject(new Error(UNREADABLE));
 
-      // Back to CSS pixels, so this agrees with BOX and with the transform.
-      const z = docZoom();
-      const r = st.getBoundingClientRect();
-      const cx = r.width / z / 2, cy = r.height / z / 2;
-      const d = cropDest(el.naturalWidth, el.naturalHeight, eff.current, pos.current, cx, cy, BOX, OUT);
-
+      const x = exportTransform(pan.current, eff.current, box.current, OUT);
       const c = document.createElement('canvas');
       c.width = c.height = OUT;
       const g = c.getContext('2d')!;
-      // Default smoothing quality is 'low', which is a box filter — it is why
-      // a downscaled photo came out mushy even when the geometry was right.
+      // Default smoothing quality is 'low', a box filter — it is why a
+      // downscaled photo came out mushy even when the geometry was right.
       g.imageSmoothingEnabled = true;
       g.imageSmoothingQuality = 'high';
       g.fillStyle = '#fff'; g.fillRect(0, 0, OUT, OUT);
-      g.drawImage(el, d.dx, d.dy, d.dw, d.dh);
+      // The same order the CSS transform uses: translate, rotate, scale.
+      g.translate(x.tx, x.ty);
+      g.rotate(toRad(ang.current));
+      g.scale(x.scale * (flip ? -1 : 1), x.scale);
+      g.drawImage(el, -el.naturalWidth / 2, -el.naturalHeight / 2, el.naturalWidth, el.naturalHeight);
       c.toBlob(b => (b ? resolve(b) : reject(new Error('crop failed'))), 'image/jpeg', 0.92);
     });
 
@@ -327,12 +437,10 @@ export default function PhotoUploader({
       // uploadAuthHeaders, not authHeaders: the latter sets
       // Content-Type: application/json, which on a FormData body suppresses
       // the multipart boundary. The route's req.formData() then cannot parse,
-      // Next returns an empty 500, and res.json() below failed with
-      // "Unexpected end of JSON input" — so the upload never once worked from
-      // this screen, while the same POST by curl did.
+      // Next returns an empty 500, and res.json() failed with "Unexpected end
+      // of JSON input" — so the upload never once worked from this screen,
+      // while the same POST by curl did.
       const res = await fetch('/api/ess/profile/photo', { method: 'POST', body: fd, headers: await uploadAuthHeaders() });
-      // Tolerate a body that is not JSON, so a transport failure reports its
-      // status instead of a parser error.
       const j = await res.json().catch(() => ({} as Record<string, string>));
       setBusy(100);
       if (!res.ok) throw new Error(j.message ?? j.error ?? `Upload failed (${res.status}).`);
@@ -345,33 +453,31 @@ export default function PhotoUploader({
 
   if (!open) return null;
 
+  const turn = (d: number) => { setQuarter(q => (q + d + 4) % 4); };
+
   return (
     <div className="ez-scrim ez-on" onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="ez-modal" style={{ maxWidth: 560 }}>
         <div className="ez-mh">
           <h3>Profile photo</h3>
-          <p>Drop an image, drag to position, zoom to fit. Saved as a {OUT} by {OUT} square.</p>
+          <p>Drag to move, pinch or scroll to zoom, double-click to fill. Saved as a {OUT} by {OUT} square.</p>
         </div>
         <div className="ez-mb">
           <div
             ref={stage}
-            className="ez-stage"
+            className={'ez-stage' + (live ? ' ez-live' : '')}
             onDragOver={e => e.preventDefault()}
             onDrop={e => { e.preventDefault(); load(e.dataTransfer.files?.[0]); }}
-            onPointerDown={e => {
+            onPointerDown={onDown}
+            onPointerMove={onMove}
+            onPointerUp={onUp}
+            onPointerCancel={onUp}
+            onDoubleClick={e => {
               if (!src) return;
-              const z = docZoom();
-              drag.current = { x: e.clientX / z - pos.current.x, y: e.clientY / z - pos.current.y };
-              (e.target as HTMLElement).setPointerCapture(e.pointerId);
+              const anchor = local(e.clientX, e.clientY);
+              const filled = eff.current > fit.current * 1.6;
+              zoomTo(filled ? fit.current : fit.current * 2.2, anchor);
             }}
-            onPointerMove={e => {
-              if (!drag.current) return;
-              const z = docZoom();
-              pos.current = clamp({ x: e.clientX / z - drag.current.x, y: e.clientY / z - drag.current.y });
-              schedule();
-            }}
-            onPointerUp={() => { drag.current = null; }}
-            onPointerCancel={() => { drag.current = null; }}
           >
             {!src && (
               <span className="ez-subtle" style={{ textAlign: 'center', padding: '0 26px' }}>
@@ -395,15 +501,41 @@ export default function PhotoUploader({
                   }}
                 />
                 <div className="ez-cring" />
+                <div className="ez-grid" />
               </>
             )}
           </div>
 
-          <input
-            className="ez-slider" type="range" min={100} max={400} value={zoom}
-            onChange={e => setZoom(+e.target.value)} aria-label="Zoom"
-            disabled={!src}
-          />
+          {src && (
+            <>
+              <div className="ez-tools">
+                <button className="ez-btn ez-sm" onClick={() => turn(-1)} title="Rotate left" aria-label="Rotate left">⟲</button>
+                <button className="ez-btn ez-sm" onClick={() => turn(1)} title="Rotate right" aria-label="Rotate right">⟳</button>
+                <button className={'ez-btn ez-sm' + (flip ? ' ez-pri' : '')} onClick={() => setFlip(f => !f)}
+                        title="Flip horizontally" aria-label="Flip horizontally">⇋</button>
+                <span className="ez-grow" />
+                <button className="ez-btn ez-sm" onClick={reset} title="Reset all adjustments">Reset</button>
+              </div>
+
+              <label className="ez-row">
+                <span>Zoom</span>
+                <input className="ez-slider" type="range" min={100} max={MAX_ZOOM} step={1}
+                       value={Math.round(zoom)}
+                       onChange={e => zoomTo(fit.current * +e.target.value / 100, { x: 0, y: 0 })}
+                       aria-label="Zoom" />
+                <b>{Math.round(zoom)}%</b>
+              </label>
+
+              <label className="ez-row">
+                <span>Straighten</span>
+                <input className="ez-slider" type="range" min={-MAX_STRAIGHT} max={MAX_STRAIGHT} step={0.5}
+                       value={straight} onChange={e => setStraight(+e.target.value)}
+                       aria-label="Straighten" />
+                <b>{straight > 0 ? `+${straight}` : straight}°</b>
+              </label>
+            </>
+          )}
+
           {busy > 0 && (
             <div className="ez-prog"><i style={{ width: `${busy}%` }} /></div>
           )}
