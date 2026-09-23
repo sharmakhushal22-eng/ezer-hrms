@@ -35,6 +35,7 @@ import ChangeRequests from '@/components/profile/ChangeRequests'
 import { maySee, type ProfileField, type ProfilePayload, type Row, type TabId } from '@/lib/profile/types'
 import { loadProfile, editField, requestChange, setProfileOwner } from '@/lib/profile/client'
 import IdCard from '@/components/profile/IdCard'
+import IdCardDownload from '@/components/profile/IdCardDownload'
 import PhotoUploader from '@/components/profile/PhotoUploader'
 import '@/components/profile/profile.css'
 
@@ -416,12 +417,28 @@ export default function Profile360({ code, employeeId, initial }: {
           </Card>
 
           {self ? (
+            <>
             <IdCard
               name={val(emp.full_name)} designation={val(emp.designation)}
               company={val(emp.company_name)} code={val(emp.employee_code)}
               doj={emp.date_of_joining as string | null}
               blood={emp.blood_group as string | null}
               emergency={emp.emergency_contact_1 as string | null} />
+            {/* The printable card. Only on your own profile — a colleague's
+                card is not yours to take away, the same rule the gate code
+                already follows. */}
+            <IdCardDownload
+              name={val(emp.full_name)}
+              code={val(emp.employee_code)}
+              company={val(emp.company_name)}
+              designation={emp.designation as string | null}
+              department={emp.department_name as string | null}
+              location={emp.location_name as string | null}
+              doj={emp.date_of_joining as string | null}
+              blood={emp.blood_group as string | null}
+              photoUrl={photo}
+            />
+            </>
           ) : (
             /* A colleague's gate code is not yours to mint, so their card is
                shown as a face and nothing more. */

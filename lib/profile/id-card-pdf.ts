@@ -1,0 +1,365 @@
+// lib/profile/id-card-pdf.ts — the printable ID card, as a PDF.
+//
+// WHY THE PRINTED CARD HAS NO WORKING QR
+//
+// The digital card's QR is a 30-second, single-use, signed token bound to
+// card_version (see lib/profile/idcard.ts). Printing one is impossible in both
+// directions:
+//
+//   * print the LIVE token and it is dead before the PDF finishes saving;
+//   * print a STATIC "EZER-ID|code|name" string — which is what the design
+//     reference did — and you have manufactured a permanent, forgeable
+//     credential that no longer expires, cannot be revoked when a phone is
+//     lost, and carries the employee's identity in plain text.
+//
+// So the card prints a DELIBERATELY BLURRED QR with a line telling the holder
+// where the real one lives. A blurred code is honest in a way an empty square
+// is not: it reads as "there is a QR for this, and it is not this one".
+//
+// The blur is applied to a REAL generated code rather than a fake pattern, so
+// it degrades like a photograph of a code rather than looking like decoration.
+//
+// FORMAT
+//
+// CR80 portrait, 54 x 85.6 mm — the ISO/IEC 7810 ID-1 size every card printer
+// and lanyard holder expects. Two pages: front, then back. Drawn to canvas at
+// 12 px/mm and embedded as JPEG, which is how the reference produced a sharp
+// card without shipping fonts into the PDF.
+//
+// pdf-lib rather than jsPDF: it is already a dependency (lib/payroll/payslip-pdf.ts
+// draws a whole payslip with it, and components/payroll/PayslipDownload.tsx
+// already runs it in the browser), so this adds no third PDF library and no CDN.
+
+import { PDFDocument } from 'pdf-lib'
+
+/** ID-1 / CR80 portrait, in millimetres. */
+export const CARD_MM = { w: 54, h: 85.6 } as const
+/** Canvas scale. 12 px/mm gives ~305 dpi — card-printer sharp. */
+const PX_PER_MM = 12
+const CW = Math.round(CARD_MM.w * PX_PER_MM)
+const CH = Math.round(CARD_MM.h * PX_PER_MM)
+
+const FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif'
+const F = (weight: number, size: number) => `${weight} ${size}px ${FONT}`
+
+export interface IdCardData {
+  name: string
+  designation: string | null
+  company: string
+  code: string
+  department?: string | null
+  location?: string | null
+  doj?: string | null
+  blood?: string | null
+  cardNo?: string | null
+  validTill?: string | null
+  /** Composed elsewhere so this module never guesses which column won. */
+  emergencyName?: string | null
+  emergencyRelation?: string | null
+  emergencyPhone?: string | null
+  /** A data: or blob: URL. Absent for ~397 of 398 today, so initials are the norm. */
+  photoDataUrl?: string | null
+  /** Where the live QR actually lives, printed under the blurred one. */
+  qrHint?: string
+}
+
+/** Not available, spelled the same way everywhere on the card. */
+const NA = 'Not available'
+const dash = (v?: string | null) => (v && String(v).trim()) || '—'
+
+const initials = (n: string) =>
+  n.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase()
+
+export function prettyDate(v?: string | null): string {
+  if (!v) return '—'
+  const d = new Date(v)
+  if (Number.isNaN(d.getTime())) return String(v)
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+// ── canvas helpers ─────────────────────────────────────────────────────────
+
+function rounded(x: CanvasRenderingContext2D, a: number, b: number, w: number, h: number, r: number) {
+  x.beginPath()
+  x.moveTo(a + r, b)
+  x.arcTo(a + w, b, a + w, b + h, r)
+  x.arcTo(a + w, b + h, a, b + h, r)
+  x.arcTo(a, b + h, a, b, r)
+  x.arcTo(a, b, a + w, b, r)
+  x.closePath()
+}
+
+/** Shrink until it fits. A long designation must not run off the card. */
+function fit(x: CanvasRenderingContext2D, text: string, weight: number, size: number, maxW: number) {
+  let s = size
+  x.font = F(weight, s)
+  while (x.measureText(text).width > maxW && s > 10) { s--; x.font = F(weight, s) }
+}
+
+function wrap(x: CanvasRenderingContext2D, text: string, a: number, b: number, maxW: number, lh: number): number {
+  const words = text.split(' ')
+  let line = '', y = b
+  for (const w of words) {
+    const next = line ? `${line} ${w}` : w
+    if (x.measureText(next).width > maxW && line) { x.fillText(line, a, y); line = w; y += lh }
+    else line = next
+  }
+  if (line) x.fillText(line, a, y)
+  return y
+}
+
+function brandBand(x: CanvasRenderingContext2D, y0: number, y1: number): CanvasGradient {
+  const g = x.createLinearGradient(0, y0, CW, y1)
+  g.addColorStop(0, '#1E1B4B')
+  g.addColorStop(1, '#6D28D9')
+  return g
+}
+
+function newCanvas(): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = CW; c.height = CH
+  return c
+}
+
+async function loadImage(src: string): Promise<HTMLImageElement | null> {
+  try {
+    return await new Promise((resolve, reject) => {
+      const im = new Image()
+      im.onload = () => resolve(im)
+      im.onerror = reject
+      im.src = src
+    })
+  } catch { return null }
+}
+
+/**
+ * A real QR, blurred past readability.
+ *
+ * Generated from a harmless string — never a live token, never the employee's
+ * identity. If `qrcode` fails for any reason the caller gets null and the card
+ * draws a plain placeholder instead of pretending.
+ */
+async function blurredQr(size: number): Promise<HTMLCanvasElement | null> {
+  try {
+    const QR = (await import('qrcode')).default
+    const url = await QR.toDataURL('EZER · live code available in ESS', {
+      width: size * 2, margin: 1, errorCorrectionLevel: 'L',
+      color: { dark: '#1E1B4B', light: '#FFFFFF' },
+    })
+    const im = await loadImage(url)
+    if (!im) return null
+    const c = document.createElement('canvas')
+    c.width = size; c.height = size
+    const x = c.getContext('2d')
+    if (!x) return null
+    x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, size, size)
+    // Enough blur that no scanner will resolve it, little enough that a human
+    // still recognises the shape as a QR code.
+    x.filter = `blur(${Math.max(2, Math.round(size / 28))}px)`
+    x.drawImage(im, 0, 0, size, size)
+    x.filter = 'none'
+    return c
+  } catch { return null }
+}
+
+// ── the two faces ──────────────────────────────────────────────────────────
+
+export async function drawFront(d: IdCardData): Promise<HTMLCanvasElement> {
+  const c = newCanvas()
+  const x = c.getContext('2d')!
+  x.save()
+  rounded(x, 0, 0, CW, CH, 30); x.clip()
+  x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, CW, CH)
+
+  x.fillStyle = brandBand(x, 0, 260); x.fillRect(0, 0, CW, 250)
+  x.fillStyle = 'rgba(255,255,255,.07)'
+  x.beginPath(); x.arc(CW - 30, 20, 150, 0, Math.PI * 2); x.fill()
+  x.beginPath(); x.arc(CW - 150, 230, 70, 0, Math.PI * 2); x.fill()
+
+  // logo tile + company
+  x.fillStyle = '#FFFFFF'; rounded(x, 44, 42, 60, 60, 16); x.fill()
+  x.fillStyle = '#1E1B4B'; x.font = F(800, 30)
+  x.textAlign = 'center'; x.textBaseline = 'middle'
+  x.fillText((d.company || 'E').trim()[0]?.toUpperCase() || 'E', 74, 73)
+  x.textBaseline = 'alphabetic'; x.textAlign = 'left'
+  x.fillStyle = '#FFFFFF'; fit(x, d.company, 800, 24, CW - 122 - 36); x.fillText(d.company, 122, 68)
+  x.fillStyle = 'rgba(255,255,255,.75)'; x.font = F(700, 15)
+  x.fillText('EMPLOYEE IDENTITY CARD', 122, 96)
+
+  // photo, or initials on a brand gradient
+  const pw = 230, ph = 270, px = (CW - pw) / 2, py = 148
+  x.fillStyle = '#FFFFFF'; rounded(x, px - 9, py - 9, pw + 18, ph + 18, 30); x.fill()
+  x.save(); rounded(x, px, py, pw, ph, 24); x.clip()
+  const photo = d.photoDataUrl ? await loadImage(d.photoDataUrl) : null
+  if (photo) {
+    const s = Math.max(pw / photo.width, ph / photo.height)
+    const dw = photo.width * s, dh = photo.height * s
+    x.drawImage(photo, px + (pw - dw) / 2, py + (ph - dh) / 2, dw, dh)
+  } else {
+    const g = x.createLinearGradient(px, py, px + pw, py + ph)
+    g.addColorStop(0, '#A5B4FC'); g.addColorStop(1, '#4F46E5')
+    x.fillStyle = g; x.fillRect(px, py, pw, ph)
+    x.fillStyle = 'rgba(255,255,255,.95)'; x.font = F(800, 88)
+    x.textAlign = 'center'; x.textBaseline = 'middle'
+    x.fillText(initials(d.name), px + pw / 2, py + ph / 2)
+    x.textBaseline = 'alphabetic'
+  }
+  x.restore()
+
+  // name + designation
+  x.textAlign = 'center'
+  x.fillStyle = '#1E1B4B'; fit(x, d.name, 800, 40, CW - 80); x.fillText(d.name, CW / 2, 490)
+  x.fillStyle = '#7C3AED'; const desig = dash(d.designation)
+  fit(x, desig, 700, 22, CW - 80); x.fillText(desig, CW / 2, 526)
+  x.strokeStyle = '#E9E7F5'; x.lineWidth = 2
+  x.beginPath(); x.moveTo(56, 558); x.lineTo(CW - 56, 558); x.stroke()
+
+  // detail rows
+  const rows: [string, string][] = [
+    ['EMPLOYEE CODE', d.code],
+    ['DEPARTMENT', dash(d.department)],
+    ['BLOOD GROUP', dash(d.blood)],
+    ['LOCATION', dash(d.location)],
+  ]
+  let y = 604
+  for (const [k, v] of rows) {
+    x.textAlign = 'left'; x.fillStyle = '#9C99B8'; x.font = F(700, 15); x.fillText(k, 56, y)
+    x.textAlign = 'right'; x.fillStyle = '#1E1B4B'; fit(x, v, 700, 22, CW - 56 - 210)
+    x.fillText(v, CW - 56, y)
+    y += 48
+  }
+
+  // the blurred QR, and what it is for
+  const qy = 800, qs = 132
+  x.fillStyle = '#F5F3FF'; rounded(x, 48, qy - 8, qs + 16, qs + 16, 16); x.fill()
+  const qr = await blurredQr(qs)
+  if (qr) x.drawImage(qr, 56, qy, qs, qs)
+  else {
+    x.strokeStyle = '#C4B5FD'; x.setLineDash([6, 6]); rounded(x, 56, qy, qs, qs, 10); x.stroke(); x.setLineDash([])
+  }
+  x.textAlign = 'left'
+  x.fillStyle = '#1E1B4B'; x.font = F(800, 19); x.fillText('Entry QR not printable', 214, qy + 34)
+  x.fillStyle = '#6B6890'; x.font = F(600, 15)
+  wrap(x, d.qrHint || 'For your entry QR, open your digital ID in ESS. The code changes every few seconds.',
+    214, qy + 60, CW - 214 - 48, 22)
+
+  // footer
+  x.fillStyle = brandBand(x, CH - 62, CH); x.fillRect(0, CH - 62, CW, 62)
+  x.fillStyle = '#FFFFFF'; x.textAlign = 'center'; x.font = F(600, 15)
+  x.fillText(`Property of ${d.company}`, CW / 2, CH - 24)
+  x.restore()
+  return c
+}
+
+export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
+  const c = newCanvas()
+  const x = c.getContext('2d')!
+  x.save()
+  rounded(x, 0, 0, CW, CH, 30); x.clip()
+  x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, CW, CH)
+  x.fillStyle = brandBand(x, 0, 140); x.fillRect(0, 0, CW, 130)
+
+  x.textAlign = 'center'; x.fillStyle = '#FFFFFF'; x.font = F(800, 27)
+  x.fillText('IN CASE OF EMERGENCY', CW / 2, 72)
+  x.fillStyle = 'rgba(255,255,255,.75)'; x.font = F(600, 15)
+  x.fillText('Please contact the person below', CW / 2, 102)
+
+  // Emergency contact. Missing for ~391 of 398 today — it prints "Not
+  // available" and does NOT block the download, deliberately.
+  x.textAlign = 'left'; x.fillStyle = '#9C99B8'; x.font = F(700, 15)
+  x.fillText('EMERGENCY CONTACT', 56, 190)
+  if (d.emergencyName || d.emergencyPhone) {
+    x.fillStyle = '#1E1B4B'; fit(x, d.emergencyName || NA, 800, 32, CW - 56 - 200)
+    x.fillText(d.emergencyName || NA, 56, 232)
+    if (d.emergencyRelation) {
+      x.fillStyle = '#7C3AED'; x.font = F(700, 20); x.fillText(d.emergencyRelation, 56, 264)
+    }
+    x.fillStyle = '#1E1B4B'; const ph = d.emergencyPhone || NA
+    fit(x, ph, 800, 34, CW - 56 - 200); x.fillText(ph, 56, 322)
+  } else {
+    x.fillStyle = '#9C99B8'; x.font = F(800, 24); x.fillText(NA, 56, 236)
+    x.font = F(600, 16); x.fillText('Add one in ESS › Profile', 56, 268)
+  }
+
+  // blood group disc
+  const bx = CW - 112, by = 250
+  const blood = (d.blood || '').trim()
+  x.fillStyle = blood ? '#DC2626' : '#E9E7F5'
+  x.beginPath(); x.arc(bx, by, 64, 0, Math.PI * 2); x.fill()
+  x.fillStyle = blood ? '#FFFFFF' : '#9C99B8'
+  x.textAlign = 'center'; x.textBaseline = 'middle'
+  x.font = F(800, blood.length > 2 ? 34 : 40); x.fillText(blood || '—', bx, by + 2)
+  x.textBaseline = 'alphabetic'
+  x.fillStyle = '#9C99B8'; x.font = F(700, 14); x.fillText('BLOOD GROUP', bx, by + 94)
+
+  x.strokeStyle = '#E9E7F5'; x.lineWidth = 2
+  x.beginPath(); x.moveTo(56, 382); x.lineTo(CW - 56, 382); x.stroke()
+
+  const rows: [string, string][] = [
+    ['DATE OF JOINING', prettyDate(d.doj)],
+    ['CARD NUMBER', dash(d.cardNo)],
+    ['ISSUED ON', prettyDate(new Date().toISOString())],
+  ]
+  let y = 430
+  for (const [k, v] of rows) {
+    x.textAlign = 'left'; x.fillStyle = '#9C99B8'; x.font = F(700, 15); x.fillText(k, 56, y)
+    x.textAlign = 'right'; x.fillStyle = '#1E1B4B'; fit(x, v, 700, 21, CW - 56 - 200)
+    x.fillText(v, CW - 56, y)
+    y += 46
+  }
+
+  x.strokeStyle = '#E9E7F5'; x.beginPath(); x.moveTo(56, 584); x.lineTo(CW - 56, 584); x.stroke()
+  x.textAlign = 'left'; x.fillStyle = '#9C99B8'; x.font = F(700, 15)
+  x.fillText('IF FOUND, PLEASE RETURN TO', 56, 630)
+  x.fillStyle = '#1E1B4B'; fit(x, d.company, 800, 22, CW - 112); x.fillText(d.company, 56, 668)
+
+  x.fillStyle = '#9C99B8'; x.font = F(700, 15); x.fillText('VALID TILL', 56, 760)
+  x.fillStyle = '#1E1B4B'; x.font = F(800, 24); x.fillText(prettyDate(d.validTill), 56, 796)
+
+  // This card is not a credential, and says so.
+  x.fillStyle = '#9C99B8'; x.font = F(600, 14)
+  wrap(x, 'This printed card is for identification only. It does not open doors.',
+    56, 838, CW - 112, 20)
+
+  x.fillStyle = brandBand(x, CH - 62, CH); x.fillRect(0, CH - 62, CW, 62)
+  x.fillStyle = '#FFFFFF'; x.textAlign = 'center'; x.font = F(600, 15)
+  x.fillText('Non-transferable · Report loss to HR immediately', CW / 2, CH - 24)
+  x.restore()
+  return c
+}
+
+// ── assembly ───────────────────────────────────────────────────────────────
+
+/** White behind the card, so a transparent corner does not print black. */
+function flatten(src: HTMLCanvasElement): HTMLCanvasElement {
+  const c = document.createElement('canvas')
+  c.width = src.width; c.height = src.height
+  const x = c.getContext('2d')!
+  x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, c.width, c.height)
+  x.drawImage(src, 0, 0)
+  return c
+}
+
+const PT_PER_MM = 72 / 25.4
+
+/** Both faces as a two-page PDF at exact card size. Returns the bytes. */
+export async function buildIdCardPdf(d: IdCardData): Promise<Uint8Array> {
+  const faces = [await drawFront(d), await drawBack(d)]
+  const doc = await PDFDocument.create()
+  doc.setTitle(`ID Card — ${d.name} (${d.code})`)
+  doc.setProducer('EZER HRMS')
+  const w = CARD_MM.w * PT_PER_MM, h = CARD_MM.h * PT_PER_MM
+  for (const face of faces) {
+    const jpeg = flatten(face).toDataURL('image/jpeg', 0.94)
+    const img = await doc.embedJpg(jpeg)
+    const page = doc.addPage([w, h])
+    page.drawImage(img, { x: 0, y: 0, width: w, height: h })
+  }
+  return doc.save()
+}
+
+/** `ID-Card_SRS9010_Shreya-Reddy.pdf` */
+export function idCardFileName(d: IdCardData): string {
+  const slug = d.name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')
+  return `ID-Card_${d.code}_${slug}.pdf`
+}
