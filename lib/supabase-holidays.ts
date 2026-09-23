@@ -83,8 +83,77 @@ export async function listCompanyMaps(): Promise<CompanyCalendarMap[]> {
   return (data || []) as CompanyCalendarMap[]
 }
 // one mapping per company (company_id is UNIQUE) → upsert on conflict.
+//
+// NOTE: since migration 129 this is the LEAVE calendar's mapping only. The
+// holiday side moved to company_calendar_activation, because a company needs to
+// follow several holiday calendars at once — one per financial year, each
+// governing its own dates. `holiday_calendar_id` is left in place and is no
+// longer read by resolve_holidays.
 export async function upsertCompanyMap(input: { company_id: string; holiday_calendar_id: string | null; leave_calendar_id: string | null }) {
   return supabase.from('company_calendar_map').upsert(input, { onConflict: 'company_id' })
+}
+
+// ── Calendar activation (migration 129) ─────────────────────────────
+//
+// A calendar owns a date range. A company may have MANY active at once as long
+// as their ranges do not overlap, so activating FY 2027-28 takes nothing away
+// from FY 2026-27 — last year's attendance keeps its holidays forever.
+//
+// Activating does BOTH halves in one step: publishes the calendar and links the
+// company, recording who and when. The old two-switch arrangement (status
+// PUBLISHED *and* a company mapping) is how FY 2026-27 sat DRAFT for months
+// while looking configured.
+export interface CalendarActivation {
+  id: string; company_id: string; calendar_id: string
+  activated_at: string; activated_by: string | null
+  deactivated_at: string | null; deactivated_by: string | null; note: string | null
+}
+
+/** One row per company × currently-active calendar, from the 129 view. */
+export interface ActiveCalendarRow {
+  company_id: string; company_code: string; company_name: string
+  calendar_id: string; calendar_name: string; status: CalendarStatus
+  from_date: string; to_date: string
+  activated_at: string; activated_by: string | null
+  reaches_ess: boolean; covers_today: boolean
+}
+
+export async function listActiveCalendars(): Promise<ActiveCalendarRow[]> {
+  const { data } = await supabase
+    .from('company_active_calendars').select('*')
+    .order('from_date', { ascending: false })
+  return (data || []) as ActiveCalendarRow[]
+}
+
+/** Full audit trail, newest first. Rows are never deleted. */
+export async function listActivationHistory(company_id?: string): Promise<CalendarActivation[]> {
+  let q = supabase.from('company_calendar_activation').select('*')
+  if (company_id) q = q.eq('company_id', company_id)
+  const { data } = await q.order('activated_at', { ascending: false })
+  return (data || []) as CalendarActivation[]
+}
+
+/**
+ * Publishes + links + audits, and stands down any calendar this company
+ * follows over the SAME dates. Calendars for other years are untouched.
+ *
+ * Raises if the ranges overlap something still active, if the calendar has no
+ * from/to date, or if it is a LEAVE calendar — all with readable messages meant
+ * to be shown to whoever clicked.
+ */
+export async function activateCalendar(
+  company_id: string, calendar_id: string, actor: string | null, note?: string | null,
+) {
+  return supabase.rpc('activate_calendar', {
+    p_company_id: company_id, p_calendar_id: calendar_id,
+    p_actor: actor, p_note: note ?? null,
+  })
+}
+
+export async function deactivateCalendar(company_id: string, calendar_id: string, actor: string | null) {
+  return supabase.rpc('deactivate_calendar', {
+    p_company_id: company_id, p_calendar_id: calendar_id, p_actor: actor,
+  })
 }
 
 // ── Holiday entries + applicability ─────────────────────────────────

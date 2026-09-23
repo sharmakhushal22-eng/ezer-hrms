@@ -46,9 +46,15 @@
      as siblings of this wrapper, so they still anchor to the viewport — put the
      container on .ezt instead and the toast lands at the bottom of the whole
      tab, far below the fold. */
+  /* No max-width: the portal is full-width, so every section fills the window.
+     container-type STAYS — the @container queries below measure THIS element,
+     and the comment above explains why it must sit on .page rather than .ezt
+     (fixed toasts and confetti anchor to the viewport). Both breakpoints are
+     900px and 520px, below the old 1100 cap, so a wider container only moves
+     further above them and nothing that fires today stops firing. */
   .ezt .page {
     container-type: inline-size;
-    container-name: ezt; max-width:1100px; margin:0 auto; }
+    container-name: ezt; }
   .ezt button { font-family:inherit; cursor:pointer; }
   .ezt :focus-visible { outline:2px solid var(--ez-brand); outline-offset:2px; border-radius:8px; }
 

@@ -99,11 +99,12 @@
 .soc button { font-family: inherit; cursor: pointer; }
 .soc :focus-visible { outline: 2px solid var(--kind-ink, var(--ez-brand)); outline-offset: 2px; }
 
-/* The portal already caps its content column at 1100px and pads it, so this
-   adds width of its own only in the preview harness. container-type is what
-   the breakpoints at the bottom measure against — the section renders beside a
-   200-260px rail, where a viewport query still reads "large". */
-.soc .page { container-type: inline-size; container-name: soc; max-width: 1100px; margin: 0 auto; }
+/* The portal no longer caps its content column — every ESS section is full
+   width and padded — so this carries no width of its own either. container-type
+   stays, because it is what the breakpoints at the bottom measure against: the
+   section renders beside a 200-260px rail, where a viewport query still reads
+   "large". Both are below 780px, so a wider container changes nothing they do. */
+.soc .page { container-type: inline-size; container-name: soc; }
 
 /* ── ENTRANCE ──────────────────────────────────────────────────────────────
    Short and without stagger. At .5s with 70/140/200ms delays this re-ran on

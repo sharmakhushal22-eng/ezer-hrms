@@ -193,10 +193,18 @@ export async function GET(req: NextRequest) {
   // resolve_holidays returns the whole calendar; only this month's matter here.
   const allHolidays = rows<HolidayRow>(holR.data)
   const holidays = allHolidays.filter(h => h.holiday_date >= from && h.holiday_date <= to)
-  // Only a mandatory holiday takes the day. An optional one is the employee's
-  // to take or skip, so it stays a working day on the grid.
+  // Every holiday on the calendar takes the day, optional ones included.
+  //
+  // This used to keep an optional holiday as a working day, on the reasoning
+  // that it was "the employee's to take or skip". That reasoning depended on a
+  // pick mechanism that does not exist: there is no table, route or screen
+  // anywhere that lets an employee choose an optional holiday, so the flag only
+  // ever removed the day from holiday treatment. Leave now refuses to start or
+  // end on any configured holiday (app/api/ess/leave/route.ts §7), and the
+  // attendance grid has to agree with it — otherwise the same date reads as a
+  // holiday on one screen and a working day on the other.
   const holidayBy = new Map<string, HolidayRow>()
-  for (const h of holidays) if (!h.is_optional) holidayBy.set(h.holiday_date, h)
+  for (const h of holidays) holidayBy.set(h.holiday_date, h)
 
   const offs = new Set<string>(rows<OffRow>(offR.data).map(w => w.off_date))
 

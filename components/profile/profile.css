@@ -428,7 +428,12 @@
    the crop maths reads that number, so the two must not drift. */
 .ezp .ez-stage {
   position: relative;
-  width: 184px; height: 184px;
+  /* MEASURED at runtime by PhotoUploader, so this declaration is the single
+     source of truth. It used to be duplicated as a BOX constant in the
+     component, with a comment asking the two not to drift; now they cannot.
+     260 rather than 184 because you are expected to work in here — pinch,
+     rotate, straighten — and 184 was a postage stamp. */
+  width: 260px; height: 260px;
   margin: 0 auto;
   display: grid; place-items: center;
   overflow: hidden;
@@ -450,11 +455,59 @@
   pointer-events: none;
   border-radius: 14px;
   box-shadow: inset 0 0 0 999px rgba(15, 23, 42, .34);
-  -webkit-mask: radial-gradient(circle at 50% 50%, #000 66px, rgba(0,0,0,.55) 67px);
-          mask: radial-gradient(circle at 50% 50%, #000 66px, rgba(0,0,0,.55) 67px);
+  /* 130px = half the 260px stage, i.e. the circle inscribed in exactly what
+     gets saved. It used to be 66px — a 132px circle inside a 184px crop — so
+     the ring under-promised by 39%: you framed a face to fill the circle and
+     got it back at 72% size with a ring of background around it. The ring is
+     supposed to be a promise about the output, so it has to match it. */
+  -webkit-mask: radial-gradient(circle at 50% 50%, #000 130px, rgba(0,0,0,.55) 131px);
+          mask: radial-gradient(circle at 50% 50%, #000 130px, rgba(0,0,0,.55) 131px);
 }
 
-.ezp .ez-slider { width: 100%; margin-top: 14px; accent-color: var(--ez-brand); }
+/* Rule of thirds, shown only while you are actually moving something — a
+   permanent grid is clutter, and a grid that appears under your finger is the
+   one phone-camera affordance everybody already knows. */
+.ezp .ez-grid {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  background-image:
+    linear-gradient(rgba(255,255,255,.45) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.45) 1px, transparent 1px);
+  background-size: 100% 33.3333%, 33.3333% 100%;
+}
+.ezp .ez-stage.ez-live .ez-grid { opacity: 1; }
+
+.ezp .ez-tools {
+  display: flex; align-items: center; gap: 6px;
+  margin-top: 12px;
+}
+.ezp .ez-tools .ez-grow { flex: 1 1 auto; }
+
+.ezp .ez-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 10px;
+  font-size: 12px; color: var(--ez-muted);
+}
+.ezp .ez-row > span { flex: 0 0 74px; }
+.ezp .ez-row > b {
+  flex: 0 0 46px; text-align: right;
+  font-variant-numeric: tabular-nums;      /* or the width jitters while dragging */
+  color: var(--ez-ink-soft); font-weight: 650;
+}
+
+.ezp .ez-slider { width: 100%; margin: 0; accent-color: var(--ez-brand); }
+
+@media (max-width: 560px) {
+  /* The stage is measured, so it may shrink freely — but the ring's mask is a
+     fixed radius, so both move together or the promise breaks again. */
+  .ezp .ez-stage { width: 220px; height: 220px; }
+  .ezp .ez-cring {
+    -webkit-mask: radial-gradient(circle at 50% 50%, #000 110px, rgba(0,0,0,.55) 111px);
+            mask: radial-gradient(circle at 50% 50%, #000 110px, rgba(0,0,0,.55) 111px);
+  }
+}
 
 .ezp .ez-prog {
   height: 5px; margin-top: 12px; overflow: hidden;

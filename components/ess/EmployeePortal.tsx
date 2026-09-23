@@ -44,7 +44,7 @@ import EmployeeProfileSections, { ESS_RECORD_TABS, RecordQuickStats } from '@/co
 // The design system — see lib/ui/tokens.ts. This file has no colliding names,
 // so the tokens come in under their own.
 import {
-  C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle, UIKeyframes,
+  C, F, W, R, E, S, Z, tone, eyebrow, numeric, inputStyle, UIKeyframes,
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
   IconLetters, IconReports, IconAi, IconBell, IconMail,
 } from '@/lib/ui'
@@ -304,7 +304,7 @@ function ClaimStepper({ status }: { status: string }) {
                             justifyContent: 'center', fontSize: 8, color: C.onAccent, fontWeight: 700 }}>
                 {on ? '' : ''}
               </div>
-              <span style={{ fontSize: 9, fontWeight: 600, color: on ? colour: C.line,
+              <span style={{ fontSize: 9, fontWeight: 600, color: on ? colour: C.faint,
                              whiteSpace: 'nowrap' }}>{label}</span>
             </div>
             {i < steps.length - 1 && (
@@ -1429,7 +1429,11 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
   isThisMonth: boolean; isMobile: boolean
 }) {
   const { working, pct } = summary
-  const tone = pct == null ? C.faint : pct >= 95 ? C.positive : pct >= 85 ? C.warning : C.criticalTint
+  // `critical`, not `criticalTint`. A tint is a BACKGROUND wash — #FEF2F2 in
+  // light, #2A1414 in dark — so the ring below 85% was drawing itself in a
+  // near-black stroke, which is why a 33% month showed almost no arc at all.
+  // Its three siblings are full colours; this one was the odd case out.
+  const tone = pct == null ? C.faint : pct >= 95 ? C.positive : pct >= 85 ? C.warning : C.critical
 
   const size = isMobile ? 68 : 82
   const r = (size - 10) / 2
@@ -1437,15 +1441,31 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
 
   const nav: React.CSSProperties = {
     width: 32, height: 32, borderRadius: 10, cursor: 'pointer',
-    border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.10)',
+    border: '1px solid rgba(255,255,255,0.28)', background: 'rgba(255,255,255,0.14)',
     color: C.onAccent, fontSize: 15, fontFamily: 'inherit', lineHeight: 1,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     transition: 'background .15s ease, transform .12s ease',
   }
 
   return (
+    // AN ACCENT PLANE — it must have contrast against the page in BOTH themes.
+    //
+    // Two wrong answers preceded this one, both from reading token NAMES
+    // instead of their values:
+    //
+    //   1. C.ink / C.inkSoft / C.brand. Those are TEXT tokens. In dark C.ink is
+    //      #F3F4F6, so a band meant as "dark navy → brand" inverted to
+    //      near-white and became the brightest thing on screen.
+    //   2. C.dark / darkMid / darkAccent. These exist for a plane that is dark
+    //      RELATIVE TO A WHITE PAGE. In dark mode --ez-dark is #0B0E12 against
+    //      a #0F1216 canvas — darker than the background — so the band
+    //      disappeared instead.
+    //
+    // The brand ramp is the one pair that carries contrast either way: it is a
+    // saturated blue in light and in dark, and C.onAccent is defined precisely
+    // as the ink that stays legible on a saturated fill in both themes.
     <div style={{ borderRadius: 14, overflow: 'hidden', marginBottom: 11, position: 'relative',
-                  background: `linear-gradient(135deg,${C.ink} 0%,${C.inkSoft} 55%,${C.brand} 100%)`,
+                  background: `linear-gradient(135deg,${C.brandDeep} 0%,${C.brand} 55%,${C.info} 100%)`,
                   boxShadow: '0 8px 26px rgba(30,27,75,0.26)' }}>
       <div style={{ position: 'absolute', top: -80, right: -50, width: 220, height: 220,
                     borderRadius: '50%', background: 'rgba(167,139,250,0.15)', pointerEvents: 'none' }} />
@@ -1466,7 +1486,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
               </button>
             )}
           </div>
-          <div style={{ fontSize: 12, color: C.onAccentDim }}>
+          <div style={{ fontSize: 12, color: C.onAccentSoft }}>
             {working > 0
               ? `${working} working day${working === 1 ? '' : 's'} · ${summary.present} present, ${summary.absent} absent`
               : 'No working days recorded yet'}
@@ -1480,7 +1500,7 @@ function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThisMonth,
 
         <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
           <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.16)" strokeWidth="7" />
+            <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="7" />
             {pct != null && (
               <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={tone} strokeWidth="7" strokeLinecap="round"
                       strokeDasharray={`${(circ * pct) / 100} ${circ}`}
@@ -1510,12 +1530,18 @@ function StatTile({ label, value, bg, fg, bar, wide }: {
     <div className="ezer-tile" style={{ background: empty ? C.sunken : bg, borderRadius: 10, padding: '10px 13px',
                   border: `1px solid ${empty ? C.line : bg}`, position: 'relative',
                   overflow: 'hidden', minWidth: wide ? 96 : 74, flex: wide ? '1 1 96px' : '1 1 74px' }}>
+      {/* `faint`, not `line`. C.line is a HAIRLINE token — #E5E7EB light,
+          #262C35 dark — and it was being used as a text colour, so on the dark
+          canvas the zero tiles (Half day, Late, Overtime, Loss of pay) were
+          near-black on near-black and simply vanished. C.faint is the token for
+          quiet-but-legible metadata and is contrast-checked in both themes.
+          Greying a zero is still right; it just has to stay readable. */}
       <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
                     background: empty ? C.line : bar }} />
       <div style={{ fontSize: 21, fontWeight: 700, lineHeight: 1.05, marginLeft: 4,
-                    color: empty ? C.line : fg }}>{value}</div>
+                    color: empty ? C.faint : fg }}>{value}</div>
       <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
-                    marginLeft: 4, marginTop: 3, color: empty ? C.line : fg, opacity: empty ? 1 : .8 }}>
+                    marginLeft: 4, marginTop: 3, color: empty ? C.faint : fg, opacity: empty ? 1 : .8 }}>
         {label}
       </div>
     </div>
@@ -1677,7 +1703,7 @@ function DayPanelResting({ summary }: { summary: ReturnType<typeof monthStats> }
             <span style={{ width: 7, height: 7, borderRadius: '50%', background: c }} />
             <span style={{ fontSize: 12, color: C.muted, flex: 1 }}>{k}</span>
             <span style={{ fontSize: 13, fontWeight: 700,
-                           color: v === '0' ? C.line : C.ink }}>{v}</span>
+                           color: v === '0' ? C.faint : C.ink }}>{v}</span>
           </div>
         ))}
       </div>
@@ -1799,12 +1825,16 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
         title={isFuture ? '' : `${STATUS_FULL[status] || status}${rec?.work_in ? ` · in ${fmtT(rec.work_in)}` : ''}${rec?.late_minutes ? ` · ${rec.late_minutes}m late` : ''}`}
         style={{
           height: cell, position: 'relative', overflow: 'hidden', fontFamily: 'inherit',
-          background: isSel ? 'linear-gradient(145deg,#3B82F6,#1D4ED8)'
+          // Tokens, not literals. The selected gradient and the today ring were
+          // fixed blues, and the cell border was rgba(37,99,235,0.09) — a wash
+          // that is nearly invisible on a #0F1216 canvas, so in dark mode the
+          // grid lost its structure and the days ran together.
+          background: isSel ? `linear-gradient(145deg, ${C.brand}, ${C.brandDeep})`
                     : isFuture ? 'transparent' : bg,
-          color: isSel ? C.surface : ink,
-          border: isSel ? '1px solid #1D4ED8'
-                : isToday ? '2px solid #93C5FD'
-                : '1px solid rgba(37,99,235,0.09)',
+          color: isSel ? C.onAccent : ink,
+          border: isSel ? `1px solid ${C.brandDeep}`
+                : isToday ? `2px solid ${C.brand}`
+                : `1px solid ${C.line}`,
           borderRadius: 10, padding: 0,
           cursor: isFuture ? 'default' : 'pointer',
           opacity: isFuture ? .45 : 1,
@@ -1827,7 +1857,9 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
         {/* the status, as a dot — small, and never the only signal */}
         {!isFuture && dot && (
           <span style={{ width: 5, height: 5, borderRadius: '50%', marginTop: 1,
-                         background: isSel ? 'rgba(255,255,255,0.9)' : dot }} />
+                         // onAccent, not white: in dark the selected fill is a
+                         // LIGHT blue, and a white dot on it disappears.
+                         background: isSel ? C.onAccent : dot }} />
         )}
 
         {hasTimes && (
@@ -1856,9 +1888,13 @@ function AttendanceCalendar({ year, month, monthData, todayStr, isMobile, onDayC
       <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap, marginBottom: 3,
                     transform: 'translateZ(14px)' }}>
         {WEEKDAYS.map((w, n) => (
+          // `muted`, not `line`. C.line is a HAIRLINE token — #262C35 in dark —
+          // and using it as type made the weekday letters invisible on the dark
+          // canvas. Same mistake as the zero-value tiles in StatTile; this is
+          // the third place in this file where a border token was used as ink.
           <div key={w} style={{ textAlign:'center', fontSize:10, fontWeight:700,
                                 letterSpacing:'.05em', padding:'3px 0',
-                                color: n % 6 === 0 ? C.brand : C.line }}>
+                                color: n % 6 === 0 ? C.brand : C.muted }}>
             {w[0]}{isMobile ? '' : w[1]}
           </div>
         ))}
@@ -3343,7 +3379,7 @@ function ManageMenu({ group, items, open, activeKey, alignRight, onToggle, onClo
       {open && (
         <div ref={pop} role="menu"
           style={{ position:'absolute', top:'calc(100% + 4px)', ...(alignRight ? { right:0 } : { left:0 }),
-                   minWidth:220, zIndex:40,
+                   minWidth:220, zIndex:Z.navMenu,
                    background:C.surface, border:`1px solid ${C.brandEdge}`, borderRadius:R.lg,
                    boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:6 }}>
           {items.map(i => {
@@ -3698,7 +3734,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
 
       <div style={{ flex:1, minWidth:0, paddingBottom: isMobile ? 70 : 0 }}>
         {/* Top bar */}
-        <div style={{ background:C.surface, borderBottom: `1px solid ${C.brandEdge}`, padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:25 }}>
+        <div style={{ background:C.surface, borderBottom: `1px solid ${C.brandEdge}`, padding: isMobile ? '10px 14px' : '10px 22px', display:'flex', alignItems:'center', gap:10, position:'sticky', top:0, zIndex:Z.nav }}>
           {/* The tab's own name and badge live in TabHeader below, so this bar carries
               only what that header can't: the sub-tab you're on, and who you are. */}
           <div style={{ fontSize: isMobile ? 15 : 16, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', flexShrink:0 }}>
@@ -3757,18 +3793,26 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
               <div>{renderView()}</div>
             ) : (
             // The inbox is a full-bleed tab: three panes that fill the viewport
-            // and scroll independently. Capping it at 1100px would put it in its
-            // own narrow breakpoint on every desktop, so only the header band
-            // keeps the standard measure — .ib brings its own width and padding.
+            // and scroll independently. .ib brings its own width and padding, so
+            // only the header band is padded here — and it now spans the window
+            // like every other section's does.
             <div style={{ paddingTop: isMobile ? 14 : 18 }}>
-              <div style={{ padding: isMobile ? '0 12px' : '0 22px', maxWidth:1100 }}>
+              <div style={{ padding: isMobile ? '0 12px' : '0 22px' }}>
                 <TabHeader s={section} />
               </div>
               {renderView()}
             </div>
             )
           ) : (
-            <div style={{ padding: isMobile ? '14px 12px' : '18px 22px', maxWidth:1100 }}>
+            // Full width, padded. This carried maxWidth:1100 — but it was only
+            // one of FOUR different caps: Today and Social also set 1100 in their
+            // own stylesheets, HRIS used --col:1160px and the Inbox 1480px. Four
+            // numbers meant the portal visibly changed shape from tab to tab on
+            // anything wider than about 1150px. All four are gone; Fun Zone was
+            // the only section that genuinely never had one.
+            // Line length is still protected where it matters, inside the
+            // sections that render prose (Wall of Fame's 70ch, and so on).
+            <div style={{ padding: isMobile ? '14px 12px' : '18px 22px' }}>
               <TabHeader s={section} />
               <SubTabs items={sectionItems} view={view} go={go} />
               {renderView()}
@@ -3784,7 +3828,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         // The panel was absolutely positioned inside that catcher, which
         // covered the viewport — so `fixed` with the same offsets puts it in
         // exactly the same place, now that the catcher is gone.
-        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:41, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
+        <div ref={bellPop} style={{ position:'fixed', top: isMobile ? 56 : 60, right: isMobile ? 8 : 22, width: isMobile ? 'calc(100vw - 16px)' : 380, maxHeight:'70vh', overflowY:'auto', zIndex:Z.navMenu, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:14, boxShadow:'0 12px 32px rgba(30,27,75,0.18)', padding:'12px 14px' }}>
           <Notifications emp={emp} onChange={refreshUnread} />
         </div>
       )}
@@ -3792,7 +3836,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {/* Mobile bottom bar — eleven tabs don't fit a thumb bar, so the four an employee
           opens daily sit here and the rest are one tap away under More. */}
       {isMobile && (
-        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:C.surface, borderTop: `1px solid ${C.brandEdge}`, display:'flex', zIndex:20 }}>
+        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:C.surface, borderTop: `1px solid ${C.brandEdge}`, display:'flex', zIndex:Z.nav }}>
           {MOBILE_PRIMARY.map(k => { const s = SECTIONS.find(x => x.k === k)!; const on = section.k === k && !moreOpen; return (
             <button key={k} onClick={() => { setMoreOpen(false); goSection(s) }} style={{ flex:1, minWidth:0, padding:'8px 0', border:'none', background:'transparent', cursor:'pointer', fontFamily:'inherit', fontSize:10, color: on ? C.brand : C.faint, fontWeight: on ? 600 : 500 }}>
               <EssIcon k={s.k} size={16} />{s.short}
@@ -3807,7 +3851,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
       {/* Mobile "More" sheet — every tab, including the four in the bar, so nothing
           is reachable from only one place. */}
       {isMobile && moreOpen && (
-        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:30, display:'flex', alignItems:'flex-end' }}>
+        <div onClick={() => setMoreOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:Z.overlay, display:'flex', alignItems:'flex-end' }}>
           <div onClick={e => e.stopPropagation()} style={{ background:C.surface, width:'100%', borderRadius:'14px 14px 0 0', padding:'16px 14px 24px', maxHeight:'72vh', overflowY:'auto' }}>
             <div style={{ fontSize:13, fontWeight:700, marginBottom:10 }}>All tabs</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
@@ -3843,7 +3887,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
         </div>
       )}
 
-      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:9999, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
+      {toast && <div style={{ position:'fixed', bottom: isMobile ? 80 : 24, right:24, zIndex:Z.toast, background: toast.type==='success'?C.positive:C.critical, color:C.onAccent, borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500, boxShadow:'0 8px 24px rgba(0,0,0,0.2)' }}>{toast.type==='success'?'':''} {toast.msg}</div>}
     </div>
   )
 }
