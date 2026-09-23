@@ -47,6 +47,35 @@ const CH = Math.round(CARD_MM.h * PX_PER_MM)
  */
 const CARD_R = Math.round(3.18 * PX_PER_MM)
 
+/**
+ * A PDF page is a rectangle. It cannot have rounded corners — no clipping
+ * trick changes that, and the first attempt at this failed for exactly that
+ * reason: the corners WERE cut, but the area outside the radius was painted
+ * white and the page is white, so a rounded corner on a white page is
+ * invisible. All it produced was a pale wedge where the dark header band
+ * stopped short of the square page corner.
+ *
+ * The only thing that makes a corner read as round is contrast. So the page
+ * is 3mm larger than the card on every side and that margin is filled with a
+ * backdrop: the card then sits ON something, its rounded corners visibly cut
+ * against it, the way a card looks photographed on a desk.
+ *
+ * The card itself stays exactly CR80 / ISO ID-1. The margin is trim, not card
+ * — print at 100% and cut the rounded outline and you hold a real 54 x 85.6mm
+ * card. Growing the page was the only way to keep that true AND show the shape.
+ */
+const PAGE_MARGIN_MM = 3
+export const PAGE_MM = {
+  w: CARD_MM.w + PAGE_MARGIN_MM * 2,
+  h: CARD_MM.h + PAGE_MARGIN_MM * 2,
+} as const
+const PM = Math.round(PAGE_MARGIN_MM * PX_PER_MM)
+const PW = CW + PM * 2
+const PH = CH + PM * 2
+
+/** The trim area. Light enough to spare toner, dark enough to cut a corner. */
+const BACKDROP = '#E7E4F2'
+
 const FONT = '-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif'
 const F = (weight: number, size: number) => `${weight} ${size}px ${FONT}`
 
@@ -420,9 +449,9 @@ export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
 // ── assembly ───────────────────────────────────────────────────────────────
 
 /**
- * The card outline, and the reason the corners were not visibly round.
+ * The card outline — the cut line, and what defines the rounded corner.
  *
- * Both faces already clip to a rounded rectangle — but flatten() paints white
+ * Both faces already clip to a rounded rectangle — but the old flatten() painted white
  * across the whole canvas and the PDF page is cut to exactly card size, so a
  * white rounded corner lands on a white page and disappears. The radius only
  * showed where the dark header and footer bands happened to cross the edge,
@@ -433,23 +462,47 @@ export async function drawBack(d: IdCardData): Promise<HTMLCanvasElement> {
  * drawImage so it sits above the artwork, and inset by 1px because a stroke
  * straddles its path — centred on the edge, half of it would fall off canvas.
  */
-function cardEdge(x: CanvasRenderingContext2D) {
+function cardEdge(x: CanvasRenderingContext2D, ox: number, oy: number) {
   x.save()
-  rounded(x, 1, 1, CW - 2, CH - 2, CARD_R - 1)
-  x.strokeStyle = 'rgba(30,27,75,.30)'
-  x.lineWidth = 2
+  rounded(x, ox + 1, oy + 1, CW - 2, CH - 2, CARD_R - 1)
+  // Was 2px at 30% — 0.17mm of pale grey, which rendered as nothing at all.
+  // This is the cut line; it has to survive a printer.
+  x.strokeStyle = 'rgba(30,27,75,.45)'
+  x.lineWidth = 3
   x.stroke()
   x.restore()
 }
 
-/** White behind the card, so a transparent corner does not print black. */
-function flatten(src: HTMLCanvasElement): HTMLCanvasElement {
+/**
+ * Card onto page.
+ *
+ * The face canvas is transparent outside the rounded clip — that alpha is the
+ * whole mechanism, and the previous version destroyed it by filling white
+ * before drawing. Here the backdrop goes down first, so the transparent
+ * corners let it through and the radius becomes visible.
+ *
+ * The white rounded fill under drawImage is not redundant: it carries the
+ * shadow (a shadow needs a shape to cast from) and guarantees an opaque card
+ * body, so JPEG — which has no alpha — never flattens a corner to black.
+ */
+function compose(src: HTMLCanvasElement): HTMLCanvasElement {
   const c = document.createElement('canvas')
-  c.width = src.width; c.height = src.height
+  c.width = PW; c.height = PH
   const x = c.getContext('2d')!
-  x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, c.width, c.height)
-  x.drawImage(src, 0, 0)
-  cardEdge(x)
+
+  x.fillStyle = BACKDROP; x.fillRect(0, 0, PW, PH)
+
+  x.save()
+  x.shadowColor = 'rgba(30,27,75,.30)'
+  x.shadowBlur = 16
+  x.shadowOffsetY = 5
+  rounded(x, PM, PM, CW, CH, CARD_R)
+  x.fillStyle = '#FFFFFF'
+  x.fill()
+  x.restore()
+
+  x.drawImage(src, PM, PM)
+  cardEdge(x, PM, PM)
   return c
 }
 
@@ -461,9 +514,9 @@ export async function buildIdCardPdf(d: IdCardData): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   doc.setTitle(`ID Card — ${d.name} (${d.code})`)
   doc.setProducer('EZER HRMS')
-  const w = CARD_MM.w * PT_PER_MM, h = CARD_MM.h * PT_PER_MM
+  const w = PAGE_MM.w * PT_PER_MM, h = PAGE_MM.h * PT_PER_MM
   for (const face of faces) {
-    const jpeg = flatten(face).toDataURL('image/jpeg', 0.94)
+    const jpeg = compose(face).toDataURL('image/jpeg', 0.94)
     const img = await doc.embedJpg(jpeg)
     const page = doc.addPage([w, h])
     page.drawImage(img, { x: 0, y: 0, width: w, height: h })

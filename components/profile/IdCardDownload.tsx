@@ -117,8 +117,9 @@ export default function IdCardDownload(props: {
           rotation would put the security model on a card anyone can pick up,
           and in help text anyone can read. */}
       <div style={{ fontSize: 10.5, color: 'var(--ez-muted)', marginTop: 6, lineHeight: 1.5 }}>
-        Two pages at card size, 54 × 85.6 mm. For identification only — scan at
-        the gate from your digital ID above.
+        Two pages, front and back. Print at 100% and cut the rounded outline
+        for a 54 × 85.6 mm card. For identification only — scan at the gate
+        from your digital ID above.
       </div>
       {err && (
         <div style={{ fontSize: 11, color: 'var(--ez-critical)', marginTop: 6 }}>{err}</div>
