@@ -524,6 +524,48 @@ export async function buildIdCardPdf(d: IdCardData): Promise<Uint8Array> {
   return doc.save()
 }
 
+/**
+ * Many cards, one PDF — the HR-side bulk export.
+ *
+ * PDF ONLY, and that is not a preference. A bulk image export means N separate
+ * downloads fired in a burst, which every browser blocks after the first two or
+ * three: the person gets four files out of forty and no error explaining why.
+ * One document always arrives.
+ *
+ * Two pages per employee, front then back, in the order given — so page 2n-1
+ * and 2n belong to the nth person on the list, which is what makes a printed
+ * stack sortable. Cards are drawn one at a time rather than in parallel: each
+ * one allocates a pair of 720x1099 canvases, and forty of those at once is how
+ * a tab runs out of memory on the machine of the person least able to diagnose
+ * it.
+ */
+export async function buildIdCardsPdf(list: IdCardData[]): Promise<Uint8Array> {
+  const doc = await PDFDocument.create()
+  doc.setTitle(list.length === 1
+    ? `ID Card — ${list[0].name} (${list[0].code})`
+    : `ID Cards — ${list.length} employees`)
+  doc.setProducer('EZER HRMS')
+  const w = PAGE_MM.w * PT_PER_MM, h = PAGE_MM.h * PT_PER_MM
+
+  for (const d of list) {
+    for (const face of [await drawFront(d), await drawBack(d)]) {
+      const jpeg = compose(face).toDataURL('image/jpeg', 0.94)
+      const img = await doc.embedJpg(jpeg)
+      doc.addPage([w, h]).drawImage(img, { x: 0, y: 0, width: w, height: h })
+    }
+  }
+  return doc.save()
+}
+
+/** `ID-Cards_12_2026-09-24.pdf` — the count is in the name because a bulk file
+ *  that says only "ID-Cards" tells you nothing once it is in a downloads
+ *  folder next to yesterday's. */
+export function idCardsFileName(n: number): string {
+  const d = new Date()
+  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  return `ID-Cards_${n}_${iso}.pdf`
+}
+
 /** `ID-Card_SRS9010_Shreya-Reddy.pdf` */
 export function idCardFileName(d: IdCardData): string {
   const slug = d.name.replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')
