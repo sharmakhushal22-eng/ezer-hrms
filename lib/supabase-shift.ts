@@ -82,3 +82,32 @@ export async function loadAttendance(from: string, to: string): Promise<AttRecor
     .order('attendance_date', { ascending: false })
   return (data || []) as AttRecord[]
 }
+
+// ── Leave backdating window (migration 132) ─────────────────────────────────
+//
+// Lives here because HR sets it from Attendance & Shifts, alongside the other
+// things on that screen. It is READ by the ESS leave route and enforced there
+// too — this module is only the admin side of it.
+
+export interface BackdateConfig {
+  company_id: string
+  window_days: number
+  updated_at?: string | null
+}
+
+/** Every company's configured window. A company with no row is simply absent —
+ *  the caller renders 0, which is the same default the resolver returns. */
+export async function loadBackdateWindows(): Promise<BackdateConfig[]> {
+  const { data } = await supabase.from('leave_backdate_config').select('*')
+  return (data || []) as BackdateConfig[]
+}
+
+/** Upsert, keyed on company. Returns the raw result so the caller can report
+ *  the error, matching createShift/assignShift above. */
+export async function saveBackdateWindow(company_id: string, window_days: number) {
+  return supabase
+    .from('leave_backdate_config')
+    .upsert({ company_id, window_days, updated_at: new Date().toISOString() }, { onConflict: 'company_id' })
+    .select()
+    .maybeSingle()
+}

@@ -43,6 +43,16 @@ interface Payload {
   // weekly_off_config. `weekly_offs` is exact for a rolling year from today;
   // `weekly_off_weekdays` is the weekday fallback beyond that window.
   weekly_offs: string[]; weekly_off_weekdays: number[]
+  /**
+   * How many days back this employee may apply, from leave_backdate_config via
+   * the server. 0 means no backdating — which is the old behaviour, now a
+   * choice rather than a hardcoded assumption.
+   *
+   * Optional so an older server that does not send it still renders: the client
+   * falls back to 0, which refuses past dates exactly as it always did. A
+   * missing field must not become an unbounded window.
+   */
+  backdate_days?: number
   diagnostics: { noBalances: boolean; noHolidays: boolean; noApprover: boolean; noWeeklyOffs: boolean }
 }
 
@@ -82,13 +92,24 @@ const rangeLabel = (f: string, t: string) => {
  *
  * NOTE: this is the CLIENT half of the rule. app/api/ess/leave/route.ts does
  * not enforce it (it checks only that the date is not before joining), so a
- * crafted POST can still file a backdated request. See REDESIGN.md §4.5 for
- * the server guard that closes it.
+ * crafted POST could still file a backdated request. That guard now exists —
+ * route.ts §4b refuses anything older than the same window this uses.
  *
- * If a type ever needs to be backdatable — sick leave applied the morning
- * after, typically — make this per-type rather than removing it.
+ * BACKDATING IS NOW CONFIGURED, NOT FORBIDDEN. The old version returned today
+ * and nothing else, which made the commonest real case impossible: somebody was
+ * absent on Tuesday and needs to claim it as sick leave on Wednesday. HR sets
+ * the window per company from Attendance & Shifts (migration 132).
+ *
+ * Counted back from today INCLUSIVE — a window of 30 means today and the
+ * previous 29 days. 0, the default and the answer before the migration runs,
+ * reproduces the old behaviour exactly, so nothing changes until HR chooses it.
  */
-const earliestApplyDate = () => iso(new Date())
+const earliestApplyDate = (backdateDays?: number) => {
+  const d = new Date()
+  const n = Math.max(0, Math.floor(Number(backdateDays) || 0))
+  if (n > 1) d.setDate(d.getDate() - (n - 1))
+  return iso(d)
+}
 
 /**
  * Counts a figure up once, the first time it lands. Never on a re-render, and
@@ -162,7 +183,12 @@ export default function LeaveSection({ emp, notify }: {
   const sel = useMemo(() => types.find(t => t.id === form.leave_type_id) || null, [types, form.leave_type_id])
 
   const today = iso(new Date())
-  const floor = earliestApplyDate()
+  // Every past-date gate in this file derives from `floor` — the day-tap
+  // handler, both typed-input clamps, arrow-key navigation, `min=` on the two
+  // date fields, the disabled previous-month button and each day cell. Pointing
+  // it at the configured window opens all seven at once; there is deliberately
+  // no second place that decides what "past" means.
+  const floor = earliestApplyDate(data?.backdate_days)
   const floorDate = fromIso(floor)
   // Nothing to go back to: the month holding the first selectable day is as
   // far back as the calendar goes.
@@ -276,7 +302,7 @@ export default function LeaveSection({ emp, notify }: {
    * very first tap, so the calendar always reacts and Submit is valid at once.
    */
   const pickDay = (key: string) => {
-    if (key < floor) return                       // past dates are not selectable
+    if (key < floor) return                       // outside the backdating window
     // Leave may SPAN a holiday or a weekly off, but may not start or end on
     // one — you cannot claim as leave a day the company has already given you.
     // route.ts §7 enforces this; refusing the tap here means the employee finds

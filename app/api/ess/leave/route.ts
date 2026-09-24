@@ -201,6 +201,18 @@ export async function GET(req: NextRequest) {
   const fyStartYear = leaveFyStartYear(year)
   const approved = (fyApps || []) as LeaveApplicationLike[]
 
+  // How far back this employee may apply, set by HR per company (migration
+  // 132). Resolved through the function rather than read from the table, so
+  // this and the POST guard below answer the identical question — a UI that
+  // offers a date the server then refuses is worse than no backdating at all.
+  // 0 (the default, and the answer when the migration has not run) reproduces
+  // exactly the old behaviour: nothing before today.
+  let backdateDays = 0
+  if (emp?.company_id) {
+    const { data: win } = await sb.rpc('resolve_backdate_window', { p_company_id: emp.company_id })
+    backdateDays = Number(win) || 0
+  }
+
   // Annotate each type with whether THIS employee may take it, and why not.
   // The old dropdown offered all ten to all 398 — including Maternity Leave to
   // everybody — because it filtered on nothing but is_active and HR_MARK.
@@ -295,6 +307,9 @@ export async function GET(req: NextRequest) {
     // moment a branch was configured differently.
     weekly_offs: weeklyOffs,
     weekly_off_weekdays: weeklyOffWeekdays,
+    // The calendar's earliest selectable day is computed from this. Sent rather
+    // than assumed client-side, because the same number gates the POST.
+    backdate_days: backdateDays,
     // Surfaced so the tab can say WHY a card is empty instead of implying the
     // employee simply has nothing — the two are indistinguishable today.
     diagnostics: {
@@ -355,7 +370,7 @@ export async function POST(req: NextRequest) {
 
   // ── 4. The employee, and the eligibility rules that were never enforced ──
   const { data: emp } = await sb.from('employees')
-    .select('full_name, gender, company_doj, group_doj, confirmation_status, l1_manager_id, hr_manager_id')
+    .select('full_name, gender, company_doj, group_doj, company_id, confirmation_status, l1_manager_id, hr_manager_id')
     .eq('id', me).maybeSingle()
   if (!emp) return bad('Employee record not found.', 404)
 
@@ -390,6 +405,32 @@ export async function POST(req: NextRequest) {
   }
   if (type.eligible_from === 'ON_DOJ' && doj && from < new Date(doj + 'T00:00:00Z')) {
     return bad('That date is before your joining date.')
+  }
+
+  // ── 4b. Backdating, within the window HR configured ─────────────────────
+  //
+  // THE GUARD THE CLIENT COMMENT PROMISED AND NOBODY WROTE. Until now there was
+  // no past-date check here at all: the calendar refused past dates, so nothing
+  // server-side did, and a hand-crafted POST could file leave for any date back
+  // to the employee's joining. Now that the calendar deliberately offers past
+  // dates, that hole would be reachable from the UI itself.
+  //
+  // Counted back from today INCLUSIVE, matching what the calendar offers: a
+  // window of 30 means today and the previous 29 days. 0 refuses every past
+  // date, which is the default and the old behaviour.
+  {
+    const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0)
+    if (from < startOfToday) {
+      const { data: win } = await sb.rpc('resolve_backdate_window', { p_company_id: emp.company_id })
+      const days = Number(win) || 0
+      const earliest = new Date(startOfToday.getTime() - Math.max(0, days - 1) * 86400000)
+      if (days <= 0) {
+        return bad('Leave cannot be applied for a past date. Ask HR if you need to claim an absence.')
+      }
+      if (from < earliest) {
+        return bad(`Leave can only be backdated ${days} day${days === 1 ? '' : 's'} — the earliest you can claim is ${fmtDate(iso(earliest))}.`)
+      }
+    }
   }
 
   // ── 5. Overlap with an existing request ─────────────────────────────────
