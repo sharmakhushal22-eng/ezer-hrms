@@ -110,13 +110,21 @@ export default function IdCardDownload(props: {
 
   return (
     <div style={{ marginTop: 10 }}>
-      <button className="btn ghost wide" onClick={run} disabled={busy}>
+      <button className="btn wide getcard" onClick={run} disabled={busy}>
+        {/* currentColor only — no literal, so it follows --ez-on-accent when
+            the theme flips the ink on an accent fill from white to near-black. */}
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M12 3v12" />
+          <path d="m7 11 5 5 5-5" />
+          <path d="M4 19h16" />
+        </svg>
         {busy ? 'Preparing…' : 'Download ID card (PDF)'}
       </button>
       {/* Says what you get, not how the gate code works. Describing the
           rotation would put the security model on a card anyone can pick up,
           and in help text anyone can read. */}
-      <div style={{ fontSize: 10.5, color: 'var(--ez-muted)', marginTop: 6, lineHeight: 1.5 }}>
+      <div style={{ fontSize: 11.5, color: 'var(--ez-muted)', marginTop: 8, lineHeight: 1.55 }}>
         Two pages, front and back. Print at 100% and cut the rounded outline
         for a 54 × 85.6 mm card. For identification only — scan at the gate
         from your digital ID above.

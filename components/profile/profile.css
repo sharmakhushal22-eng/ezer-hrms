@@ -275,6 +275,42 @@
 .ezp .btn.ghost { background: none; color: var(--ez-ink-soft); border-color: var(--ez-line); }
 .ezp .btn.wide { width: 100%; }
 
+/* The printable-card button.
+ *
+ * It was `btn ghost`: transparent fill, muted ink, hairline border — the
+ * lowest-emphasis style in the system, sitting directly under a saturated
+ * ID card. Next to that it read as disabled, which is why nobody could see it.
+ *
+ * Every colour here is a token, not a literal: --ez-brand-deep is documented
+ * as "pressed, gradient end" and --ez-shadow-brand exists precisely for a
+ * brand-coloured lift, so this is the system's own vocabulary rather than a
+ * new one. Both are redefined for dark, where the ramp inverts (brand is the
+ * darker of the two) and --ez-on-accent flips to dark ink — so the fill stays
+ * legible in either theme without a second rule. */
+.ezp .btn.getcard {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 12px 16px;
+  font-size: 13.5px; font-weight: 650; letter-spacing: -.005em;
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--ez-brand), var(--ez-brand-deep));
+  border-color: var(--ez-brand-deep);
+  box-shadow: var(--ez-shadow-brand);
+  transition: transform 120ms ease, box-shadow 160ms ease, filter 120ms ease;
+}
+.ezp .btn.getcard:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: var(--ez-shadow-floating);
+  filter: saturate(1.06);
+}
+.ezp .btn.getcard:active:not(:disabled) {
+  transform: translateY(0);
+  box-shadow: var(--ez-shadow-flat);
+}
+/* The glyph carries no colour of its own — currentColor keeps it correct in
+   both themes, where the ink on an accent fill flips from white to near-black. */
+.ezp .btn.getcard svg { flex: 0 0 auto; }
+.ezp .btn.getcard:disabled { box-shadow: none; }
+
 @media (max-width: 560px) {
   .ezp .idcard { margin: -46px 6px 0; padding: 14px; }
   .ezp .face { width: 60px; height: 60px; margin-top: -28px; font-size: 19px; }
@@ -554,5 +590,8 @@
 @media (prefers-reduced-motion: reduce) {
   .ezp .face .facebtn,
   .ezp .ez-prog i,
+  .ezp .btn.getcard,
   .ezp .ez-btn { transition: none; }
+  /* The lift is motion too, not just the fade into it. */
+  .ezp .btn.getcard:hover:not(:disabled) { transform: none; }
 }
