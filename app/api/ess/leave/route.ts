@@ -22,7 +22,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { essRoute, forbidden, notify, audit, fmtDate } from '@/lib/ess/session'
-import { leaveYearOf, leaveFyLabel } from '@/lib/ess/leave-year'
+import { leaveYearOf, leaveFyLabel, leaveFyStartYear, leavePolicyFy } from '@/lib/ess/leave-year'
+import { balanceFor, normaliseMode, type LeaveApplicationLike } from '@/lib/leave/accrual'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,9 +128,12 @@ export async function GET(req: NextRequest) {
   const winFrom = iso(new Date())
   const winTo = iso(new Date(Date.now() + 366 * 86400000))
 
-  const [{ data: emp }, { data: balances }, { data: types }, { data: apps }, { data: hols }, { data: offRows }] = await Promise.all([
+  const [{ data: emp }, { data: balances }, { data: types }, { data: apps }, { data: hols }, { data: offRows }, { data: fyApps }] = await Promise.all([
     sb.from('employees')
-      .select('gender, company_doj, group_doj, confirmation_status, l1_manager_id, hr_manager_id')
+      // date_of_leaving and company_id are for the balance: the first weights a
+      // leaving month pro-rata, the second resolves the quota through
+      // leave_policy rather than assuming the catalogue value.
+      .select('gender, company_doj, group_doj, date_of_leaving, company_id, confirmation_status, l1_manager_id, hr_manager_id')
       .eq('id', me).maybeSingle(),
     sb.from('leave_balances').select('*, leave_types(short_name, name)').eq('employee_id', me).eq('year', year),
     sb.from('leave_types').select('*').eq('is_active', true).neq('application_mode', 'HR_MARK').order('sort_order'),
@@ -138,6 +142,19 @@ export async function GET(req: NextRequest) {
       .eq('employee_id', me).order('applied_at', { ascending: false }).limit(10),
     sb.rpc('resolve_holidays', { p_employee_id: me }),
     sb.rpc('resolve_weekly_offs', { p_employee_id: me, p_from: winFrom, p_to: winTo }),
+    // `used` comes from HERE, not from `apps` above. That one is the recent
+    // strip the tab renders and is capped at 10 rows — deriving consumption
+    // from it would silently undercount anybody who has applied more than ten
+    // times, which is a wrong balance that looks entirely plausible.
+    //
+    // APPROVED only, and bounded to the financial year, so the query returns
+    // what it means rather than everything the employee has ever filed.
+    sb.from('leave_applications')
+      .select('leave_type_id, status, from_date, days')
+      .eq('employee_id', me)
+      .eq('status', 'APPROVED')
+      .gte('from_date', `${leaveFyStartYear(year)}-04-01`)
+      .lte('from_date', `${leaveFyStartYear(year) + 1}-03-31`),
   ])
 
   const weeklyOffs = ((offRows || []) as { off_date: string }[]).map(r => String(r.off_date)).sort()
@@ -148,6 +165,41 @@ export async function GET(req: NextRequest) {
 
   const balByType = new Map<string, any>()
   for (const b of balances || []) balByType.set(b.leave_type_id, b)
+
+  // ── QUOTA: resolved, not assumed ──────────────────────────────────────────
+  //
+  // resolve_leave_quota prefers a branch policy, then the company default, then
+  // the leave_types catalogue. Reading t.annual_quota directly would skip the
+  // first two — and this database HAS company policy rows, so the catalogue is
+  // not the answer for EL.
+  //
+  // Needs emp.company_id, so it cannot join the Promise.all above. branch is
+  // null deliberately: there is no branches table here (employees carry
+  // location_id), and every live leave_policy row has branch_id NULL, so null
+  // is what resolves to the company default rather than a guess.
+  //
+  // It does NOT return `accrual` — confirmed against the live function, whose
+  // columns stop at annual_quota/max_carry_forward/source. So the mode still
+  // comes from the catalogue below. A per-branch accrual override would be
+  // silently ignored today; extending the RPC is a follow-up, and nothing is
+  // configured that way yet because 130 set every quota-bearing type MONTHLY.
+  const quotaByType = new Map<string, { annual_quota: number; max_carry_forward: number }>()
+  if (emp?.company_id) {
+    const { data: quotas } = await sb.rpc('resolve_leave_quota', {
+      p_company_id: emp.company_id,
+      p_branch_id: null,
+      p_fy: leavePolicyFy(year),
+    })
+    for (const q of (quotas || []) as Record<string, string>[]) {
+      quotaByType.set(String(q.leave_type_id), {
+        annual_quota: Number(q.annual_quota) || 0,
+        max_carry_forward: Number(q.max_carry_forward) || 0,
+      })
+    }
+  }
+
+  const fyStartYear = leaveFyStartYear(year)
+  const approved = (fyApps || []) as LeaveApplicationLike[]
 
   // Annotate each type with whether THIS employee may take it, and why not.
   // The old dropdown offered all ten to all 398 — including Maternity Leave to
@@ -202,7 +254,29 @@ export async function GET(req: NextRequest) {
       allow_half_day: !!t.allow_half_day,          // ← the client no longer hardcodes this
       allow_without_balance: !!t.allow_without_balance,
       approval_by: t.approval_by,
-      available: bal ? availOf(bal) : null,
+      // COMPUTED, not read. leave_balances holds 0 rows for all 398 employees,
+      // so `bal ? availOf(bal) : null` reported null for every type for
+      // everybody — an empty Leave tab that looked like a loading state.
+      //
+      // The engine accrues monthly from the quota, weights the joining and
+      // leaving months pro-rata, and derives `used` from APPROVED applications
+      // in this FY. The stored row now supplies only what cannot be computed:
+      // `opening` (carried in from last FY) and `encashed`. Both default to 0,
+      // which is correct for a first year.
+      available: balanceFor({
+        // Parenthesised deliberately: `a ?? b || c` is ambiguous enough that
+        // TypeScript refuses it (TS5076). The meaning is the resolved policy
+        // quota when there is one, otherwise the catalogue value, otherwise 0.
+        annualQuota: quotaByType.get(t.id)?.annual_quota ?? (Number(t.annual_quota) || 0),
+        fyStartYear,
+        doj,
+        lwd: emp?.date_of_leaving ?? null,
+        opening: Number(bal?.opening || 0),
+        encashed: Number(bal?.encashed || 0),
+        applications: approved,
+        leaveTypeId: t.id,
+        mode: normaliseMode(t.accrual),
+      }).available,
       eligible: reasons.length === 0,
       reason: reasons[0] || null,
     }
