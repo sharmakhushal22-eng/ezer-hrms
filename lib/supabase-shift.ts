@@ -95,19 +95,38 @@ export interface BackdateConfig {
   updated_at?: string | null
 }
 
-/** Every company's configured window. A company with no row is simply absent —
- *  the caller renders 0, which is the same default the resolver returns. */
-export async function loadBackdateWindows(): Promise<BackdateConfig[]> {
-  const { data } = await supabase.from('leave_backdate_config').select('*')
-  return (data || []) as BackdateConfig[]
+/** THROUGH A ROUTE, NOT THE BROWSER CLIENT.
+ *
+ *  Unlike every other helper in this file, these two do not touch Supabase
+ *  directly. leave_backdate_config carries a deny-all RLS policy for anon and
+ *  authenticated (migration 132), because it decides how far back anybody in a
+ *  company may rewrite their attendance — the browser has no business writing
+ *  it. The first version of this file did exactly that and every Save failed
+ *  with "new row violates row-level security policy".
+ *
+ *  app/api/attendance/settings holds the service-role key and gates on
+ *  requireModule('Attendance', ...). */
+async function bearer(): Promise<Record<string, string>> {
+  const { authToken } = await import('@/lib/rms/client')
+  const t = await authToken()
+  return t ? { Authorization: `Bearer ${t}` } : {}
 }
 
-/** Upsert, keyed on company. Returns the raw result so the caller can report
- *  the error, matching createShift/assignShift above. */
+export async function loadBackdateWindows(): Promise<BackdateConfig[]> {
+  const res = await fetch('/api/attendance/settings', { headers: await bearer() })
+  if (!res.ok) return []
+  const j = await res.json().catch(() => ({}))
+  return (j.windows || []) as BackdateConfig[]
+}
+
+/** Returns { error } like the Supabase helpers above, so the caller's existing
+ *  error handling keeps working unchanged. */
 export async function saveBackdateWindow(company_id: string, window_days: number) {
-  return supabase
-    .from('leave_backdate_config')
-    .upsert({ company_id, window_days, updated_at: new Date().toISOString() }, { onConflict: 'company_id' })
-    .select()
-    .maybeSingle()
+  const res = await fetch('/api/attendance/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(await bearer()) },
+    body: JSON.stringify({ company_id, window_days }),
+  })
+  const j = await res.json().catch(() => ({}))
+  return res.ok ? { data: j.window, error: null } : { data: null, error: { message: j?.error || `Save failed (${res.status}).` } }
 }
