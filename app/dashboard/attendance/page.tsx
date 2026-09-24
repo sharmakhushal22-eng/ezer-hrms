@@ -14,7 +14,7 @@ import LeaveRulesTab from '@/components/attendance/LeaveRulesTab'
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 import { useGrant } from '@/lib/rms/client'
-import { canSeeScreen } from '@/lib/rms/resolve'
+import { canSeeScreen, scopedCompanies } from '@/lib/rms/resolve'
 
 const T = {
   page:  { background:TK.canvas, minHeight:'100vh', color:TK.ink, fontFamily:'"DM Sans","Segoe UI",sans-serif', fontSize:'13px' } as React.CSSProperties,
@@ -262,7 +262,11 @@ export default function AttendancePage() {
     setSavingWindow(true)
     const { error } = await saveBackdateWindow(company_id, window_days) as { error: { message: string } | null }
     setSavingWindow(false)
-    if (error) return notify('Could not save: ' + error.message + ' (has migration 132 been run?)', 'error')
+    // Report what the server said, and nothing else. This used to append
+    // "(has migration 132 been run?)" to EVERY failure, so a 403 about company
+    // scope read as a missing migration — it sent a real investigation down
+    // the wrong path. The route already says when 132 is the problem.
+    if (error) return notify('Could not save: ' + error.message, 'error')
     notify(window_days > 0
       ? `Employees can now claim absences up to ${window_days} day${window_days === 1 ? '' : 's'} back.`
       : 'Backdating turned off — only today and future dates.')
@@ -284,7 +288,11 @@ export default function AttendancePage() {
             {tab === 'shifts' && <ShiftsTab companies={companies} locations={locations} departments={departments} shifts={shifts} onCreate={doCreate} onToggle={doToggle} onDelete={doDelete} />}
             {tab === 'assign' && <AssignTab shifts={shifts} employees={employees} assignments={assignments} onAssign={doAssign} />}
             {tab === 'records' && <RecordsTab employees={employees} records={records} from={fromDate} to={toDate} onFrom={setFromDate} onTo={setToDate} />}
-            {tab === 'leaverules' && <LeaveRulesTab companies={companies} windows={windows} onSave={doSaveWindow} saving={savingWindow} />}
+            {/* Only the companies this caller may actually write. scopedCompanies
+                is the same helper the Employee Master uses; without it the tab
+                listed all three for everyone and Save returned 403 on two of
+                them — a button that cannot work is worse than no button. */}
+            {tab === 'leaverules' && <LeaveRulesTab companies={scopedCompanies(grant, companies)} windows={windows} onSave={doSaveWindow} saving={savingWindow} />}
           </>
         )}
       </div>
