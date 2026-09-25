@@ -78,22 +78,53 @@ const SOURCES = ['Direct','Naukri','LinkedIn','Referral','Campus','WhatsApp','Co
 // is decided.
 const T = {
   page: { background:C.canvas, minHeight:'100vh', color:C.ink, fontFamily:F.family } as React.CSSProperties,
-  card: { background:C.surface, borderRadius:R.lg, border:`1px solid ${C.line}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.raised } as React.CSSProperties,
-  cardPurple: { background:C.surface, borderRadius:R.lg, border:`2px solid ${C.brand}`, padding:'14px 16px', marginBottom:S.md, boxShadow:E.floating } as React.CSSProperties,
-  label: { ...eyebrow, display:'block', marginBottom:5 } as React.CSSProperties,
+  // ── SURFACES ────────────────────────────────────────────────────────────
+  // Twenty-pixel corners and twenty pixels of air, with structure coming from
+  // elevation rather than outline: the border is still present but recedes,
+  // so a page of cards reads as a stack of planes instead of a grid of boxes.
+  // 14x16 padding was dense enough that every card felt like a table cell.
+  card: { background:C.surface, borderRadius:R.xl, border:`1px solid ${C.line}`,
+          padding:S.xl, marginBottom:S.lg, boxShadow:E.raised,
+          transition:`box-shadow ${M.ease}, border-color ${M.ease}` } as React.CSSProperties,
+
+  // Emphasis as a tinted plane, which is how the rest of the system says
+  // "this one" — a 2px brand outline drawn around an otherwise identical card
+  // shouts at the same volume whatever it is applied to.
+  cardPurple: { background:C.brandTint, borderRadius:R.xl, border:`1px solid ${C.brandEdge}`,
+                padding:S.xl, marginBottom:S.lg, boxShadow:E.brand } as React.CSSProperties,
+
+  label: { ...eyebrow, display:'block', marginBottom:6 } as React.CSSProperties,
   input: { ...inputStyle() } as React.CSSProperties,
   select: { ...inputStyle(), cursor:'pointer' } as React.CSSProperties,
   textarea: { ...inputStyle(), height:'auto', minHeight:90, padding:'9px 11px', resize:'vertical' as const, lineHeight:1.5 } as React.CSSProperties,
-  btn: { height:36, padding:'0 16px', borderRadius:R.md, border:'none', cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', whiteSpace:'nowrap' as const } as React.CSSProperties,
-  btnPrimary: { height:36, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.brandDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, boxShadow:E.brand, whiteSpace:'nowrap' as const } as React.CSSProperties,
-  btnOutline: { height:34, padding:'0 13px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  // ── CONTROLS ────────────────────────────────────────────────────────────
+  // 38px with 18px of side padding. The old 36/16 was fine in isolation but
+  // sat a step below the inputs it appears beside, and btnOutline was 34 —
+  // three different control heights in one form. They are one height now.
+  // UIKeyframes already gives every button its press, hover and transition.
+  btn: { height:38, padding:'0 18px', borderRadius:R.md, border:'none', cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', letterSpacing:'-.005em', whiteSpace:'nowrap' as const } as React.CSSProperties,
+  btnPrimary: { height:38, padding:'0 18px', borderRadius:R.md, border:`1px solid ${C.brandDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', letterSpacing:'-.005em', background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, boxShadow:E.brand, whiteSpace:'nowrap' as const } as React.CSSProperties,
+  btnOutline: { height:38, padding:'0 16px', borderRadius:R.md, border:`1px solid ${C.lineStrong}`, cursor:'pointer', fontSize:F.small, fontWeight:W.medium, fontFamily:'inherit', background:C.surface, color:C.ink, boxShadow:E.flat, whiteSpace:'nowrap' as const } as React.CSSProperties,
   // Fixed 2/3/4-column grids collapsed badly on a laptop at the app's 130%
   // zoom. auto-fit lets each row find its own column count instead.
-  g2: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:S.md } as React.CSSProperties,
-  g3: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:S.md } as React.CSSProperties,
-  g4: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:S.md } as React.CSSProperties,
-  row: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom:`1px solid ${C.line}` } as React.CSSProperties,
-  section: { ...eyebrow, marginBottom:S.md, marginTop:S.xs, display:'flex', alignItems:'center', gap:8 } as React.CSSProperties,
+  g2: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(200px, 1fr))', gap:S.lg } as React.CSSProperties,
+  g3: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:S.lg } as React.CSSProperties,
+  g4: { display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:S.lg } as React.CSSProperties,
+  row: { display:'flex', justifyContent:'space-between', alignItems:'center', padding:`${S.sm}px 0`, borderBottom:`1px solid ${C.line}`, gap:S.md } as React.CSSProperties,
+
+  // ── SECTION HEADING ─────────────────────────────────────────────────────
+  // This was an 11px uppercase grey eyebrow — the quietest type in the system
+  // doing the job of a heading, which is why every panel read as one flat
+  // sheet with no hierarchy. It is a real heading now: 15px, bold, primary
+  // ink, with a short brand rule in front of it so the eye finds the start of
+  // a section without reading a word.
+  // The brand rule is the heading's own left border rather than a <span>, so
+  // all ~40 headings gain it without a single JSX edit — and there is no
+  // accent component that call sites could forget to render.
+  section: { fontSize:F.lead, fontWeight:W.bold, color:C.ink, letterSpacing:'-.01em',
+             borderLeft:`3px solid ${C.brand}`, paddingLeft:S.sm,
+             marginBottom:S.md, marginTop:S.xs, display:'flex', alignItems:'center', gap:S.sm,
+             lineHeight:1.3 } as React.CSSProperties,
 }
 
 // ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
@@ -316,29 +347,56 @@ export default function RecruitmentPage() {
           looks complete while quietly clipping "Job Status" behind a scrollbar,
           so a whole destination is invisible unless you think to drag it. A
           second row costs 30px and hides nothing at any width. */}
-      <div style={{ background:C.surface, display:'flex', flexWrap:'wrap', gap:6, rowGap:6,
-                    padding:`10px ${S.xl}px`,
+      <div style={{ background:C.surface, padding:`10px ${S.xl}px`,
                     borderTop:`1px solid ${C.line}`, borderBottom:`1px solid ${C.line}`,
                     position:'sticky', top:0, zIndex:30, boxShadow:E.flat }}>
-        {visibleTabs.map(t => {
-          const on = tab === t.k
-          return (
-            // Pill tabs — same shape as the Onboarding page's join-window buttons.
-            // Inactive pills sit back — a hairline on the page ground rather
-            // than a filled chip. Eleven filled chips all claimed the eye
-            // equally, so the one that mattered, the active tab, had to fight
-            // the other ten. Now it is the only filled thing in the bar.
-            <button key={t.k} onClick={() => setTab(t.k as any)}
-              className="ez-tab" data-on={on ? '1' : '0'}
-              style={{ padding:'6px 13px', borderRadius:99,
-                border:'1px solid '+(on?C.brand:C.line),
-                cursor:'pointer', fontSize:12, fontWeight:on?600:500, fontFamily:'inherit',
-                background:on?C.brand:'transparent', color:on?C.onAccent:C.muted,
-                whiteSpace:'nowrap', flexShrink:0 }}>
-              {t.l}
-            </button>
-          )
-        })}
+        {/* A segmented control on a recessed track, rather than chips floating
+            free on the bar. The track draws the group as ONE object, so the
+            destinations read as a single control with a current position
+            instead of N buttons each competing for the eye — and the current
+            tab is marked by being the one raised out of the well.
+
+            In DARK that elevation carries nothing, and this was measured, not
+            assumed: --ez-surface #171B21 on --ez-sunken #14181E is a contrast
+            ratio of 1.03, and --ez-brand-tint #172033 is no better at 1.09.
+            Every candidate fill in this palette is near-black, so a fill can
+            never mark the active tab there. The only thing that reads is the
+            saturated brand (#60A5FA, 6.8:1), so the chip carries a 2px brand
+            rule: elevation identifies it in light, the rule does in dark, and
+            neither theme depends on the other's cue.
+
+            NOT `ez-seg`: that class already belongs to ThemeToggle's sun/moon/
+            contrast buttons, whose stylesheet carries `.ez-seg:hover{transform:
+            translateY(-1px)}` and `.ez-seg:active{transform:scale(.94)}`. Those
+            are unscoped, so borrowing the name made the whole tab track lift on
+            hover and shrink to 94% on every tab click.
+
+            inline-flex, not flex: a segmented control should hug its contents.
+            Role-based screen access can reduce this bar to a single tab, and a
+            full-width 1140px well holding one chip looks like a loading bar. */}
+        <div className="ez-tabseg"
+             style={{ display:'inline-flex', flexWrap:'wrap', gap:4, rowGap:4,
+                      maxWidth:'100%', verticalAlign:'top',
+                      background:C.sunken, padding:4, borderRadius:R.lg,
+                      border:`1px solid ${C.line}` }}>
+          {visibleTabs.map(t => {
+            const on = tab === t.k
+            return (
+              <button key={t.k} onClick={() => setTab(t.k as any)}
+                className="ez-tab" data-on={on ? '1' : '0'}
+                style={{ padding:'7px 14px', borderRadius:R.md,
+                  border:`1px solid ${on ? C.brandEdge : 'transparent'}`,
+                  cursor:'pointer', fontSize:F.tiny, fontWeight:on ? W.semi : W.medium,
+                  fontFamily:'inherit',
+                  background:on ? C.surface : 'transparent',
+                  color:on ? C.brand : C.muted,
+                  boxShadow:on ? `inset 0 -2px 0 ${C.brand}, ${E.raised}` : 'none',
+                  whiteSpace:'nowrap', flexShrink:0 }}>
+                {t.l}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
       <div style={{ padding:'18px 24px', maxWidth:1300 }}>
@@ -972,7 +1030,7 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
   )
 
   return (
-    <div style={{ ...T.card, padding:'14px 16px' }}>
+    <div style={T.card}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:11, gap:10, flexWrap:'wrap' as const }}>
         <div style={T.section}>Requisition Overview</div>
         <div style={{ display:'flex', gap:6 }}>

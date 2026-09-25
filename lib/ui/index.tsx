@@ -211,8 +211,19 @@ export function UIKeyframes() {
 
       /* Tab pills. Hover only lifts the inactive ones — the active pill is
          already filled, and lightening it on hover would read as deselecting. */
-      .ez-tab{transition:background .14s cubic-bezier(.4,0,.2,1),color .14s,border-color .14s}
+      .ez-tab{transition:background .14s cubic-bezier(.4,0,.2,1),color .14s,border-color .14s,box-shadow .14s}
       .ez-tab[data-on="0"]:hover{background:var(--ez-sunken);color:var(--ez-ink);border-color:var(--ez-line-strong)}
+      /* Inside a segmented track the well itself is --ez-sunken, so the hover
+         above would be invisible — an inactive tab lighting up to exactly the
+         colour it already sits on. There hover raises toward the surface
+         instead, which is the same direction the active tab moves. Scoped as a
+         descendant so it outscores the rule above WITHOUT touching the three
+         pages still using bare .ez-tab pills (letters, onboarding, profile).
+         Named ez-tabseg and NOT ez-seg, which ThemeToggle already owns: its
+         unscoped .ez-seg:hover/:active transforms would lift and shrink this
+         whole track. (No backticks in here — this comment sits inside the
+         template literal that builds the stylesheet, so one would end it.) */
+      .ez-tabseg .ez-tab[data-on="0"]:hover{background:var(--ez-surface);color:var(--ez-ink);border-color:var(--ez-line)}
       .ez-scroll::-webkit-scrollbar{width:9px;height:9px}
       .ez-scroll::-webkit-scrollbar-thumb{background:${C.lineStrong};border-radius:99px;border:2px solid transparent;background-clip:content-box}
       .ez-scroll::-webkit-scrollbar-thumb:hover{background:${C.faint};background-clip:content-box}
