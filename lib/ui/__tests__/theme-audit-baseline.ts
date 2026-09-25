@@ -43,7 +43,13 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'app/dashboard/org-chart/page.tsx': 14,
   'app/dashboard/page.tsx': 2,
   'app/dashboard/recruitment/offer-flow-components.tsx': 6,
-  'app/dashboard/recruitment/page.tsx': 18,
+  // 18 → 0. Converted while restyling Recruitment onto the design system: the
+  // tab-pill borders, the PersonSearchSelect dropdown (which rendered
+  // white-on-white in dark mode, ink and hover included), and the
+  // approve/hold/reject edges, which now use the state edge tokens added in
+  // fd6323f. Zero, not three: the last three were inside a comment I had
+  // written describing the literals I removed, and the scanner strips comments.
+  'app/dashboard/recruitment/page.tsx': 0,
   'app/dashboard/roles/page.tsx': 2,
   'app/ess-login/page.tsx': 1,
   'app/joining/[token]/client.tsx': 6,
@@ -91,4 +97,4 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
 };
 
 /** Total at the time of generation: 253. */
-export const THEME_AUDIT_TOTAL = 251;
+export const THEME_AUDIT_TOTAL = 233;
