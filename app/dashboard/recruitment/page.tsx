@@ -4036,9 +4036,9 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
             <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{c.full_name}</div>
             <span style={{ fontSize:F.micro, fontWeight:W.semi, padding:'3px 10px', borderRadius:R.pill, background:C.sunken, border:`1px solid ${C.line}`, lineHeight:1.45, color:STAGE_TEXT[c.stage] }}>{c.stage}</span>
           </div>
-          <div style={{ fontSize:12, color:C.faint, marginTop:3 }}>{c.current_company} · {c.experience_years}yr · {c.phone||c.mobile}</div>
-          {c.email&&<div style={{ fontSize:11, color:C.faint, marginTop:1 }}>✉️ {c.email}</div>}
-          {mrf&&<div style={{ fontSize:11, color:C.brand, marginTop:3, fontWeight:600 }}>🎯 {mrf.designation||mrf.position}{c.source?` · Source: ${c.source}`:''}</div>}
+          <div style={{ fontSize:F.tiny, color:C.muted, marginTop:3 }}>{c.current_company} · {c.experience_years}yr · {c.phone||c.mobile}</div>
+          {c.email&&<div style={{ fontSize:F.micro, color:C.muted, marginTop:1 }}>{c.email}</div>}
+          {mrf&&<div style={{ fontSize:F.micro, color:C.brand, marginTop:3, fontWeight:W.semi }}>{mrf.designation||mrf.position}{c.source?` · Source: ${c.source}`:''}</div>}
         </div>
         {/* Another contentless button — this one closes the drawer. */}
         <button onClick={onClose} style={{ ...T.btn, height:32, background:C.brandTint, color:C.brandDeep, border:`1px solid ${C.brandEdge}`, padding:'0 12px', fontSize:F.tiny }}>Close</button>

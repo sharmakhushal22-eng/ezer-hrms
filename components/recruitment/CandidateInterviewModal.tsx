@@ -199,7 +199,7 @@ export default function CandidateInterviewModal({
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <div style={{ fontSize:17, fontWeight:800 }}>{candidate.full_name}</div>
-            <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background:C.sunken, color: stageText[candidate.stage] || C.muted }}>{candidate.stage}</span>
+            <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:99, background:C.sunken, border:`1px solid ${C.line}`, lineHeight:1.45, color: stageText[candidate.stage] || C.muted }}>{candidate.stage}</span>
           </div>
           <div style={{ fontSize:12, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{subLine || '—'}</div>
         </div>
@@ -333,8 +333,8 @@ export default function CandidateInterviewModal({
               title={isBack ? 'Pipeline moves forward only' : reason ? `Complete the ${reason} round first` : ''}
               style={{ fontFamily:font, fontSize:11, fontWeight:600, padding:'5px 11px', borderRadius:8, cursor: disabled ? 'not-allowed' : 'pointer',
                 background: current ? (stageColor[s] || C.purple) : C.sunken,
-                color: current ? '#fff' : (stageColor[s] || C.muted),
-                border: current ? 'none' : `1px solid ${(stageColor[s] || C.line)}30`,
+                color: current ? '#fff' : (stageText[s] || C.muted),
+                border: current ? 'none' : `1px solid ${C.line}`,
                 opacity: disabled && !current ? .4 : 1, textDecoration: isBack ? 'line-through' : 'none' }}>
               {s}{reason && !isBack && !current ? ' 🔒' : ''}
             </button>
