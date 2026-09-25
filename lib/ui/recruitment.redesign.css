@@ -104,7 +104,7 @@
 .rx-river::after{content:"";position:absolute;left:5.5%;right:5.5%;top:28px;height:2px;border-radius:2px;
   background:repeating-linear-gradient(90deg,var(--ez-brand) 0 6px,transparent 6px 22px);
   background-size:44px 2px;opacity:.55;animation:rxFlow 1.6s linear infinite}
-.rx-node{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
+.rx-node{position:relative;z-index:var(--ez-z-raised);display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
 .rx-dot{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-family:var(--rx-display);font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;
   background:var(--ez-surface);border:2px solid var(--ez-brand-edge);color:var(--ez-brand-deep);
@@ -208,7 +208,7 @@
 .rx-step:last-child::after{display:none}
 .rx-step.done::after{background:var(--ez-positive);transform-origin:left;animation:rxGrowX .6s .5s var(--rx-ease) both}
 .rx-sd{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;
-  background:var(--ez-sunken);color:var(--ez-faint);border:1.5px solid var(--ez-line-strong);position:relative;z-index:1}
+  background:var(--ez-sunken);color:var(--ez-faint);border:1.5px solid var(--ez-line-strong);position:relative;z-index:var(--ez-z-raised)}
 .rx-sd svg{width:13px;height:13px}
 .rx-step.done .rx-sd{background:var(--ez-positive);color:var(--ez-on-accent);border-color:var(--ez-positive);animation:rxPop .45s .3s var(--rx-snap) both}
 .rx-step.now .rx-sd{background:var(--ez-warning-tint);color:var(--ez-warning);border-color:var(--ez-warning);box-shadow:0 0 0 0 var(--ez-warning-edge);animation:rxRing 2s ease-out infinite}
@@ -261,18 +261,18 @@
   display:flex;flex-direction:column;align-items:center;gap:8px;position:relative;overflow:hidden}
 .rx-drop::after{content:"";position:absolute;inset:-40%;background:radial-gradient(circle at center,var(--ez-surface) 0,transparent 55%);
   opacity:.5;animation:rxBreathe 4s ease-in-out infinite}
-.rx-drop > *{position:relative;z-index:1}
+.rx-drop > *{position:relative;z-index:var(--ez-z-raised)}
 .rx-scan{position:relative;overflow:hidden}
 .rx-scan::after{content:"";position:absolute;top:0;bottom:0;width:40%;left:-40%;
   background:linear-gradient(90deg,transparent,var(--ez-brand-tint),transparent);animation:rxSweep 1.6s ease-in-out infinite}
 .rx-score{font-family:var(--rx-display);font-weight:700;font-size:26px;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 
 /* ── Overlays ──────────────────────────────────────────────────────────── */
-.rx-scrim{position:absolute;inset:0;background:rgba(15,23,42,.42);backdrop-filter:blur(3px);animation:rxFade .3s both;z-index:5}
+.rx-scrim{position:absolute;inset:0;background:rgba(15,23,42,.42);backdrop-filter:blur(3px);animation:rxFade .3s both;z-index:var(--ez-z-local-1)}
 .rx-drawer{position:absolute;top:0;right:0;bottom:0;width:560px;background:var(--ez-surface);border-left:1px solid var(--ez-line);
-  box-shadow:var(--ez-shadow-overlay);z-index:6;padding:28px;display:flex;flex-direction:column;gap:18px;animation:rxSlideIn .45s var(--rx-ease) both}
+  box-shadow:var(--ez-shadow-overlay);z-index:var(--ez-z-local-2);padding:28px;display:flex;flex-direction:column;gap:18px;animation:rxSlideIn .45s var(--rx-ease) both}
 .rx-modal{position:absolute;left:50%;top:48px;width:1080px;margin-left:-540px;background:var(--ez-surface);border:1px solid var(--ez-line);
-  border-radius:24px;box-shadow:var(--ez-shadow-overlay);z-index:6;overflow:hidden;animation:rxModal .45s var(--rx-ease) both}
+  border-radius:24px;box-shadow:var(--ez-shadow-overlay);z-index:var(--ez-z-local-2);overflow:hidden;animation:rxModal .45s var(--rx-ease) both}
 .rx-paper{background:#fff;color:#1f2937;border-radius:6px;box-shadow:var(--ez-shadow-floating);padding:36px 40px;font-size:12.5px;line-height:1.6;
   animation:rxRise .6s .2s var(--rx-ease) both}
 
@@ -361,7 +361,7 @@
 .rx-help summary::-webkit-details-marker{display:none}
 .rx-help summary svg{width:14px;height:14px}
 .rx-help[open] summary{background:var(--ez-surface)}
-.rx-help-body{position:absolute;z-index:30;top:38px;left:0;width:360px;padding:16px 18px;border-radius:16px;background:var(--ez-surface);
+.rx-help-body{position:absolute;z-index:var(--ez-z-popover);top:38px;left:0;width:360px;padding:16px 18px;border-radius:16px;background:var(--ez-surface);
   border:1px solid var(--ez-line);box-shadow:var(--ez-shadow-overlay);font-size:13px;line-height:1.55;color:var(--ez-ink-soft);animation:rxRise .25s var(--rx-ease) both}
 .rx-help-body.r{left:auto;right:0}
 .rx-help-body b{color:var(--ez-ink)}
@@ -431,7 +431,7 @@
 
 /* ── attractiveness + usability pass 3 ─────────────────────────────────── */
 .rx-head{position:relative;isolation:isolate}
-.rx-head::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;
+.rx-head::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:var(--ez-z-under);pointer-events:none;
   background:radial-gradient(circle,var(--ez-head-brand) 1.2px,transparent 1.6px) 0 0/18px 18px;
   -webkit-mask:linear-gradient(100deg,transparent 45%,#000 85%);mask:linear-gradient(100deg,transparent 45%,#000 85%);opacity:.22}
 .rx-title{margin-top:8px;line-height:1.08}
@@ -468,7 +468,7 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx-filter:not(:disabled):not([aria-pressed="true"]):hover{border-color:var(--ez-brand-edge);color:var(--ez-brand-deep)}
 .rx-seg button{transition:background .2s,color .2s,box-shadow .2s}
 
-.rx-footbar{position:sticky;bottom:14px;z-index:5;margin-top:26px;display:flex;align-items:center;justify-content:space-between;gap:16px;
+.rx-footbar{position:sticky;bottom:14px;z-index:var(--ez-z-local-1);margin-top:26px;display:flex;align-items:center;justify-content:space-between;gap:16px;
   padding:12px 12px 12px 14px;border-radius:16px;background:color-mix(in srgb,var(--ez-surface) 90%,transparent);backdrop-filter:blur(8px);
   border:1px solid var(--ez-line);box-shadow:var(--ez-shadow-floating)}
 .rx-stile{display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:14px;border-radius:14px;border:1px solid var(--ez-line);
@@ -489,8 +489,8 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
    sticky rail, help popovers or the board's sideways scroll. */
 .rx{overflow:visible;background:transparent;
   --rx-display:var(--rx-display-font,"Bricolage Grotesque"),"DM Sans","Segoe UI",system-ui,sans-serif}
-.rx-head{position:relative;z-index:25}
-.rx-rail{position:sticky;top:10px;z-index:20;backdrop-filter:saturate(1.4) blur(10px);
+.rx-head{position:relative;z-index:var(--ez-z-band)}
+.rx-rail{position:sticky;top:10px;z-index:var(--ez-z-rail);backdrop-filter:saturate(1.4) blur(10px);
   background:color-mix(in srgb,var(--ez-surface) 86%,transparent)}
 
 /* The runtime sheet (UIKeyframes) forces border-radius:10px !important on every
@@ -537,7 +537,7 @@ a.rx-node:hover .rx-nl{color:var(--ez-brand-deep)}
 .rx-dlg[open]::backdrop{animation:rxFade .3s both}
 
 /* Toast */
-.rx-toast{position:fixed;left:50%;bottom:24px;z-index:1000;transform:translate(-50%,20px);opacity:0;pointer-events:none;
+.rx-toast{position:fixed;left:50%;bottom:24px;z-index:var(--ez-z-modal);transform:translate(-50%,20px);opacity:0;pointer-events:none;
   display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:14px;background:var(--ez-dark);color:var(--ez-on-dark);
   font:600 13.5px var(--rx-font);box-shadow:var(--ez-shadow-overlay);transition:transform .35s var(--rx-ease),opacity .35s}
 .rx-toast.on{transform:translate(-50%,0);opacity:1}

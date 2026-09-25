@@ -34,6 +34,26 @@
 :root {
   color-scheme: light;
 
+  /* Stacking, for stylesheets.
+     Z in lib/ui/tokens.ts is the scale, but a .css file cannot import it, so a
+     raw number there is a guess — which is how this repo once reached 37 of
+     them. These mirror Z exactly and are theme-independent, so unlike a colour
+     they are defined once rather than in all four blocks.
+
+     `local` covers layering INSIDE one component (a fill over its own track),
+     where the number never competes outside its stacking context. `popover`
+     is deliberately its own tier rather than a copy of sticky: two tiers
+     sharing a value leaves their order undefined, which is precisely the bug
+     the z-index ratchet was written after. */
+  --ez-z-under:    -1;   /* decorative underlay within a component  */
+  --ez-z-raised:    1;   /* Z.raised                                */
+  --ez-z-local-1:   5;   /* component-local layering, lower         */
+  --ez-z-local-2:   6;   /* component-local layering, upper         */
+  --ez-z-rail:     20;   /* below Z.sticky(30) and Z.nav(60)        */
+  --ez-z-band:     25;   /* page header band, still below sticky    */
+  --ez-z-popover:  28;   /* its own tier, NOT a tie with sticky      */
+  --ez-z-modal:  1000;   /* Z.modal                                 */
+
   /* Text.
      Every value below clears WCAG AA (4.5:1) against BOTH white cards and the
      canvas — measured, not eyeballed. The previous set did not: --ez-faint at

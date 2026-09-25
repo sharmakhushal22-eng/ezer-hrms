@@ -60,7 +60,11 @@ export function DashboardView(props: {
             <div className="rx-todos" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(3, todos.length)}, minmax(0, 1fr))`, gap: 10 }}>
               {todos.map((t, i) => (
                 <button key={i} type="button" className="rx-todo" onClick={() => onTab(t.tab)}>
-                  <span className="n" style={{ color: t.tone === 'crit' ? '#F87171' : '#FBBF24' }}>{t.count}</span>
+                  {/* Tokens, not the kit's frozen #F87171 / #FBBF24. Those are
+                      the dark-theme reds and ambers written as literals, so in
+                      light mode they stayed dark-mode colours — and the repo's
+                      colour ratchet fails any new file that carries one. */}
+                  <span className="n" style={{ color: t.tone === 'crit' ? 'var(--ez-critical)' : 'var(--ez-warning)' }}>{t.count}</span>
                   <span className="t">{t.title}<span>{t.detail}</span></span>
                   <span className="go">{t.actionLabel}</span>
                 </button>

@@ -13,8 +13,17 @@ import MrfForm from '@/components/ess/MrfForm'
 // deliberately not imported.
 import {
   C, F, W, R, E, S, M, tone, eyebrow, numeric, inputStyle,
-  Card, Stat, StatRow, TableWrap, Th, Td, Tr, Empty,
+  TableWrap, Th, Td, Tr, Empty,
 } from '@/lib/ui'
+
+// The Recruitment redesign kit. Presentation only — nothing here fetches, and
+// the adapters reshape rows loadAll has already loaded. See
+// docs/recruitment-redesign/01-WHAT-STAYS-THE-SAME.md for the contract.
+import {
+  TabRail, TAB_META, type RailTab,
+  toMrfVM, toCandidateVM, dashboardTodos,
+  DashboardView,
+} from '@/components/recruitment/rx'
 
 /**
  * The type scale under a name this file does not shadow.
@@ -351,6 +360,51 @@ export default function RecruitmentPage() {
   const sendOfferAllowed = useMemo(() => isHrHead ? null : new Set(mrfs.map(m => m.id)), [isHrHead, mrfs])
   const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify, employeeId: grant.employeeId }
 
+  // ── Redesign wiring ───────────────────────────────────────────────────
+  // Adapters only reshape the rows loadAll already put in state. No query is
+  // added, no handler changes, and the rail is built from the SAME visibleTabs
+  // filter that already decides which tabs exist.
+  //
+  // nameOf is a stub here on purpose: the employee lookup (`people`) lives
+  // inside MRFTab, not at page level, and the Dashboard renders no recruiter
+  // initials. Phase 3 (MRF) must pass a real resolver before MrfCard shows them.
+  // The adapters take an index-signature row shape; this file's own interfaces
+  // (MRF, Candidate, Department…) do not declare one, so each array is cast at
+  // the boundary. Cast narrowly, per array, rather than blanket-casting the
+  // context object — a genuinely wrong shape should still fail here.
+  type RxRow = Record<string, unknown>
+  const rxCtx = {
+    departments: departments as unknown as RxRow[],
+    locations: locations as unknown as RxRow[],
+    candidates: candidates as unknown as RxRow[],
+    quickHireCap: QUICK_HIRE_CAP,
+    nameOf: () => '',
+  }
+  const mrfVMs = useMemo(() => mrfs.map(r => toMrfVM(r as unknown as RxRow, rxCtx)), [mrfs, candidates, departments, locations]) // eslint-disable-line react-hooks/exhaustive-deps
+  const candVMs = useMemo(() => candidates.map(c => toCandidateVM(c as unknown as RxRow)), [candidates])
+
+  // DashTab's own figure, lifted verbatim — same formula, same arrays. It reads
+  // created_at, not a joining date; that is the existing definition and this
+  // redesign does not change what the tile counts.
+  const joinedThisMonth = useMemo(
+    () => candidates.filter((c:Candidate) => c.stage==='Joined' && new Date(c.created_at).getMonth()===new Date().getMonth()).length,
+    [candidates])
+
+  // TABS here uses `k`/`l`, not `key`/`label` as the kit's example assumes.
+  const railTabs: RailTab[] = visibleTabs.map(t => ({
+    key: t.k, label: t.l, ...TAB_META[t.k],
+    count: t.k === 'mrf' ? mrfs.length
+         : t.k === 'pipeline' ? candVMs.filter(c => c.stage !== 'Rejected').length
+         : null,
+  }))
+  const rail = <TabRail tabs={railTabs} active={tab} onSelect={k => setTab(k as typeof tab)} />
+
+  // Which tabs have been converted to the redesign. Converted tabs render their
+  // own header, rail and page frame; the rest keep the old chrome untouched.
+  // Grows by one entry per phase until every tab is in, then the old header,
+  // tab bar and width wrapper come out for good.
+  const RX_TABS = new Set<typeof tab>(['dashboard'])
+
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
       <div style={{ color:C.brand, fontSize:14, fontWeight:500 }}>Loading...</div>
@@ -359,7 +413,11 @@ export default function RecruitmentPage() {
 
   return (
     <div style={T.page}>
-      {/* Header */}
+      {/* Header and tab bar are rendered by the redesign for converted tabs:
+          RecruitmentHeader carries the title and crumb, TabRail the navigation.
+          Showing the old ones too would stack three navigations on the page.
+          Tabs not yet converted still need them, so both are conditional. */}
+      {!RX_TABS.has(tab) && (
       <div className="ez-page-head ez-page-head-bleed">
         <h1 style={{ margin:0, fontSize:F.page, fontWeight:W.bold, color:C.ink, letterSpacing:'-.02em' }}>
           Recruitment &amp; ATS
@@ -368,13 +426,13 @@ export default function RecruitmentPage() {
           MRF → AI Screening → Pipeline → Negotiation → Offer → Pre-onboarding
         </div>
       </div>
+      )}
 
-      {/* Tabs */}
-      {/* Wraps rather than scrolls. Eleven pills need 1061px in the 1036px this
-          bar gets at 1280 — a 25px overrun, which is the worst kind: the bar
-          looks complete while quietly clipping "Job Status" behind a scrollbar,
-          so a whole destination is invisible unless you think to drag it. A
-          second row costs 30px and hides nothing at any width. */}
+      {/* Tabs — only for tabs not yet converted. A converted tab renders the
+          redesign's own TabRail inside RxPage, and leaving this bar visible as
+          well stacked two navigations on the same screen. This whole block
+          disappears once every tab is converted. */}
+      {!RX_TABS.has(tab) && (
       <div style={{ background:C.surface, padding:`10px ${S.xl}px`,
                     borderTop:`1px solid ${C.line}`, borderBottom:`1px solid ${C.line}`,
                     position:'sticky', top:0, zIndex:30, boxShadow:E.flat }}>
@@ -426,151 +484,49 @@ export default function RecruitmentPage() {
           })}
         </div>
       </div>
+      )}
 
-      <div style={{ padding:'18px 24px', maxWidth:1300 }}>
-        {tab==='dashboard' && <DashTab {...props} />}
-        {tab==='mrf' && <MRFTab {...props} />}
-        {tab==='screening' && <ScreeningTab {...props} />}
-        {tab==='pipeline' && <PipelineTab {...props} />}
-        {tab==='negotiation' && <NegotiationTab {...props} />}
-        {tab==='offerapproval' && <OfferApprovalTab {...props} />}
-        {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
-        {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
-        {tab==='offers' && <OffersTab {...props} />}
-        {tab==='preonboarding' && <PreOnboardTab {...props} />}
-        {tab==='jobstatus' && <JobStatusTab {...props} />}
-      </div>
+      {/* Tabs converted to the redesign render their own frame: RxPage sets its
+          own padding (28/32/40) and is overflow:hidden, and .rx-rail is
+          position:sticky inside it. Nesting that in the old width wrapper
+          double-padded it, capped it at 1300px and killed the rail's sticky
+          behaviour — which is what clipped "Job Status" off the right edge.
+          Tabs not yet converted keep the old wrapper exactly as before. */}
+      {RX_TABS.has(tab) ? (
+        <>
+        {tab==='dashboard' && (
+          <DashboardView
+            rail={rail}
+            mrfs={mrfVMs}
+            candidates={candVMs}
+            stages={STAGES}
+            joinedThisMonth={joinedThisMonth}
+            todos={dashboardTodos({ mrfs: mrfVMs, viewerName: grant.name ?? '' })}
+            onTab={k => setTab(k as typeof tab)}
+            /* No page-level handler exists for either of these: setSelCand lives
+               inside PipelineTab and setShowForm inside MRFTab. Routing through
+               setTab keeps every handler where it is rather than lifting state. */
+            onOpenCandidate={() => setTab('pipeline')}
+            onRaiseMrf={() => setTab('mrf')}
+          />
+        )}
+        </>
+      ) : (
+        <div style={{ padding:'18px 24px', maxWidth:1300 }}>
+          {tab==='mrf' && <MRFTab {...props} />}
+          {tab==='screening' && <ScreeningTab {...props} />}
+          {tab==='pipeline' && <PipelineTab {...props} />}
+          {tab==='negotiation' && <NegotiationTab {...props} />}
+          {tab==='offerapproval' && <OfferApprovalTab {...props} />}
+          {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
+          {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
+          {tab==='offers' && <OffersTab {...props} />}
+          {tab==='preonboarding' && <PreOnboardTab {...props} />}
+          {tab==='jobstatus' && <JobStatusTab {...props} />}
+        </div>
+      )}
 
       {notify && <Toast msg={notify.msg} type={notify.type} onClose={() => setNotify(null)} />}
-    </div>
-  )
-}
-
-// ── DASHBOARD ─────────────────────────────────────────────────────
-function DashTab({ mrfs, candidates }:any) {
-  const approved = mrfs.filter((m:MRF)=>m.status==='APPROVED')
-  const openings = approved.reduce((s:number,m:MRF)=>s+(m.no_of_openings||m.openings||0),0)
-  const joined = candidates.filter((c:Candidate)=>c.stage==='Joined'&&new Date(c.created_at).getMonth()===new Date().getMonth())
-  const stageCount = STAGES.reduce((a:any,s)=>{ a[s]=candidates.filter((c:Candidate)=>c.stage===s).length; return a },{})
-
-  // ── Layout-only derivations ─────────────────────────────────────────────
-  // No new query, no new field, no changed figure: these read exactly the same
-  // arrays the tiles already count. `peak` scales the funnel bars so the
-  // widest live stage fills the track, which is what gives the pipeline a
-  // readable shape when most stages hold 0.
-  const flow = STAGES.filter(s => s !== 'Rejected')
-  const rejected = stageCount['Rejected'] || 0
-  const peak = Math.max(1, ...flow.map((s:string) => stageCount[s] || 0))
-  const MRF_STATES = ['DRAFT','SUBMITTED','APPROVED','CLOSED','REJECTED']
-  const statusOf = (st:string) => mrfs.filter((m:MRF) => m.status === st).length
-  const statusPeak = Math.max(1, ...MRF_STATES.map(statusOf))
-
-  return (
-    <div>
-      {/* The tiles gain a supporting line. A bare "6" answers how many but not
-          how many of what, and every figure here already has a qualifier
-          sitting in the same data — approved count, the rejected tail — so the
-          sub-line costs nothing to compute and removes a question. */}
-      <StatRow min={170}>
-        <Stat label="Total MRFs"        value={mrfs.length}       sub={`${approved.length} approved`} />
-        <Stat label="Active Openings"   value={openings}          sub="on approved MRFs" />
-        <Stat label="In Pipeline"       value={candidates.length} t="brand"    sub={`${rejected} rejected`} />
-        <Stat label="Joined This Month" value={joined.length}     t="positive" sub="stage · Joined" />
-      </StatRow>
-
-      {/* PIPELINE — a funnel, not a grid.
-
-          Ten ordered stages were drawn as a 5x2 grid of equal boxes, which
-          breaks the sequence across two rows: Applied..L2 on the first, then
-          Optional Round..Rejected on the second. The eye reads "L2 leads to
-          Optional Round" only by accident of where the grid happened to wrap.
-          Equal boxes also hand a terminal state the same weight as a live one,
-          and ten tiles mostly showing 0 spend the panel's whole area saying
-          nothing.
-
-          One row per stage, in order, bar scaled to the busiest stage: the
-          shape of the pipeline is readable at a glance and an empty stage
-          stays quiet. Rejected moves below the rule because it is an outcome,
-          not a step. Same ten figures, same source arrays. */}
-      <Card style={{ marginBottom:S.lg }}>
-        <div style={T.section}>Pipeline Overview</div>
-        <div className="ez-stagger">
-          {flow.map(s => {
-            const n = stageCount[s] || 0
-            return (
-              <div key={s} style={{ display:'flex', alignItems:'center', gap:S.md, padding:'5px 0' }}>
-                <div style={{ width:124, flexShrink:0, fontSize:F.small, lineHeight:1.3,
-                              color:n ? C.ink : C.faint, fontWeight:n ? W.medium : W.regular }}>{s}</div>
-                {/* The hairline is not decoration. C.sunken on a C.surface card
-                    is #14181E on #171B21 in dark — a contrast ratio of 1.03,
-                    measured, so an empty track is invisible there and a stage
-                    holding 0 loses the bar that shows where its count would
-                    go. The edge is what defines the track on near-black. */}
-                <div style={{ flex:1, minWidth:0, height:10, borderRadius:R.pill,
-                              background:C.sunken, border:`1px solid ${C.line}`,
-                              boxSizing:'border-box' as const, overflow:'hidden' }}>
-                  <div style={{ width:`${Math.round((n / peak) * 100)}%`, height:'100%',
-                                borderRadius:R.pill, background:STAGE_COLOR[s],
-                                transition:`width ${M.ease}` }} />
-                </div>
-                <div style={{ width:34, flexShrink:0, textAlign:'right' as const, fontSize:F.body,
-                              fontWeight:W.bold, color:n ? STAGE_TEXT[s] : C.faint, ...numeric }}>{n}</div>
-              </div>
-            )
-          })}
-          <div style={{ display:'flex', alignItems:'center', gap:S.md, marginTop:S.sm,
-                        paddingTop:S.sm, borderTop:`1px solid ${C.line}` }}>
-            <div style={{ width:124, flexShrink:0, fontSize:F.small, color:C.muted }}>Rejected</div>
-            <div style={{ flex:1, minWidth:0, fontSize:F.micro, color:C.faint }}>an outcome, not a pipeline stage</div>
-            <div style={{ width:34, flexShrink:0, textAlign:'right' as const, fontSize:F.body,
-                          fontWeight:W.bold, color:rejected ? C.critical : C.faint, ...numeric }}>{rejected}</div>
-          </div>
-        </div>
-      </Card>
-
-      {/* The page's own Badge is kept deliberately — see the import comment:
-          this file declares one, and swapping it for the system Badge would
-          change how every status in Recruitment reads, which is a behaviour
-          change dressed as a restyle. */}
-      <div style={T.g2}>
-        <Card>
-          <div style={T.section}>Recent MRFs</div>
-          <div className="ez-stagger">
-            {mrfs.slice(0,5).map((m:MRF)=>(
-              <div key={m.id} style={T.row}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:F.small, fontWeight:W.medium, color:C.ink }}>{m.designation||m.position||'—'}</div>
-                  <div style={{ fontSize:F.micro, color:C.faint, marginTop:1 }}>{m.employment_type} · {m.no_of_openings||m.openings||0} openings</div>
-                </div>
-                <Badge text={m.status} />
-              </div>
-            ))}
-          </div>
-        </Card>
-        <Card>
-          <div style={T.section}>MRF Status</div>
-          {/* Was a badge and a bare number per row, which made the reader hold
-              five figures in their head to see the spread. The bar shows it. */}
-          <div className="ez-stagger">
-            {MRF_STATES.map(st => {
-              const n = statusOf(st)
-              return (
-                <div key={st} style={{ display:'flex', alignItems:'center', gap:S.md, padding:'5px 0' }}>
-                  <div style={{ width:104, flexShrink:0 }}><Badge text={st} /></div>
-                  <div style={{ flex:1, minWidth:0, height:8, borderRadius:R.pill,
-                                background:C.sunken, border:`1px solid ${C.line}`,
-                                boxSizing:'border-box' as const, overflow:'hidden' }}>
-                    <div style={{ width:`${Math.round((n / statusPeak) * 100)}%`, height:'100%',
-                                  borderRadius:R.pill, background:C.brand, transition:`width ${M.ease}` }} />
-                  </div>
-                  <span style={{ width:28, flexShrink:0, textAlign:'right' as const, fontSize:F.body,
-                                 fontWeight:W.semi, color:C.ink, ...numeric }}>{n}</span>
-                </div>
-              )
-            })}
-          </div>
-        </Card>
-      </div>
     </div>
   )
 }
