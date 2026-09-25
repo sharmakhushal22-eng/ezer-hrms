@@ -1266,21 +1266,28 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
             {m.urgency && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:ubg, color:uc, fontWeight:W.semi, lineHeight:1.45 }}>{m.urgency}</span>}
             {expired && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:C.criticalTint, color:C.critical, fontWeight:W.semi, lineHeight:1.45 }}>EXPIRED</span>}
           </div>
-          <div style={{ fontSize:11, color:C.faint, marginBottom:6 }}>
+          <div style={{ fontSize:F.micro, color:C.muted, marginBottom:S.sm }}>
             {m.mrf_number || 'No MRF number'} · {org.company} · {org.dept} · {org.loc}
             {m.business_unit?` · ${m.business_unit}`:''}
           </div>
-          <div style={{ fontSize:12, color:C.faint, display:'flex', gap:14, flexWrap:'wrap' as const }}>
-            <span>👥 {openings} opening{openings===1?'':'s'}</span>
-            <span>💼 {m.employment_type||'—'}</span>
-            {m.work_mode && <span>🏢 {m.work_mode}</span>}
-            {m.grade && <span>🏷 {m.grade}</span>}
-            {m.experience_required && <span>⏱ {m.experience_required}</span>}
-            {m.budget_max && <span>💰 {compOf(m.employment_type).label} {payAmount(m.budget_max, m.currency, compOf(m.employment_type).period)} max</span>}
-            {m.duration_months && <span>⏳ {m.duration_months} month{m.duration_months===1?'':'s'}</span>}
-            {m.target_joining_date && <span>📅 by {fmtDay(m.target_joining_date)}</span>}
-            <span style={{ color:C.brand }}>🧑 {cands.length} candidate{cands.length===1?'':'s'}</span>
-            {m.assigned_recruiter && <span>👤 {m.assigned_recruiter}</span>}
+          {/* The card's primary facts. Two changes, no field added or removed:
+              C.faint -> C.muted, because this is the content of the card and
+              faint is the quietest ink in the system, meant for the metadata
+              you read last; and the emoji are replaced by words. A glyph does
+              not follow the theme, renders differently on every platform, and
+              carries no meaning to a screen reader — "🏷 E1" is only a label
+              if you already know the convention, whereas "Grade E1" is one. */}
+          <div style={{ fontSize:F.tiny, color:C.muted, display:'flex', gap:S.md, rowGap:S.xs, flexWrap:'wrap' as const }}>
+            <span>{openings} opening{openings===1?'':'s'}</span>
+            <span>{m.employment_type||'—'}</span>
+            {m.work_mode && <span>{m.work_mode}</span>}
+            {m.grade && <span>Grade {m.grade}</span>}
+            {m.experience_required && <span>Exp {m.experience_required}</span>}
+            {m.budget_max && <span>{compOf(m.employment_type).label} {payAmount(m.budget_max, m.currency, compOf(m.employment_type).period)} max</span>}
+            {m.duration_months && <span>{m.duration_months} month{m.duration_months===1?'':'s'}</span>}
+            {m.target_joining_date && <span>Target {fmtDay(m.target_joining_date)}</span>}
+            <span style={{ color:C.brand, fontWeight:W.medium }}>{cands.length} candidate{cands.length===1?'':'s'}</span>
+            {m.assigned_recruiter && <span>Recruiter {m.assigned_recruiter}</span>}
           </div>
           {m.skills_required && (
             <div style={{ fontSize:11, color:C.brandDeep, marginTop:5 }}>Skills: {m.skills_required}</div>
@@ -1293,14 +1300,17 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
               {(() => {
                 const pending = chain.find((s:any)=>s.status==='PENDING')
                 return pending ? (
-                  <div style={{ fontSize:11.5, color:C.warning, fontWeight:600, marginBottom:4 }}>
+                  <div style={{ fontSize:F.micro, color:C.warning, fontWeight:W.semi, marginBottom:S.xs }}>
                     ⏳ Waiting on: {pending.approver_name || pending.actor || '—'}{pending.approver_code?` (${pending.approver_code})`:''} — {ROLE_LABEL[pending.role]||pending.role}
                   </div>
                 ) : m.status==='APPROVED' ? (
-                  <div style={{ fontSize:11.5, color:C.positive, fontWeight:600, marginBottom:4 }}>✓ Fully approved</div>
+                  <div style={{ fontSize:F.micro, color:C.positive, fontWeight:W.semi, marginBottom:S.xs }}>✓ Fully approved</div>
                 ) : null
               })()}
-              <div style={{ fontSize:10.5, color:C.faint, marginBottom:3 }}>Approval chain · {doneSteps}/{chain.length} done</div>
+              {/* 10.5px — a fractional size below the 11px floor. tokens.ts:
+                  "Whole pixels, not halves… integers survive the quarter-step
+                  zoom factors intact", which matters at this app's 130% zoom. */}
+              <div style={{ ...eyebrow, marginBottom:S.xs }}>Approval chain · {doneSteps}/{chain.length} done</div>
               <div style={{ display:'flex', flexWrap:'wrap' as const, gap:5 }}>
                 {chain.map((s:any,i:number)=>{
                   const col = s.status==='APPROVED'?C.positive : s.status==='REJECTED'?C.critical : s.status==='PENDING'?C.warning : C.muted
