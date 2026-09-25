@@ -72,22 +72,27 @@ CREATE POLICY "allow_all_my_table" ON my_table
 All styling is done with inline React `style={{}}` objects. No Tailwind classes in JSX.
 Each page/component defines a local `T` or `C` constant at the top. Match it exactly.
 
-### Hardcoded hex palette
+### The palette — `C` from `@/lib/ui`
 
 ```
-Page background   →  #F5F3FF
-Cards             →  #FFFFFF
-Primary text      →  #1E1B4B
-Muted text        →  #6B7280
-Border            →  rgba(124,58,237,0.12)
-Purple (primary)  →  #7C3AED
-Purple soft       →  rgba(124,58,237,0.08)
-Purple label      →  #6D28D9
-Green (success)   →  #059669
-Amber (warning)   →  #B45309
-Red (error)       →  #DC2626
-Card shadow       →  0 1px 4px rgba(124,58,237,0.06)
+Page behind cards →  C.canvas        Cards / inputs    →  C.surface
+Table heads, wells→  C.sunken        Hairline          →  C.line / C.lineStrong
+Headings          →  C.ink           Body              →  C.inkSoft
+Labels            →  C.muted         Placeholders      →  C.faint
+Primary action    →  C.brand         Pressed / gradient→  C.brandDeep
+Hover wash        →  C.brandTint     Edge on a tint    →  C.brandEdge
+Text ON an accent →  C.onAccent      (white in light, near-black in dark)
+Done / waiting / wrong / context     →  C.positive · C.warning · C.critical · C.info
+  each with a matching  …Tint  (fill) and  …Edge  (border)
+Elevation  E.flat · E.raised · E.floating · E.overlay · E.brand
+Radius     R.sm 7 · R.md 10 · R.lg 14 · R.xl 20 · R.pill
+Motion     M.quick · M.ease · M.slow · M.spring · M.page
 ```
+
+The old purple palette this section used to list (`#7C3AED`, `#F5F3FF`,
+`#1E1B4B`…) is **gone from the product** — the brand is trust blue now, and
+the values live in `lib/ui/theme.css` with their measured contrast ratios in
+comments. Don't reintroduce them.
 
 ### Border radius
 
@@ -173,9 +178,25 @@ export default function InterviewPipeline({ candidate }: ...) {
 
 No company name, no logo anywhere in UI. EZER HRMS is the brand.
 
-### No CSS variables
+### Colour comes from tokens, never from hex
 
-Only hardcoded hex colors. Never `var(--color-xxx)` in JSX styles.
+**Import from `@/lib/ui` and use `C`, `F`, `W`, `S`, `R`, `E`, `M`.** Those
+resolve to `var(--ez-*)` custom properties defined in `lib/ui/theme.css`, which
+is what makes one attribute on `<html>` repaint every screen — light and dark.
+
+A hex literal cannot do that. `#FFFFFF` is white at midnight too, so any
+hardcoded colour is a dark-mode bug waiting to be reported.
+
+This is enforced, not merely advised: `lib/ui/__tests__/theme-hardcoded-colours.test.ts`
+counts hex literals on colour-bearing properties across `app/` and `components/`
+and **fails the build if the count rises**. It also fails if the count *drops*
+without the baseline being tightened, so converting a file to tokens means
+updating `theme-audit-baseline.ts` in the same change.
+
+> This section previously read "Only hardcoded hex colors. Never
+> `var(--color-xxx)` in JSX styles", and the palette it listed was the old
+> purple one (`#7C3AED`) that the product no longer uses. Following it would
+> have broken dark mode and failed the test suite.
 
 ### File structure
 
@@ -727,7 +748,14 @@ HR_DEFAULT_EMAIL                  = hr@company.com
 ## Frequently Asked AI Questions
 
 **Q: Can I use Tailwind classes?**
-A: No. All styling is inline `style={{}}` objects with hardcoded hex values. Never `className="..."` for styles.
+A: No Tailwind. Styling is inline `style={{}}` objects — but the **values come
+from tokens**, not hex: `background: C.surface`, not `background: '#FFFFFF'`.
+A few `className`s are legitimate and necessary, because `:hover`,
+`:focus-visible` and `@keyframes` cannot be expressed inline at all — those
+live in `UIKeyframes` (`lib/ui/index.tsx`) as `ez-press`, `ez-lift`, `ez-rise`,
+`ez-stagger` and friends. Reach for a primitive from `@/lib/ui` before writing
+styles by hand; there are 28 of them, including `Card`, `Stat`, `Tabs`,
+`TableWrap`, `Field`, `Notice` and `Badge`.
 
 **Q: Can I create a new file for each sub-component?**
 A: No. Per project convention, all related code stays in one file (recruitment/page.tsx is 1,365 lines — that's intentional). The only exception is the `InterviewPipeline.tsx` component because it's large enough and reused.

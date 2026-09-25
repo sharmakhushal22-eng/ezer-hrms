@@ -88,6 +88,17 @@ export const C = {
   info: 'var(--ez-info)',
   infoTint: 'var(--ez-info-tint)',
 
+  /** Borders on a tinted state surface — Badge, Stat, Notice.
+   *
+   *  These were four hex literals inside tone() below, which meant the border
+   *  on every status chip in the product could not change with the theme: a
+   *  pale mint edge stayed pale mint on a near-black card. Now tokens, defined
+   *  in all four theme blocks in theme.css. */
+  positiveEdge: 'var(--ez-positive-edge)',
+  warningEdge: 'var(--ez-warning-edge)',
+  criticalEdge: 'var(--ez-critical-edge)',
+  infoEdge: 'var(--ez-info-edge)',
+
   /** The navigation rail. White in light, one step above canvas in dark. */
   rail: 'var(--ez-rail)',
   railText: 'var(--ez-rail-text)',
@@ -187,6 +198,19 @@ export const M = {
   ease: '.26s cubic-bezier(.22,1,.36,1)',
   /** Layout shifts like the rail opening. */
   slow: '.34s cubic-bezier(.22,1,.36,1)',
+  /**
+   * Something completing — a step approved, a chip landing. Overshoots very
+   * slightly, which is what makes it read as a confirmation rather than a
+   * fade. Was written inline in UIKeyframes' ezPop; named here so the motion
+   * vocabulary lives in one place like every other scale.
+   */
+  spring: '.3s cubic-bezier(.22,1.4,.4,1)',
+  /**
+   * A whole section arriving. Deliberately shorter than `ease`: the data now
+   * lands in ~290ms, so anything longer makes the animation the thing you
+   * wait for rather than the thing that explains what moved.
+   */
+  page: '.22s cubic-bezier(.22,1,.36,1)',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -256,10 +280,10 @@ export type Tone = 'neutral' | 'brand' | 'positive' | 'warning' | 'critical' | '
 export const tone = (t: Tone): { fg: string; bg: string; edge: string } => ({
   neutral:  { fg: C.muted,     bg: C.sunken,        edge: C.line },
   brand:    { fg: C.brandDeep, bg: C.brandTint,    edge: C.brandEdge },
-  positive: { fg: C.positive,  bg: C.positiveTint,  edge: '#C9EADD' },
-  warning:  { fg: C.warning,   bg: C.warningTint,   edge: '#F2DFBE' },
-  critical: { fg: C.critical,  bg: C.criticalTint,  edge: '#F5CFD1' },
-  info:     { fg: C.info,      bg: C.infoTint,      edge: '#CFE0FC' },
+  positive: { fg: C.positive,  bg: C.positiveTint,  edge: C.positiveEdge },
+  warning:  { fg: C.warning,   bg: C.warningTint,   edge: C.warningEdge },
+  critical: { fg: C.critical,  bg: C.criticalTint,  edge: C.criticalEdge },
+  info:     { fg: C.info,      bg: C.infoTint,      edge: C.infoEdge },
 }[t]);
 
 // ---------------------------------------------------------------------------
