@@ -13,7 +13,7 @@ import MrfForm from '@/components/ess/MrfForm'
 // deliberately not imported.
 import {
   C, F, W, R, E, S, M, tone, eyebrow, numeric, inputStyle,
-  Card, Section, Stat, StatRow, TableWrap, Th, Td, Tr, Empty,
+  Card, Stat, StatRow, TableWrap, Th, Td, Tr, Empty,
 } from '@/lib/ui'
 
 // ── TYPES ────────────────────────────────────────────────────────
@@ -211,17 +211,24 @@ function Badge({ text }:{ text:string }) {
     'Revised Offer':[C.warningTint,C.warning], 'Blacklisted':[C.criticalTint,C.critical],
   }
   const [bg,c] = map[text] || [C.brandTint,C.brandDeep]
-  return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600 }}>{text}</span>
+  // 11px, not 10. F.micro is the floor the rest of the system holds to, and a
+  // status is the word that tells you what a row IS — it was being set smaller
+  // than the table's own column heads. Same defect as the 9px stage labels.
+  return <span style={{ fontSize:F.micro, padding:'3px 10px', borderRadius:R.pill,
+                        background:bg, color:c, fontWeight:W.semi, lineHeight:1.45,
+                        whiteSpace:'nowrap' as const, display:'inline-block' }}>{text}</span>
 }
 
 function Toast({ msg, type, onClose }:{ msg:string, type:'success'|'error', onClose:()=>void }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t) }, [onClose])
   return (
-    <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999,
+    // Radius, shadow and spacing off the scales rather than hand-picked. The
+    // shadow was a literal rgba, so a toast kept its light-theme cast in dark.
+    <div style={{ position:'fixed', bottom:S.xl, right:S.xl, zIndex:9999,
       background:type==='success'?C.positive:C.critical, color:C.onAccent,
-      borderRadius:10, padding:'12px 18px', fontSize:13, fontWeight:500,
-      boxShadow:'0 8px 24px rgba(0,0,0,0.2)', display:'flex', alignItems:'center', gap:10 }}>
-      {type==='success'?'':''} {msg}
+      borderRadius:R.md, padding:`${S.md}px ${S.lg}px`, fontSize:F.small, fontWeight:W.medium,
+      boxShadow:E.overlay, display:'flex', alignItems:'center', gap:S.sm }}>
+      {msg}
       <button onClick={onClose} style={{ background:'none', border:'none', color:C.onAccentDim, cursor:'pointer', fontSize:16, padding:'0 4px' }}>×</button>
     </div>
   )
@@ -229,9 +236,17 @@ function Toast({ msg, type, onClose }:{ msg:string, type:'success'|'error', onCl
 
 function SectionLine({ title }:{ title:string }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:10, margin:'14px 0 10px' }}>
-      <div style={{ fontSize:11, fontWeight:600, color:C.brand, textTransform:'uppercase' as const, letterSpacing:'.06em', whiteSpace:'nowrap' as const }}>{title}</div>
-      <div style={{ flex:1, height:1, background:C.brandTint }} />
+    // The step headers inside every form ("3 · Employment details"). They were
+    // an 11px brand-coloured eyebrow trailing a tint hairline — quieter than
+    // the field labels beneath them, so a long form read as one undivided run
+    // of inputs with no sense of where a step began. Now they speak with the
+    // same voice as T.section: ink, bold, a brand rule at the head. The
+    // trailing line stays, on C.line so it reads as structure and not accent.
+    <div style={{ display:'flex', alignItems:'center', gap:S.md, margin:`${S.xl}px 0 ${S.md}px` }}>
+      <div style={{ fontSize:F.small, fontWeight:W.bold, color:C.ink, letterSpacing:'-.01em',
+                    borderLeft:`3px solid ${C.brand}`, paddingLeft:S.sm,
+                    lineHeight:1.3, whiteSpace:'nowrap' as const }}>{title}</div>
+      <div style={{ flex:1, height:1, background:C.line }} />
     </div>
   )
 }
@@ -427,77 +442,122 @@ function DashTab({ mrfs, candidates }:any) {
   const joined = candidates.filter((c:Candidate)=>c.stage==='Joined'&&new Date(c.created_at).getMonth()===new Date().getMonth())
   const stageCount = STAGES.reduce((a:any,s)=>{ a[s]=candidates.filter((c:Candidate)=>c.stage===s).length; return a },{})
 
+  // ── Layout-only derivations ─────────────────────────────────────────────
+  // No new query, no new field, no changed figure: these read exactly the same
+  // arrays the tiles already count. `peak` scales the funnel bars so the
+  // widest live stage fills the track, which is what gives the pipeline a
+  // readable shape when most stages hold 0.
+  const flow = STAGES.filter(s => s !== 'Rejected')
+  const rejected = stageCount['Rejected'] || 0
+  const peak = Math.max(1, ...flow.map((s:string) => stageCount[s] || 0))
+  const MRF_STATES = ['DRAFT','SUBMITTED','APPROVED','CLOSED','REJECTED']
+  const statusOf = (st:string) => mrfs.filter((m:MRF) => m.status === st).length
+  const statusPeak = Math.max(1, ...MRF_STATES.map(statusOf))
+
   return (
     <div>
-      {/* Four hand-built tiles became StatRow + Stat: the same figures, the
-          same order, drawn by the primitive every other module already uses.
-          StatRow carries ez-stagger, so they now arrive as a wave rather than
-          all at once — the tiles were static before because this page applied
-          no animation classes at all. `t` replaces the ad-hoc colour: a tone
-          resolves fg/bg/edge together and follows the theme. */}
-      <StatRow min={150}>
-        <Stat label="Total MRFs"        value={mrfs.length} />
-        <Stat label="Active Openings"   value={openings} />
-        <Stat label="In Pipeline"       value={candidates.length} t="brand" />
-        <Stat label="Joined This Month" value={joined.length}     t="positive" />
+      {/* The tiles gain a supporting line. A bare "6" answers how many but not
+          how many of what, and every figure here already has a qualifier
+          sitting in the same data — approved count, the rejected tail — so the
+          sub-line costs nothing to compute and removes a question. */}
+      <StatRow min={170}>
+        <Stat label="Total MRFs"        value={mrfs.length}       sub={`${approved.length} approved`} />
+        <Stat label="Active Openings"   value={openings}          sub="on approved MRFs" />
+        <Stat label="In Pipeline"       value={candidates.length} t="brand"    sub={`${rejected} rejected`} />
+        <Stat label="Joined This Month" value={joined.length}     t="positive" sub="stage · Joined" />
       </StatRow>
 
-      <Card style={{ marginBottom:S.md }}>
-        <Section title="Pipeline Overview" style={{ marginBottom:S.md }}>
-        {/* Ten stages, five columns — a deliberate 5x2, kept exactly as it
-            was. auto-fit gave nine and stranded "Rejected" alone on the second
-            row; ten across does not fit the content column at the app's 130%
-            zoom. That is a measured decision, and this is a restyle rather
-            than a relayout, so the grid itself is untouched.
+      {/* PIPELINE — a funnel, not a grid.
 
-            What changed: the cells lift on hover and arrive staggered, and the
-            label is legible — 9px sat below the 11px floor the rest of the
-            system holds to. */}
-        <div className="ez-stagger" style={{ display:'grid', gridTemplateColumns:'repeat(5, minmax(0, 1fr))', gap:S.sm }}>
-          {STAGES.map(s=>(
-            <div key={s} className="ez-lift" style={{ background:C.surface, borderRadius:R.md, padding:'10px 12px',
-                                  textAlign:'center' as const, minWidth:76,
-                                  border:`1px solid ${C.line}`, boxShadow:E.flat,
-                                  borderTop:`2px solid ${STAGE_COLOR[s]}` }}>
-              <div style={{ fontSize:F.title, fontWeight:W.bold, color:STAGE_TEXT[s], lineHeight:1.15, ...numeric }}>{stageCount[s]||0}</div>
-              <div style={{ fontSize:F.micro, color:C.muted, marginTop:3, lineHeight:1.3 }}>{s}</div>
-            </div>
-          ))}
+          Ten ordered stages were drawn as a 5x2 grid of equal boxes, which
+          breaks the sequence across two rows: Applied..L2 on the first, then
+          Optional Round..Rejected on the second. The eye reads "L2 leads to
+          Optional Round" only by accident of where the grid happened to wrap.
+          Equal boxes also hand a terminal state the same weight as a live one,
+          and ten tiles mostly showing 0 spend the panel's whole area saying
+          nothing.
+
+          One row per stage, in order, bar scaled to the busiest stage: the
+          shape of the pipeline is readable at a glance and an empty stage
+          stays quiet. Rejected moves below the rule because it is an outcome,
+          not a step. Same ten figures, same source arrays. */}
+      <Card style={{ marginBottom:S.lg }}>
+        <div style={T.section}>Pipeline Overview</div>
+        <div className="ez-stagger">
+          {flow.map(s => {
+            const n = stageCount[s] || 0
+            return (
+              <div key={s} style={{ display:'flex', alignItems:'center', gap:S.md, padding:'5px 0' }}>
+                <div style={{ width:124, flexShrink:0, fontSize:F.small, lineHeight:1.3,
+                              color:n ? C.ink : C.faint, fontWeight:n ? W.medium : W.regular }}>{s}</div>
+                {/* The hairline is not decoration. C.sunken on a C.surface card
+                    is #14181E on #171B21 in dark — a contrast ratio of 1.03,
+                    measured, so an empty track is invisible there and a stage
+                    holding 0 loses the bar that shows where its count would
+                    go. The edge is what defines the track on near-black. */}
+                <div style={{ flex:1, minWidth:0, height:10, borderRadius:R.pill,
+                              background:C.sunken, border:`1px solid ${C.line}`,
+                              boxSizing:'border-box' as const, overflow:'hidden' }}>
+                  <div style={{ width:`${Math.round((n / peak) * 100)}%`, height:'100%',
+                                borderRadius:R.pill, background:STAGE_COLOR[s],
+                                transition:`width ${M.ease}` }} />
+                </div>
+                <div style={{ width:34, flexShrink:0, textAlign:'right' as const, fontSize:F.body,
+                              fontWeight:W.bold, color:n ? STAGE_TEXT[s] : C.faint, ...numeric }}>{n}</div>
+              </div>
+            )
+          })}
+          <div style={{ display:'flex', alignItems:'center', gap:S.md, marginTop:S.sm,
+                        paddingTop:S.sm, borderTop:`1px solid ${C.line}` }}>
+            <div style={{ width:124, flexShrink:0, fontSize:F.small, color:C.muted }}>Rejected</div>
+            <div style={{ flex:1, minWidth:0, fontSize:F.micro, color:C.faint }}>an outcome, not a pipeline stage</div>
+            <div style={{ width:34, flexShrink:0, textAlign:'right' as const, fontSize:F.body,
+                          fontWeight:W.bold, color:rejected ? C.critical : C.faint, ...numeric }}>{rejected}</div>
+          </div>
         </div>
-        </Section>
       </Card>
-      {/* Both panels are Cards now, and their rows arrive staggered. The
-          page's own Badge is kept deliberately — see the import comment: this
-          file declares one, and swapping it for the system Badge would change
-          how every status in Recruitment reads, which is a behaviour change
-          dressed as a restyle. */}
+
+      {/* The page's own Badge is kept deliberately — see the import comment:
+          this file declares one, and swapping it for the system Badge would
+          change how every status in Recruitment reads, which is a behaviour
+          change dressed as a restyle. */}
       <div style={T.g2}>
         <Card>
-          <Section title="Recent MRFs" style={{ marginBottom:S.sm }}>
-            <div className="ez-stagger">
-              {mrfs.slice(0,5).map((m:MRF)=>(
-                <div key={m.id} style={T.row}>
-                  <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:F.small, fontWeight:W.medium, color:C.ink }}>{m.designation||m.position||'—'}</div>
-                    <div style={{ fontSize:F.micro, color:C.faint, marginTop:1 }}>{m.employment_type} · {m.no_of_openings||m.openings||0} openings</div>
-                  </div>
-                  <Badge text={m.status} />
+          <div style={T.section}>Recent MRFs</div>
+          <div className="ez-stagger">
+            {mrfs.slice(0,5).map((m:MRF)=>(
+              <div key={m.id} style={T.row}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:F.small, fontWeight:W.medium, color:C.ink }}>{m.designation||m.position||'—'}</div>
+                  <div style={{ fontSize:F.micro, color:C.faint, marginTop:1 }}>{m.employment_type} · {m.no_of_openings||m.openings||0} openings</div>
                 </div>
-              ))}
-            </div>
-          </Section>
+                <Badge text={m.status} />
+              </div>
+            ))}
+          </div>
         </Card>
         <Card>
-          <Section title="MRF Status" style={{ marginBottom:S.sm }}>
-            <div className="ez-stagger">
-              {['DRAFT','SUBMITTED','APPROVED','CLOSED','REJECTED'].map(st=>(
-                <div key={st} style={T.row}>
-                  <Badge text={st} />
-                  <span style={{ fontSize:F.body, fontWeight:W.semi, color:C.ink, ...numeric }}>{mrfs.filter((m:MRF)=>m.status===st).length}</span>
+          <div style={T.section}>MRF Status</div>
+          {/* Was a badge and a bare number per row, which made the reader hold
+              five figures in their head to see the spread. The bar shows it. */}
+          <div className="ez-stagger">
+            {MRF_STATES.map(st => {
+              const n = statusOf(st)
+              return (
+                <div key={st} style={{ display:'flex', alignItems:'center', gap:S.md, padding:'5px 0' }}>
+                  <div style={{ width:104, flexShrink:0 }}><Badge text={st} /></div>
+                  <div style={{ flex:1, minWidth:0, height:8, borderRadius:R.pill,
+                                background:C.sunken, border:`1px solid ${C.line}`,
+                                boxSizing:'border-box' as const, overflow:'hidden' }}>
+                    <div style={{ width:`${Math.round((n / statusPeak) * 100)}%`, height:'100%',
+                                  borderRadius:R.pill, background:C.brand, transition:`width ${M.ease}` }} />
+                  </div>
+                  <span style={{ width:28, flexShrink:0, textAlign:'right' as const, fontSize:F.body,
+                                 fontWeight:W.semi, color:C.ink, ...numeric }}>{n}</span>
                 </div>
-              ))}
-            </div>
-          </Section>
+              )
+            })}
+          </div>
         </Card>
       </div>
     </div>
