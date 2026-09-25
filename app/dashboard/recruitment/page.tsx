@@ -789,7 +789,7 @@ function Field({ label, error, required, hint, children }:{ label:string; error?
       <label style={T.label}>{label}{required && <span style={{ color:C.critical }}> *</span>}</label>
       {children}
       {error ? <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>⚠ {error}</div>
-             : hint ? <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{hint}</div> : null}
+             : hint ? <div style={{ fontSize:F.micro, color:C.muted, marginTop:S.xs }}>{hint}</div> : null}
     </div>
   )
 }
@@ -875,7 +875,7 @@ function PersonSearchSelect({ people, value, onChange, placeholder }:{ people:an
           ) : filtered.map((p:any)=>(
             <div key={p.id}
               onMouseDown={e=>{ e.preventDefault(); onChange(p.id); setOpen(false); setQ('') }}
-              style={{ padding:'8px 12px', fontSize:12.5, cursor:'pointer', color:C.ink, borderBottom:`1px solid ${C.line}` }}
+              style={{ padding:`${S.sm}px ${S.md}px`, fontSize:F.small, cursor:'pointer', color:C.ink, borderBottom:`1px solid ${C.line}` }}
               onMouseEnter={e=>{ (e.currentTarget as HTMLDivElement).style.background=C.brandTint }}
               onMouseLeave={e=>{ (e.currentTarget as HTMLDivElement).style.background=C.surface }}
             >
@@ -996,7 +996,7 @@ function ChannelPicker({ options, value, onChange }:{ options:any[]; value:strin
         const on = value.includes(o.label)
         return (
           <button key={o.code} onClick={()=>toggle(o.label)} style={{ ...T.btn, fontSize:11,
-            background:on?C.brand: C.surface, color:on?C.surface:C.brandDeep, border:on?'none':`1px solid ${C.brandEdge}` }}>
+            background:on?C.brand: C.surface, color:on?C.onAccent:C.brandDeep, border:`1px solid ${on?C.brandDeep:C.brandEdge}` }}>
             {on?'✓ ':''}{o.label}
           </button>
         )
@@ -1418,8 +1418,8 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
           <div style={{ display:'flex', gap:7, marginTop:10, flexWrap:'wrap' as const }}>
             <Badge text={m.status} />
             {m.mrf_type && <Badge text={m.mrf_type} />}
-            {m.urgency && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:600 }}>{m.urgency} priority</span>}
-            {m.work_mode && <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:600 }}>{m.work_mode}</span>}
+            {m.urgency && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:W.semi, lineHeight:1.45 }}>{m.urgency} priority</span>}
+            {m.work_mode && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:'rgba(255,255,255,.2)', color:C.onAccent, fontWeight:W.semi, lineHeight:1.45 }}>{m.work_mode}</span>}
           </div>
         </div>
 
@@ -1672,7 +1672,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
                       {Object.entries(l.details).map(([k,v])=>`${k}: ${v}`).join(' · ')}
                     </div>
                   )}
-                  <div style={{ fontSize:10, color:C.faint, marginTop:2 }}>
+                  <div style={{ fontSize:F.micro, color:C.muted, marginTop:2 }}>
                     {fmtDT(l.created_at)}{l.actor_email?` · ${l.actor_email}`:''}
                   </div>
                 </div>
@@ -2051,7 +2051,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <div style={{ display:'flex', gap:10, marginBottom:16 }}>
             {['Quick Hire','Full MRF'].map(type=>(
               <button key={type} onClick={()=>F('mrf_type',type)} style={{ ...T.btn, flex:1, padding:'10px',
-                background:form.mrf_type===type?C.brand:C.brandTint, color:form.mrf_type===type?C.surface:C.brandDeep,
+                background:form.mrf_type===type?C.brand:C.brandTint, color:form.mrf_type===type?C.onAccent:C.brandDeep,
                 border:form.mrf_type===type?'none':`1px solid ${C.brandEdge}`, fontSize:13 }}>
                 {type==='Quick Hire'?'Quick Hire (CTC ≤ ₹6L)':'Full MRF (CTC > ₹6L)'}
               </button>
@@ -2372,7 +2372,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             <div style={{ fontSize:12, color:C.inkSoft, lineHeight:1.6 }}>
               On <b>Submit</b>, this requisition is routed for approval automatically — the same flow as ESS “Raise MRF”. Each approver sees it in their <b>ESS → Tasks &amp; Approvals</b>.
             </div>
-            <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const, marginTop:10, fontSize:12.5 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:S.sm, flexWrap:'wrap' as const, marginTop:S.md, fontSize:TYPE.small }}>
               <span style={{ fontWeight:600, padding:'4px 10px', borderRadius:99, background:C.brandTint, color:C.brandDeep }}>
                 1 · RM2 — {people.find((p:any)=>p.id===(form.rm2_id||form.reporting_manager_id))?.full_name || <span style={{ color:C.critical }}>pick RM2 / Reporting Manager in §2</span>}
               </span>
@@ -2708,8 +2708,8 @@ function fillTone(rate:number|null) {
 function JobFlag({ flag }:{ flag:string }) {
   const f = JOB_FLAGS[flag] || JOB_FLAGS.NO_DEADLINE
   return (
-    <span title={f.help} style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:f.bg, color:f.fg,
-      fontWeight:600, whiteSpace:'nowrap' as const }}>{f.icon} {f.label}</span>
+    <span title={f.help} style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:f.bg, color:f.fg,
+      fontWeight:W.semi, lineHeight:1.45, whiteSpace:'nowrap' as const }}>{f.label}</span>
   )
 }
 
@@ -2717,7 +2717,7 @@ function JobFlag({ flag }:{ flag:string }) {
 function DeadlineBoard({ rows, orgOf }:any) {
   if (!rows.length) return (
     <div style={{ ...T.card, textAlign:'center' as const, padding:26, color:C.faint, fontSize:13 }}>
-      No live requisitions with a deadline. ✅
+      No live requisitions with a deadline.
     </div>
   )
   return (
@@ -4034,7 +4034,7 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
         <div>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
             <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{c.full_name}</div>
-            <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:99, background:C.sunken, color:STAGE_TEXT[c.stage] }}>{c.stage}</span>
+            <span style={{ fontSize:F.micro, fontWeight:W.semi, padding:'3px 10px', borderRadius:R.pill, background:C.sunken, border:`1px solid ${C.line}`, lineHeight:1.45, color:STAGE_TEXT[c.stage] }}>{c.stage}</span>
           </div>
           <div style={{ fontSize:12, color:C.faint, marginTop:3 }}>{c.current_company} · {c.experience_years}yr · {c.phone||c.mobile}</div>
           {c.email&&<div style={{ fontSize:11, color:C.faint, marginTop:1 }}>✉️ {c.email}</div>}
@@ -4048,7 +4048,7 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14 }}>
         {[['Current CTC',c.current_ctc?`₹${(c.current_ctc/100000).toFixed(1)}L`:'—',C.brand],['Expected CTC',c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—',C.positive],['Notice Period',c.notice_period?c.notice_period+' days':'—',C.warning],['AI Score',c.ai_score?c.ai_score+'%':'—',(c.ai_tag||c.ai_match_tag)==='STRONG'?C.positive:C.warning]].map(([l,v,col])=>(
           <div key={l as string} style={{ background:C.sunken, borderRadius:7, padding:10, border: `1px solid ${C.brandEdge}` }}>
-            <div style={{ fontSize:10, color:C.faint, textTransform:'uppercase' as const, letterSpacing:'.04em' }}>{l}</div>
+            <div style={{ ...eyebrow }}>{l}</div>
             <div style={{ fontSize:14, fontWeight:600, color:col as string, marginTop:2 }}>{v}</div>
           </div>
         ))}
@@ -4062,10 +4062,10 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
           return (
             <button key={s} onClick={()=>{ if(!isBack) onStageChange(c.id,s) }} disabled={isBack}
               title={isBack?'Pipeline moves forward only — cannot return to an earlier round':''}
-              style={{ ...T.btn, fontSize:10, padding:'4px 9px',
+              style={{ ...T.btn, fontSize:F.micro, height:28, padding:'0 10px',
                 background:c.stage===s?STAGE_COLOR[s]:C.sunken,
-                color:c.stage===s?C.surface:STAGE_COLOR[s],
-                border:c.stage===s?'none':`1px solid ${STAGE_COLOR[s]}30`,
+                color:c.stage===s?C.onAccent:STAGE_TEXT[s],
+                border:c.stage===s?'none':`1px solid ${C.line}`,
                 opacity:isBack?0.35:1, cursor:isBack?'not-allowed':'pointer',
                 textDecoration:isBack?'line-through':'none' }}>
               {s}
