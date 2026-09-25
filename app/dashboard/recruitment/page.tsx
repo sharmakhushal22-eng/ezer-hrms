@@ -904,7 +904,9 @@ function CtqEditor({ items, onChange }:{ items:any[]; onChange:(v:any[])=>void }
             <span style={{ fontSize:11, fontWeight:700, color:C.brandDeep, minWidth:22 }}>Q{i+1}</span>
             <input style={{ ...T.input, flex:1 }} value={q.question||''} placeholder="e.g. Do you have a valid B.Tech degree?"
               onChange={e=>set(i,{ question:e.target.value })} />
-            <button onClick={()=>del(i)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontSize:11 }}></button>
+            {/* Was contentless — an empty red box with no label and no
+                accessible name. Same stripped-glyph bug as MrfCard's Delete. */}
+            <button onClick={()=>del(i)} style={{ ...T.btn, height:32, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalEdge}`, fontSize:F.tiny }}>Remove</button>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:8, alignItems:'center' }}>
             <select style={T.select} value={q.type||'YES_NO'} onChange={e=>set(i,{ type:e.target.value, expected: e.target.value==='YES_NO'?'Yes':'' })}>
@@ -954,9 +956,13 @@ function ApprovalChainEditor({ chain, onChange }:{ chain:any[]; onChange:(v:any[
           <span style={{ fontSize:13, fontWeight:600, flex:1 }}>{s.role}</span>
           {s.status && s.status!=='PENDING' && <Badge text={s.status} />}
           {s.actor && <span style={{ fontSize:11, color:C.faint }}>{s.actor}</span>}
-          <button onClick={()=>move(i,-1)} disabled={i===0} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11, opacity:i===0?.4:1 }}></button>
-          <button onClick={()=>move(i,1)} disabled={i===chain.length-1} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11, opacity:i===chain.length-1?.4:1 }}></button>
-          <button onClick={()=>del(i)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, fontSize:11 }}></button>
+          {/* All three rendered with no content: reordering and removing an
+              approver were unlabelled boxes, unreachable by screen reader and
+              unguessable by sight. Words, not glyphs — a stripped emoji is
+              exactly how they ended up empty. */}
+          <button onClick={()=>move(i,-1)} disabled={i===0} title="Move earlier" style={{ ...T.btn, height:32, background:C.brandTint, color:C.brandDeep, border:`1px solid ${C.brandEdge}`, fontSize:F.tiny, opacity:i===0?.4:1 }}>Up</button>
+          <button onClick={()=>move(i,1)} disabled={i===chain.length-1} title="Move later" style={{ ...T.btn, height:32, background:C.brandTint, color:C.brandDeep, border:`1px solid ${C.brandEdge}`, fontSize:F.tiny, opacity:i===chain.length-1?.4:1 }}>Down</button>
+          <button onClick={()=>del(i)} style={{ ...T.btn, height:32, background:C.criticalTint, color:C.critical, border:`1px solid ${C.criticalEdge}`, fontSize:F.tiny }}>Remove</button>
         </div>
       ))}
       <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginTop:6 }}>
@@ -1083,28 +1089,50 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
     return days <= 14
   }).length
 
+  // The label was 10px in C.faint — the lightest ink in the system, below the
+  // 11px floor, on the word that says what the number means. eyebrow is that
+  // exact role, already defined once. Radius and padding come off the scales,
+  // and the border was the raw string 'var(--ez-line)' rather than the token.
   const Tile = ({ label, value, sub, color }:any) => (
-    <div style={{ background:C.surface, border:'1px solid var(--ez-line)', borderRadius:10, padding:'11px 13px' }}>
-      <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
-      <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||C.ink }}>{value}</div>
-      {sub && <div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{sub}</div>}
+    <div style={{ background:C.surface, border:`1px solid ${C.line}`, borderRadius:R.lg,
+                  padding:`${S.md}px ${S.lg}px`, minWidth:0 }}>
+      <div style={{ ...eyebrow, marginBottom:5 }}>{label}</div>
+      <div style={{ fontSize:F.title, fontWeight:W.bold, color:color||C.ink,
+                    lineHeight:1.1, letterSpacing:'-.02em', ...numeric }}>{value}</div>
+      {sub && <div style={{ fontSize:F.micro, color:C.muted, marginTop:3 }}>{sub}</div>}
     </div>
   )
 
   return (
     <div style={T.card}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:11, gap:10, flexWrap:'wrap' as const }}>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:S.md, gap:S.md, flexWrap:'wrap' as const }}>
         <div style={T.section}>Requisition Overview</div>
-        <div style={{ display:'flex', gap:6 }}>
-          {[['cards','Cards'],['table','List']].map(([k,l])=>(
-            <button key={k} onClick={()=>onView(k)} style={{ ...T.btn, fontSize:11,
-              background:view===k?C.brand: C.surface, color:view===k?C.surface:C.brandDeep,
-              border:view===k?'none':`1px solid ${C.brandEdge}` }}>{l}</button>
-          ))}
+        {/* Cards/List is a two-option segmented control, drawn the same way as
+            the page's tab bar so "pick one of these" looks like one thing
+            everywhere. It also carries the brand rule for the same measured
+            reason: a raised chip separates from its well by 1.03 in dark, so
+            elevation alone cannot say which option is active. */}
+        {/* ez-tabseg is required, not decorative: without it the base rule
+            .ez-tab[data-on="0"]:hover paints --ez-sunken, which is exactly the
+            colour of this track, so hovering an inactive option would do
+            nothing visible. The scoped rule raises it to --ez-surface. */}
+        <div className="ez-tabseg"
+             style={{ display:'inline-flex', gap:3, background:C.sunken, padding:3,
+                      borderRadius:R.md, border:`1px solid ${C.line}` }}>
+          {[['cards','Cards'],['table','List']].map(([k,l])=>{
+            const on = view===k
+            return (
+              <button key={k} onClick={()=>onView(k)} className="ez-tab" data-on={on?'1':'0'}
+                style={{ ...T.btn, height:30, padding:'0 14px', fontSize:F.tiny,
+                  background:on?C.surface:'transparent', color:on?C.brand:C.muted,
+                  border:`1px solid ${on?C.brandEdge:'transparent'}`,
+                  boxShadow:on?`inset 0 -2px 0 ${C.brand}, ${E.flat}`:'none' }}>{l}</button>
+            )
+          })}
         </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))', gap:9, marginBottom:13 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:S.md, marginBottom:S.lg }}>
         <Tile label="Total MRFs" value={mrfs.length} color={C.brand} />
         <Tile label="Open Positions" value={totalOpen} sub="on approved MRFs" color={C.info} />
         <Tile label="Available to Hire" value={available} sub={`${totalFill} already filled`} color={available?C.positive:C.faint} />
@@ -1113,9 +1141,12 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
         {expiring>0 && <Tile label="Expiring Soon" value={expiring} sub="within 14 days" color={C.critical} />}
       </div>
 
-      {/* Proportional bar — the shape of the pipeline at a glance. */}
+      {/* Proportional bar — the spread of statuses at a glance. The hairline
+          matters in dark for the same reason as the funnel's tracks. */}
       {mrfs.length>0 && (
-        <div style={{ display:'flex', height:7, borderRadius:99, overflow:'hidden', marginBottom:10, background:C.brandTint }}>
+        <div style={{ display:'flex', height:8, borderRadius:R.pill, overflow:'hidden',
+                      marginBottom:S.md, background:C.sunken,
+                      border:`1px solid ${C.line}`, boxSizing:'border-box' as const }}>
           {MRF_STATUSES.filter(s=>counts[s]>0).map(s=>(
             <div key={s} title={`${s.replace('_',' ')}: ${counts[s]}`}
               style={{ width:`${(counts[s]/mrfs.length)*100}%`, background:STATUS_TONE[s][1] }} />
@@ -1123,21 +1154,25 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
         </div>
       )}
 
-      <div style={{ display:'flex', gap:7, flexWrap:'wrap' as const }}>
-        <button onClick={()=>onPickStatus('')} style={{ ...T.btn, fontSize:11,
-          background: fStatus===''?C.brand: C.surface, color: fStatus===''?C.surface:C.brandDeep,
-          border: fStatus===''?'none':`1px solid ${C.brandEdge}` }}>
-          All <span style={{ fontWeight:700 }}>{mrfs.length}</span>
+      {/* Status filter. `C.onAccent` on the selected pill, NOT C.surface: text
+          sitting on a saturated fill is what onAccent exists for, and surface
+          is a background token that only looked right in light by coincidence. */}
+      <div style={{ display:'flex', gap:S.sm, flexWrap:'wrap' as const }}>
+        <button onClick={()=>onPickStatus('')} style={{ ...T.btn, height:32, fontSize:F.tiny,
+          display:'flex', alignItems:'center', gap:6,
+          background: fStatus===''?C.brand:C.surface, color: fStatus===''?C.onAccent:C.brandDeep,
+          border: `1px solid ${fStatus===''?C.brandDeep:C.brandEdge}` }}>
+          All <span style={{ fontWeight:W.bold, ...numeric }}>{mrfs.length}</span>
         </button>
         {MRF_STATUSES.map(s=>{
           const on = fStatus===s
           const [bg,fg] = STATUS_TONE[s]
           return (
             <button key={s} onClick={()=>onPickStatus(on?'':s)} title={STATUS_HELP[s]}
-              style={{ ...T.btn, fontSize:11, display:'flex', alignItems:'center', gap:6,
-                background:on?fg:bg, color:on?C.surface:fg, border:'1px solid '+(on?fg:'transparent'),
+              style={{ ...T.btn, height:32, fontSize:F.tiny, display:'flex', alignItems:'center', gap:6,
+                background:on?fg:bg, color:on?C.onAccent:fg, border:'1px solid '+(on?fg:'transparent'),
                 opacity: counts[s]===0 && !on ? .55 : 1 }}>
-              {s.replace('_',' ')}<span style={{ fontWeight:700 }}>{counts[s]}</span>
+              {s.replace('_',' ')}<span style={{ fontWeight:W.bold, ...numeric }}>{counts[s]}</span>
             </button>
           )
         })}
@@ -1228,8 +1263,8 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
             <span style={{ fontSize:14, fontWeight:600, color:C.ink }}>{m.job_title||m.designation||m.position||'Untitled'}</span>
             <Badge text={m.status} />
             {m.mrf_type && <Badge text={m.mrf_type} />}
-            {m.urgency && <span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, background:ubg, color:uc, fontWeight:600 }}>{m.urgency}</span>}
-            {expired && <span style={{ fontSize:10, padding:'2px 7px', borderRadius:99, background:C.criticalTint, color:C.critical, fontWeight:600 }}>EXPIRED</span>}
+            {m.urgency && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:ubg, color:uc, fontWeight:W.semi, lineHeight:1.45 }}>{m.urgency}</span>}
+            {expired && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:C.criticalTint, color:C.critical, fontWeight:W.semi, lineHeight:1.45 }}>EXPIRED</span>}
           </div>
           <div style={{ fontSize:11, color:C.faint, marginBottom:6 }}>
             {m.mrf_number || 'No MRF number'} · {org.company} · {org.dept} · {org.loc}
@@ -1270,9 +1305,15 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
                 {chain.map((s:any,i:number)=>{
                   const col = s.status==='APPROVED'?C.positive : s.status==='REJECTED'?C.critical : s.status==='PENDING'?C.warning : C.muted
                   const bg  = s.status==='APPROVED'?C.positiveTint : s.status==='REJECTED'?C.criticalTint : s.status==='PENDING'?C.warningTint : C.sunken
+                  // The edge was `${col}22` — an alpha suffix concatenated onto
+                  // a token, which yields "var(--ez-positive)22" and is not a
+                  // colour at all, so every chip in this chain has been drawn
+                  // with no border. tokens.ts warns about exactly this. These
+                  // are the real per-state edge tokens.
+                  const edge= s.status==='APPROVED'?C.positiveEdge : s.status==='REJECTED'?C.criticalEdge : s.status==='PENDING'?C.warningEdge : C.line
                   const mark= s.status==='APPROVED'?'✓' : s.status==='REJECTED'?'✗' : s.status==='PENDING'?'⏳' : '•'
                   return (
-                    <span key={i} style={{ fontSize:10, padding:'3px 9px', borderRadius:99, background:bg, color:col, fontWeight:600, border:`1px solid ${col}22` }}>
+                    <span key={i} style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:bg, color:col, fontWeight:W.semi, lineHeight:1.45, border:`1px solid ${edge}` }}>
                       {mark} {ROLE_LABEL[s.role]||s.role}: {s.approver_name || s.actor || '—'} · {s.status||'PENDING'}
                     </span>
                   )
@@ -1285,8 +1326,11 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
               <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:C.faint, marginBottom:3 }}>
                 <span>Positions filled</span><span>{filled} / {openings}</span>
               </div>
-              <div style={{ background:C.brandTint, borderRadius:99, height:5, overflow:'hidden' }}>
-                <div style={{ width:`${pct}%`, height:'100%', background: pct>=100?C.positive:C.brand, borderRadius:99 }} />
+              {/* Hairline for the same measured reason as the dashboard funnel:
+                  a fill-only track is 1.03 against the card in dark. */}
+              <div style={{ background:C.sunken, borderRadius:R.pill, height:8, overflow:'hidden',
+                            border:`1px solid ${C.line}`, boxSizing:'border-box' as const }}>
+                <div style={{ width:`${pct}%`, height:'100%', background: pct>=100?C.positive:C.brand, borderRadius:R.pill }} />
               </div>
             </div>
           )}
@@ -1304,7 +1348,12 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
             <button onClick={()=>onReopen(m)} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}`, fontSize:11 }}>Re-open</button>
           )}
           <button onClick={()=>onEdit(m)} style={{ ...T.btn, background:C.infoTint, color:C.info, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>Edit</button>
-          <button onClick={()=>onDelete(m.id)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontSize:11 }}></button>
+          {/* This button had NO content — it rendered as an empty red box with
+              no label and no accessible name, so the only way to know it
+              deletes the requisition was to press it. Looks like an emoji was
+              stripped from this file at some point; see Toast's dead ternary.
+              A word is safer than a glyph for a destructive action anyway. */}
+          <button onClick={()=>onDelete(m.id)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalEdge}`, fontSize:F.tiny }}>Delete</button>
         </div>
       </div>
     </div>
@@ -3925,7 +3974,8 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
           {c.email&&<div style={{ fontSize:11, color:C.faint, marginTop:1 }}>✉️ {c.email}</div>}
           {mrf&&<div style={{ fontSize:11, color:C.brand, marginTop:3, fontWeight:600 }}>🎯 {mrf.designation||mrf.position}{c.source?` · Source: ${c.source}`:''}</div>}
         </div>
-        <button onClick={onClose} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, padding:'4px 10px' }}></button>
+        {/* Another contentless button — this one closes the drawer. */}
+        <button onClick={onClose} style={{ ...T.btn, height:32, background:C.brandTint, color:C.brandDeep, border:`1px solid ${C.brandEdge}`, padding:'0 12px', fontSize:F.tiny }}>Close</button>
       </div>
 
       {/* Stats */}
