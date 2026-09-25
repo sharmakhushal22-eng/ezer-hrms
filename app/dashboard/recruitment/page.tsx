@@ -98,9 +98,11 @@ const T = {
   select: { ...inputStyle(), cursor:'pointer' } as React.CSSProperties,
   textarea: { ...inputStyle(), height:'auto', minHeight:90, padding:'9px 11px', resize:'vertical' as const, lineHeight:1.5 } as React.CSSProperties,
   // ── CONTROLS ────────────────────────────────────────────────────────────
-  // 38px with 18px of side padding. The old 36/16 was fine in isolation but
-  // sat a step below the inputs it appears beside, and btnOutline was 34 —
-  // three different control heights in one form. They are one height now.
+  // 38px with 18px of side padding. btn was 36 and btnOutline 34 — two button
+  // heights sitting side by side in the same toolbar. Raising them to 38 then
+  // left them a step ABOVE inputStyle()'s 36, so that was lifted to 38 too:
+  // buttons and inputs now share one height, which is what makes a filter row
+  // like "Search […] [Apply]" sit on a single line rather than nearly one.
   // UIKeyframes already gives every button its press, hover and transition.
   btn: { height:38, padding:'0 18px', borderRadius:R.md, border:'none', cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', letterSpacing:'-.005em', whiteSpace:'nowrap' as const } as React.CSSProperties,
   btnPrimary: { height:38, padding:'0 18px', borderRadius:R.md, border:`1px solid ${C.brandDeep}`, cursor:'pointer', fontSize:F.small, fontWeight:W.semi, fontFamily:'inherit', letterSpacing:'-.005em', background:`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`, color:C.onAccent, boxShadow:E.brand, whiteSpace:'nowrap' as const } as React.CSSProperties,

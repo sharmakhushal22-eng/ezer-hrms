@@ -586,9 +586,14 @@ export function Field({ label, hint, error, required, children }: {
   );
 }
 
-/** Shared input skin. Spread onto <input>, <select> or <textarea>. */
+/** Shared input skin. Spread onto <input>, <select> or <textarea>.
+ *
+ *  38, not 36, so a control row lines up. Buttons are 38 across the system;
+ *  an input sitting beside one at 36 leaves a 2px step that reads as sloppy
+ *  rather than as a distinction, and a "Search […] [Apply]" pair shows it
+ *  most. The extra pixel of side padding goes with the height. */
 export const inputStyle = (invalid?: boolean): React.CSSProperties => ({
-  width: '100%', height: 36, padding: '0 11px', boxSizing: 'border-box',
+  width: '100%', height: 38, padding: '0 12px', boxSizing: 'border-box',
   fontSize: F.small, fontFamily: F.family, color: C.ink,
   background: C.surface, borderRadius: R.md,
   border: `1px solid ${invalid ? tone('critical').edge : C.lineStrong}`,
