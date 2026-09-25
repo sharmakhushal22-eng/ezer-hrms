@@ -37,7 +37,7 @@ function SecLine({ title }: { title: string }) {
 // ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
 // `f` shape: { company, department, position, location } — all '' means "All".
 function RecFilterBar({ companies, departments, locations, positions, f, setF }: any) {
-  const lbl = { fontSize:11, fontWeight:600 as const, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', display:'block', marginBottom:4 }
+  const lbl = { ...eyebrow, display:'block', marginBottom:SP.xs }
   return (
     <div style={{ ...S.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end' }}>
       <div style={{ flex:'1 1 160px', minWidth:140 }}>
@@ -320,7 +320,7 @@ This document is confidential and for internal approval only.`
               ['Hike %', `${Number(negotiation.hike_pct||0).toFixed(1)}%`],
             ].map(([l,v]) => (
               <div key={l} style={{ background:TK.brandTint, borderRadius:10, padding:'10px 12px' }}>
-                <div style={{ fontSize:10, color:TK.faint }}>{l}</div>
+                <div style={{ ...eyebrow }}>{l}</div>
                 <div style={{ fontSize:14, fontWeight:500, color:TK.brandDeep, marginTop:2 }}>{v}</div>
               </div>
             ))}
@@ -538,7 +538,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
         {fRejected.map(c => (
           <div key={c.id} style={{ ...S.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
             <div>
-              <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}{c.blacklisted && <span style={{ fontSize:10, color:TK.critical, marginLeft:8, fontWeight:600 }}>BLACKLISTED</span>}</div>
+              <div style={{ fontSize:14, fontWeight:600 }}>{c.full_name}{c.blacklisted && <span style={{ fontSize:TF.micro, color:TK.critical, marginLeft:SP.sm, fontWeight:W.semi }}>BLACKLISTED</span>}</div>
               <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{c.designation || '—'}</div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
@@ -581,9 +581,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                     <div style={{ fontSize:14, fontWeight:600 }}>{r.candidates?.full_name}</div>
                     <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} CTC</div>
                     <div style={{ fontSize:11, color:TK.brand, marginTop:2 }}>Hike: {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}</div>
-                    {r.submitted_at && <div style={{ fontSize:10, color:TK.faint, marginTop:3 }}>Submitted: {new Date(r.submitted_at).toLocaleDateString('en-IN')}</div>}
+                    {r.submitted_at && <div style={{ fontSize:TF.micro, color:TK.muted, marginTop:SP.xs }}>Submitted: {new Date(r.submitted_at).toLocaleDateString('en-IN')}</div>}
                   </div>
-                  <span style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:bg, color:c, fontWeight:500 }}>{r.status.replace('_',' ')}</span>
+                  <span style={{ fontSize:TF.micro, padding:'3px 9px', borderRadius:R.pill, background:bg, color:c, fontWeight:W.medium, lineHeight:1.45 }}>{r.status.replace('_',' ')}</span>
                 </div>
               </div>
             )
@@ -614,7 +614,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                   ['Notice Period', `${selected.notice_period_days || '—'} days`],
                 ].map(([l,v]) => (
                   <div key={l} style={{ background:TK.sunken, borderRadius:7, padding:'9px 12px', border: `1px solid ${TK.brandEdge}` }}>
-                    <div style={{ fontSize:10, color:TK.faint }}>{l}</div>
+                    <div style={{ ...eyebrow }}>{l}</div>
                     <div style={{ fontSize:13, fontWeight:500, color:TK.ink, marginTop:2 }}>{v}</div>
                   </div>
                 ))}
@@ -926,7 +926,7 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
             <div>
               <div style={{ fontSize:12, fontWeight:500, color:TK.ink }}>{label}</div>
               {log.actor_email && <div style={{ fontSize:11, color:TK.faint, marginTop:1 }}>By: {log.actor_email}</div>}
-              <div style={{ fontSize:10, color:TK.faint, marginTop:1 }}>{new Date(log.created_at).toLocaleString('en-IN')}</div>
+              <div style={{ fontSize:TF.micro, color:TK.muted, marginTop:1 }}>{new Date(log.created_at).toLocaleString('en-IN')}</div>
             </div>
           </div>
         )

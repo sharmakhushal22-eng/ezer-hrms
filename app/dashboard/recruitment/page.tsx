@@ -797,7 +797,7 @@ function Field({ label, error, required, hint, children }:{ label:string; error?
 function MrfMeta({ label, value }:{ label:string; value:React.ReactNode }) {
   return (
     <div>
-      <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
+      <div style={{ ...eyebrow }}>{label}</div>
       <div style={{ fontSize:13, color:C.ink, marginTop:2 }}>{value ?? '—'}</div>
     </div>
   )
@@ -1531,7 +1531,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             </div>
             {m.skills_required && (
               <div style={{ marginBottom:10 }}>
-                <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Mandatory Skills</div>
+                <div style={{ ...eyebrow, marginBottom:5 }}>Mandatory Skills</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
                   {String(m.skills_required).split(',').map((s:string)=>s.trim()).filter(Boolean).map((s:string)=>(
                     <span key={s} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.brandTint, color:C.brandDeep, fontWeight:500 }}>{s}</span>
@@ -1541,7 +1541,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             )}
             {m.good_to_have_skills && (
               <div>
-                <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Good-to-have Skills</div>
+                <div style={{ ...eyebrow, marginBottom:5 }}>Good-to-have Skills</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
                   {String(m.good_to_have_skills).split(',').map((s:string)=>s.trim()).filter(Boolean).map((s:string)=>(
                     <span key={s} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.infoTint, color:C.info, fontWeight:500 }}>{s}</span>
@@ -1608,7 +1608,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             </div>
             {channels.length>0 && (
               <div>
-                <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em', marginBottom:5 }}>Preferred Channels</div>
+                <div style={{ ...eyebrow, marginBottom:5 }}>Preferred Channels</div>
                 <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const }}>
                   {channels.map((c:string)=>(
                     <span key={c} style={{ fontSize:11, padding:'3px 10px', borderRadius:99, background:C.positiveTint, color:C.positive, fontWeight:500 }}>{c}</span>
@@ -2929,7 +2929,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
 
   const Tile = ({ label, value, sub, color }:any) => (
     <div style={{ background:C.surface, border:'1px solid var(--ez-line)', borderRadius:10, padding:'11px 13px' }}>
-      <div style={{ fontSize:10, color:C.faint, fontWeight:600, textTransform:'uppercase' as const, letterSpacing:'.05em' }}>{label}</div>
+      <div style={{ ...eyebrow }}>{label}</div>
       <div style={{ fontSize:20, fontWeight:700, marginTop:2, color:color||C.ink }}>{value}</div>
       {sub && <div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{sub}</div>}
     </div>
@@ -3183,7 +3183,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
       {/* Recruiter performance */}
       <div style={{ ...T.section, marginTop:14, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
         <span>Recruiter Performance</span>
-        <span style={{ fontSize:10, color:C.faint, textTransform:'none' as const, letterSpacing:0, fontWeight:400 }}>
+        <span style={{ fontSize:F.micro, color:C.muted, textTransform:'none' as const, letterSpacing:0, fontWeight:W.regular }}>
           Fill rate = filled ÷ (filled + breached). Live requisitions are excluded — they are neither yet.
         </span>
       </div>
@@ -4700,7 +4700,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
             </>
           ) : (
             <div style={{ ...T.card, color:C.warning, background:C.warningTint, border: `1px solid ${C.warningTint}` }}>
-              No CTC negotiation found for <b>{sel.full_name}</b>. Create one in the 💰 Negotiation tab first.
+              No CTC negotiation found for <b>{sel.full_name}</b>. Create one in the Negotiation tab first.
             </div>
           )}
       </div>
@@ -4725,7 +4725,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
           {ar ? (
             <div style={{ textAlign:'right' as const, flexShrink:0 }}>
               <div style={{ fontSize:12, fontWeight:600, color: ar.status==='HR_HEAD_REJECTED' ? C.critical : C.positive }}>
-                {ar.status==='SUBMITTED' ? '⏳ ' : ar.status==='OFFER_SENT' ? '📤 ' : '✅ '}{STATUS_LABEL[ar.status] || ar.status}
+                {STATUS_LABEL[ar.status] || ar.status}
               </div>
               {ar.submitted_at && <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>on {new Date(ar.submitted_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>}
             </div>
@@ -4857,7 +4857,7 @@ HR Team`
               </div>
             )}
             {c.stage==='Offer Sent'&&c.offer_accepted&&(
-              <div style={{ fontSize:10, color:C.positive, marginTop:6, fontWeight:600 }}>Accepted — moved to Pre-onboarding</div>
+              <div style={{ fontSize:F.micro, color:C.positive, marginTop:S.sm, fontWeight:W.semi }}>Accepted — moved to Pre-onboarding</div>
             )}
           </div>
         ))}
@@ -5048,7 +5048,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
                   ? <span style={{ fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:99, background:C.positiveTint, color:C.positive }}>Joining in {d} day{d===1?'':'s'} — start onboarding</span>
                   : <span style={{ fontSize:11, color:d<0?C.critical:C.faint }}>{d<0?'past joining date':`${d} days to join`}</span> })()}
             </div>
-            {!c.hr_email&&!hrEmails[c.id]&&<div style={{ fontSize:10, color:C.critical, marginTop:4 }}>Add an HR email so onboarding reminder mails can be sent.</div>}
+            {!c.hr_email&&!hrEmails[c.id]&&<div style={{ fontSize:F.micro, color:C.critical, marginTop:S.xs }}>Add an HR email so onboarding reminder mails can be sent.</div>}
 
             {!resp&&(
               choose===c.id ? (
@@ -5070,7 +5070,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
             )}
 
             {resp==='ACCEPTED'&&row?.acceptance_letter_sent_at&&(
-              <div style={{ marginTop:10, fontSize:11, color:C.positive }}>✉️ {row.candidate_type==='EXPERIENCED'?'Resignation Acceptance':'Joining Confirmation'} letter sent · {new Date(row.acceptance_letter_sent_at).toLocaleDateString('en-IN')}</div>
+              <div style={{ marginTop:S.md, fontSize:F.micro, color:C.positive }}>{row.candidate_type==='EXPERIENCED'?'Resignation Acceptance':'Joining Confirmation'} letter sent · {new Date(row.acceptance_letter_sent_at).toLocaleDateString('en-IN')}</div>
             )}
             {resp==='REVISE'&&row?.revise_note&&(
               <div style={{ marginTop:10, fontSize:11, color:C.warning, background:C.warningTint, borderRadius:7, padding:'6px 10px' }}>Revision note: {row.revise_note}</div>
