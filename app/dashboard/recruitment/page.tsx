@@ -16,6 +16,17 @@ import {
   Card, Stat, StatRow, TableWrap, Th, Td, Tr, Empty,
 } from '@/lib/ui'
 
+/**
+ * The type scale under a name this file does not shadow.
+ *
+ * Two components here declare their own `const F = (k, v) => setForm(...)`
+ * field setter — MRFTab at ~1759 and NegotiationTab at ~4283 — which shadows
+ * the imported `F` typography scale for their whole body. Inside them `F.micro`
+ * is not 11px, it is a property lookup on a function, and it fails as a type
+ * error rather than anything visible. Use TYPE inside those two components.
+ */
+const TYPE = F
+
 // ── TYPES ────────────────────────────────────────────────────────
 interface Company { id:string; company_code:string; company_name?:string }
 interface Location { id:string; location_code:string; location_name:string; company_id:string }
@@ -4561,13 +4572,13 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   )}
                   {calc.variable>0&&(
                     <tr style={{ borderBottom: `1px solid ${C.line}` }}>
-                      <td style={{ padding:'6px 10px', color:C.inkSoft }}>Variable Pay ({form.varPct}%) <span style={{ fontSize:10, color:C.faint }}>performance-linked</span></td>
+                      <td style={{ padding:'6px 10px', color:C.inkSoft }}>Variable Pay ({form.varPct}%) <span style={{ fontSize:TYPE.micro, color:C.muted }}>performance-linked</span></td>
                       <td style={{ padding:'6px 10px', textAlign:'right' as const, fontWeight:500 }}>₹{Math.round(calc.varMonthly).toLocaleString('en-IN')}</td>
                       <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.muted }}>₹{Math.round(calc.variable).toLocaleString('en-IN')}</td>
                     </tr>
                   )}
                   <tr style={{ background:C.brandTint }}>
-                    <td style={{ padding:'7px 10px', fontWeight:600, color:C.ink }}>CTC <span style={{ fontSize:10, fontWeight:400, color:C.faint }}>(Fixed Gross + Variable)</span></td>
+                    <td style={{ padding:'7px 10px', fontWeight:600, color:C.ink }}>CTC <span style={{ fontSize:TYPE.micro, fontWeight:W.regular, color:C.muted }}>(Fixed Gross + Variable)</span></td>
                     <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.brand }}>₹{Math.round(calc.totalCTCMonthly).toLocaleString('en-IN')}</td>
                     <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:700, color:C.brand, fontSize:14 }}>₹{calc.ctcAnnual.toLocaleString('en-IN')}</td>
                   </tr>
@@ -4580,19 +4591,19 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                   <div style={T.section}>One-time Payments</div>
                   {calc.joining_bonus>0&&(
                     <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom: `1px solid ${C.line}`, fontSize:12 }}>
-                      <span>Joining Bonus <span style={{ fontSize:10, color:C.faint }}>({form.joining_freq})</span></span>
+                      <span>Joining Bonus <span style={{ fontSize:TYPE.micro, color:C.muted }}>({form.joining_freq})</span></span>
                       <span style={{ fontWeight:600, color:C.positive }}>₹{calc.joining_bonus.toLocaleString('en-IN')}</span>
                     </div>
                   )}
                   {calc.retention_bonus>0&&(
                     <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom: `1px solid ${C.line}`, fontSize:12 }}>
-                      <span>Retention Bonus <span style={{ fontSize:10, color:C.faint }}>({form.retention_freq})</span></span>
+                      <span>Retention Bonus <span style={{ fontSize:TYPE.micro, color:C.muted }}>({form.retention_freq})</span></span>
                       <span style={{ fontWeight:600, color:C.positive }}>₹{calc.retention_bonus.toLocaleString('en-IN')}</span>
                     </div>
                   )}
                   {calc.esop>0&&(
                     <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', fontSize:12 }}>
-                      <span>ESOP Grant Value <span style={{ fontSize:10, color:C.faint }}>{form.esop_plan&&`(${form.esop_plan})`}</span></span>
+                      <span>ESOP Grant Value <span style={{ fontSize:TYPE.micro, color:C.muted }}>{form.esop_plan&&`(${form.esop_plan})`}</span></span>
                       <span style={{ fontWeight:600, color:C.brand }}>₹{calc.esop.toLocaleString('en-IN')}</span>
                     </div>
                   )}
@@ -4618,7 +4629,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                     <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btn, background:C.brand, color:C.onAccent, whiteSpace:'nowrap' as const }}>Copy</button>
                     <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, textDecoration:'none', whiteSpace:'nowrap' as const }}>Open ↗</a>
                   </div>
-                  <div style={{ fontSize:10, color: C.brand, marginTop:6 }}>Share with the candidate — shows salary breakdown only (no internal data).</div>
+                  <div style={{ fontSize:TYPE.micro, color: C.brandDeep, marginTop:S.sm }}>Share with the candidate — shows salary breakdown only (no internal data).</div>
                 </div>
               )}
             </div>
