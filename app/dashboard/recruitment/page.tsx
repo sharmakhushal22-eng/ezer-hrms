@@ -3639,18 +3639,21 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
 
       {/* Stage filter pills */}
       <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginBottom:14 }}>
-        <button onClick={()=>setStageF('')} style={{ ...T.btn, fontSize:11, padding:'5px 12px', borderRadius:99,
-          background: stageF===''?C.brand: C.surface, color: stageF===''?C.surface:C.muted, border:`1px solid ${stageF===''?C.brand:C.brandTint}` }}>
-          All <span style={{ opacity:.8 }}>({baseList.length})</span>
+        {/* C.onAccent, not C.surface: surface is a BACKGROUND token, and using
+            it as ink on a brand fill only looked right in light by accident —
+            in dark, surface is near-black and the accent lightens. */}
+        <button onClick={()=>setStageF('')} style={{ ...T.btn, height:32, fontSize:F.tiny, padding:'0 13px', borderRadius:R.pill,
+          background: stageF===''?C.brand: C.surface, color: stageF===''?C.onAccent:C.muted, border:`1px solid ${stageF===''?C.brandDeep:C.line}` }}>
+          All <span style={{ opacity:.8, ...numeric }}>({baseList.length})</span>
         </button>
         {STAGES.map(stage=>{
           const n = baseList.filter((c:Candidate)=>c.stage===stage).length
           const on = stageF===stage
           return (
-            <button key={stage} onClick={()=>setStageF(on?'':stage)} style={{ ...T.btn, fontSize:11, padding:'5px 12px', borderRadius:99,
+            <button key={stage} onClick={()=>setStageF(on?'':stage)} style={{ ...T.btn, height:32, fontSize:F.tiny, padding:'0 13px', borderRadius:R.pill,
               background: on?STAGE_COLOR[stage]:C.sunken, color: on?C.onAccent:STAGE_TEXT[stage],
               border:`1px solid ${on?STAGE_COLOR[stage]:C.line}` }}>
-              {stage} <span style={{ opacity:.85 }}>({n})</span>
+              {stage} <span style={{ opacity:.85, ...numeric }}>({n})</span>
             </button>
           )
         })}
@@ -3666,34 +3669,61 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
             const tag = c.ai_tag||c.ai_match_tag
             const tagCol = tag==='STRONG'?C.positive:tag==='PARTIAL'?C.warning:C.critical
             const initials = c.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
+            // ez-lift replaces two hand-written mouse handlers that set a
+            // frozen 'rgba(37,99,235,0.14)' shadow — a hardcoded brand blue
+            // that could not follow the theme and stayed light-mode blue on a
+            // near-black card. The class already does the lift, respects
+            // prefers-reduced-motion, and costs no JS per card.
+            //
+            // NOTE THE COMMENT STYLE. These are // line comments ABOVE the
+            // return. A JSX comment container placed after "return (" is not
+            // a comment at all: that is an EXPRESSION slot, so the container
+            // reads as an object literal sitting beside the element, two
+            // expressions where one belongs, and the whole file stops
+            // parsing. tsc then reports FEWER errors, not more, because it
+            // bails early — which looks like progress and is not. Second
+            // time I have made this exact mistake in this file.
             return (
-              <div key={c.id} onClick={()=>{setSelCand(c);setAiQs([])}}
-                style={{ background:C.surface, borderRadius:14, padding:'14px 15px', cursor:'pointer', border: `1px solid ${C.brandEdge}`, boxShadow:'var(--ez-shadow-flat)', transition:'box-shadow .15s, transform .1s' }}
-                onMouseEnter={e=>{ e.currentTarget.style.boxShadow='0 6px 18px rgba(37,99,235,0.14)'; e.currentTarget.style.transform='translateY(-1px)' }}
-                onMouseLeave={e=>{ e.currentTarget.style.boxShadow='var(--ez-shadow-flat)'; e.currentTarget.style.transform='' }}>
+              <div key={c.id} onClick={()=>{setSelCand(c);setAiQs([])}} className="ez-lift"
+                style={{ background:C.surface, borderRadius:R.lg, padding:S.lg, cursor:'pointer', border: `1px solid ${C.line}`, boxShadow:E.flat }}>
                 {/* header */}
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
                   <div style={{ width:40, height:40, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, flexShrink:0 }}>{initials}</div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:14, fontWeight:700, color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}{c.offer_revised&&<span style={{ fontSize:9, color:C.warning, fontWeight:600, marginLeft:5 }}></span>}</div>
-                    <div style={{ fontSize:11, color:C.faint, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.designation||mrf?.designation||'—'}</div>
+                    {/* The offer_revised marker was an EMPTY span at 9px — a
+                        stripped glyph leaving an invisible element, below even
+                        the sizes the audit was counting. It says the word now. */}
+                    <div style={{ fontSize:F.body, fontWeight:W.bold, color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}{c.offer_revised&&<span style={{ fontSize:F.micro, color:C.warning, fontWeight:W.semi, marginLeft:6 }}>revised</span>}</div>
+                    <div style={{ fontSize:F.micro, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.designation||mrf?.designation||'—'}</div>
                   </div>
-                  <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:99, background:C.sunken, color:STAGE_TEXT[c.stage], whiteSpace:'nowrap' }}>{c.stage}</span>
+                  <span style={{ fontSize:F.micro, fontWeight:W.semi, padding:'3px 10px', borderRadius:R.pill, background:C.sunken, border:`1px solid ${C.line}`, color:STAGE_TEXT[c.stage], whiteSpace:'nowrap', lineHeight:1.45 }}>{c.stage}</span>
                 </div>
                 {/* role / opening */}
-                {mrf && <div style={{ fontSize:11, color:C.brand, fontWeight:500, marginBottom:8 }}>🎯 {mrf.designation||mrf.position}</div>}
+                {mrf && <div style={{ fontSize:F.micro, color:C.brand, fontWeight:W.medium, marginBottom:S.sm }}>{mrf.designation||mrf.position}</div>}
                 {/* detail rows */}
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 10px', fontSize:12, color:C.inkSoft }}>
-                  <div><span style={{ color:C.faint }}>Company</span><div style={{ fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.current_company||'—'}</div></div>
-                  <div><span style={{ color:C.faint }}>Experience</span><div style={{ fontWeight:600 }}>{c.experience_years||0} yr</div></div>
-                  <div><span style={{ color:C.faint }}>Expected CTC</span><div style={{ fontWeight:600, color:C.positive }}>{c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—'}</div></div>
-                  <div><span style={{ color:C.faint }}>Notice</span><div style={{ fontWeight:600 }}>{c.notice_period?`${c.notice_period}d`:'—'}</div></div>
+                  {/* Labels were C.faint — the quietest ink in the system — on
+                      the four facts a recruiter actually scans this card for. */}
+                  <div><span style={{ color:C.muted }}>Company</span><div style={{ fontWeight:W.semi, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.current_company||'—'}</div></div>
+                  <div><span style={{ color:C.muted }}>Experience</span><div style={{ fontWeight:W.semi, ...numeric }}>{c.experience_years||0} yr</div></div>
+                  <div><span style={{ color:C.muted }}>Expected CTC</span><div style={{ fontWeight:W.semi, color:C.positive, ...numeric }}>{c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—'}</div></div>
+                  <div><span style={{ color:C.muted }}>Notice</span><div style={{ fontWeight:W.semi, ...numeric }}>{c.notice_period?`${c.notice_period}d`:'—'}</div></div>
                 </div>
                 {/* footer chips */}
                 <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, flexWrap:'wrap' as const }}>
-                  {c.ai_score!=null&&<span style={{ fontSize:10, fontWeight:600, padding:'2px 8px', borderRadius:99, background:tagCol+'14', color:tagCol }}>AI {c.ai_score}% {tag==='STRONG'?'':tag==='PARTIAL'?'':''}</span>}
-                  {c.source&&<span style={{ fontSize:10, color:C.faint, background:C.sunken, border: `1px solid ${C.brandEdge}`, borderRadius:99, padding:'2px 8px' }}>{c.source}</span>}
-                  <span style={{ marginLeft:'auto', fontSize:11, color:C.brand, fontWeight:600 }}>View →</span>
+                  {/* background was `tagCol+'14'` — an alpha suffix concatenated
+                      onto a token, giving "var(--ez-positive)14", which is not
+                      a colour, so this chip has had NO background at all. Same
+                      bug as the approval-chain borders, written with + instead
+                      of ${}, which is why the first sweep missed it. The tint
+                      tokens are the real thing. The trailing ternary had three
+                      empty branches — more stripped glyphs — and is gone. */}
+                  {c.ai_score!=null&&<span style={{ fontSize:F.micro, fontWeight:W.semi, padding:'3px 9px', borderRadius:R.pill, lineHeight:1.45,
+                    background: tag==='STRONG'?C.positiveTint:tag==='PARTIAL'?C.warningTint:C.criticalTint,
+                    border:`1px solid ${tag==='STRONG'?C.positiveEdge:tag==='PARTIAL'?C.warningEdge:C.criticalEdge}`,
+                    color:tagCol }}>AI {c.ai_score}%</span>}
+                  {c.source&&<span style={{ fontSize:F.micro, color:C.muted, background:C.sunken, border: `1px solid ${C.line}`, borderRadius:R.pill, padding:'3px 9px', lineHeight:1.45 }}>{c.source}</span>}
+                  <span style={{ marginLeft:'auto', fontSize:F.micro, color:C.brand, fontWeight:W.semi }}>View →</span>
                 </div>
               </div>
             )
@@ -3837,22 +3867,28 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <div style={{ ...T.g3, marginBottom:14 }}>
                 <div><label style={T.label}>Current fixed CTC{reqMark}</label><input style={inp('current_fixed')} type="number" min={0} step={0.01} value={cForm.current_fixed} onChange={e=>CF('current_fixed',e.target.value)} placeholder="8.40" /></div>
                 <div><label style={T.label}>Current variable</label><input style={T.input} type="number" min={0} step={0.01} value={cForm.current_variable} onChange={e=>CF('current_variable',e.target.value)} placeholder="0.60" /></div>
-                <div style={{ background:C.ink, color:C.onAccent, borderRadius:R.md, padding:'8px 12px', alignSelf:'end' }}>
-                  <div style={{ fontSize:10, color:C.onAccentDim }}>Total current CTC</div>
-                  <div style={{ fontSize:17, fontWeight:700 }}>₹{((Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0)).toFixed(2)} LPA</div>
+                {/* background was C.ink — a TEXT token used as a surface. The
+                    audit baseline records this exact failure: a band built
+                    from C.ink inverted in dark mode and became the brightest
+                    thing on the screen. It carries no hex, so the scanner
+                    cannot see it. C.dark/C.onDark is the pair that exists for
+                    a surface which is meant to stay inverted in both themes. */}
+                <div style={{ background:C.dark, color:C.onDark, borderRadius:R.md, padding:`${S.sm}px ${S.md}px`, alignSelf:'end' }}>
+                  <div style={{ fontSize:F.micro, color:C.onDarkMuted }}>Total current CTC</div>
+                  <div style={{ fontSize:F.title, fontWeight:W.bold, ...numeric }}>₹{((Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0)).toFixed(2)} LPA</div>
                 </div>
                 <div><label style={T.label}>Expected CTC{reqMark}</label>
                   <input style={{ ...inp('expected_ctc'), ...(expCtcOver?errStyle:{}) }} type="number" min={0} step={0.01} value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} placeholder="11.00" />
                   {expCtcOver
-                    ? <div style={{ fontSize:10, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>
-                    : cMrf?.budget_max ? <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>MRF budget: ₹{(Number(cMrf.budget_min||0)/100000).toFixed(1)}L – ₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L</div> : null}
+                    ? <div style={{ fontSize:F.micro, color:C.critical, marginTop:S.xs, fontWeight:W.semi }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>
+                    : cMrf?.budget_max ? <div style={{ fontSize:F.micro, color:C.muted, marginTop:S.xs }}>MRF budget: ₹{(Number(cMrf.budget_min||0)/100000).toFixed(1)}L – ₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L</div> : null}
                 </div>
                 <div><label style={T.label}>Negotiable</label>
                   <select style={T.select} value={cForm.negotiable} onChange={e=>CF('negotiable',e.target.value)}><option>Yes</option><option>No</option><option>Depends on role</option></select>
                 </div>
                 <div style={{ background:C.sunken, borderRadius:R.md, padding:'8px 12px', alignSelf:'end', border:`1px solid ${C.line}` }}>
-                  <div style={{ fontSize:10, color:C.faint }}>Hike over current</div>
-                  <div style={{ fontSize:17, fontWeight:700, color:C.positive }}>{(()=>{ const t=(Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0); const e=Number(cForm.expected_ctc)||0; return (t>0&&e>0)?(((e-t)/t)*100).toFixed(1)+'%':'—' })()}</div>
+                  <div style={{ fontSize:F.micro, color:C.muted }}>Hike over current</div>
+                  <div style={{ fontSize:F.title, fontWeight:W.bold, color:C.positive, ...numeric }}>{(()=>{ const t=(Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0); const e=Number(cForm.expected_ctc)||0; return (t>0&&e>0)?(((e-t)/t)*100).toFixed(1)+'%':'—' })()}</div>
                 </div>
                 <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Offer in hand</label>
                   <select style={{ ...T.select, maxWidth:200 }} value={cForm.offer_in_hand} onChange={e=>CF('offer_in_hand',e.target.value)}><option>No</option><option>Yes</option></select>
@@ -3900,7 +3936,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 <div><label style={T.label}>LinkedIn profile</label><input style={T.input} type="url" value={cForm.linkedin} onChange={e=>CF('linkedin',e.target.value)} placeholder="https://linkedin.com/in/" /></div>
                 <div><label style={T.label}>Portfolio / other link</label><input style={T.input} type="url" value={cForm.portfolio} onChange={e=>CF('portfolio',e.target.value)} placeholder="https://" /></div>
                 <div style={{ gridColumn:'1 / -1' }}>
-                  <label style={{ display:'flex', alignItems:'flex-start', gap:8, cursor:'pointer', fontSize:12.5, color:C.ink, ...(bad('consent')?{ color:C.critical }:{}) }}>
+                  <label style={{ display:'flex', alignItems:'flex-start', gap:S.sm, cursor:'pointer', fontSize:F.small, color:C.ink, ...(bad('consent')?{ color:C.critical }:{}) }}>
                     <input type="checkbox" checked={cForm.consent} onChange={e=>CF('consent',e.target.checked)} style={{ marginTop:2 }} />
                     <span>Candidate has consented to their data being stored and processed for this hiring process{reqMark}</span>
                   </label>
@@ -3911,14 +3947,14 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <SectionLine title="Screening" />
               <div style={{ marginBottom:10 }}>
                 <div style={{ background:C.sunken, border:`1px solid ${C.line}`, borderRadius:R.md, padding:'10px 12px', marginBottom:8 }}>
-                  <div style={{ fontSize:12.5, fontWeight:500, marginBottom:6 }}>Has the candidate independently run a monthly payroll cycle for 500+ employees?</div>
+                  <div style={{ fontSize:F.small, fontWeight:W.medium, marginBottom:S.sm }}>Has the candidate independently run a monthly payroll cycle for 500+ employees?</div>
                   <div style={{ display:'flex', gap:16 }}>{['Yes','No','Partially'].map(o=><label key={o} style={{ display:'flex', gap:5, alignItems:'center', fontSize:13 }}><input type="radio" name="q1" checked={cForm.q1===o} onChange={()=>CF('q1',o)} />{o}</label>)}</div>
                 </div>
                 <div style={{ background:C.sunken, border:`1px solid ${C.line}`, borderRadius:R.md, padding:'10px 12px' }}>
-                  <div style={{ fontSize:12.5, fontWeight:500, marginBottom:6 }}>Can the candidate join within the notice period stated above?</div>
+                  <div style={{ fontSize:F.small, fontWeight:W.medium, marginBottom:S.sm }}>Can the candidate join within the notice period stated above?</div>
                   <div style={{ display:'flex', gap:16 }}>{['Yes','No'].map(o=><label key={o} style={{ display:'flex', gap:5, alignItems:'center', fontSize:13 }}><input type="radio" name="q2" checked={cForm.q2===o} onChange={()=>CF('q2',o)} />{o}</label>)}</div>
                 </div>
-                {(cForm.q1==='No'||cForm.q2==='No') && <div style={{ fontSize:11.5, color:C.critical, marginTop:6, fontWeight:600 }}>A “No” on a knockout question will file this candidate under Rejected.</div>}
+                {(cForm.q1==='No'||cForm.q2==='No') && <div style={{ fontSize:F.tiny, color:C.critical, marginTop:S.sm, fontWeight:W.semi }}>A “No” on a knockout question will file this candidate under Rejected.</div>}
               </div>
               <div style={{ ...T.g2, marginBottom:6 }}>
                 <div><label style={T.label}>Stage</label>
@@ -4965,8 +5001,17 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
         const row:any = linkByCand.get(c.id)
         const resp = row?.offer_response
         const [bg,fg] = resp ? respStyle[resp] : [C.surface,C.muted]
+        // Both halves of this border were broken. fg+'40' concatenates an
+        // alpha suffix onto a design token, giving "var(--ez-...)40", which is
+        // not a colour — so a card WITH a response had no border at all. And
+        // the fallback was a frozen rgba brand blue that could not follow the
+        // theme. A responded card now takes its state colour; the rest take
+        // the hairline.
+        //
+        // Line comment above the return, NOT a {} container after it — see the
+        // same note in PipelineTab. Third time I made that mistake today.
         return (
-          <div key={c.id} style={{ ...T.card, border:`1px solid ${resp?fg+'40':'rgba(37,99,235,0.12)'}` }}>
+          <div key={c.id} style={{ ...T.card, border:`1px solid ${resp?fg:C.line}` }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
                 <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>{c.full_name}</div>
