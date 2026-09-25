@@ -3319,23 +3319,30 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
             <label style={T.label}>Upload Resumes (PDF/Word/TXT)</label>
             <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv" onChange={e=>setFiles(Array.from(e.target.files||[]))} style={{ display:'none' }} />
             <button onClick={()=>fileRef.current?.click()} style={{ ...T.btnOutline, width:'100%', textAlign:'left' as const }}>
-              📂 {files.length>0?`${files.length} files selected`:'Choose Files'}
+              {files.length>0?`${files.length} file${files.length===1?'':'s'} selected`:'Choose files…'}
             </button>
           </div>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center' }}>
           <button onClick={runScreening} disabled={screening||!selMRF||!files.length} style={{ ...T.btnPrimary, padding:'9px 20px', opacity:screening||!selMRF||!files.length?0.5:1 }}>
-            {screening?`⏳ ${progress}% (${results.length}/${files.length})` :'Start AI Screening'}
+            {screening?`Screening… ${progress}% (${results.length}/${files.length})` :'Start AI Screening'}
           </button>
           {results.length>0&&<button onClick={downloadExcel} style={{ ...T.btn, background:C.positive, color:C.onAccent }}>Excel Download</button>}
           {strong.filter(r=>!r.added).length>0&&(
-            <button onClick={addAllStrong} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}` }}>Add All Strong ({strong.filter(r=>!r.added).length})
+            <button onClick={addAllStrong} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveEdge}` }}>Add All Strong ({strong.filter(r=>!r.added).length})
             </button>
           )}
         </div>
         {screening&&(
-          <div style={{ marginTop:10, background:C.brandTint, borderRadius:99, height:6, overflow:'hidden' }}>
-            <div style={{ background:C.brand, height:'100%', width:`${progress}%`, transition:'width .3s', borderRadius:99 }} />
+          // REGRESSION I CAUSED: this track was C.brandTint, which read fine
+          // when T.cardPurple was a white card with a brand border. cardPurple
+          // is now a brandTint PLANE, so the track became tint-on-tint — a
+          // contrast ratio of 1.0, invisible in both themes, on the one
+          // element whose whole job is to show progress. Surface separates
+          // from the tinted card in both themes; the hairline defines it.
+          <div style={{ marginTop:S.md, background:C.surface, borderRadius:R.pill, height:8,
+                        overflow:'hidden', border:`1px solid ${C.brandEdge}`, boxSizing:'border-box' as const }}>
+            <div style={{ background:C.brand, height:'100%', width:`${progress}%`, transition:`width ${M.ease}`, borderRadius:R.pill }} />
           </div>
         )}
       </div>
@@ -3359,7 +3366,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
                 <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4, flexWrap:'wrap' as const }}>
                   <span style={{ fontSize:13, fontWeight:600, color:C.ink }}>{r.candidate_name}</span>
                   <Badge text={r.match_tag} />
-                  {r.added&&<span style={{ fontSize:10, color:C.positive, fontWeight:500 }}>Added to pipeline</span>}
+                  {r.added&&<span style={{ fontSize:F.micro, color:C.positive, fontWeight:W.medium }}>Added to pipeline</span>}
                 </div>
                 <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>{r.reasoning}</div>
                 {typeof r.ats_score==='number'&&(
@@ -3367,19 +3374,21 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
                 )}
                 {(r.matched_skills?.length||r.missing_skills?.length)?(
                   <div style={{ display:'flex', flexWrap:'wrap' as const, gap:4, marginBottom:6 }}>
+                    {/* The tick and cross stay: on a skill chip they carry the
+                        meaning (matched vs missing), they are not decoration. */}
                     {(r.matched_skills||[]).map((s:string,si:number)=>(
-                      <span key={'m'+si} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:C.positiveTint, color:C.positive, fontWeight:500 }}>✓ {s}</span>
+                      <span key={'m'+si} style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:C.positiveTint, color:C.positive, fontWeight:W.medium, border:`1px solid ${C.positiveEdge}`, lineHeight:1.45 }}>✓ {s}</span>
                     ))}
                     {(r.missing_skills||[]).map((s:string,si:number)=>(
-                      <span key={'x'+si} style={{ fontSize:10, padding:'2px 8px', borderRadius:99, background:C.criticalTint, color:C.critical, fontWeight:500 }}>✕ {s}</span>
+                      <span key={'x'+si} style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:C.criticalTint, color:C.critical, fontWeight:W.medium, border:`1px solid ${C.criticalEdge}`, lineHeight:1.45 }}>✕ {s}</span>
                     ))}
                   </div>
                 ):null}
                 {(r.experience_match||r.education_match)&&(
                   <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>
-                    {r.experience_match&&<span>⏱ {r.experience_match}</span>}
+                    {r.experience_match&&<span>Experience: {r.experience_match}</span>}
                     {r.experience_match&&r.education_match&&<span> · </span>}
-                    {r.education_match&&<span>🎓 {r.education_match}</span>}
+                    {r.education_match&&<span>Education: {r.education_match}</span>}
                   </div>
                 )}
                 {r.interview_questions?.length>0&&(
