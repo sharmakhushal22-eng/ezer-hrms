@@ -13,7 +13,7 @@ import MrfForm from '@/components/ess/MrfForm'
 // deliberately not imported.
 import {
   C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle,
-  Card, Section, Stat, StatRow,
+  Card, Section, Stat, StatRow, TableWrap, Th, Td, Tr, Empty,
 } from '@/lib/ui'
 
 // ── TYPES ────────────────────────────────────────────────────────
@@ -1028,56 +1028,58 @@ function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:a
 
 // ── MRF TABLE (list view) ─────────────────────────────────────────
 function MrfTable({ rows, orgOf, candidates, onOpen, onReview }:any) {
-  const th:React.CSSProperties = { fontSize:10, color:C.brandDeep, fontWeight:600, textTransform:'uppercase',
-    letterSpacing:'.05em', textAlign:'left', padding:'8px 10px', borderBottom: `1px solid ${C.line}`, whiteSpace:'nowrap' }
-  const td:React.CSSProperties = { fontSize:12, color:C.ink, padding:'9px 10px', borderBottom: `1px solid ${C.line}`, verticalAlign:'middle' }
+  // The local th/td objects are gone: Th and Td ARE those styles, plus a
+  // sticky header, the row-hover wash and the staggered entrance that this
+  // table never had. minWidth keeps the 900px floor the raw <table> carried —
+  // without it ten columns crush into unreadable stacks before the wrapper
+  // ever starts scrolling.
   return (
-    <div style={{ ...T.card, padding:0, overflowX:'auto' }}>
-      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:900 }}>
-        <thead>
-          <tr>
-            <th style={th}>MRF No.</th><th style={th}>Position</th><th style={th}>Department</th>
-            <th style={th}>Type</th><th style={{ ...th, textAlign:'center' }}>Openings</th>
-            <th style={{ ...th, textAlign:'center' }}>Filled</th><th style={th}>Status</th>
-            <th style={th}>Recruiter</th><th style={th}>Target</th><th style={th}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((m:MRF)=>{
-            const org = orgOf(m)
-            const openings = m.no_of_openings||m.openings||0
-            const filled = candidates.filter((c:Candidate)=>c.mrf_id===m.id && (c.stage==='Offer Sent'||c.stage==='Joined')).length
-            return (
-              <tr key={m.id} style={{ cursor:'pointer' }} onClick={()=>onOpen(m)}>
-                <td style={{ ...td, color:C.muted, whiteSpace:'nowrap' }}>{m.mrf_number||'—'}</td>
-                <td style={td}>
-                  <div style={{ fontWeight:600 }}>{(m as any).job_title||m.designation||m.position||'Untitled'}</div>
-                  {(m as any).grade && <div style={{ fontSize:11, color:C.faint }}>{(m as any).grade}</div>}
-                </td>
-                <td style={{ ...td, color:C.muted }}>{org.dept}</td>
-                <td style={{ ...td, color:C.muted, whiteSpace:'nowrap' }}>
-                  {m.employment_type||'—'}{(m as any).work_mode?` · ${(m as any).work_mode}`:''}
-                </td>
-                <td style={{ ...td, textAlign:'center', fontWeight:600 }}>{openings}</td>
-                <td style={{ ...td, textAlign:'center', color: filled>=openings&&openings>0?C.positive:C.muted }}>{filled}</td>
-                <td style={td}><Badge text={m.status} /></td>
-                <td style={{ ...td, color:C.muted }}>{m.assigned_recruiter||'—'}</td>
-                <td style={{ ...td, color:C.muted, whiteSpace:'nowrap' }}>{fmtDay((m as any).target_joining_date)}</td>
-                <td style={{ ...td, textAlign:'right', whiteSpace:'nowrap' }}>
-                  {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
-                    <button onClick={e=>{ e.stopPropagation(); onReview(m) }}
-                      style={{ ...T.btn, background:C.brand, color:C.onAccent, fontSize:11 }}>Review</button>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      {rows.length===0 && (
-        <div style={{ padding:26, textAlign:'center', color:C.faint, fontSize:13 }}>No requisitions match.</div>
-      )}
-    </div>
+    <TableWrap minWidth={900} style={{ marginBottom:S.md }}>
+      <thead>
+        <tr>
+          <Th>MRF No.</Th><Th>Position</Th><Th>Department</Th>
+          <Th>Type</Th><Th align="center">Openings</Th>
+          <Th align="center">Filled</Th><Th>Status</Th>
+          <Th>Recruiter</Th><Th>Target</Th><Th />
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length===0 && (
+          <tr><td colSpan={10}>
+            <Empty title="No requisitions match" hint="Try clearing the status filter or widening the company and department filters." />
+          </td></tr>
+        )}
+        {rows.map((m:MRF)=>{
+          const org = orgOf(m)
+          const openings = m.no_of_openings||m.openings||0
+          const filled = candidates.filter((c:Candidate)=>c.mrf_id===m.id && (c.stage==='Offer Sent'||c.stage==='Joined')).length
+          return (
+            <Tr key={m.id} onClick={()=>onOpen(m)}>
+              <Td style={{ color:C.muted, whiteSpace:'nowrap' }}>{m.mrf_number||'—'}</Td>
+              <Td>
+                <div style={{ fontWeight:W.semi, color:C.ink }}>{(m as any).job_title||m.designation||m.position||'Untitled'}</div>
+                {(m as any).grade && <div style={{ fontSize:F.micro, color:C.faint }}>{(m as any).grade}</div>}
+              </Td>
+              <Td style={{ color:C.muted }}>{org.dept}</Td>
+              <Td style={{ color:C.muted, whiteSpace:'nowrap' }}>
+                {m.employment_type||'—'}{(m as any).work_mode?` · ${(m as any).work_mode}`:''}
+              </Td>
+              <Td align="center" strong>{openings}</Td>
+              <Td align="center" style={{ color: filled>=openings&&openings>0?C.positive:C.muted }}>{filled}</Td>
+              <Td><Badge text={m.status} /></Td>
+              <Td style={{ color:C.muted }}>{m.assigned_recruiter||'—'}</Td>
+              <Td style={{ color:C.muted, whiteSpace:'nowrap' }}>{fmtDay((m as any).target_joining_date)}</Td>
+              <Td align="right" style={{ whiteSpace:'nowrap' }}>
+                {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
+                  <button onClick={e=>{ e.stopPropagation(); onReview(m) }}
+                    style={{ ...T.btn, background:C.brand, color:C.onAccent, fontSize:F.micro }}>Review</button>
+                )}
+              </Td>
+            </Tr>
+          )
+        })}
+      </tbody>
+    </TableWrap>
   )
 }
 
