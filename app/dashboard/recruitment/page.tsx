@@ -13,6 +13,7 @@ import MrfForm from '@/components/ess/MrfForm'
 // deliberately not imported.
 import {
   C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle,
+  Card, Section, Stat, StatRow,
 } from '@/lib/ui'
 
 // ── TYPES ────────────────────────────────────────────────────────
@@ -368,57 +369,76 @@ function DashTab({ mrfs, candidates }:any) {
 
   return (
     <div>
-      <div style={T.g4}>
-        {[{l:'Total MRFs',v:mrfs.length,c:C.ink},
-          {l:'Active Openings',v:openings,c:C.ink},
-          {l:'In Pipeline',v:candidates.length,c:C.brandDeep},
-          {l:'Joined This Month',v:joined.length,c:C.positive}].map(s=>(
-          <div key={s.l} style={{ ...T.card, boxShadow:E.flat }}>
-            <div style={{ ...eyebrow, lineHeight:1.3, minHeight:27 }}>{s.l}</div>
-            <div style={{ fontSize:F.display, fontWeight:W.bold, color:s.c, marginTop:4,
-                          letterSpacing:'-.02em', lineHeight:1.05, ...numeric }}>{s.v}</div>
-          </div>
-        ))}
-      </div>
-      <div style={T.card}>
-        <div style={T.section}>Pipeline Overview</div>
-        {/* Ten stages, five columns — a deliberate 5x2. auto-fit gave nine and
-            stranded "Rejected" alone on the second row; ten across does not
-            fit the content column at the app's 130% zoom. */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5, minmax(0, 1fr))', gap:8 }}>
+      {/* Four hand-built tiles became StatRow + Stat: the same figures, the
+          same order, drawn by the primitive every other module already uses.
+          StatRow carries ez-stagger, so they now arrive as a wave rather than
+          all at once — the tiles were static before because this page applied
+          no animation classes at all. `t` replaces the ad-hoc colour: a tone
+          resolves fg/bg/edge together and follows the theme. */}
+      <StatRow min={150}>
+        <Stat label="Total MRFs"        value={mrfs.length} />
+        <Stat label="Active Openings"   value={openings} />
+        <Stat label="In Pipeline"       value={candidates.length} t="brand" />
+        <Stat label="Joined This Month" value={joined.length}     t="positive" />
+      </StatRow>
+
+      <Card style={{ marginBottom:S.md }}>
+        <Section title="Pipeline Overview" style={{ marginBottom:S.md }}>
+        {/* Ten stages, five columns — a deliberate 5x2, kept exactly as it
+            was. auto-fit gave nine and stranded "Rejected" alone on the second
+            row; ten across does not fit the content column at the app's 130%
+            zoom. That is a measured decision, and this is a restyle rather
+            than a relayout, so the grid itself is untouched.
+
+            What changed: the cells lift on hover and arrive staggered, and the
+            label is legible — 9px sat below the 11px floor the rest of the
+            system holds to. */}
+        <div className="ez-stagger" style={{ display:'grid', gridTemplateColumns:'repeat(5, minmax(0, 1fr))', gap:S.sm }}>
           {STAGES.map(s=>(
-            <div key={s} style={{ background:C.surface, borderRadius:R.md, padding:'9px 12px',
+            <div key={s} className="ez-lift" style={{ background:C.surface, borderRadius:R.md, padding:'10px 12px',
                                   textAlign:'center' as const, minWidth:76,
-                                  border:`1px solid ${C.line}`,
+                                  border:`1px solid ${C.line}`, boxShadow:E.flat,
                                   borderTop:`2px solid ${STAGE_COLOR[s]}` }}>
-              <div style={{ fontSize:F.title, fontWeight:W.bold, color:STAGE_TEXT[s], ...numeric }}>{stageCount[s]||0}</div>
-              <div style={{ fontSize:9, color:C.muted, marginTop:2, lineHeight:1.3 }}>{s}</div>
+              <div style={{ fontSize:F.title, fontWeight:W.bold, color:STAGE_TEXT[s], lineHeight:1.15, ...numeric }}>{stageCount[s]||0}</div>
+              <div style={{ fontSize:F.micro, color:C.muted, marginTop:3, lineHeight:1.3 }}>{s}</div>
             </div>
           ))}
         </div>
-      </div>
+        </Section>
+      </Card>
+      {/* Both panels are Cards now, and their rows arrive staggered. The
+          page's own Badge is kept deliberately — see the import comment: this
+          file declares one, and swapping it for the system Badge would change
+          how every status in Recruitment reads, which is a behaviour change
+          dressed as a restyle. */}
       <div style={T.g2}>
-        <div style={T.card}>
-          <div style={T.section}>Recent MRFs</div>
-          {mrfs.slice(0,5).map((m:MRF)=>(
-            <div key={m.id} style={T.row}>
-              <div>
-                <div style={{ fontSize:13, fontWeight:500 }}>{m.designation||m.position||'—'}</div>
-                <div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{m.employment_type} · {m.no_of_openings||m.openings||0} openings</div>
-              </div>
-              <Badge text={m.status} />
+        <Card>
+          <Section title="Recent MRFs" style={{ marginBottom:S.sm }}>
+            <div className="ez-stagger">
+              {mrfs.slice(0,5).map((m:MRF)=>(
+                <div key={m.id} style={T.row}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:F.small, fontWeight:W.medium, color:C.ink }}>{m.designation||m.position||'—'}</div>
+                    <div style={{ fontSize:F.micro, color:C.faint, marginTop:1 }}>{m.employment_type} · {m.no_of_openings||m.openings||0} openings</div>
+                  </div>
+                  <Badge text={m.status} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div style={T.card}>
-          <div style={T.section}>MRF Status</div>
-          {['DRAFT','SUBMITTED','APPROVED','CLOSED','REJECTED'].map(st=>(
-            <div key={st} style={T.row}>
-              <Badge text={st} />
-              <span style={{ fontSize:14, fontWeight:600, color:C.ink }}>{mrfs.filter((m:MRF)=>m.status===st).length}</span>
+          </Section>
+        </Card>
+        <Card>
+          <Section title="MRF Status" style={{ marginBottom:S.sm }}>
+            <div className="ez-stagger">
+              {['DRAFT','SUBMITTED','APPROVED','CLOSED','REJECTED'].map(st=>(
+                <div key={st} style={T.row}>
+                  <Badge text={st} />
+                  <span style={{ fontSize:F.body, fontWeight:W.semi, color:C.ink, ...numeric }}>{mrfs.filter((m:MRF)=>m.status===st).length}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </Section>
+        </Card>
       </div>
     </div>
   )
