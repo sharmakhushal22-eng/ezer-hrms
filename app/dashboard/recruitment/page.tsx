@@ -12,7 +12,7 @@ import MrfForm from '@/components/ess/MrfForm'
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
 import {
-  C, F, W, R, E, S, tone, eyebrow, numeric, inputStyle,
+  C, F, W, R, E, S, M, tone, eyebrow, numeric, inputStyle,
   Card, Section, Stat, StatRow, TableWrap, Th, Td, Tr, Empty,
 } from '@/lib/ui'
 
@@ -2531,61 +2531,59 @@ function DeadlineBoard({ rows, orgOf }:any) {
     </div>
   )
   return (
-    <div style={{ ...T.card, padding:0, overflowX:'auto' }}>
-      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:820 }}>
-        <thead>
-          <tr>
-            {['Requisition','Department','Recruiter','Openings','Progress','Deadline','Days Left','Flag'].map((h,i)=>(
-              <th key={h} style={{ fontSize:10, color:C.brandDeep, fontWeight:600, textTransform:'uppercase' as const,
-                letterSpacing:'.05em', textAlign: i>=3&&i<=6 ? 'center':'left', padding:'8px 10px',
-                borderBottom: `1px solid ${C.line}`, whiteSpace:'nowrap' as const }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map(({ m, js }:any)=>{
-            const org = orgOf(m)
-            const pct = js.openings ? Math.min(100,(js.filledCount/js.openings)*100) : 0
-            const late = js.daysLeft!=null && js.daysLeft < 0
-            return (
-              <tr key={m.id}>
-                <td style={{ fontSize:12, padding:'9px 10px', borderBottom: `1px solid ${C.line}` }}>
-                  <div style={{ fontWeight:600 }}>{m.job_title||m.designation||m.position}</div>
-                  <div style={{ fontSize:11, color:C.faint }}>{m.mrf_number||'—'}</div>
-                </td>
-                <td style={{ fontSize:12, color:C.muted, padding:'9px 10px', borderBottom: `1px solid ${C.line}` }}>{org.dept}</td>
-                <td style={{ fontSize:12, color:C.muted, padding:'9px 10px', borderBottom: `1px solid ${C.line}` }}>{m.assigned_recruiter||'— unassigned'}</td>
-                <td style={{ fontSize:12, textAlign:'center', padding:'9px 10px', borderBottom: `1px solid ${C.line}` }}>{js.openings}</td>
-                <td style={{ padding:'9px 10px', borderBottom: `1px solid ${C.line}`, minWidth:110 }}>
-                  <div style={{ fontSize:11, color:C.faint, textAlign:'center', marginBottom:3 }}>{js.filledCount}/{js.openings}</div>
-                  <div style={{ background:C.brandTint, borderRadius:99, height:5, overflow:'hidden' }}>
-                    <div style={{ width:`${pct}%`, height:'100%', background:pct>=100?C.positive:C.brand }} />
-                  </div>
-                </td>
-                <td style={{ fontSize:12, color:C.muted, textAlign:'center', padding:'9px 10px', borderBottom: `1px solid ${C.line}`, whiteSpace:'nowrap' as const }}>{fmtDay(js.deadline)}</td>
-                <td style={{ fontSize:13, fontWeight:700, textAlign:'center', padding:'9px 10px',
-                  borderBottom: `1px solid ${C.line}`, color: late?C.critical: js.daysLeft<=DUE_CRITICAL?C.critical:C.positive, whiteSpace:'nowrap' as const }}>
-                  {js.daysLeft==null ? '—' : late ? `${Math.abs(js.daysLeft)}d over` : `${js.daysLeft}d`}
-                </td>
-                <td style={{ padding:'9px 10px', borderBottom: `1px solid ${C.line}` }}><JobFlag flag={js.flag} /></td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-    </div>
+    // Every one of the eight cells repeated `borderBottom: 1px solid C.line`
+    // by hand — that rule is what Td carries for you. The header's per-column
+    // textAlign, computed from the index, becomes Th's align prop. No row
+    // click here, so Tr takes no handler and stays non-interactive.
+    <TableWrap minWidth={820} style={{ marginBottom:S.md }}>
+      <thead>
+        <tr>
+          {['Requisition','Department','Recruiter','Openings','Progress','Deadline','Days Left','Flag'].map((h,i)=>(
+            <Th key={h} align={i>=3&&i<=6 ? 'center':'left'}>{h}</Th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map(({ m, js }:any)=>{
+          const org = orgOf(m)
+          const pct = js.openings ? Math.min(100,(js.filledCount/js.openings)*100) : 0
+          const late = js.daysLeft!=null && js.daysLeft < 0
+          return (
+            <Tr key={m.id}>
+              <Td>
+                <div style={{ fontWeight:W.semi, color:C.ink }}>{m.job_title||m.designation||m.position}</div>
+                <div style={{ fontSize:F.micro, color:C.faint }}>{m.mrf_number||'—'}</div>
+              </Td>
+              <Td style={{ color:C.muted }}>{org.dept}</Td>
+              <Td style={{ color:C.muted }}>{m.assigned_recruiter||'— unassigned'}</Td>
+              <Td align="center">{js.openings}</Td>
+              <Td style={{ minWidth:110 }}>
+                <div style={{ fontSize:F.micro, color:C.faint, textAlign:'center', marginBottom:3, ...numeric }}>{js.filledCount}/{js.openings}</div>
+                <div style={{ background:C.brandTint, borderRadius:R.pill, height:5, overflow:'hidden' }}>
+                  <div style={{ width:`${pct}%`, height:'100%', background:pct>=100?C.positive:C.brand,
+                                transition:`width ${M.ease}` }} />
+                </div>
+              </Td>
+              <Td align="center" style={{ color:C.muted, whiteSpace:'nowrap' }}>{fmtDay(js.deadline)}</Td>
+              <Td align="center" style={{ fontWeight:W.bold,
+                color: late?C.critical: js.daysLeft<=DUE_CRITICAL?C.critical:C.positive, whiteSpace:'nowrap' }}>
+                {js.daysLeft==null ? '—' : late ? `${Math.abs(js.daysLeft)}d over` : `${js.daysLeft}d`}
+              </Td>
+              <Td><JobFlag flag={js.flag} /></Td>
+            </Tr>
+          )
+        })}
+      </tbody>
+    </TableWrap>
   )
 }
 
 // ── Recruiter performance table ───────────────────────────────────
 function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:any) {
-  const th = (k:string, label:string, num=false):React.CSSProperties => ({
-    fontSize:10, color:C.brandDeep, fontWeight:600, textTransform:'uppercase', letterSpacing:'.05em',
-    textAlign: num?'right':'left', padding:'9px 10px', borderBottom: `1px solid ${C.line}`,
-    cursor:'pointer', whiteSpace:'nowrap',
-  })
-  const td:React.CSSProperties = { fontSize:13, padding:'10px', borderBottom: `1px solid ${C.line}` }
-  const num:React.CSSProperties = { ...td, textAlign:'right' }
+  // th/td/num are gone: Th and Td carry those styles, and Th now takes an
+  // onClick so a sortable header stays a <th> rather than becoming a button
+  // nested inside one. Td align="right" also brings tabular numerals, which
+  // these count columns were not getting before.
   const arrow = (k:string) => sortKey===k ? (sortDir==='asc'?' ▲':' ▼') : ''
   const COLS:[string,string,boolean][] = [
     ['name','Recruiter',false], ['total','MRFs',true], ['filled','Filled',true],
@@ -2593,54 +2591,53 @@ function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:a
     ['ttf','Avg Days to Fill',true], ['ttc','Avg Days to 1st CV',true],
   ]
   return (
-    <div style={{ ...T.card, padding:0, overflowX:'auto' }}>
-      <table style={{ width:'100%', borderCollapse:'collapse', minWidth:860 }}>
-        <thead>
-          <tr>{COLS.map(([k,l,n])=>(
-            <th key={k} style={th(k,l,n)} onClick={()=>onSort(k)}>{l}{arrow(k)}</th>
-          ))}</tr>
-        </thead>
-        <tbody>
-          {rows.map((r:any)=>{
-            const [bg,fg] = fillTone(r.rate)
-            const on = selected===r.key
-            return (
-              <tr key={r.key} onClick={()=>onSelect(on?null:r.key)}
-                style={{ cursor:'pointer', background: on?C.brandTint:'transparent' }}>
-                <td style={td}>
-                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ width:26, height:26, borderRadius:'50%', background:C.brandTint, color:C.brandDeep,
-                      display:'flex', alignItems:'center', justifyContent:'center', fontSize:10, fontWeight:700, flexShrink:0 }}>
-                      {r.name.slice(0,2).toUpperCase()}
-                    </span>
-                    <div style={{ minWidth:0 }}>
-                      <div style={{ fontWeight:600 }}>{r.name}</div>
-                      {r.unassigned && <div style={{ fontSize:10, color:C.warning }}>no recruiter assigned</div>}
-                    </div>
-                  </div>
-                </td>
-                <td style={num}>{r.total}</td>
-                <td style={{ ...num, color:C.positive, fontWeight:600 }}>{r.filled}</td>
-                <td style={{ ...num, color: r.expired?C.critical:C.faint, fontWeight: r.expired?600:400 }}>{r.expired}</td>
-                <td style={num}>{r.open}</td>
-                <td style={num}>
-                  <span style={{ fontWeight:700, padding:'3px 10px', borderRadius:99, fontSize:12, background:bg, color:fg }}>
-                    {r.rate==null ? '—' : r.rate+'%'}
+    <TableWrap minWidth={860} style={{ marginBottom:S.md }}>
+      <thead>
+        <tr>{COLS.map(([k,l,n])=>(
+          <Th key={k} align={n?'right':'left'} onClick={()=>onSort(k)}
+              title={`Sort by ${l}`}>{l}{arrow(k)}</Th>
+        ))}</tr>
+      </thead>
+      <tbody>
+        {rows.length===0 && (
+          <tr><td colSpan={COLS.length}>
+            <Empty title="No requisitions in this period"
+                   hint="Widen the period, or clear the company and department filters." />
+          </td></tr>
+        )}
+        {rows.map((r:any)=>{
+          const [bg,fg] = fillTone(r.rate)
+          const on = selected===r.key
+          return (
+            <Tr key={r.key} onClick={()=>onSelect(on?null:r.key)} selected={on}>
+              <Td>
+                <div style={{ display:'flex', alignItems:'center', gap:S.sm }}>
+                  <span style={{ width:26, height:26, borderRadius:'50%', background:C.brandTint, color:C.brandDeep,
+                    display:'flex', alignItems:'center', justifyContent:'center', fontSize:F.micro, fontWeight:W.bold, flexShrink:0 }}>
+                    {r.name.slice(0,2).toUpperCase()}
                   </span>
-                </td>
-                <td style={num}>{r.ttf==null?'—':r.ttf}</td>
-                <td style={num}>{r.ttc==null?'—':r.ttc}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
-      {rows.length===0 && (
-        <div style={{ padding:26, textAlign:'center', color:C.faint, fontSize:13 }}>
-          No requisitions in this period.
-        </div>
-      )}
-    </div>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontWeight:W.semi, color:C.ink }}>{r.name}</div>
+                    {r.unassigned && <div style={{ fontSize:F.micro, color:C.warning }}>no recruiter assigned</div>}
+                  </div>
+                </div>
+              </Td>
+              <Td align="right">{r.total}</Td>
+              <Td align="right" style={{ color:C.positive, fontWeight:W.semi }}>{r.filled}</Td>
+              <Td align="right" style={{ color: r.expired?C.critical:C.faint, fontWeight: r.expired?W.semi:W.regular }}>{r.expired}</Td>
+              <Td align="right">{r.open}</Td>
+              <Td align="right">
+                <span style={{ fontWeight:W.bold, padding:'3px 10px', borderRadius:R.pill, fontSize:F.tiny, background:bg, color:fg }}>
+                  {r.rate==null ? '—' : r.rate+'%'}
+                </span>
+              </Td>
+              <Td align="right">{r.ttf==null?'—':r.ttf}</Td>
+              <Td align="right">{r.ttc==null?'—':r.ttc}</Td>
+            </Tr>
+          )
+        })}
+      </tbody>
+    </TableWrap>
   )
 }
 
