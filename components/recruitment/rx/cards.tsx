@@ -130,12 +130,29 @@ export function CandidateCard({ c, next, onOpen }: { c: CandidateVM; next: NextS
 }
 
 /* ── AI screening result ─────────────────────────────────────────────
-   `result` is exactly what screen-resumes returns today. `existing` comes from
-   existingCandidate() — when set, the card offers "Open candidate" instead of a
-   second insert. onAdd is the tab's current "Add to pipeline" handler. */
+   CORRECTION: the kit's note here said `result` is "exactly what screen-resumes
+   returns today". It is not, and following that would have blanked every card.
+   The route returns snake_case with different names entirely —
+   candidate_name / file_name / match_tag / matched_skills / missing_skills /
+   interview_questions — so ScreeningTab maps them explicitly.
+
+   It also returns four things this card originally had nowhere to put, all of
+   which are on screen today: reasoning (the AI's own justification — the whole
+   point of an AI screen), ats_score, experience_match and education_match.
+   They are optional fields below rather than dropped.
+
+   `existing` is kept for API compatibility but CANNOT fire here: it comes from
+   existingCandidate(), which matches on email within an MRF, and screen-resumes
+   never returns an email. The tab's own `added` flag drives that state instead. */
 export interface ScreenResult {
   fileName: string; name?: string | null; email?: string | null; score: number;
   tag: 'STRONG' | 'PARTIAL' | 'NOT_SUITABLE'; matched: string[]; missing: string[]; questions: string[]; error?: string | null;
+  reasoning?: string | null;
+  atsScore?: number | null;
+  experienceMatch?: string | null;
+  educationMatch?: string | null;
+  /** Set by the tab once the candidate has been inserted into the pipeline. */
+  added?: boolean;
 }
 export function ScreeningResultCard({ r, existing, onAdd, onOpenExisting, onRetry }: {
   r: ScreenResult; existing?: CandidateVM | null; onAdd: () => void; onOpenExisting?: () => void; onRetry?: () => void;
@@ -164,11 +181,27 @@ export function ScreeningResultCard({ r, existing, onAdd, onOpenExisting, onRetr
           </div>
           <div className="rx-row" style={{ gap: 8 }}>
             {r.questions.length > 0 && <button type="button" className="rx-btn sm g" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Hide questions' : `Questions (${r.questions.length})`}</button>}
-            {existing
-              ? <><Badge tone="info" title="Matched on email to an existing candidate">Already in pipeline at {existing.stage}</Badge>{onOpenExisting && <button type="button" className="rx-btn sm" onClick={onOpenExisting}>Open candidate</button>}</>
-              : <button type="button" className="rx-btn sm p" onClick={onAdd}><Icon name="plus" />Add to pipeline</button>}
+            {/* `added` first: it is the state this screen can actually observe.
+                `existing` stays for API compatibility but never fires here —
+                screen-resumes returns no email for existingCandidate to match. */}
+            {r.added
+              ? <Badge tone="pos">Added to pipeline</Badge>
+              : existing
+                ? <><Badge tone="info" title="Matched on email to an existing candidate">Already in pipeline at {existing.stage}</Badge>{onOpenExisting && <button type="button" className="rx-btn sm" onClick={onOpenExisting}>Open candidate</button>}</>
+                : <button type="button" className="rx-btn sm p" onClick={onAdd}><Icon name="plus" />Add to pipeline</button>}
           </div>
         </div>
+        {/* The AI's own justification. An AI screening tool that hides its
+            reasoning is just an unexplained number, so this is not optional
+            detail — it is the output. */}
+        {r.reasoning && <p className="rx-meta" style={{ margin: 0 }}>{r.reasoning}</p>}
+        {(r.atsScore != null || r.experienceMatch || r.educationMatch) && (
+          <div className="rx-row" style={{ gap: 14, flexWrap: 'wrap' }}>
+            {r.atsScore != null && <span className="rx-meta">Skills match <b className="rx-num">{r.atsScore}%</b> · overall <b className="rx-num">{r.score}</b></span>}
+            {r.experienceMatch && <span className="rx-meta">Experience: {r.experienceMatch}</span>}
+            {r.educationMatch && <span className="rx-meta">Education: {r.educationMatch}</span>}
+          </div>
+        )}
         <div className="rx-row" style={{ gap: 6, flexWrap: 'wrap' }}>
           {r.matched.length > 0 && <span className="rx-group-l">Matched</span>}
           {r.matched.map((s) => <Chip key={s} variant="ok">{s}</Chip>)}

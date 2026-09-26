@@ -22,7 +22,8 @@ import {
 import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
-  DashboardView, MrfListView, PipelineView, CandidateCard, RxPage, RecruitmentHeader,
+  DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
+  type ScreenResult,
 } from '@/components/recruitment/rx'
 
 /**
@@ -408,7 +409,7 @@ export default function RecruitmentPage() {
   // own header, rail and page frame; the rest keep the old chrome untouched.
   // Grows by one entry per phase until every tab is in, then the old header,
   // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'pipeline', 'jobstatus'])
+  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'jobstatus'])
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -530,10 +531,13 @@ export default function RecruitmentPage() {
             stage move still goes through the modal, so moveStage's forward-only
             rule and the modal's own feedback gate cannot be bypassed. */}
         {tab==='pipeline' && <PipelineTab {...props} rail={rail} />}
+        {/* AI Screening is a WRAP, not a replace: the kit has no ScreeningView.
+            The tab keeps its upload flow and handlers; only the result rows
+            move to ScreeningResultCard, with the API's field names mapped. */}
+        {tab==='screening' && <ScreeningTab {...props} rail={rail} />}
         </>
       ) : (
         <div style={{ padding:'18px 24px', maxWidth:1300 }}>
-          {tab==='screening' && <ScreeningTab {...props} />}
           {tab==='negotiation' && <NegotiationTab {...props} />}
           {tab==='offerapproval' && <OfferApprovalTab {...props} />}
           {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
@@ -2909,7 +2913,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
 }
 
 // ── AI SCREENING ──────────────────────────────────────────────────
-function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any) {
+function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail }:any) {
   const [selMRF, setSelMRF] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [screening, setScreening] = useState(false)
@@ -2991,113 +2995,99 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
   const partial = results.filter(r=>r.match_tag==='PARTIAL')
   const notSuitable = results.filter(r=>r.match_tag==='NOT_SUITABLE')
 
+  // screen-resumes returns snake_case under DIFFERENT names than the kit card
+  // expects, so map explicitly. The kit's own comment claimed the shapes already
+  // matched; they do not (candidate_name/file_name/match_tag/matched_skills/
+  // missing_skills/interview_questions), and trusting it would have blanked
+  // every chip and question on every result.
+  //
+  // `error` is deliberately NOT set. The card's error branch collapses the row
+  // to one line, but this tab has always shown a failed screen as a full row
+  // whose reasoning carries the explanation ("Network/parse error",
+  // "GEMINI_API_KEY is not configured on the server"). Leaving error undefined
+  // keeps that behaviour.
+  const toScreenResult = (r:any):ScreenResult => ({
+    fileName:        r.file_name || '',
+    name:            r.candidate_name || null,
+    score:           Number(r.score) || 0,
+    tag:             r.match_tag==='STRONG' ? 'STRONG' : r.match_tag==='PARTIAL' ? 'PARTIAL' : 'NOT_SUITABLE',
+    matched:         Array.isArray(r.matched_skills) ? r.matched_skills : [],
+    missing:         Array.isArray(r.missing_skills) ? r.missing_skills : [],
+    questions:       Array.isArray(r.interview_questions) ? r.interview_questions : [],
+    reasoning:       r.reasoning ?? null,
+    atsScore:        typeof r.ats_score==='number' ? r.ats_score : null,
+    experienceMatch: r.experience_match ?? null,
+    educationMatch:  r.education_match ?? null,
+    added:           !!r.added,
+  })
+
+  const ordered = [...strong, ...partial, ...notSuitable]
+
   return (
-    <div>
-      <div style={T.cardPurple}>
-        <div style={T.section}>AI Resume Screening — Bulk Upload</div>
-        <div style={{ ...T.g2, marginBottom:12 }}>
-          <div>
-            <label style={T.label}>Select Job Opening *</label>
-            <select style={T.select} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
-              <option value="">Select MRF (approved)</option>
-              {mrfs.filter((m:MRF)=>m.status==='APPROVED').map((m:MRF)=>(
-                <option key={m.id} value={m.id}>{m.designation||m.position} — {m.no_of_openings||m.openings||0} openings</option>
-              ))}
-            </select>
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="AI resume screening"
+        subtitle="Score a batch of resumes against one approved opening, then send the strong ones straight into the pipeline."
+        actions={results.length>0
+          ? <button type="button" className="rx-btn" onClick={downloadExcel}>Export to Excel</button>
+          : undefined}
+      />}>
+      <div className="rx-grid rx-stag">
+        <section className="rx-mod s12">
+          <div className="rx-mod-h"><div className="rx-mod-t">Screen a batch</div></div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16, marginBottom:14 }}>
+            <div>
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Job opening <em>*</em></label>
+              <select className="rx-input" value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
+                <option value="">Select an approved MRF</option>
+                {mrfs.filter((m:MRF)=>m.status==='APPROVED').map((m:MRF)=>(
+                  <option key={m.id} value={m.id}>{m.designation||m.position} — {m.no_of_openings||m.openings||0} openings</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Resumes (PDF, Word or text)</label>
+              <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv"
+                onChange={e=>setFiles(Array.from(e.target.files||[]))} style={{ display:'none' }} />
+              <button type="button" className="rx-btn" style={{ width:'100%', justifyContent:'flex-start' }}
+                onClick={()=>fileRef.current?.click()}>
+                {files.length>0?`${files.length} file${files.length===1?'':'s'} selected`:'Choose files…'}
+              </button>
+            </div>
           </div>
-          <div>
-            <label style={T.label}>Upload Resumes (PDF/Word/TXT)</label>
-            <input ref={fileRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.csv" onChange={e=>setFiles(Array.from(e.target.files||[]))} style={{ display:'none' }} />
-            <button onClick={()=>fileRef.current?.click()} style={{ ...T.btnOutline, width:'100%', textAlign:'left' as const }}>
-              {files.length>0?`${files.length} file${files.length===1?'':'s'} selected`:'Choose files…'}
+          <div className="rx-row" style={{ gap:10, flexWrap:'wrap' }}>
+            <button type="button" className="rx-btn p" onClick={runScreening} disabled={screening||!selMRF||!files.length}>
+              {screening?`Screening… ${progress}% (${results.length}/${files.length})`:'Start AI screening'}
             </button>
+            {strong.filter(r=>!r.added).length>0 && (
+              <button type="button" className="rx-btn ok" onClick={addAllStrong}>
+                Add all strong ({strong.filter(r=>!r.added).length})
+              </button>
+            )}
           </div>
-        </div>
-        <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-          <button onClick={runScreening} disabled={screening||!selMRF||!files.length} style={{ ...T.btnPrimary, padding:'9px 20px', opacity:screening||!selMRF||!files.length?0.5:1 }}>
-            {screening?`Screening… ${progress}% (${results.length}/${files.length})` :'Start AI Screening'}
-          </button>
-          {results.length>0&&<button onClick={downloadExcel} style={{ ...T.btn, background:C.positive, color:C.onAccent }}>Excel Download</button>}
-          {strong.filter(r=>!r.added).length>0&&(
-            <button onClick={addAllStrong} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveEdge}` }}>Add All Strong ({strong.filter(r=>!r.added).length})
-            </button>
-          )}
-        </div>
-        {screening&&(
-          // REGRESSION I CAUSED: this track was C.brandTint, which read fine
-          // when T.cardPurple was a white card with a brand border. cardPurple
-          // is now a brandTint PLANE, so the track became tint-on-tint — a
-          // contrast ratio of 1.0, invisible in both themes, on the one
-          // element whose whole job is to show progress. Surface separates
-          // from the tinted card in both themes; the hairline defines it.
-          <div style={{ marginTop:S.md, background:C.surface, borderRadius:R.pill, height:8,
-                        overflow:'hidden', border:`1px solid ${C.brandEdge}`, boxSizing:'border-box' as const }}>
-            <div style={{ background:C.brand, height:'100%', width:`${progress}%`, transition:`width ${M.ease}`, borderRadius:R.pill }} />
+          {/* The kit's own progress track. The hand-rolled one this replaces had
+              a documented regression (a brandTint fill on a brandTint plane, 1.0
+              contrast); .rx-track carries its own fill and hairline so that
+              cannot recur. */}
+          {screening && <div className="rx-track" style={{ marginTop:14 }}><i style={{ width:`${progress}%` }} /></div>}
+        </section>
+
+        {results.length>0 && (
+          <div className="s12 rx-bar" style={{ gap:8 }}>
+            <span className="rx-b b-pos">Strong {strong.length}</span>
+            <span className="rx-b b-warn">Partial {partial.length}</span>
+            <span className="rx-b b-crit">Not suitable {notSuitable.length}</span>
+            <span className="rx-b b-mute nodot">Total {results.length}</span>
           </div>
         )}
-      </div>
 
-      {results.length>0&&(
-        <>
-          <div style={{ display:'flex', gap:16, fontSize:13, marginBottom:10 }}>
-            <span style={{ color:C.positive, fontWeight:500 }}>Strong: {strong.length}</span>
-            <span style={{ color:C.warning, fontWeight:500 }}>Partial: {partial.length}</span>
-            <span style={{ color:C.critical, fontWeight:500 }}>Not Suitable: {notSuitable.length}</span>
-            <span style={{ color:C.faint }}>Total: {results.length}</span>
+        {ordered.map((r, i)=>(
+          <div className="s12" key={(r.file_name||'')+i}>
+            <ScreeningResultCard r={toScreenResult(r)} onAdd={()=>addToBank(results.indexOf(r))} />
           </div>
-          {[...strong,...partial,...notSuitable].map((r,i)=>(
-            <div key={i} style={{ ...T.card, display:'flex', gap:12, alignItems:'flex-start' }}>
-              <div style={{ width:46, height:46, borderRadius:99, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:15, fontWeight:700,
-                background:r.match_tag==='STRONG'?C.positiveTint:r.match_tag==='PARTIAL'?C.warningTint:C.criticalTint,
-                color:r.match_tag==='STRONG'?C.positive:r.match_tag==='PARTIAL'?C.warning:C.critical }}>
-                {r.score}
-              </div>
-              <div style={{ flex:1 }}>
-                <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4, flexWrap:'wrap' as const }}>
-                  <span style={{ fontSize:13, fontWeight:600, color:C.ink }}>{r.candidate_name}</span>
-                  <Badge text={r.match_tag} />
-                  {r.added&&<span style={{ fontSize:F.micro, color:C.positive, fontWeight:W.medium }}>Added to pipeline</span>}
-                </div>
-                <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>{r.reasoning}</div>
-                {typeof r.ats_score==='number'&&(
-                  <div style={{ fontSize:11, color:C.brandDeep, marginBottom:4 }}>ATS skills match: <b>{r.ats_score}%</b> · Overall: <b>{r.score}</b></div>
-                )}
-                {(r.matched_skills?.length||r.missing_skills?.length)?(
-                  <div style={{ display:'flex', flexWrap:'wrap' as const, gap:4, marginBottom:6 }}>
-                    {/* The tick and cross stay: on a skill chip they carry the
-                        meaning (matched vs missing), they are not decoration. */}
-                    {(r.matched_skills||[]).map((s:string,si:number)=>(
-                      <span key={'m'+si} style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:C.positiveTint, color:C.positive, fontWeight:W.medium, border:`1px solid ${C.positiveEdge}`, lineHeight:1.45 }}>✓ {s}</span>
-                    ))}
-                    {(r.missing_skills||[]).map((s:string,si:number)=>(
-                      <span key={'x'+si} style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:C.criticalTint, color:C.critical, fontWeight:W.medium, border:`1px solid ${C.criticalEdge}`, lineHeight:1.45 }}>✕ {s}</span>
-                    ))}
-                  </div>
-                ):null}
-                {(r.experience_match||r.education_match)&&(
-                  <div style={{ fontSize:11, color:C.muted, marginBottom:6 }}>
-                    {r.experience_match&&<span>Experience: {r.experience_match}</span>}
-                    {r.experience_match&&r.education_match&&<span> · </span>}
-                    {r.education_match&&<span>Education: {r.education_match}</span>}
-                  </div>
-                )}
-                {r.interview_questions?.length>0&&(
-                  <details style={{ cursor:'pointer' }}>
-                    <summary style={{ fontSize:11, color:C.brandDeep, fontWeight:500 }}>View {r.interview_questions.length} Interview Questions</summary>
-                    {r.interview_questions.map((q:string,qi:number)=>(
-                      <div key={qi} style={{ fontSize:11, padding:'3px 0 3px 12px', color:C.muted }}>{qi+1}. {q}</div>
-                    ))}
-                  </details>
-                )}
-              </div>
-              {!r.added&&(
-                <button onClick={()=>addToBank(results.indexOf(r))} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border: `1px solid ${C.brandEdge}`, flexShrink:0, fontSize:11 }}>+ Pipeline</button>
-              )}
-            </div>
-          ))}
-        </>
-      )}
-    </div>
+        ))}
+      </div>
+    </RxPage>
   )
 }
 
