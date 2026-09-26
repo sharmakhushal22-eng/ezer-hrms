@@ -1,11 +1,12 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
 
 function fmt(n: number) { return Math.round(n).toLocaleString('en-IN') }
+const pad2 = (n: number) => String(n).padStart(2, '0')
 
 // ── TAX ENGINE ──────────────────────────────────────────────────
 function calcTax(taxableIncome: number, regime: 'old' | 'new'): number {
@@ -71,10 +72,27 @@ function getSlab(ctc: number): number {
 }
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────
-export default function SalaryViewClient({ data }: { data: any }) {
+export default function SalaryViewClient({ data, meta }: { data: any; meta?: { company_name?: string; branch?: string; department?: string; designation?: string } }) {
   const [response, setResponse] = useState<string>(data.candidate_response || '')
   const [responding, setResponding] = useState(false)
+  // ── 7-day validity — the offer link expires 7 days after it was (re)sent ──
+  // Clock starts at link_sent_at (stamped on every save, so a revised offer restarts it),
+  // falling back to created_at for older rows. Countdown renders only after mount so the
+  // server-rendered text never disagrees with the client's clock.
+  const OFFER_VALID_DAYS = 7
+  const linkStartMs = new Date(data.link_sent_at || data.created_at || Date.now()).getTime()
+  const expiresAtMs = linkStartMs + OFFER_VALID_DAYS * 86400000
+  const [nowMs, setNowMs] = useState<number | null>(null)
+  useEffect(() => { setNowMs(Date.now()); const id = setInterval(() => setNowMs(Date.now()), 1000); return () => clearInterval(id) }, [])
+  const mounted = nowMs !== null
+  const remainingMs = mounted ? Math.max(0, expiresAtMs - (nowMs as number)) : OFFER_VALID_DAYS * 86400000
+  const offerExpired = mounted && expiresAtMs - (nowMs as number) <= 0
+  const remDays = Math.floor(remainingMs / 86400000), remHrs = Math.floor((remainingMs % 86400000) / 3600000), remMins = Math.floor((remainingMs % 3600000) / 60000), remSecs = Math.floor((remainingMs % 60000) / 1000)
+  const validityPct = Math.max(0, Math.min(100, (remainingMs / (OFFER_VALID_DAYS * 86400000)) * 100))
+  const validityUrgent = mounted && !offerExpired && remainingMs < 86400000
+  const expiresAtLabel = new Date(expiresAtMs).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
   async function respond(r: 'ACCEPTED' | 'REJECTED') {
+    if (r === 'ACCEPTED' && offerExpired) return   // window closed — the button is hidden, this is the backstop
     let note = ''
     if (r === 'REJECTED') { const n = window.prompt('Optionally, let us know why you are declining:'); if (n === null) return; note = n }
     else if (!window.confirm('Confirm you accept this offer?')) return
@@ -104,17 +122,53 @@ export default function SalaryViewClient({ data }: { data: any }) {
   const ptMonthly = Math.round(calc.ptMonthly || 0)
   const inHand = Math.round(data.net_monthly || calc.inHand || 0)
   const otherAllow = Math.round(calc.otherAllow || 0)
+  // Conveyance + Special Allowance are the salary slip's own heads; fall back to
+  // splitting the old flat "otherAllow" for negotiations saved before this existed.
+  const conveyance = Math.round(calc.conveyance != null ? calc.conveyance : Math.min(otherAllow, 1600))
+  const specialAllow = Math.round(calc.specialAllow != null ? calc.specialAllow : Math.max(0, otherAllow - conveyance))
+  const lwfMonthly = Math.round(calc.lwfMonthly || 0)
   const statBonus = Math.round(calc.statBonus || 0)
-  const totalDed = epfEmp + esicEmp + ptMonthly
+  const totalDed = epfEmp + esicEmp + ptMonthly + lwfMonthly
   const ctcAnnual = Math.round(data.offered_ctc || 0)
-  const varAnnual = Math.round(calc.variableAnnual || 0)
+  const varAnnual = Math.round(calc.variableAnnual ?? calc.variable ?? 0)
   const fixedAnnual = ctcAnnual - varAnnual
   const grossAnnual = grossMonthly * 12
   const joiningBonus = data.joining_bonus || 0
   const retentionBonus = data.retention_bonus || 0
   const esopValue = data.esop_value || 0
+  // Employer-side components that sit INSIDE the CTC (Automated CTC model)
+  const epfEmployer = Math.round(calc.epfEmployer || 0)
+  const esicEmployer = Math.round(calc.esicEmployer || 0)
+  const gratuityMonthly = Math.round(calc.gratuityMonthly || 0)
+  const bonusOverheadMonthly = Math.round(calc.bonusOverheadMonthly || 0)
+  const gratuityIncluded = calc.gratuity === 'yes'
+  const gratuityExcluded = calc.gratuity === 'no'
+  const minWage = Math.round(calc.minWage || 0)
+  // Basis shown to the candidate (only for offers saved with the Automated CTC model)
+  const hasAutoModel = calc.epfEmployer != null && calc.minWage != null
+  const bonusPctVal = Number(calc.bonusPct ?? 0)
+  const bonusModeVal: string = calc.bonusMode || ''
+  const bonusLabel = bonusPctVal > 0 ? `${bonusPctVal}% · ${bonusModeVal === 'ctc' ? 'Only in CTC (statutory overhead)' : 'With Salary (paid in gross)'}` : 'Not applicable'
+  const fixedCtcMonthly = Math.round((calc.fixedAnnual ?? fixedAnnual) / 12)
+  const chipStyle: React.CSSProperties = { fontSize:10.5, fontWeight:700, padding:'3px 9px', borderRadius:99, background:'rgba(255,255,255,0.18)', color:TK.onAccent }
   const slab = getSlab(ctcAnnual)
   const ltaAmt = Math.round(basic * 12 * 0.0833)
+
+  // ── Stipend (intern / NATS / NAPS) — the link shows ONLY what was entered ──
+  const isStipend = !!(calc.is_stipend || data.is_stipend)
+  const stipendMonthly = Math.round(calc.stipend_monthly || data.stipend_monthly || 0)
+  const tdsApplicable = !!(calc.tds_applicable ?? data.tds_applicable)
+  const tdsPct = Number(calc.tds_pct ?? data.tds_pct ?? 0)
+  const stipendTdsAmt = Math.round(calc.tds_amount || (stipendMonthly * tdsPct / 100) || 0)
+  const stipendNet = Math.round(data.net_monthly || calc.net_monthly || (stipendMonthly - stipendTdsAmt))
+  const addAmount = Math.round(calc.additional_amount || 0)
+  const addFreq = calc.additional_freq || 'One-time'
+  const remarkText = calc.remark || ''
+  // 'Stipend' for interns/NATS/NAPS, 'Fees' for consultants/contractors.
+  const payLabel = calc.pay_label || 'Stipend'
+  const designation = meta?.designation || data.position_title || ''
+  const termsText: string = calc.terms_conditions || ''
+  const additionalItems: { amount:number; freq:string; remark?:string }[] = Array.isArray(calc.additional_items) ? calc.additional_items.filter((r:any)=>Number(r.amount)>0) : []
 
   // Available FBP components for current slab+regime
   const availableFBP = useMemo(() => {
@@ -179,6 +233,13 @@ export default function SalaryViewClient({ data }: { data: any }) {
     sec: (margin?: string) => ({ fontSize:10, fontWeight:600 as const, color:TK.brand, textTransform:'uppercase' as const, letterSpacing:'.06em', margin:margin||'12px 0 8px', display:'flex', alignItems:'center', gap:8 }) as React.CSSProperties,
   }
 
+  const Basis = ({ k, v, sub }: { k: string; v: string; sub?: string }) => (
+    <div style={{ background:TK.sunken, borderRadius:8, padding:'8px 11px', minWidth:0 }}>
+      <div style={{ fontSize:9.5, fontWeight:700, color:TK.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.06em' }}>{k}</div>
+      <div style={{ fontSize:12.5, fontWeight:600, color:TK.ink, marginTop:2, lineHeight:1.35 }}>{v}</div>
+      {sub && <div style={{ fontSize:10, color:TK.faint, marginTop:1 }}>{sub}</div>}
+    </div>
+  )
   const Row = ({ l, v, red, bold, green }: { l: string; v: string; red?: boolean; bold?: boolean; green?: boolean }) => (
     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'7px 16px', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:13 }}>
       <span style={{ color: red ? TK.critical : TK.inkSoft }}>{l}</span>
@@ -189,28 +250,95 @@ export default function SalaryViewClient({ data }: { data: any }) {
   return (
     <div style={S.page}>
       {/* Header */}
-      <div style={{ background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, padding:'18px 20px', color:TK.onAccent }}>
+      <div style={{ background: `linear-gradient(135deg,${TK.brand},${TK.brand})`, padding:'20px 20px 18px', color:TK.onAccent }}>
         <div style={{ maxWidth:680, margin:'0 auto' }}>
-          <div style={{ fontSize:11, color:TK.onAccentDim, marginBottom:3 }}>{data.company_name || 'EZER HRMS'}</div>
-          <div style={{ fontSize:20, fontWeight:600 }}>Your Salary Structure</div>
+          <div style={{ fontSize:19, fontWeight:800, color:TK.onAccent, letterSpacing:'.02em', lineHeight:1.15 }}>{meta?.company_name || data.company_name || 'EZER HRMS'}</div>
+          {(meta?.branch || meta?.department) && (
+            <div style={{ fontSize:11.5, color:TK.onAccentDim, marginTop:3 }}>{[meta?.branch, meta?.department].filter(Boolean).join(' · ')}</div>
+          )}
+          <div style={{ height:1, background:'rgba(255,255,255,0.22)', margin:'12px 0 10px' }} />
+          <div style={{ fontSize:20, fontWeight:600 }}>{isStipend ? `Your ${payLabel} Details` : 'Your Salary Structure'}</div>
           {data.candidate_name && <div style={{ fontSize:13, color:TK.onAccentSoft, marginTop:3 }}>Dear {data.candidate_name}</div>}
-          {data.position_title && <div style={{ fontSize:12, color:TK.onAccentDim, marginTop:1 }}>{data.position_title}</div>}
+          {designation && <div style={{ fontSize:12, color:TK.onAccentDim, marginTop:1 }}>Designation: {designation}</div>}
+          {!isStipend && hasAutoModel && (
+            <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginTop:10 }}>
+              <span style={chipStyle}>✓ Statutory Minimum Wage</span>
+              <span style={chipStyle}>✓ EPFO Compliant</span>
+              {gratuityIncluded && <span style={chipStyle}>Gratuity included in CTC</span>}
+            </div>
+          )}
         </div>
       </div>
 
       <div style={{ maxWidth:680, margin:'0 auto', padding:'16px' }}>
 
+        {/* Offer validity — 7 days from when the link was sent; Accept disappears after */}
+        <div style={{ background: offerExpired ? TK.criticalTint : validityUrgent ? TK.warningTint : TK.surface, border: `1px solid ${offerExpired ? '#FCA5A5' : validityUrgent ? '#FDE68A' : TK.brandEdge}`, borderRadius:14, padding:'12px 16px', marginBottom:14, boxShadow:'0 4px 14px rgba(30,27,75,0.06)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' as const }}>
+            <div style={{ fontSize:22 }}>{offerExpired ? '⌛' : validityUrgent ? '⏰' : '🗓️'}</div>
+            <div style={{ flex:1, minWidth:180 }}>
+              <div style={{ fontSize:10.5, fontWeight:700, letterSpacing:'.06em', textTransform:'uppercase' as const, color: offerExpired ? TK.critical : validityUrgent ? TK.warning : TK.muted }}>
+                {offerExpired ? 'Offer link expired' : `Offer valid for ${OFFER_VALID_DAYS} days`}
+              </div>
+              <div style={{ fontSize:18, fontWeight:800, fontVariantNumeric:'tabular-nums' as const, color: offerExpired ? TK.critical : validityUrgent ? TK.warning : TK.ink, marginTop:2 }}>
+                {!mounted ? '—' : offerExpired ? `Expired on ${expiresAtLabel}` : `${remDays}d ${pad2(remHrs)}h ${pad2(remMins)}m ${pad2(remSecs)}s left`}
+              </div>
+            </div>
+            <div style={{ fontSize:11, color:TK.faint, textAlign:'right' as const }}>
+              {offerExpired ? 'Please contact your recruiter' : <>Valid till<br /><b style={{ color:TK.inkSoft }}>{expiresAtLabel}</b></>}
+            </div>
+          </div>
+          <div style={{ height:6, background:'#E9E7F5', borderRadius:99, overflow:'hidden', marginTop:10 }}>
+            <div style={{ width:`${mounted ? validityPct : 100}%`, height:'100%', background: offerExpired ? TK.critical : validityUrgent ? TK.warning : TK.brand, borderRadius:99, transition:'width .5s' }} />
+          </div>
+        </div>
+
         {/* In-Hand Highlight */}
         <div style={{ background:TK.surface, borderRadius:14, border: `2px solid ${TK.brandEdge}`, padding:'18px 20px', marginBottom:14, textAlign:'center' as const }}>
-          <div style={{ fontSize:11, color:TK.faint, textTransform:'uppercase' as const, letterSpacing:'.08em', marginBottom:3 }}>Estimated Monthly In-Hand</div>
-          <div style={{ fontSize:38, fontWeight:700, color:TK.positive, letterSpacing:-1 }}>₹{fmt(inHand)}</div>
-          <div style={{ fontSize:11, color:TK.faint, marginTop:3 }}>Annual: ₹{fmt(inHand*12)} &nbsp;|&nbsp; Excl. TDS</div>
+          <div style={{ fontSize:11, color:TK.faint, textTransform:'uppercase' as const, letterSpacing:'.08em', marginBottom:3 }}>{isStipend ? `Monthly ${payLabel} (In-Hand)` : 'Estimated Monthly In-Hand'}</div>
+          <div style={{ fontSize:38, fontWeight:700, color:TK.positive, letterSpacing:-1 }}>₹{fmt(isStipend ? stipendNet : inHand)}</div>
+          <div style={{ fontSize:11, color:TK.faint, marginTop:3 }}>{isStipend ? `Annual: ₹${fmt(stipendNet*12)}` : <>Annual: ₹{fmt(inHand*12)} &nbsp;|&nbsp; Excl. TDS</>}</div>
           {data.hike_pct && (
             <div style={{ background:TK.positiveTint, borderRadius:99, padding:'4px 14px', display:'inline-block', marginTop:8, border: `1px solid ${TK.positiveTint}` }}>
               <span style={{ fontSize:13, fontWeight:600, color:TK.positive }}>Hike: {Number(data.hike_pct).toFixed(1)}%</span>
             </div>
           )}
         </div>
+
+        {/* Stipend (intern / NATS / NAPS) — only the entered figures, nothing else */}
+        {isStipend && (
+          <>
+            <div style={S.card}>
+              <div style={{ background:TK.brand, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>{payLabel} Details</div>
+              <Row l={`Monthly ${payLabel}`} v={`₹${fmt(stipendMonthly)}`} />
+              {tdsApplicable && stipendTdsAmt > 0 && <Row l={`(−) TDS (${tdsPct}%)`} v={`₹${fmt(stipendTdsAmt)}`} red />}
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 16px', background:TK.positiveTint, fontSize:15, fontWeight:700, color:TK.positive }}>
+                <span>Net Monthly In-Hand</span><span>₹{fmt(stipendNet)}</span>
+              </div>
+              <Row l={`Annual ${payLabel}`} v={`₹${fmt(stipendMonthly*12)}`} />
+              {addAmount > 0 && <Row l={`Additional Amount (${addFreq})`} v={`₹${fmt(addAmount)}`} green />}
+            </div>
+            {remarkText && (
+              <div style={S.card}>
+                <div style={{ background:TK.brandDeep, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>Remark</div>
+                <div style={{ padding:'12px 16px', fontSize:13, color:TK.ink, lineHeight:1.6, whiteSpace:'pre-wrap' as const }}>{remarkText}</div>
+              </div>
+            )}
+          </>
+        )}
+
+        {!isStipend && (<>
+        {/* Statutory basis — the rules this structure was built on (Automated CTC model) */}
+        {hasAutoModel && (
+          <div style={{ ...S.card, padding:'12px 14px', display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(150px, 1fr))', gap:8 }}>
+            <Basis k="State / UT" v={calc.state || '—'} />
+            <Basis k="Worker Category" v={calc.category || '—'} />
+            <Basis k="Minimum Wage" v={`₹${fmt(minWage)}/month`} sub={calc.minWageSource === 'master' ? 'As per HR master' : calc.minWageSource === 'default' ? 'Pan-India default table' : undefined} />
+            <Basis k="Basic Salary Rule" v="Higher of 50% of fixed CTC and the minimum wage" />
+            <Basis k="Gratuity" v={gratuityIncluded ? 'Included in CTC (4.81% of Basic)' : gratuityExcluded ? 'Over & above the CTC' : '—'} />
+            <Basis k="Statutory Bonus" v={bonusLabel} />
+          </div>
+        )}
 
         {/* Salary Breakdown — ANNUAL */}
         <div style={{ ...S.card }}>
@@ -220,10 +348,11 @@ export default function SalaryViewClient({ data }: { data: any }) {
           </div>
           <Row l="Basic" v={`₹${fmt(basic*12)}`} />
           <Row l="HRA" v={`₹${fmt(hra*12)}`} />
-          <Row l="Allowances / Flexi Pool" v={`₹${fmt(otherAllow*12)}`} />
-          {statBonus > 0 && <Row l="Statutory Bonus" v={`₹${fmt(statBonus*12)}`} />}
+          {conveyance > 0 && <Row l="Conveyance" v={`₹${fmt(conveyance*12)}`} />}
+          {specialAllow > 0 && <Row l="Special Allowance" v={`₹${fmt(specialAllow*12)}`} />}
+          {statBonus > 0 && <Row l={`Statutory Bonus${bonusPctVal > 0 ? ` (${bonusPctVal}% · with salary)` : ''}`} v={`₹${fmt(statBonus*12)}`} />}
           <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', background:TK.brandTint, borderBottom: `1px solid ${TK.brandEdge}`, fontSize:14, fontWeight:600, color:TK.brandDeep }}>
-            <span>Gross (Annual)</span><span>₹{fmt(grossAnnual)}</span>
+            <span>Gross Earnings (Annual)</span><span style={{ textAlign:'right' as const }}>₹{fmt(grossAnnual)}<div style={{ fontSize:10, fontWeight:500, color:TK.faint }}>≈ ₹{fmt(grossMonthly)}/mo</div></span>
           </div>
           {epfEmp > 0 && <Row l="(−) EPF Employee" v={`₹${fmt(epfEmp*12)}`} red />}
           <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 16px', background: TK.criticalTint, borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12 }}>
@@ -240,6 +369,7 @@ export default function SalaryViewClient({ data }: { data: any }) {
             </span>
           </div>
           {ptMonthly > 0 && <Row l="(−) Professional Tax" v={`₹${fmt(ptMonthly*12)}`} red />}
+          {lwfMonthly > 0 && <Row l="(−) LWF" v={`₹${fmt(lwfMonthly*12)}`} red />}
           <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 16px', background: TK.criticalTint, borderBottom: `1px solid ${TK.brandEdge}`, fontSize:12, fontWeight:500, color: TK.critical }}>
             <span>Total Deductions</span><span>₹{fmt(totalDed*12)}</span>
           </div>
@@ -248,13 +378,37 @@ export default function SalaryViewClient({ data }: { data: any }) {
           </div>
         </div>
 
+        {/* Employer contributions — part of the CTC package (Automated CTC model) */}
+        {(epfEmployer > 0 || gratuityMonthly > 0 || bonusOverheadMonthly > 0) && (
+          <div style={S.card}>
+            <div style={{ background:TK.brandDeep, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>Employer Contributions — included in CTC (Annual)</div>
+            {epfEmployer > 0 && <Row l={`Employer EPF (13%, capped at ₹${fmt(calc.epfCeiling || 15000)} Basic)`} v={`₹${fmt(epfEmployer*12)}`} />}
+            {esicEmployer > 0 && <Row l="Employer ESIC (3.25%)" v={`₹${fmt(esicEmployer*12)}`} />}
+            {gratuityIncluded && gratuityMonthly > 0 && <Row l="Gratuity (4.81% of Basic)" v={`₹${fmt(gratuityMonthly*12)}`} green />}
+            {bonusOverheadMonthly > 0 && <Row l="Statutory Bonus (Employer Overhead)" v={`₹${fmt(bonusOverheadMonthly*12)}`} />}
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 16px', background:TK.brandTint, fontSize:14, fontWeight:700, color:TK.brandDeep }}>
+              <div>Fixed CTC Package<div style={{ fontSize:10, fontWeight:500, color:TK.faint, marginTop:1 }}>Gross earnings + employer contributions</div></div>
+              <div style={{ textAlign:'right' as const }}>₹{fmt(fixedAnnual)}<div style={{ fontSize:10.5, fontWeight:500, color:TK.faint }}>≈ ₹{fmt(fixedCtcMonthly)}/mo</div></div>
+            </div>
+          </div>
+        )}
+        {gratuityExcluded && (
+          <div style={{ background:TK.infoTint, border: `1px solid ${TK.brandEdge}`, borderRadius:10, padding:'10px 14px', marginBottom:14, fontSize:12, color:TK.info, lineHeight:1.6 }}>
+            <strong>Note:</strong> Gratuity is Over and Above the mentioned CTC package as per The Payment of Gratuity Act, 1972.
+          </div>
+        )}
+        {minWage > 0 && (
+          <div style={{ fontSize:11, color:TK.faint, margin:'-6px 2px 14px' }}>Basic salary meets the statutory minimum wage for {calc.state} ({calc.category}): ₹{fmt(minWage)}/month.</div>
+        )}
+
         {/* CTC Summary */}
         <div style={S.card}>
           <div style={{ background:TK.brandDeep, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>CTC Summary — Annual</div>
           <Row l="Fixed Component" v={`₹${fmt(fixedAnnual)}`} />
           <Row l="Variable Component" v={`₹${fmt(varAnnual)}`} />
-          <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 16px', fontSize:14, fontWeight:700, color:TK.brandDeep }}>
-            <span>Total CTC</span><span>₹{fmt(ctcAnnual)}</span>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 16px', fontSize:14, fontWeight:700, color:TK.brandDeep }}>
+            <span>Total CTC</span>
+            <span style={{ textAlign:'right' as const }}>₹{fmt(ctcAnnual)}<div style={{ fontSize:10.5, fontWeight:500, color:TK.faint }}>≈ ₹{fmt(Math.round(ctcAnnual/12))}/mo</div></span>
           </div>
         </div>
 
@@ -431,11 +585,40 @@ export default function SalaryViewClient({ data }: { data: any }) {
             </div>
           )}
         </div>
+        </>)}
+
+        {/* Terms & Conditions for the one-time payments (Employee offers) */}
+        {!isStipend && termsText && (
+          <div style={S.card}>
+            <div style={{ background:TK.brandDeep, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>Terms &amp; Conditions</div>
+            <div style={{ padding:'12px 16px', fontSize:13, color:TK.ink, lineHeight:1.65, whiteSpace:'pre-wrap' as const }}>{termsText}</div>
+          </div>
+        )}
+
+        {/* Additional Amounts — applies to every offer type */}
+        {additionalItems.length > 0 && (
+          <div style={S.card}>
+            <div style={{ background:TK.positive, padding:'9px 16px', color:TK.onAccent, fontSize:12, fontWeight:500 }}>Additional Amounts</div>
+            {additionalItems.map((r, i) => (
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'8px 16px', borderBottom: `1px solid ${TK.brandEdge}`, fontSize:13 }}>
+                <div><span style={{ color:TK.inkSoft }}>Additional</span><span style={{ fontSize:11, color:TK.faint, marginLeft:8 }}>({r.freq}{r.remark ? ` · ${r.remark}` : ''})</span></div>
+                <span style={{ fontWeight:600, color:TK.positive }}>₹{fmt(Math.round(r.amount))}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Statutory-change note — applies to every offer */}
+        <div style={{ background:TK.brandTint, border: `1px solid ${TK.brandEdge}`, borderRadius:10, padding:'11px 15px', marginBottom:14, fontSize:12, color:TK.brandDeep, lineHeight:1.6 }}>
+          <strong>Please note:</strong> If any salary-related law or statutory regulation changes in the future, your salary will be calculated and paid in accordance with the applicable law in force at that time.
+        </div>
 
         {/* Disclaimer */}
-        <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, borderRadius:10, padding:'11px 15px', marginBottom:14, fontSize:12, color:TK.warning, lineHeight:1.6, borderLeft: `3px solid ${TK.warningTint}`, borderRadius:'0 8px 8px 0' as any }}>
-          <strong>Disclaimer:</strong> Indicative calculation only. Actual in-hand depends on IT declaration, applicable TDS, company policy, and FBP bill submission. Please review your formal offer letter for confirmed figures.
-        </div>
+        {!isStipend && (
+          <div style={{ background:TK.warningTint, border: `1px solid ${TK.warningTint}`, padding:'11px 15px', marginBottom:14, fontSize:12, color:TK.warning, lineHeight:1.6, borderLeft: `3px solid ${TK.warningTint}`, borderRadius:'0 8px 8px 0' as any }}>
+            <strong>Disclaimer:</strong> Indicative calculation only. Actual in-hand depends on IT declaration, applicable TDS, company policy, and FBP bill submission. Please review your formal offer letter for confirmed figures.
+          </div>
+        )}
 
         {/* Accept / Reject the offer */}
         {response ? (
@@ -452,12 +635,18 @@ export default function SalaryViewClient({ data }: { data: any }) {
           </div>
         ) : (
           <div style={{ background:TK.canvas, border: `1px solid ${TK.brandEdge}`, borderRadius:10, padding:'18px 20px', marginBottom:16, textAlign:'center' as const }}>
-            <div style={{ fontSize:14, fontWeight:600, color:TK.brandDeep, marginBottom:12 }}>Would you like to accept this offer?</div>
-            <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
-              <button onClick={()=>respond('ACCEPTED')} disabled={responding}
-                style={{ padding:'11px 32px', borderRadius:10, border:'none', cursor:responding?'not-allowed':'pointer', fontSize:14, fontWeight:600, fontFamily:'inherit', background:TK.positive, color:TK.onAccent, opacity:responding?.6:1 }}>Accept Offer
-              </button>
-            </div>
+            <div style={{ fontSize:14, fontWeight:600, color: offerExpired ? TK.critical : TK.brandDeep, marginBottom:12 }}>{offerExpired ? 'Acceptance window closed' : 'Would you like to accept this offer?'}</div>
+            {offerExpired ? (
+              <div style={{ background:TK.criticalTint, border:'1px solid #FCA5A5', borderRadius:10, padding:'10px 14px', fontSize:13, color:TK.critical, fontWeight:600, lineHeight:1.55 }}>
+                This offer link expired on {expiresAtLabel}. The acceptance window has closed — please contact your recruiter for a fresh offer.
+              </div>
+            ) : mounted && (
+              <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' as const }}>
+                <button onClick={()=>respond('ACCEPTED')} disabled={responding}
+                  style={{ padding:'11px 32px', borderRadius:10, border:'none', cursor:responding?'not-allowed':'pointer', fontSize:14, fontWeight:600, fontFamily:'inherit', background:TK.positive, color:TK.onAccent, opacity:responding?.6:1 }}>Accept Offer
+                </button>
+              </div>
+            )}
             <div style={{ fontSize:12, color:TK.muted, lineHeight:1.6, marginTop:12 }}>
               Any questions about your salary structure? Please connect with your recruiter directly.
             </div>

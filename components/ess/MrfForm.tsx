@@ -11,6 +11,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { authToken } from '@/lib/rms/client'
+import { WAGE_CATS } from '@/lib/recruitment/min-wages'
+import { jobCodePrefix, newMrfNumber } from '@/lib/recruitment/job-code'
 
 // ── ESS-portal palette (matches components/ess/RoleTabs.tsx) ─────────────────
 const C = {
@@ -80,6 +82,26 @@ function SectionLine({ n, title }: { n: string; title: string }) {
     </div>
   )
 }
+// "Questions to ask" — an optional, growable list (Add+). Stored as a JSON array in
+// manpower_requisitions.ctq_questions and shown to interviewers on the feedback form.
+function QuestionsList({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) {
+  const set = (i: number, q: string) => onChange(value.map((x, idx) => idx === i ? q : x))
+  const del = (i: number) => onChange(value.filter((_, idx) => idx !== i))
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      {value.length === 0 && <div style={{ fontSize: 11, color: C.faint }}>No questions added — click “+ Add question” to add one.</div>}
+      {value.map((q, i) => (
+        <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: C.faint, width: 18, textAlign: 'right' }}>{i + 1}.</span>
+          <input style={{ ...st.input, flex: 1 }} value={q} onChange={e => set(i, e.target.value)} placeholder="e.g. Walk me through a project where you owned the outcome end-to-end" />
+          <button type="button" onClick={() => del(i)} style={{ border: `1px solid ${C.red}44`, background: C.redBg, color: C.red, borderRadius: 7, padding: '7px 10px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600 }}>Remove</button>
+        </div>
+      ))}
+      <div><button type="button" onClick={() => onChange([...value, ''])} style={{ border: `1px solid ${C.purple}55`, background: C.soft, color: C.purpleD, borderRadius: 7, padding: '6px 12px', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 700 }}>+ Add question</button></div>
+    </div>
+  )
+}
+
 function Field({ label, required, hint, children }: { label: string; required?: boolean; hint?: string; children: React.ReactNode }) {
   return (
     <div>
@@ -175,14 +197,16 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill, placeholder
 type Person = { id: string; full_name: string; emp_code: string; designation: string | null }
 
 const EMPTY = {
+  mrf_number: '',
   mrf_type: 'Full MRF', hiring_type: 'New Hire', urgency: 'MEDIUM', raised_by_name: '', raised_by_role: '',
   job_title: '', designation: '', business_unit: '', grade: '', job_code: '', no_of_openings: '1',
   employment_type: 'Employee', work_mode: 'Onsite', location_id: '',
-  cost_center: '', is_budgeted: '', headcount_ref: '', currency: 'INR', budget_min: '', budget_max: '', duration_months: '',
+  cost_center: '', is_budgeted: '', headcount_ref: '', currency: 'INR', budget_min: '', budget_max: '', wage_category: '', duration_months: '',
   reason: '', outgoing_employee_id: '', exit_reason: '', business_justification: '',
   target_joining_date: '', validity_date: '',
   experience_min: '', experience_max: '', education_min: '', education_max: '', previous_company_preference: '',
   skills_required: '', good_to_have_skills: '', job_description: '',
+  ctq_questions: [] as string[],   // questions the interviewers should ask (optional)
   sourcing_mode: 'External', sourcing_channels: [] as string[],
 }
 
@@ -191,6 +215,7 @@ const EMPTY = {
 export function mrfToForm(m: any): Record<string, any> {
   return {
     ...EMPTY,
+    mrf_number: m.mrf_number || '',
     mrf_type: m.mrf_type || 'Full MRF', hiring_type: m.hiring_type || 'New Hire', urgency: m.urgency || 'MEDIUM',
     raised_by_name: m.raised_by_name || '', raised_by_role: m.raised_by_role || '',
     job_title: m.job_title || '', designation: m.designation || m.position || '', business_unit: m.business_unit || '',
@@ -199,6 +224,7 @@ export function mrfToForm(m: any): Record<string, any> {
     cost_center: m.cost_center || '', is_budgeted: m.is_budgeted === true ? 'yes' : m.is_budgeted === false ? 'no' : '',
     headcount_ref: m.headcount_ref || '', currency: m.currency || 'INR',
     budget_min: m.budget_min != null ? String(m.budget_min) : '', budget_max: m.budget_max != null ? String(m.budget_max) : '',
+    wage_category: m.wage_category || '',
     duration_months: m.duration_months != null ? String(m.duration_months) : '',
     reason: m.reason || m.reason_for_hire || '', outgoing_employee_id: m.outgoing_employee_id || '', exit_reason: m.exit_reason || '',
     business_justification: m.business_justification || '',
@@ -206,20 +232,28 @@ export function mrfToForm(m: any): Record<string, any> {
     experience_min: m.experience_min != null ? String(m.experience_min) : '', experience_max: m.experience_max != null ? String(m.experience_max) : '',
     education_min: m.education_min || '', education_max: m.education_max || '', previous_company_preference: m.previous_company_preference || '',
     skills_required: m.skills_required || '', good_to_have_skills: m.good_to_have_skills || '', job_description: m.job_description || '',
+    ctq_questions: Array.isArray(m.ctq_questions) ? m.ctq_questions.map(String) : [],
     sourcing_mode: m.sourcing_mode || 'External', sourcing_channels: Array.isArray(m.sourcing_channels) ? m.sourcing_channels : [],
   }
 }
 
-export default function MrfForm({ employeeId, onDone, onCancel, notify, initial, replaceId }: {
+export default function MrfForm({ employeeId, onDone, onCancel, notify, initial, replaceId, readOnly, viewRow, onApprove, onReject, onRevise, actionBusy }: {
   employeeId: string
   onDone: () => void
   onCancel: () => void
   notify: (m: string, t?: 'success' | 'error') => void
   initial?: Record<string, any> | null   // prefill (editing a sent-back requisition)
   replaceId?: string | null              // scrap this requisition when the new one is submitted
+  // ── read-only approval mode ──
+  readOnly?: boolean                     // show the requisition filled but non-editable
+  viewRow?: any | null                   // the MRF row being reviewed (its raiser gives the locked fields)
+  onApprove?: () => void
+  onReject?: (note: string) => void
+  onRevise?: (note: string) => void      // "send back for revision"
+  actionBusy?: boolean
 }) {
   const [form, setForm] = useState<any>({ ...EMPTY, ...(initial || {}) })
-  const [done, setDone] = useState<null | { id: string }>(null)   // success screen after submit
+  const [done, setDone] = useState<null | { id: string; mrf_number?: string }>(null)   // success screen after submit
   const [replaceRef, setReplaceRef] = useState<string | null>(replaceId || null)
   const [masters, setMasters] = useState<Record<string, Master[]>>({})
   const [people, setPeople] = useState<Person[]>([])
@@ -228,6 +262,22 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   const [auto, setAuto] = useState<any>(null)   // raiser autofill bundle
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [sbOpen, setSbOpen] = useState(false)   // send-back note box (read-only mode)
+  const [sbNote, setSbNote] = useState('')
+  // In read-only approval mode the locked Company/Department/RM fields must reflect the
+  // MRF's RAISER, not the approver looking at it — so the autofill reads the raiser's row.
+  const raiserId = readOnly && viewRow?.requested_by ? String(viewRow.requested_by) : employeeId
+  // Requisition ID is reserved the moment the form opens (same MRF-YYYY-NNNNN shape as the
+  // DB default), checked against existing rows, and sent on save — so the raiser sees the
+  // number while filling, and what they see is exactly what gets saved.
+  async function reserveMrfNumber() {
+    for (let i = 0; i < 6; i++) {
+      const cand = newMrfNumber()
+      const { data } = await supabase.from('manpower_requisitions').select('id').eq('mrf_number', cand).maybeSingle()
+      if (!data) { setForm((f: any) => ({ ...f, mrf_number: cand })); return }
+    }
+  }
+  useEffect(() => { if (!readOnly && !(initial as any)?.mrf_number) reserveMrfNumber() }, []) // eslint-disable-line react-hooks/exhaustive-deps
   const F = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
   // Persist a brand-new skill to the master so it is there next time, and show it now.
   const addSkill = async (name: string) => {
@@ -242,8 +292,8 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       setLoading(true)
       // The raiser — their company & department (locked) and reporting line.
       const { data: me } = await supabase.from('employees')
-        .select('id, full_name, emp_code, designation, company_id, department_id, hod_id, l1_manager_id, companies:companies!employees_company_id_fkey(company_name), departments:departments!employees_department_id_fkey(dept_name)')
-        .eq('id', employeeId).maybeSingle()
+        .select('id, full_name, emp_code, designation, company_id, department_id, hod_id, l1_manager_id, companies:companies!employees_company_id_fkey(company_name), departments:departments!employees_department_id_fkey(dept_name, dept_code)')
+        .eq('id', raiserId).maybeSingle()
       const mm: any = me || {}
       const others = [mm.l1_manager_id, mm.hod_id].filter(Boolean)
       const { data: rel } = others.length
@@ -252,7 +302,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       const byId: Record<string, any> = {}; (rel || []).forEach((r: any) => { byId[r.id] = r })
       // Raiser's ESS role (for "Raised By — Role"): first non-Employee role, else designation.
       let role = mm.designation || ''
-      const { data: acct } = await supabase.from('ess_accounts').select('id').eq('employee_id', employeeId).maybeSingle()
+      const { data: acct } = await supabase.from('ess_accounts').select('id').eq('employee_id', raiserId).maybeSingle()
       if (acct?.id) {
         const { data: ur } = await supabase.from('ess_user_roles').select('ess_roles(role_name, role_code)').eq('ess_account_id', acct.id).eq('is_active', true)
         const names = (ur || []).map((r: any) => r.ess_roles).filter((r: any) => r && r.role_code !== 'EMPLOYEE')
@@ -262,7 +312,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       const bundle = {
         name: mm.full_name || '', code: mm.emp_code || '', designation: mm.designation || '', role,
         company_id: mm.company_id || '', company_name: mm.companies?.company_name || '—',
-        department_id: mm.department_id || '', department_name: mm.departments?.dept_name || '—',
+        department_id: mm.department_id || '', department_name: mm.departments?.dept_name || '—', department_code: mm.departments?.dept_code || '',
         rm1: mm.full_name ? `${mm.full_name} (${mm.emp_code})` : '—',
         rm2: fmt(byId[mm.l1_manager_id]), rm2_id: mm.l1_manager_id || '',
         hod: fmt(byId[mm.hod_id]), hod_id: mm.hod_id || '',
@@ -284,7 +334,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       setLoading(false)
     })()
     return () => { live = false }
-  }, [employeeId])
+  }, [raiserId])
 
   const isQuick = form.mrf_type === 'Quick Hire'
   const isReplacement = form.hiring_type === 'Replacement' || form.hiring_type === 'Backfill'
@@ -298,6 +348,8 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   async function save(status: 'DRAFT' | 'SUBMITTED') {
     const designation = String(form.designation || '').trim()
     if (!designation) { notify('Designation is required.', 'error'); return }
+    const bMin = Number(form.budget_min) || 0, bMax = Number(form.budget_max) || 0
+    if (bMin && bMax && bMin > bMax) { notify(`${comp.label} range minimum (₹${bMin.toLocaleString('en-IN')}) cannot be more than the maximum (₹${bMax.toLocaleString('en-IN')}).`, 'error'); return }
     if (status === 'SUBMITTED') {
       if (!form.reason) { notify('Reason for hire is required to submit.', 'error'); return }
       if (!form.target_joining_date) { notify('Target joining date is required to submit.', 'error'); return }
@@ -308,6 +360,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
     try {
       const payload = {
         action: 'create', status, designation,
+        mrf_number: form.mrf_number || null,   // the number shown in the form — kept on resubmit too
         replace_id: replaceRef || null,   // scrap the old requisition (resubmit / edit after send-back)
         mrf_type: form.mrf_type, hiring_type: form.hiring_type, urgency: form.urgency,
         raised_by_name: form.raised_by_name || null, raised_by_role: form.raised_by_role || null,
@@ -317,6 +370,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         employment_type: form.employment_type, work_mode: form.work_mode, location_id: form.location_id || null,
         cost_center: form.cost_center || null, is_budgeted: form.is_budgeted, headcount_ref: form.headcount_ref || null,
         currency: form.currency || 'INR', budget_min: form.budget_min || null, budget_max: form.budget_max || null,
+        wage_category: form.wage_category || null,
         compensation_type: comp.kind, pay_period: comp.period,
         duration_months: (comp.fixedTerm || form.duration_months) ? (Number(form.duration_months) || null) : null,
         reason: form.reason || null,
@@ -328,6 +382,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         education_min: form.education_min || null, education_max: form.education_max || null,
         previous_company_preference: form.previous_company_preference || null,
         skills_required: form.skills_required || null, good_to_have_skills: form.good_to_have_skills || null,
+        ctq_questions: (form.ctq_questions || []).map((q: string) => String(q).trim()).filter(Boolean),
         job_description: form.job_description || null,
         sourcing_mode: form.sourcing_mode || null, sourcing_channels: form.sourcing_channels || [],
       }
@@ -335,7 +390,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       if (status === 'DRAFT') { notify('MRF saved as draft.'); onDone(); return }
       // Submitted → show the success screen with "raise one more" / "resubmit".
       setReplaceRef(null)
-      setDone({ id: res?.id || '' })
+      setDone({ id: res?.id || '', mrf_number: res?.mrf_number || form.mrf_number || '' })
     } catch (e: any) { notify(e.message, 'error') } finally { setSaving(false) }
   }
 
@@ -343,6 +398,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   function raiseAnother() {
     setForm({ ...EMPTY, raised_by_name: auto?.name || '', raised_by_role: auto?.role || '' })
     setReplaceRef(null); setDone(null)
+    reserveMrfNumber()   // a fresh number for the next requisition
     if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
   }
   // Go back to editing the just-submitted one — on the next submit it is scrapped and a
@@ -359,6 +415,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
     <div style={{ border: `2px solid ${C.green}`, borderRadius: 12, padding: '32px 24px', marginBottom: 12, background: C.greenBg, textAlign: 'center' }}>
       <div style={{ width: 64, height: 64, borderRadius: '50%', background: C.green, color: '#fff', fontSize: 36, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>✓</div>
       <div style={{ fontSize: 18, fontWeight: 700, color: C.ink }}>You have successfully raised the MRF</div>
+      {done.mrf_number && <div style={{ display: 'inline-block', marginTop: 8, fontSize: 13, fontWeight: 700, color: C.purpleD, background: C.soft, borderRadius: 99, padding: '4px 14px', letterSpacing: '.03em' }}>Requisition ID: {done.mrf_number}</div>}
       <div style={{ fontSize: 13, color: C.muted, marginTop: 6, lineHeight: 1.6, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
         It’s been sent for approval through your reporting chain (RM2 → HR Head).
         You can raise another, or resubmit this one if you spotted a mistake (the one you just submitted will be scrapped).
@@ -372,7 +429,13 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
   )
 
   return (
-    <div style={{ border: `2px solid ${C.purple}`, borderRadius: 10, padding: '14px 16px', marginBottom: 12, background: '#fff' }}>
+    <div style={{ border: `2px solid ${readOnly ? C.green : C.purple}`, borderRadius: 10, padding: '14px 16px', marginBottom: 12, background: '#fff' }}>
+      {readOnly && (
+        <div style={{ fontSize: 12.5, color: C.ink, background: C.greenBg, border: `1px solid ${C.green}`, borderRadius: 8, padding: '9px 12px', marginBottom: 10, fontWeight: 600 }}>
+          Reviewing this requisition — read only. Use the buttons at the bottom to Approve, Send back, or Reject.
+        </div>
+      )}
+      <div style={{ pointerEvents: readOnly ? 'none' : undefined }}>
       {replaceRef && (
         <div style={{ fontSize: 12, color: C.amber, background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 7, padding: '8px 11px', marginBottom: 10, lineHeight: 1.5 }}>
           <b>Editing / resubmitting.</b> When you submit, the previous requisition is scrapped and this corrected one goes for approval afresh.
@@ -400,7 +463,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       <div style={g2}>
         <Field label="Requisition Type"><Sel value={form.hiring_type} onChange={v => F('hiring_type', v)}>{REQ_TYPES.map(t => <option key={t}>{t}</option>)}</Sel></Field>
         <Field label="Priority"><Sel value={form.urgency} onChange={v => F('urgency', v)}>{PRIORITIES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</Sel></Field>
-        <Field label="Requisition ID" hint="Generated on save"><div style={{ ...st.input, background: C.locked, color: C.faint, display: 'flex', alignItems: 'center', minHeight: 38 }}>Auto-generated</div></Field>
+        <Field label="Requisition ID" hint={form.mrf_number ? 'Reserved for this requisition' : 'Reserving a number…'}><div style={{ ...st.input, background: C.locked, color: form.mrf_number ? C.ink : C.faint, fontWeight: form.mrf_number ? 700 : 400, letterSpacing: form.mrf_number ? '.03em' : 0, display: 'flex', alignItems: 'center', minHeight: 38 }}>{form.mrf_number || 'Generating…'}</div></Field>
         <Field label="Raised By — Name"><input style={st.input} value={form.raised_by_name} onChange={e => F('raised_by_name', e.target.value)} placeholder="Your name" /></Field>
         <Field label="Raised By — Role"><input style={st.input} value={form.raised_by_role} onChange={e => F('raised_by_role', e.target.value)} placeholder="e.g. Department Head" /></Field>
       </div>
@@ -415,7 +478,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Designation" required><input style={st.input} value={form.designation} onChange={e => F('designation', e.target.value)} placeholder="e.g. Senior Engineer" /></Field>
         <Field label="No. of Openings"><input type="number" min="1" style={st.input} value={form.no_of_openings} onChange={e => F('no_of_openings', e.target.value)} /></Field>
         <Field label="Grade / Band"><MasterSel value={form.grade} onChange={v => F('grade', v)} opts={masters.grade || []} placeholder="Select…" /></Field>
-        <Field label="Job Code" hint="Position-based staffing only"><input style={st.input} value={form.job_code} onChange={e => F('job_code', e.target.value)} placeholder="e.g. ENG-BE-02" /></Field>
+        <Field label="Job Code" hint={form.job_code ? 'Custom code' : 'Auto-generated on save — leave blank, or type your own'}><input style={st.input} value={form.job_code} onChange={e => F('job_code', e.target.value)} placeholder={`${jobCodePrefix(auto?.department_code, auto?.department_name, form.designation)}## (auto)`} /></Field>
         <Locked label="RM1 — Reporting Manager" value={auto?.rm1} hint="auto · you" />
         <Locked label="RM2 — Skip-level Manager" value={auto?.rm2} hint="auto · your manager" />
         <Locked label="HOD — Department Head" value={auto?.hod} hint="auto · your HOD" />
@@ -440,7 +503,16 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
         <Field label="Approved Headcount Ref."><input style={st.input} value={form.headcount_ref} onChange={e => F('headcount_ref', e.target.value)} placeholder="e.g. HCP-2026-014" /></Field>
         <Field label="Currency"><MasterSel value={form.currency} onChange={v => F('currency', v)} opts={masters.currency || []} placeholder="INR" useCode /></Field>
         <Field label={`${comp.label} Range — Min`} hint={perLabel(comp.period)}><input type="number" style={st.input} value={form.budget_min} onChange={e => F('budget_min', e.target.value)} placeholder={comp.ph[0]} /></Field>
-        <Field label={`${comp.label} Range — Max`} hint={perLabel(comp.period)}><input type="number" style={st.input} value={form.budget_max} onChange={e => F('budget_max', e.target.value)} placeholder={comp.ph[1]} /></Field>
+        <Field label={`${comp.label} Range — Max`} hint={perLabel(comp.period)}><input type="number" style={{ ...st.input, ...((Number(form.budget_min) > 0 && Number(form.budget_max) > 0 && Number(form.budget_min) > Number(form.budget_max)) ? { borderColor: C.red } : {}) }} value={form.budget_max} onChange={e => F('budget_max', e.target.value)} placeholder={comp.ph[1]} /></Field>
+        {Number(form.budget_min) > 0 && Number(form.budget_max) > 0 && Number(form.budget_min) > Number(form.budget_max) && (
+          <div style={{ gridColumn: '1 / -1', fontSize: 12, color: C.red, background: C.redBg, borderRadius: 7, padding: '7px 10px' }}>Minimum cannot be more than maximum — please correct the {comp.label.toLowerCase()} range.</div>
+        )}
+        <Field label="Worker / Skill Category" hint="Sets the state minimum wage applied in salary negotiation">
+          <Sel value={form.wage_category} onChange={v => F('wage_category', v)}>
+            <option value="">Select category…</option>
+            {WAGE_CATS.map(c => <option key={c} value={c}>{c}</option>)}
+          </Sel>
+        </Field>
         {(comp.fixedTerm || comp.period === 'MONTHLY') && (
           <Field label="Duration (months)"><input type="number" min="1" max="60" style={st.input} value={form.duration_months} onChange={e => F('duration_months', e.target.value)} /></Field>
         )}
@@ -483,6 +555,7 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
           <Field label="Mandatory Skills"><SkillsMultiSelect value={form.skills_required} onChange={v => F('skills_required', v)} allSkills={skills} onAddSkill={addSkill} /></Field>
           <Field label="Good-to-have Skills"><SkillsMultiSelect value={form.good_to_have_skills} onChange={v => F('good_to_have_skills', v)} allSkills={skills} onAddSkill={addSkill} placeholder="Search good-to-have skills, or add custom" /></Field>
           <Field label="Job Description"><textarea style={{ ...st.input, minHeight: 120, resize: 'vertical' }} value={form.job_description} onChange={e => F('job_description', e.target.value)} placeholder="Role summary, responsibilities, must-haves…" /></Field>
+          <Field label="Questions to ask the candidate" hint="optional · every interviewer sees these on the feedback form"><QuestionsList value={form.ctq_questions || []} onChange={v => F('ctq_questions', v)} /></Field>
         </div>
       </>}
 
@@ -508,12 +581,39 @@ export default function MrfForm({ employeeId, onDone, onCancel, notify, initial,
       <SectionLine n="10" title="Attachments" />
       <div style={{ fontSize: 12, color: C.faint }}>Files can be attached from the Recruitment module once the MRF is created.</div>
 
+      </div>{/* end read-only body wrapper */}
+
       {/* Footer */}
-      <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
-        <button type="button" style={st.btnO} disabled={saving} onClick={() => save('DRAFT')}>Save Draft</button>
-        <button type="button" style={st.btn} disabled={saving} onClick={() => save('SUBMITTED')}>{saving ? 'Submitting…' : 'Submit for Approval'}</button>
-        <button type="button" style={{ ...st.btnO, marginLeft: 'auto' }} disabled={saving} onClick={onCancel}>Cancel</button>
-      </div>
+      {readOnly ? (
+        <div style={{ marginTop: 16 }}>
+          {sbOpen && (
+            <div style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.amber, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 5 }}>Remark — what should the raiser fix?</div>
+              <textarea autoFocus value={sbNote} onChange={e => setSbNote(e.target.value)} placeholder="e.g. Budget looks high for this grade — please revise the range." style={{ ...st.input, minHeight: 64, resize: 'vertical' }} />
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {sbOpen ? (
+              <>
+                <button type="button" style={st.btnO} disabled={actionBusy} onClick={() => { setSbOpen(false); setSbNote('') }}>← Back</button>
+                <button type="button" style={{ ...st.btn, background: C.amber, marginLeft: 'auto' }} disabled={actionBusy || !sbNote.trim()} onClick={() => onRevise?.(sbNote.trim())}>{actionBusy ? 'Sending…' : 'Send back for revision'}</button>
+              </>
+            ) : (
+              <>
+                <button type="button" style={{ ...st.btnO, borderColor: C.red, color: C.red }} disabled={actionBusy} onClick={() => onReject?.(sbNote)}>Reject</button>
+                <button type="button" style={{ ...st.btnO, borderColor: '#FDE68A', color: C.amber }} disabled={actionBusy} onClick={() => setSbOpen(true)}>↩ Send back</button>
+                <button type="button" style={{ ...st.btn, background: C.green, marginLeft: 'auto' }} disabled={actionBusy} onClick={() => onApprove?.()}>{actionBusy ? 'Approving…' : 'Approve'}</button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+          <button type="button" style={st.btnO} disabled={saving} onClick={() => save('DRAFT')}>Save Draft</button>
+          <button type="button" style={st.btn} disabled={saving} onClick={() => save('SUBMITTED')}>{saving ? 'Submitting…' : 'Submit for Approval'}</button>
+          <button type="button" style={{ ...st.btnO, marginLeft: 'auto' }} disabled={saving} onClick={onCancel}>Cancel</button>
+        </div>
+      )}
     </div>
   )
 }

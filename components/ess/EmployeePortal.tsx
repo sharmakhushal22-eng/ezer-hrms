@@ -3549,6 +3549,18 @@ export default function EmployeePortal({ employeeId, adminMode, onExit }: { empl
     startTransition(() => setView(k))
   }
   const goAdmin = (k: string) => { setAdminKey(k); setBellOpen(false); setMoreOpen(false); window.scrollTo({ top: 0 }) }
+  // Deep-link: /ess-portal?module=recruitment opens that admin module on load (the module
+  // reads its own further params, e.g. &mrfSub=approvals&mrf=<id> — the MRF approval link).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    const mod = params.get('module')
+    if (mod) setAdminKey(mod)
+    // Notification links are "/ess?tab=<view>" (approvals, funzone, …) — open that view.
+    const tab = params.get('tab')
+    if (tab && !mod) go(tab)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // Clicking a section lands on its first item — the section itself is never a
   // destination, so there is no empty "section landing page" to design or maintain.
   const goSection = (s: NavSection) => go(s.items.some(i => i.k === view) ? view : s.items[0].k)

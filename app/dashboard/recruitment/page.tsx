@@ -7,7 +7,12 @@ import * as XLSX from 'xlsx'
 import { CreateOfferApproval, HRHeadApprovalDashboard, HRManagerSendOffer, AuditTrailViewer } from './offer-flow-components'
 import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
 import CandidateInterviewModal from '@/components/recruitment/CandidateInterviewModal'
-import MrfForm from '@/components/ess/MrfForm'
+import MrfForm, { mrfToForm } from '@/components/ess/MrfForm'
+import { api as essApi } from '@/lib/ess/api'
+import { MIN_WAGE_STATES, WAGE_CATS, resolveMinWage, OLD_CODE_TO_STATE, DEFAULT_STATE, DEFAULT_CATEGORY, stateFromLocation } from '@/lib/recruitment/min-wages'
+import { computeCtc, inr, EPF_WAGE_CEILING } from '@/lib/recruitment/ctc-model'
+import { jobCodePrefix, nextJobCode, newMrfNumber } from '@/lib/recruitment/job-code'
+import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
 
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
@@ -24,7 +29,7 @@ interface MRF {
   location_name?:string; dept_name?:string
   designation?:string; position?:string; no_of_openings?:number; openings?:number
   urgency?:string; reason?:string; reason_for_hire?:string; status:string
-  job_description?:string; employment_type?:string; budget_min?:number; budget_max?:number
+  job_description?:string; employment_type?:string; budget_min?:number; budget_max?:number; wage_category?:string
   experience_required?:string; assigned_recruiter?:string; mrf_number?:string
   remarks?:string; created_at:string
   mrf_type?:string; education_required?:string; skills_required?:string
@@ -45,7 +50,9 @@ interface Candidate {
   aadhaar_url?:string; prev_offer_url?:string; pre_negotiation_done?:boolean
 }
 
-const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted','Offer Sent','Joined','Rejected']
+// 'Hold' is where an interviewer's Hold decision parks a candidate — still in play (a round
+// can be added), but not yet Shortlisted.
+const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Hold','Shortlisted','Offer Sent','Joined','Rejected']
 // A hiring pipeline is ordered — Applied is not "a different kind of thing"
 // from Shortlisted, it is earlier. So colour follows the funnel: violet
 // deepening as a candidate advances, green once the outcome is good, red when
@@ -55,7 +62,7 @@ const STAGES = ['Applied','AI Screened','Telephonic','L1','L2','Optional Round',
 const STAGE_COLOR:Record<string,string> = {
   'Applied':'var(--ez-ramp-1)', 'AI Screened':'var(--ez-ramp-2)', 'Telephonic':'var(--ez-ramp-3)',
   'L1':'var(--ez-ramp-4)', 'L2':'var(--ez-ramp-5)', 'Optional Round':'var(--ez-ramp-6)',
-  'Shortlisted':C.positive, 'Offer Sent':C.positive, 'Joined':C.positive,
+  'Hold':C.warning, 'Shortlisted':C.positive, 'Offer Sent':C.positive, 'Joined':C.positive,
   'Rejected':C.critical,
 }
 
@@ -64,7 +71,7 @@ const STAGE_COLOR:Record<string,string> = {
 const STAGE_TEXT:Record<string,string> = {
   'Applied':'var(--ez-ramp-1-fg)', 'AI Screened':'var(--ez-ramp-2-fg)', 'Telephonic':'var(--ez-ramp-3-fg)',
   'L1':'var(--ez-ramp-4-fg)', 'L2':'var(--ez-ramp-5-fg)', 'Optional Round':'var(--ez-ramp-6-fg)',
-  'Shortlisted':C.positive, 'Offer Sent':C.positive, 'Joined':C.positive,
+  'Hold':C.warning, 'Shortlisted':C.positive, 'Offer Sent':C.positive, 'Joined':C.positive,
   'Rejected':C.critical,
 }
 const EMP_TYPES = ['Employee','Intern','Contract','Consultant','NAPS','NATS','Live Project']
@@ -213,6 +220,15 @@ export default function RecruitmentPage() {
   // The HR Head tab is for the HR Head alone (and super admin / legacy dashboard login).
   const isHrHead = grant.legacy || grant.isSuperAdmin || (grant.roles || []).some((r: any) => r.role_code === 'HR_HEAD')
   const [tab, setTab] = useState<'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'>('dashboard')
+  // Deep-link from ESS Tasks & Approvals: /ess-portal?module=recruitment&mrfSub=approvals&mrf=<id>
+  // opens the MRF tab on its Approvals sub-tab with that requisition ready to review.
+  const [mrfDeep, setMrfDeep] = useState<{ sub?:string; id?:string }>({})
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const p = new URLSearchParams(window.location.search)
+    const sub = p.get('mrfSub'); const id = p.get('mrf')
+    if (sub || id) { setTab('mrf'); setMrfDeep({ sub: sub || undefined, id: id || undefined }) }
+  }, [])
   const [companies, setCompanies] = useState<Company[]>([])
   const [locations, setLocations] = useState<Location[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
@@ -289,7 +305,7 @@ export default function RecruitmentPage() {
   // Scoped-HM MRF id set for the Send Offers tab (null = oversight, no filter). Memoised so
   // the child's fetch effect does not refire on every render.
   const sendOfferAllowed = useMemo(() => isHrHead ? null : new Set(mrfs.map(m => m.id)), [isHrHead, mrfs])
-  const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify, employeeId: grant.employeeId }
+  const props = { supabase, companies, locations, departments, mrfs, candidates, onRefresh:loadAll, showNotify, employeeId: grant.employeeId, mrfInitialSub: mrfDeep.sub, mrfFocusId: mrfDeep.id, canEditAnyMrf: !!(grant.isSuperAdmin || grant.legacy) }
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -382,10 +398,10 @@ function DashTab({ mrfs, candidates }:any) {
       </div>
       <div style={T.card}>
         <div style={T.section}>Pipeline Overview</div>
-        {/* Ten stages, five columns — a deliberate 5x2. auto-fit gave nine and
-            stranded "Rejected" alone on the second row; ten across does not
-            fit the content column at the app's 130% zoom. */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(5, minmax(0, 1fr))', gap:8 }}>
+        {/* Eleven stages, six columns — a deliberate 6+5. auto-fit stranded the
+            last stage alone on the second row; eleven across does not fit the
+            content column at the app's 130% zoom. */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(6, minmax(0, 1fr))', gap:8 }}>
           {STAGES.map(s=>(
             <div key={s} style={{ background:C.surface, borderRadius:R.md, padding:'9px 12px',
                                   textAlign:'center' as const, minWidth:76,
@@ -1059,7 +1075,7 @@ const ROLE_LABEL: Record<string,string> = {
   'Reporting Manager':'Reporting Manager', 'Department Head':'Department Head', HR:'HR', Finance:'Finance',
 }
 
-function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, onReopen }:any) {
+function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, onReopen, canEdit, canSendBack, onSendBack }:any) {
   const openings = m.no_of_openings || m.openings || 0
   const filled = cands.filter((c:Candidate)=>c.stage==='Offer Sent'||c.stage==='Joined').length
   const pct = openings ? Math.min(100, (filled/openings)*100) : 0
@@ -1152,8 +1168,14 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
           {m.status==='CLOSED' && (
             <button onClick={()=>onReopen(m)} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}`, fontSize:11 }}>Re-open</button>
           )}
+          {canSendBack && (
+            <button onClick={()=>onSendBack(m)} style={{ ...T.btn, background:C.warningTint, color:C.warning, border: `1px solid ${C.warningTint}`, fontSize:11 }}>↩ Send back</button>
+          )}
+          {/* Only the raiser (or a super admin) may edit / delete — see canEditMrf in MRFTab */}
+          {canEdit && (<>
           <button onClick={()=>onEdit(m)} style={{ ...T.btn, background:C.infoTint, color:C.info, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>Edit</button>
           <button onClick={()=>onDelete(m.id)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalTint}`, fontSize:11 }}></button>
+          </>)}
         </div>
       </div>
     </div>
@@ -1161,7 +1183,7 @@ function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, o
 }
 
 // ── MRF DETAIL ────────────────────────────────────────────────────
-function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onReview, onChanged, showNotify }:any) {
+function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onReview, onChanged, showNotify, canEdit, canSendBack, onSendBack }:any) {
   const [logs, setLogs] = useState<any[]>([])
   const [loadingLogs, setLoadingLogs] = useState(true)
   useEffect(()=>{
@@ -1204,7 +1226,8 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
 
         <div style={{ padding:'16px 20px' }}>
           <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' as const }}>
-            <button onClick={()=>{ onEdit(m); onClose() }} style={T.btnOutline}>Edit this MRF</button>
+            {canEdit && <button onClick={()=>{ onEdit(m); onClose() }} style={T.btnOutline}>Edit this MRF</button>}
+            {canSendBack && <button onClick={()=>{ onSendBack(m); onClose() }} style={{ ...T.btnOutline, borderColor:'#FDE68A', color:C.warning }}>↩ Send back to raiser</button>}
             {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
               <button onClick={()=>{ onReview(m); onClose() }} style={T.btnPrimary}>Review & Approve</button>
             )}
@@ -1258,6 +1281,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
             <div style={{ ...T.g3, rowGap:12 }}>
               <MrfMeta label="Cost Center" value={m.cost_center} />
               <MrfMeta label="Budgeted Position" value={m.is_budgeted==null?'—':(m.is_budgeted?'Yes — budgeted':'No — unbudgeted')} />
+              <MrfMeta label="Worker / Skill Category" value={(m as any).wage_category||'—'} />
               <MrfMeta label="Headcount Reference" value={m.headcount_ref} />
               <MrfMeta label="Paid As" value={`${comp.label} · ${perLabel(comp.period)}`} />
               <MrfMeta label={`${comp.label} Range`}
@@ -1465,18 +1489,18 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
 }
 
 // ── MRF TAB ───────────────────────────────────────────────────────
-function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify, employeeId }:any) {
+function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify, employeeId, mrfInitialSub, mrfFocusId, canEditAnyMrf }:any) {
   const EMPTY = {
     // §1 Requisition Meta
     mrf_type:'Full MRF', hiring_type:'New Hire', urgency:'MEDIUM',
     raised_by_name:'', raised_by_role:'',
     // §2 Position Details
     company_id:'', location_id:'', department_id:'', job_title:'', designation:'',
-    business_unit:'', grade:'', job_code:'', reporting_manager_id:'', rm2_id:'', hod_id:'', no_of_openings:1,
+    business_unit:'', grade:'', job_code:'', reporting_manager_id:'', rm2_id:'', hod_id:'', no_of_openings:1, mrf_number:'',
     // §3 Employment Details
     employment_type:'Employee', work_mode:'Onsite', shift_schedule:'',
     // §4 Budget & Cost
-    cost_center:'', is_budgeted:'', headcount_ref:'', budget_min:'', budget_max:'', currency:'INR',
+    cost_center:'', is_budgeted:'', headcount_ref:'', budget_min:'', budget_max:'', currency:'INR', wage_category:'',
     duration_months:'',
     // §5 Justification
     reason:'', outgoing_employee_id:'', exit_reason:'', business_justification:'',
@@ -1492,9 +1516,70 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     // §9 Sourcing
     sourcing_mode:'External', sourcing_channels:[] as string[],
   }
+  // Only the raiser (or a super admin / legacy dashboard login) may edit or delete an MRF.
+  const canEditMrf = (m:any) => !!canEditAnyMrf || (!!employeeId && m?.requested_by === employeeId)
+  // The assigned hiring manager can send an APPROVED MRF back to the raiser for changes.
+  const canSendBackMrf = (m:any) => m?.status==='APPROVED' && !!employeeId && Array.isArray(m?.assigned_recruiter_ids) && m.assigned_recruiter_ids.includes(employeeId)
+  const [sendBackFor, setSendBackFor] = useState<MRF|null>(null)
+  const [sbNote, setSbNote] = useState('')
+  const [sbBusy, setSbBusy] = useState(false)
+  async function sendBackMrf() {
+    if (!sendBackFor || !sbNote.trim()) { showNotify('Add a remark explaining what to fix','error'); return }
+    setSbBusy(true)
+    try {
+      await essApi('/api/ess/mrf', employeeId, { method:'POST', body: JSON.stringify({ action:'revise', id:sendBackFor.id, note:sbNote.trim() }) })
+      showNotify('MRF sent back to the raiser for changes.'); setSendBackFor(null); setSbNote(''); onRefresh()
+    } catch(e:any){ showNotify(e.message||'Could not send back','error') } finally { setSbBusy(false) }
+  }
   const [showForm, setShowForm] = useState(false)
   const [editMRF, setEditMRF] = useState<MRF|null>(null)
   const [form, setForm] = useState<any>(EMPTY)
+
+  // ── MRF Approvals sub-tab — the ESS chain approvals (approve / reject / send-back),
+  //    reached from the hyperlink in ESS Tasks & Approvals. Data + actions go through the
+  //    ESS API so the chain advances and notifications fire, exactly like Raise MRF.
+  const [mrfSub, setMrfSub] = useState<'requisitions'|'approvals'>(mrfInitialSub==='approvals'?'approvals':'requisitions')
+  const [toApprove, setToApprove] = useState<any[]>([])
+  const [apprErr, setApprErr] = useState('')
+  const [reviewMrf, setReviewMrf] = useState<any|null>(null)
+  const [apprBusy, setApprBusy] = useState(false)
+  const [apprFocused, setApprFocused] = useState(false)
+  const loadApprovals = useCallback(async () => {
+    if (!employeeId) { setToApprove([]); return }
+    try { const d = await essApi('/api/ess/mrf', employeeId); setToApprove(d.toApprove||[]); setApprPeople(toPickerPeople(d)); setApprErr('') }
+    catch(e:any){ setApprErr(e.message||'Could not load approvals') }
+  }, [employeeId])
+  useEffect(()=>{ if (mrfSub==='approvals') loadApprovals() }, [mrfSub, loadApprovals])
+  // Open a requisition for review — fetch the full row (the pending-list select omits some
+  // fields, e.g. job_description) so the read-only form shows everything.
+  const openReviewMrf = useCallback(async (m:any) => {
+    try {
+      const { data } = await supabase.from('manpower_requisitions')
+        .select('*, departments:department_id(dept_name), companies:company_id(company_name), locations:location_id(location_name)')
+        .eq('id', m.id).maybeSingle()
+      setReviewMrf({ ...m, ...(data||{}) })
+    } catch { setReviewMrf(m) }
+  }, [supabase])
+  // Deep-link: once the pending list is in, open the requested MRF for review.
+  useEffect(()=>{
+    if (!mrfFocusId || apprFocused || !toApprove.length) return
+    const m = toApprove.find((x:any)=>x.id===mrfFocusId)
+    if (m) { openReviewMrf(m); setApprFocused(true) }
+  }, [mrfFocusId, apprFocused, toApprove, openReviewMrf])
+  // HR Head assigns hiring manager(s) as part of approving — searched by code / name.
+  const [apprPeople, setApprPeople] = useState<any[]>([])
+  const [assignOpen, setAssignOpen] = useState(false)
+  const [assignIds, setAssignIds] = useState<string[]>([])
+  const pendingRole = (m:any) => (Array.isArray(m?.approval_chain)?m.approval_chain:[]).find((s:any)=>s.status==='PENDING')?.role
+  const apprDecide = async (action:'approve'|'reject'|'revise', note?:string, assignedIds?:string[]) => {
+    if (!reviewMrf) return
+    setApprBusy(true)
+    try {
+      await essApi('/api/ess/mrf', employeeId, { method:'POST', body: JSON.stringify({ action, id:reviewMrf.id, ...(note!=null?{note}:{}), ...(assignedIds&&assignedIds.length?{ assigned_hr_ids:assignedIds }:{}) }) })
+      showNotify(action==='approve'?'MRF approved.':action==='reject'?'MRF rejected.':'Sent back for revision.')
+      setReviewMrf(null); setAssignOpen(false); setAssignIds([]); await loadApprovals(); onRefresh()
+    } catch(e:any){ showNotify(e.message||'Action failed','error') } finally { setApprBusy(false) }
+  }
   const [errors, setErrors] = useState<Record<string,string>>({})
   const [saving, setSaving] = useState(false)
   const [mrfQ, setMrfQ] = useState('')
@@ -1572,6 +1657,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       business_unit:a.business_unit||'', grade:a.grade||'', job_code:a.job_code||'',
       reporting_manager_id:a.reporting_manager_id||'', rm2_id:a.rm2_id||'', hod_id:a.hod_id||'', no_of_openings:m.no_of_openings||m.openings||1,
       employment_type:m.employment_type||'Employee', work_mode:a.work_mode||'Onsite', shift_schedule:a.shift_schedule||'',
+      wage_category:(m as any).wage_category||'',
       cost_center:a.cost_center||'', is_budgeted: a.is_budgeted==null?'':(a.is_budgeted?'yes':'no'),
       headcount_ref:a.headcount_ref||'', budget_min:m.budget_min||'', budget_max:m.budget_max||'', currency:a.currency||'INR',
       duration_months:a.duration_months||'',
@@ -1656,6 +1742,9 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       reason:form.reason, reason_for_hire:form.reason,
       job_description:form.job_description||null, status,
       budget_min:Number(form.budget_min)||null, budget_max:Number(form.budget_max)||null,
+      ...(!editMRF && form.mrf_number ? { mrf_number:form.mrf_number } : {}),
+      // only sent when chosen, so an edit still saves before migration 130 adds the column
+      ...(form.wage_category ? { wage_category:form.wage_category } : {}),
       experience_required:expReq, experience_min:form.experience_min||null, experience_max:form.experience_max||null,
       education_required:eduReq, education_min:form.education_min||null, education_max:form.education_max||null,
       skills_required:form.skills_required||null,
@@ -1663,7 +1752,9 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
       previous_company_preference:form.previous_company_preference||null,
       // ── added by 032 ──
       raised_by_name:form.raised_by_name||null, raised_by_role:form.raised_by_role||null,
-      business_unit:form.business_unit||null, grade:form.grade||null, job_code:form.job_code||null,
+      business_unit:form.business_unit||null, grade:form.grade||null,
+      // blank job code → DEPT-DESIG-NN, numbered within the company (same rule as the API)
+      job_code:form.job_code || (()=>{ const d=departments.find((x:Department)=>x.id===form.department_id); const prefix=jobCodePrefix(d?.dept_code, d?.dept_name, form.designation||form.job_title||''); return nextJobCode(prefix, mrfs.filter((m:MRF)=>!form.company_id || m.company_id===form.company_id).map((m:MRF)=>(m as any).job_code)) })(),
       reporting_manager_id:form.reporting_manager_id||null,
       reports_to_designation: mgr?.designation || null,
       rm2_id:form.rm2_id||null, hod_id:form.hod_id||null,
@@ -1793,9 +1884,64 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
 
   return (
     <div>
+      {/* MRF sub-tabs — Requisitions (the list/create) and Approvals (chain approvals). */}
+      <div style={{ display:'flex', gap:6, marginBottom:14, flexWrap:'wrap' as const }}>
+        <button onClick={()=>{ setMrfSub('requisitions'); setReviewMrf(null) }} style={{ ...T.btnOutline, ...(mrfSub==='requisitions'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>Requisitions</button>
+        <button onClick={()=>{ setMrfSub('approvals'); loadApprovals() }} style={{ ...T.btnOutline, ...(mrfSub==='approvals'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>Approvals{toApprove.length?` (${toApprove.length})`:''}</button>
+      </div>
+
+      {mrfSub==='approvals' ? (
+        reviewMrf ? (
+          <div>
+            <button onClick={()=>setReviewMrf(null)} style={{ ...T.btnOutline, marginBottom:12 }}>← Back to approvals</button>
+            <div style={{ fontSize:15, fontWeight:600, color:C.ink, marginBottom:10 }}>
+              Review requisition — {reviewMrf.designation||reviewMrf.position}{reviewMrf.mrf_number?` · ${reviewMrf.mrf_number}`:''}
+            </div>
+            <MrfForm readOnly viewRow={reviewMrf} initial={mrfToForm(reviewMrf)} employeeId={employeeId} notify={showNotify}
+              onApprove={()=>{ if (pendingRole(reviewMrf)==='HR_HEAD') { setAssignIds([]); setAssignOpen(true) } else apprDecide('approve') }}
+              onReject={(note:string)=>apprDecide('reject', note)} onRevise={(note:string)=>apprDecide('revise', note)}
+              actionBusy={apprBusy} onDone={()=>setReviewMrf(null)} onCancel={()=>setReviewMrf(null)} />
+
+            {/* HR Head step: approving also assigns the hiring manager(s) who will run the hiring */}
+            {assignOpen && (
+              <div onMouseDown={e=>{ if(e.target===e.currentTarget && !apprBusy) setAssignOpen(false) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+                <div style={{ background:C.surface, borderRadius:14, width:'min(520px,100%)', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 24px 70px rgba(30,27,75,0.3)', overflow:'hidden' }}>
+                  <div style={{ padding:'16px 20px 12px', borderBottom:`1px solid ${C.line}` }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:C.ink }}>Assign Hiring Manager(s)</div>
+                    <div style={{ fontSize:12.5, color:C.faint, marginTop:3 }}>Search by employee code or name and add one or more people to run the hiring for {reviewMrf.designation||reviewMrf.position}{reviewMrf.mrf_number?` · ${reviewMrf.mrf_number}`:''}. Approval is recorded with the assignment.</div>
+                  </div>
+                  <div style={{ padding:'14px 20px', overflowY:'auto', flex:1 }}>
+                    <RecruiterPicker people={apprPeople} value={assignIds} onChange={setAssignIds} />
+                  </div>
+                  <div style={{ display:'flex', gap:8, padding:'12px 20px', borderTop:`1px solid ${C.line}` }}>
+                    <button onClick={()=>setAssignOpen(false)} disabled={apprBusy} style={{ ...T.btnOutline, flex:1 }}>Cancel</button>
+                    <button onClick={()=>apprDecide('approve', undefined, assignIds)} disabled={apprBusy||assignIds.length===0} style={{ ...T.btn, background:C.positive, color:C.onAccent, flex:1, opacity:(apprBusy||assignIds.length===0)?.6:1 }}>{apprBusy?'Approving…':`Approve & Assign${assignIds.length?` (${assignIds.length})`:''}`}</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize:15, fontWeight:600, color:C.ink, marginBottom:4 }}>MRFs awaiting your approval</div>
+            <div style={{ fontSize:12, color:C.faint, marginBottom:12 }}>Open a requisition to review it, then Approve, Send back, or Reject.</div>
+            {apprErr && <div style={{ fontSize:12.5, color:C.critical, background:C.criticalTint, borderRadius:8, padding:'9px 12px', marginBottom:12 }}>{apprErr}</div>}
+            {toApprove.length===0 && !apprErr && <div style={{ ...T.card, color:C.faint, fontSize:13, textAlign:'center' as const, padding:24 }}>Nothing is waiting on your approval right now.</div>}
+            {toApprove.map((m:any)=>(
+              <div key={m.id} style={{ ...T.card, display:'flex', gap:12, alignItems:'center', flexWrap:'wrap' as const }}>
+                <div style={{ flex:'1 1 240px', minWidth:0 }}>
+                  <div style={{ fontSize:13.5, fontWeight:600, color:C.ink }}>{m.designation||m.position} · {m.no_of_openings||m.openings||1} opening{(m.no_of_openings||m.openings||1)>1?'s':''}</div>
+                  <div style={{ fontSize:11.5, color:C.faint, marginTop:2 }}>{m.companies?.company_name||'—'} · {m.departments?.dept_name||'—'} · raised by {m.raised_by_name||'—'}{m.raised_by_role?` (${m.raised_by_role})`:''} · {m.urgency||'Normal'}</div>
+                </div>
+                <button onClick={()=>openReviewMrf(m)} style={{ ...T.btnPrimary, flexShrink:0 }}>Review &amp; Approve</button>
+              </div>
+            ))}
+          </div>
+        )
+      ) : (<>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' as const }}>
         <div style={{ fontSize:15, fontWeight:600, color:C.ink }}>Manpower Requisitions ({mrfs.length})</div>
-        <button onClick={()=>{setEditMRF(null);setForm(EMPTY);setErrors({});setShowForm(!showForm)}} style={T.btnPrimary}>
+        <button onClick={()=>{setEditMRF(null);setForm({ ...EMPTY, mrf_number:(()=>{ for(let i=0;i<6;i++){ const n=newMrfNumber(); if(!mrfs.some((m:MRF)=>m.mrf_number===n)) return n } return '' })() });setErrors({});setShowForm(!showForm)}} style={T.btnPrimary}>
           {showForm?'Cancel':'+ New MRF'}
         </button>
       </div>
@@ -1885,7 +2031,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               </select>
             </Field>
             <Field label="Requisition ID" hint={editMRF?undefined:'Generated on save'}>
-              <input style={{ ...T.input, background:C.sunken, color:C.muted }} value={(editMRF as any)?.mrf_number||'Auto-generated'} readOnly />
+              <input style={{ ...T.input, background:C.sunken, color:C.ink, fontWeight:700 }} value={(editMRF as any)?.mrf_number||form.mrf_number||'Auto-generated'} readOnly />
             </Field>
           </div>
           <div style={{ ...T.g2, marginBottom:10 }}>
@@ -1932,7 +2078,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <MasterSelect options={masters.grade} value={form.grade} onChange={(v:string)=>F('grade',v)} />
             </Field>
             <Field label="Job Code" hint="Position-based staffing only">
-              <input style={T.input} value={form.job_code} onChange={e=>F('job_code',e.target.value)} placeholder="e.g. ENG-BE-02" />
+              <input style={T.input} value={form.job_code} onChange={e=>F('job_code',e.target.value)} placeholder={`${jobCodePrefix(departments.find((x:Department)=>x.id===form.department_id)?.dept_code, departments.find((x:Department)=>x.id===form.department_id)?.dept_name, form.designation||form.job_title||'')}## (auto)`} />
             </Field>
           </div>
           <div style={{ ...T.g3, marginBottom:10 }}>
@@ -2007,6 +2153,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
             <Field label={`${comp.label} Range — Max`} error={errors.budget_max} hint={errors.budget_max?undefined:perLabel(comp.period)}>
               <input style={eb('budget_max')} type="number" value={form.budget_max} onChange={e=>F('budget_max',e.target.value)} placeholder={comp.ph[1]} />
+            </Field>
+            <Field label="Worker / Skill Category" hint="Sets the minimum wage applied in salary negotiation">
+              <select style={T.select} value={form.wage_category||''} onChange={e=>F('wage_category',e.target.value)}>
+                <option value="">Select category…</option>
+                {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
+              </select>
             </Field>
           </div>
           {form.budget_min && form.budget_max && !errors.budget_max && (
@@ -2263,7 +2415,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         <MrfCard key={m.id} m={m} org={orgOf(m)}
           cands={candidates.filter((c:Candidate)=>c.mrf_id===m.id)}
           onOpen={setDetailMRF} onEdit={openEdit} onDelete={setDeleteConfirm}
-          onReview={setApprovalModal}
+          onReview={setApprovalModal} canEdit={canEditMrf(m)} canSendBack={canSendBackMrf(m)} onSendBack={setSendBackFor}
           onClose={(x:MRF)=>setMrfStatus(x,'CLOSED','MRF_CLOSED')}
           onReopen={(x:MRF)=>setMrfStatus(x,'APPROVED','MRF_REOPENED')} />
       ))}
@@ -2272,11 +2424,25 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         <MrfDetail supabase={supabase} mrf={mrfs.find((x:MRF)=>x.id===detailMRF.id)||detailMRF} org={orgOf(detailMRF)}
           cands={candidates.filter((c:Candidate)=>c.mrf_id===detailMRF.id)} people={people}
           onClose={()=>setDetailMRF(null)} onEdit={openEdit} onReview={setApprovalModal}
-          onChanged={onRefresh} showNotify={showNotify} />
+          onChanged={onRefresh} showNotify={showNotify} canEdit={canEditMrf(detailMRF)} canSendBack={canSendBackMrf(detailMRF)} onSendBack={setSendBackFor} />
       )}
 
       {approvalModal&&<ApprovalModal mrf={approvalModal} org={orgOf(approvalModal)}
         onApprove={approveMRF} onReject={rejectMRF} onHold={holdMRF} onClose={()=>setApprovalModal(null)} />}
+      {sendBackFor&&(
+        <div onMouseDown={e=>{ if(e.target===e.currentTarget && !sbBusy) setSendBackFor(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:C.surface, borderRadius:14, width:'min(440px,100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.3)' }}>
+            <div style={{ fontSize:15, fontWeight:700, color:C.ink, marginBottom:4 }}>Send back to raiser</div>
+            <div style={{ fontSize:12.5, color:C.faint, marginBottom:12 }}>{sendBackFor.designation||sendBackFor.position}{sendBackFor.mrf_number?` · ${sendBackFor.mrf_number}`:''} — the raiser will fix and resubmit; it re-enters approval from the top.</div>
+            <label style={T.label}>Remark — what should the raiser fix?</label>
+            <textarea autoFocus style={{ ...T.textarea, minHeight:80 }} value={sbNote} onChange={e=>setSbNote(e.target.value)} placeholder="e.g. Budget needs revision / openings count is wrong…" />
+            <div style={{ display:'flex', gap:8, marginTop:14 }}>
+              <button onClick={sendBackMrf} disabled={sbBusy||!sbNote.trim()} style={{ ...T.btn, background:C.warning, color:C.onAccent, flex:1, opacity:(sbBusy||!sbNote.trim())?.6:1 }}>{sbBusy?'Sending…':'Send back'}</button>
+              <button onClick={()=>{ setSendBackFor(null); setSbNote('') }} disabled={sbBusy} style={{ ...T.btnOutline, flex:1 }}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
       {deleteConfirm&&(
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div style={{ background:C.surface, borderRadius:14, padding:24, width:340, boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
@@ -2289,6 +2455,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           </div>
         </div>
       )}
+      </>)}
     </div>
   )
 }
@@ -3054,7 +3221,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
     setScreening(false)
   }
 
-  async function addToBank(idx:number) {
+  async function addToBank(idx:number, quiet=false) {
     const r = results[idx]
     const summary = [
       r.matched_skills?.length ? `Matched: ${r.matched_skills.join(', ')}` : '',
@@ -3074,11 +3241,26 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
     if (error) { showNotify('Add failed: '+error.message,'error'); return }
     const updated = [...results]; updated[idx] = { ...updated[idx], added:true }
     setResults(updated); showNotify(`${r.candidate_name} added to pipeline!`); onRefresh()
+    if (!quiet) await notifyRaiser([r.candidate_name])
+  }
+
+  // Selected resumes go straight to the hiring manager — the MRF raiser gets an ESS
+  // notification (Tasks & bell) naming the candidates, with a link to the pipeline.
+  async function notifyRaiser(names:string[]) {
+    const to = mrf?.requested_by
+    if (!to || !names.length) return
+    const who = names.length===1 ? names[0] : `${names.length} candidates (${names.slice(0,3).join(', ')}${names.length>3?'…':''})`
+    await supabase.from('ess_notifications').insert({
+      employee_id: to, category:'RECRUITMENT', is_read:false, link:'/dashboard/recruitment',
+      title:`Resume${names.length>1?'s':''} shortlisted — ${who}`,
+      body:`AI screening selected ${who} for ${mrf?.designation||mrf?.position||'your requisition'}${mrf?.mrf_number?` (${mrf.mrf_number})`:''}. Review the profile${names.length>1?'s':''} in Recruitment → Pipeline and schedule the interview rounds.`,
+    })
   }
 
   async function addAllStrong() {
     const strong = results.map((r,i)=>({ r, i })).filter(({r})=>r.match_tag==='STRONG'&&!r.added)
-    for (const { i } of strong) await addToBank(i)
+    for (const { i } of strong) await addToBank(i, true)
+    await notifyRaiser(strong.map(({r})=>r.candidate_name))
     showNotify('All STRONG candidates added!')
   }
 
@@ -3214,12 +3396,15 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     first_name:'', middle_name:'', last_name:'', dob:'', gender:'', marital_status:'', nationality:'Indian', languages:'',
     // 3 contact
     email:'', dial_code:'+91', phone:'', alt_mobile:'', current_city:'', preferred_location:'', permanent_address:'', relocate:'Not applicable',
+    // permanent address — structured (permanent_address is kept as the composed string for compatibility)
+    perm_line1:'', perm_line2:'', perm_pincode:'', perm_city:'', perm_state:'', perm_country:'India',
     // 4 professional
     total_exp_years:'', total_exp_months:'', relevant_exp:'', current_company:'', designation:'', function:'', qualification:'', specialization:'', passing_year:'', institute:'', certifications:'', skills:[] as string[], custom_skill:'', notice_period:'', last_working_day:'', buyout:'No',
     // 5 compensation (₹ LPA)
     current_fixed:'', current_variable:'', expected_ctc:'', negotiable:'Yes', offer_in_hand:'No', offer_company:'', offer_amount:'', offer_deadline:'',
+    comp_unit:'AUTO',   // how the compensation figures were typed: AUTO | LPA | MONTH | YEAR
     // 6 source
-    source:'', sourced_on:new Date().toISOString().slice(0,10), referrer_id:'', referrer_name:'', referrer_relation:'Ex-colleague', vendor_name:'', vendor_fee:'', portal_link:'',
+    source:'', source_remark:'', sourced_on:new Date().toISOString().slice(0,10), referrer_id:'', referrer_name:'', referrer_relation:'Ex-colleague', vendor_name:'', vendor_fee:'', portal_link:'',
     // 7 documents
     resume_name:'', photo_name:'', linkedin:'', portfolio:'', consent:false,
     // 8 screening
@@ -3227,13 +3412,61 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     hr_email:'',
   }
   const [cForm, setCForm] = useState<any>(EMPTY_C)
+  // Add Candidate is a 4-part wizard: Next validates only the current part, Submit sits on part 4.
+  const [addStep, setAddStep] = useState(1)
+  const addBodyRef = useRef<HTMLDivElement>(null)
+  // "Upload & Parse Resume" — fills the form from the resume via /api/recruitment/parse-resume
+  const resumeRef = useRef<HTMLInputElement>(null)
+  const [parsing, setParsing] = useState(false)
+  const [parseNote, setParseNote] = useState<{ ok:boolean; text:string; missing?:string[] }|null>(null)
+  async function parseResume(file: File) {
+    setParsing(true); setParseNote(null)
+    try {
+      const fd = new FormData(); fd.append('file', file)
+      const r = await fetch('/api/recruitment/parse-resume', { method:'POST', body: fd })
+      const j = await r.json().catch(()=>({}))
+      if (!r.ok || !j.ok) { setParseNote({ ok:false, text: j.error || 'Could not parse this resume' }); setParsing(false); return }
+      const f = j.fields || {}
+      setCForm((prev:any) => {
+        const next:any = { ...prev, resume_name: file.name, comp_unit:'LPA' }   // parser returns LPA
+        for (const [k, v] of Object.entries(f)) {
+          if (k === 'skills') { const arr = Array.isArray(v) ? v : []; if (arr.length) next.skills = Array.from(new Set([...(prev.skills||[]), ...arr])) }
+          else if (v !== '' && v != null && k in prev) next[k] = v
+        }
+        return next
+      })
+      const n = (j.filled||[]).length
+      setParseNote({ ok:true, text:`Auto-filled ${n} field${n===1?'':'s'} from "${file.name}"${j.meta?.confidence!=null?` · AI confidence ${Math.round(j.meta.confidence*100)}%`:''} — please review before saving.`, missing: (j.missing||[]).filter((k:string)=>['first_name','last_name','email','phone','current_company','designation','total_exp_years','skills','qualification'].includes(k)) })
+      showNotify(`Resume parsed — ${n} fields filled`)
+    } catch { setParseNote({ ok:false, text:'Could not reach the parser — try again' }) }
+    setParsing(false)
+  }
   const [saving, setSaving] = useState(false)
   const [touched, setTouched] = useState(false)   // reveal red on the missing fields only after a submit attempt
   const [myEmail, setMyEmail] = useState('')
   useEffect(()=>{ supabase.auth.getUser().then(({data}:any)=>{ const em=data?.user?.email; if(em){ setMyEmail(em); setCForm((f:any)=>({...f, hr_email:f.hr_email||em, recruiter:f.recruiter||em})) } }) },[])
   const cMrf = mrfs.find((m:MRF)=>m.id===cForm.mrf_id)
-  // expected_ctc is captured in ₹ lakh per annum; the MRF budget is in rupees.
-  const expCtcOver = !!(cMrf?.budget_max && cForm.expected_ctc!=='' && Number(cForm.expected_ctc)*100000 > Number(cMrf.budget_max))
+  // Compensation can be typed as ₹ LPA, ₹ per month or ₹ per year — every figure is converted
+  // to LPA before it is used (hike, budget check, save). AUTO reads each value the way people
+  // actually type it: 8.4 → LPA, 20799.99 (≥ 1,000) → per month, 840000 (≥ 1,00,000) → per year.
+  // This is what stops a monthly salary typed into an LPA box from producing a "-100% hike".
+  const unitOf = (v:any): 'LPA'|'MONTH'|'YEAR' => {
+    const u = cForm.comp_unit; const n = Number(v)||0
+    if (u==='LPA'||u==='MONTH'||u==='YEAR') return u
+    return n >= 100000 ? 'YEAR' : n >= 1000 ? 'MONTH' : 'LPA'
+  }
+  const toLpa = (v:any) => { const n = Number(v)||0; const u = unitOf(v); return u==='MONTH' ? n*12/100000 : u==='YEAR' ? n/100000 : n }
+  const curFixedLpa = toLpa(cForm.current_fixed), curVarLpa = toLpa(cForm.current_variable), expLpa = toLpa(cForm.expected_ctc), offerLpa = toLpa(cForm.offer_amount)
+  const totalCurLpa = curFixedLpa + curVarLpa
+  const hikePct = (totalCurLpa>0 && expLpa>0) ? ((expLpa-totalCurLpa)/totalCurLpa)*100 : null
+  const hikeSuspicious = hikePct!=null && (hikePct < -60 || hikePct > 500)   // almost always a unit mix-up
+  const UNIT_WORD:Record<string,string> = { LPA:'₹ LPA', MONTH:'₹ per month', YEAR:'₹ per year' }
+  const rsYr = (lpa:number) => `₹${Math.round(lpa*100000).toLocaleString('en-IN')}/yr`
+  // "read as ₹ per month = ₹2,49,600/yr" — shown under each figure so a wrong unit is obvious
+  const echo = (v:any) => (v===''||v==null||!(Number(v)>0)) ? null : `${cForm.comp_unit==='AUTO'?'read as ':''}${UNIT_WORD[unitOf(v)]} = ${rsYr(toLpa(v))}`
+  const ph = (lpa:string, month:string, year:string) => cForm.comp_unit==='MONTH' ? month : cForm.comp_unit==='YEAR' ? year : lpa
+  // expected_ctc (→ rupees) vs the MRF budget (rupees)
+  const expCtcOver = !!(cMrf?.budget_max && cForm.expected_ctc!=='' && expLpa*100000 > Number(cMrf.budget_max))
   const CF = (k:string,v:any) => setCForm((f:any)=>({...f,[k]:v}))
   const toggleSkill = (s:string) => setCForm((f:any)=>({ ...f, skills: f.skills.includes(s) ? f.skills.filter((x:string)=>x!==s) : [...f.skills, s] }))
   const addCustomSkill = () => { const s=(cForm.custom_skill||'').trim(); if(!s) return; setCForm((f:any)=>({ ...f, skills: f.skills.includes(s)?f.skills:[...f.skills,s], custom_skill:'' })) }
@@ -3241,6 +3474,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   // the lists this tab already loaded (the raw mrf row has no *_name field).
   const mrfLocName = (m:any) => (locations||[]).find((l:any)=>l.id===m?.location_id)?.location_name || m?.location_name || ''
   const mrfDeptName = (m:any) => (departments||[]).find((d:any)=>d.id===m?.department_id)?.dept_name || m?.dept_name || ''
+  const mrfCompanyName = (m:any) => (companies||[]).find((c:Company)=>c.id===m?.company_id)?.company_name || (companies||[]).find((c:Company)=>c.id===m?.company_id)?.company_code || ''
   const EMP_TYPES = ['Full time — permanent','Fixed term contract','Third party payroll','Intern']
   // Autofill everything the chosen opening already knows, the moment it is picked:
   // job location, recruiter, employment type and the role's required skills. Only
@@ -3267,9 +3501,18 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     current_city: !cForm.current_city.trim(), total_exp_years: cForm.total_exp_years==='',
     qualification: !cForm.qualification, notice_period: !cForm.notice_period,
     current_fixed: cForm.current_fixed==='', expected_ctc: cForm.expected_ctc==='',
-    source: !cForm.source, consent: !cForm.consent,
+    source: !cForm.source, source_remark: cForm.source==='Other' && !String(cForm.source_remark||'').trim(), consent: !cForm.consent,
   } as Record<string,boolean>
   const bad = (k:string)=> touched && missing[k]
+  const STEP_TITLES = ['Requisition & Personal', 'Contact & Professional', 'Compensation & Source', 'Documents & Screening']
+  const STEP_FIELDS: Record<number,string[]> = { 1:['mrf_id','first_name','last_name'], 2:['email','phone','current_city','total_exp_years','qualification','notice_period'], 3:['current_fixed','expected_ctc','source','source_remark'], 4:['consent'] }
+  const stepMissing = (n:number) => STEP_FIELDS[n].filter(k=>missing[k]).length
+  const goToStep = (n:number) => { setAddStep(Math.max(1, Math.min(4, n))); setTouched(false); addBodyRef.current?.scrollTo({ top:0, behavior:'smooth' }) }
+  const goNext = () => {
+    const miss = stepMissing(addStep)
+    if (miss > 0) { setTouched(true); showNotify(`${miss} required field${miss>1?'s':''} missing in this part`, 'error'); return }
+    goToStep(addStep + 1)
+  }
   const missingCount = Object.values(missing).filter(Boolean).length
   const errStyle = { borderColor:C.critical, background:C.criticalTint } as React.CSSProperties
   const inp = (k:string):React.CSSProperties => ({ ...T.input, ...(bad(k)?errStyle:{}) })
@@ -3285,7 +3528,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
 
   async function addCandidate() {
     setTouched(true)
-    if (missingCount > 0) { showNotify(`${missingCount} required field${missingCount>1?'s':''} still missing`,'error'); return }
+    if (missingCount > 0) { const first = [1,2,3,4].find(n => stepMissing(n) > 0); if (first && first !== addStep) setAddStep(first); showNotify(`${missingCount} required field${missingCount>1?'s':''} still missing`,'error'); return }
     setSaving(true)
     try {
       const phone = cForm.phone.trim()
@@ -3300,9 +3543,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       const expYears = Math.round((Number(cForm.total_exp_years)||0) + (Number(cForm.total_exp_months)||0)/12)
       const noticeDays = cForm.notice_period==='Immediate' ? 0 : (parseInt(cForm.notice_period,10) || null)
       // ₹ LPA → rupees, the unit every existing card and offer screen already reads.
-      const fixedRs = Math.round((Number(cForm.current_fixed)||0) * 100000) || null
-      const varRs = Math.round((Number(cForm.current_variable)||0) * 100000) || null
-      const expRs = Math.round((Number(cForm.expected_ctc)||0) * 100000) || null
+      const fixedRs = Math.round(curFixedLpa * 100000) || null
+      const varRs = Math.round(curVarLpa * 100000) || null
+      const expRs = Math.round(expLpa * 100000) || null
       // Knockout screening: a "No" on either question drops the candidate into Rejected.
       const knockedOut = cForm.q1==='No' || cForm.q2==='No'
       const stage = knockedOut ? 'Rejected' : cForm.stage
@@ -3310,10 +3553,13 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
       const details = {
         requisition:{ job_location:cForm.job_location||mrf?.location_name||null, recruiter:cForm.recruiter||null, employment_type:cForm.employment_type },
         personal:{ first_name:cForm.first_name, middle_name:cForm.middle_name, last_name:cForm.last_name, dob:cForm.dob||null, gender:cForm.gender||null, marital_status:cForm.marital_status||null, nationality:cForm.nationality||null, languages:cForm.languages||null },
-        contact:{ dial_code:cForm.dial_code, alt_mobile:cForm.alt_mobile||null, current_city:cForm.current_city, preferred_location:cForm.preferred_location||null, permanent_address:cForm.permanent_address||null, willing_to_relocate:cForm.relocate },
+        contact:{ dial_code:cForm.dial_code, alt_mobile:cForm.alt_mobile||null, current_city:cForm.current_city, preferred_location:cForm.preferred_location||null,
+          permanent_address:[cForm.perm_line1, cForm.perm_line2, cForm.perm_city, cForm.perm_state, cForm.perm_pincode, cForm.perm_country].map((x:string)=>(x||'').trim()).filter(Boolean).join(', ') || cForm.permanent_address || null,
+          permanent_address_parts:{ line1:cForm.perm_line1||null, line2:cForm.perm_line2||null, pincode:cForm.perm_pincode||null, city:cForm.perm_city||null, state:cForm.perm_state||null, country:cForm.perm_country||null },
+          willing_to_relocate:cForm.relocate },
         professional:{ relevant_exp:cForm.relevant_exp||null, function:cForm.function||null, qualification:cForm.qualification, specialization:cForm.specialization||null, passing_year:cForm.passing_year||null, institute:cForm.institute||null, certifications:cForm.certifications||null, skills:cForm.skills, buyout:cForm.buyout, last_working_day:cForm.last_working_day||null },
-        compensation:{ current_fixed_lpa:Number(cForm.current_fixed)||null, current_variable_lpa:Number(cForm.current_variable)||null, total_current_ctc_rs:(fixedRs||0)+(varRs||0)||null, expected_ctc_lpa:Number(cForm.expected_ctc)||null, negotiable:cForm.negotiable, offer_in_hand:cForm.offer_in_hand, offer_company:cForm.offer_company||null, offer_amount_lpa:cForm.offer_amount||null, offer_deadline:cForm.offer_deadline||null },
-        source:{ channel:cForm.source, sourced_on:cForm.sourced_on||null, referrer_id:cForm.referrer_id||null, referrer_name:cForm.referrer_name||null, referrer_relation:cForm.referrer_relation||null, vendor_name:cForm.vendor_name||null, vendor_fee:cForm.vendor_fee||null, portal_link:cForm.portal_link||null },
+        compensation:{ current_fixed_lpa:curFixedLpa||null, current_variable_lpa:curVarLpa||null, total_current_ctc_rs:(fixedRs||0)+(varRs||0)||null, expected_ctc_lpa:expLpa||null, hike_pct: hikePct!=null ? Math.round(hikePct*10)/10 : null, entry_unit:cForm.comp_unit, negotiable:cForm.negotiable, offer_in_hand:cForm.offer_in_hand, offer_company:cForm.offer_company||null, offer_amount_lpa:offerLpa||null, offer_deadline:cForm.offer_deadline||null },
+        source:{ channel:cForm.source, remark: cForm.source==='Other' ? (cForm.source_remark||'').trim()||null : null, sourced_on:cForm.sourced_on||null, referrer_id:cForm.referrer_id||null, referrer_name:cForm.referrer_name||null, referrer_relation:cForm.referrer_relation||null, vendor_name:cForm.vendor_name||null, vendor_fee:cForm.vendor_fee||null, portal_link:cForm.portal_link||null },
         documents:{ resume_name:cForm.resume_name||null, photo_name:cForm.photo_name||null, linkedin:cForm.linkedin||null, portfolio:cForm.portfolio||null, consent:cForm.consent, consent_at:cForm.consent?new Date().toISOString():null },
         screening:{ q1:cForm.q1||null, q2:cForm.q2||null, chosen_stage:cForm.stage, availability:cForm.availability||null, notify_hiring_manager:cForm.notify, knocked_out:knockedOut },
       }
@@ -3325,7 +3571,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
         designation:cForm.designation||null, experience_years:expYears,
         current_ctc:fixedRs, expected_ctc:expRs,
         notice_period:noticeDays, notice_period_days:noticeDays,
-        source:cForm.source, stage,
+        source: cForm.source==='Other' && (cForm.source_remark||'').trim() ? `Other — ${cForm.source_remark.trim()}` : (cForm.source||null), stage,
         status:'active', applied_date:new Date().toISOString().split('T')[0],
         interview_notes:cForm.remarks||null,
         ...(knockedOut ? { blacklist_reason:`Screening knockout: ${cForm.q1==='No'?'cannot run 500+ payroll independently':'cannot join within notice'}` } : {}),
@@ -3410,7 +3656,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
             <option key={m.id} value={m.id}>{m.designation||m.position} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
           ))}
         </select>
-        <button onClick={()=>{ setCForm({...EMPTY_C, hr_email:myEmail}); setShowAdd(true) }} style={T.btnPrimary}>+ Add Candidate</button>
+        <button onClick={()=>{ setCForm({...EMPTY_C, hr_email:myEmail}); setAddStep(1); setTouched(false); setShowAdd(true) }} style={T.btnPrimary}>+ Add Candidate</button>
       </div>
       <SearchBar placeholder="Filter pipeline by candidate name…" onApply={setPipeQ} />
       <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
@@ -3460,7 +3706,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   <div style={{ width:40, height:40, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, flexShrink:0 }}>{initials}</div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:14, fontWeight:700, color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}{c.offer_revised&&<span style={{ fontSize:9, color:C.warning, fontWeight:600, marginLeft:5 }}></span>}</div>
-                    <div style={{ fontSize:11, color:C.faint, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.designation||mrf?.designation||'—'}</div>
+                    <div style={{ fontSize:11, color:C.faint, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.designation||mrf?.designation||'—'}{mrf?.mrf_number && <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mrf.mrf_number}</span>}</div>
                   </div>
                   <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:99, background:C.sunken, color:STAGE_TEXT[c.stage], whiteSpace:'nowrap' }}>{c.stage}</span>
                 </div>
@@ -3498,12 +3744,35 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   {cMrf ? [cMrf.designation||cMrf.position, mrfDeptName(cMrf), mrfLocName(cMrf)].filter(Boolean).join(' · ') : 'Attach the candidate to an approved opening'}
                 </div>
               </div>
-              <button onClick={()=>!saving&&setShowAdd(false)} style={{ marginLeft:'auto', background:'transparent', border:`1px solid ${C.onAccentDim}`, color:C.onAccent, borderRadius:8, padding:'5px 12px', cursor:'pointer', fontSize:13, fontFamily:'inherit' }}>Close</button>
+              <input ref={resumeRef} type="file" accept=".pdf,.doc,.docx,.txt" style={{ display:'none' }}
+                onChange={e=>{ const f=e.target.files?.[0]; if (f) parseResume(f); e.currentTarget.value='' }} />
+              <button onClick={()=>!parsing&&resumeRef.current?.click()} disabled={parsing}
+                style={{ marginLeft:'auto', background:C.onAccent, color:C.brandDeep, border:'none', borderRadius:8, padding:'7px 14px', cursor:parsing?'wait':'pointer', fontSize:12.5, fontWeight:700, fontFamily:'inherit', whiteSpace:'nowrap' as const, opacity:parsing?.7:1 }}>
+                {parsing ? '⏳ Parsing resume…' : '📄 Upload & Parse Resume'}
+              </button>
+              <button onClick={()=>!saving&&setShowAdd(false)} style={{ background:'transparent', border:`1px solid ${C.onAccentDim}`, color:C.onAccent, borderRadius:8, padding:'5px 12px', cursor:'pointer', fontSize:13, fontFamily:'inherit' }}>Close</button>
             </div>
 
             {/* scrollable body */}
-            <div style={{ overflowY:'auto', padding:'6px 22px 18px' }}>
+            <div ref={addBodyRef} style={{ overflowY:'auto', padding:'6px 22px 18px' }}>
+              {/* step indicator — click a completed part to go back to it */}
+              <div style={{ display:'flex', gap:6, margin:'12px 0 6px', flexWrap:'wrap' as const }}>
+                {STEP_TITLES.map((t,i)=>{ const n=i+1, active=n===addStep, done=n<addStep; return (
+                  <button key={n} type="button" onClick={()=>{ if (done) goToStep(n) }} disabled={!done && !active}
+                    style={{ display:'flex', alignItems:'center', gap:7, flex:'1 1 150px', padding:'7px 10px', borderRadius:9, border:`1px solid ${active?C.brand:done?'#A7F3D0':C.line}`, background:active?C.brandTint:done?C.positiveTint:C.surface, cursor:done?'pointer':'default', fontFamily:'inherit', textAlign:'left' as const }}>
+                    <span style={{ width:20, height:20, borderRadius:'50%', display:'grid', placeItems:'center', fontSize:11, fontWeight:800, background:active?C.brand:done?C.positive:C.sunken, color:(active||done)?C.onAccent:C.faint, flexShrink:0 }}>{done?'✓':n}</span>
+                    <span style={{ fontSize:11.5, fontWeight:active?700:600, color:active?C.brandDeep:done?C.positive:C.faint, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{t}</span>
+                  </button>
+                )})}
+              </div>
+              {parseNote && (
+                <div style={{ margin:'10px 0 4px', padding:'9px 12px', borderRadius:9, fontSize:12.5, lineHeight:1.5, background: parseNote.ok?C.positiveTint:C.criticalTint, color: parseNote.ok?C.positive:C.critical, border:`1px solid ${parseNote.ok?'#A7F3D0':'#FCA5A5'}` }}>
+                  <b>{parseNote.ok?'✓ Resume parsed.':'✗ Parse failed.'}</b> {parseNote.text}
+                  {parseNote.ok && parseNote.missing && parseNote.missing.length>0 && <div style={{ marginTop:3, fontSize:11.5, opacity:.9 }}>Not found in the resume — fill manually: {parseNote.missing.map((k:string)=>k.replace(/_/g,' ')).join(', ')}</div>}
+                </div>
+              )}
 
+              {addStep===1 && (<>
               {/* 1 · Requisition */}
               <SectionLine title="Requisition" />
               <div style={{ ...T.g2, marginBottom:14 }}>
@@ -3515,6 +3784,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   </select>
                   {approvedMRFs.length===0 && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>No approved MRF yet — approve one in the MRF tab first.</div>}
                 </div>
+                <div><label style={T.label}>Company</label><input style={{ ...T.input, opacity:.7 }} value={mrfCompanyName(cMrf)||'—'} readOnly placeholder="Auto-filled from the opening" /></div>
                 <div><label style={T.label}>Department</label><input style={{ ...T.input, opacity:.7 }} value={mrfDeptName(cMrf)||'—'} readOnly /></div>
                 <div><label style={T.label}>Job location</label>
                   <input style={T.input} value={cForm.job_location} onChange={e=>CF('job_location',e.target.value)} placeholder={mrfLocName(cMrf)||'City / Remote'} />
@@ -3548,6 +3818,8 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 <div style={{ gridColumn:'span 2' }}><label style={T.label}>Languages known <span style={{ color:C.faint, fontWeight:400 }}>(comma separated)</span></label><input style={T.input} value={cForm.languages} onChange={e=>CF('languages',e.target.value)} placeholder="Hindi, English" /></div>
               </div>
 
+              </>)}
+              {addStep===2 && (<>
               {/* 3 · Contact */}
               <SectionLine title="Contact" />
               <div style={{ ...T.g2, marginBottom:14 }}>
@@ -3564,7 +3836,22 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 <div><label style={T.label}>Willing to relocate</label>
                   <select style={T.select} value={cForm.relocate} onChange={e=>CF('relocate',e.target.value)}><option>Not applicable</option><option>Yes</option><option>No</option></select>
                 </div>
-                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Permanent address</label><textarea style={{ ...T.textarea, minHeight:60 }} value={cForm.permanent_address} onChange={e=>CF('permanent_address',e.target.value)} placeholder="House, street, city, state, PIN" /></div>
+                <div style={{ gridColumn:'1 / -1' }}>
+                  <label style={T.label}>Permanent address</label>
+                  <input style={{ ...T.input, marginBottom:8 }} value={cForm.perm_line1} onChange={e=>CF('perm_line1',e.target.value)} placeholder="Address line 1 — house / flat, building, street" />
+                  <input style={{ ...T.input, marginBottom:8 }} value={cForm.perm_line2} onChange={e=>CF('perm_line2',e.target.value)} placeholder="Address line 2 — area / locality, landmark (optional)" />
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10 }}>
+                    <div><label style={T.label}>PIN code</label><input style={T.input} inputMode="numeric" maxLength={6} value={cForm.perm_pincode} onChange={e=>CF('perm_pincode',e.target.value.replace(/\D/g,'').slice(0,6))} placeholder="560011" /></div>
+                    <div><label style={T.label}>City</label><input style={T.input} value={cForm.perm_city} onChange={e=>CF('perm_city',e.target.value)} placeholder="Bengaluru" /></div>
+                    <div><label style={T.label}>State</label>
+                      <select style={T.select} value={cForm.perm_state} onChange={e=>CF('perm_state',e.target.value)}>
+                        <option value="">Select state</option>
+                        {MIN_WAGE_STATES.map(st=><option key={st} value={st}>{st}</option>)}
+                      </select>
+                    </div>
+                    <div><label style={T.label}>Country</label><input style={T.input} value={cForm.perm_country} onChange={e=>CF('perm_country',e.target.value)} placeholder="India" /></div>
+                  </div>
+                </div>
               </div>
 
               {/* 4 · Professional */}
@@ -3616,17 +3903,32 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 </div>
               </div>
 
+              </>)}
+              {addStep===3 && (<>
               {/* 5 · Compensation */}
-              <SectionLine title="Compensation (₹ lakh per annum)" />
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, flexWrap:'wrap' as const }}>
+                <SectionLine title="Compensation" />
+                <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:C.faint, whiteSpace:'nowrap' as const }}>Entered in
+                  <select style={{ ...T.select, width:'auto', padding:'4px 8px', fontSize:12 }} value={cForm.comp_unit} onChange={e=>CF('comp_unit',e.target.value)}>
+                    <option value="AUTO">Auto-detect</option><option value="LPA">₹ LPA</option><option value="MONTH">₹ per month</option><option value="YEAR">₹ per year</option>
+                  </select>
+                </label>
+              </div>
               <div style={{ ...T.g3, marginBottom:14 }}>
-                <div><label style={T.label}>Current fixed CTC{reqMark}</label><input style={inp('current_fixed')} type="number" min={0} step={0.01} value={cForm.current_fixed} onChange={e=>CF('current_fixed',e.target.value)} placeholder="8.40" /></div>
-                <div><label style={T.label}>Current variable</label><input style={T.input} type="number" min={0} step={0.01} value={cForm.current_variable} onChange={e=>CF('current_variable',e.target.value)} placeholder="0.60" /></div>
+                <div><label style={T.label}>Current fixed CTC{reqMark}</label><input style={inp('current_fixed')} type="number" min={0} step={0.01} value={cForm.current_fixed} onChange={e=>CF('current_fixed',e.target.value)} placeholder={ph('8.40','70000','840000')} />
+                  {echo(cForm.current_fixed) && <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{echo(cForm.current_fixed)}</div>}
+                </div>
+                <div><label style={T.label}>Current variable</label><input style={T.input} type="number" min={0} step={0.01} value={cForm.current_variable} onChange={e=>CF('current_variable',e.target.value)} placeholder={ph('0.60','5000','60000')} />
+                  {echo(cForm.current_variable) && <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{echo(cForm.current_variable)}</div>}
+                </div>
                 <div style={{ background:C.ink, color:C.onAccent, borderRadius:R.md, padding:'8px 12px', alignSelf:'end' }}>
                   <div style={{ fontSize:10, color:C.onAccentDim }}>Total current CTC</div>
-                  <div style={{ fontSize:17, fontWeight:700 }}>₹{((Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0)).toFixed(2)} LPA</div>
+                  <div style={{ fontSize:17, fontWeight:700 }}>₹{totalCurLpa.toFixed(2)} LPA</div>
+                  {totalCurLpa>0 && <div style={{ fontSize:10, color:C.onAccentDim }}>= {rsYr(totalCurLpa)}</div>}
                 </div>
                 <div><label style={T.label}>Expected CTC{reqMark}</label>
-                  <input style={{ ...inp('expected_ctc'), ...(expCtcOver?errStyle:{}) }} type="number" min={0} step={0.01} value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} placeholder="11.00" />
+                  <input style={{ ...inp('expected_ctc'), ...(expCtcOver?errStyle:{}) }} type="number" min={0} step={0.01} value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} placeholder={ph('11.00','92000','1100000')} />
+                  {echo(cForm.expected_ctc) && <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{echo(cForm.expected_ctc)}</div>}
                   {expCtcOver
                     ? <div style={{ fontSize:10, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>
                     : cMrf?.budget_max ? <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>MRF budget: ₹{(Number(cMrf.budget_min||0)/100000).toFixed(1)}L – ₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L</div> : null}
@@ -3636,14 +3938,18 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 </div>
                 <div style={{ background:C.sunken, borderRadius:R.md, padding:'8px 12px', alignSelf:'end', border:`1px solid ${C.line}` }}>
                   <div style={{ fontSize:10, color:C.faint }}>Hike over current</div>
-                  <div style={{ fontSize:17, fontWeight:700, color:C.positive }}>{(()=>{ const t=(Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0); const e=Number(cForm.expected_ctc)||0; return (t>0&&e>0)?(((e-t)/t)*100).toFixed(1)+'%':'—' })()}</div>
+                  <div style={{ fontSize:17, fontWeight:700, color: hikePct==null ? C.faint : hikePct<0 ? C.critical : C.positive }}>{hikePct==null ? '—' : `${hikePct>0?'+':''}${hikePct.toFixed(1)}%`}</div>
+                  {hikePct!=null && <div style={{ fontSize:10, color:C.faint }}>₹{totalCurLpa.toFixed(2)}L → ₹{expLpa.toFixed(2)}L</div>}
+                  {hikeSuspicious && <div style={{ fontSize:10, color:C.critical, marginTop:2, fontWeight:600 }}>Looks like a unit mix-up — check "Entered in" above.</div>}
                 </div>
                 <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Offer in hand</label>
                   <select style={{ ...T.select, maxWidth:200 }} value={cForm.offer_in_hand} onChange={e=>CF('offer_in_hand',e.target.value)}><option>No</option><option>Yes</option></select>
                 </div>
                 {cForm.offer_in_hand==='Yes' && <>
                   <div><label style={T.label}>Offering company</label><input style={T.input} value={cForm.offer_company} onChange={e=>CF('offer_company',e.target.value)} /></div>
-                  <div><label style={T.label}>Offered CTC (LPA)</label><input style={T.input} type="number" min={0} step={0.01} value={cForm.offer_amount} onChange={e=>CF('offer_amount',e.target.value)} /></div>
+                  <div><label style={T.label}>Offered CTC</label><input style={T.input} type="number" min={0} step={0.01} value={cForm.offer_amount} onChange={e=>CF('offer_amount',e.target.value)} placeholder={ph('12.00','100000','1200000')} />
+                    {echo(cForm.offer_amount) && <div style={{ fontSize:10, color:C.faint, marginTop:3 }}>{echo(cForm.offer_amount)}</div>}
+                  </div>
                   <div><label style={T.label}>Joining deadline</label><input style={T.input} type="date" value={cForm.offer_deadline} onChange={e=>CF('offer_deadline',e.target.value)} /></div>
                 </>}
               </div>
@@ -3656,6 +3962,11 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                     <option value="">Select</option>{SOURCES.map(s=><option key={s}>{s}</option>)}
                   </select>
                 </div>
+                {cForm.source==='Other' && (
+                  <div><label style={T.label}>Source remark{reqMark}</label>
+                    <input style={sel('source_remark')} value={cForm.source_remark} onChange={e=>CF('source_remark',e.target.value)} placeholder="Where did this candidate come from?" />
+                  </div>
+                )}
                 <div><label style={T.label}>Sourced on</label><input style={T.input} type="date" value={cForm.sourced_on} onChange={e=>CF('sourced_on',e.target.value)} /></div>
                 {cForm.source==='Referral' && <>
                   <div><label style={T.label}>Referring employee ID</label><input style={T.input} value={cForm.referrer_id} onChange={e=>CF('referrer_id',e.target.value)} placeholder="EMP-10234" /></div>
@@ -3671,6 +3982,8 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Job portal / profile link</label><input style={T.input} type="url" value={cForm.portal_link} onChange={e=>CF('portal_link',e.target.value)} placeholder="https://" /></div>
               </div>
 
+              </>)}
+              {addStep===4 && (<>
               {/* 7 · Documents */}
               <SectionLine title="Documents" />
               <div style={{ ...T.g2, marginBottom:14 }}>
@@ -3713,14 +4026,18 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 <div><label style={T.label}>Interview availability</label><input style={T.input} value={cForm.availability} onChange={e=>CF('availability',e.target.value)} placeholder="Weekdays after 6 pm, Sat full day" /></div>
                 <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Recruiter remarks <span style={{ color:C.faint, fontWeight:400 }}>(visible to hiring manager)</span></label><textarea style={{ ...T.textarea, minHeight:64 }} value={cForm.remarks} onChange={e=>CF('remarks',e.target.value)} placeholder="Screening call summary, red flags, why this profile fits" /></div>
               </div>
+              </>)}
             </div>
 
             {/* sticky footer */}
             <div style={{ borderTop:`1px solid ${C.line}`, padding:'12px 22px', display:'flex', alignItems:'center', gap:10, flexShrink:0, background:C.surface }}>
-              <button onClick={addCandidate} disabled={saving} style={{ ...T.btnPrimary, opacity:saving?.6:1, cursor:saving?'default':'pointer' }}>{saving?'Saving…':'Add to pipeline'}</button>
+              {addStep>1 && <button onClick={()=>goToStep(addStep-1)} disabled={saving} style={T.btnOutline}>← Back</button>}
+              {addStep<4
+                ? <button onClick={goNext} disabled={saving} style={T.btnPrimary}>Next: {STEP_TITLES[addStep]} →</button>
+                : <button onClick={addCandidate} disabled={saving} style={{ ...T.btnPrimary, opacity:saving?.6:1, cursor:saving?'default':'pointer' }}>{saving?'Saving…':'Add to pipeline'}</button>}
               <button onClick={()=>!saving&&setShowAdd(false)} style={T.btnOutline}>Cancel</button>
-              <span style={{ marginLeft:'auto', fontSize:12, fontWeight:500, color: touched&&missingCount>0 ? C.critical : C.faint }}>
-                {touched&&missingCount>0 ? `${missingCount} required field${missingCount>1?'s':''} missing` : 'Fields marked * are required'}
+              <span style={{ marginLeft:'auto', fontSize:12, fontWeight:500, color: touched&&stepMissing(addStep)>0 ? C.critical : C.faint }}>
+                Part {addStep} of 4 · {touched&&stepMissing(addStep)>0 ? `${stepMissing(addStep)} required field${stepMissing(addStep)>1?'s':''} missing here` : 'Fields marked * are required'}
               </span>
             </div>
           </div>
@@ -3736,6 +4053,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
           schedulerId={employeeId}
           onClose={()=>setSelCand(null)}
           onStageChange={moveStage}
+          onChanged={(stage)=>{ if (stage) setSelCand(c=>c?{...c,stage}:null); onRefresh() }}
           showNotify={showNotify} />
       )}
 
@@ -3770,7 +4088,7 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
       <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
         <div>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
-            <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{c.full_name}</div>
+            <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{c.full_name}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
             <span style={{ fontSize:10, fontWeight:700, padding:'3px 10px', borderRadius:99, background:C.sunken, color:STAGE_TEXT[c.stage] }}>{c.stage}</span>
           </div>
           <div style={{ fontSize:12, color:C.faint, marginTop:3 }}>{c.current_company} · {c.experience_years}yr · {c.phone||c.mobile}</div>
@@ -3844,29 +4162,59 @@ function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNote
 
 // ── NEGOTIATION CALCULATOR ────────────────────────────────────────
 // ── Stipend calculator (Intern / NATS / NAPS / Contract / Live Project / Consultant) ──
-function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:any) {
+function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwRates, locations }:any) {
   const [stipend, setStipend] = useState('')
   const [tds, setTds] = useState(false)
   const [tdsPct, setTdsPct] = useState('')
+  const [addAmt, setAddAmt] = useState('')
+  const [addFreq, setAddFreq] = useState('One-time')
+  const [remark, setRemark] = useState('')
   const [saving, setSaving] = useState(false)
   const [savedLink, setSavedLink] = useState<string|null>(null)
   const [companyOverride, setCompanyOverride] = useState('')
   const autoCompany = sel?.company_id || mrf?.company_id || (companies?.length===1 ? companies[0].id : '')
   const effCompany = autoCompany || companyOverride
+  // Consultants / contractors are paid "Fees", interns / NATS / NAPS a "Stipend" — one
+  // calculator, the label follows the engagement type.
+  const comp = compOf(mrf?.employment_type)
+  const payLabel = comp.label   // 'Stipend' | 'Fees'
   const s = Number(stipend)||0
   const pct = tds ? (Number(tdsPct)||0) : 0
   const tdsAmt = Math.round(s*pct/100)
   const net = s - tdsAmt
+  const addAmount = Number(addAmt)||0
+
+  // The offered stipend may not exceed the MRF's approved budget. For stipend roles the
+  // budget is a monthly figure; annualise only if the MRF stored it per year.
+  const mrfStipendCapMonthly = mrf?.budget_max ? Number(mrf.budget_max) / (mrf?.pay_period==='ANNUAL' ? 12 : 1) : 0
+  const overBudget = mrfStipendCapMonthly>0 && s > mrfStipendCapMonthly
+  const lakh = (v:number) => `₹${(v/100000).toFixed(2)}L`
+  const money = (v:number) => `₹${Math.round(v).toLocaleString('en-IN')}`
+
+  // Minimum-wage floor applies to EVERY engagement type: the monthly stipend / fees may
+  // not be below the state + worker-category minimum wage (HR master → default table).
+  const mrfLoc = (locations||[]).find((l:any)=>l.id===mrf?.location_id)
+  const mrfState = stateFromLocation(mrfLoc)   // e.g. Ahmedabad Branch → Gujarat
+  const [mwState, setMwState] = useState<string>(mrfState || DEFAULT_STATE)
+  useEffect(()=>{ if (mrfState) setMwState(mrfState) }, [mrf?.id, mrfState])
+  const [mwCat, setMwCat] = useState<string>(mrf?.wage_category || DEFAULT_CATEGORY)
+  useEffect(()=>{ if (mrf?.wage_category) setMwCat(mrf.wage_category) }, [mrf?.id, mrf?.wage_category])
+  const mw = resolveMinWage(mwRates, mwState, mwCat as any)
+  const belowMinWage = s>0 && s < mw.amount
 
   async function save() {
-    if (!s) { showNotify('Enter the monthly stipend','error'); return }
+    if (!s) { showNotify(`Enter the monthly ${payLabel.toLowerCase()}`,'error'); return }
+    if (mrfStipendCapMonthly>0 && s > mrfStipendCapMonthly) { showNotify(`${payLabel} ${money(s)}/mo exceeds the MRF budget of ${money(mrfStipendCapMonthly)}/mo. Reduce it before saving.`,'error'); return }
+    if (s < mw.amount) { showNotify(`${payLabel} ${money(s)}/mo is below the minimum wage for ${mwState} (${mwCat}): ${money(mw.amount)}/mo. Raise it to continue.`,'error'); return }
     const companyId = effCompany || null
     if (!companyId) { showNotify('Select the company for this candidate first (dropdown in the calculator).','error'); return }
     if (!sel.company_id) await supabase.from('candidates').update({ company_id:companyId }).eq('id', sel.id)
     setSaving(true); setSavedLink(null)
-    const calcData = { is_stipend:true, employment_type:mrf?.employment_type, stipend_monthly:s, tds_applicable:tds, tds_pct:pct, tds_amount:tdsAmt, net_monthly:net, annual:s*12 }
+    const calcData = { is_stipend:true, pay_kind:comp.kind, pay_label:payLabel, employment_type:mrf?.employment_type, stipend_monthly:s, tds_applicable:tds, tds_pct:pct, tds_amount:tdsAmt, net_monthly:net, annual:s*12,
+      additional_amount:addAmount, additional_freq:addFreq, remark:remark.trim()||null,
+      mw_state:mwState, mw_category:mwCat, min_wage:mw.amount, min_wage_source:mw.source }
     const { data, error } = await supabase.from('ctc_negotiations').upsert({
-      candidate_id:sel.id, company_id:companyId,
+      candidate_id:sel.id, company_id:companyId, link_sent_at:new Date().toISOString(),
       offered_ctc:s*12, net_monthly:net,
       candidate_name:sel.full_name, position_title:sel.designation||null,
       is_stipend:true, stipend_monthly:s, tds_applicable:tds, tds_pct:pct,
@@ -3875,14 +4223,14 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:an
     setSaving(false)
     if (error) { showNotify('Save failed: '+error.message,'error'); return }
     setSavedLink(data?.link_token ? `${window.location.origin}/salary-view/${data.link_token}` : null)
-    showNotify('Stipend saved! Salary link ready 👇'); onRefresh()
+    showNotify(`${payLabel} saved! Salary link ready 👇`); onRefresh()
   }
 
   return (
     <div>
       <div style={T.cardPurple}>
-        <div style={{ fontSize:13, fontWeight:600, color:C.brandDeep, marginBottom:4 }}>Stipend Calculator — {sel.full_name}</div>
-        <div style={{ fontSize:11, color:C.faint, marginBottom:14 }}>{mrf?.employment_type||'Non-employee'} engagement · stipend only (no PF/HRA structure)</div>
+        <div style={{ fontSize:13, fontWeight:600, color:C.brandDeep, marginBottom:4 }}>{payLabel} Calculator — {sel.full_name}{mrf?.mrf_number && <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mrf.mrf_number}</span>}</div>
+        <div style={{ fontSize:11, color:C.faint, marginBottom:14 }}>{mrf?.employment_type||'Non-employee'} engagement · {payLabel.toLowerCase()} only (no PF/HRA structure)</div>
         {!autoCompany && (
           <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
             <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
@@ -3893,21 +4241,60 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:an
           </div>
         )}
         <div style={{ ...T.g2, marginBottom:10 }}>
-          <div><label style={T.label}>Monthly Stipend (₹) *</label><input style={T.input} type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder="25000" /></div>
+          <div><label style={T.label}>State / UT</label>
+            <select style={T.select} value={mwState} onChange={e=>setMwState(e.target.value)} disabled={!!mrfState}>
+              {MIN_WAGE_STATES.map(st=><option key={st} value={st}>{st}</option>)}
+            </select>
+            <div style={{ fontSize:10.5, color:mrfState?C.positive:C.faint, marginTop:3 }}>{mrfState ? `Auto-filled from MRF branch: ${mrfLoc?.location_name||'branch'} → ${mrfState}` : 'No branch on the MRF — choose the state'}</div>
+          </div>
+          <div><label style={T.label}>Worker Category</label>
+            <select style={T.select} value={mwCat} onChange={e=>setMwCat(e.target.value)} disabled={!!mrf?.wage_category}>
+              {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
+            </select>
+            <div style={{ fontSize:10.5, color:mrf?.wage_category?C.positive:C.faint, marginTop:3 }}>{mrf?.wage_category ? 'Auto-filled from the MRF' : 'Not set on the MRF — choose here'}</div>
+          </div>
+        </div>
+        <div style={{ ...T.g2, marginBottom:10 }}>
+          <div><label style={T.label}>Monthly {payLabel} (₹) *</label>
+            <input style={{ ...T.input, ...((overBudget||belowMinWage)?{ borderColor:C.critical }:{}) }} type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder={comp.ph?.[0]||'25000'} />
+            {mrfStipendCapMonthly>0 && (
+              overBudget
+                ? <div style={{ fontSize:10.5, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF budget ({money(mrfStipendCapMonthly)}/mo) — {payLabel.toLowerCase()} can’t be higher than the approved budget.</div>
+                : <div style={{ fontSize:10.5, color:C.faint, marginTop:3 }}>MRF budget: up to {money(mrfStipendCapMonthly)}/mo</div>
+            )}
+            {belowMinWage
+              ? <div style={{ fontSize:10.5, color:C.critical, marginTop:3, fontWeight:600 }}>Below minimum wage for {mwState} ({mwCat}): {money(mw.amount)}/mo — {payLabel.toLowerCase()} can’t be lower than this.</div>
+              : <div style={{ fontSize:10.5, color:C.faint, marginTop:3 }}>Minimum wage · {mwState} · {mwCat}: <b style={{ color:C.ink }}>{money(mw.amount)}/mo</b> {mw.source==='master'?'(HR master)':mw.source==='default'?'(default table)':'(fallback)'}</div>}
+          </div>
           <div><label style={T.label}>TDS Applicable?</label>
             <select style={T.select} value={tds?'Yes':'No'} onChange={e=>setTds(e.target.value==='Yes')}><option>No</option><option>Yes</option></select>
           </div>
         </div>
         {tds&&(<div style={{ marginBottom:10 }}><label style={T.label}>TDS %</label><input style={T.input} type="number" value={tdsPct} onChange={e=>setTdsPct(e.target.value)} placeholder="10" /></div>)}
+
+        {/* Additional amount — one-off or recurring, with an optional remark */}
+        <div style={{ ...T.g2, marginBottom:10 }}>
+          <div><label style={T.label}>Additional Amount (₹)</label><input style={T.input} type="number" value={addAmt} onChange={e=>setAddAmt(e.target.value)} placeholder="e.g. 5000" /></div>
+          <div><label style={T.label}>Frequency</label>
+            <select style={T.select} value={addFreq} onChange={e=>setAddFreq(e.target.value)}>
+              {['One-time','Monthly','Quarterly','Half-yearly','Yearly'].map(o=><option key={o}>{o}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ marginBottom:10 }}><label style={T.label}>Remark</label>
+          <textarea style={{ ...T.textarea, minHeight:60 }} value={remark} onChange={e=>setRemark(e.target.value)} placeholder="Any note for the candidate (shown on the salary link)…" />
+        </div>
+
         {s>0&&(
           <div style={{ marginTop:8, background:C.sunken, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 16px' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:13 }}><span style={{ color: C.inkSoft }}>Monthly Stipend</span><span style={{ fontWeight:600 }}>₹{s.toLocaleString('en-IN')}</span></div>
+            <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:13 }}><span style={{ color: C.inkSoft }}>Monthly {payLabel}</span><span style={{ fontWeight:600 }}>₹{s.toLocaleString('en-IN')}</span></div>
             {tds&&<div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:13, color:C.critical }}><span>(-) TDS ({pct}%)</span><span>-₹{tdsAmt.toLocaleString('en-IN')}</span></div>}
             <div style={{ display:'flex', justifyContent:'space-between', padding:'7px 0 0', fontSize:14, fontWeight:700, color:C.positive, borderTop: `1px solid ${C.brandEdge}`, marginTop:4 }}><span>Net In-Hand (monthly)</span><span>₹{net.toLocaleString('en-IN')}</span></div>
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0 0', fontSize:12, color:C.brand }}><span>Annual Stipend</span><span>₹{(s*12).toLocaleString('en-IN')}</span></div>
+            <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0 0', fontSize:12, color:C.brand }}><span>Annual {payLabel}</span><span>₹{(s*12).toLocaleString('en-IN')}</span></div>
+            {addAmount>0&&<div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0 0', fontSize:12, color:C.inkSoft }}><span>Additional ({addFreq})</span><span>₹{addAmount.toLocaleString('en-IN')}</span></div>}
           </div>
         )}
-        <button onClick={save} disabled={saving} style={{ ...T.btnPrimary, width:'100%', marginTop:12, padding:10 }}>{saving?'Saving…':'Save Stipend & Move to Offers'}</button>
+        <button onClick={save} disabled={saving||overBudget||belowMinWage} style={{ ...T.btnPrimary, width:'100%', marginTop:12, padding:10, opacity:(saving||overBudget||belowMinWage)?.6:1, cursor:(overBudget||belowMinWage)?'not-allowed':'pointer' }}>{overBudget?`${payLabel} exceeds MRF budget`:belowMinWage?`${payLabel} below minimum wage`:saving?'Saving…':`Save ${payLabel} & Move to Offers`}</button>
         {savedLink&&(
           <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 14px' }}>
             <div style={{ fontSize:11, fontWeight:600, color: C.brand, marginBottom:6 }}>CANDIDATE SALARY LINK</div>
@@ -3922,78 +4309,281 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:an
   )
 }
 
-// ── Pre-negotiation document checks (Aadhaar + previous offer letter) ──
-function PreNegoChecks({ candidate, supabase, showNotify, onDone }:any) {
-  const [aadhaar, setAadhaar] = useState<string>(candidate.aadhaar_url||'')
-  const [prevOffer, setPrevOffer] = useState<string>(candidate.prev_offer_url||'')
-  const [busy, setBusy] = useState('')
-  const [saving, setSaving] = useState(false)
-  const aadhaarRef = useRef<HTMLInputElement>(null)
-  const prevRef = useRef<HTMLInputElement>(null)
+// ── CTC Negotiation — document collection link (24h) ──────────────────────────
+// Replaces the old Aadhaar/offer uploader. The recruiter sends the candidate a
+// secure 24h link to upload their documents; CC colleagues; then Resend / see Status.
+function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, onRefresh }:any) {
+  const [loading, setLoading] = useState(true)
+  const [link, setLink] = useState<any>(null)
+  const [docs, setDocs] = useState<any[]>([])
+  const [mode, setMode] = useState<'main'|'send'|'status'>('main')
+  const [email, setEmail] = useState<string>(candidate.email||'')
+  const [cc, setCc] = useState<{id:string;name:string;email:string}[]>([])
+  const [ccQ, setCcQ] = useState('')
+  const [emps, setEmps] = useState<any[]>([])
+  const [sending, setSending] = useState(false)
+  const [meEmail, setMeEmail] = useState<string>('')
+  const [busyDoc, setBusyDoc] = useState<string>('')          // doc id currently acting on
+  const [viewDoc, setViewDoc] = useState<{url:string; name:string}|null>(null) // View popup
+  const [selDocs, setSelDocs] = useState<Set<string>>(new Set())
+  const [zipping, setZipping] = useState(false)
+  const [rejecting, setRejecting] = useState<any|null>(null)  // doc pending reject confirm
 
-  async function upload(docType:'AADHAAR'|'PREV_OFFER', file:File) {
-    if (!file) return
-    if (file.size > 5*1024*1024) { showNotify('File too large (max 5MB)','error'); return }
-    setBusy(docType)
-    const fd = new FormData()
-    fd.append('candidate_id', candidate.id); fd.append('doc_type', docType); fd.append('file', file)
+  const signDoc = async (docId:string, mode:'view'|'download') => {
+    const r = await fetch(`/api/recruitment/doc-collection/file?doc_id=${docId}&mode=${mode}`, { cache:'no-store' })
+    const j = await r.json().catch(()=>({}))
+    if (!r.ok || !j.url) throw new Error(j.error||'Could not open file')
+    return j as { url:string; file_name?:string }
+  }
+  async function onView(d:any) {
+    setBusyDoc(d.id)
+    try { const j = await signDoc(d.id,'view'); setViewDoc({ url:j.url, name:d.doc_label||d.file_name||'Document' }) }
+    catch(e:any){ showNotify(e.message||'Could not open','error') }
+    setBusyDoc('')
+  }
+  async function onDownload(d:any) {
+    setBusyDoc(d.id)
+    try { const j = await signDoc(d.id,'download'); const a=document.createElement('a'); a.href=j.url; a.download=d.file_name||''; document.body.appendChild(a); a.click(); a.remove() }
+    catch(e:any){ showNotify(e.message||'Could not download','error') }
+    setBusyDoc('')
+  }
+  async function onReject(d:any) {
+    setBusyDoc(d.id)
     try {
-      const r = await fetch('/api/recruitment/upload-doc', { method:'POST', body:fd })
-      const d = await r.json()
-      if (!r.ok) throw new Error(d.error||'Upload failed')
-      if (docType==='AADHAAR') setAadhaar(d.path); else setPrevOffer(d.path)
-      showNotify(`${docType==='AADHAAR'?'Aadhaar':'Previous offer letter'} uploaded ✓`)
-    } catch(e:any){ showNotify('Upload failed: '+e.message,'error') }
-    setBusy('')
+      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'reject', doc_id:d.id }) })
+      const j = await r.json().catch(()=>({}))
+      if (!r.ok) { showNotify(j.error||'Could not reject','error'); setBusyDoc(''); setRejecting(null); return }
+      showNotify(`${d.doc_label||d.doc_type} rejected — resend the link so the candidate re-uploads it.`)
+      setSelDocs(new Set()); setRejecting(null); await loadStatus(); onRefresh?.()
+    } catch { showNotify('Could not reject','error') }
+    setBusyDoc('')
   }
-
-  async function save() {
-    if (!aadhaar || !prevOffer) { showNotify('Please upload both documents first','error'); return }
-    setSaving(true)
-    const { error } = await supabase.from('candidates').update({ pre_negotiation_done:true }).eq('id', candidate.id)
-    setSaving(false)
-    if (error) { showNotify('Save failed: '+error.message,'error'); return }
-    showNotify(`${candidate.full_name} cleared pre-negotiation checks — moved to CTC Negotiations.`)
-    onDone()
+  async function onDownloadZip(ids?:string[]) {
+    setZipping(true)
+    try {
+      const qs = ids && ids.length ? `&ids=${ids.join(',')}` : ''
+      const r = await fetch(`/api/recruitment/doc-collection/zip?candidate_id=${candidate.id}${qs}`, { cache:'no-store' })
+      if (!r.ok) { const j = await r.json().catch(()=>({})); showNotify(j.error||'Could not build zip','error'); setZipping(false); return }
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href=url; a.download=`${(candidate.full_name||'candidate').replace(/[^A-Za-z0-9]+/g,'_')}_documents.zip`
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url)
+    } catch { showNotify('Could not build zip','error') }
+    setZipping(false)
   }
+  const toggleSel = (id:string) => setSelDocs(s=>{ const n=new Set(s); n.has(id)?n.delete(id):n.add(id); return n })
 
-  const box = (docType:'AADHAAR'|'PREV_OFFER', label:string, val:string, ref:React.RefObject<HTMLInputElement|null>) => (
-    <div style={{ border:`2px dashed ${val?'#A7F3D0':C.brandEdge}`, borderRadius:10, padding:'14px 16px', background:val?C.positiveTint:C.sunken, marginBottom:12 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
-        <div>
-          <div style={{ fontSize:13, fontWeight:600 }}>{val?'':''} {label} <span style={{ color:C.critical, fontSize:11 }}>*</span></div>
-          {val && <div style={{ fontSize:11, color:C.positive, marginTop:3 }}>Uploaded</div>}
-        </div>
-        <input ref={ref} type="file" accept=".jpg,.jpeg,.png,.pdf" style={{ display:'none' }}
-          onChange={e=>{ const f=e.target.files?.[0]; if(f) upload(docType,f); if(ref.current) ref.current.value='' }} />
-        <button onClick={()=>ref.current?.click()} disabled={busy===docType} style={{ ...T.btnPrimary, opacity:busy===docType?.6:1 }}>
-          {busy===docType?'Uploading…':val?'Re-upload':'Upload'}
-        </button>
-      </div>
-    </div>
-  )
+  const loadStatus = async () => {
+    try {
+      const r = await fetch(`/api/recruitment/doc-collection?candidate_id=${candidate.id}`, { cache:'no-store' })
+      const j = await r.json().catch(()=>({}))
+      setLink(j.link||null); setDocs(j.docs||[])
+    } catch {} finally { setLoading(false) }
+  }
+  useEffect(()=>{ loadStatus() },[candidate.id]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{
+    supabase.from('employees').select('id, full_name, emp_code, office_email, personal_email').is('date_of_leaving',null).order('full_name').then(({data}:any)=>setEmps(data||[]))
+    supabase.auth.getUser().then(({data}:any)=>setMeEmail(data?.user?.email||''))
+  },[supabase])
+
+  const empEmail = (e:any) => e.office_email || e.personal_email || ''
+  const ccHits = ccQ.trim() ? emps.filter((e:any)=> empEmail(e) && !cc.some(c=>c.id===e.id) && ((e.full_name||'').toLowerCase().includes(ccQ.toLowerCase()) || (e.emp_code||'').toLowerCase().includes(ccQ.toLowerCase()))).slice(0,8) : []
+  const now = Date.now()
+  const active = link && link.status==='ACTIVE' && link.expires_at && new Date(link.expires_at).getTime()>now
+  const timeLeft = link?.expires_at ? Math.max(0, Math.floor((new Date(link.expires_at).getTime()-now)/3600000)) : 0
+
+  async function send() {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { showNotify('Enter a valid candidate email','error'); return }
+    setSending(true)
+    try {
+      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'send', candidate_id:candidate.id, mrf_id:candidate.mrf_id||mrf?.id||null, company_id:companyId||candidate.company_id||mrf?.company_id||null, email:email.trim(), cc:cc.map(c=>c.email), created_by:meEmail||null }) })
+      const j = await r.json().catch(()=>({}))
+      if (!r.ok) { showNotify(j.error||'Could not send','error'); setSending(false); return }
+      showNotify(j.emailSkipped ? `Link created (email off: ${j.emailSkipped})` : `Document link sent to ${email}${cc.length?` (cc ${cc.length})`:''}`)
+      await loadStatus(); setMode('main'); onRefresh?.()
+    } catch { showNotify('Could not send','error') }
+    setSending(false)
+  }
 
   return (
-    <div style={T.cardPurple}>
-      <div style={{ fontSize:13, fontWeight:600, color:C.brandDeep, marginBottom:6 }}>Pre-negotiation Checks — {candidate.full_name}</div>
-      <div style={{ fontSize:11, color:C.faint, marginBottom:14 }}>Upload the candidate's documents, then save to begin CTC negotiation.</div>
-      {box('AADHAAR','Aadhaar Card', aadhaar, aadhaarRef)}
-      {box('PREV_OFFER','Previous Offer Letter', prevOffer, prevRef)}
-      <button onClick={save} disabled={saving||!aadhaar||!prevOffer} style={{ ...T.btnPrimary, width:'100%', padding:11, marginTop:6, opacity:(saving||!aadhaar||!prevOffer)?.6:1 }}>
-        {saving?'Saving…':'Save & Move to CTC Negotiations →'}
-      </button>
+    <div onMouseDown={e=>{ if(e.target===e.currentTarget) onClose() }}
+      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}>
+      <div style={{ background:C.surface, borderRadius:16, width:'min(560px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.3)', padding:'18px 20px', margin:'0 auto' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+          <div style={{ fontSize:16, fontWeight:700, color:C.ink, flex:1 }}>CTC Negotiation — {candidate.full_name}{mrf?.mrf_number && <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mrf.mrf_number}</span>}</div>
+          <button onClick={onClose} style={{ ...T.btnOutline }}>Close</button>
+        </div>
+
+        {loading ? <div style={{ fontSize:13, color:C.faint, padding:'10px 0' }}>Loading…</div> : (
+          <>
+          {mode==='main' && (
+            <div>
+              <div style={{ fontSize:12, color:C.faint, marginBottom:2 }}>Registered email</div>
+              <div style={{ fontSize:13, fontWeight:600, marginBottom:12 }}>{candidate.email || <span style={{ color:C.critical }}>no email on file</span>}</div>
+              {link ? (
+                <>
+                  <div style={{ background:C.sunken, border:`1px solid ${C.line}`, borderRadius:10, padding:'12px 14px', marginBottom:12 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <span style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:99,
+                        background: link.status==='SUBMITTED'?C.positiveTint : active?C.infoTint : C.criticalTint,
+                        color: link.status==='SUBMITTED'?C.positive : active?C.info : C.critical }}>
+                        {link.status==='SUBMITTED'?'Submitted ✓' : active?`Active · ${timeLeft}h left` : 'Expired'}
+                      </span>
+                      <span style={{ fontSize:11, color:C.faint }}>{docs.length} document{docs.length===1?'':'s'} uploaded</span>
+                    </div>
+                    <div style={{ fontSize:11, color:C.faint, marginTop:6 }}>Sent to {link.candidate_email||candidate.email}{Array.isArray(link.cc_emails)&&link.cc_emails.length?` · cc ${link.cc_emails.join(', ')}`:''}</div>
+                  </div>
+                  {link.status==='SUBMITTED' ? (
+                    <div style={{ display:'flex', gap:8 }}>
+                      <button onClick={()=>setMode('status')} style={{ ...T.btnPrimary, flex:1 }}>Review Documents</button>
+                    </div>
+                  ) : (
+                    <div style={{ display:'flex', gap:8 }}>
+                      <button onClick={()=>{ setEmail(link.candidate_email||candidate.email||''); setCc((link.cc_emails||[]).map((em:string)=>({id:em,name:em,email:em}))); setMode('send') }} style={{ ...T.btnPrimary, flex:1 }}>Resend link</button>
+                      <button onClick={()=>setMode('status')} style={{ ...T.btnOutline, flex:1 }}>Status</button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <button onClick={()=>{ setEmail(candidate.email||''); setMode('send') }} style={{ ...T.btnPrimary, width:'100%', padding:11 }}>Create CTC Negotiation Link</button>
+              )}
+            </div>
+          )}
+
+          {mode==='send' && (
+            <div>
+              <label style={T.label}>Candidate email</label>
+              <input style={T.input} value={email} onChange={e=>setEmail(e.target.value)} placeholder="candidate@email.com" />
+              <label style={{ ...T.label, marginTop:12 }}>CC <span style={{ color:C.faint, fontWeight:400 }}>— search employees to add to the email</span></label>
+              {cc.length>0 && (
+                <div style={{ display:'flex', flexWrap:'wrap' as const, gap:6, marginBottom:6 }}>
+                  {cc.map(c=>(
+                    <span key={c.id} style={{ display:'inline-flex', alignItems:'center', gap:6, background:C.brandTint, color:C.brandDeep, borderRadius:99, padding:'3px 6px 3px 10px', fontSize:11.5, fontWeight:600 }}>
+                      {c.name}<button onClick={()=>setCc(cc.filter(x=>x.id!==c.id))} style={{ border:'none', background:'transparent', cursor:'pointer', color:C.brandDeep, fontSize:13, lineHeight:1 }}>×</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div style={{ position:'relative' }}>
+                <input style={T.input} value={ccQ} onChange={e=>setCcQ(e.target.value)} placeholder="Type a name or emp code…" />
+                {ccHits.length>0 && (
+                  <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:C.surface, border:`1px solid ${C.line}`, borderRadius:8, marginTop:3, boxShadow:'0 8px 24px rgba(30,27,75,0.14)', maxHeight:220, overflowY:'auto' }}>
+                    {ccHits.map((e:any)=>(
+                      <button key={e.id} onClick={()=>{ setCc([...cc,{id:e.id,name:`${e.full_name} (${e.emp_code})`,email:empEmail(e)}]); setCcQ('') }}
+                        style={{ display:'block', width:'100%', textAlign:'left' as const, padding:'8px 11px', border:'none', borderBottom:`1px solid ${C.line}`, background:C.surface, cursor:'pointer', fontFamily:'inherit', fontSize:12.5, color:C.ink }}>
+                        {e.full_name} <span style={{ color:C.faint }}>· {e.emp_code} · {empEmail(e)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div style={{ fontSize:11, color:C.faint, margin:'10px 0' }}>Sends a secure upload link, valid 24 hours, for PAN, Aadhaar, bank statement, education, appointment/appraisal letters, 3 salary slips, Form 16 and a photo.</div>
+              <div style={{ display:'flex', gap:8 }}>
+                <button onClick={send} disabled={sending} style={{ ...T.btnPrimary, flex:1, opacity:sending?.6:1 }}>{sending?'Sending…':'Send link'}</button>
+                <button onClick={()=>setMode('main')} style={T.btnOutline}>Back</button>
+              </div>
+            </div>
+          )}
+
+          {mode==='status' && (
+            <div>
+              <div style={{ fontSize:12, color:C.faint, marginBottom:8 }}>
+                {link?.status==='SUBMITTED' ? `Submitted on ${fmtDay(link.submitted_at)}` : active ? `Link active — ${timeLeft}h left (expires ${new Date(link.expires_at).toLocaleString('en-IN',{dateStyle:'medium',timeStyle:'short'})})` : 'Link expired'}
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8, flexWrap:'wrap' as const }}>
+                <div style={{ fontSize:12, fontWeight:600 }}>Uploaded documents ({docs.length})</div>
+                {docs.length>0 && (
+                  <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:10 }}>
+                    <label style={{ display:'flex', alignItems:'center', gap:5, fontSize:11.5, color:C.faint, cursor:'pointer' }}>
+                      <input type="checkbox" checked={selDocs.size===docs.length && docs.length>0} onChange={e=>setSelDocs(e.target.checked ? new Set(docs.map((d:any)=>d.id)) : new Set())} />
+                      Select all
+                    </label>
+                    <button onClick={()=>onDownloadZip(selDocs.size?Array.from(selDocs):undefined)} disabled={zipping} style={{ ...T.btnPrimary, fontSize:11.5, opacity:zipping?.6:1 }}>
+                      {zipping?'Zipping…':selDocs.size?`Download ${selDocs.size} as ZIP`:'Download all as ZIP'}
+                    </button>
+                  </div>
+                )}
+              </div>
+              {docs.length===0 ? <div style={{ fontSize:12, color:C.faint }}>Nothing uploaded yet.</div> : (
+                <div style={{ maxHeight:'46vh', overflowY:'auto' }}>
+                  {docs.map((d:any)=>(
+                    <div key={d.id||d.doc_type} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 0', borderBottom:`1px solid ${C.line}`, fontSize:12.5 }}>
+                      <input type="checkbox" checked={selDocs.has(d.id)} onChange={()=>toggleSel(d.id)} style={{ flexShrink:0 }} />
+                      <div style={{ minWidth:0, flex:1 }}>
+                        <div style={{ fontWeight:600 }}>{d.doc_label||d.doc_type}</div>
+                        <div style={{ color:C.faint, fontSize:11, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{d.file_name}</div>
+                      </div>
+                      <div style={{ display:'flex', gap:5, flexShrink:0 }}>
+                        <button onClick={()=>onView(d)} disabled={busyDoc===d.id} style={{ ...T.btnOutline, padding:'5px 9px', fontSize:11 }}>View</button>
+                        <button onClick={()=>onDownload(d)} disabled={busyDoc===d.id} style={{ ...T.btnOutline, padding:'5px 9px', fontSize:11 }}>Download</button>
+                        <button onClick={()=>setRejecting(d)} disabled={busyDoc===d.id} style={{ padding:'5px 9px', fontSize:11, borderRadius:7, border:`1px solid ${C.critical}44`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontWeight:600 }}>Reject</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button onClick={()=>setMode('main')} style={{ ...T.btnOutline, marginTop:14 }}>Back</button>
+
+              {/* Reject confirm */}
+              {rejecting && (
+                <div onMouseDown={e=>{ if(e.target===e.currentTarget && !busyDoc) setRejecting(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:210, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+                  <div style={{ background:C.surface, borderRadius:14, width:'min(400px,100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.3)' }}>
+                    <div style={{ fontSize:15, fontWeight:700, color:C.ink, marginBottom:8 }}>Reject this document?</div>
+                    <div style={{ fontSize:12.5, color:C.faint, marginBottom:18, lineHeight:1.5 }}>“{rejecting.doc_label||rejecting.doc_type}” will be removed and the upload link reopened for 24h. Resend the link so the candidate re-uploads only this document.</div>
+                    <div style={{ display:'flex', gap:8 }}>
+                      <button onClick={()=>onReject(rejecting)} disabled={busyDoc===rejecting.id} style={{ ...T.btn, background:C.critical, color:C.onAccent, flex:1, opacity:busyDoc===rejecting.id?.6:1 }}>{busyDoc===rejecting.id?'Rejecting…':'Reject document'}</button>
+                      <button onClick={()=>setRejecting(null)} disabled={busyDoc===rejecting.id} style={{ ...T.btnOutline, flex:1 }}>Cancel</button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* View popup */}
+              {viewDoc && (
+                <div onMouseDown={e=>{ if(e.target===e.currentTarget) setViewDoc(null) }} style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.6)', zIndex:220, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'20px 16px' }}>
+                  <div style={{ background:C.surface, borderRadius:12, width:'min(900px,100%)', height:'88vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 24px 70px rgba(30,27,75,0.4)' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${C.line}` }}>
+                      <div style={{ fontSize:13, fontWeight:600, color:C.ink, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{viewDoc.name}</div>
+                      <a href={viewDoc.url} target="_blank" rel="noreferrer" style={{ ...T.btnOutline, textDecoration:'none' }}>Open in new tab</a>
+                      <button onClick={()=>setViewDoc(null)} style={T.btnOutline}>Close</button>
+                    </div>
+                    <iframe src={viewDoc.url} title={viewDoc.name} style={{ flex:1, width:'100%', border:'none', background:C.sunken }} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
-function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify }:any) {
+function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId }:any) {
   // Offer Sent is intentionally excluded — once an offer goes out there's no more negotiation.
   // A revised offer moves the candidate back to 'Shortlisted', so they reappear here with the calculator.
   const finalCands = candidates.filter((c:Candidate)=>['Shortlisted'].includes(c.stage))
   const [subTab, setSubTab] = useState<'checks'|'ctc'>('checks')
   const [negQ, setNegQ] = useState('')
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
-  const checksCands = finalCands.filter((c:Candidate)=>!c.pre_negotiation_done)
+  // Map candidate_id -> latest doc-collection link status ('ACTIVE' | 'SUBMITTED' | 'EXPIRED').
+  const [docStatusMap, setDocStatusMap] = useState<Record<string,string>>({})
+  useEffect(()=>{
+    const ids = finalCands.map((c:Candidate)=>c.id)
+    if (!ids.length) { setDocStatusMap({}); return }
+    supabase.from('document_collection_links').select('candidate_id, status, created_at').in('candidate_id', ids).order('created_at',{ascending:false})
+      .then(({data}:any)=>{
+        const m:Record<string,string> = {}
+        for (const r of data||[]) { if(!(r.candidate_id in m)) m[r.candidate_id]=r.status }
+        setDocStatusMap(m)
+      })
+  },[candidates]) // eslint-disable-line react-hooks/exhaustive-deps
+  const docsReceived = (c:Candidate) => docStatusMap[c.id]==='SUBMITTED'
+  // Once documents are received, the candidate STAYS in Pre-negotiation Checks (with a
+  // "Documents received" badge) rather than disappearing — the recruiter reviews them here.
+  const checksCands = finalCands.filter((c:Candidate)=>!c.pre_negotiation_done || docsReceived(c))
   const ctcCands = finalCands.filter((c:Candidate)=>c.pre_negotiation_done)
   const activeList = subTab==='checks' ? checksCands : ctcCands
   const shownCands = activeList
@@ -4001,10 +4591,29 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
     .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
   const [sel, setSel] = useState<Candidate|null>(null)
   const selMrf = mrfs.find((m:MRF)=>m.id===sel?.mrf_id)
+  // The MRF's branch decides the minimum-wage state (e.g. Ahmedabad Branch → Gujarat).
+  const mrfLocOf = (m:any) => (locations||[]).find((l:any)=>l.id===m?.location_id)
+  const mrfStateOf = (m:any) => stateFromLocation(mrfLocOf(m))
   // Interns / contract / consultants etc. use the simple stipend calculator, not the full CTC one.
   const isStipend = !!sel && (selMrf?.employment_type||'Employee') !== 'Employee'
-  const [form, setForm] = useState({ ctc:'', varPct:'10', joining_bonus:'', joining_freq:'With Salary', retention_bonus:'', retention_freq:'After 3 Months', esop:'', esop_plan:'', state:'HR' })
-  const [calc, setCalc] = useState<any>(null)
+  // Inputs mirror the "Automated CTC Calculator Studio": state + worker category drive the
+  // minimum-wage floor on Basic; variable is an absolute annual amount; gratuity and the
+  // statutory bonus are rules that reshape the breakdown (see calculate()).
+  const [form, setForm] = useState({ ctc:'', varAmt:'', joining_bonus:'', joining_freq:'With Salary', retention_bonus:'', retention_freq:'After 3 Months', esop:'', esop_plan:'', terms:'',
+    state:DEFAULT_STATE, category:DEFAULT_CATEGORY as string, gratuity:'yes', bonusPct:'8.33', bonusMode:'salary' })
+  // Current minimum-wage master (HR-maintained). The lib's defaults fill any state it lacks.
+  const [mwRates, setMwRates] = useState<any[]>([])
+  useEffect(()=>{
+    supabase.from('minimum_wage_config').select('state, category, total_minimum_wage').is('effective_to', null)
+      .then(({data}:any)=>setMwRates(data||[]))
+  },[supabase])
+  // Extra additional-amount rows the recruiter can add on top of CTC (amount + frequency + remark).
+  const [addItems, setAddItems] = useState<{amount:string; freq:string; remark:string}[]>([])
+  const ADD_FREQS = ['One-time','Monthly','Quarterly','Half-yearly','Yearly']
+  const addRow = () => setAddItems(a=>[...a,{ amount:'', freq:'One-time', remark:'' }])
+  const setRow = (i:number,k:'amount'|'freq'|'remark',v:string) => setAddItems(a=>a.map((r,idx)=>idx===i?{...r,[k]:v}:r))
+  const delRow = (i:number) => setAddItems(a=>a.filter((_,idx)=>idx!==i))
+  const cleanAddItems = () => addItems.map(r=>({ amount:Number(r.amount)||0, freq:r.freq, remark:r.remark.trim() })).filter(r=>r.amount>0)
   const [saving, setSaving] = useState(false)
   const [savedLink, setSavedLink] = useState<string|null>(null)
   const [loadedNeg, setLoadedNeg] = useState<any>(null)
@@ -4029,69 +4638,84 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   const effCompany = autoCompany || companyOverride
   const F = (k:string,v:any) => setForm(f=>({...f,[k]:v}))
 
-  const PT_RATES:Record<string,number> = { 'KA':200,'MH':200,'TN':0,'TS':200,'AP':200,'WB':200,'GJ':200,'MP':208,'OD':250,'AS':208,'KL':0,'HR':0,'DL':0,'UP':0 }
+  // The offered CTC may not exceed the MRF's approved budget. budget_max is stored per
+  // pay period, so annualise a monthly cap. Both figures are in rupees.
+  const mrfBudgetMax = selMrf?.budget_max ? Number(selMrf.budget_max) * (selMrf?.pay_period==='MONTHLY' ? 12 : 1) : 0
+  const ctcOverBudget = mrfBudgetMax>0 && form.ctc!=='' && Number(form.ctc) > mrfBudgetMax
+  const lakh = (v:number) => `₹${(v/100000).toFixed(2)}L`
 
-  function calculate() {
+  // Minimum wage for the chosen state + worker category (HR master → default table).
+  const mw = resolveMinWage(mwRates, form.state, form.category as any)
+
+  // ── Automated CTC model — lives in lib/recruitment/ctc-model.ts (EPF ceiling ₹25,000,
+  // ESIC on gross, statutory bonus on the Act's base, state PT/LWF). It runs LIVE: every
+  // input change recomputes the statement, exactly like the reference calculator.
+  const model = useMemo(()=>{
     const ctcAnnual = Number(form.ctc)
-    if (!ctcAnnual) return
-    const varPct = Number(form.varPct)/100
-    const variable = ctcAnnual * varPct
-    const fixed = ctcAnnual - variable
-    const fixedMonthly = fixed/12
-    const basic = fixedMonthly * 0.50
-    const hra = basic * 0.50
-    const statBonus = basic <= 21000 ? Math.round(basic*0.0833) : 0
-    const otherAllow = Math.max(0, fixedMonthly - basic - hra - statBonus)
-    const gross = basic + hra + statBonus + otherAllow
-    const epfEmployee = Math.min(basic, 15000) * 0.12
-    const esicEmployee = gross <= 21000 ? gross * 0.0075 : 0
-    const ptMonthly = PT_RATES[form.state] || 0
-    const lwfMonthly = 34
-    const totalDed = epfEmployee + esicEmployee + ptMonthly + lwfMonthly
-    const inHand = gross - totalDed
-    const epfEmployer = Math.min(basic, 15000) * 0.12
-    const esicEmployer = gross <= 21000 ? gross * 0.0325 : 0
-    // CTC = fixed gross (annual) + variable pay. By construction gross*12 = fixed = ctcAnnual - variable,
-    // so (gross + varMonthly)*12 = ctcAnnual — i.e. monthly CTC reconciles to the entered annual CTC.
-    const ctcMonthly = ctcAnnual / 12
-    const hike = sel?.current_ctc ? ((ctcAnnual-sel.current_ctc)/sel.current_ctc*100).toFixed(1) : null
-
-    setCalc({ ctcAnnual, variable, varMonthly:variable/12, fixedMonthly, basic, hra, statBonus, otherAllow, gross, epfEmployee, esicEmployee, ptMonthly, lwfMonthly, totalDed, inHand, epfEmployer, esicEmployer, totalCTCMonthly:ctcMonthly, totalCTCAnnual:ctcAnnual, hike,
-      joining_bonus:Number(form.joining_bonus)||0, retention_bonus:Number(form.retention_bonus)||0, esop:Number(form.esop)||0, state:form.state })
-  }
+    if (!ctcAnnual) return null
+    return computeCtc({ ctcAnnual, variableAnnual:Number(form.varAmt)||0, minWage:mw.amount, state:form.state,
+      gratuity:form.gratuity as 'yes'|'no', bonusPct:Number(form.bonusPct)||0, bonusMode:form.bonusMode as 'salary'|'ctc' })
+  },[form.ctc, form.varAmt, form.state, form.gratuity, form.bonusPct, form.bonusMode, mw.amount])
+  const calcError = model && !model.ok
+    ? `Required minimum fixed CTC for ${form.state} (${form.category}) is ${inr(model.minReqFixedAnn)}/year (${inr(model.minReqFixedAnn/12)}/month) to satisfy basic wages (₹${Math.round(model.basic).toLocaleString('en-IN')}), PF/ESIC, gratuity and bonus rules. Given fixed CTC is ${inr(model.fixedAnnual)}/year.`
+    : ''
+  const calc = useMemo(()=>{
+    if (!model || !model.ok) return null
+    const hike = sel?.current_ctc ? ((model.ctcAnnual-sel.current_ctc)/sel.current_ctc*100).toFixed(1) : null
+    return { ...model, hike,
+      minWage:mw.amount, minWageSource:mw.source, state:form.state, category:form.category,
+      gratuity:form.gratuity, bonusPct:Number(form.bonusPct)||0, bonusMode:form.bonusMode,
+      joining_bonus:Number(form.joining_bonus)||0, retention_bonus:Number(form.retention_bonus)||0, esop:Number(form.esop)||0,
+      additional_items:cleanAddItems(), terms_conditions:(form.terms||'').trim()||null }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[model, sel?.current_ctc, mw.amount, mw.source, form.category, form.joining_bonus, form.retention_bonus, form.esop, form.terms, addItems])
+  const [pulse, setPulse] = useState(0)   // "Recalculate" re-animates the statement
+  const recalc = () => setPulse(p=>p+1)
 
   // Load this candidate into the CTC calculator, pre-filling any saved negotiation.
   async function selectCtcCandidate(c:Candidate) {
-    setSel(c); setCalc(null); setSavedLink(null); setLoadedNeg(null); F('ctc','')
+    setSel(c); setSavedLink(null); setLoadedNeg(null); setAddItems([]); F('ctc','')
+    // Worker category comes from the MRF (set beside its salary min/max) so the right minimum wage applies.
+    const mrfCat = (mrfs.find((m:MRF)=>m.id===c.mrf_id) as any)?.wage_category || ''
+    if (mrfCat) F('category', mrfCat)
+    const mrfState = mrfStateOf(mrfs.find((m:MRF)=>m.id===c.mrf_id))
+    if (mrfState) F('state', mrfState)
     const { data } = await supabase.from('ctc_negotiations').select('*')
       .eq('candidate_id', c.id).order('created_at',{ascending:false}).limit(1).maybeSingle()
     // First time (no saved negotiation): seed Annual CTC from the candidate's expected CTC.
     if (!data) { F('ctc', c.expected_ctc ? String(c.expected_ctc) : ''); return }
     setLoadedNeg(data)
+    const savedAdd = Array.isArray(data.calculation_data?.additional_items) ? data.calculation_data.additional_items : []
+    setAddItems(savedAdd.map((r:any)=>({ amount:String(r.amount||''), freq:r.freq||'One-time', remark:r.remark||'' })))
     setForm(f=>({ ...f,
       ctc:            data.offered_ctc!=null ? String(data.offered_ctc) : '',
-      varPct:         data.variable_pct!=null ? String(data.variable_pct) : '10',
+      varAmt:         (()=>{ const cd=data.calculation_data||{}; const v = cd.variableAnnual ?? cd.variable ?? (data.offered_ctc!=null && data.variable_pct!=null ? Number(data.offered_ctc)*Number(data.variable_pct)/100 : null); return v!=null ? String(Math.round(Number(v))) : '' })(),
+      category:       mrfCat || data.calculation_data?.category || DEFAULT_CATEGORY,
+      gratuity:       data.calculation_data?.gratuity || 'yes',
+      bonusPct:       data.calculation_data?.bonusPct!=null ? String(data.calculation_data.bonusPct) : '8.33',
+      bonusMode:      data.calculation_data?.bonusMode || 'salary',
       joining_bonus:  data.joining_bonus ? String(data.joining_bonus) : '',
       joining_freq:   data.joining_bonus_freq || 'With Salary',
       retention_bonus:data.retention_bonus ? String(data.retention_bonus) : '',
       retention_freq: data.retention_bonus_freq || 'After 3 Months',
       esop:           data.esop_value ? String(data.esop_value) : '',
       esop_plan:      data.esop_remark || '',
-      state:          data.calculation_data?.state || f.state || 'HR',
+      terms:          data.calculation_data?.terms_conditions || '',
+      state:          mrfState || (()=>{ const st = data.calculation_data?.state; if (!st) return f.state || DEFAULT_STATE; return OLD_CODE_TO_STATE[st] || st })(),
     }))
-    if (data.calculation_data) setCalc(data.calculation_data)
     if (data.link_token) setSavedLink(`${window.location.origin}/salary-view/${data.link_token}`)
   }
 
   async function saveNegotiation() {
     if (!sel||!calc) return
+    if (mrfBudgetMax>0 && Number(form.ctc) > mrfBudgetMax) { showNotify(`CTC ${lakh(Number(form.ctc))} exceeds the MRF budget of ${lakh(mrfBudgetMax)}. Reduce it before saving.`,'error'); return }
     const companyId = effCompany || null
     if (!companyId) { showNotify('Select the company for this candidate first (dropdown in the calculator).','error'); return }
     if (!sel.company_id) await supabase.from('candidates').update({ company_id:companyId }).eq('id', sel.id)
     setSaving(true); setSavedLink(null)
     const { data, error } = await supabase.from('ctc_negotiations').upsert({
-      candidate_id:sel.id, company_id:companyId,
-      offered_ctc:calc.ctcAnnual, variable_pct:Number(form.varPct)||null,
+      candidate_id:sel.id, company_id:companyId, link_sent_at:new Date().toISOString(),
+      offered_ctc:calc.ctcAnnual, variable_pct: calc.ctcAnnual>0 ? Math.round((Number(calc.variable)||0)/calc.ctcAnnual*10000)/100 : null,
       basic_monthly:Math.round(calc.basic), hra_monthly:Math.round(calc.hra),
       epf_monthly:Math.round(calc.epfEmployee), net_monthly:Math.round(calc.inHand),
       current_ctc:sel.current_ctc||null, hike_pct:calc.hike?Number(calc.hike):null,
@@ -4105,274 +4729,437 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
     setSaving(false)
     if (error) { showNotify('Save failed: '+error.message); return }
     setSavedLink(data?.link_token ? `${window.location.origin}/salary-view/${data.link_token}` : null)
-    showNotify('Negotiation saved! Salary link ready below 👇')
+    showNotify('Negotiation saved! Salary link ready 👇')
   }
+
+  // Every statement line, in order — one source for the on-screen table, Excel and PDF.
+  const statementRows = () => calc ? ctcStatementRows(calc, form) : []
 
   function downloadExcel() {
     if (!calc||!sel) return
-    const rows = [
-      ['Component','Formula','Monthly (₹)','Annual (₹)','Remark'],
-      ['Basic','CTC*50%',Math.round(calc.basic),Math.round(calc.basic*12),''],
-      ['HRA','Basic*50%',Math.round(calc.hra),Math.round(calc.hra*12),''],
-      ['Other Allowance','Fixed-Basic-HRA-Stat Bonus',Math.round(calc.otherAllow),Math.round(calc.otherAllow*12),'Flexi pool'],
-      ['Statutory Bonus','Basic*8.33% (if Basic≤21K)',Math.round(calc.statBonus),Math.round(calc.statBonus*12),''],
-      ['Gross','',Math.round(calc.gross),Math.round(calc.gross*12),''],
-      ['Emp EPF','Min(Basic,15K)*12%',Math.round(calc.epfEmployee),Math.round(calc.epfEmployee*12),'Deduction'],
-      ['Emp ESIC','Gross*0.75% (if≤21K)',Math.round(calc.esicEmployee),Math.round(calc.esicEmployee*12),'Deduction'],
-      ['PT','As per state',calc.ptMonthly,calc.ptMonthly*12,'Deduction'],
-      ['LWF','As per state',calc.lwfMonthly,calc.lwfMonthly*12,'Deduction'],
-      ['Total Deductions','',Math.round(calc.totalDed),Math.round(calc.totalDed*12),''],
-      ['In Hand','Gross-Deductions',Math.round(calc.inHand),Math.round(calc.inHand*12),''],
-      ['','','','',''],
-      ['Emp EPF (Employer)','',Math.round(calc.epfEmployer),Math.round(calc.epfEmployer*12),''],
-      ['Emp ESIC (Employer)','',Math.round(calc.esicEmployer),Math.round(calc.esicEmployer*12),''],
-      ['','','','',''],
-      ['Fixed Component','',Math.round(calc.fixedMonthly),Math.round(calc.fixedMonthly*12),''],
-      ['Variable Component','',Math.round(calc.varMonthly),Math.round(calc.variable),''],
-      ['CTC','Fixed Gross + Variable',Math.round(calc.totalCTCMonthly),calc.ctcAnnual,''],
-      ['','','','',''],
-      ['Joining Bonus ('+form.joining_freq+')','',' ',calc.joining_bonus,'One-time'],
-      ['Retention Bonus ('+form.retention_freq+')','',' ',calc.retention_bonus,'One-time'],
-      ['ESOP','',' ',calc.esop,'As per grant letter'],
-    ]
+    const rows:any[] = [['Component','Formula / basis','Monthly (₹)','Annual (₹)','Remark'],
+      ['State / Category',`${calc.state} / ${calc.category}`,'','',`Minimum wage ₹${Math.round(calc.minWage||0)}/mo (${calc.minWageSource})`]]
+    for (const r of statementRows()) rows.push(r.kind==='head' ? [r.label] : [r.label, r.basis||'', r.monthly!=null?Math.round(r.monthly):'', r.annual!=null?Math.round(r.annual):'', r.remark||''])
+    rows.push([])
+    rows.push(['Joining Bonus ('+form.joining_freq+')','','',calc.joining_bonus,'One-time'])
+    rows.push(['Retention Bonus ('+form.retention_freq+')','','',calc.retention_bonus,'One-time'])
+    rows.push(['ESOP','','',calc.esop,form.esop_plan||'As per grant letter'])
+    for (const a of calc.additional_items||[]) rows.push(['Additional amount',a.remark||'','',a.amount,a.freq])
+    if (calc.gratuity==='no') { rows.push([]); rows.push(['Note:','Gratuity is Over and Above the mentioned CTC package as per The Payment of Gratuity Act, 1972.']) }
     const ws = XLSX.utils.aoa_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb,ws,'CTC Structure')
     XLSX.writeFile(wb,`CTC_${sel.full_name}.xlsx`)
   }
 
+  // PDF: a clean print view of the statement in a new window (the browser's Save as PDF).
+  function printPdf() {
+    if (!calc||!sel) return
+    const w = window.open('', '_blank', 'width=900,height=1000'); if (!w) { showNotify('Allow pop-ups to export the PDF','error'); return }
+    const esc = (s:any)=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    const tr = statementRows().map(r => r.kind==='head'
+      ? `<tr><td colspan="3" class="head">${esc(r.label)}</td></tr>`
+      : `<tr class="${r.kind}"><td>${esc(r.label)}${r.basis?`<span class="b"> · ${esc(r.basis)}</span>`:''}</td><td class="n">${r.monthly!=null?inr(r.monthly):''}</td><td class="n">${r.annual!=null?inr(r.annual):''}</td></tr>`).join('')
+    const extras = [
+      calc.joining_bonus>0 ? `<tr><td>Joining Bonus <span class="b">(${esc(form.joining_freq)})</span></td><td></td><td class="n">${inr(calc.joining_bonus)}</td></tr>` : '',
+      calc.retention_bonus>0 ? `<tr><td>Retention Bonus <span class="b">(${esc(form.retention_freq)})</span></td><td></td><td class="n">${inr(calc.retention_bonus)}</td></tr>` : '',
+      calc.esop>0 ? `<tr><td>ESOP Grant Value <span class="b">${esc(form.esop_plan)}</span></td><td></td><td class="n">${inr(calc.esop)}</td></tr>` : '',
+      ...(calc.additional_items||[]).map((a:any)=>`<tr><td>Additional amount <span class="b">(${esc(a.freq)}${a.remark?` · ${esc(a.remark)}`:''})</span></td><td></td><td class="n">${inr(a.amount)}</td></tr>`),
+    ].join('')
+    w.document.write(`<!doctype html><html><head><title>CTC Annexure — ${esc(sel.full_name)}</title><style>
+      body{font-family:"DM Sans","Segoe UI",sans-serif;color:#1E1B4B;padding:28px;font-size:12px}
+      h1{font-size:18px;margin:0 0 2px}.sub{color:#6B7280;font-size:11px;margin-bottom:14px}
+      table{width:100%;border-collapse:collapse}td{padding:6px 8px;border-bottom:1px solid #E9E7F5}.n{text-align:right;white-space:nowrap}
+      th{font-size:10px;text-transform:uppercase;color:#6B7280;text-align:left;padding:6px 8px;background:#F5F3FF}th.n{text-align:right}
+      .head td{padding-top:14px;font-weight:700;font-size:11px;color:#6B7280;border:none}
+      .b{color:#9CA3AF;font-size:10px}.total td{background:#7C3AED;color:#fff;font-weight:700}.sum td{background:#F5F3FF;font-weight:700}
+      .net td{background:#059669;color:#fff;font-weight:700}.ded td{color:#DC2626}.emp td{color:#6D28D9}.grat td{color:#059669}.bonus td{color:#2563EB}.muted td{color:#9CA3AF}
+      .note{margin-top:12px;font-size:11px;color:#2563EB;background:#EFF6FF;padding:8px 10px;border-radius:8px}
+      @media print{body{padding:0}}
+    </style></head><body>
+      <h1>Salary Breakdown Statement — ${esc(sel.full_name)}</h1>
+      <div class="sub">${esc(sel.designation||selMrf?.designation||'')}${selMrf?.mrf_number?` · MRF ${esc(selMrf.mrf_number)}`:''} · ${esc(calc.state)} · ${esc(calc.category)} · Minimum wage ₹${Math.round(calc.minWage||0).toLocaleString('en-IN')}/mo · EPF ceiling ₹${Number(calc.epfCeiling||EPF_WAGE_CEILING).toLocaleString('en-IN')}</div>
+      <table><thead><tr><th>Component</th><th class="n">Monthly (₹)</th><th class="n">Annual (₹)</th></tr></thead><tbody>${tr}
+      ${extras?`<tr><td colspan="3" class="head">One-time payments &amp; additional amounts</td></tr>${extras}`:''}</tbody></table>
+      ${calc.gratuity==='no'?'<div class="note"><b>Note:</b> Gratuity is Over and Above the mentioned CTC package as per The Payment of Gratuity Act, 1972.</div>':''}
+      ${calc.terms_conditions?`<div class="note" style="color:#1E1B4B;background:#F7F6FD"><b>Terms &amp; conditions:</b> ${esc(calc.terms_conditions)}</div>`:''}
+      <div class="sub" style="margin-top:12px">Net in-hand is before income tax (TDS). Generated by EZER HRMS on ${new Date().toLocaleDateString('en-IN')}.</div>
+      <script>window.onload=function(){window.print()}</script></body></html>`)
+    w.document.close()
+  }
+
+  // The calculator panel is open for a regular employee → the candidate column narrows and
+  // the panel slides in from the right (grid-template-columns is animatable in Chromium/Firefox).
+  const calcOpen = subTab==='ctc' && !!sel && !isStipend
+  const compact = calcOpen
+  const [showFilters, setShowFilters] = useState(false)
+  const ceilingNote = `EPF ceiling ₹${EPF_WAGE_CEILING.toLocaleString('en-IN')} • Gratuity • Statutory bonus • Pan-India minimum wages`
+
   return (
-    <div style={T.g2}>
-      <div>
+    <div style={{ display:'grid', gridTemplateColumns: compact ? 'minmax(200px, 250px) minmax(0, 1fr)' : '1fr 1fr', gap:12, alignItems:'start', transition:'grid-template-columns .45s cubic-bezier(.4,0,.2,1)' }}>
+      {/* ── Candidate column — full cards normally, compact list while the calculator is open ── */}
+      <div style={{ minWidth:0 }}>
         <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' as const }}>
-          <button onClick={()=>{ setSubTab('checks'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='checks'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>Pre-negotiation Checks ({checksCands.length})</button>
-          <button onClick={()=>{ setSubTab('ctc'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='ctc'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>CTC Negotiations ({ctcCands.length})</button>
+          <button onClick={()=>{ setSubTab('checks'); setSel(null) }} style={{ ...T.btnOutline, ...(compact?{ padding:'5px 9px', fontSize:11 }:{}), ...(subTab==='checks'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>{compact?'Checks':'Pre-negotiation Checks'} ({checksCands.length})</button>
+          <button onClick={()=>{ setSubTab('ctc'); setSel(null) }} style={{ ...T.btnOutline, ...(compact?{ padding:'5px 9px', fontSize:11 }:{}), ...(subTab==='ctc'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>{compact?'CTC':'CTC Negotiations'} ({ctcCands.length})</button>
         </div>
-        <SearchBar placeholder="Search candidate…" onApply={setNegQ} width={240} />
-        <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
-        {shownCands.map((c:Candidate)=>(
-          <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
-            style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:sel?.id===c.id?C.brandTint: C.surface }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
-              <div style={{ minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
-                <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L exp':'—'}</div>
+        <SearchBar placeholder="Search candidate…" onApply={setNegQ} width={compact?200:240} />
+        {compact
+          ? <button onClick={()=>setShowFilters(s=>!s)} style={{ ...T.btnOutline, padding:'4px 10px', fontSize:11, marginBottom:8 }}>{showFilters?'Hide filters ▴':'Filters ▾'}</button>
+          : null}
+        {(!compact || showFilters) && <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />}
+        {shownCands.map((c:Candidate)=>{
+          const on = sel?.id===c.id
+          const mn = mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number
+          return (
+            <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
+              style={{ ...T.card, cursor:'pointer', padding: compact ? '9px 11px' : T.card.padding, marginBottom: compact ? 6 : T.card.marginBottom,
+                border:on?'2px solid #2563EB':'1px solid var(--ez-line)', background:on?C.brandTint: C.surface, transition:'padding .3s, background .2s' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:compact?12.5:13, fontWeight:600, color:C.ink, whiteSpace:'nowrap' as const, overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}</div>
+                  {!compact && <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L exp':'—'}{mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null}</div>}
+                </div>
+                {subTab==='ctc' && (
+                  <button onClick={(e)=>rejectCand(c,e)} title="Move to Rejected" style={{ padding: compact?'2px 7px':'4px 10px', borderRadius:7, border: `1px solid ${C.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit', background:C.criticalTint, color:C.critical, flexShrink:0 }}>{compact?'✕':'Reject'}</button>
+                )}
               </div>
-              {subTab==='ctc' && (
-                <button onClick={(e)=>rejectCand(c,e)} style={{ padding:'4px 10px', borderRadius:7, border: `1px solid ${C.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit', background:C.criticalTint, color:C.critical, flexShrink:0 }}>Reject</button>
-              )}
+              <div style={{ marginTop:compact?4:6, display:'flex', gap:5, flexWrap:'wrap' as const, alignItems:'center' }}>
+                {compact && mn && <span style={{ fontSize:9.5, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 6px', borderRadius:99, whiteSpace:'nowrap' as const }}>{mn}</span>}
+                {!compact && <Badge text={c.stage} />}
+                {subTab==='checks' && docStatusMap[c.id]==='SUBMITTED' && (
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 10px', borderRadius:99, fontSize:10.5, fontWeight:700, background:C.positiveTint, color:C.positive }}>✓ Documents received</span>
+                )}
+                {subTab==='checks' && docStatusMap[c.id]==='ACTIVE' && (
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:4, padding:'2px 10px', borderRadius:99, fontSize:10.5, fontWeight:700, background:C.infoTint, color:C.info }}>Link sent</span>
+                )}
+                {subTab==='ctc' && respMap[c.id]==='ACCEPTED' && <Badge text="Offer Accepted" />}
+                {subTab==='ctc' && respMap[c.id]==='REJECTED' && <Badge text="Offer Rejected" />}
+                {c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}
+              </div>
             </div>
-            <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}>
-              <Badge text={c.stage} />
-              {subTab==='ctc' && respMap[c.id]==='ACCEPTED' && <Badge text="Offer Accepted" />}
-              {subTab==='ctc' && respMap[c.id]==='REJECTED' && <Badge text="Offer Rejected" />}
-              {c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}
-            </div>
-          </div>
-        ))}
+          )
+        })}
         {shownCands.length===0&&<div style={{ ...T.card, color:C.faint, fontSize:13, textAlign:'center' as const, padding:24 }}>{negQ?'No matching candidate':(subTab==='checks'?'No candidates awaiting pre-negotiation checks':'No candidates ready for CTC negotiation')}</div>}
       </div>
 
       {subTab==='checks'&&sel&&(
-        <PreNegoChecks candidate={sel} supabase={supabase} showNotify={showNotify}
-          onDone={()=>{ setSel(null); setSubTab('ctc'); onRefresh() }} />
+        <CtcDocLink candidate={sel} mrf={selMrf} companyId={effCompany} supabase={supabase} showNotify={showNotify}
+          onClose={()=>setSel(null)} onRefresh={onRefresh} />
       )}
 
-      {subTab==='ctc'&&sel&&isStipend&&<StipendCalc sel={sel} mrf={selMrf} companies={companies} supabase={supabase} showNotify={showNotify} onRefresh={onRefresh} />}
+      {subTab==='ctc'&&sel&&isStipend&&<StipendCalc sel={sel} mrf={selMrf} companies={companies} supabase={supabase} showNotify={showNotify} onRefresh={onRefresh} mwRates={mwRates} locations={locations} />}
 
-      {subTab==='ctc'&&sel&&!isStipend&&(
-        <div>
-          <div style={T.cardPurple}>
-            <div style={{ fontSize:13, fontWeight:600, color:C.brandDeep, marginBottom:14 }}>CTC Calculator — {sel.full_name}</div>
-            {loadedNeg?.candidate_response && (
-              <div style={{ marginBottom:12, padding:'8px 12px', borderRadius:10, fontSize:12, fontWeight:600,
-                background: loadedNeg.candidate_response==='ACCEPTED'?C.positiveTint:C.criticalTint,
-                color: loadedNeg.candidate_response==='ACCEPTED'?C.positive:C.critical,
-                border:`1px solid ${loadedNeg.candidate_response==='ACCEPTED'?C.positiveTint:C.criticalTint}` }}>
-                {loadedNeg.candidate_response==='ACCEPTED'?'Candidate ACCEPTED this offer':'Candidate REJECTED this offer'}
-                {loadedNeg.response_note?` — “${loadedNeg.response_note}”`:''}
+      {/* ── Automated CTC Calculator — slides in; inputs (5) | statement (7), like the reference studio ── */}
+      {calcOpen&&sel&&(
+        <div key={sel.id} style={{ minWidth:0, animation:'ezSlideInRight .45s cubic-bezier(.4,0,.2,1)' }}>
+          {/* header strip */}
+          <div style={{ ...T.card, display:'flex', alignItems:'center', gap:12, padding:'12px 16px', marginBottom:12, position:'sticky', top:0, zIndex:31 }}>
+            <div style={{ width:40, height:40, borderRadius:12, background:C.brand, color:C.onAccent, display:'grid', placeItems:'center', fontSize:17, fontWeight:800, flexShrink:0, boxShadow:'0 8px 20px rgba(124,58,237,.30)' }}>₹</div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:15, fontWeight:700, color:C.ink, display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
+                Automated CTC Calculator <span style={{ color:C.faint, fontWeight:500 }}>—</span> {sel.full_name}
+                {selMrf?.mrf_number && <span style={{ fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, whiteSpace:'nowrap' as const }}>{selMrf.mrf_number}</span>}
+                {loadedNeg?.candidate_response && (
+                  <span style={{ fontSize:10.5, fontWeight:700, padding:'2px 9px', borderRadius:99, background: loadedNeg.candidate_response==='ACCEPTED'?C.positiveTint:C.criticalTint, color: loadedNeg.candidate_response==='ACCEPTED'?C.positive:C.critical }}>
+                    {loadedNeg.candidate_response==='ACCEPTED'?'Candidate accepted':'Candidate rejected'}{loadedNeg.response_note?` — “${loadedNeg.response_note}”`:''}
+                  </span>
+                )}
               </div>
-            )}
-            {!autoCompany && (
-              <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
-                <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
-                <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
-                  <option value="">Select company…</option>
-                  {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
-                </select>
-              </div>
-            )}
-            <SectionLine title="Input" />
-            <div style={{ ...T.g3, marginBottom:10 }}>
-              <div><label style={T.label}>Annual CTC (₹) *</label><input style={T.input} type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder="2400000" /></div>
-              <div><label style={T.label}>Variable % (default 10)</label><input style={T.input} type="number" value={form.varPct} onChange={e=>F('varPct',e.target.value)} /></div>
-              <div><label style={T.label}>Employee State (PT)</label>
-                <select style={T.select} value={form.state} onChange={e=>F('state',e.target.value)}>
-                  {[['HR','Haryana'],['DL','Delhi'],['KA','Karnataka'],['MH','Maharashtra'],['UP','UP'],['TS','Telangana'],['AP','Andhra Pradesh'],['WB','West Bengal'],['GJ','Gujarat'],['MP','MP'],['TN','Tamil Nadu']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
-                </select>
-              </div>
+              <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>{ceilingNote}</div>
             </div>
-            <SectionLine title="One-time Payments" />
-            <div style={{ ...T.g2, marginBottom:10 }}>
-              <div><label style={T.label}>Joining Bonus (₹)</label><input style={T.input} type="number" value={form.joining_bonus} onChange={e=>F('joining_bonus',e.target.value)} placeholder="100000" /></div>
-              <div><label style={T.label}>Payment Frequency</label>
-                <select style={T.select} value={form.joining_freq} onChange={e=>F('joining_freq',e.target.value)}>
-                  <option>With Salary</option><option>After 3 Months</option><option>After 6 Months</option><option>As per Policy</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ ...T.g2, marginBottom:10 }}>
-              <div><label style={T.label}>Retention Bonus (₹)</label><input style={T.input} type="number" value={form.retention_bonus} onChange={e=>F('retention_bonus',e.target.value)} placeholder="200000" /></div>
-              <div><label style={T.label}>Payment Frequency</label>
-                <select style={T.select} value={form.retention_freq} onChange={e=>F('retention_freq',e.target.value)}>
-                  <option>After 3 Months</option><option>After 6 Months</option><option>After 1 Year</option><option>As per Policy</option>
-                </select>
-              </div>
-            </div>
-            <div style={{ ...T.g2, marginBottom:14 }}>
-              <div><label style={T.label}>ESOP (₹ Grant Value)</label><input style={T.input} type="number" value={form.esop} onChange={e=>F('esop',e.target.value)} placeholder="2000000" /></div>
-              <div><label style={T.label}>ESOP Plan / Vesting</label><input style={T.input} value={form.esop_plan} onChange={e=>F('esop_plan',e.target.value)} placeholder="4 yr vesting, 1 yr cliff" /></div>
-            </div>
-            <button onClick={calculate} style={{ ...T.btnPrimary, width:'100%', padding:'10px', fontSize:13 }}>Calculate CTC Structure →</button>
+            <button onClick={()=>setSel(null)} style={T.btnOutline}>Close</button>
           </div>
 
-          {calc&&(
-            <div style={T.card}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
-                <div style={T.section}>CTC Breakdown</div>
-                <button onClick={downloadExcel} style={{ ...T.btn, background:C.positive, color:C.onAccent, fontSize:11 }}>Download Excel</button>
+          <div style={{ display:'grid', gridTemplateColumns:'minmax(300px, 5fr) minmax(360px, 7fr)', gap:12, alignItems:'start' }}>
+            {/* ── Inputs & Rules Selection ── */}
+            <div style={T.cardPurple}>
+              <div style={{ ...T.section, borderBottom:`1px solid ${C.brandEdge}`, paddingBottom:8 }}>Inputs &amp; Rules Selection</div>
+              {!autoCompany && (
+                <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
+                  <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
+                  <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
+                    <option value="">Select company…</option>
+                    {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+                  </select>
+                </div>
+              )}
+              <div style={{ marginBottom:10 }}><label style={T.label}>State / UT</label>
+                <select style={T.select} value={form.state} onChange={e=>F('state',e.target.value)} disabled={!!mrfStateOf(selMrf)}>
+                  {MIN_WAGE_STATES.map(st=><option key={st} value={st}>{st}</option>)}
+                </select>
+                <div style={{ fontSize:10.5, color:mrfStateOf(selMrf)?C.positive:C.faint, marginTop:3 }}>{mrfStateOf(selMrf) ? `Auto-filled from MRF branch: ${mrfLocOf(selMrf)?.location_name||'branch'} → ${mrfStateOf(selMrf)}` : 'No branch on the MRF — choose the state'}</div>
+              </div>
+              <div style={{ marginBottom:10 }}><label style={T.label}>Worker Category</label>
+                <select style={T.select} value={form.category} onChange={e=>F('category',e.target.value)} disabled={!!(selMrf as any)?.wage_category}>
+                  {WAGE_CATS.map(ct=><option key={ct} value={ct}>{ct}</option>)}
+                </select>
+                <div style={{ fontSize:10.5, color:(selMrf as any)?.wage_category?C.positive:C.faint, marginTop:3 }}>{(selMrf as any)?.wage_category ? 'Auto-filled from the MRF' : 'Not set on the MRF — choose here'}</div>
+              </div>
+              <div style={{ ...T.g2, marginBottom:6 }}>
+                <div><label style={T.label}>Total CTC (Annual ₹) *</label>
+                  <input style={{ ...T.input, fontWeight:700, ...(ctcOverBudget?{ borderColor:C.critical }:{}) }} type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder="600000" />
+                  {mrfBudgetMax>0 && (
+                    ctcOverBudget
+                      ? <div style={{ fontSize:10.5, color:C.critical, marginTop:3, fontWeight:600 }}>Exceeds MRF budget ({lakh(mrfBudgetMax)}) — CTC can’t be higher than the approved budget.</div>
+                      : <div style={{ fontSize:10.5, color:C.faint, marginTop:3 }}>MRF budget: up to {lakh(mrfBudgetMax)}{selMrf?.budget_min?` (from ${lakh(Number(selMrf.budget_min)*(selMrf?.pay_period==='MONTHLY'?12:1))})`:''}</div>
+                  )}
+                </div>
+                <div><label style={T.label}>Variable CTC (Annual ₹)</label><input style={{ ...T.input, fontWeight:700 }} type="number" value={form.varAmt} onChange={e=>F('varAmt',e.target.value)} placeholder="0" /></div>
+              </div>
+              <div style={{ fontSize:11, color:C.faint, margin:'2px 0 12px', lineHeight:1.5 }}>
+                Minimum wage · {form.state} · {form.category}: <b style={{ color:C.ink }}>₹{Math.round(mw.amount).toLocaleString('en-IN')}/mo</b>
+                <span style={{ marginLeft:6, fontSize:10, padding:'1px 7px', borderRadius:99, background:mw.source==='master'?C.positiveTint:C.sunken, color:mw.source==='master'?C.positive:C.faint }}>{mw.source==='master'?'HR master':mw.source==='default'?'default table':'fallback'}</span>
+                — Basic is the higher of 50% of fixed CTC and this floor.
               </div>
 
-              {/* Salary Table */}
-              <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-                <thead>
-                  <tr style={{ background:C.brandTint }}>
-                    <th style={{ padding:'7px 10px', textAlign:'left' as const, color:C.brandDeep, fontWeight:600, fontSize:11 }}>Component</th>
-                    <th style={{ padding:'7px 10px', textAlign:'right' as const, color:C.brandDeep, fontWeight:600, fontSize:11 }}>Monthly (₹)</th>
-                    <th style={{ padding:'7px 10px', textAlign:'right' as const, color:C.brandDeep, fontWeight:600, fontSize:11 }}>Annual (₹)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[
-                    ['Basic', calc.basic, true],
-                    ['HRA', calc.hra, true],
-                    ['Other Allowance (Flexi Pool)', calc.otherAllow, true],
-                    ['Statutory Bonus', calc.statBonus, true],
-                  ].map(([l,v,show])=>show&&(
-                    <tr key={l as string} style={{ borderBottom: `1px solid ${C.brandEdge}` }}>
-                      <td style={{ padding:'6px 10px', color:C.inkSoft }}>{l}</td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, fontWeight:500 }}>₹{Math.round(v as number).toLocaleString('en-IN')}</td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.muted }}>₹{Math.round((v as number)*12).toLocaleString('en-IN')}</td>
-                    </tr>
-                  ))}
-                  <tr style={{ background:C.brandTint }}>
-                    <td style={{ padding:'7px 10px', fontWeight:600, color:C.ink }}>Gross</td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.brand }}>₹{Math.round(calc.gross).toLocaleString('en-IN')}</td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.brand }}>₹{Math.round(calc.gross*12).toLocaleString('en-IN')}</td>
-                  </tr>
-                  <tr style={{ borderBottom: `1px solid ${C.brandEdge}` }}>
-                    <td style={{ padding:'6px 10px', color:C.critical, fontSize:11 }}>(-) Employee EPF</td>
-                    <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.critical }}>-₹{Math.round(calc.epfEmployee).toLocaleString('en-IN')}</td>
-                    <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.critical }}>-₹{Math.round(calc.epfEmployee*12).toLocaleString('en-IN')}</td>
-                  </tr>
-                  {calc.esicEmployee>0&&(
-                    <tr style={{ borderBottom: `1px solid ${C.brandEdge}` }}>
-                      <td style={{ padding:'6px 10px', color:C.critical, fontSize:11 }}>(-) Employee ESIC</td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.critical }}>-₹{Math.round(calc.esicEmployee).toLocaleString('en-IN')}</td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.critical }}>-₹{Math.round(calc.esicEmployee*12).toLocaleString('en-IN')}</td>
-                    </tr>
-                  )}
-                  {calc.ptMonthly>0&&(
-                    <tr style={{ borderBottom: `1px solid ${C.brandEdge}` }}>
-                      <td style={{ padding:'6px 10px', color:C.critical, fontSize:11 }}>(-) PT ({form.state})</td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.critical }}>-₹{calc.ptMonthly}</td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.critical }}>-₹{calc.ptMonthly*12}</td>
-                    </tr>
-                  )}
-                  <tr style={{ background:C.positiveTint, borderBottom: `2px solid ${C.positiveTint}` }}>
-                    <td style={{ padding:'7px 10px', fontWeight:600, color:C.positive, fontSize:13 }}>In Hand</td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:700, color:C.positive, fontSize:14 }}>₹{Math.round(calc.inHand).toLocaleString('en-IN')}</td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:700, color:C.positive }}>₹{Math.round(calc.inHand*12).toLocaleString('en-IN')}</td>
-                  </tr>
-                  <tr style={{ borderBottom: `1px solid ${C.brandEdge}` }}>
-                    <td style={{ padding:'6px 10px', color:C.muted, fontSize:11 }}>Employer EPF</td>
-                    <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.muted }}>₹{Math.round(calc.epfEmployer).toLocaleString('en-IN')}</td>
-                    <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.muted }}>₹{Math.round(calc.epfEmployer*12).toLocaleString('en-IN')}</td>
-                  </tr>
-                  {calc.esicEmployer>0&&(
-                    <tr style={{ borderBottom: `1px solid ${C.brandEdge}` }}>
-                      <td style={{ padding:'6px 10px', color:C.muted, fontSize:11 }}>Employer ESIC</td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.muted }}>₹{Math.round(calc.esicEmployer).toLocaleString('en-IN')}</td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.muted }}>₹{Math.round(calc.esicEmployer*12).toLocaleString('en-IN')}</td>
-                    </tr>
-                  )}
-                  {calc.variable>0&&(
-                    <tr style={{ borderBottom: `1px solid ${C.brandEdge}` }}>
-                      <td style={{ padding:'6px 10px', color:C.inkSoft }}>Variable Pay ({form.varPct}%) <span style={{ fontSize:10, color:C.faint }}>performance-linked</span></td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, fontWeight:500 }}>₹{Math.round(calc.varMonthly).toLocaleString('en-IN')}</td>
-                      <td style={{ padding:'6px 10px', textAlign:'right' as const, color:C.muted }}>₹{Math.round(calc.variable).toLocaleString('en-IN')}</td>
-                    </tr>
-                  )}
-                  <tr style={{ background:C.brandTint }}>
-                    <td style={{ padding:'7px 10px', fontWeight:600, color:C.ink }}>CTC <span style={{ fontSize:10, fontWeight:400, color:C.faint }}>(Fixed Gross + Variable)</span></td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:600, color:C.brand }}>₹{Math.round(calc.totalCTCMonthly).toLocaleString('en-IN')}</td>
-                    <td style={{ padding:'7px 10px', textAlign:'right' as const, fontWeight:700, color:C.brand, fontSize:14 }}>₹{calc.ctcAnnual.toLocaleString('en-IN')}</td>
-                  </tr>
-                </tbody>
-              </table>
-
-              {/* One-time Payments */}
-              {(calc.joining_bonus>0||calc.retention_bonus>0||calc.esop>0)&&(
-                <div style={{ marginTop:12 }}>
-                  <div style={T.section}>One-time Payments</div>
-                  {calc.joining_bonus>0&&(
-                    <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom: `1px solid ${C.brandEdge}`, fontSize:12 }}>
-                      <span>Joining Bonus <span style={{ fontSize:10, color:C.faint }}>({form.joining_freq})</span></span>
-                      <span style={{ fontWeight:600, color:C.positive }}>₹{calc.joining_bonus.toLocaleString('en-IN')}</span>
-                    </div>
-                  )}
-                  {calc.retention_bonus>0&&(
-                    <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom: `1px solid ${C.brandEdge}`, fontSize:12 }}>
-                      <span>Retention Bonus <span style={{ fontSize:10, color:C.faint }}>({form.retention_freq})</span></span>
-                      <span style={{ fontWeight:600, color:C.positive }}>₹{calc.retention_bonus.toLocaleString('en-IN')}</span>
-                    </div>
-                  )}
-                  {calc.esop>0&&(
-                    <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', fontSize:12 }}>
-                      <span>ESOP Grant Value <span style={{ fontSize:10, color:C.faint }}>{form.esop_plan&&`(${form.esop_plan})`}</span></span>
-                      <span style={{ fontWeight:600, color:C.brand }}>₹{calc.esop.toLocaleString('en-IN')}</span>
-                    </div>
-                  )}
+              <div style={{ ...T.section, borderTop:`1px solid ${C.brandEdge}`, paddingTop:10 }}>Statutory &amp; Benefit Rules</div>
+              <div style={{ marginBottom:10 }}>
+                <label style={T.label}>Include Gratuity in CTC?</label>
+                <select style={T.select} value={form.gratuity} onChange={e=>F('gratuity',e.target.value)}>
+                  <option value="yes">Yes (4.81% of Basic included in CTC)</option>
+                  <option value="no">No (Over and Above CTC)</option>
+                </select>
+              </div>
+              <div style={{ ...T.g2, marginBottom:12 }}>
+                <div><label style={T.label}>Bonus Rate</label>
+                  <select style={T.select} value={form.bonusPct} onChange={e=>F('bonusPct',e.target.value)}>
+                    <option value="8.33">8.33% (Min Statutory)</option>
+                    <option value="20">20.00% (Max Statutory)</option>
+                    <option value="0">0% (Not Applicable)</option>
+                  </select>
                 </div>
-              )}
-
-              {calc.hike&&(
-                <div style={{ marginTop:12, background:C.positiveTint, borderRadius:10, padding:'10px 14px', display:'flex', gap:16 }}>
-                  <span style={{ fontSize:13, color:C.positive, fontWeight:600 }}>Hike: {calc.hike}%</span>
-                  <span style={{ fontSize:12, color:C.inkSoft }}>Current: ₹{((sel?.current_ctc||0)/100000).toFixed(1)}L → Offered: ₹{(calc.ctcAnnual/100000).toFixed(1)}L</span>
+                <div><label style={T.label}>Bonus Mode</label>
+                  <select style={T.select} value={form.bonusMode} onChange={e=>F('bonusMode',e.target.value)}>
+                    <option value="salary">With Salary (In Gross)</option>
+                    <option value="ctc">Only in CTC (Statutory)</option>
+                  </select>
                 </div>
-              )}
+              </div>
+              <button onClick={recalc} style={{ ...T.btnPrimary, width:'100%', padding:'10px', fontSize:13, marginBottom:14, boxShadow:'0 6px 16px rgba(124,58,237,.25)' }}>Recalculate Breakdown</button>
 
-              <button onClick={saveNegotiation} disabled={saving} style={{ ...T.btnPrimary, width:'100%', marginTop:12, padding:10 }}>
-                {saving?'Saving...':'Save Negotiation & Move to Offers'}
-              </button>
+              <div style={{ ...T.section, borderTop:`1px solid ${C.brandEdge}`, paddingTop:10 }}>One-time Payments</div>
+              <div style={{ ...T.g2, marginBottom:10 }}>
+                <div><label style={T.label}>Joining Bonus (₹)</label><input style={T.input} type="number" value={form.joining_bonus} onChange={e=>F('joining_bonus',e.target.value)} placeholder="100000" /></div>
+                <div><label style={T.label}>Payment Frequency</label>
+                  <select style={{ ...T.select, opacity: Number(form.joining_bonus)>0 ? 1 : .45, cursor: Number(form.joining_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.joining_bonus)>0)} value={form.joining_freq} onChange={e=>F('joining_freq',e.target.value)}>
+                    <option>With Salary</option><option>After 3 Months</option><option>After 6 Months</option><option>As per Policy</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ ...T.g2, marginBottom:10 }}>
+                <div><label style={T.label}>Retention Bonus (₹)</label><input style={T.input} type="number" value={form.retention_bonus} onChange={e=>F('retention_bonus',e.target.value)} placeholder="200000" /></div>
+                <div><label style={T.label}>Payment Frequency</label>
+                  <select style={{ ...T.select, opacity: Number(form.retention_bonus)>0 ? 1 : .45, cursor: Number(form.retention_bonus)>0 ? 'pointer' : 'not-allowed' }} disabled={!(Number(form.retention_bonus)>0)} value={form.retention_freq} onChange={e=>F('retention_freq',e.target.value)}>
+                    <option>After 3 Months</option><option>After 6 Months</option><option>After 1 Year</option><option>As per Policy</option>
+                  </select>
+                </div>
+              </div>
+              <div style={{ ...T.g2, marginBottom:12 }}>
+                <div><label style={T.label}>ESOP (₹ Grant Value)</label><input style={T.input} type="number" value={form.esop} onChange={e=>F('esop',e.target.value)} placeholder="2000000" /></div>
+                <div><label style={T.label}>ESOP Plan / Vesting</label><input style={T.input} value={form.esop_plan} onChange={e=>F('esop_plan',e.target.value)} placeholder="4 yr vesting, 1 yr cliff" /></div>
+              </div>
+              <div style={{ marginBottom:12 }}>
+                <label style={T.label}>Terms &amp; Conditions <span style={{ color:C.faint, fontWeight:400, textTransform:'none' as const, letterSpacing:0 }}>— for the one-time payments (shown on the salary link)</span></label>
+                <textarea style={{ ...T.textarea, minHeight:64 }} value={form.terms} onChange={e=>F('terms',e.target.value)} placeholder="e.g. Joining bonus is recoverable if the employee leaves within 12 months; retention bonus paid after completion of the stated period…" />
+              </div>
 
-              {savedLink&&(
-                <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 14px' }}>
-                  <div style={{ fontSize:11, fontWeight:600, color: C.brand, marginBottom:6 }}>CANDIDATE SALARY LINK</div>
-                  <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace' }} />
-                    <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btn, background:C.brand, color:C.onAccent, whiteSpace:'nowrap' as const }}>Copy</button>
-                    <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, textDecoration:'none', whiteSpace:'nowrap' as const }}>Open ↗</a>
+              {/* Additional Amounts — add as many as needed (amount + frequency + remark) */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', borderTop:`1px solid ${C.brandEdge}`, paddingTop:10, marginBottom:6 }}>
+                <div style={{ ...T.section, marginBottom:0, marginTop:0 }}>Additional Amounts</div>
+                <button onClick={addRow} style={{ ...T.btnOutline, padding:'5px 11px', fontSize:12, whiteSpace:'nowrap' as const }}>+ Add</button>
+              </div>
+              {addItems.length===0 && <div style={{ fontSize:11, color:C.faint, marginBottom:10 }}>Optional — e.g. a monthly allowance, a quarterly incentive, etc. Click “+ Add” to add one.</div>}
+              {addItems.map((r,i)=>(
+                <div key={i} style={{ border:`1px solid ${C.line}`, borderRadius:10, padding:'10px 12px', marginBottom:8, background:C.sunken, animation:'ezFadeUp .25s ease' }}>
+                  <div style={{ ...T.g2, marginBottom:8 }}>
+                    <div><label style={T.label}>Additional Amount (₹)</label><input style={T.input} type="number" value={r.amount} onChange={e=>setRow(i,'amount',e.target.value)} placeholder="e.g. 5000" /></div>
+                    <div><label style={T.label}>Frequency</label>
+                      <select style={T.select} value={r.freq} onChange={e=>setRow(i,'freq',e.target.value)}>{ADD_FREQS.map(o=><option key={o}>{o}</option>)}</select>
+                    </div>
                   </div>
-                  <div style={{ fontSize:10, color: C.brand, marginTop:6 }}>Share with the candidate — shows salary breakdown only (no internal data).</div>
+                  <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
+                    <div style={{ flex:1 }}><label style={T.label}>Remark</label><input style={T.input} value={r.remark} onChange={e=>setRow(i,'remark',e.target.value)} placeholder="Optional note (shown on the salary link)" /></div>
+                    <button onClick={()=>delRow(i)} style={{ padding:'8px 11px', borderRadius:7, border:`1px solid ${C.critical}44`, background:C.criticalTint, color:C.critical, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:600, whiteSpace:'nowrap' as const }}>Remove</button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Candidate salary link — save the negotiation, then share (mirrors the studio's link box) */}
+              <div style={{ borderTop:`1px solid ${C.brandEdge}`, paddingTop:12, marginTop:12 }}>
+                <div style={{ ...T.section, color:C.positive }}>Candidate salary link</div>
+                <div style={{ fontSize:11, color:C.faint, lineHeight:1.55, marginBottom:10 }}>Saves this negotiation and creates a shareable link. The candidate sees the salary breakup, one-time payments and additional amounts only — no internal data — and can accept or decline. If the CTC changes, save again to refresh the link.</div>
+                <button onClick={saveNegotiation} disabled={saving||!calc||ctcOverBudget} style={{ ...T.btnPrimary, width:'100%', padding:'10px', fontSize:13, background:C.positive, opacity:(saving||!calc||ctcOverBudget)?.6:1, cursor:(saving||!calc||ctcOverBudget)?'not-allowed':'pointer', boxShadow:'0 6px 16px rgba(5,150,105,.25)' }}>
+                  {saving?'Saving…':ctcOverBudget?'CTC exceeds MRF budget':!calc?'Enter a valid CTC first':'Save Negotiation & Generate Link'}
+                </button>
+                {savedLink&&(
+                  <div style={{ marginTop:10, background:C.positiveTint, border:`1px solid ${C.positive}44`, borderRadius:10, padding:'10px 12px', animation:'ezFadeUp .3s ease' }}>
+                    <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace', marginBottom:8 }} />
+                    <div style={{ display:'flex', gap:8 }}>
+                      <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btnOutline, flex:1, background:C.surface, borderColor:C.positive, color:C.positive, fontWeight:700 }}>Copy link</button>
+                      <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, flex:1, textAlign:'center' as const, background:C.positive, color:C.onAccent, textDecoration:'none' }}>Open ↗</a>
+                    </div>
+                    <div style={{ fontSize:10, color:C.positive, marginTop:6 }}>Valid for 7 days from now. Share with the candidate.</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Salary Breakdown Statement ── */}
+            <div style={{ ...T.card, position:'sticky', top:64 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, borderBottom:`1px solid ${C.brandEdge}`, paddingBottom:10, marginBottom:10 }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:C.ink }}>Salary Breakdown Statement</div>
+                  <div style={{ fontSize:10.5, color:C.faint, marginTop:2 }}>Compliant with statutory minimum wage ({form.state} · {form.category}: ₹{Math.round(mw.amount).toLocaleString('en-IN')}/mo) &amp; EPFO regulations</div>
+                </div>
+                <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                  <button onClick={downloadExcel} disabled={!calc} style={{ ...T.btnOutline, background:C.positiveTint, borderColor:`${C.positive}55`, color:C.positive, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>Excel</button>
+                  <button onClick={printPdf} disabled={!calc} style={{ ...T.btnOutline, background:C.criticalTint, borderColor:`${C.critical}55`, color:C.critical, fontWeight:700, fontSize:11.5, opacity:calc?1:.5 }}>PDF</button>
+                </div>
+              </div>
+
+              {calcError&&(
+                <div style={{ background:C.criticalTint, border:`1px solid ${C.critical}55`, color:C.critical, fontSize:12, lineHeight:1.6, borderRadius:10, padding:'10px 12px', marginBottom:10 }}>
+                  <b>Given CTC is too low!</b> {calcError}
+                </div>
+              )}
+              {!model && (
+                <div style={{ padding:'28px 12px', textAlign:'center' as const, color:C.faint, fontSize:12.5 }}>Enter the Total CTC to see the live breakdown.</div>
+              )}
+
+              {calc&&(
+                <div key={pulse} style={{ animation:'ezFadeUp .3s ease' }}>
+                  <CtcStatementTable rows={statementRows()} />
+
+                  {calc.gratuity==='no'&&(
+                    <div style={{ marginTop:10, background:C.infoTint, border:`1px solid ${C.info}44`, borderRadius:10, padding:'9px 13px', fontSize:12, color:C.info, lineHeight:1.5 }}>
+                      <b>Note:</b> Gratuity is Over and Above the mentioned CTC package as per The Payment of Gratuity Act, 1972.
+                    </div>
+                  )}
+
+                  {/* One-time Payments */}
+                  {(calc.joining_bonus>0||calc.retention_bonus>0||calc.esop>0)&&(
+                    <div style={{ marginTop:12 }}>
+                      <div style={T.section}>One-time Payments</div>
+                      {calc.joining_bonus>0&&(
+                        <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom: `1px solid ${C.brandEdge}`, fontSize:12 }}>
+                          <span>Joining Bonus <span style={{ fontSize:10, color:C.faint }}>({form.joining_freq})</span></span>
+                          <span style={{ fontWeight:600, color:C.positive }}>₹{calc.joining_bonus.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                      {calc.retention_bonus>0&&(
+                        <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom: `1px solid ${C.brandEdge}`, fontSize:12 }}>
+                          <span>Retention Bonus <span style={{ fontSize:10, color:C.faint }}>({form.retention_freq})</span></span>
+                          <span style={{ fontWeight:600, color:C.positive }}>₹{calc.retention_bonus.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                      {calc.esop>0&&(
+                        <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', fontSize:12 }}>
+                          <span>ESOP Grant Value <span style={{ fontSize:10, color:C.faint }}>{form.esop_plan&&`(${form.esop_plan})`}</span></span>
+                          <span style={{ fontWeight:600, color:C.brand }}>₹{calc.esop.toLocaleString('en-IN')}</span>
+                        </div>
+                      )}
+                      {calc.terms_conditions && <div style={{ fontSize:11, color:C.muted, padding:'6px 10px', lineHeight:1.5 }}><b style={{ color:C.ink }}>T&amp;C:</b> {calc.terms_conditions}</div>}
+                    </div>
+                  )}
+
+                  {/* Additional Amounts */}
+                  {Array.isArray(calc.additional_items)&&calc.additional_items.length>0&&(
+                    <div style={{ marginTop:12 }}>
+                      <div style={T.section}>Additional Amounts</div>
+                      {calc.additional_items.map((r:any,i:number)=>(
+                        <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 10px', borderBottom:`1px solid ${C.brandEdge}`, fontSize:12 }}>
+                          <span>Additional <span style={{ fontSize:10, color:C.faint }}>({r.freq}{r.remark?` · ${r.remark}`:''})</span></span>
+                          <span style={{ fontWeight:600, color:C.positive }}>₹{Number(r.amount).toLocaleString('en-IN')}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {calc.hike&&(
+                    <div style={{ marginTop:12, background:C.positiveTint, borderRadius:10, padding:'10px 14px', display:'flex', gap:16, flexWrap:'wrap' as const }}>
+                      <span style={{ fontSize:13, color:C.positive, fontWeight:600 }}>Hike: {calc.hike}%</span>
+                      <span style={{ fontSize:12, color:C.inkSoft }}>Current: ₹{((sel?.current_ctc||0)/100000).toFixed(1)}L → Offered: ₹{(calc.ctcAnnual/100000).toFixed(1)}L</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          </div>
         </div>
       )}
     </div>
+  )
+}
+
+// ── Salary statement rows — shared by the on-screen table, Excel and the PDF print view ──
+type StmtRow = { kind:'row'|'head'|'sum'|'emp'|'grat'|'bonus'|'muted'|'total'|'ded'|'net'|'note'; label:string; basis?:string; monthly?:number|null; annual?:number|null; remark?:string }
+function ctcStatementRows(calc:any, form:any): StmtRow[] {
+  const ceil = Number(calc.epfCeiling||EPF_WAGE_CEILING)
+  const epfBase = Math.min(calc.basic, ceil)
+  const rows:StmtRow[] = [
+    { kind:'row',  label:'Basic Salary', basis: calc.basicRule==='minwage' ? 'minimum wage floor' : '50% of fixed CTC', monthly:calc.basic, annual:calc.basic*12 },
+    { kind:'row',  label:'House Rent Allowance (HRA)', basis:'≤ 50% of Basic', monthly:calc.hra, annual:calc.hra*12 },
+  ]
+  if ((calc.statBonus||0)>0) rows.push({ kind:'bonus', label:'Statutory Bonus', basis:`${calc.bonusPct}% on ₹${Math.round(calc.bonusBase||calc.basic).toLocaleString('en-IN')} · with salary`, monthly:calc.statBonus, annual:calc.statBonus*12, remark:'In gross' })
+  if ((calc.conveyance||0)>0) rows.push({ kind:'row', label:'Conveyance Allowance', basis:'standard ₹1,600', monthly:calc.conveyance, annual:calc.conveyance*12 })
+  rows.push({ kind:'row', label:'Special Allowance', basis:'balance of fixed CTC', monthly:calc.specialAllow||0, annual:(calc.specialAllow||0)*12 })
+  rows.push({ kind:'sum', label:'Gross Earnings (A)', monthly:calc.gross, annual:calc.gross*12 })
+  rows.push({ kind:'emp', label:'Employer EPF', basis:`13% on ₹${Math.round(epfBase).toLocaleString('en-IN')}, ceiling ₹${ceil.toLocaleString('en-IN')}`, monthly:calc.epfEmployer, annual:calc.epfEmployer*12, remark:'In CTC' })
+  rows.push({ kind:'emp', label:'Employer ESIC', basis: (calc.esicEmployer||0)>0 ? '3.25% of gross (≤ ₹21,000)' : 'not applicable — gross > ₹21,000', monthly:calc.esicEmployer||0, annual:(calc.esicEmployer||0)*12, remark:'In CTC' })
+  if (calc.gratuity==='yes') rows.push({ kind:'grat', label:'Gratuity', basis:'4.81% of Basic', monthly:calc.gratuityMonthly||0, annual:(calc.gratuityMonthly||0)*12, remark:'In CTC' })
+  if (calc.bonusMode==='ctc' && (calc.bonusOverheadMonthly||0)>0) rows.push({ kind:'bonus', label:'Statutory Bonus (employer overhead)', basis:`${calc.bonusPct}% on ₹${Math.round(calc.bonusBase||calc.basic).toLocaleString('en-IN')}`, monthly:calc.bonusOverheadMonthly, annual:calc.bonusOverheadMonthly*12, remark:'In CTC' })
+  rows.push({ kind:'sum', label:'Fixed CTC Package', basis:'gross + employer contributions', monthly:calc.fixedMonthly, annual:calc.fixedMonthly*12 })
+  rows.push({ kind:'muted', label:'Variable / Performance CTC', monthly:calc.varMonthly||0, annual:calc.variable||0 })
+  rows.push({ kind:'total', label:'Total Annual CTC Package', monthly:calc.totalCTCMonthly, annual:calc.ctcAnnual })
+  rows.push({ kind:'head', label:'Employee deductions & net in-hand' })
+  rows.push({ kind:'sum', label:'Gross Earnings (A)', monthly:calc.gross, annual:calc.gross*12 })
+  rows.push({ kind:'ded', label:'(−) Employee PF', basis:`12% on ₹${Math.round(epfBase).toLocaleString('en-IN')}`, monthly:calc.epfEmployee, annual:calc.epfEmployee*12, remark:'Deduction' })
+  rows.push({ kind:'ded', label:'(−) Employee ESIC', basis: (calc.esicEmployee||0)>0 ? '0.75% of gross' : 'not applicable', monthly:calc.esicEmployee||0, annual:(calc.esicEmployee||0)*12, remark:'Deduction' })
+  rows.push({ kind:'ded', label:`(−) Professional Tax`, basis: (calc.ptMonthly||0)>0 ? `${form.state} slab` : `nil in ${form.state}`, monthly:calc.ptMonthly||0, annual:(calc.ptMonthly||0)*12, remark:'Deduction' })
+  rows.push({ kind:'ded', label:'(−) Labour Welfare Fund', basis: (calc.lwfMonthly||0)>0 ? `${form.state}` : `nil in ${form.state}`, monthly:calc.lwfMonthly||0, annual:(calc.lwfMonthly||0)*12, remark:'Deduction' })
+  rows.push({ kind:'net', label:'Net In-Hand Salary', basis:'before TDS', monthly:calc.inHand, annual:calc.inHand*12 })
+  rows.push({ kind:'note', label:'Net in-hand is shown before income tax (TDS). The candidate’s salary link compares TDS under the old and new regimes.' })
+  return rows
+}
+
+// Module-scope (never re-mounts) — the statement table, themed like the reference studio.
+function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
+  const cell:React.CSSProperties = { padding:'6px 10px', fontSize:12 }
+  const num:React.CSSProperties = { ...cell, textAlign:'right' as const, whiteSpace:'nowrap' as const, fontVariantNumeric:'tabular-nums' }
+  const tone:Record<string,{ color?:string; bg?:string; weight?:number }> = {
+    row:{}, sum:{ bg:C.sunken, weight:700 }, emp:{ color:C.brandDeep }, grat:{ color:C.positive }, bonus:{ color:C.info },
+    muted:{ color:C.faint }, total:{ bg:C.brand, color:C.onAccent, weight:700 }, ded:{ color:C.critical }, net:{ bg:C.positive, color:C.onAccent, weight:700 },
+  }
+  return (
+    <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:0 }}>
+      <thead>
+        <tr style={{ background:C.sunken }}>
+          <th style={{ ...cell, textAlign:'left' as const, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'.05em', color:C.faint, fontWeight:700, borderRadius:'8px 0 0 8px' }}>Component</th>
+          <th style={{ ...num, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'.05em', color:C.faint, fontWeight:700 }}>Monthly (₹)</th>
+          <th style={{ ...num, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'.05em', color:C.faint, fontWeight:700, borderRadius:'0 8px 8px 0' }}>Annual (₹)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((r,i)=>{
+          if (r.kind==='head') return <tr key={i}><td colSpan={3} style={{ ...cell, paddingTop:16, paddingBottom:4, fontSize:11, fontWeight:700, color:C.muted }}>{r.label}</td></tr>
+          if (r.kind==='note') return <tr key={i}><td colSpan={3} style={{ ...cell, fontSize:10, color:C.faint, lineHeight:1.5 }}>{r.label}</td></tr>
+          const t = tone[r.kind]||{}
+          const big = r.kind==='total'||r.kind==='net'
+          const base:React.CSSProperties = { background:t.bg, color:t.color||C.ink, fontWeight:t.weight||500, borderBottom: t.bg?'none':`1px solid ${C.brandEdge}` }
+          const nil = (r.monthly||0)===0 && (r.kind==='emp'||r.kind==='ded')
+          return (
+            <tr key={i}>
+              <td style={{ ...cell, ...base, padding: big?'9px 10px':cell.padding, fontSize: big?13:12, borderRadius: t.bg?'10px 0 0 10px':0 }}>
+                {r.label}{r.basis && <span style={{ fontSize:10, color: t.bg&&t.color===C.onAccent ? 'rgba(255,255,255,.75)' : C.faint, fontWeight:400, marginLeft:6 }}>· {r.basis}</span>}
+              </td>
+              <td style={{ ...num, ...base, padding: big?'9px 10px':cell.padding, fontSize: big?13:12, opacity: nil?.55:1 }}>{nil?'Nil':`₹${Math.round(r.monthly||0).toLocaleString('en-IN')}`}</td>
+              <td style={{ ...num, ...base, padding: big?'9px 10px':cell.padding, fontSize: big?14:12, borderRadius: t.bg?'0 10px 10px 0':0, opacity: nil?.55:1 }}>{nil?'Nil':`₹${Math.round(r.annual||0).toLocaleString('en-IN')}`}</td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
   )
 }
 
@@ -4456,7 +5243,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
         <div key={c.id} style={{ ...T.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
           <div>
             <div style={{ fontSize:14, fontWeight:600, display:'flex', gap:6, alignItems:'center' }}>{c.full_name}{c.offer_revised&&<Badge text="Revised Offer" />}</div>
-            <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.designation||'—'} · {c.stage}</div>
+            <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.designation||'—'} · {c.stage}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
           </div>
           {ar ? (
             <div style={{ textAlign:'right' as const, flexShrink:0 }}>
@@ -4582,7 +5369,7 @@ HR Team`
         {shownOffered.map((c:Candidate)=>(
           <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:sel?.id===c.id?C.brandTint: C.surface }}
             onClick={()=>generateLetter(c)}>
-            <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
+            <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
             <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}><Badge text={c.stage} />{c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}</div>
             {c.stage==='Offer Sent'&&!c.offer_accepted&&(
@@ -4753,7 +5540,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
                 <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>{c.full_name}</div>
-                <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.designation||'—'} · {companyName(c)} · DOJ: {row?.doj||c.doj||'Not set'}</div>
+                <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.designation||'—'} · {companyName(c)} · DOJ: {row?.doj||c.doj||'Not set'}{(()=>{ const mn=mrfs.find((m:MRF)=>m.id===c.mrf_id)?.mrf_number; return mn ? <span style={{ marginLeft:6, fontSize:10, fontWeight:700, color:C.brandDeep, background:C.brandTint, padding:'1px 7px', borderRadius:99, verticalAlign:'middle', whiteSpace:'nowrap' as const }}>{mn}</span> : null })()}</div>
                 {c.email&&<div style={{ fontSize:11, color:C.faint, marginTop:1 }}>{c.email}</div>}
               </div>
               {resp&&(

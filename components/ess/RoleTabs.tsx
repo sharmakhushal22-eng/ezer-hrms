@@ -19,6 +19,7 @@ import { api } from '@/lib/ess/api'
 import { C as TK } from '@/lib/ui'
 import MrfForm, { mrfToForm } from './MrfForm'
 import InterviewFeedbackForm, { type Feedback as InterviewFeedback } from '@/components/recruitment/InterviewFeedbackForm'
+import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
 
 const C = {
   ink: '#1E1B4B', muted: '#6B7280', faint: '#9CA3AF', border: 'rgba(124,58,237,0.12)', card: '#FFFFFF',
@@ -211,7 +212,10 @@ export function PendingOnYou({ employeeId, go, notify }: { employeeId: string; g
 
 // ── APPROVALS ──────────────────────────────────────────────────────────────
 // ── MRF (Manpower Requisition) — raise + approve, shown inside Approvals ──────
-export function MrfApprovals({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+// `focusId` puts the component in single-MRF mode: it opens straight into the review
+// popup for that one requisition (used by the /mrf-approve/[id] page that the Tasks &
+// Approvals hyperlink lands on). `onDone` navigates back after the decision.
+export function MrfApprovals({ employeeId, notify, focusId, onDone }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void; focusId?: string; onDone?: () => void }) {
   const [d, setD] = useState<any>(null)
   const [err, setErr] = useState('')
   const [reviewFor, setReviewFor] = useState<any | null>(null)   // the MRF open in the review popup
@@ -221,6 +225,7 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
   const [remark, setRemark] = useState('')                       // send-back remark
   const [showRemark, setShowRemark] = useState(false)            // remark box open in the modal
   const [editMrf, setEditMrf] = useState<any | null>(null)       // a sent-back MRF being edited & resubmitted
+  const [singleDone, setSingleDone] = useState<'approve' | 'reject' | 'revise' | null>(null) // single-mode outcome
   const load = useCallback(() => api('/api/ess/mrf', employeeId).then(x => { setD(x); setErr('') }).catch(e => setErr(e.message)), [employeeId])
   useEffect(() => { load() }, [load])
 
@@ -229,7 +234,8 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
     try {
       await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify({ action, id, ...extra }) })
       notify(action === 'approve' ? 'MRF approved.' : action === 'reject' ? 'MRF rejected.' : 'Sent back for changes.')
-      setReviewFor(null); setSelHr([]); setReviewStep('details'); setRemark(''); setShowRemark(false); load()
+      setReviewFor(null); setSelHr([]); setReviewStep('details'); setRemark(''); setShowRemark(false)
+      if (focusId) setSingleDone(action); else load()
     } catch (e: any) { notify(e.message, 'error') } finally { setBusy(false) }
   }
   // The role of the step this MRF is currently waiting on.
@@ -238,7 +244,17 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
     return (ch.find((s: any) => s.status === 'PENDING') || {}).role
   }
   const openReview = (m: any) => { setSelHr([]); setReviewStep('details'); setRemark(''); setShowRemark(false); setReviewFor(m) }
-  const closeReview = () => { if (!busy) { setReviewFor(null); setSelHr([]); setReviewStep('details'); setRemark(''); setShowRemark(false) } }
+  const closeReview = () => {
+    if (busy) return
+    setReviewFor(null); setSelHr([]); setReviewStep('details'); setRemark(''); setShowRemark(false)
+    if (focusId) onDone?.()   // single-MRF page: closing the popup returns to the portal
+  }
+  // Single-MRF (hyperlinked) mode: as soon as the data is in, open that MRF's review popup.
+  useEffect(() => {
+    if (!focusId || !d || reviewFor || singleDone) return
+    const m = (d.toApprove || []).find((x: any) => x.id === focusId)
+    if (m) openReview(m)
+  }, [focusId, d, reviewFor, singleDone]) // eslint-disable-line react-hooks/exhaustive-deps
   const acknowledge = async (id: string) => {
     try { await api('/api/ess/mrf', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', id }) }); notify('Acknowledged — this MRF is now in your Recruitment.'); load() }
     catch (e: any) { notify(e.message, 'error') }
@@ -271,6 +287,25 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
 
   return (
     <div style={S.card}>
+      {focusId ? (
+        singleDone ? (
+          <div style={{ textAlign: 'center', padding: '26px 12px' }}>
+            <div style={{ fontSize: 40 }}>{singleDone === 'approve' ? '✅' : singleDone === 'reject' ? '🚫' : '↩️'}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginTop: 8 }}>{singleDone === 'approve' ? 'MRF approved' : singleDone === 'reject' ? 'MRF rejected' : 'Sent back for changes'}</div>
+            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6 }}>Your decision has been recorded.</div>
+            <button style={{ ...S.btn, background: C.purple, marginTop: 16 }} onClick={() => onDone?.()}>← Back to Tasks &amp; Approvals</button>
+          </div>
+        ) : (!reviewFor && !(d.toApprove || []).some((x: any) => x.id === focusId)) ? (
+          <div style={{ textAlign: 'center', padding: '26px 12px' }}>
+            <div style={{ fontSize: 40 }}>🔍</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: C.ink, marginTop: 8 }}>This MRF isn’t awaiting your approval</div>
+            <div style={{ fontSize: 12.5, color: C.muted, marginTop: 6 }}>It may already have been actioned, or it isn’t routed to you.</div>
+            <button style={{ ...S.btn, background: C.purple, marginTop: 16 }} onClick={() => onDone?.()}>← Back to Tasks &amp; Approvals</button>
+          </div>
+        ) : (
+          <div style={{ textAlign: 'center', padding: '26px 12px', color: C.muted, fontSize: 13 }}>Opening the requisition…</div>
+        )
+      ) : (<>
       <div style={S.section}>Hiring Requests · MRF</div>
 
       {(d.myAssignments && d.myAssignments.length > 0) && <>
@@ -291,13 +326,15 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
       {d.toApprove.length > 0 && <>
         <div style={{ fontSize: 12, fontWeight: 700, color: C.amber, margin: '6px 0 4px' }}>Waiting on you ({d.toApprove.length})</div>
         {d.toApprove.map((m: any) => (
-          <div key={m.id} style={{ borderBottom: `1px solid ${C.border}`, padding: '8px 0' }}>
-            <div style={{ fontSize: 13, fontWeight: 600 }}>{m.designation || m.position} · {m.no_of_openings || m.openings || 1} opening(s)</div>
-            <div style={{ fontSize: 11.5, color: C.muted }}>{m.departments?.dept_name || '—'} · raised by {m.raised_by_name || '—'}{m.raised_by_role ? ` (${m.raised_by_role})` : ''} · {m.urgency || 'Normal'}</div>
-            {m.reason && <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{m.reason}</div>}
-            <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <button style={{ ...S.btn, background: C.green }} onClick={() => openReview(m)}>Review &amp; Approve</button>
-              <button style={S.btnD} onClick={() => decide(m.id, 'reject', { note: window.prompt('Reason for rejection (optional):') || '' })}>Reject</button>
+          <div key={m.id} style={{ borderBottom: `1px solid ${C.border}`, padding: '10px 0' }}>
+            {/* Only a notification + a hyperlink here — the review & approve happens on the MRF screen. */}
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 9, padding: '10px 12px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 18, flexShrink: 0 }}>📋</span>
+              <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{m.designation || m.position} · {m.no_of_openings || m.openings || 1} opening(s)</div>
+                <div style={{ fontSize: 11.5, color: '#8a5a08' }}>Needs your approval · raised by {m.raised_by_name || '—'}{m.raised_by_role ? ` (${m.raised_by_role})` : ''} · {m.urgency || 'Normal'}</div>
+              </div>
+              <a href={`/ess-portal?module=recruitment&mrfSub=approvals&mrf=${m.id}`} style={{ ...S.btn, background: C.green, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>Open MRF to review &amp; approve →</a>
             </div>
           </div>
         ))}
@@ -327,6 +364,7 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
           </div>
         )
       })}
+      </>)}
 
       {reviewFor && createPortal((() => {
         const m = reviewFor
@@ -411,25 +449,8 @@ export function MrfApprovals({ employeeId, notify }: { employeeId: string; notif
                 ) : (
                   <>
                     <div style={{ fontSize: 13, fontWeight: 600, color: C.ink, marginBottom: 3 }}>Assign Hiring Manager(s)</div>
-                    <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>This requisition is approved. Pick one or more hiring managers to run the hiring.</div>
-                    <div style={{ border: `1px solid ${C.border}`, borderRadius: 10, overflow: 'hidden' }}>
-                      {(!d.hrOptions || d.hrOptions.length === 0) && <div style={{ fontSize: 12.5, color: C.faint, padding: '16px' }}>No hiring manager found in your company. Assign the “Hiring Manager / Recruiter” role first (ESS &amp; Access → Assign Roles).</div>}
-                      {(d.hrOptions || []).map((h: any, i: number) => {
-                        const on = selHr.includes(h.id)
-                        return (
-                          <label key={h.id} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '11px 14px', cursor: 'pointer', background: on ? C.greenBg : '#fff', borderTop: i ? `1px solid ${C.border}` : 'none' }}>
-                            <input type="checkbox" checked={on} onChange={e => setSelHr(s => e.target.checked ? [...s, h.id] : s.filter(x => x !== h.id))} />
-                            <span style={{ width: 30, height: 30, borderRadius: '50%', background: on ? C.green : C.soft, color: on ? '#fff' : C.purpleD, fontSize: 11, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{(h.name || '?').split(' ').slice(0, 2).map((x: string) => x[0]).join('').toUpperCase()}</span>
-                            <span style={{ flex: 1 }}>
-                              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{h.name}</div>
-                              <div style={{ fontSize: 11, color: C.faint }}>{h.code} · Hiring Manager</div>
-                            </span>
-                            {on && <span style={{ fontSize: 15, color: C.green }}>✓</span>}
-                          </label>
-                        )
-                      })}
-                    </div>
-                    {selHr.length > 0 && <div style={{ fontSize: 11.5, color: C.green, fontWeight: 600, marginTop: 8 }}>{selHr.length} hiring manager{selHr.length > 1 ? 's' : ''} selected</div>}
+                    <div style={{ fontSize: 12, color: C.muted, marginBottom: 12 }}>This requisition is approved. Search by employee code or name and add one or more hiring managers to run the hiring.</div>
+                    <RecruiterPicker people={toPickerPeople(d)} value={selHr} onChange={setSelHr} />
                   </>
                 )}
               </div>
@@ -503,9 +524,12 @@ export function RaiseMrfSection({ employeeId, notify, go }: { employeeId: string
 }
 
 // ── Interviews to conduct — the interviewer's half of the round flow ──────────
-// A row per interview this employee has been added to. Acknowledge first (the
-// button then turns into a blue "Give feedback"); giving feedback opens the
-// 8-parameter form and, once submitted, the row is marked done.
+// A row per interview this employee has been added to, as MAIN interviewer or as
+// a PANELIST. Everyone sees the details and acknowledges; only the main
+// interviewer's row turns into a blue "Give feedback" (8 parameters + a
+// Hold / Reject / Shortlist decision). A panelist's row is done once acknowledged.
+const isMain = (i: any) => (i.role || 'MAIN') === 'MAIN'
+
 export function InterviewInvites({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
   const [invites, setInvites] = useState<any[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -515,7 +539,8 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
   useEffect(() => { load() }, [load])
   if (!invites || invites.length === 0) return null
 
-  const pending = invites.filter((i: any) => i.status !== 'submitted')
+  // Main interviewers are done once feedback is in; panelists once they've acknowledged.
+  const pending = invites.filter((i: any) => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
   const ack = async (id: string) => {
     setBusy(id)
     try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify('Acknowledged — record your feedback after the interview.'); await load() }
@@ -538,7 +563,8 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
         return (
           <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{i.candidate_name || 'Candidate'} <span style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, background: C.soft, borderRadius: 99, padding: '2px 8px', marginLeft: 4 }}>{i.round}</span></div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{i.candidate_name || 'Candidate'} <span style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, background: C.soft, borderRadius: 99, padding: '2px 8px', marginLeft: 4 }}>{i.round}</span>
+                <span style={{ ...pill(isMain(i) ? 'info' : 'mut'), marginLeft: 4 }}>{isMain(i) ? 'Main interviewer' : 'Panelist'}</span></div>
               <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>
                 {when}{i.scheduled_by_name ? ` · by ${i.scheduled_by_name}` : ''}
                 {i.meet_link ? <> · <a href={i.meet_link} target="_blank" rel="noreferrer" style={{ color: C.blue, fontWeight: 600 }}>Join link</a></> : ''}
@@ -546,7 +572,9 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
               </div>
             </div>
             {i.status === 'submitted' ? (
-              <span style={{ fontSize: 11, fontWeight: 700, color: C.green, background: C.greenBg, borderRadius: 99, padding: '4px 12px' }}>Feedback submitted ✓</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.green, background: C.greenBg, borderRadius: 99, padding: '4px 12px' }}>Feedback submitted ✓{i.decision ? ` · ${i.decision === 'HOLD' ? 'On hold' : i.decision === 'REJECT' ? 'Rejected' : 'Shortlisted'}` : ''}</span>
+            ) : i.status === 'acknowledged' && !isMain(i) ? (
+              <span style={{ fontSize: 11, fontWeight: 700, color: C.muted, background: C.bg, borderRadius: 99, padding: '4px 12px' }}>Acknowledged · panelist — feedback is the main interviewer's</span>
             ) : i.status === 'acknowledged' ? (
               <button onClick={() => setFbFor(i)} style={{ ...S.btn, background: C.blue }}>Give feedback</button>
             ) : (
@@ -566,7 +594,7 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
             </div>
             <InterviewFeedbackForm
               mode="fill" round={fbFor.round} submitting={saving}
-              candidate={{ name: fbFor.candidate_name || 'Candidate', sub: fbFor.round }}
+              candidate={{ name: fbFor.candidate_name || 'Candidate', sub: fbFor.round }} questions={fbFor.questions}
               onSubmit={submit} onClose={() => !saving && setFbFor(null)} />
           </div>
         </div>, document.body)}

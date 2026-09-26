@@ -610,3 +610,7 @@ html, body {
     --ez-grade-5-bg: #172436;      --ez-grade-5-fg: #7BAFF4;
     --ez-grade-6-bg: #1C2129;      --ez-grade-6-fg: #9AA6B5;
   }
+
+/* CTC calculator panel — slides in from the right while the candidate column narrows. */
+@keyframes ezSlideInRight { from { opacity: 0; transform: translateX(28px) } to { opacity: 1; transform: none } }
+@keyframes ezFadeUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
