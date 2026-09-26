@@ -3063,8 +3063,17 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   const bad = (k:string)=> touched && missing[k]
   const missingCount = Object.values(missing).filter(Boolean).length
   const errStyle = { borderColor:C.critical, background:C.criticalTint } as React.CSSProperties
-  const inp = (k:string):React.CSSProperties => ({ ...T.input, ...(bad(k)?errStyle:{}) })
-  const sel = (k:string):React.CSSProperties => ({ ...T.select, ...(bad(k)?errStyle:{}) })
+  // These return ONLY the error override now — .rx-input carries the base, so
+  // spreading T.input back over it would undo the class. Same shape as eb() in
+  // MRFTab. undefined when valid, which React treats as no inline style.
+  //
+  // These two are why the first census of this tab was wrong: they are style
+  // FACTORIES, not style props, so scanning for the inline style prop never
+  // saw the twelve fields that route through them. (This sentence used to
+  // quote that prop verbatim — and the bulk rewrite duly edited the comment
+  // along with the code, which is how the site count came out one too high.)
+  const inp = (k:string):React.CSSProperties|undefined => (bad(k)?errStyle:undefined)
+  const sel = (k:string):React.CSSProperties|undefined => (bad(k)?errStyle:undefined)
   const reqMark = <span style={{ color:C.critical }}> *</span>
   const approvedMRFs = mrfs.filter((m:MRF)=>m.status==='APPROVED')
   const [stageF, setStageF] = useState('')   // '' = all stages
@@ -3169,7 +3178,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     .map((c:Candidate) => toCandidateVM(c as unknown as Record<string, unknown>))
 
   const openingSelect = (
-    <select style={{ ...T.select, width:280 }} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
+    <select className="rx-input" style={{ width:280 }} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
       <option value="all">All Openings ({candidates.length} candidates)</option>
       {approvedMRFs.map((m:MRF)=>(
         <option key={m.id} value={m.id}>{m.designation||m.position} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
@@ -3186,19 +3195,19 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   // offer-flow-components.tsx keeps its own copy for the two unconverted tabs.
   const filterBar = (
     <>
-      <select style={{ ...T.select, maxWidth:170 }} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+      <select className="rx-input" style={{ maxWidth:170 }} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
         <option value="">All Companies</option>
         {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
       </select>
-      <select style={{ ...T.select, maxWidth:170 }} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
+      <select className="rx-input" style={{ maxWidth:170 }} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
         <option value="">All Departments</option>
         {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
       </select>
-      <select style={{ ...T.select, maxWidth:170 }} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
+      <select className="rx-input" style={{ maxWidth:170 }} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
         <option value="">All Locations</option>
         {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
       </select>
-      <select style={{ ...T.select, maxWidth:170 }} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
+      <select className="rx-input" style={{ maxWidth:170 }} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
         <option value="">All Positions</option>
         {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
       </select>
@@ -3206,7 +3215,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
           as its own column, but this still filters the List view. Rejected is
           excluded because PipelineView drops it unconditionally -- leaving it
           selectable would hand the view a list it then empties completely. */}
-      <select style={{ ...T.select, maxWidth:170 }} value={stageF} onChange={e=>setStageF(e.target.value)}>
+      <select className="rx-input" style={{ maxWidth:170 }} value={stageF} onChange={e=>setStageF(e.target.value)}>
         <option value="">All stages</option>
         {STAGES.filter((s:string)=>s!==REJECTED).map((s:string)=>(
           <option key={s} value={s}>{s} ({baseList.filter((c:Candidate)=>c.stage===s).length})</option>
@@ -3259,20 +3268,20 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <SectionLine title="Requisition" />
               <div style={{ ...T.g2, marginBottom:14 }}>
                 <div style={{ gridColumn:'1 / -1' }}>
-                  <label style={T.label}>For Opening (MRF){reqMark}</label>
-                  <select style={sel('mrf_id')} value={cForm.mrf_id} onChange={e=>CF('mrf_id',e.target.value)}>
+                  <label className="rx-label" style={{ display:'block', marginBottom:6 }}>For Opening (MRF){reqMark}</label>
+                  <select className="rx-input" style={sel('mrf_id')} value={cForm.mrf_id} onChange={e=>CF('mrf_id',e.target.value)}>
                     <option value="">Select an approved opening</option>
                     {approvedMRFs.map((m:MRF)=><option key={m.id} value={m.id}>{m.designation||m.position} ({m.no_of_openings||m.openings||0} openings){m.location_name?` · ${m.location_name}`:''}</option>)}
                   </select>
                   {approvedMRFs.length===0 && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>No approved MRF yet — approve one in the MRF tab first.</div>}
                 </div>
-                <div><label style={T.label}>Department</label><input style={{ ...T.input, opacity:.7 }} value={mrfDeptName(cMrf)||'—'} readOnly /></div>
-                <div><label style={T.label}>Job location</label>
-                  <input style={T.input} value={cForm.job_location} onChange={e=>CF('job_location',e.target.value)} placeholder={mrfLocName(cMrf)||'City / Remote'} />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Department</label><input className="rx-input" style={{ opacity:.7 }} value={mrfDeptName(cMrf)||'—'} readOnly /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Job location</label>
+                  <input className="rx-input" value={cForm.job_location} onChange={e=>CF('job_location',e.target.value)} placeholder={mrfLocName(cMrf)||'City / Remote'} />
                 </div>
-                <div><label style={T.label}>Recruiter</label><input style={T.input} value={cForm.recruiter} onChange={e=>CF('recruiter',e.target.value)} placeholder="Recruiter name / email" /></div>
-                <div><label style={T.label}>Employment type</label>
-                  <select style={T.select} value={cForm.employment_type} onChange={e=>CF('employment_type',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Recruiter</label><input className="rx-input" value={cForm.recruiter} onChange={e=>CF('recruiter',e.target.value)} placeholder="Recruiter name / email" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Employment type</label>
+                  <select className="rx-input" value={cForm.employment_type} onChange={e=>CF('employment_type',e.target.value)}>
                     {Array.from(new Set([...EMP_TYPES, cForm.employment_type].filter(Boolean))).map(o=><option key={o as string}>{o as string}</option>)}
                   </select>
                 </div>
@@ -3281,69 +3290,69 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               {/* 2 · Personal */}
               <SectionLine title="Personal details" />
               <div style={{ ...T.g3, marginBottom:14 }}>
-                <div><label style={T.label}>First name{reqMark}</label><input style={inp('first_name')} value={cForm.first_name} onChange={e=>CF('first_name',e.target.value)} /></div>
-                <div><label style={T.label}>Middle name</label><input style={T.input} value={cForm.middle_name} onChange={e=>CF('middle_name',e.target.value)} /></div>
-                <div><label style={T.label}>Last name{reqMark}</label><input style={inp('last_name')} value={cForm.last_name} onChange={e=>CF('last_name',e.target.value)} /></div>
-                <div><label style={T.label}>Date of birth</label><input style={T.input} type="date" max="2010-01-01" value={cForm.dob} onChange={e=>CF('dob',e.target.value)} /></div>
-                <div><label style={T.label}>Gender</label>
-                  <select style={T.select} value={cForm.gender} onChange={e=>CF('gender',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>First name{reqMark}</label><input className="rx-input" style={inp('first_name')} value={cForm.first_name} onChange={e=>CF('first_name',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Middle name</label><input className="rx-input" value={cForm.middle_name} onChange={e=>CF('middle_name',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Last name{reqMark}</label><input className="rx-input" style={inp('last_name')} value={cForm.last_name} onChange={e=>CF('last_name',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Date of birth</label><input className="rx-input" type="date" max="2010-01-01" value={cForm.dob} onChange={e=>CF('dob',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Gender</label>
+                  <select className="rx-input" value={cForm.gender} onChange={e=>CF('gender',e.target.value)}>
                     <option value="">Prefer not to say</option><option>Female</option><option>Male</option><option>Other</option>
                   </select>
                 </div>
-                <div><label style={T.label}>Marital status</label>
-                  <select style={T.select} value={cForm.marital_status} onChange={e=>CF('marital_status',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Marital status</label>
+                  <select className="rx-input" value={cForm.marital_status} onChange={e=>CF('marital_status',e.target.value)}>
                     <option value="">Select</option><option>Single</option><option>Married</option><option>Other</option>
                   </select>
                 </div>
-                <div><label style={T.label}>Nationality</label><input style={T.input} value={cForm.nationality} onChange={e=>CF('nationality',e.target.value)} /></div>
-                <div style={{ gridColumn:'span 2' }}><label style={T.label}>Languages known <span style={{ color:C.faint, fontWeight:400 }}>(comma separated)</span></label><input style={T.input} value={cForm.languages} onChange={e=>CF('languages',e.target.value)} placeholder="Hindi, English" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Nationality</label><input className="rx-input" value={cForm.nationality} onChange={e=>CF('nationality',e.target.value)} /></div>
+                <div style={{ gridColumn:'span 2' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Languages known <span style={{ color:C.faint, fontWeight:400 }}>(comma separated)</span></label><input className="rx-input" value={cForm.languages} onChange={e=>CF('languages',e.target.value)} placeholder="Hindi, English" /></div>
               </div>
 
               {/* 3 · Contact */}
               <SectionLine title="Contact" />
               <div style={{ ...T.g2, marginBottom:14 }}>
-                <div><label style={T.label}>Personal email{reqMark}</label><input style={inp('email')} type="email" value={cForm.email} onChange={e=>CF('email',e.target.value)} placeholder="name@example.com" /></div>
-                <div><label style={T.label}>Mobile{reqMark} <span style={{ color:C.faint, fontWeight:400 }}>(10 digits)</span></label>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Personal email{reqMark}</label><input className="rx-input" style={inp('email')} type="email" value={cForm.email} onChange={e=>CF('email',e.target.value)} placeholder="name@example.com" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Mobile{reqMark} <span style={{ color:C.faint, fontWeight:400 }}>(10 digits)</span></label>
                   <div style={{ display:'flex', gap:6 }}>
-                    <select style={{ ...T.select, flex:'0 0 80px' }} value={cForm.dial_code} onChange={e=>CF('dial_code',e.target.value)}>{['+91','+971','+1','+44','+65'].map(o=><option key={o}>{o}</option>)}</select>
-                    <input style={{ ...inp('phone'), flex:1 }} inputMode="numeric" maxLength={10} value={cForm.phone} onChange={e=>CF('phone',e.target.value.replace(/\D/g,''))} placeholder="10 digits" />
+                    <select className="rx-input" style={{ flex:'0 0 80px' }} value={cForm.dial_code} onChange={e=>CF('dial_code',e.target.value)}>{['+91','+971','+1','+44','+65'].map(o=><option key={o}>{o}</option>)}</select>
+                    <input className="rx-input" style={{ ...inp('phone'), flex:1 }} inputMode="numeric" maxLength={10} value={cForm.phone} onChange={e=>CF('phone',e.target.value.replace(/\D/g,''))} placeholder="10 digits" />
                   </div>
                 </div>
-                <div><label style={T.label}>Alternate number</label><input style={T.input} inputMode="numeric" maxLength={10} value={cForm.alt_mobile} onChange={e=>CF('alt_mobile',e.target.value.replace(/\D/g,''))} /></div>
-                <div><label style={T.label}>Current city{reqMark}</label><input style={inp('current_city')} value={cForm.current_city} onChange={e=>CF('current_city',e.target.value)} placeholder="Gurugram" /></div>
-                <div><label style={T.label}>HR email (for follow-ups)</label><input style={T.input} value={cForm.hr_email} onChange={e=>CF('hr_email',e.target.value)} placeholder="hr@company.com" /></div>
-                <div><label style={T.label}>Willing to relocate</label>
-                  <select style={T.select} value={cForm.relocate} onChange={e=>CF('relocate',e.target.value)}><option>Not applicable</option><option>Yes</option><option>No</option></select>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Alternate number</label><input className="rx-input" inputMode="numeric" maxLength={10} value={cForm.alt_mobile} onChange={e=>CF('alt_mobile',e.target.value.replace(/\D/g,''))} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current city{reqMark}</label><input className="rx-input" style={inp('current_city')} value={cForm.current_city} onChange={e=>CF('current_city',e.target.value)} placeholder="Gurugram" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>HR email (for follow-ups)</label><input className="rx-input" value={cForm.hr_email} onChange={e=>CF('hr_email',e.target.value)} placeholder="hr@company.com" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Willing to relocate</label>
+                  <select className="rx-input" value={cForm.relocate} onChange={e=>CF('relocate',e.target.value)}><option>Not applicable</option><option>Yes</option><option>No</option></select>
                 </div>
-                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Permanent address</label><textarea style={{ ...T.textarea, minHeight:60 }} value={cForm.permanent_address} onChange={e=>CF('permanent_address',e.target.value)} placeholder="House, street, city, state, PIN" /></div>
+                <div style={{ gridColumn:'1 / -1' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Permanent address</label><textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:60 }} value={cForm.permanent_address} onChange={e=>CF('permanent_address',e.target.value)} placeholder="House, street, city, state, PIN" /></div>
               </div>
 
               {/* 4 · Professional */}
               <SectionLine title="Professional background" />
               <div style={{ ...T.g3, marginBottom:14 }}>
-                <div><label style={T.label}>Total experience — years{reqMark}</label><input style={inp('total_exp_years')} type="number" min={0} max={50} value={cForm.total_exp_years} onChange={e=>CF('total_exp_years',e.target.value)} /></div>
-                <div><label style={T.label}>Months</label><input style={T.input} type="number" min={0} max={11} value={cForm.total_exp_months} onChange={e=>CF('total_exp_months',e.target.value)} /></div>
-                <div><label style={T.label}>Relevant experience (yrs)</label><input style={T.input} type="number" min={0} max={50} step={0.5} value={cForm.relevant_exp} onChange={e=>CF('relevant_exp',e.target.value)} /></div>
-                <div><label style={T.label}>Current employer</label><input style={T.input} value={cForm.current_company} onChange={e=>CF('current_company',e.target.value)} placeholder="Blank if fresher" /></div>
-                <div><label style={T.label}>Current designation</label><input style={T.input} value={cForm.designation} onChange={e=>CF('designation',e.target.value)} /></div>
-                <div><label style={T.label}>Function</label>
-                  <select style={T.select} value={cForm.function} onChange={e=>CF('function',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Total experience — years{reqMark}</label><input className="rx-input" style={inp('total_exp_years')} type="number" min={0} max={50} value={cForm.total_exp_years} onChange={e=>CF('total_exp_years',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Months</label><input className="rx-input" type="number" min={0} max={11} value={cForm.total_exp_months} onChange={e=>CF('total_exp_months',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Relevant experience (yrs)</label><input className="rx-input" type="number" min={0} max={50} step={0.5} value={cForm.relevant_exp} onChange={e=>CF('relevant_exp',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current employer</label><input className="rx-input" value={cForm.current_company} onChange={e=>CF('current_company',e.target.value)} placeholder="Blank if fresher" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current designation</label><input className="rx-input" value={cForm.designation} onChange={e=>CF('designation',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Function</label>
+                  <select className="rx-input" value={cForm.function} onChange={e=>CF('function',e.target.value)}>
                     <option value="">Select</option>{['Payroll','HR Operations','HR Compliance','Talent Acquisition','Finance','Engineering','Sales','Other'].map(o=><option key={o}>{o}</option>)}
                   </select>
                 </div>
-                <div><label style={T.label}>Highest qualification{reqMark}</label>
-                  <select style={sel('qualification')} value={cForm.qualification} onChange={e=>CF('qualification',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Highest qualification{reqMark}</label>
+                  <select className="rx-input" style={sel('qualification')} value={cForm.qualification} onChange={e=>CF('qualification',e.target.value)}>
                     <option value="">Select</option>{['Diploma','Graduate','Post graduate','Professional — CA / CS / CMA','Doctorate'].map(o=><option key={o}>{o}</option>)}
                   </select>
                 </div>
-                <div><label style={T.label}>Specialization</label><input style={T.input} value={cForm.specialization} onChange={e=>CF('specialization',e.target.value)} placeholder="B.Com (Hons), MBA-HR" /></div>
-                <div><label style={T.label}>Year of passing</label><input style={T.input} type="number" min={1970} max={2035} value={cForm.passing_year} onChange={e=>CF('passing_year',e.target.value)} placeholder="2019" /></div>
-                <div style={{ gridColumn:'span 2' }}><label style={T.label}>Institute / university</label><input style={T.input} value={cForm.institute} onChange={e=>CF('institute',e.target.value)} /></div>
-                <div><label style={T.label}>Certifications</label><input style={T.input} value={cForm.certifications} onChange={e=>CF('certifications',e.target.value)} placeholder="SHRM-CP, Payroll (NPI)" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Specialization</label><input className="rx-input" value={cForm.specialization} onChange={e=>CF('specialization',e.target.value)} placeholder="B.Com (Hons), MBA-HR" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Year of passing</label><input className="rx-input" type="number" min={1970} max={2035} value={cForm.passing_year} onChange={e=>CF('passing_year',e.target.value)} placeholder="2019" /></div>
+                <div style={{ gridColumn:'span 2' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Institute / university</label><input className="rx-input" value={cForm.institute} onChange={e=>CF('institute',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Certifications</label><input className="rx-input" value={cForm.certifications} onChange={e=>CF('certifications',e.target.value)} placeholder="SHRM-CP, Payroll (NPI)" /></div>
               </div>
               {/* skills */}
               <div style={{ marginBottom:14 }}>
-                <label style={T.label}>Key skills</label>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Key skills</label>
                 <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginTop:2 }}>
                   {['Payroll processing','Statutory compliance','PF / ESIC','Income tax — TDS','Advanced Excel','Recruitment','Stakeholder management','Communication'].concat(cForm.skills.filter((s:string)=>!['Payroll processing','Statutory compliance','PF / ESIC','Income tax — TDS','Advanced Excel','Recruitment','Stakeholder management','Communication'].includes(s))).map((s:string)=>{
                     const on = cForm.skills.includes(s)
@@ -3351,27 +3360,27 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   })}
                 </div>
                 <div style={{ display:'flex', gap:6, marginTop:8, maxWidth:340 }}>
-                  <input style={{ ...T.input, height:32 }} value={cForm.custom_skill} onChange={e=>CF('custom_skill',e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); addCustomSkill() } }} placeholder="Add a custom skill…" />
+                  <input className="rx-input" style={{ height:32 }} value={cForm.custom_skill} onChange={e=>CF('custom_skill',e.target.value)} onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); addCustomSkill() } }} placeholder="Add a custom skill…" />
                   <button type="button" onClick={addCustomSkill} style={{ ...T.btnOutline, height:32 }}>Add</button>
                 </div>
               </div>
               <div style={{ ...T.g3, marginBottom:14 }}>
-                <div><label style={T.label}>Notice period{reqMark}</label>
-                  <select style={sel('notice_period')} value={cForm.notice_period} onChange={e=>CF('notice_period',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Notice period{reqMark}</label>
+                  <select className="rx-input" style={sel('notice_period')} value={cForm.notice_period} onChange={e=>CF('notice_period',e.target.value)}>
                     <option value="">Select</option>{['Immediate','15 days','30 days','60 days','90 days','Serving notice'].map(o=><option key={o}>{o}</option>)}
                   </select>
                 </div>
-                {cForm.notice_period==='Serving notice' && <div><label style={T.label}>Last working day</label><input style={T.input} type="date" value={cForm.last_working_day} onChange={e=>CF('last_working_day',e.target.value)} /></div>}
-                <div><label style={T.label}>Buyout possible</label>
-                  <select style={T.select} value={cForm.buyout} onChange={e=>CF('buyout',e.target.value)}><option>No</option><option>Yes</option><option>To be discussed</option></select>
+                {cForm.notice_period==='Serving notice' && <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Last working day</label><input className="rx-input" type="date" value={cForm.last_working_day} onChange={e=>CF('last_working_day',e.target.value)} /></div>}
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Buyout possible</label>
+                  <select className="rx-input" value={cForm.buyout} onChange={e=>CF('buyout',e.target.value)}><option>No</option><option>Yes</option><option>To be discussed</option></select>
                 </div>
               </div>
 
               {/* 5 · Compensation */}
               <SectionLine title="Compensation (₹ lakh per annum)" />
               <div style={{ ...T.g3, marginBottom:14 }}>
-                <div><label style={T.label}>Current fixed CTC{reqMark}</label><input style={inp('current_fixed')} type="number" min={0} step={0.01} value={cForm.current_fixed} onChange={e=>CF('current_fixed',e.target.value)} placeholder="8.40" /></div>
-                <div><label style={T.label}>Current variable</label><input style={T.input} type="number" min={0} step={0.01} value={cForm.current_variable} onChange={e=>CF('current_variable',e.target.value)} placeholder="0.60" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current fixed CTC{reqMark}</label><input className="rx-input" style={inp('current_fixed')} type="number" min={0} step={0.01} value={cForm.current_fixed} onChange={e=>CF('current_fixed',e.target.value)} placeholder="8.40" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Current variable</label><input className="rx-input" type="number" min={0} step={0.01} value={cForm.current_variable} onChange={e=>CF('current_variable',e.target.value)} placeholder="0.60" /></div>
                 {/* background was C.ink — a TEXT token used as a surface. The
                     audit baseline records this exact failure: a band built
                     from C.ink inverted in dark mode and became the brightest
@@ -3382,64 +3391,64 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                   <div style={{ fontSize:F.micro, color:C.onDarkMuted }}>Total current CTC</div>
                   <div style={{ fontSize:F.title, fontWeight:W.bold, ...numeric }}>₹{((Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0)).toFixed(2)} LPA</div>
                 </div>
-                <div><label style={T.label}>Expected CTC{reqMark}</label>
-                  <input style={{ ...inp('expected_ctc'), ...(expCtcOver?errStyle:{}) }} type="number" min={0} step={0.01} value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} placeholder="11.00" />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Expected CTC{reqMark}</label>
+                  <input className="rx-input" style={{ ...inp('expected_ctc'), ...(expCtcOver?errStyle:{}) }} type="number" min={0} step={0.01} value={cForm.expected_ctc} onChange={e=>CF('expected_ctc',e.target.value)} placeholder="11.00" />
                   {expCtcOver
                     ? <div style={{ fontSize:F.micro, color:C.critical, marginTop:S.xs, fontWeight:W.semi }}>Exceeds MRF max budget (₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L) — you can still save.</div>
                     : cMrf?.budget_max ? <div style={{ fontSize:F.micro, color:C.muted, marginTop:S.xs }}>MRF budget: ₹{(Number(cMrf.budget_min||0)/100000).toFixed(1)}L – ₹{(Number(cMrf.budget_max)/100000).toFixed(1)}L</div> : null}
                 </div>
-                <div><label style={T.label}>Negotiable</label>
-                  <select style={T.select} value={cForm.negotiable} onChange={e=>CF('negotiable',e.target.value)}><option>Yes</option><option>No</option><option>Depends on role</option></select>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Negotiable</label>
+                  <select className="rx-input" value={cForm.negotiable} onChange={e=>CF('negotiable',e.target.value)}><option>Yes</option><option>No</option><option>Depends on role</option></select>
                 </div>
                 <div style={{ background:C.sunken, borderRadius:R.md, padding:'8px 12px', alignSelf:'end', border:`1px solid ${C.line}` }}>
                   <div style={{ fontSize:F.micro, color:C.muted }}>Hike over current</div>
                   <div style={{ fontSize:F.title, fontWeight:W.bold, color:C.positive, ...numeric }}>{(()=>{ const t=(Number(cForm.current_fixed)||0)+(Number(cForm.current_variable)||0); const e=Number(cForm.expected_ctc)||0; return (t>0&&e>0)?(((e-t)/t)*100).toFixed(1)+'%':'—' })()}</div>
                 </div>
-                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Offer in hand</label>
-                  <select style={{ ...T.select, maxWidth:200 }} value={cForm.offer_in_hand} onChange={e=>CF('offer_in_hand',e.target.value)}><option>No</option><option>Yes</option></select>
+                <div style={{ gridColumn:'1 / -1' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Offer in hand</label>
+                  <select className="rx-input" style={{ maxWidth:200 }} value={cForm.offer_in_hand} onChange={e=>CF('offer_in_hand',e.target.value)}><option>No</option><option>Yes</option></select>
                 </div>
                 {cForm.offer_in_hand==='Yes' && <>
-                  <div><label style={T.label}>Offering company</label><input style={T.input} value={cForm.offer_company} onChange={e=>CF('offer_company',e.target.value)} /></div>
-                  <div><label style={T.label}>Offered CTC (LPA)</label><input style={T.input} type="number" min={0} step={0.01} value={cForm.offer_amount} onChange={e=>CF('offer_amount',e.target.value)} /></div>
-                  <div><label style={T.label}>Joining deadline</label><input style={T.input} type="date" value={cForm.offer_deadline} onChange={e=>CF('offer_deadline',e.target.value)} /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Offering company</label><input className="rx-input" value={cForm.offer_company} onChange={e=>CF('offer_company',e.target.value)} /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Offered CTC (LPA)</label><input className="rx-input" type="number" min={0} step={0.01} value={cForm.offer_amount} onChange={e=>CF('offer_amount',e.target.value)} /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Joining deadline</label><input className="rx-input" type="date" value={cForm.offer_deadline} onChange={e=>CF('offer_deadline',e.target.value)} /></div>
                 </>}
               </div>
 
               {/* 6 · Source */}
               <SectionLine title="Source" />
               <div style={{ ...T.g2, marginBottom:14 }}>
-                <div><label style={T.label}>Source{reqMark}</label>
-                  <select style={sel('source')} value={cForm.source} onChange={e=>CF('source',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Source{reqMark}</label>
+                  <select className="rx-input" style={sel('source')} value={cForm.source} onChange={e=>CF('source',e.target.value)}>
                     <option value="">Select</option>{SOURCES.map(s=><option key={s}>{s}</option>)}
                   </select>
                 </div>
-                <div><label style={T.label}>Sourced on</label><input style={T.input} type="date" value={cForm.sourced_on} onChange={e=>CF('sourced_on',e.target.value)} /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Sourced on</label><input className="rx-input" type="date" value={cForm.sourced_on} onChange={e=>CF('sourced_on',e.target.value)} /></div>
                 {cForm.source==='Referral' && <>
-                  <div><label style={T.label}>Referring employee ID</label><input style={T.input} value={cForm.referrer_id} onChange={e=>CF('referrer_id',e.target.value)} placeholder="EMP-10234" /></div>
-                  <div><label style={T.label}>Referring employee name</label><input style={T.input} value={cForm.referrer_name} onChange={e=>CF('referrer_name',e.target.value)} /></div>
-                  <div><label style={T.label}>Relationship</label>
-                    <select style={T.select} value={cForm.referrer_relation} onChange={e=>CF('referrer_relation',e.target.value)}><option>Ex-colleague</option><option>Friend</option><option>Family</option><option>Other</option></select>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Referring employee ID</label><input className="rx-input" value={cForm.referrer_id} onChange={e=>CF('referrer_id',e.target.value)} placeholder="EMP-10234" /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Referring employee name</label><input className="rx-input" value={cForm.referrer_name} onChange={e=>CF('referrer_name',e.target.value)} /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Relationship</label>
+                    <select className="rx-input" value={cForm.referrer_relation} onChange={e=>CF('referrer_relation',e.target.value)}><option>Ex-colleague</option><option>Friend</option><option>Family</option><option>Other</option></select>
                   </div>
                 </>}
                 {cForm.source==='Consultancy' && <>
-                  <div><label style={T.label}>Vendor name</label><input style={T.input} value={cForm.vendor_name} onChange={e=>CF('vendor_name',e.target.value)} /></div>
-                  <div><label style={T.label}>Agreed fee (% of CTC)</label><input style={T.input} type="number" min={0} max={30} step={0.5} value={cForm.vendor_fee} onChange={e=>CF('vendor_fee',e.target.value)} placeholder="8.33" /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Vendor name</label><input className="rx-input" value={cForm.vendor_name} onChange={e=>CF('vendor_name',e.target.value)} /></div>
+                  <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Agreed fee (% of CTC)</label><input className="rx-input" type="number" min={0} max={30} step={0.5} value={cForm.vendor_fee} onChange={e=>CF('vendor_fee',e.target.value)} placeholder="8.33" /></div>
                 </>}
-                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Job portal / profile link</label><input style={T.input} type="url" value={cForm.portal_link} onChange={e=>CF('portal_link',e.target.value)} placeholder="https://" /></div>
+                <div style={{ gridColumn:'1 / -1' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Job portal / profile link</label><input className="rx-input" type="url" value={cForm.portal_link} onChange={e=>CF('portal_link',e.target.value)} placeholder="https://" /></div>
               </div>
 
               {/* 7 · Documents */}
               <SectionLine title="Documents" />
               <div style={{ ...T.g2, marginBottom:14 }}>
-                <div><label style={T.label}>Resume <span style={{ color:C.faint, fontWeight:400 }}>(PDF/DOCX)</span></label>
-                  <input style={{ ...T.input, padding:'7px 9px' }} type="file" accept=".pdf,.doc,.docx" onChange={e=>CF('resume_name',e.target.files?.[0]?.name||'')} />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Resume <span style={{ color:C.faint, fontWeight:400 }}>(PDF/DOCX)</span></label>
+                  <input className="rx-input" style={{ padding:'7px 9px' }} type="file" accept=".pdf,.doc,.docx" onChange={e=>CF('resume_name',e.target.files?.[0]?.name||'')} />
                   {cForm.resume_name && <div style={{ fontSize:11, color:C.positive, marginTop:3 }}>Attached: {cForm.resume_name}</div>}
                 </div>
-                <div><label style={T.label}>Photograph <span style={{ color:C.faint, fontWeight:400 }}>(optional)</span></label>
-                  <input style={{ ...T.input, padding:'7px 9px' }} type="file" accept="image/*" onChange={e=>CF('photo_name',e.target.files?.[0]?.name||'')} />
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Photograph <span style={{ color:C.faint, fontWeight:400 }}>(optional)</span></label>
+                  <input className="rx-input" style={{ padding:'7px 9px' }} type="file" accept="image/*" onChange={e=>CF('photo_name',e.target.files?.[0]?.name||'')} />
                 </div>
-                <div><label style={T.label}>LinkedIn profile</label><input style={T.input} type="url" value={cForm.linkedin} onChange={e=>CF('linkedin',e.target.value)} placeholder="https://linkedin.com/in/" /></div>
-                <div><label style={T.label}>Portfolio / other link</label><input style={T.input} type="url" value={cForm.portfolio} onChange={e=>CF('portfolio',e.target.value)} placeholder="https://" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>LinkedIn profile</label><input className="rx-input" type="url" value={cForm.linkedin} onChange={e=>CF('linkedin',e.target.value)} placeholder="https://linkedin.com/in/" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Portfolio / other link</label><input className="rx-input" type="url" value={cForm.portfolio} onChange={e=>CF('portfolio',e.target.value)} placeholder="https://" /></div>
                 <div style={{ gridColumn:'1 / -1' }}>
                   <label style={{ display:'flex', alignItems:'flex-start', gap:S.sm, cursor:'pointer', fontSize:F.small, color:C.ink, ...(bad('consent')?{ color:C.critical }:{}) }}>
                     <input type="checkbox" checked={cForm.consent} onChange={e=>CF('consent',e.target.checked)} style={{ marginTop:2 }} />
@@ -3462,13 +3471,13 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
                 {(cForm.q1==='No'||cForm.q2==='No') && <div style={{ fontSize:F.tiny, color:C.critical, marginTop:S.sm, fontWeight:W.semi }}>A “No” on a knockout question will file this candidate under Rejected.</div>}
               </div>
               <div style={{ ...T.g2, marginBottom:6 }}>
-                <div><label style={T.label}>Stage</label>
-                  <select style={T.select} value={cForm.stage} onChange={e=>CF('stage',e.target.value)}>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Stage</label>
+                  <select className="rx-input" value={cForm.stage} onChange={e=>CF('stage',e.target.value)}>
                     {['Applied','AI Screened','Telephonic','L1','L2','Optional Round','Shortlisted'].map(s=><option key={s}>{s}</option>)}
                   </select>
                 </div>
-                <div><label style={T.label}>Interview availability</label><input style={T.input} value={cForm.availability} onChange={e=>CF('availability',e.target.value)} placeholder="Weekdays after 6 pm, Sat full day" /></div>
-                <div style={{ gridColumn:'1 / -1' }}><label style={T.label}>Recruiter remarks <span style={{ color:C.faint, fontWeight:400 }}>(visible to hiring manager)</span></label><textarea style={{ ...T.textarea, minHeight:64 }} value={cForm.remarks} onChange={e=>CF('remarks',e.target.value)} placeholder="Screening call summary, red flags, why this profile fits" /></div>
+                <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Interview availability</label><input className="rx-input" value={cForm.availability} onChange={e=>CF('availability',e.target.value)} placeholder="Weekdays after 6 pm, Sat full day" /></div>
+                <div style={{ gridColumn:'1 / -1' }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Recruiter remarks <span style={{ color:C.faint, fontWeight:400 }}>(visible to hiring manager)</span></label><textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:64 }} value={cForm.remarks} onChange={e=>CF('remarks',e.target.value)} placeholder="Screening call summary, red flags, why this profile fits" /></div>
               </div>
             </div>
 
