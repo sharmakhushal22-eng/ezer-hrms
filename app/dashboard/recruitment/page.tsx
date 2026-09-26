@@ -467,7 +467,7 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:st
         </div>
       )}
       <div style={{ position:'relative' as const }}>
-        <input style={T.input} value={q} onChange={e=>setQ(e.target.value)} placeholder="Search skills — type e.g. 'py' then pick, or add custom"
+        <input className="rx-input" value={q} onChange={e=>setQ(e.target.value)} placeholder="Search skills — type e.g. 'py' then pick, or add custom"
           onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); if(matches[0]) add(matches[0]); else if(q.trim()&&!exact) addCustom() } }} />
         {q.trim() && (matches.length>0 || !exact) && (
           <div style={{ position:'absolute' as const, top:'100%', left:0, right:0, background:C.surface, border: `1px solid ${C.brandEdge}`, borderRadius:7, marginTop:2, zIndex:20, maxHeight:200, overflowY:'auto' as const, boxShadow:'0 6px 18px rgba(0,0,0,.1)' }}>
@@ -641,7 +641,12 @@ async function logMrfAudit(supabase:any, mrf:{id:string; company_id?:string}, ac
 function Field({ label, error, required, hint, children }:{ label:string; error?:string; required?:boolean; hint?:string; children:React.ReactNode }) {
   return (
     <div>
-      <label style={T.label}>{label}{required && <span style={{ color:C.critical }}> *</span>}</label>
+      {/* rx-label, not T.label. Every field in the ten-step MRF form goes
+          through here, so this one line moves all 43 of them off the 11px
+          uppercase eyebrow and onto the redesign's 12.5px sentence-case
+          label — the same one MrfForm and the SearchBox above it use.
+          The required marker is <em>, which is what .rx-label styles. */}
+      <label className="rx-label" style={{ display:'block', marginBottom:6 }}>{label}{required && <em> *</em>}</label>
       {children}
       {error ? <div style={{ fontSize:11, color:C.critical, marginTop:3 }}>⚠ {error}</div>
              : hint ? <div style={{ fontSize:F.micro, color:C.muted, marginTop:S.xs }}>{hint}</div> : null}
@@ -665,7 +670,7 @@ function MrfMeta({ label, value }:{ label:string; value:React.ReactNode }) {
 // back to "Select…" every time somebody picked a currency.
 function MasterSelect({ options, value, onChange, placeholder, style, useCode }:any) {
   return (
-    <select style={style||T.select} value={value||''} onChange={e=>onChange(e.target.value)}>
+    <select className="rx-input" style={style} value={value||''} onChange={e=>onChange(e.target.value)}>
       <option value="">{options?.length ? (placeholder||'Select…') : 'No options configured'}</option>
       {(options||[]).map((o:any)=>
         <option key={o.code} value={useCode ? o.code : o.label}>{o.label}</option>)}
@@ -703,7 +708,7 @@ function PersonSearchSelect({ people, value, onChange, placeholder }:{ people:an
   return (
     <div ref={boxRef} style={{ position:'relative' }}>
       <input
-        style={{ ...T.input, paddingRight: value ? 28 : undefined }}
+        className="rx-input" style={{ paddingRight: value ? 28 : undefined }}
         value={open ? q : (selected ? `${selected.full_name}${selected.designation?` — ${selected.designation}`:''}` : '')}
         onChange={e=>setQ(e.target.value)}
         onFocus={()=>{ setOpen(true); setQ('') }}
@@ -1309,7 +1314,11 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   const filtLocs = form.company_id ? locations.filter((l:Location)=>l.company_id===form.company_id) : locations
   const filtDepts = form.company_id ? departments.filter((d:Department)=>d.company_id===form.company_id) : departments
   const F = (k:string,v:any) => { setForm((f:any)=>({...f,[k]:v})); setErrors(e=> e[k] ? { ...e, [k]:'' } : e) }
-  const eb = (k:string) => errors[k] ? { ...T.input, border: `1px solid ${C.criticalTint}`, background:C.criticalTint } : T.input
+  // Returns ONLY the error override now — .rx-input carries the base, so
+  // spreading T.input back over it would undo the class. undefined when the
+  // field is valid, which React treats as no inline style at all.
+  const eb = (k:string): React.CSSProperties | undefined =>
+    errors[k] ? { borderColor: C.critical, background: C.criticalTint } : undefined
 
   const isQuick = form.mrf_type === 'Quick Hire'
   const isReplacement = form.hiring_type==='Replacement' || form.hiring_type==='Backfill'
@@ -1600,23 +1609,23 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   // owns the search box and status is controlled above.
   const filterBar = (
     <>
-      <select value={fCompany} onChange={e=>setFCompany(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+      <select value={fCompany} onChange={e=>setFCompany(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
         <option value="">All Companies</option>
         {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
       </select>
-      <select value={fDept} onChange={e=>setFDept(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+      <select value={fDept} onChange={e=>setFDept(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
         <option value="">All Departments</option>
         {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
       </select>
-      <select value={fLoc} onChange={e=>setFLoc(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+      <select value={fLoc} onChange={e=>setFLoc(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
         <option value="">All Locations</option>
         {locations.filter((l:Location)=>!fCompany||l.company_id===fCompany).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
       </select>
-      <select value={fPos} onChange={e=>setFPos(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+      <select value={fPos} onChange={e=>setFPos(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
         <option value="">All Positions</option>
         {mrfPositions.map((p:string)=><option key={p} value={p}>{p}</option>)}
       </select>
-      <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+      <select value={sortBy} onChange={e=>setSortBy(e.target.value)} className="rx-input" style={{ maxWidth:170 }}>
         <option value="newest">Newest first</option>
         <option value="oldest">Oldest first</option>
         <option value="openings">Most openings</option>
@@ -1643,11 +1652,21 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
 
       {showForm && (editMRF || !employeeId) && (
         <div style={T.cardPurple}>
-          <div style={{ display:'flex', gap:10, marginBottom:16 }}>
+          {/* A segmented control on a sunken track, matching MrfForm — the ESS
+              twin that fills this exact slot when the login resolves an
+              employeeId. Two hard-split brand-filled halves read as two
+              competing buttons; a track with one raised half reads as one
+              control with a current choice. */}
+          <div style={{ display:'flex', gap:4, border:`1px solid ${C.line}`, background:C.sunken,
+                        borderRadius:13, padding:4, marginBottom:16 }}>
             {['Quick Hire','Full MRF'].map(type=>(
-              <button key={type} onClick={()=>F('mrf_type',type)} style={{ ...T.btn, flex:1, padding:'10px',
-                background:form.mrf_type===type?C.brand:C.brandTint, color:form.mrf_type===type?C.onAccent:C.brandDeep,
-                border:form.mrf_type===type?'none':`1px solid ${C.brandEdge}`, fontSize:13 }}>
+              <button key={type} onClick={()=>F('mrf_type',type)} style={{ flex:1, height:36,
+                border:'1px solid transparent', borderRadius:9, cursor:'pointer', fontSize:13,
+                fontWeight:W.semi, fontFamily:'inherit',
+                background:form.mrf_type===type?`linear-gradient(180deg, ${C.brand}, ${C.brandDeep})`:'transparent',
+                borderColor:form.mrf_type===type?C.brandDeep:'transparent',
+                boxShadow:form.mrf_type===type?E.brand:'none',
+                color:form.mrf_type===type?C.onAccent:C.muted }}>
                 {type==='Quick Hire'?'Quick Hire (CTC ≤ ₹6L)':'Full MRF (CTC > ₹6L)'}
               </button>
             ))}
@@ -1665,14 +1684,14 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               ? lakhs(bMax, form.currency)
               : `${money(bMax, form.currency)}/mo = ${lakhs(annual, form.currency)} a year`
             if (shouldBe === form.mrf_type) return (
-              <div style={{ background:C.positiveTint, border: `1px solid ${C.positiveTint}`, borderRadius:7, padding:'8px 12px',
-                marginBottom:14, fontSize:12, color:C.positive }}>
+              <div style={{ background:C.positiveTint, border: `1px solid ${C.positiveEdge}`, borderRadius:11, padding:'9px 12px',
+                marginBottom:14, fontSize:12.5, color:C.positive }}>
                 ✓ {asYearly} — correct lane for {form.mrf_type}.
               </div>
             )
             return (
-              <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalTint}`, borderRadius:7, padding:'9px 12px',
-                marginBottom:14, fontSize:12, color:C.critical, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
+              <div style={{ background:C.criticalTint, border: `1px solid ${C.criticalEdge}`, borderRadius:11, padding:'9px 12px',
+                marginBottom:14, fontSize:12.5, color:C.critical, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
                 <span>
                   {asYearly} — {shouldBe==='Full MRF'
                     ? 'above ₹6L, so this belongs on a Full MRF.'
@@ -1689,27 +1708,27 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <SectionLine title="1 · Requisition Meta" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Requisition Type">
-              <select style={T.select} value={form.hiring_type} onChange={e=>F('hiring_type',e.target.value)}>
+              <select className="rx-input" value={form.hiring_type} onChange={e=>F('hiring_type',e.target.value)}>
                 {REQ_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
               </select>
             </Field>
             <Field label="Priority">
-              <select style={T.select} value={form.urgency} onChange={e=>F('urgency',e.target.value)}>
+              <select className="rx-input" value={form.urgency} onChange={e=>F('urgency',e.target.value)}>
                 <option value="HIGH">High / Urgent</option>
                 <option value="MEDIUM">Medium / Normal</option>
                 <option value="LOW">Low</option>
               </select>
             </Field>
             <Field label="Requisition ID" hint={editMRF?undefined:'Generated on save'}>
-              <input style={{ ...T.input, background:C.sunken, color:C.muted }} value={(editMRF as any)?.mrf_number||'Auto-generated'} readOnly />
+              <input className="rx-input" style={{ background:C.sunken, color:C.muted }} value={(editMRF as any)?.mrf_number||'Auto-generated'} readOnly />
             </Field>
           </div>
           <div style={{ ...T.g2, marginBottom:10 }}>
             <Field label="Raised By — Name">
-              <input style={T.input} value={form.raised_by_name} onChange={e=>F('raised_by_name',e.target.value)} placeholder="Your name" />
+              <input className="rx-input" value={form.raised_by_name} onChange={e=>F('raised_by_name',e.target.value)} placeholder="Your name" />
             </Field>
             <Field label="Raised By — Role">
-              <input style={T.input} value={form.raised_by_role} onChange={e=>F('raised_by_role',e.target.value)} placeholder="e.g. Department Head" />
+              <input className="rx-input" value={form.raised_by_role} onChange={e=>F('raised_by_role',e.target.value)} placeholder="e.g. Department Head" />
             </Field>
           </div>
 
@@ -1717,13 +1736,13 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <SectionLine title="2 · Position Details" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Company" required error={errors.company_id}>
-              <select style={eb('company_id')} value={form.company_id} onChange={e=>F('company_id',e.target.value)}>
+              <select className="rx-input" style={eb('company_id')} value={form.company_id} onChange={e=>F('company_id',e.target.value)}>
                 <option value="">Select Company</option>
                 {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
               </select>
             </Field>
             <Field label="Department / Function" error={errors.department_id}>
-              <select style={eb('department_id')} value={form.department_id} onChange={e=>F('department_id',e.target.value)}>
+              <select className="rx-input" style={eb('department_id')} value={form.department_id} onChange={e=>F('department_id',e.target.value)}>
                 <option value="">Select Department</option>
                 {filtDepts.map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
               </select>
@@ -1734,13 +1753,13 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           </div>
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Job Title">
-              <input style={T.input} value={form.job_title} onChange={e=>F('job_title',e.target.value)} placeholder="e.g. Backend Engineer II" />
+              <input className="rx-input" value={form.job_title} onChange={e=>F('job_title',e.target.value)} placeholder="e.g. Backend Engineer II" />
             </Field>
             <Field label="Designation" required error={errors.designation}>
-              <input style={eb('designation')} value={form.designation} onChange={e=>F('designation',e.target.value)} placeholder="e.g. Senior Engineer" />
+              <input className="rx-input" style={eb('designation')} value={form.designation} onChange={e=>F('designation',e.target.value)} placeholder="e.g. Senior Engineer" />
             </Field>
             <Field label="No. of Openings" error={errors.no_of_openings}>
-              <input style={eb('no_of_openings')} type="number" min={1} value={form.no_of_openings} onChange={e=>F('no_of_openings',e.target.value)} />
+              <input className="rx-input" style={eb('no_of_openings')} type="number" min={1} value={form.no_of_openings} onChange={e=>F('no_of_openings',e.target.value)} />
             </Field>
           </div>
           <div style={{ ...T.g3, marginBottom:10 }}>
@@ -1748,7 +1767,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <MasterSelect options={masters.grade} value={form.grade} onChange={(v:string)=>F('grade',v)} />
             </Field>
             <Field label="Job Code" hint="Position-based staffing only">
-              <input style={T.input} value={form.job_code} onChange={e=>F('job_code',e.target.value)} placeholder="e.g. ENG-BE-02" />
+              <input className="rx-input" value={form.job_code} onChange={e=>F('job_code',e.target.value)} placeholder="e.g. ENG-BE-02" />
             </Field>
           </div>
           <div style={{ ...T.g3, marginBottom:10 }}>
@@ -1769,17 +1788,17 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <SectionLine title="3 · Employment Details" />
           <div style={{ ...T.g4, marginBottom:10 }}>
             <Field label="Employment Type">
-              <select style={T.select} value={form.employment_type} onChange={e=>F('employment_type',e.target.value)}>
+              <select className="rx-input" value={form.employment_type} onChange={e=>F('employment_type',e.target.value)}>
                 {EMP_TYPES.map(t=><option key={t}>{t}</option>)}
               </select>
             </Field>
             <Field label="Work Mode">
-              <select style={T.select} value={form.work_mode} onChange={e=>F('work_mode',e.target.value)}>
+              <select className="rx-input" value={form.work_mode} onChange={e=>F('work_mode',e.target.value)}>
                 {WORK_MODES.map(w=><option key={w} value={w}>{w}</option>)}
               </select>
             </Field>
             <Field label="Work Location">
-              <select style={T.select} value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
+              <select className="rx-input" value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
                 <option value="">Select Location</option>
                 {filtLocs.map((l:Location)=><option key={l.id} value={l.id}>{l.location_name||l.location_code}</option>)}
               </select>
@@ -1796,14 +1815,14 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <MasterSelect options={masters.cost_center} value={form.cost_center} onChange={(v:string)=>F('cost_center',v)} />
             </Field>
             <Field label="Budgeted Position">
-              <select style={T.select} value={form.is_budgeted} onChange={e=>F('is_budgeted',e.target.value)}>
+              <select className="rx-input" value={form.is_budgeted} onChange={e=>F('is_budgeted',e.target.value)}>
                 <option value="">Not specified</option>
                 <option value="yes">Yes — budgeted</option>
                 <option value="no">No — unbudgeted</option>
               </select>
             </Field>
             <Field label="Approved Headcount Ref." hint="Link to the headcount plan record">
-              <input style={T.input} value={form.headcount_ref} onChange={e=>F('headcount_ref',e.target.value)} placeholder="e.g. HCP-2026-014" />
+              <input className="rx-input" value={form.headcount_ref} onChange={e=>F('headcount_ref',e.target.value)} placeholder="e.g. HCP-2026-014" />
             </Field>
           </div>
           {/* Labels follow the employment type: employees draw a salary,
@@ -1816,13 +1835,13 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             <Field label="Currency">
               {masters.currency?.length
                 ? <MasterSelect useCode options={masters.currency} value={form.currency} onChange={(v:string)=>F('currency', v)} />
-                : <input style={T.input} value={form.currency} onChange={e=>F('currency',e.target.value)} />}
+                : <input className="rx-input" value={form.currency} onChange={e=>F('currency',e.target.value)} />}
             </Field>
             <Field label={`${comp.label} Range — Min`} hint={perLabel(comp.period)}>
-              <input style={T.input} type="number" value={form.budget_min} onChange={e=>F('budget_min',e.target.value)} placeholder={comp.ph[0]} />
+              <input className="rx-input" type="number" value={form.budget_min} onChange={e=>F('budget_min',e.target.value)} placeholder={comp.ph[0]} />
             </Field>
             <Field label={`${comp.label} Range — Max`} error={errors.budget_max} hint={errors.budget_max?undefined:perLabel(comp.period)}>
-              <input style={eb('budget_max')} type="number" value={form.budget_max} onChange={e=>F('budget_max',e.target.value)} placeholder={comp.ph[1]} />
+              <input className="rx-input" style={eb('budget_max')} type="number" value={form.budget_max} onChange={e=>F('budget_max',e.target.value)} placeholder={comp.ph[1]} />
             </Field>
           </div>
           {form.budget_min && form.budget_max && !errors.budget_max && (
@@ -1841,12 +1860,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <Field label={`${comp.kind==='STIPEND' && form.employment_type==='Intern' ? 'Internship' : 'Engagement'} Duration (months)`}
                 required={comp.fixedTerm} error={errors.duration_months}
                 hint={errors.duration_months?undefined:(comp.fixedTerm?'Required for this employment type':'Optional')}>
-                <input style={eb('duration_months')} type="number" min={1} max={60} value={form.duration_months}
+                <input className="rx-input" style={eb('duration_months')} type="number" min={1} max={60} value={form.duration_months}
                   onChange={e=>F('duration_months',e.target.value)} placeholder="e.g. 6" />
               </Field>
               <Field label="Expected End Date"
                 hint={form.target_joining_date ? 'Derived from joining date + duration' : 'Set the target joining date first'}>
-                <input style={{ ...T.input, background:C.sunken, color:C.muted }} readOnly
+                <input className="rx-input" style={{ background:C.sunken, color:C.muted }} readOnly
                   value={addMonths(form.target_joining_date, form.duration_months) ? fmtDay(addMonths(form.target_joining_date, form.duration_months)) : '—'} />
               </Field>
               <div />
@@ -1857,7 +1876,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <SectionLine title="5 · Justification" />
           <div style={{ ...T.g3, marginBottom:10 }}>
             <Field label="Reason for Hire" error={errors.reason}>
-              <select style={eb('reason')} value={form.reason} onChange={e=>F('reason',e.target.value)}>
+              <select className="rx-input" style={eb('reason')} value={form.reason} onChange={e=>F('reason',e.target.value)}>
                 <option value="">Select Reason</option>
                 <option value="New position">New position</option>
                 <option value="Replacement">Replacement</option>
@@ -1867,14 +1886,14 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
             </Field>
             <Field label="Outgoing Employee" error={errors.outgoing_employee_id}
               hint={isReplacement?undefined:'Only for Replacement / Backfill'}>
-              <select style={{ ...eb('outgoing_employee_id'), opacity:isReplacement?1:.55 }} disabled={!isReplacement}
+              <select className="rx-input" style={{ ...eb('outgoing_employee_id'), opacity:isReplacement?1:.55 }} disabled={!isReplacement}
                 value={form.outgoing_employee_id} onChange={e=>F('outgoing_employee_id',e.target.value)}>
                 <option value="">Select Employee</option>
                 {people.map((p:any)=><option key={p.id} value={p.id}>{p.full_name} ({p.emp_code})</option>)}
               </select>
             </Field>
             <Field label="Reason for Exit">
-              <select style={{ ...T.select, opacity:isReplacement?1:.55 }} disabled={!isReplacement}
+              <select className="rx-input" style={{ opacity:isReplacement?1:.55 }} disabled={!isReplacement}
                 value={form.exit_reason} onChange={e=>F('exit_reason',e.target.value)}>
                 <option value="">Select Reason</option>
                 {(masters.separation_reason||[]).map(o=><option key={o.code} value={o.label}>{o.label}</option>)}
@@ -1883,7 +1902,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           </div>
           <div style={{ marginBottom:10 }}>
             <Field label="Business Justification">
-              <textarea style={{ ...T.textarea, minHeight:80 }} value={form.business_justification}
+              <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:80 }} value={form.business_justification}
                 onChange={e=>F('business_justification',e.target.value)}
                 placeholder="Why this headcount is needed — business impact, workload, revenue linkage…" />
             </Field>
@@ -1893,10 +1912,10 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           <SectionLine title="6 · Timeline" />
           <div style={{ ...T.g2, marginBottom:10 }}>
             <Field label="Target Joining Date" error={errors.target_joining_date}>
-              <input type="date" style={eb('target_joining_date')} value={form.target_joining_date} onChange={e=>F('target_joining_date',e.target.value)} />
+              <input type="date" className="rx-input" style={eb('target_joining_date')} value={form.target_joining_date} onChange={e=>F('target_joining_date',e.target.value)} />
             </Field>
             <Field label="Requisition Validity / Expiry" error={errors.validity_date} hint="Auto-flagged as expired if unfilled past this date">
-              <input type="date" style={eb('validity_date')} value={form.validity_date} onChange={e=>F('validity_date',e.target.value)} />
+              <input type="date" className="rx-input" style={eb('validity_date')} value={form.validity_date} onChange={e=>F('validity_date',e.target.value)} />
             </Field>
           </div>
 
@@ -1906,27 +1925,27 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <SectionLine title="7 · Candidate Requirements" />
               <div style={{ ...T.g2, marginBottom:10 }}>
                 <Field label="Experience — Min (years)">
-                  <input style={T.input} type="number" min="0" value={form.experience_min} onChange={e=>F('experience_min',e.target.value)} placeholder="e.g. 3" />
+                  <input className="rx-input" type="number" min="0" value={form.experience_min} onChange={e=>F('experience_min',e.target.value)} placeholder="e.g. 3" />
                 </Field>
                 <Field label="Experience — Max (years)" error={errors.experience_max}>
-                  <input style={eb('experience_max')} type="number" min="0" value={form.experience_max} onChange={e=>F('experience_max',e.target.value)} placeholder="e.g. 5" />
+                  <input className="rx-input" style={eb('experience_max')} type="number" min="0" value={form.experience_max} onChange={e=>F('experience_max',e.target.value)} placeholder="e.g. 5" />
                 </Field>
               </div>
               <div style={{ ...T.g3, marginBottom:10 }}>
                 <Field label="Education — Minimum">
-                  <select style={T.select} value={form.education_min} onChange={e=>F('education_min',e.target.value)}>
+                  <select className="rx-input" value={form.education_min} onChange={e=>F('education_min',e.target.value)}>
                     <option value="">Any</option>
                     {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
                   </select>
                 </Field>
                 <Field label="Education — Maximum">
-                  <select style={T.select} value={form.education_max} onChange={e=>F('education_max',e.target.value)}>
+                  <select className="rx-input" value={form.education_max} onChange={e=>F('education_max',e.target.value)}>
                     <option value="">Any</option>
                     {EDUCATION_OPTIONS.map(e=><option key={e}>{e}</option>)}
                   </select>
                 </Field>
                 <Field label="Previous Company Preference">
-                  <select style={T.select} value={form.previous_company_preference} onChange={e=>F('previous_company_preference',e.target.value)}>
+                  <select className="rx-input" value={form.previous_company_preference} onChange={e=>F('previous_company_preference',e.target.value)}>
                     <option value="">Select Preference</option>
                     <option value="MNC">MNC</option>
                     <option value="STARTUP">Startup</option>
@@ -1945,17 +1964,17 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               </div>
               <div style={{ marginBottom:14 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:5 }}>
-                  <label style={{ ...T.label, marginBottom:0 }}>Job Description</label>
+                  <label className="rx-label" style={{ marginBottom:0 }}>Job Description</label>
                   <button onClick={generateJD} disabled={aiLoading} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>
                     {aiLoading?'Generating...':'Generate JD with AI'}
                   </button>
                 </div>
-                <textarea style={{ ...T.textarea, minHeight:150 }} value={form.job_description}
+                <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:150 }} value={form.job_description}
                   onChange={e=>F('job_description',e.target.value)}
                   placeholder="Write a job description or generate it with the AI button..." />
               </div>
               <div style={{ marginBottom:14 }}>
-                <label style={T.label}>Screening (CTQ) Questions</label>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Screening (CTQ) Questions</label>
                 <CtqEditor items={form.ctq_questions} onChange={(v:any[])=>F('ctq_questions',v)} />
               </div>
             </>
@@ -1982,17 +2001,17 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               <SectionLine title="9 · Sourcing" />
               <div style={{ ...T.g2, marginBottom:10 }}>
                 <Field label="Internal vs External">
-                  <select style={T.select} value={form.sourcing_mode} onChange={e=>F('sourcing_mode',e.target.value)}>
+                  <select className="rx-input" value={form.sourcing_mode} onChange={e=>F('sourcing_mode',e.target.value)}>
                     {SOURCING_MODES.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </Field>
                 <Field label="Assigned Recruiter" hint="Set on approval, or enter here">
-                  <input style={{ ...T.input, background:C.sunken, color:C.muted }}
+                  <input className="rx-input" style={{ background:C.sunken, color:C.muted }}
                     value={(editMRF as any)?.assigned_recruiter||'Assigned at approval'} readOnly />
                 </Field>
               </div>
               <div style={{ marginBottom:14 }}>
-                <label style={T.label}>Preferred Sourcing Channels</label>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Preferred Sourcing Channels</label>
                 <ChannelPicker options={masters.candidate_source} value={form.sourcing_channels}
                   onChange={(v:string[])=>F('sourcing_channels',v)} />
               </div>
