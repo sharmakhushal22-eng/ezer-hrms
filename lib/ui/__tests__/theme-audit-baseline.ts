@@ -48,7 +48,10 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   // #DC2626, #E5E7EB) that could not follow dark mode. The two left are
   // #2563EB in HRManagerSendOffer (step 11) and #F3F0FF in AuditTrailViewer,
   // which is not a tab.
-  'app/dashboard/recruitment/offer-flow-components.tsx': 2,
+  // 2 → 1. HRManagerSendOffer converted: its selected-request border was a
+  // frozen #2563EB. The one left is #F3F0FF in AuditTrailViewer, which is not a
+  // tab and was out of scope for the eleven-tab redesign.
+  'app/dashboard/recruitment/offer-flow-components.tsx': 1,
   // 18 → 0. Converted while restyling Recruitment onto the design system: the
   // tab-pill borders, the PersonSearchSelect dropdown (which rendered
   // white-on-white in dark mode, ink and hover included), and the

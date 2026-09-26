@@ -35,46 +35,6 @@ function SecLine({ title }: { title: string }) {
   )
 }
 
-// ── RECRUITMENT FILTER BAR (Company / Department / Position / Location) ──
-// `f` shape: { company, department, position, location } — all '' means "All".
-function RecFilterBar({ companies, departments, locations, positions, f, setF }: any) {
-  const lbl = { ...eyebrow, display:'block', marginBottom:SP.xs }
-  return (
-    <div style={{ ...S.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end' }}>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={lbl}>Company</label>
-        <select style={S.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
-          <option value="">All companies</option>
-          {(companies||[]).map((c:any)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={lbl}>Department</label>
-        <select style={S.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
-          <option value="">All departments</option>
-          {(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={lbl}>Position</label>
-        <select style={S.select} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
-          <option value="">All positions</option>
-          {(positions||[]).map((p:string)=><option key={p} value={p}>{p}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={lbl}>Location</label>
-        <select style={S.select} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
-          <option value="">All locations</option>
-          {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
-        </select>
-      </div>
-      {(f.company||f.department||f.position||f.location) && (
-        <button style={{ ...S.btn(TK.surface,TK.brandDeep), border: `1px solid ${TK.brandEdge}` }} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
-      )}
-    </div>
-  )
-}
 
 // Generic matcher for a record carrying company_id/position + an mrf_id (department & location resolve via the MRF).
 // `position` is the record's own role string (designation/position); pass '' if none.
@@ -371,19 +331,6 @@ This document is confidential and for internal approval only.`
   )
 }
 
-// ═══════════════════════════════════════════════════════════════
-// Reusable type-then-Apply search (matches the offer-flow S styles).
-function SearchBar({ placeholder, onApply, width=320 }:{ placeholder:string; onApply:(q:string)=>void; width?:number }) {
-  const [draft, setDraft] = useState('')
-  return (
-    <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
-      <input style={{ ...S.input, maxWidth:width }} value={draft} placeholder={placeholder}
-        onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
-      <button style={S.btn(TK.brand,TK.surface)} onClick={()=>onApply(draft.trim())}>Apply</button>
-      {draft && <button style={S.btn(TK.brandTint,TK.brandDeep)} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
-    </div>
-  )
-}
 
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════
@@ -515,10 +462,11 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       <div className="rx-grid rx-stag">
         <div className="s12 rx-bar" style={{ gap:10 }}>
           <SearchBox value={hq} onChange={setHq} placeholder="Search candidate or job role…" label="Search approvals" />
-          {/* Inline rather than this file's own RecFilterBar, whose root carries
-              position:sticky; zIndex:30 and would scroll over the rail
-              (--ez-z-rail, 20); inline sticky cannot be unset by a parent. Same
-              `f` state, same setF. That component stays for Send Offers. */}
+          {/* CORRECTION to what step 10 said here: this file's RecFilterBar was
+              NOT sticky -- that was page.tsx's separate copy. The reason these
+              controls are inline is consistency with the other tabs, and it let
+              the duplicated component go once Send Offers stopped using it.
+              Same `f` state, same setF. */}
           <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
             onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
             <option value="">All companies</option>
@@ -710,7 +658,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
 // ═══════════════════════════════════════════════════════════════
 // HR MANAGER: SEND OFFER LETTER
 // ═══════════════════════════════════════════════════════════════
-export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup, allowedMrfIds = null }: any = {}) {
+export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrfLookup, allowedMrfIds = null, rail }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [approved, setApproved] = useState<any[]>([])
@@ -857,14 +805,42 @@ ${company} — Human Resources`)
   const positionOpts = distinctSorted(approved.map((r:any)=>r.candidates?.designation || r.manpower_requisitions?.designation))
   const fApproved = approved.filter((r:any)=>(!sql || (r.candidates?.full_name||'').toLowerCase().includes(sql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation || r.manpower_requisitions?.designation }, mrfLookup, f))
   return (
-    <div style={{ maxWidth:900, margin:'0 auto', padding:16 }}>
-      <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Manager — Send Offer Letters</div>
-      <div style={{ fontSize:12, color:TK.faint, marginBottom:16 }}>Requests approved by the HR Head — send the offer letter</div>
-      <SearchBar placeholder="Search candidate…" onApply={setSq} width={300} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={positionOpts} f={f} setF={setF} />
-
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
-        <div>
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Send offer letters"
+        subtitle="Requests the HR Head has approved. Review the letter, then send it to the candidate."
+        help={<Help label="Who appears here">
+          <p>Only requests already <b>approved by the HR Head</b>. Nothing reaches this list before that.</p>
+          <p>Sending emails the letter, records it, and moves the candidate to <b>Offer Sent</b>.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s12 rx-bar" style={{ gap:10 }}>
+          <SearchBox value={sq} onChange={setSq} placeholder="Search candidate…" label="Search approved requests" />
+          {/* Inline for the same reason as the other tabs: one shared filter bar
+              per screen, and dropping the duplicate let this file's copy go. */}
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
+            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+            <option value="">All companies</option>
+            {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
+            onChange={e=>setF({ ...f, department:e.target.value })}>
+            <option value="">All departments</option>
+            {(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
+            onChange={e=>setF({ ...f, location:e.target.value })}>
+            <option value="">All locations</option>
+            {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
+            onChange={e=>setF({ ...f, position:e.target.value })}>
+            <option value="">All positions</option>
+            {positionOpts.map((p:string)=><option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="s4">
           {fApproved.length === 0 && (
             <div style={{ ...S.card, textAlign:'center' as const, color:TK.faint, padding:32 }}>
               {sql ? 'No matching candidate' : 'No approved requests pending'}
@@ -872,7 +848,7 @@ ${company} — Human Resources`)
           )}
           {fApproved.map(r => (
             <div key={r.id} onClick={() => prepareOffer(r)}
-              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+              style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?`2px solid ${TK.brand}`:`1px solid ${TK.line}`, background:selected?.id===r.id?TK.brandTint: TK.surface }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:3 }}>{r.candidates?.full_name}</div>
               <div style={{ fontSize:12, color:TK.faint }}>
                 {r.candidates?.experience_years}yr · ₹{r.offered_ctc ? fmt(r.offered_ctc) : '—'} · Hike {r.hike_pct ? Number(r.hike_pct).toFixed(1) + '%' : '—'}
@@ -885,7 +861,7 @@ ${company} — Human Resources`)
         </div>
 
         {selected && (
-          <div style={S.cardP}>
+          <div className="s8" style={S.cardP}>
             <div style={{ fontSize:13, fontWeight:500, color:TK.brandDeep, marginBottom:12 }}>Send Offer Letter — {selected.candidates?.full_name}</div>
             <div style={{ marginBottom:8 }}>
               <label style={S.label}>To *</label>
@@ -913,7 +889,7 @@ ${company} — Human Resources`)
           </div>
         )}
       </div>
-    </div>
+    </RxPage>
   )
 }
 

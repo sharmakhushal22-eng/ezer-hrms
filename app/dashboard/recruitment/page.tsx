@@ -365,12 +365,6 @@ export default function RecruitmentPage() {
   }))
   const rail = <TabRail tabs={railTabs} active={tab} onSelect={k => setTab(k as typeof tab)} />
 
-  // Which tabs have been converted to the redesign. Converted tabs render their
-  // own header, rail and page frame; the rest keep the old chrome untouched.
-  // Grows by one entry per phase until every tab is in, then the old header,
-  // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'offerapproval', 'offers', 'preonboarding', 'hrhead', 'jobstatus'])
-
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
       <div style={{ color:C.brand, fontSize:14, fontWeight:500 }}>Loading...</div>
@@ -379,150 +373,70 @@ export default function RecruitmentPage() {
 
   return (
     <div style={T.page}>
-      {/* Header and tab bar are rendered by the redesign for converted tabs:
-          RecruitmentHeader carries the title and crumb, TabRail the navigation.
-          Showing the old ones too would stack three navigations on the page.
-          Tabs not yet converted still need them, so both are conditional. */}
-      {!RX_TABS.has(tab) && (
-      <div className="ez-page-head ez-page-head-bleed">
-        <h1 style={{ margin:0, fontSize:F.page, fontWeight:W.bold, color:C.ink, letterSpacing:'-.02em' }}>
-          Recruitment &amp; ATS
-        </h1>
-        <div style={{ marginTop:5, fontSize:F.small, color:C.muted }}>
-          MRF → AI Screening → Pipeline → Negotiation → Offer → Pre-onboarding
-        </div>
-      </div>
+      {/* All eleven tabs now render their own frame: RxPage supplies the
+          padding and the sticky rail, RecruitmentHeader the title and crumb.
+          The legacy page header, the pill bar and the 1300px width wrapper
+          that used to sit here are gone — they existed only for tabs that had
+          not been converted yet, and there are none left. */}
+
+      {tab==='dashboard' && (
+        <DashboardView
+          rail={rail}
+          mrfs={mrfVMs}
+          candidates={candVMs}
+          stages={STAGES}
+          joinedThisMonth={joinedThisMonth}
+          todos={dashboardTodos({ mrfs: mrfVMs, viewerName: grant.name ?? '' })}
+          onTab={k => setTab(k as typeof tab)}
+          /* No page-level handler exists for either of these: setSelCand lives
+             inside PipelineTab and setShowForm inside MRFTab. Routing through
+             setTab keeps every handler where it is rather than lifting state. */
+          onOpenCandidate={() => setTab('pipeline')}
+          onRaiseMrf={() => setTab('mrf')}
+        />
       )}
-
-      {/* Tabs — only for tabs not yet converted. A converted tab renders the
-          redesign's own TabRail inside RxPage, and leaving this bar visible as
-          well stacked two navigations on the same screen. This whole block
-          disappears once every tab is converted. */}
-      {!RX_TABS.has(tab) && (
-      <div style={{ background:C.surface, padding:`10px ${S.xl}px`,
-                    borderTop:`1px solid ${C.line}`, borderBottom:`1px solid ${C.line}`,
-                    position:'sticky', top:0, zIndex:30, boxShadow:E.flat }}>
-        {/* A segmented control on a recessed track, rather than chips floating
-            free on the bar. The track draws the group as ONE object, so the
-            destinations read as a single control with a current position
-            instead of N buttons each competing for the eye — and the current
-            tab is marked by being the one raised out of the well.
-
-            In DARK that elevation carries nothing, and this was measured, not
-            assumed: --ez-surface #171B21 on --ez-sunken #14181E is a contrast
-            ratio of 1.03, and --ez-brand-tint #172033 is no better at 1.09.
-            Every candidate fill in this palette is near-black, so a fill can
-            never mark the active tab there. The only thing that reads is the
-            saturated brand (#60A5FA, 6.8:1), so the chip carries a 2px brand
-            rule: elevation identifies it in light, the rule does in dark, and
-            neither theme depends on the other's cue.
-
-            NOT `ez-seg`: that class already belongs to ThemeToggle's sun/moon/
-            contrast buttons, whose stylesheet carries `.ez-seg:hover{transform:
-            translateY(-1px)}` and `.ez-seg:active{transform:scale(.94)}`. Those
-            are unscoped, so borrowing the name made the whole tab track lift on
-            hover and shrink to 94% on every tab click.
-
-            inline-flex, not flex: a segmented control should hug its contents.
-            Role-based screen access can reduce this bar to a single tab, and a
-            full-width 1140px well holding one chip looks like a loading bar. */}
-        <div className="ez-tabseg"
-             style={{ display:'inline-flex', flexWrap:'wrap', gap:4, rowGap:4,
-                      maxWidth:'100%', verticalAlign:'top',
-                      background:C.sunken, padding:4, borderRadius:R.lg,
-                      border:`1px solid ${C.line}` }}>
-          {visibleTabs.map(t => {
-            const on = tab === t.k
-            return (
-              <button key={t.k} onClick={() => setTab(t.k as any)}
-                className="ez-tab" data-on={on ? '1' : '0'}
-                style={{ padding:'7px 14px', borderRadius:R.md,
-                  border:`1px solid ${on ? C.brandEdge : 'transparent'}`,
-                  cursor:'pointer', fontSize:F.tiny, fontWeight:on ? W.semi : W.medium,
-                  fontFamily:'inherit',
-                  background:on ? C.surface : 'transparent',
-                  color:on ? C.brand : C.muted,
-                  boxShadow:on ? `inset 0 -2px 0 ${C.brand}, ${E.raised}` : 'none',
-                  whiteSpace:'nowrap', flexShrink:0 }}>
-                {t.l}
-              </button>
-            )
-          })}
-        </div>
-      </div>
-      )}
-
-      {/* Tabs converted to the redesign render their own frame: RxPage sets its
-          own padding (28/32/40) and is overflow:hidden, and .rx-rail is
-          position:sticky inside it. Nesting that in the old width wrapper
-          double-padded it, capped it at 1300px and killed the rail's sticky
-          behaviour — which is what clipped "Job Status" off the right edge.
-          Tabs not yet converted keep the old wrapper exactly as before. */}
-      {RX_TABS.has(tab) ? (
-        <>
-        {tab==='dashboard' && (
-          <DashboardView
-            rail={rail}
-            mrfs={mrfVMs}
-            candidates={candVMs}
-            stages={STAGES}
-            joinedThisMonth={joinedThisMonth}
-            todos={dashboardTodos({ mrfs: mrfVMs, viewerName: grant.name ?? '' })}
-            onTab={k => setTab(k as typeof tab)}
-            /* No page-level handler exists for either of these: setSelCand lives
-               inside PipelineTab and setShowForm inside MRFTab. Routing through
-               setTab keeps every handler where it is rather than lifting state. */
-            onOpenCandidate={() => setTab('pipeline')}
-            onRaiseMrf={() => setTab('mrf')}
-          />
-        )}
-        {/* Job Status keeps its own component: it carries ten pieces of state
-            and eight UI blocks, six of which JobStatusView has no slot for.
-            Per Step 6 of the guide it is restyled in place inside RxPage
-            rather than replaced by the view. */}
-        {tab==='jobstatus' && <JobStatusTab {...props} rail={rail} />}
-        {/* MRF renders MrfListView, which is a genuine fit here in a way
-            JobStatusView was not: it has a passthrough slot for the existing
-            filter bar and its actions map one-to-one onto the tab's handlers.
-            The tab keeps its create/edit form, its detail drawer, its approval
-            modal and its delete dialog. */}
-        {tab==='mrf' && <MRFTab {...props} rail={rail} />}
-        {/* Pipeline renders PipelineView. No drag-and-drop by design: every
-            stage move still goes through the modal, so moveStage's forward-only
-            rule and the modal's own feedback gate cannot be bypassed. */}
-        {tab==='pipeline' && <PipelineTab {...props} rail={rail} />}
-        {/* AI Screening is a WRAP, not a replace: the kit has no ScreeningView.
-            The tab keeps its upload flow and handlers; only the result rows
-            move to ScreeningResultCard, with the API's field names mapped. */}
-        {tab==='screening' && <ScreeningTab {...props} rail={rail} />}
-        {/* Negotiation is a WRAP. The payroll calculator's table and maths are
-            untouched on purpose: restyling statutory EPF/ESIC/PT presentation
-            risks real numbers for cosmetic gain. Only the frame, the list and
-            the panel containers change. */}
-        {tab==='negotiation' && <NegotiationTab {...props} rail={rail} />}
-        {/* Offer Approval has TWO component returns -- the list, and an early
-            return for the selected candidate. Both are wrapped, or the screen
-            loses its chrome the moment a request is created. */}
-        {tab==='offerapproval' && <OfferApprovalTab {...props} rail={rail} />}
-        {/* Offers: the letter body and the Send flow are deliberately not
-            restyled -- that text reaches a real candidate. Only the frame,
-            the list and the panel container change. */}
-        {tab==='offers' && <OffersTab {...props} rail={rail} />}
-        {/* Pre-onboarding: render-only restyle. Every control here writes,
-            deletes or emails a real candidate (sendAcceptance posts to
-            send-letter), so the frame changed and the handlers did not. */}
-        {tab==='preonboarding' && <PreOnboardTab {...props} rail={rail} />}
-        {/* HR Head lives in offer-flow-components.tsx, which has its own style
-            objects and its own RecFilterBar/SearchBar. Only this component was
-            converted; CreateOfferApproval and AuditTrailViewer in that file are
-            untouched, since the Offer Approval tab renders both. */}
-        {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} rail={rail} />}
-        </>
-      ) : (
-        <div style={{ padding:'18px 24px', maxWidth:1300 }}>
-          {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
-        </div>
-      )}
+      {/* Job Status keeps its own component: it carries ten pieces of state
+          and eight UI blocks, six of which JobStatusView has no slot for.
+          Per Step 6 of the guide it is restyled in place inside RxPage
+          rather than replaced by the view. */}
+      {tab==='jobstatus' && <JobStatusTab {...props} rail={rail} />}
+      {/* MRF renders MrfListView, which is a genuine fit here in a way
+          JobStatusView was not: it has a passthrough slot for the existing
+          filter bar and its actions map one-to-one onto the tab's handlers.
+          The tab keeps its create/edit form, its detail drawer, its approval
+          modal and its delete dialog. */}
+      {tab==='mrf' && <MRFTab {...props} rail={rail} />}
+      {/* Pipeline renders PipelineView. No drag-and-drop by design: every
+          stage move still goes through the modal, so moveStage's forward-only
+          rule and the modal's own feedback gate cannot be bypassed. */}
+      {tab==='pipeline' && <PipelineTab {...props} rail={rail} />}
+      {/* AI Screening is a WRAP, not a replace: the kit has no ScreeningView.
+          The tab keeps its upload flow and handlers; only the result rows
+          move to ScreeningResultCard, with the API's field names mapped. */}
+      {tab==='screening' && <ScreeningTab {...props} rail={rail} />}
+      {/* Negotiation is a WRAP. The payroll calculator's table and maths are
+          untouched on purpose: restyling statutory EPF/ESIC/PT presentation
+          risks real numbers for cosmetic gain. Only the frame, the list and
+          the panel containers change. */}
+      {tab==='negotiation' && <NegotiationTab {...props} rail={rail} />}
+      {/* Offer Approval has TWO component returns -- the list, and an early
+          return for the selected candidate. Both are wrapped, or the screen
+          loses its chrome the moment a request is created. */}
+      {tab==='offerapproval' && <OfferApprovalTab {...props} rail={rail} />}
+      {/* Offers: the letter body and the Send flow are deliberately not
+          restyled -- that text reaches a real candidate. Only the frame,
+          the list and the panel container change. */}
+      {tab==='offers' && <OffersTab {...props} rail={rail} />}
+      {/* Pre-onboarding: render-only restyle. Every control here writes,
+          deletes or emails a real candidate (sendAcceptance posts to
+          send-letter), so the frame changed and the handlers did not. */}
+      {tab==='preonboarding' && <PreOnboardTab {...props} rail={rail} />}
+      {/* HR Head lives in offer-flow-components.tsx, which has its own style
+          objects and its own RecFilterBar/SearchBar. Only this component was
+          converted; CreateOfferApproval and AuditTrailViewer in that file are
+          untouched, since the Offer Approval tab renders both. */}
+      {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} rail={rail} />}
+      {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} rail={rail} />}
 
       {notify && <Toast msg={notify.msg} type={notify.type} onClose={() => setNotify(null)} />}
     </div>
@@ -3134,10 +3048,8 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
   const sel = (k:string):React.CSSProperties => ({ ...T.select, ...(bad(k)?errStyle:{}) })
   const reqMark = <span style={{ color:C.critical }}> *</span>
   const approvedMRFs = mrfs.filter((m:MRF)=>m.status==='APPROVED')
-  const [pipeQ, setPipeQ] = useState('')
   const [stageF, setStageF] = useState('')   // '' = all stages
   const baseList = (selMRF==='all'?candidates:candidates.filter((c:Candidate)=>c.mrf_id===selMRF))
-    .filter((c:Candidate)=>!pipeQ || c.full_name.toLowerCase().includes(pipeQ.toLowerCase()) || (c.current_company||'').toLowerCase().includes(pipeQ.toLowerCase()) || (c.designation||'').toLowerCase().includes(pipeQ.toLowerCase()))
     .filter((c:Candidate)=>candidateMatchesFilters(c, mrfs, f))
   const filtered = stageF ? baseList.filter((c:Candidate)=>c.stage===stageF) : baseList
 
