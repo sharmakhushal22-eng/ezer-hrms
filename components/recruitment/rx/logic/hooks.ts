@@ -8,10 +8,31 @@ import * as React from 'react';
  */
 export function useListControls<T, V extends string>(
   items: T[],
-  opts: { text: (t: T) => string; status?: (t: T) => string; defaultView: V },
+  opts: {
+    text: (t: T) => string; status?: (t: T) => string; defaultView: V;
+    /**
+     * Optional CONTROLLED status. Pass both to let the parent own the value —
+     * the MRF tab does, because its "N awaiting approval · Show them" banner
+     * sets the status filter from outside the list.
+     *
+     * This has to live here rather than being overridden by the caller: the
+     * `visible` memo below filters on this hook's own `status`, so a caller
+     * that merely swapped the value would move the pills without filtering
+     * anything — a control that looks like it works and does not.
+     */
+    statusValue?: string;
+    onStatusChange?: (v: string) => void;
+  },
 ) {
   const [query, setQuery] = React.useState('');
-  const [status, setStatus] = React.useState<string>('*');
+  const [statusState, setStatusState] = React.useState<string>('*');
+  const controlled = opts.statusValue !== undefined;
+  const status = controlled ? (opts.statusValue as string) : statusState;
+  const { onStatusChange } = opts;
+  const setStatus = React.useCallback((v: string) => {
+    onStatusChange?.(v);
+    if (!controlled) setStatusState(v);
+  }, [controlled, onStatusChange]);
   const [view, setView] = React.useState<V>(opts.defaultView);
   const q = query.trim().toLowerCase();
   const visible = React.useMemo(
@@ -21,7 +42,11 @@ export function useListControls<T, V extends string>(
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [items, q, status],
   );
-  const clear = React.useCallback(() => { setQuery(''); setStatus('*'); }, []);
+  // setStatus is no longer a useState setter (those are stable) but a
+  // useCallback that changes identity with `controlled`/`onStatusChange`, so an
+  // empty dep list here would pin `clear` to the FIRST setStatus forever and
+  // "Clear filters" would reset the search while leaving the status pill stuck.
+  const clear = React.useCallback(() => { setQuery(''); setStatus('*'); }, [setStatus]);
   return { query, setQuery, status, setStatus, view, setView, visible, total: items.length, clear, filtered: !!q || status !== '*' };
 }
 

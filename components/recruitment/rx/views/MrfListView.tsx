@@ -16,13 +16,39 @@ import type { MrfVM } from '../logic/types';
  *  onMore   → the existing card menu (delete etc.)
  * `filterBar` is the existing company/department/position/location filter bar —
  * pass it through unchanged so its behaviour and any query it drives stay the same.
+ *
+ * `onReview` / `onCloseMrf` / `onReopen` / `onDelete` are the status-conditional
+ * actions the pre-redesign card carried. They are optional here, but the MRF tab
+ * passes all four: the redesign restyles the screen, it does not remove what the
+ * screen could do.
+ *
+ * `status` / `onStatusChange` make the status filter CONTROLLED. The tab needs
+ * that because its "N awaiting approval · Show them" banner sets the filter from
+ * outside this component.
  */
-export function MrfListView({ rail, mrfs, companyLabel, filterBar, quickHireCap, onCreate, onEdit, onView, onMore, onExport, canEdit }: {
-  rail: React.ReactNode; mrfs: MrfVM[]; companyLabel?: string; filterBar?: React.ReactNode; quickHireCap: number;
+export function MrfListView({ rail, mrfs, companyLabel, filterBar, banner, form, quickHireCap, status, onStatusChange,
+  onCreate, onEdit, onView, onMore, onExport, canEdit, onReview, onCloseMrf, onReopen, onDelete }: {
+  rail: React.ReactNode; mrfs: MrfVM[]; companyLabel?: string; filterBar?: React.ReactNode; banner?: React.ReactNode;
+  /**
+   * The tab's create/edit form. It has to render INSIDE this frame, between the
+   * banner and the overview, because that is where it appears today — pushing it
+   * below <MrfListView/> would drop it under the whole page instead of under the
+   * "Raise MRF" button that opens it.
+   */
+  form?: React.ReactNode;
+  quickHireCap: number;
+  status?: string; onStatusChange?: (v: string) => void;
   onCreate: () => void; onEdit: (id: string) => void; onView: (id: string) => void; onMore?: (id: string) => void; onExport?: () => void;
   canEdit?: (m: MrfVM) => boolean;
+  onReview?: (id: string) => void; onCloseMrf?: (id: string) => void; onReopen?: (id: string) => void; onDelete?: (id: string) => void;
 }) {
-  const ctl = useListControls(mrfs, { text: (m) => `${m.title} ${m.code} ${m.department} ${m.location}`, status: (m) => m.status, defaultView: 'cards' as 'cards' | 'table' });
+  const ctl = useListControls(mrfs, {
+    text: (m) => `${m.title} ${m.code} ${m.department} ${m.location}`,
+    status: (m) => m.status,
+    defaultView: 'cards' as 'cards' | 'table',
+    statusValue: status,
+    onStatusChange,
+  });
   const search = React.useRef<HTMLInputElement>(null);
   useSlashFocus(search);
   const by = (s: string) => mrfs.filter((m) => m.status === s).length;
@@ -44,6 +70,8 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, quickHireCap,
         actions={<>{onExport && <button type="button" className="rx-btn" onClick={onExport}><Icon name="download" />Export</button>}
           <button type="button" className="rx-btn p" onClick={onCreate}><Icon name="plus" />Raise MRF</button></>} />}>
       <div className="rx-grid rx-stag">
+        {banner && <div className="s12">{banner}</div>}
+        {form && <div className="s12">{form}</div>}
         <Module className="s12" title="Requisition overview" icon="chart" meta={companyLabel && `Company: ${companyLabel}`}>
           <div className="rx-tiles6" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: 16 }}>
             {tiles.map(([l, v, c]) => <div key={l} style={{ padding: '4px 0' }}><div className="rx-meta">{l}</div><div className="rx-kpi-v" style={{ fontSize: 36, marginTop: 6, color: c }}>{v}</div></div>)}
@@ -70,7 +98,11 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, quickHireCap,
           <div className="s12"><div className="rx-grid">
             {ctl.visible.map((m) => (
               <div className="s4" key={m.id}>
-                <MrfCard m={m} onView={() => onView(m.id)} onEdit={() => onEdit(m.id)} onMore={onMore ? () => onMore(m.id) : undefined} canEdit={canEdit ? canEdit(m) : true} />
+                <MrfCard m={m} onView={() => onView(m.id)} onEdit={() => onEdit(m.id)} onMore={onMore ? () => onMore(m.id) : undefined} canEdit={canEdit ? canEdit(m) : true}
+                  onReview={onReview ? () => onReview(m.id) : undefined}
+                  onCloseMrf={onCloseMrf ? () => onCloseMrf(m.id) : undefined}
+                  onReopen={onReopen ? () => onReopen(m.id) : undefined}
+                  onDelete={onDelete ? () => onDelete(m.id) : undefined} />
               </div>
             ))}
           </div></div>
@@ -78,7 +110,7 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, quickHireCap,
           <Module className="s12" >
             <div style={{ overflowX: 'auto' }}>
               <table className="rx-table">
-                <thead><tr><th>Requisition</th><th>Department</th><th>Lane</th><th>Status</th><th>Filled</th><th>Candidates</th><th>Next step</th><th><span className="sr-only">Actions</span></th></tr></thead>
+                <thead><tr><th>Requisition</th><th>Department</th><th>Lane</th><th>Status</th><th>Filled</th><th>Candidates</th><th>Recruiter</th><th>Next step</th><th><span className="sr-only">Actions</span></th></tr></thead>
                 <tbody>{ctl.visible.map((m) => (
                   <tr key={m.id}>
                     <td><button type="button" onClick={() => onView(m.id)} style={{ background: 'none', border: 0, padding: 0, font: 'inherit', fontWeight: 650, color: 'var(--ez-ink)', cursor: 'pointer' }}>{m.title}</button><div className="rx-meta" style={{ fontSize: 12 }}>{m.code}</div></td>
@@ -87,8 +119,18 @@ export function MrfListView({ rail, mrfs, companyLabel, filterBar, quickHireCap,
                     <td><Badge tone={MRF_TONE[m.status]}>{MRF_LABEL[m.status]}</Badge></td>
                     <td className="rx-num">{m.filled} of {m.openings}</td>
                     <td className="rx-num">{m.candidates}</td>
+                    {/* The pre-redesign table carried a Recruiter column; keeping it
+                        means the list view loses nothing to the card view. */}
+                    <td className="rx-meta">{m.recruiterEmail || (m.recruiterInitials.length ? m.recruiterInitials.join(', ') : '—')}</td>
                     <td><NextStepLine step={mrfNextStep(m)} compact /></td>
-                    <td>{(!canEdit || canEdit(m)) && <button type="button" className="rx-btn sm" onClick={() => onEdit(m.id)}><Icon name="edit" />Edit</button>}</td>
+                    <td>
+                      <div className="rx-row" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                        {/* Review was the pre-redesign table's only action; it stays. */}
+                        {onReview && (m.status === 'SUBMITTED' || m.status === 'ON_HOLD') && (
+                          <button type="button" className="rx-btn sm p" onClick={() => onReview(m.id)}><Icon name="check" />Review</button>)}
+                        {(!canEdit || canEdit(m)) && <button type="button" className="rx-btn sm" onClick={() => onEdit(m.id)}><Icon name="edit" />Edit</button>}
+                      </div>
+                    </td>
                   </tr>))}</tbody>
               </table>
             </div>

@@ -22,7 +22,7 @@ import {
 import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos,
-  DashboardView, RxPage, RecruitmentHeader,
+  DashboardView, MrfListView, RxPage, RecruitmentHeader,
 } from '@/components/recruitment/rx'
 
 /**
@@ -365,9 +365,13 @@ export default function RecruitmentPage() {
   // added, no handler changes, and the rail is built from the SAME visibleTabs
   // filter that already decides which tabs exist.
   //
-  // nameOf is a stub here on purpose: the employee lookup (`people`) lives
-  // inside MRFTab, not at page level, and the Dashboard renders no recruiter
-  // initials. Phase 3 (MRF) must pass a real resolver before MrfCard shows them.
+  // nameOf stays a stub HERE, and that is correct rather than pending: the
+  // employee roster (`people`) is fetched inside MRFTab, and the Dashboard
+  // renders no recruiter initials. MRFTab builds its own view models with a
+  // real resolver (see nameOf/budgetLabelOf there). Hoisting the roster fetch
+  // to page level to share it would run that query on every tab instead of on
+  // the one that needs it — a data-flow change the redesign brief rules out.
+  //
   // The adapters take an index-signature row shape; this file's own interfaces
   // (MRF, Candidate, Department…) do not declare one, so each array is cast at
   // the boundary. Cast narrowly, per array, rather than blanket-casting the
@@ -377,6 +381,7 @@ export default function RecruitmentPage() {
     departments: departments as unknown as RxRow[],
     locations: locations as unknown as RxRow[],
     candidates: candidates as unknown as RxRow[],
+    companies: companies as unknown as RxRow[],
     quickHireCap: QUICK_HIRE_CAP,
     nameOf: () => '',
   }
@@ -403,7 +408,7 @@ export default function RecruitmentPage() {
   // own header, rail and page frame; the rest keep the old chrome untouched.
   // Grows by one entry per phase until every tab is in, then the old header,
   // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard', 'jobstatus'])
+  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'jobstatus'])
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -515,10 +520,15 @@ export default function RecruitmentPage() {
             Per Step 6 of the guide it is restyled in place inside RxPage
             rather than replaced by the view. */}
         {tab==='jobstatus' && <JobStatusTab {...props} rail={rail} />}
+        {/* MRF renders MrfListView, which is a genuine fit here in a way
+            JobStatusView was not: it has a passthrough slot for the existing
+            filter bar and its actions map one-to-one onto the tab's handlers.
+            The tab keeps its create/edit form, its detail drawer, its approval
+            modal and its delete dialog. */}
+        {tab==='mrf' && <MRFTab {...props} rail={rail} />}
         </>
       ) : (
         <div style={{ padding:'18px 24px', maxWidth:1300 }}>
-          {tab==='mrf' && <MRFTab {...props} />}
           {tab==='screening' && <ScreeningTab {...props} />}
           {tab==='pipeline' && <PipelineTab {...props} />}
           {tab==='negotiation' && <NegotiationTab {...props} />}
@@ -608,7 +618,9 @@ async function reopenMrf(supabase:any, mrfId?:string) {
 
 // ── MRF HELPERS ───────────────────────────────────────────────────
 // Field taxonomy follows mrf-module-spec.md §2 (sections 1–10).
-const MRF_STATUSES = ['DRAFT','SUBMITTED','ON_HOLD','APPROVED','REJECTED','CLOSED']
+// The MRF_STATUSES list that sat here is gone with MrfOverview, its only
+// consumer. MrfListView carries its own ordered status list, and MRF_LABEL /
+// MRF_TONE in the kit's primitives cover all six of the same keys.
 // Quick Hire is the ≤ ₹6L lane; Full MRF carries any CTC, with no floor.
 const QUICK_HIRE_CAP = 600000
 // §1 Requisition type · §3 Work mode · §9 Sourcing mode
@@ -630,9 +642,6 @@ const CTQ_TYPES = [
 // so a different chain can be used per department without a code change.
 const DEFAULT_CHAIN_ROLES = ['Reporting Manager','Department Head','HR','Finance']
 
-const URGENCY_STYLE:Record<string,[string,string]> = {
-  HIGH:[C.criticalTint,C.critical], MEDIUM:[C.warningTint,C.warning], LOW:[C.positiveTint,C.positive],
-}
 const CUR_SYMBOL:Record<string,string> = { INR:'₹', USD:'$', GBP:'£', EUR:'€', AED:'AED ', SGD:'S$' }
 const money  = (n?:number|null, cur='INR') => n==null ? '—' : (CUR_SYMBOL[cur]||'')+Number(n).toLocaleString('en-IN')
 const lakhs  = (n?:number|null, cur='INR') => n==null ? '—' : cur==='INR' ? '₹'+(Number(n)/100000).toFixed(1)+'L' : money(n,cur)
@@ -1029,318 +1038,6 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase 
   )
 }
 
-// ── MRF OVERVIEW ──────────────────────────────────────────────────
-// Headline position maths plus a clickable status breakdown. "Available" is
-// the number still to hire on live requisitions — openings on APPROVED MRFs
-// that no offer has been made against yet, which is what a recruiter is
-// actually working from.
-const STATUS_TONE:Record<string,[string,string]> = {
-  DRAFT:[C.sunken,C.muted], SUBMITTED:[C.warningTint,C.warning], ON_HOLD:[C.warningTint,C.critical],
-  APPROVED:[C.positiveTint,C.positive], REJECTED:[C.criticalTint,C.critical], CLOSED:[C.sunken,C.inkSoft],
-}
-const STATUS_HELP:Record<string,string> = {
-  DRAFT:'Not yet submitted', SUBMITTED:'Waiting on approval', ON_HOLD:'Paused by an approver',
-  APPROVED:'Open for hiring', REJECTED:'Turned down', CLOSED:'Filled or withdrawn',
-}
-
-function MrfOverview({ mrfs, candidates, fStatus, onPickStatus, view, onView }:any) {
-  const filledFor = (m:MRF) => candidates.filter((c:Candidate)=>
-    c.mrf_id===m.id && (c.stage==='Offer Sent'||c.stage==='Joined')).length
-  const openingsOf = (m:MRF) => m.no_of_openings || m.openings || 0
-
-  const live      = mrfs.filter((m:MRF)=>m.status==='APPROVED')
-  const totalOpen = live.reduce((s:number,m:MRF)=>s+openingsOf(m), 0)
-  const totalFill = live.reduce((s:number,m:MRF)=>s+Math.min(filledFor(m), openingsOf(m)), 0)
-  const available = Math.max(0, totalOpen - totalFill)
-  const counts = Object.fromEntries(MRF_STATUSES.map(s=>[s, mrfs.filter((m:MRF)=>m.status===s).length]))
-  const expiring = mrfs.filter((m:MRF)=>{
-    const v = (m as any).validity_date
-    if (!v || ['CLOSED','REJECTED'].includes(m.status)) return false
-    const days = Math.ceil((+new Date(v) - +new Date(new Date().toDateString()))/86400000)
-    return days <= 14
-  }).length
-
-  // The label was 10px in C.faint — the lightest ink in the system, below the
-  // 11px floor, on the word that says what the number means. eyebrow is that
-  // exact role, already defined once. Radius and padding come off the scales,
-  // and the border was the raw string 'var(--ez-line)' rather than the token.
-  const Tile = ({ label, value, sub, color }:any) => (
-    <div style={{ background:C.surface, border:`1px solid ${C.line}`, borderRadius:R.lg,
-                  padding:`${S.md}px ${S.lg}px`, minWidth:0 }}>
-      <div style={{ ...eyebrow, marginBottom:5 }}>{label}</div>
-      <div style={{ fontSize:F.title, fontWeight:W.bold, color:color||C.ink,
-                    lineHeight:1.1, letterSpacing:'-.02em', ...numeric }}>{value}</div>
-      {sub && <div style={{ fontSize:F.micro, color:C.muted, marginTop:3 }}>{sub}</div>}
-    </div>
-  )
-
-  return (
-    <div style={T.card}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:S.md, gap:S.md, flexWrap:'wrap' as const }}>
-        <div style={T.section}>Requisition Overview</div>
-        {/* Cards/List is a two-option segmented control, drawn the same way as
-            the page's tab bar so "pick one of these" looks like one thing
-            everywhere. It also carries the brand rule for the same measured
-            reason: a raised chip separates from its well by 1.03 in dark, so
-            elevation alone cannot say which option is active. */}
-        {/* ez-tabseg is required, not decorative: without it the base rule
-            .ez-tab[data-on="0"]:hover paints --ez-sunken, which is exactly the
-            colour of this track, so hovering an inactive option would do
-            nothing visible. The scoped rule raises it to --ez-surface. */}
-        <div className="ez-tabseg"
-             style={{ display:'inline-flex', gap:3, background:C.sunken, padding:3,
-                      borderRadius:R.md, border:`1px solid ${C.line}` }}>
-          {[['cards','Cards'],['table','List']].map(([k,l])=>{
-            const on = view===k
-            return (
-              <button key={k} onClick={()=>onView(k)} className="ez-tab" data-on={on?'1':'0'}
-                style={{ ...T.btn, height:30, padding:'0 14px', fontSize:F.tiny,
-                  background:on?C.surface:'transparent', color:on?C.brand:C.muted,
-                  border:`1px solid ${on?C.brandEdge:'transparent'}`,
-                  boxShadow:on?`inset 0 -2px 0 ${C.brand}, ${E.flat}`:'none' }}>{l}</button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:S.md, marginBottom:S.lg }}>
-        <Tile label="Total MRFs" value={mrfs.length} color={C.brand} />
-        <Tile label="Open Positions" value={totalOpen} sub="on approved MRFs" color={C.info} />
-        <Tile label="Available to Hire" value={available} sub={`${totalFill} already filled`} color={available?C.positive:C.faint} />
-        <Tile label="Pending Approval" value={counts.SUBMITTED} sub={counts.ON_HOLD?`${counts.ON_HOLD} on hold`:'awaiting sign-off'} color={counts.SUBMITTED?C.warning:C.faint} />
-        <Tile label="Approved" value={counts.APPROVED} sub="live requisitions" color={C.positive} />
-        {expiring>0 && <Tile label="Expiring Soon" value={expiring} sub="within 14 days" color={C.critical} />}
-      </div>
-
-      {/* Proportional bar — the spread of statuses at a glance. The hairline
-          matters in dark for the same reason as the funnel's tracks. */}
-      {mrfs.length>0 && (
-        <div style={{ display:'flex', height:8, borderRadius:R.pill, overflow:'hidden',
-                      marginBottom:S.md, background:C.sunken,
-                      border:`1px solid ${C.line}`, boxSizing:'border-box' as const }}>
-          {MRF_STATUSES.filter(s=>counts[s]>0).map(s=>(
-            <div key={s} title={`${s.replace('_',' ')}: ${counts[s]}`}
-              style={{ width:`${(counts[s]/mrfs.length)*100}%`, background:STATUS_TONE[s][1] }} />
-          ))}
-        </div>
-      )}
-
-      {/* Status filter. `C.onAccent` on the selected pill, NOT C.surface: text
-          sitting on a saturated fill is what onAccent exists for, and surface
-          is a background token that only looked right in light by coincidence. */}
-      <div style={{ display:'flex', gap:S.sm, flexWrap:'wrap' as const }}>
-        <button onClick={()=>onPickStatus('')} style={{ ...T.btn, height:32, fontSize:F.tiny,
-          display:'flex', alignItems:'center', gap:6,
-          background: fStatus===''?C.brand:C.surface, color: fStatus===''?C.onAccent:C.brandDeep,
-          border: `1px solid ${fStatus===''?C.brandDeep:C.brandEdge}` }}>
-          All <span style={{ fontWeight:W.bold, ...numeric }}>{mrfs.length}</span>
-        </button>
-        {MRF_STATUSES.map(s=>{
-          const on = fStatus===s
-          const [bg,fg] = STATUS_TONE[s]
-          return (
-            <button key={s} onClick={()=>onPickStatus(on?'':s)} title={STATUS_HELP[s]}
-              style={{ ...T.btn, height:32, fontSize:F.tiny, display:'flex', alignItems:'center', gap:6,
-                background:on?fg:bg, color:on?C.onAccent:fg, border:'1px solid '+(on?fg:'transparent'),
-                opacity: counts[s]===0 && !on ? .55 : 1 }}>
-              {s.replace('_',' ')}<span style={{ fontWeight:W.bold, ...numeric }}>{counts[s]}</span>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── MRF TABLE (list view) ─────────────────────────────────────────
-function MrfTable({ rows, orgOf, candidates, onOpen, onReview }:any) {
-  // The local th/td objects are gone: Th and Td ARE those styles, plus a
-  // sticky header, the row-hover wash and the staggered entrance that this
-  // table never had. minWidth keeps the 900px floor the raw <table> carried —
-  // without it ten columns crush into unreadable stacks before the wrapper
-  // ever starts scrolling.
-  return (
-    <TableWrap minWidth={900} style={{ marginBottom:S.md }}>
-      <thead>
-        <tr>
-          <Th>MRF No.</Th><Th>Position</Th><Th>Department</Th>
-          <Th>Type</Th><Th align="center">Openings</Th>
-          <Th align="center">Filled</Th><Th>Status</Th>
-          <Th>Recruiter</Th><Th>Target</Th><Th />
-        </tr>
-      </thead>
-      <tbody>
-        {rows.length===0 && (
-          <tr><td colSpan={10}>
-            <Empty title="No requisitions match" hint="Try clearing the status filter or widening the company and department filters." />
-          </td></tr>
-        )}
-        {rows.map((m:MRF)=>{
-          const org = orgOf(m)
-          const openings = m.no_of_openings||m.openings||0
-          const filled = candidates.filter((c:Candidate)=>c.mrf_id===m.id && (c.stage==='Offer Sent'||c.stage==='Joined')).length
-          return (
-            <Tr key={m.id} onClick={()=>onOpen(m)}>
-              <Td style={{ color:C.muted, whiteSpace:'nowrap' }}>{m.mrf_number||'—'}</Td>
-              <Td>
-                <div style={{ fontWeight:W.semi, color:C.ink }}>{(m as any).job_title||m.designation||m.position||'Untitled'}</div>
-                {(m as any).grade && <div style={{ fontSize:F.micro, color:C.faint }}>{(m as any).grade}</div>}
-              </Td>
-              <Td style={{ color:C.muted }}>{org.dept}</Td>
-              <Td style={{ color:C.muted, whiteSpace:'nowrap' }}>
-                {m.employment_type||'—'}{(m as any).work_mode?` · ${(m as any).work_mode}`:''}
-              </Td>
-              <Td align="center" strong>{openings}</Td>
-              <Td align="center" style={{ color: filled>=openings&&openings>0?C.positive:C.muted }}>{filled}</Td>
-              <Td><Badge text={m.status} /></Td>
-              <Td style={{ color:C.muted }}>{m.assigned_recruiter||'—'}</Td>
-              <Td style={{ color:C.muted, whiteSpace:'nowrap' }}>{fmtDay((m as any).target_joining_date)}</Td>
-              <Td align="right" style={{ whiteSpace:'nowrap' }}>
-                {(m.status==='SUBMITTED'||m.status==='ON_HOLD') && (
-                  <button onClick={e=>{ e.stopPropagation(); onReview(m) }}
-                    style={{ ...T.btn, background:C.brand, color:C.onAccent, fontSize:F.micro }}>Review</button>
-                )}
-              </Td>
-            </Tr>
-          )
-        })}
-      </tbody>
-    </TableWrap>
-  )
-}
-
-// ── MRF CARD ──────────────────────────────────────────────────────
-// Friendly labels for the roles that appear in an MRF's approval chain.
-const ROLE_LABEL: Record<string,string> = {
-  RM1:'Reporting Manager', RM2:'RM2 / Skip-level', HOD:'HOD', HR_HEAD:'HR Head', HR_MANAGER:'HR Manager',
-  'Reporting Manager':'Reporting Manager', 'Department Head':'Department Head', HR:'HR', Finance:'Finance',
-}
-
-function MrfCard({ m, org, cands, onOpen, onEdit, onDelete, onReview, onClose, onReopen }:any) {
-  const openings = m.no_of_openings || m.openings || 0
-  const filled = cands.filter((c:Candidate)=>c.stage==='Offer Sent'||c.stage==='Joined').length
-  const pct = openings ? Math.min(100, (filled/openings)*100) : 0
-  const [ubg,uc] = URGENCY_STYLE[m.urgency] || [C.brandTint,C.brandDeep]
-  const chain = asArray(m.approval_chain)
-  const doneSteps = chain.filter((s:any)=>s.status==='APPROVED').length
-  // §6 — flag a requisition that has run past its validity date.
-  const expired = m.validity_date && new Date(m.validity_date) < new Date(new Date().toDateString())
-    && !['CLOSED','REJECTED'].includes(m.status)
-  return (
-    <div style={T.card}>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
-        <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={()=>onOpen(m)}>
-          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4, flexWrap:'wrap' as const }}>
-            <span style={{ fontSize:14, fontWeight:600, color:C.ink }}>{m.job_title||m.designation||m.position||'Untitled'}</span>
-            <Badge text={m.status} />
-            {m.mrf_type && <Badge text={m.mrf_type} />}
-            {m.urgency && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:ubg, color:uc, fontWeight:W.semi, lineHeight:1.45 }}>{m.urgency}</span>}
-            {expired && <span style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:C.criticalTint, color:C.critical, fontWeight:W.semi, lineHeight:1.45 }}>EXPIRED</span>}
-          </div>
-          <div style={{ fontSize:F.micro, color:C.muted, marginBottom:S.sm }}>
-            {m.mrf_number || 'No MRF number'} · {org.company} · {org.dept} · {org.loc}
-            {m.business_unit?` · ${m.business_unit}`:''}
-          </div>
-          {/* The card's primary facts. Two changes, no field added or removed:
-              C.faint -> C.muted, because this is the content of the card and
-              faint is the quietest ink in the system, meant for the metadata
-              you read last; and the emoji are replaced by words. A glyph does
-              not follow the theme, renders differently on every platform, and
-              carries no meaning to a screen reader — "🏷 E1" is only a label
-              if you already know the convention, whereas "Grade E1" is one. */}
-          <div style={{ fontSize:F.tiny, color:C.muted, display:'flex', gap:S.md, rowGap:S.xs, flexWrap:'wrap' as const }}>
-            <span>{openings} opening{openings===1?'':'s'}</span>
-            <span>{m.employment_type||'—'}</span>
-            {m.work_mode && <span>{m.work_mode}</span>}
-            {m.grade && <span>Grade {m.grade}</span>}
-            {m.experience_required && <span>Exp {m.experience_required}</span>}
-            {m.budget_max && <span>{compOf(m.employment_type).label} {payAmount(m.budget_max, m.currency, compOf(m.employment_type).period)} max</span>}
-            {m.duration_months && <span>{m.duration_months} month{m.duration_months===1?'':'s'}</span>}
-            {m.target_joining_date && <span>Target {fmtDay(m.target_joining_date)}</span>}
-            <span style={{ color:C.brand, fontWeight:W.medium }}>{cands.length} candidate{cands.length===1?'':'s'}</span>
-            {m.assigned_recruiter && <span>Recruiter {m.assigned_recruiter}</span>}
-          </div>
-          {m.skills_required && (
-            <div style={{ fontSize:11, color:C.brandDeep, marginTop:5 }}>Skills: {m.skills_required}</div>
-          )}
-          {m.status==='REJECTED' && m.remarks && (
-            <div style={{ fontSize:11, color:C.critical, marginTop:5 }}>Rejected: {m.remarks}</div>
-          )}
-          {chain.length>0 && m.status!=='CLOSED' && (
-            <div style={{ marginTop:6 }}>
-              {(() => {
-                const pending = chain.find((s:any)=>s.status==='PENDING')
-                return pending ? (
-                  <div style={{ fontSize:F.micro, color:C.warning, fontWeight:W.semi, marginBottom:S.xs }}>
-                    ⏳ Waiting on: {pending.approver_name || pending.actor || '—'}{pending.approver_code?` (${pending.approver_code})`:''} — {ROLE_LABEL[pending.role]||pending.role}
-                  </div>
-                ) : m.status==='APPROVED' ? (
-                  <div style={{ fontSize:F.micro, color:C.positive, fontWeight:W.semi, marginBottom:S.xs }}>✓ Fully approved</div>
-                ) : null
-              })()}
-              {/* 10.5px — a fractional size below the 11px floor. tokens.ts:
-                  "Whole pixels, not halves… integers survive the quarter-step
-                  zoom factors intact", which matters at this app's 130% zoom. */}
-              <div style={{ ...eyebrow, marginBottom:S.xs }}>Approval chain · {doneSteps}/{chain.length} done</div>
-              <div style={{ display:'flex', flexWrap:'wrap' as const, gap:5 }}>
-                {chain.map((s:any,i:number)=>{
-                  const col = s.status==='APPROVED'?C.positive : s.status==='REJECTED'?C.critical : s.status==='PENDING'?C.warning : C.muted
-                  const bg  = s.status==='APPROVED'?C.positiveTint : s.status==='REJECTED'?C.criticalTint : s.status==='PENDING'?C.warningTint : C.sunken
-                  // The edge was `${col}22` — an alpha suffix concatenated onto
-                  // a token, which yields "var(--ez-positive)22" and is not a
-                  // colour at all, so every chip in this chain has been drawn
-                  // with no border. tokens.ts warns about exactly this. These
-                  // are the real per-state edge tokens.
-                  const edge= s.status==='APPROVED'?C.positiveEdge : s.status==='REJECTED'?C.criticalEdge : s.status==='PENDING'?C.warningEdge : C.line
-                  const mark= s.status==='APPROVED'?'✓' : s.status==='REJECTED'?'✗' : s.status==='PENDING'?'⏳' : '•'
-                  return (
-                    <span key={i} style={{ fontSize:F.micro, padding:'3px 9px', borderRadius:R.pill, background:bg, color:col, fontWeight:W.semi, lineHeight:1.45, border:`1px solid ${edge}` }}>
-                      {mark} {ROLE_LABEL[s.role]||s.role}: {s.approver_name || s.actor || '—'} · {s.status||'PENDING'}
-                    </span>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-          {openings > 0 && (m.status==='APPROVED'||m.status==='CLOSED') && (
-            <div style={{ marginTop:8, maxWidth:260 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, color:C.faint, marginBottom:3 }}>
-                <span>Positions filled</span><span>{filled} / {openings}</span>
-              </div>
-              {/* Hairline for the same measured reason as the dashboard funnel:
-                  a fill-only track is 1.03 against the card in dark. */}
-              <div style={{ background:C.sunken, borderRadius:R.pill, height:8, overflow:'hidden',
-                            border:`1px solid ${C.line}`, boxSizing:'border-box' as const }}>
-                <div style={{ width:`${pct}%`, height:'100%', background: pct>=100?C.positive:C.brand, borderRadius:R.pill }} />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div style={{ display:'flex', gap:6, flexShrink:0, alignItems:'center', flexWrap:'wrap' as const, justifyContent:'flex-end', maxWidth:290 }}>
-          <button onClick={()=>onOpen(m)} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>View</button>
-          {(m.status==='SUBMITTED'||m.status==='ON_HOLD')&&(
-            <button onClick={()=>onReview(m)} style={{ ...T.btn, background:C.brand, color:C.onAccent, fontSize:11 }}>Review & Approve</button>
-          )}
-          {m.status==='APPROVED' && (
-            <button onClick={()=>onClose(m)} style={{ ...T.btn, background:C.sunken, color:C.inkSoft, border: `1px solid ${C.line}`, fontSize:11 }}>Close MRF</button>
-          )}
-          {m.status==='CLOSED' && (
-            <button onClick={()=>onReopen(m)} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}`, fontSize:11 }}>Re-open</button>
-          )}
-          <button onClick={()=>onEdit(m)} style={{ ...T.btn, background:C.infoTint, color:C.info, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>Edit</button>
-          {/* This button had NO content — it rendered as an empty red box with
-              no label and no accessible name, so the only way to know it
-              deletes the requisition was to press it. Looks like an emoji was
-              stripped from this file at some point; see Toast's dead ternary.
-              A word is safer than a glyph for a destructive action anyway. */}
-          <button onClick={()=>onDelete(m.id)} style={{ ...T.btn, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalEdge}`, fontSize:F.tiny }}>Delete</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── MRF DETAIL ────────────────────────────────────────────────────
 function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onReview, onChanged, showNotify }:any) {
   const [logs, setLogs] = useState<any[]>([])
@@ -1646,7 +1343,7 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
 }
 
 // ── MRF TAB ───────────────────────────────────────────────────────
-function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify, employeeId }:any) {
+function MRFTab({ supabase, companies, locations, departments, mrfs, candidates, onRefresh, showNotify, employeeId, rail }:any) {
   const EMPTY = {
     // §1 Requisition Meta
     mrf_type:'Full MRF', hiring_type:'New Hire', urgency:'MEDIUM',
@@ -1678,14 +1375,12 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   const [form, setForm] = useState<any>(EMPTY)
   const [errors, setErrors] = useState<Record<string,string>>({})
   const [saving, setSaving] = useState(false)
-  const [mrfQ, setMrfQ] = useState('')
   const [fCompany, setFCompany] = useState('')
   const [fDept, setFDept] = useState('')
   const [fLoc, setFLoc] = useState('')
   const [fPos, setFPos] = useState('')
   const [fStatus, setFStatus] = useState('')
   const [sortBy, setSortBy] = useState('newest')
-  const [view, setView] = useState<'cards'|'table'>('cards')
   const mrfPositions = Array.from(new Set(mrfs.map((m:MRF)=>m.designation||m.position).filter(Boolean))).sort() as string[]
   const [aiLoading, setAiLoading] = useState(false)
   const [approvalModal, setApprovalModal] = useState<MRF|null>(null)
@@ -1741,6 +1436,22 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     dept: departments.find((d:Department)=>d.id===m.department_id)?.dept_name || '—',
     loc: locations.find((l:Location)=>l.id===m.location_id)?.location_name || '—',
   })
+
+  // The same resolver MrfDetail already uses. It lives HERE, not at page level,
+  // because the employee roster is fetched in this tab — lifting the fetch up to
+  // share it would run that query on every tab instead of on this one, which
+  // changes the data flow rather than the design.
+  const nameOf = (id?:string) => people.find((p:any)=>p.id===id)?.full_name || '—'
+
+  // The card's budget chip, formatted by THIS file's helpers. Budget wording
+  // depends on employment type (salary p.a. vs stipend/fees per month) and on
+  // six currency symbols; the kit's formatLakh knows neither, so letting it
+  // format would mislabel every intern, contractor and consultant requisition.
+  const budgetLabelOf = (row:Record<string,unknown>) => {
+    if (row.budget_max == null) return null
+    const c = compOf(row.employment_type as string|undefined)
+    return `${c.label} ${payAmount(Number(row.budget_max), (row.currency as string)||'INR', c.period)} max`
+  }
 
   function openEdit(m:MRF) {
     setEditMRF(m); setErrors({})
@@ -1953,15 +1664,15 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     showNotify('MRF deleted'); setDeleteConfirm(null); onRefresh()
   }
 
+  // Search and status are NOT filtered here any more: MrfListView owns the
+  // search box, and status is passed to it as a CONTROLLED filter so the
+  // "awaiting approval · Show them" banner can still set it from outside.
+  // Filtering twice would leave the overview counts disagreeing with the list.
   const visible = mrfs.filter((m:MRF)=>
-    (!mrfQ || (m.designation||(m as any).position||'').toLowerCase().includes(mrfQ.toLowerCase())
-           || ((m as any).job_title||'').toLowerCase().includes(mrfQ.toLowerCase())
-           || (m.mrf_number||'').toLowerCase().includes(mrfQ.toLowerCase())) &&
     (!fCompany || m.company_id===fCompany) &&
     (!fDept || m.department_id===fDept) &&
     (!fLoc || m.location_id===fLoc) &&
-    (!fPos || (m.designation||m.position)===fPos) &&
-    (!fStatus || m.status===fStatus)
+    (!fPos || (m.designation||m.position)===fPos)
   ).sort((a:MRF,b:MRF)=>{
     if (sortBy==='oldest')   return +new Date(a.created_at) - +new Date(b.created_at)
     if (sortBy==='openings') return (b.no_of_openings||b.openings||0) - (a.no_of_openings||a.openings||0)
@@ -1970,30 +1681,68 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     return +new Date(b.created_at) - +new Date(a.created_at)
   })
 
+  // filledStages is ['Offer Sent','Joined'] on purpose: that is what this tab's
+  // card and overview have always counted as a filled position. The adapter
+  // defaults to 'Joined' alone (which is what the Dashboard uses), and taking
+  // that default here would quietly drop every candidate holding an offer out
+  // of the filled ring — a number going down with nothing on screen to explain it.
+  const mrfVMs = visible.map((m:MRF) => toMrfVM(m as unknown as Record<string, unknown>, {
+    departments: departments as unknown as Record<string, unknown>[],
+    locations: locations as unknown as Record<string, unknown>[],
+    candidates: candidates as unknown as Record<string, unknown>[],
+    companies: companies as unknown as Record<string, unknown>[],
+    quickHireCap: QUICK_HIRE_CAP,
+    filledStages: ['Offer Sent', 'Joined'],
+    nameOf,
+    budgetLabelOf,
+  }))
+
   const pendingCount = mrfs.filter((m:MRF)=>m.status==='SUBMITTED').length
 
-  return (
-    <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' as const }}>
-        <div style={{ fontSize:15, fontWeight:600, color:C.ink }}>Manpower Requisitions ({mrfs.length})</div>
-        <button onClick={()=>{setEditMRF(null);setForm(EMPTY);setErrors({});setShowForm(!showForm)}} style={T.btnPrimary}>
-          {showForm?'Cancel':'+ New MRF'}
-        </button>
-      </div>
+  const bannerNode = pendingCount>0 ? (
+    <div style={{ fontSize:12, color:C.warning, background:C.warningTint, border: `1px solid ${C.warningTint}`,
+      borderRadius:7, padding:'8px 12px', display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
+      ⏳ {pendingCount} requisition{pendingCount===1?'':'s'} awaiting approval
+      <button onClick={()=>setFStatus('SUBMITTED')} style={{ ...T.btn, background:C.warning, color:C.onAccent, fontSize:11 }}>
+        Show them
+      </button>
+    </div>
+  ) : null
 
-      <MrfOverview mrfs={mrfs} candidates={candidates} fStatus={fStatus}
-        onPickStatus={setFStatus} view={view} onView={setView} />
+  // Passed through to MrfListView unchanged, so these five controls behave
+  // exactly as before. Search and status are absent deliberately — the view
+  // owns the search box and status is controlled above.
+  const filterBar = (
+    <>
+      <select value={fCompany} onChange={e=>setFCompany(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+        <option value="">All Companies</option>
+        {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+      </select>
+      <select value={fDept} onChange={e=>setFDept(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+        <option value="">All Departments</option>
+        {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+      </select>
+      <select value={fLoc} onChange={e=>setFLoc(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+        <option value="">All Locations</option>
+        {locations.filter((l:Location)=>!fCompany||l.company_id===fCompany).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+      </select>
+      <select value={fPos} onChange={e=>setFPos(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+        <option value="">All Positions</option>
+        {mrfPositions.map((p:string)=><option key={p} value={p}>{p}</option>)}
+      </select>
+      <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
+        <option value="newest">Newest first</option>
+        <option value="oldest">Oldest first</option>
+        <option value="openings">Most openings</option>
+        <option value="urgency">Most urgent</option>
+        <option value="joining">Earliest joining</option>
+      </select>
+      {(fCompany||fDept||fLoc||fPos||fStatus)&&<button onClick={()=>{setFCompany('');setFDept('');setFLoc('');setFPos('');setFStatus('')}} style={T.btnOutline}>Clear filters</button>}
+    </>
+  )
 
-      {pendingCount>0 && (
-        <div style={{ fontSize:12, color:C.warning, background:C.warningTint, border: `1px solid ${C.warningTint}`,
-          borderRadius:7, padding:'8px 12px', marginBottom:12, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' as const }}>
-          ⏳ {pendingCount} requisition{pendingCount===1?'':'s'} awaiting approval
-          <button onClick={()=>setFStatus('SUBMITTED')} style={{ ...T.btn, background:C.warning, color:C.onAccent, fontSize:11 }}>
-            Show them
-          </button>
-        </div>
-      )}
-
+  const formNode = (
+    <>
       {/* New MRF → the same auto-filling form as ESS "Raise MRF" (MrfForm): company,
           department and reporting line (RM1/RM2/HOD) prefill from the raiser, and it
           routes through the reporting chain to the HR Head. Editing an existing MRF (or a
@@ -2390,64 +2139,32 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
         </div>
       )}
 
-      <SearchBar placeholder="Search by job title, role or MRF number…" onApply={setMrfQ} />
-      <div style={{ display:'flex', gap:8, flexWrap:'wrap' as const, marginBottom:12, alignItems:'center' }}>
-        <select value={fCompany} onChange={e=>setFCompany(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="">All Companies</option>
-          {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
-        </select>
-        <select value={fDept} onChange={e=>setFDept(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="">All Departments</option>
-          {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
-        </select>
-        <select value={fLoc} onChange={e=>setFLoc(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="">All Locations</option>
-          {locations.filter((l:Location)=>!fCompany||l.company_id===fCompany).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
-        </select>
-        <select value={fPos} onChange={e=>setFPos(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="">All Positions</option>
-          {mrfPositions.map((p:string)=><option key={p} value={p}>{p}</option>)}
-        </select>
-        <select value={sortBy} onChange={e=>setSortBy(e.target.value)} style={{ ...T.select, maxWidth:170 }}>
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-          <option value="openings">Most openings</option>
-          <option value="urgency">Most urgent</option>
-          <option value="joining">Earliest joining</option>
-        </select>
-        {(fCompany||fDept||fLoc||fPos||fStatus)&&<button onClick={()=>{setFCompany('');setFDept('');setFLoc('');setFPos('');setFStatus('')}} style={T.btnOutline}>Clear filters</button>}
-      </div>
+    </>
+  )
 
-      {visible.length>0 && (
-        <div style={{ fontSize:12, color:C.faint, marginBottom:8 }}>
-          Showing {visible.length} of {mrfs.length} requisition{mrfs.length===1?'':'s'}
-          {fStatus?` · ${fStatus.replace('_',' ')}`:''}
-        </div>
-      )}
-
-      {visible.length===0 && (
-        <div style={{ ...T.card, textAlign:'center' as const, padding:34, color:C.faint }}>
-          <div style={{ fontSize:30, marginBottom:8 }}></div>
-          <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>No requisitions match</div>
-          <div style={{ fontSize:13, marginTop:5 }}>
-            {mrfs.length ? 'Try clearing the filters above.' : 'Create your first MRF with the + New MRF button.'}
-          </div>
-        </div>
-      )}
-
-      {view==='table' && visible.length>0 && (
-        <MrfTable rows={visible} orgOf={orgOf} candidates={candidates}
-          onOpen={setDetailMRF} onReview={setApprovalModal} />
-      )}
-
-      {view==='cards' && visible.map((m:MRF)=>(
-        <MrfCard key={m.id} m={m} org={orgOf(m)}
-          cands={candidates.filter((c:Candidate)=>c.mrf_id===m.id)}
-          onOpen={setDetailMRF} onEdit={openEdit} onDelete={setDeleteConfirm}
-          onReview={setApprovalModal}
-          onClose={(x:MRF)=>setMrfStatus(x,'CLOSED','MRF_CLOSED')}
-          onReopen={(x:MRF)=>setMrfStatus(x,'APPROVED','MRF_REOPENED')} />
-      ))}
+  // Every handler below is the one this tab already had. The id→row lookup is
+  // only because MrfListView addresses rows by id while these handlers take the
+  // MRF object; nothing about what they do has changed.
+  // status: '' means "all" in this tab's state, which the view spells '*'.
+  return (
+    <>
+      <MrfListView
+        rail={rail}
+        mrfs={mrfVMs}
+        filterBar={filterBar}
+        banner={bannerNode}
+        form={formNode}
+        quickHireCap={QUICK_HIRE_CAP}
+        status={fStatus || '*'}
+        onStatusChange={(v:string)=>setFStatus(v==='*' ? '' : v)}
+        onCreate={()=>{ setEditMRF(null); setForm(EMPTY); setErrors({}); setShowForm(!showForm) }}
+        onEdit={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) openEdit(m) }}
+        onView={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setDetailMRF(m) }}
+        onReview={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setApprovalModal(m) }}
+        onCloseMrf={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setMrfStatus(m,'CLOSED','MRF_CLOSED') }}
+        onReopen={(id:string)=>{ const m = mrfs.find((x:MRF)=>x.id===id); if (m) setMrfStatus(m,'APPROVED','MRF_REOPENED') }}
+        onDelete={(id:string)=>setDeleteConfirm(id)}
+      />
 
       {detailMRF && (
         <MrfDetail supabase={supabase} mrf={mrfs.find((x:MRF)=>x.id===detailMRF.id)||detailMRF} org={orgOf(detailMRF)}
@@ -2470,7 +2187,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
           </div>
         </div>
       )}
-    </div>
+    </>
   )
 }
 

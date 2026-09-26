@@ -9,32 +9,58 @@ import type { CandidateVM, MrfVM, NextStep } from './logic/types';
    Buttons call the tab's EXISTING handlers:
    onView → opens the current detail drawer, onEdit → the inline ten-step
    form (edit path), onMore → whatever the card menu does today (delete etc.). */
-export function MrfCard({ m, onView, onEdit, onMore, canEdit = true }: {
+export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, onReview, onCloseMrf, onReopen, onDelete }: {
   m: MrfVM; onView: () => void; onEdit?: () => void; onMore?: () => void; canEdit?: boolean;
+  /* The four status-conditional actions the pre-redesign card carried. They are
+     optional so a caller can omit them, but the MRF tab passes all four: the
+     kit's original three slots (View / Edit / More) had nowhere to put Review,
+     Close, Re-open and Delete, and quietly losing them would have removed
+     working functionality rather than restyling it. */
+  onReview?: () => void; onCloseMrf?: () => void; onReopen?: () => void; onDelete?: () => void;
 }) {
   const { done, total } = chainProgress(m);
   const pct = m.openings ? Math.round((m.filled / m.openings) * 100) : 0;
   const d = daysUntil(m.targetDate);
   const urgent = m.status === 'APPROVED' && d !== null && d <= 7 && m.filled < m.openings;
+  // Only the facts this requisition actually has, so a sparse MRF shows a short
+  // row rather than a line of em dashes.
+  const facts = [
+    m.employmentType,
+    m.workMode,
+    m.grade && `Grade ${m.grade}`,
+    m.experienceRequired && `Exp ${m.experienceRequired}`,
+    m.durationMonths ? `${m.durationMonths} month${m.durationMonths === 1 ? '' : 's'}` : null,
+  ].filter(Boolean) as string[];
+  const where = [m.company, m.department, m.location, m.businessUnit].filter(Boolean).join(' · ');
   return (
     <article className="rx-mod rx-lift" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div className="rx-row" style={{ justifyContent: 'space-between' }}>
         <span className="rx-meta rx-num">{m.code}</span>
-        <div className="rx-row" style={{ gap: 6 }}>
+        <div className="rx-row" style={{ gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
           <Badge tone={m.lane === 'Full MRF' ? 'brand' : 'mute'} dot={false}>{m.lane}</Badge>
           <Badge tone={MRF_TONE[m.status]}>{MRF_LABEL[m.status]}</Badge>
+          {m.expired && <Badge tone="crit" title="Past its validity date">Expired</Badge>}
         </div>
       </div>
       <div>
         <h3 style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.02em' }}>{m.title}</h3>
-        <p className="rx-meta" style={{ marginTop: 4 }}>{m.department}, {m.location}</p>
+        <p className="rx-meta" style={{ marginTop: 4 }}>{where || '—'}</p>
       </div>
       <div className="rx-row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        {m.budgetMaxRupees != null && <Chip>{formatLakh(m.budgetMaxRupees, 1)} max</Chip>}
+        {/* budgetLabel is pre-formatted by the tab with its own compOf/payAmount,
+            so a stipend stays "Stipend ₹15,000/mo" instead of being rendered as
+            an annual lakh figure. formatLakh is only the fallback. */}
+        {m.budgetLabel ? <Chip>{m.budgetLabel}</Chip>
+          : m.budgetMaxRupees != null ? <Chip>{formatLakh(m.budgetMaxRupees, 1)} max</Chip> : null}
         {m.priority && <Chip>Priority {m.priority.toLowerCase()}</Chip>}
+        {facts.map((f) => <Chip key={f}>{f}</Chip>)}
         {urgent ? <Badge tone="crit" live>{d! < 0 ? 'Past target date' : `${d} days left`}</Badge>
           : <Chip>{m.targetDate ? `Target ${new Intl.DateTimeFormat('en-IN', { day: 'numeric', month: 'short' }).format(new Date(m.targetDate))}` : 'No target date'}</Chip>}
       </div>
+      {m.skills && <p className="rx-meta" style={{ marginTop: -4 }}>Skills: {m.skills}</p>}
+      {m.status === 'REJECTED' && m.remarks && (
+        <p className="rx-meta" style={{ marginTop: -4, color: 'var(--ez-critical)' }}>Rejected: {m.remarks}</p>
+      )}
       {m.chain.length > 0 && (
         <div style={{ padding: 12, borderRadius: 14, background: 'var(--ez-sunken)', border: '1px solid var(--ez-line)' }}>
           <div className="rx-row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
@@ -48,15 +74,30 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true }: {
           <Ring pct={pct} label={`${m.filled}/${m.openings}`} tone={pct >= 50 ? 'pos' : undefined} />
           <div><div className="rx-name">{m.candidates} candidates</div><div className="rx-meta">positions filled</div></div>
         </div>
+        {/* Migration 037 keeps the single assigned_recruiter email for display
+            while the id array holds the real assignment, so fall back to the
+            email rather than claiming "Unassigned" when only the legacy field
+            is set. */}
         <div className="rx-stack">
-          {m.recruiterInitials.length ? m.recruiterInitials.map((r, i) => <Avatar key={i} initials={r} tone={toneFor(r)} size="sm" />) : <span className="rx-meta rx-dim">Unassigned</span>}
+          {m.recruiterInitials.length ? m.recruiterInitials.map((r, i) => <Avatar key={i} initials={r} tone={toneFor(r)} size="sm" />)
+            : m.recruiterEmail ? <span className="rx-meta">{m.recruiterEmail}</span>
+            : <span className="rx-meta rx-dim">Unassigned</span>}
         </div>
       </div>
       <NextStepLine step={mrfNextStep(m)} />
-      <div className="rx-row" style={{ gap: 8, borderTop: '1px solid var(--ez-line)', paddingTop: 12 }}>
+      <div className="rx-row" style={{ gap: 8, borderTop: '1px solid var(--ez-line)', paddingTop: 12, flexWrap: 'wrap' }}>
         <button type="button" className="rx-btn sm" onClick={onView}><Icon name="eye" />View</button>
+        {onReview && (m.status === 'SUBMITTED' || m.status === 'ON_HOLD') && (
+          <button type="button" className="rx-btn sm p" onClick={onReview}><Icon name="check" />Review &amp; Approve</button>)}
+        {onCloseMrf && m.status === 'APPROVED' && (
+          <button type="button" className="rx-btn sm g" onClick={onCloseMrf}><Icon name="lock" />Close MRF</button>)}
+        {onReopen && m.status === 'CLOSED' && (
+          <button type="button" className="rx-btn sm ok" onClick={onReopen}><Icon name="door" />Re-open</button>)}
         {canEdit && onEdit && <button type="button" className="rx-btn sm" onClick={onEdit}><Icon name="edit" />Edit</button>}
         <span style={{ flex: 1 }} />
+        {/* .d is the kit's own destructive variant. The pre-redesign Delete was
+            an unlabelled empty box; it keeps a word here for the same reason. */}
+        {onDelete && <button type="button" className="rx-btn sm d" onClick={onDelete}><Icon name="x" />Delete</button>}
         {onMore && <button type="button" className="rx-btn sm ic g" aria-label="More actions" onClick={onMore}><Icon name="more" /></button>}
       </div>
     </article>

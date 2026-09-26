@@ -29,12 +29,36 @@ export interface AdapterContext {
   /** Resolve an employee/recruiter id to a display name. Use the tab's existing resolver. */
   nameOf: (id: string) => string;
   joinedStage?: string;        // defaults to 'Joined'
+  /**
+   * Which stages count as a filled position. Defaults to [joinedStage ?? 'Joined'].
+   *
+   * The MRF tab passes ['Offer Sent', 'Joined'] because that is what its card and
+   * its overview have always counted. Leaving it at 'Joined' alone would silently
+   * drop every candidate holding an offer out of "filled" — a number moving down
+   * with nothing on screen to explain why.
+   */
+  filledStages?: string[];
+  /** Optional: needed only for the company name on the MRF card. */
+  companies?: Row[];
+  /**
+   * Optional: the tab's OWN money formatter. Budget wording depends on
+   * employment type (salary p.a. vs stipend/fees per month) and on six currency
+   * symbols, all of which live in page.tsx's compOf/payAmount. Re-deriving it
+   * here with formatLakh would mislabel every intern and contractor row, so the
+   * tab passes its existing formatter instead.
+   */
+  budgetLabelOf?: (row: Row) => string | null;
 }
 
 export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
   const id = String(row.id);
   const dept = ctx.departments.find((d) => d.id === row.department_id);
   const loc = ctx.locations.find((l) => l.id === row.location_id);
+  const comp = ctx.companies?.find((c) => c.id === row.company_id);
+  const status = String(row.status ?? 'DRAFT').toUpperCase();
+  const validity = pick<string | null>(row, ['validity_date'], null);
+  const expired = !!validity && !['CLOSED', 'REJECTED'].includes(status)
+    && new Date(validity) < new Date(new Date().toDateString());
   // RESOLVED: the foreign key is `mrf_id`. There is no `requisition_id` column —
   // loadAll itself scopes candidates with `c.mrf_id`.
   const mine = ctx.candidates.filter((c) => c.mrf_id === id);
@@ -65,7 +89,7 @@ export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
     lane: (lane === 'Quick Hire' || lane === 'Full MRF' ? lane : laneFor(budgetMax ?? 0, ctx.quickHireCap)) as Lane,
     priority: pick<string | null>(row, ['urgency'], null),                               // RESOLVED: `urgency`, not `priority`
     openings: Number(pick(row, ['no_of_openings', 'openings'], 0)),                      // RESOLVED: both columns are in use
-    filled: mine.filter((c) => c.stage === (ctx.joinedStage ?? 'Joined')).length,
+    filled: mine.filter((c) => (ctx.filledStages ?? [ctx.joinedStage ?? 'Joined']).includes(String(c.stage))).length,
     candidates: mine.length,
     budgetMaxRupees: budgetMax,
     // RESOLVED, and these are two DIFFERENT fields the kit collapsed into one:
@@ -75,7 +99,23 @@ export function toMrfVM(row: Row, ctx: AdapterContext): MrfVM {
     // the tab's existing calculation, which already uses validity_date.
     targetDate: pick<string | null>(row, ['target_joining_date', 'validity_date'], null),
     chain,
-    recruiterInitials: recruiters.map((r) => initials(ctx.nameOf(r))),
+    // nameOf returns '' for an id it cannot resolve and '—' for a missing
+    // employee; initials() turns those into '' and '—'. MrfCard only tests
+    // `recruiterInitials.length`, so either would render blank avatar circles
+    // instead of the honest "Unassigned". Keep only initials with real letters.
+    recruiterInitials: recruiters.map((r) => initials(ctx.nameOf(r))).filter((s) => /[a-z0-9]/i.test(s)),
+    company: comp ? String(comp.company_name ?? comp.company_code ?? '—') : null,
+    businessUnit: pick<string | null>(row, ['business_unit'], null),
+    employmentType: pick<string | null>(row, ['employment_type'], null),
+    workMode: pick<string | null>(row, ['work_mode'], null),
+    grade: pick<string | null>(row, ['grade'], null),
+    experienceRequired: pick<string | null>(row, ['experience_required'], null),
+    durationMonths: num(pick(row, ['duration_months'], null)),
+    skills: pick<string | null>(row, ['skills_required'], null),
+    remarks: pick<string | null>(row, ['remarks'], null),
+    expired,
+    recruiterEmail: pick<string | null>(row, ['assigned_recruiter'], null),
+    budgetLabel: ctx.budgetLabelOf ? ctx.budgetLabelOf(row) : null,
     raw: row,
   };
 }

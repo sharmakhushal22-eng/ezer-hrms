@@ -177,7 +177,14 @@
   color:var(--ez-ink);font:inherit;font-size:14px;padding:0 13px;width:100%;transition:border-color .16s,box-shadow .16s}
 .rx-input:focus{outline:none;border-color:var(--ez-brand);box-shadow:0 0 0 4px var(--ez-brand-tint)}
 .rx-hint{font-size:12px;color:var(--ez-faint)}
-.rx-search{position:relative;flex:1}
+/* min-width is load-bearing, not cosmetic. The input inside is width:100% with
+   an absolutely-positioned icon and kbd hint, so this box's intrinsic minimum
+   is ~0 — and a flex item that can shrink to nothing never triggers the
+   wrap that .rx-bar already allows, it just gets starved. On the MRF tab the
+   row carries five passthrough filter selects as well, which squeezed the
+   search field down to about 90px ("Se" plus the slash hint). A floor makes
+   the row wrap instead. min() keeps it from overflowing a narrow phone. */
+.rx-search{position:relative;flex:1 1 240px;min-width:min(220px,100%)}
 .rx-search svg{position:absolute;left:13px;top:13px;width:16px;height:16px;color:var(--ez-faint)}
 .rx-search .rx-input{padding-left:38px}
 .rx-seg{display:inline-flex;padding:4px;gap:2px;border-radius:12px;background:var(--ez-sunken);border:1px solid var(--ez-line)}

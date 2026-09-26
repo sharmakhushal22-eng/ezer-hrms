@@ -38,6 +38,26 @@ export interface MrfVM {
   targetDate?: string | null;
   chain: ChainStepVM[];
   recruiterInitials: string[];
+  /* Facts the old MRF card showed and the kit's card did not. All optional and
+     purely additive, so DashboardView — the only other MrfVM consumer — is
+     unaffected. Dropping them would have removed working information from the
+     screen, which the redesign brief does not allow. */
+  company?: string | null;
+  businessUnit?: string | null;
+  employmentType?: string | null;
+  workMode?: string | null;
+  grade?: string | null;
+  experienceRequired?: string | null;
+  durationMonths?: number | null;
+  skills?: string | null;
+  /** Shown only when the requisition was turned down. */
+  remarks?: string | null;
+  /** Past validity_date and not already CLOSED/REJECTED. */
+  expired?: boolean;
+  /** Legacy single-recruiter email (migration 037 keeps it for display). */
+  recruiterEmail?: string | null;
+  /** Pre-formatted by the tab, so stipend/fees/currency wording stays identical. */
+  budgetLabel?: string | null;
   raw: unknown;
 }
 
