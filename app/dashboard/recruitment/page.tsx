@@ -773,22 +773,22 @@ function CtqEditor({ items, onChange }:{ items:any[]; onChange:(v:any[])=>void }
         <div key={q.id||i} style={{ border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'10px 12px', marginBottom:8, background:C.sunken }}>
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:8 }}>
             <span style={{ fontSize:11, fontWeight:700, color:C.brandDeep, minWidth:22 }}>Q{i+1}</span>
-            <input style={{ ...T.input, flex:1 }} value={q.question||''} placeholder="e.g. Do you have a valid B.Tech degree?"
+            <input className="rx-input" style={{ flex:1 }} value={q.question||''} placeholder="e.g. Do you have a valid B.Tech degree?"
               onChange={e=>set(i,{ question:e.target.value })} />
             {/* Was contentless — an empty red box with no label and no
                 accessible name. Same stripped-glyph bug as MrfCard's Delete. */}
             <button onClick={()=>del(i)} style={{ ...T.btn, height:32, background:C.criticalTint, color:C.critical, border: `1px solid ${C.criticalEdge}`, fontSize:F.tiny }}>Remove</button>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr auto', gap:8, alignItems:'center' }}>
-            <select style={T.select} value={q.type||'YES_NO'} onChange={e=>set(i,{ type:e.target.value, expected: e.target.value==='YES_NO'?'Yes':'' })}>
+            <select className="rx-input" value={q.type||'YES_NO'} onChange={e=>set(i,{ type:e.target.value, expected: e.target.value==='YES_NO'?'Yes':'' })}>
               {CTQ_TYPES.map(t=><option key={t.k} value={t.k}>{t.label}</option>)}
             </select>
             {q.type==='YES_NO' ? (
-              <select style={T.select} value={q.expected||'Yes'} onChange={e=>set(i,{ expected:e.target.value })}>
+              <select className="rx-input" value={q.expected||'Yes'} onChange={e=>set(i,{ expected:e.target.value })}>
                 <option value="Yes">Expected: Yes</option><option value="No">Expected: No</option>
               </select>
             ) : (
-              <input style={T.input} value={q.expected||''} placeholder={q.type==='NUMBER_MIN'?'Minimum value':'Expected answer'}
+              <input className="rx-input" value={q.expected||''} placeholder={q.type==='NUMBER_MIN'?'Minimum value':'Expected answer'}
                 onChange={e=>set(i,{ expected:e.target.value })} />
             )}
             <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, color:C.muted, whiteSpace:'nowrap' as const }}>
@@ -899,7 +899,7 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase 
   return (
     <div>
       <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap' as const, alignItems:'center' }}>
-        <select style={{ ...T.select, maxWidth:230 }} value={kind} onChange={e=>setKind(e.target.value)}>
+        <select className="rx-input" style={{ maxWidth:230 }} value={kind} onChange={e=>setKind(e.target.value)}>
           {ATTACH_KINDS.map(a=><option key={a.k} value={a.k}>{a.label}</option>)}
         </select>
         <input ref={inputRef} type="file" style={{ display:'none' }}
@@ -2142,20 +2142,20 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
           <button onClick={()=>setMode('reject')} style={{ ...T.btn, flex:1, background:mode==='reject'?C.criticalTint:C.sunken, color:mode==='reject'?C.critical:C.faint, border:mode==='reject'?`1px solid ${C.criticalEdge}`:'1px solid var(--ez-line)' }}>Reject</button>
         </div>
 
-        <label style={T.label}>Approver name</label>
-        <input style={{ ...T.input, marginBottom:11 }} value={actor} onChange={e=>setActor(e.target.value)}
+        <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Approver name</label>
+        <input className="rx-input" style={{ marginBottom:11 }} value={actor} onChange={e=>setActor(e.target.value)}
           placeholder="Your name" />
 
         {mode==='approve'?(
           <>
-            <label style={T.label}>Assign Recruiter Email</label>
-            <input style={{ ...T.input, marginBottom:4, ...(emailOk?{}:{ border: `1px solid ${C.criticalTint}`, background:C.criticalTint }) }}
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Assign Recruiter Email</label>
+            <input className="rx-input" style={{ marginBottom:4, ...(emailOk?{}:{ border: `1px solid ${C.criticalTint}`, background:C.criticalTint }) }}
               value={recruiter} onChange={e=>setRecruiter(e.target.value)} placeholder="recruiter@company.com" />
             <div style={{ fontSize:11, color: emailOk?C.faint:C.critical, marginBottom:11 }}>
               {emailOk ? 'Optional — the MRF can be approved and assigned later.' : 'That does not look like a valid email.'}
             </div>
-            <label style={T.label}>Approver comments</label>
-            <textarea style={{ ...T.textarea, marginBottom:16, minHeight:70 }} value={comments}
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Approver comments</label>
+            <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', marginBottom:16, minHeight:70 }} value={comments}
               onChange={e=>setComments(e.target.value)} placeholder="Optional note for the record" />
             <button onClick={()=>emailOk && go(()=>onApprove(mrf.id, recruiter.trim(), comments.trim(), actor.trim()))} disabled={busy||!emailOk}
               style={{ ...T.btnPrimary, width:'100%', opacity: busy||!emailOk?.6:1 }}>
@@ -2164,8 +2164,8 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
           </>
         ):mode==='hold'?(
           <>
-            <label style={T.label}>Reason for hold *</label>
-            <textarea style={{ ...T.textarea, marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Reason for hold *</label>
+            <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
               placeholder="Why is this requisition being paused?" rows={3} />
             <button onClick={()=>comments.trim() && go(()=>onHold(mrf.id, comments.trim()))} disabled={busy||!comments.trim()}
               style={{ ...T.btn, background:C.warning, color:C.onAccent, width:'100%', opacity: busy||!comments.trim()?.6:1 }}>
@@ -2174,8 +2174,8 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
           </>
         ):(
           <>
-            <label style={T.label}>Rejection Reason *</label>
-            <textarea style={{ ...T.textarea, marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Rejection Reason *</label>
+            <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', marginBottom:16 }} value={comments} onChange={e=>setComments(e.target.value)}
               placeholder="Why is this requisition being rejected?" rows={3} />
             <button onClick={()=>comments.trim() && go(()=>onReject(mrf.id, comments.trim(), actor.trim()))} disabled={busy||!comments.trim()}
               style={{ ...T.btn, background:C.critical, color:C.onAccent, width:'100%', opacity: busy||!comments.trim()?.6:1 }}>
@@ -3596,20 +3596,20 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:an
         <div style={{ fontSize:11, color:C.faint, marginBottom:14 }}>{mrf?.employment_type||'Non-employee'} engagement · stipend only (no PF/HRA structure)</div>
         {!autoCompany && (
           <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
-            <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
-            <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
+            <select className="rx-input" value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
               <option value="">Select company…</option>
               {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
             </select>
           </div>
         )}
         <div style={{ ...T.g2, marginBottom:10 }}>
-          <div><label style={T.label}>Monthly Stipend (₹) *</label><input style={T.input} type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder="25000" /></div>
-          <div><label style={T.label}>TDS Applicable?</label>
-            <select style={T.select} value={tds?'Yes':'No'} onChange={e=>setTds(e.target.value==='Yes')}><option>No</option><option>Yes</option></select>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Monthly Stipend (₹) *</label><input className="rx-input" type="number" value={stipend} onChange={e=>setStipend(e.target.value)} placeholder="25000" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>TDS Applicable?</label>
+            <select className="rx-input" value={tds?'Yes':'No'} onChange={e=>setTds(e.target.value==='Yes')}><option>No</option><option>Yes</option></select>
           </div>
         </div>
-        {tds&&(<div style={{ marginBottom:10 }}><label style={T.label}>TDS %</label><input style={T.input} type="number" value={tdsPct} onChange={e=>setTdsPct(e.target.value)} placeholder="10" /></div>)}
+        {tds&&(<div style={{ marginBottom:10 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>TDS %</label><input className="rx-input" type="number" value={tdsPct} onChange={e=>setTdsPct(e.target.value)} placeholder="10" /></div>)}
         {s>0&&(
           <div style={{ marginTop:8, background:C.sunken, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 16px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', fontSize:13 }}><span style={{ color: C.inkSoft }}>Monthly Stipend</span><span style={{ fontWeight:600 }}>₹{s.toLocaleString('en-IN')}</span></div>
@@ -3623,7 +3623,7 @@ function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh }:an
           <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 14px' }}>
             <div style={{ fontSize:11, fontWeight:600, color: C.brand, marginBottom:6 }}>CANDIDATE SALARY LINK</div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-              <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace' }} />
+              <input readOnly value={savedLink} onFocus={e=>e.target.select()} className="rx-input" style={{ fontSize:11, fontFamily:'monospace' }} />
               <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btn, background:C.brand, color:C.onAccent, whiteSpace:'nowrap' as const }}>Copy</button>
             </div>
           </div>
@@ -4680,9 +4680,9 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
             {/* Onboarding date + HR email — drive the reminder emails */}
             <div style={{ display:'flex', gap:8, alignItems:'center', marginTop:10, flexWrap:'wrap' as const }}>
               <label style={{ fontSize:11, color:C.brandDeep, fontWeight:600 }}>Onboarding date:</label>
-              <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} style={{ ...T.input, width:150, fontSize:12 }} />
+              <input type="date" value={obVal(c)} onChange={e=>setObDates(m=>({...m,[c.id]:e.target.value}))} className="rx-input" style={{ width:150, fontSize:12 }} />
               <label style={{ fontSize:11, color:C.brandDeep, fontWeight:600 }}>HR email:</label>
-              <input value={hrVal(c)} onChange={e=>setHrEmails(m=>({...m,[c.id]:e.target.value}))} placeholder="hr@company.com" style={{ ...T.input, width:180, fontSize:12 }} />
+              <input value={hrVal(c)} onChange={e=>setHrEmails(m=>({...m,[c.id]:e.target.value}))} placeholder="hr@company.com" className="rx-input" style={{ width:180, fontSize:12 }} />
               <button onClick={()=>saveOnboarding(c)} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, fontSize:11 }}>Save</button>
               {(()=>{ const d=daysToJoin(c); if(d===null) return null
                 return d>=0 && d<=3
