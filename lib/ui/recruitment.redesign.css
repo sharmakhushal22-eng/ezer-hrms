@@ -37,14 +37,24 @@
 .rx-head-act{display:flex;gap:10px;align-items:center;flex-shrink:0}
 
 /* ── Phase-grouped tab rail ────────────────────────────────────────────── */
-.rx-rail{display:flex;gap:2px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;align-items:stretch;padding:6px;border-radius:18px;
+/* Eleven tabs used to need 1197px in the 1122px available at a 1440px viewport
+   — a 75px overrun that hit any user who can see all eleven (HR Head, legacy)
+   and vanished at ten, so it was easy to miss. With scrollbar-width:none they
+   were simply cut off with no hint they could be reached: the same failure the
+   old pill bar had. Tightening both gaps to 1px and the group padding closes it
+   exactly — measured at 1122/1122, zero overflow, last tab 5px clear.
+   scrollbar-width:thin stays because narrower viewports still scroll. There is
+   deliberately NO right-edge mask: CSS cannot make one conditional on actually
+   overflowing, so it would fade the last tab permanently, including on the
+   ten-tab accounts that fit with room to spare. */
+.rx-rail{display:flex;gap:1px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:thin;align-items:stretch;padding:6px;border-radius:18px;
   background:var(--ez-surface);border:1px solid var(--ez-line);box-shadow:var(--ez-shadow-raised);
   animation:rxRise .5s .05s var(--rx-ease) both}
-.rx-grp{display:flex;flex-direction:column;gap:3px;padding:4px 3px 2px;flex-shrink:0;border-radius:14px}
+.rx-grp{display:flex;flex-direction:column;gap:3px;padding:4px 2px 2px;flex-shrink:0;border-radius:14px}
 .rx-grp + .rx-grp{border-left:1px dashed var(--ez-line)}
 .rx-grp-l{font-size:11px;font-weight:600;color:var(--ez-faint);padding-left:6px;letter-spacing:.01em}
-.rx-grp-t{display:flex;gap:2px}
-.rx-tab{position:relative;display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 8px;
+.rx-grp-t{display:flex;gap:1px}
+.rx-tab{position:relative;display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 6px;
   border-radius:10px;font-size:12.5px;font-weight:500;color:var(--ez-muted);text-decoration:none;
   white-space:nowrap;transition:background .16s,color .16s}
 .rx-tab:hover{background:var(--ez-sunken);color:var(--ez-ink)}

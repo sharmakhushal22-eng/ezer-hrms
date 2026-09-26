@@ -22,7 +22,7 @@ import {
 import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos,
-  DashboardView,
+  DashboardView, RxPage, RecruitmentHeader,
 } from '@/components/recruitment/rx'
 
 /**
@@ -403,7 +403,7 @@ export default function RecruitmentPage() {
   // own header, rail and page frame; the rest keep the old chrome untouched.
   // Grows by one entry per phase until every tab is in, then the old header,
   // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard'])
+  const RX_TABS = new Set<typeof tab>(['dashboard', 'jobstatus'])
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -510,6 +510,11 @@ export default function RecruitmentPage() {
             onRaiseMrf={() => setTab('mrf')}
           />
         )}
+        {/* Job Status keeps its own component: it carries ten pieces of state
+            and eight UI blocks, six of which JobStatusView has no slot for.
+            Per Step 6 of the guide it is restyled in place inside RxPage
+            rather than replaced by the view. */}
+        {tab==='jobstatus' && <JobStatusTab {...props} rail={rail} />}
         </>
       ) : (
         <div style={{ padding:'18px 24px', maxWidth:1300 }}>
@@ -522,7 +527,6 @@ export default function RecruitmentPage() {
           {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
           {tab==='offers' && <OffersTab {...props} />}
           {tab==='preonboarding' && <PreOnboardTab {...props} />}
-          {tab==='jobstatus' && <JobStatusTab {...props} />}
         </div>
       )}
 
@@ -2788,7 +2792,7 @@ function RecruiterTable({ rows, sortKey, sortDir, onSort, selected, onSelect }:a
 }
 
 // ── JOB STATUS TAB ────────────────────────────────────────────────
-function JobStatusTab({ companies, locations, departments, mrfs, candidates, showNotify, supabase }:any) {
+function JobStatusTab({ companies, locations, departments, mrfs, candidates, showNotify, supabase, rail }:any) {
   const [fCompany, setFCompany] = useState('')
   const [fLoc, setFLoc] = useState('')
   const [fDept, setFDept] = useState('')
@@ -3015,27 +3019,26 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
   }
 
   return (
-    <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' as const }}>
-        <div>
-          <div style={{ fontSize:15, fontWeight:600, color:C.ink }}>Job Status &amp; Recruiter Performance</div>
-          <div style={{ fontSize:12, color:C.faint, marginTop:2 }}>
-            MRF deadlines, expiries and whether hiring is closing before requisitions lapse
-          </div>
-        </div>
-        <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' as const }}>
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Job status"
+        subtitle="MRF deadlines, expiries and whether hiring is closing before requisitions lapse."
+        actions={<>
+          {/* The same three controls, the same state, the same handlers.
+              downloadReport still builds the workbook through XLSX and
+              shareReport still POSTs to share-report — only the frame changed. */}
           <select value={exportFmt} onChange={e=>{ setExportFmt(e.target.value); setShareUrl('') }}
             style={{ ...T.select, width:'auto', padding:'7px 10px', fontSize:12 }}>
             <option value="xlsx">Excel (.xlsx)</option>
             <option value="xls">Excel 97–2003 (.xls)</option>
             <option value="csv">CSV (.csv)</option>
           </select>
-          <button onClick={downloadReport} style={T.btnPrimary}>⬇ Export Report</button>
-          <button onClick={shareReport} disabled={sharing} style={{ ...T.btnOutline, opacity: sharing?.6:1 }}>
+          <button type="button" className="rx-btn" onClick={shareReport} disabled={sharing}>
             {sharing ? 'Preparing…' : 'Share link'}
           </button>
-        </div>
-      </div>
+          <button type="button" className="rx-btn p" onClick={downloadReport}>Export report</button>
+        </>}
+      />}>
 
       {shareUrl && (
         <div style={{ ...T.card, background:C.positiveTint, border: `1px solid ${C.positiveTint}` }}>
@@ -3181,7 +3184,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
           ))}
         </div>
       )}
-    </div>
+    </RxPage>
   )
 }
 
