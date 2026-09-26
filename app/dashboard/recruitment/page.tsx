@@ -2650,7 +2650,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
               downloadReport still builds the workbook through XLSX and
               shareReport still POSTs to share-report — only the frame changed. */}
           <select value={exportFmt} onChange={e=>{ setExportFmt(e.target.value); setShareUrl('') }}
-            style={{ ...T.select, width:'auto', padding:'7px 10px', fontSize:12 }}>
+            className="rx-input" style={{ width:'auto', padding:'7px 10px', fontSize:12 }}>
             <option value="xlsx">Excel (.xlsx)</option>
             <option value="xls">Excel 97–2003 (.xls)</option>
             <option value="csv">CSV (.csv)</option>
@@ -2669,7 +2669,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
           </div>
           <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' as const }}>
             <input readOnly value={shareUrl} onFocus={e=>e.currentTarget.select()}
-              style={{ ...T.input, flex:'1 1 340px', fontSize:12, background:C.surface }} />
+              className="rx-input" style={{ flex:'1 1 340px', fontSize:12, background:C.surface }} />
             <button onClick={()=>{ navigator.clipboard?.writeText(shareUrl); showNotify('Link copied') }} style={T.btnOutline}>Copy</button>
             <a href={shareUrl} target="_blank" rel="noreferrer" style={{ ...T.btnOutline, textDecoration:'none' }}>Open</a>
             <button onClick={()=>setShareUrl('')} style={{ ...T.btnOutline, color:C.muted }}>Dismiss</button>
@@ -2690,31 +2690,31 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
         <div style={T.section}>Filters</div>
         <div style={{ ...T.g4 }}>
           <div>
-            <label style={T.label}>Company</label>
-            <select style={T.select} value={fCompany} onChange={e=>{ setFCompany(e.target.value); setFLoc(''); setFDept('') }}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Company</label>
+            <select className="rx-input" value={fCompany} onChange={e=>{ setFCompany(e.target.value); setFLoc(''); setFDept('') }}>
               <option value="">All companies</option>
               {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
             </select>
           </div>
           <div>
-            <label style={T.label}>Branch / Location</label>
-            <select style={T.select} value={fLoc} onChange={e=>setFLoc(e.target.value)}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Branch / Location</label>
+            <select className="rx-input" value={fLoc} onChange={e=>setFLoc(e.target.value)}>
               <option value="">All branches</option>
               {locations.filter((l:Location)=>!fCompany||l.company_id===fCompany).map((l:Location)=>(
                 <option key={l.id} value={l.id}>{l.location_name}</option>))}
             </select>
           </div>
           <div>
-            <label style={T.label}>Department</label>
-            <select style={T.select} value={fDept} onChange={e=>setFDept(e.target.value)}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Department</label>
+            <select className="rx-input" value={fDept} onChange={e=>setFDept(e.target.value)}>
               <option value="">All departments</option>
               {departments.filter((d:Department)=>!fCompany||d.company_id===fCompany).map((d:Department)=>(
                 <option key={d.id} value={d.id}>{d.dept_name}</option>))}
             </select>
           </div>
           <div>
-            <label style={T.label}>Raised Within</label>
-            <select style={T.select} value={period} onChange={e=>setPeriod(e.target.value)}>
+            <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Raised Within</label>
+            <select className="rx-input" value={period} onChange={e=>setPeriod(e.target.value)}>
               <option value="all">All time</option>
               <option value="30">Last 30 days</option>
               <option value="90">Last 90 days</option>
@@ -4469,10 +4469,10 @@ HR Team`
         <div className="s8">
           <div className="rx-mod">
             <div className="rx-mod-h"><div className="rx-mod-t">Offer letter</div></div>
-            <div style={{ marginBottom:8 }}><label style={T.label}>To Email</label><input style={T.input} value={toEmail} onChange={e=>setToEmail(e.target.value)} /></div>
-            <div style={{ marginBottom:8 }}><label style={T.label}>CC (comma separated)</label><input style={T.input} value={cc} onChange={e=>setCc(e.target.value)} placeholder="hr@co.com, md@co.com" /></div>
-            <div style={{ marginBottom:10 }}><label style={T.label}>Date of Joining</label><input style={T.input} type="date" value={doj} onChange={e=>setDoj(e.target.value)} /></div>
-            <textarea style={{ ...T.textarea, minHeight:300, fontFamily:'monospace', fontSize:11 }} value={letter} onChange={e=>setLetter(e.target.value)} />
+            <div style={{ marginBottom:8 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>To Email</label><input className="rx-input" value={toEmail} onChange={e=>setToEmail(e.target.value)} /></div>
+            <div style={{ marginBottom:8 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>CC (comma separated)</label><input className="rx-input" value={cc} onChange={e=>setCc(e.target.value)} placeholder="hr@co.com, md@co.com" /></div>
+            <div style={{ marginBottom:10 }}><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Date of Joining</label><input className="rx-input" type="date" value={doj} onChange={e=>setDoj(e.target.value)} /></div>
+            <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:300, fontFamily:'monospace', fontSize:11 }} value={letter} onChange={e=>setLetter(e.target.value)} />
             <button onClick={sendOffer} style={{ ...T.btnPrimary, width:'100%', marginTop:10, padding:10 }}>Send Offer Letter</button>
           </div>
         </div>
