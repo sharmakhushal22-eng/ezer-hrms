@@ -162,47 +162,6 @@ function deptLabel(d:any, list:any[], companies:any[]) {
   return `${d.dept_name} — ${co?.company_name||co?.company_code||'—'}`
 }
 
-// `f` shape: { company, department, position, location } — all '' means "All".
-function RecFilterBar({ companies, departments, locations, positions, f, setF }:any) {
-  return (
-    <div style={{ ...T.card, display:'flex', gap:12, flexWrap:'wrap' as const, alignItems:'flex-end', position:'sticky', top:0, zIndex:30, boxShadow:'var(--ez-shadow-flat)' }}>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Company</label>
-        <select style={T.select} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
-          <option value="">All companies</option>
-          {(companies||[]).map((c:any)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Department</label>
-        <select style={T.select} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
-          <option value="">All departments</option>
-          {(() => {
-            const vis = (departments||[]).filter((d:any)=>!f.company||d.company_id===f.company)
-            return vis.map((d:any)=><option key={d.id} value={d.id}>{deptLabel(d, vis, companies||[])}</option>)
-          })()}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Position</label>
-        <select style={T.select} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
-          <option value="">All positions</option>
-          {(positions||[]).map((p:string)=><option key={p} value={p}>{p}</option>)}
-        </select>
-      </div>
-      <div style={{ flex:'1 1 160px', minWidth:140 }}>
-        <label style={T.label}>Location</label>
-        <select style={T.select} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
-          <option value="">All locations</option>
-          {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
-        </select>
-      </div>
-      {(f.company||f.department||f.position||f.location) && (
-        <button style={T.btnOutline} onClick={()=>setF({ company:'', department:'', position:'', location:'' })}>Clear filters</button>
-      )}
-    </div>
-  )
-}
 
 // True unless a set filter excludes the candidate. Department & location resolve via the candidate's MRF.
 function candidateMatchesFilters(c:any, mrfs:any[], f:any): boolean {
@@ -410,7 +369,7 @@ export default function RecruitmentPage() {
   // own header, rail and page frame; the rest keep the old chrome untouched.
   // Grows by one entry per phase until every tab is in, then the old header,
   // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'offerapproval', 'offers', 'jobstatus'])
+  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'offerapproval', 'offers', 'preonboarding', 'jobstatus'])
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -549,12 +508,15 @@ export default function RecruitmentPage() {
             restyled -- that text reaches a real candidate. Only the frame,
             the list and the panel container change. */}
         {tab==='offers' && <OffersTab {...props} rail={rail} />}
+        {/* Pre-onboarding: render-only restyle. Every control here writes,
+            deletes or emails a real candidate (sendAcceptance posts to
+            send-letter), so the frame changed and the handlers did not. */}
+        {tab==='preonboarding' && <PreOnboardTab {...props} rail={rail} />}
         </>
       ) : (
         <div style={{ padding:'18px 24px', maxWidth:1300 }}>
           {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
           {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
-          {tab==='preonboarding' && <PreOnboardTab {...props} />}
         </div>
       )}
 
@@ -604,18 +566,6 @@ function SkillsMultiSelect({ value, onChange, allSkills, onAddSkill }:{ value:st
   )
 }
 
-// ── Reusable search: type, then press Apply (or Enter). Clear resets it. ──
-function SearchBar({ placeholder, onApply, width=300 }:{ placeholder:string; onApply:(q:string)=>void; width?:number }) {
-  const [draft, setDraft] = useState('')
-  return (
-    <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center', flexWrap:'wrap' as const }}>
-      <input style={{ ...T.input, maxWidth:width }} value={draft} placeholder={placeholder}
-        onChange={e=>setDraft(e.target.value)} onKeyDown={e=>{ if(e.key==='Enter') onApply(draft.trim()) }} />
-      <button style={T.btnPrimary} onClick={()=>onApply(draft.trim())}>Apply</button>
-      {draft && <button style={T.btnOutline} onClick={()=>{ setDraft(''); onApply('') }}>Clear</button>}
-    </div>
-  )
-}
 
 // Close an MRF automatically once offers sent (Offer Sent + Joined) reach its openings.
 async function closeMrfIfFilled(supabase:any, mrfId?:string) {
@@ -3292,13 +3242,13 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     </select>
   )
 
-  // RecFilterBar is deliberately NOT reused inside this frame. Its root carries
-  // inline position:sticky; top:0; zIndex:30, and the redesign's tab rail is
-  // sticky at --ez-z-rail (20) -- that token's own comment says the rail sits
-  // "below Z.sticky(30)". Dropped in here it would scroll up and cover the rail,
-  // and inline sticky cannot be unset by a parent. These are the same four
-  // controls driving the same `f` state through setF, so behaviour is identical;
-  // RecFilterBar stays untouched for its four other callers.
+  // These four controls are inline rather than the old shared RecFilterBar.
+  // That component's root carried inline position:sticky; top:0; zIndex:30, and
+  // the redesign's rail is sticky at --ez-z-rail (20) -- the token's own comment
+  // says the rail sits "below Z.sticky(30)" -- so dropped into this frame it
+  // scrolled up over the rail, and inline sticky cannot be unset by a parent.
+  // Same `f` state, same setF, same behaviour. It no longer exists in this file;
+  // offer-flow-components.tsx keeps its own copy for the two unconverted tabs.
   const filterBar = (
     <>
       <select style={{ ...T.select, maxWidth:170 }} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
@@ -3983,14 +3933,13 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
               { value:'ctc' as const,    label:`CTC (${ctcCands.length})` },
             ]}
           />
-          {/* SearchBox filters as you type; the old SearchBar needed an Apply
-              click. Same field, same state, sooner. */}
+          {/* SearchBox filters as you type; the old shared SearchBar needed an
+              Apply click. Same field, same state, sooner. */}
           <SearchBox value={negQ} onChange={setNegQ} placeholder="Search candidate…" label="Search candidates" />
-          {/* RecFilterBar is not reused here for the same reason as Pipeline:
-              its root carries inline position:sticky; zIndex:30, which would
-              scroll up over the rail (--ez-z-rail, 20), and inline sticky cannot
-              be unset by a parent. Same four controls, same `f` state, same
-              setF — RecFilterBar itself is untouched for its other callers. */}
+          {/* Inline rather than the old shared RecFilterBar, for the same reason
+              as Pipeline: its root carried inline position:sticky; zIndex:30 and
+              scrolled over the rail (--ez-z-rail, 20); inline sticky cannot be
+              unset by a parent. Same four controls, same `f` state, same setF. */}
           <div className="rx-bar" style={{ gap:8 }}>
             <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.company}
               onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
@@ -4345,10 +4294,10 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
       />}>
       <div className="rx-grid rx-stag">
         <div className="s12 rx-bar" style={{ gap:10 }}>
-          {/* SearchBox filters as you type; SearchBar needed an Apply click. */}
+          {/* SearchBox filters as you type; the old SearchBar needed Apply. */}
           <SearchBox value={oaQ} onChange={setOaQ} placeholder="Search candidate…" label="Search candidates" />
-          {/* RecFilterBar is not reused inside this frame: its root carries
-              inline position:sticky; zIndex:30 and would scroll over the rail
+          {/* Inline rather than the old shared RecFilterBar, whose root
+              carried position:sticky; zIndex:30 and scrolled over the rail
               (--ez-z-rail, 20); inline sticky cannot be unset by a parent. Same
               four controls, same `f` state, same setF. */}
           <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
@@ -4520,9 +4469,9 @@ HR Team`
         <div className="s4" style={{ display:'flex', flexDirection:'column', gap:12 }}>
           <div className="rx-label">Shortlisted / offer stage ({shownOffered.length})</div>
           <SearchBox value={offQ} onChange={setOffQ} placeholder="Search candidate…" label="Search candidates" />
-          {/* RecFilterBar is not reused inside this frame: inline
-              position:sticky; zIndex:30 on its root would scroll over the rail
-              (--ez-z-rail, 20), and inline sticky cannot be unset by a parent.
+          {/* Inline rather than the old shared RecFilterBar, whose root
+              carried position:sticky; zIndex:30 and scrolled over the rail
+              (--ez-z-rail, 20); inline sticky cannot be unset by a parent.
               Same four controls, same `f` state, same setF. */}
           <div className="rx-bar" style={{ gap:8 }}>
             <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.company}
@@ -4590,7 +4539,7 @@ HR Team`
 }
 
 // ── PRE-ONBOARDING ────────────────────────────────────────────────
-function PreOnboardTab({ supabase, candidates, companies, departments, locations, mrfs, onRefresh, showNotify }:any) {
+function PreOnboardTab({ supabase, candidates, companies, departments, locations, mrfs, onRefresh, showNotify, rail }:any) {
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [links, setLinks] = useState<any[]>([])
   const [busy, setBusy] = useState('')        // candidate_id being processed
@@ -4713,11 +4662,48 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
   const respStyle:Record<string,[string,string]> = { ACCEPTED:[C.positiveTint,C.positive], REVISE:[C.warningTint,C.warning], BACKOUT:[C.criticalTint,C.critical] }
 
   return (
-    <div>
-      <div style={T.section}>Pre-onboarding & Offer Response</div>
-      <SearchBar placeholder="Search candidate…" onApply={setPoQ} width={260} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
-      {shownOnboarding.length===0&&<div style={{ ...T.card, color:C.faint, textAlign:'center' as const, padding:24 }}>{poQ?'No matching candidate':'No offer-sent candidates yet.'}</div>}
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Pre-onboarding"
+        subtitle="Confirm how each candidate responded to their offer, set the joining date, and start their onboarding."
+        help={<Help label="Who appears here">
+          <p>Candidates who have <b>accepted an offer</b>, plus anyone already marked Joined.</p>
+          <p>Set an <b>HR email</b> so the joining reminder can be sent; the badge turns green three days out.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s12 rx-bar" style={{ gap:10 }}>
+          <SearchBox value={poQ} onChange={setPoQ} placeholder="Search candidate…" label="Search candidates" />
+          {/* Inline rather than the old shared RecFilterBar, whose root
+              carried position:sticky; zIndex:30 and scrolled over the rail
+              (--ez-z-rail, 20); inline sticky cannot be unset by a parent.
+              Same four controls, same `f` state, same setF. */}
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
+            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+            <option value="">All companies</option>
+            {companies.map((co:Company)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
+            onChange={e=>setF({ ...f, department:e.target.value })}>
+            <option value="">All departments</option>
+            {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
+            onChange={e=>setF({ ...f, location:e.target.value })}>
+            <option value="">All locations</option>
+            {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
+            onChange={e=>setF({ ...f, position:e.target.value })}>
+            <option value="">All positions</option>
+            {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        {shownOnboarding.length===0&&(
+          <div className="s12 rx-mod" style={{ textAlign:'center' as const, padding:24 }}>
+            <span className="rx-meta">{poQ?'No matching candidate':'No offer-sent candidates yet.'}</span>
+          </div>
+        )}
       {shownOnboarding.map((c:Candidate)=>{
         const row:any = linkByCand.get(c.id)
         const resp = row?.offer_response
@@ -4732,7 +4718,8 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
         // Line comment above the return, NOT a {} container after it — see the
         // same note in PipelineTab. Third time I made that mistake today.
         return (
-          <div key={c.id} style={{ ...T.card, border:`1px solid ${resp?fg:C.line}` }}>
+          <div key={c.id} className="s12 rx-card"
+            style={{ borderColor: resp ? fg : undefined }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
               <div>
                 <div style={{ fontSize:14, fontWeight:600, color:C.ink }}>{c.full_name}</div>
@@ -4797,6 +4784,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
           </div>
         )
       })}
-    </div>
+      </div>
+    </RxPage>
   )
 }

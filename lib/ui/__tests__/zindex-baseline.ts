@@ -39,7 +39,7 @@ export const ZINDEX_BASELINE: Record<string, number> = {
   'app/dashboard/org-chart/page.tsx': 1,
   'app/dashboard/payroll/page.tsx': 4,
   'app/dashboard/policies/page.tsx': 2,
-  'app/dashboard/recruitment/page.tsx': 13,
+  'app/dashboard/recruitment/page.tsx': 12,
   'app/dashboard/reports/page.tsx': 1,
   'app/dashboard/roles/page.tsx': 3,
   'app/dashboard/statutory-leave/page.tsx': 4,
