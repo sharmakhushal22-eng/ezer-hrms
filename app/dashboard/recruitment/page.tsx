@@ -369,7 +369,7 @@ export default function RecruitmentPage() {
   // own header, rail and page frame; the rest keep the old chrome untouched.
   // Grows by one entry per phase until every tab is in, then the old header,
   // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'offerapproval', 'offers', 'preonboarding', 'jobstatus'])
+  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'offerapproval', 'offers', 'preonboarding', 'hrhead', 'jobstatus'])
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -512,10 +512,14 @@ export default function RecruitmentPage() {
             deletes or emails a real candidate (sendAcceptance posts to
             send-letter), so the frame changed and the handlers did not. */}
         {tab==='preonboarding' && <PreOnboardTab {...props} rail={rail} />}
+        {/* HR Head lives in offer-flow-components.tsx, which has its own style
+            objects and its own RecFilterBar/SearchBar. Only this component was
+            converted; CreateOfferApproval and AuditTrailViewer in that file are
+            untouched, since the Offer Approval tab renders both. */}
+        {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} rail={rail} />}
         </>
       ) : (
         <div style={{ padding:'18px 24px', maxWidth:1300 }}>
-          {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
           {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
         </div>
       )}

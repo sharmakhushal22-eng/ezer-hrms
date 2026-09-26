@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   C as TK, F as TF, W, R, E, S as SP, tone, eyebrow, numeric, inputStyle,
 } from '@/lib/ui'
+import { RxPage, RecruitmentHeader, SearchBox, Segmented, Help } from '@/components/recruitment/rx'
 
 // ── STYLES ───────────────────────────────────────────────────────
 // Bound to the design system. This file owns the name S, so the tokens are
@@ -386,7 +387,7 @@ function SearchBar({ placeholder, onApply, width=320 }:{ placeholder:string; onA
 
 // HR HEAD: APPROVAL DASHBOARD
 // ═══════════════════════════════════════════════════════════════
-export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup }: any = {}) {
+export function HRHeadApprovalDashboard({ companies, departments, locations, mrfs:mrfLookup, rail }: any = {}) {
   const supabase = createClient()
   const [f, setF] = useState(FILTER_EMPTY)
   const [requests, setRequests] = useState<any[]>([])
@@ -501,10 +502,45 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
   const fRequests = requests.filter((r:any)=>(!ql || (r.candidates?.full_name||'').toLowerCase().includes(ql)) && recordMatchesFilters({ company_id:r.company_id, mrf_id:r.mrf_id, position:r.candidates?.designation }, mrfLookup, f))
 
   return (
-    <div style={{ maxWidth:1100, margin:'0 auto', padding:16 }}>
-      <div style={{ fontSize:16, fontWeight:600, marginBottom:4 }}>HR Head — Approvals</div>
-      <SearchBar placeholder="Search by candidate / job role — filters all sections below…" onApply={setHq} width={420} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={positionOpts} f={f} setF={setF} />
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="HR Head approvals"
+        subtitle="Sign off new requisitions, decide on offers that recruiters have escalated, and re-enter rejected candidates."
+        help={<Help label="What lands here">
+          <p><b>MRF approvals</b> are requisitions waiting on your sign-off before hiring can start.</p>
+          <p><b>Offer approvals</b> arrive from the Offer Approval tab once a candidate has accepted their salary.</p>
+          <p><b>Rehire</b> puts a previously rejected candidate back into the pipeline at a stage you choose.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s12 rx-bar" style={{ gap:10 }}>
+          <SearchBox value={hq} onChange={setHq} placeholder="Search candidate or job role…" label="Search approvals" />
+          {/* Inline rather than this file's own RecFilterBar, whose root carries
+              position:sticky; zIndex:30 and would scroll over the rail
+              (--ez-z-rail, 20); inline sticky cannot be unset by a parent. Same
+              `f` state, same setF. That component stays for Send Offers. */}
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
+            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+            <option value="">All companies</option>
+            {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
+            onChange={e=>setF({ ...f, department:e.target.value })}>
+            <option value="">All departments</option>
+            {(departments||[]).filter((d:any)=>!f.company||d.company_id===f.company).map((d:any)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
+            onChange={e=>setF({ ...f, location:e.target.value })}>
+            <option value="">All locations</option>
+            {(locations||[]).filter((l:any)=>!f.company||l.company_id===f.company).map((l:any)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
+            onChange={e=>setF({ ...f, position:e.target.value })}>
+            <option value="">All positions</option>
+            {positionOpts.map((p:string)=><option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="s12">
 
       {/* MRF Approvals — HR Head approves new manpower requisitions here */}
       <div style={{ marginBottom:22 }}>
@@ -553,13 +589,11 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
       </div>
 
       <div style={{ fontSize:13, fontWeight:600, color:TK.brandDeep, margin:'4px 0 8px' }}>Offer Approvals</div>
-      <div style={{ display:'flex', gap:8, marginBottom:16 }}>
-        {(['pending','done'] as const).map(t => (
-          <button key={t} onClick={()=>{setTab(t);setSelected(null)}}
-            style={{ ...S.btn(tab===t?TK.brand: TK.surface, tab===t?TK.surface:TK.muted), border: tab===t?'none':'1px solid #DDD6FE' }}>
-            {t === 'pending' ? 'Pending Approval' : 'Approved'}
-          </button>
-        ))}
+      <div style={{ marginBottom:16 }}>
+        <Segmented label="Offer approvals" value={tab}
+          onChange={(v:'pending'|'done')=>{ setTab(v); setSelected(null) }}
+          options={[{ value:'pending' as const, label:`Pending (${fRequests.length})` },
+                    { value:'done' as const,    label:'Approved' }]} />
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, alignItems:'start' }}>
@@ -575,7 +609,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
             const [bg, c] = statusColor(r.status)
             return (
               <div key={r.id} onClick={()=>setSelected(r)}
-                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?'2px solid #2563EB':'1px solid var(--ez-line)', background:selected?.id===r.id?TK.brandTint: TK.surface }}>
+                style={{ ...S.card, cursor:'pointer', border:selected?.id===r.id?`2px solid ${TK.brand}`:`1px solid ${TK.line}`, background:selected?.id===r.id?TK.brandTint: TK.surface }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
                   <div>
                     <div style={{ fontSize:14, fontWeight:600 }}>{r.candidates?.full_name}</div>
@@ -634,9 +668,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               <div style={S.cardP}>
                 <div style={S.sec}>Your Decision</div>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:12 }}>
-                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?TK.positiveTint:TK.sunken, action==='approve'?TK.positive:TK.muted), border:action==='approve'?'2px solid #059669':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Approve
+                  <button onClick={()=>setAction('approve')} style={{ ...S.btn(action==='approve'?TK.positiveTint:TK.sunken, action==='approve'?TK.positive:TK.muted), border:action==='approve'?`2px solid ${TK.positive}`:`1px solid ${TK.line}`, padding:12, fontSize:13 }}>Approve
                   </button>
-                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?TK.criticalTint:TK.sunken, action==='reject'?TK.critical:TK.muted), border:action==='reject'?'2px solid #DC2626':'1px solid #E5E7EB', padding:12, fontSize:13 }}>Reject
+                  <button onClick={()=>setAction('reject')} style={{ ...S.btn(action==='reject'?TK.criticalTint:TK.sunken, action==='reject'?TK.critical:TK.muted), border:action==='reject'?`2px solid ${TK.critical}`:`1px solid ${TK.line}`, padding:12, fontSize:13 }}>Reject
                   </button>
                 </div>
                 <div style={{ marginBottom:12 }}>
@@ -667,7 +701,9 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
           </div>
         )}
       </div>
-    </div>
+        </div>
+      </div>
+    </RxPage>
   )
 }
 

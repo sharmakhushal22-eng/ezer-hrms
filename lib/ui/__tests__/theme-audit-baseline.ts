@@ -42,7 +42,13 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'app/dashboard/onboarding/page.tsx': 7,
   'app/dashboard/org-chart/page.tsx': 14,
   'app/dashboard/page.tsx': 2,
-  'app/dashboard/recruitment/offer-flow-components.tsx': 6,
+  // 6 → 2. HRHeadApprovalDashboard converted onto the redesign frame: the
+  // sub-tab pill border, the selected-request border and the approve/reject
+  // toggle edges were frozen light-mode literals (#DDD6FE, #2563EB, #059669,
+  // #DC2626, #E5E7EB) that could not follow dark mode. The two left are
+  // #2563EB in HRManagerSendOffer (step 11) and #F3F0FF in AuditTrailViewer,
+  // which is not a tab.
+  'app/dashboard/recruitment/offer-flow-components.tsx': 2,
   // 18 → 0. Converted while restyling Recruitment onto the design system: the
   // tab-pill borders, the PersonSearchSelect dropdown (which rendered
   // white-on-white in dark mode, ink and hover included), and the
