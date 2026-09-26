@@ -51,7 +51,7 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   // 2 → 1. HRManagerSendOffer converted: its selected-request border was a
   // frozen #2563EB. The one left is #F3F0FF in AuditTrailViewer, which is not a
   // tab and was out of scope for the eleven-tab redesign.
-  'app/dashboard/recruitment/offer-flow-components.tsx': 1,
+  'app/dashboard/recruitment/offer-flow-components.tsx': 0,
   // 18 → 0. Converted while restyling Recruitment onto the design system: the
   // tab-pill borders, the PersonSearchSelect dropdown (which rendered
   // white-on-white in dark mode, ink and hover included), and the
@@ -100,7 +100,7 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/profile/ProfileShell.tsx': 4,
   'components/recruitment/CandidateInterviewModal.tsx': 0,
   'components/recruitment/InterviewFeedbackForm.tsx': 0,
-  'components/recruitment/InterviewPipeline.tsx': 1,
+  'components/recruitment/InterviewPipeline.tsx': 0,
   'components/rms/EmployeeOrgFlow.tsx': 4,
   'components/wall/Badge.tsx': 6,
 };

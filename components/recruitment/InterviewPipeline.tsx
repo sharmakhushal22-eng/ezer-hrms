@@ -44,7 +44,10 @@ const C = {
   card:  { background: TK.surface, borderRadius: 10, border: '1px solid var(--ez-line)', padding: '14px 16px', marginBottom: 10, boxShadow: 'var(--ez-shadow-flat)' } as React.CSSProperties,
   btnP:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.brand, color: TK.onAccent } as React.CSSProperties,
   btnG:  { padding: '8px 18px', borderRadius: 7, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', background: TK.positive, color: TK.onAccent } as React.CSSProperties,
-  btnO:  { padding: '7px 14px', borderRadius: 7, border: '1px solid rgba(37,99,235,0.2)', cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: TK.brand } as React.CSSProperties,
+  // brandEdge, not rgba(37,99,235,…): that literal IS #2563EB, the LIGHT-mode
+  // brand frozen in place. In dark the brand lightens to #60A5FA while this
+  // border stayed dark blue. The ratchet never flagged it — rgba is not hex.
+  btnO:  { padding: '7px 14px', borderRadius: 7, border: `1px solid ${TK.brandEdge}`, cursor: 'pointer', fontSize: 12, fontWeight: 500, fontFamily: 'inherit', background: TK.surface, color: TK.brand } as React.CSSProperties,
   inp:   { width: '100%', padding: '9px 11px', background: TK.sunken, border: '1px solid var(--ez-line)', borderRadius: 7, color: TK.ink, fontSize: 13, outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' as const },
   lbl:   { fontSize: 11, fontWeight: 600, color: TK.brandDeep, textTransform: 'uppercase' as const, letterSpacing: '.05em', display: 'block', marginBottom: 4 },
   g2:    { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 } as React.CSSProperties,
@@ -165,7 +168,9 @@ function RoundNode({ round, isLast }: { round: Round; isLast: boolean }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0 }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-        <div style={{ width: 30, height: 30, borderRadius: '50%', background: done || rejected ? dot: TK.surface, border: `2px solid ${dot}`, color: done || rejected ? '#fff' : dot, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>
+        {/* onAccent, not '#fff': this text sits ON the filled dot, and every
+            accent lightens in dark, where white falls to about 2.5:1. */}
+        <div style={{ width: 30, height: 30, borderRadius: '50%', background: done || rejected ? dot: TK.surface, border: `2px solid ${dot}`, color: done || rejected ? TK.onAccent : dot, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700 }}>
           {cfg.badge}
         </div>
         <div style={{ fontSize: 9, color: TK.muted, whiteSpace: 'nowrap', maxWidth: 80, overflow: 'hidden', textOverflow: 'ellipsis' }}>{round.round_type.replace(' Interview', '').replace(' Round', '')}</div>
@@ -322,7 +327,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
         <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 14 }}>
           {defs.map((d, i) => (
             <button key={d.id} onClick={() => setTab(i)} style={{
-              padding: '6px 11px', borderRadius: 7, border: `1px solid ${i === tab ? cfg.color : 'rgba(37,99,235,0.15)'}`,
+              padding: '6px 11px', borderRadius: 7, border: `1px solid ${i === tab ? cfg.color : TK.brandEdge}`,
               background: i === tab ? cfg.color : TK.onAccent, color: i === tab ? TK.surface : TK.muted,
               fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
             }}>
@@ -338,7 +343,7 @@ function AssessmentForm({ round, prevRounds, onCancel, onSubmit }: {
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '10px 0' }}>
             {def.tags.map(tg => (
               <button key={tg} onClick={() => setParam(tab, { text: clampWords((cur.text ? cur.text + ' ' : '') + tg, 100) })}
-                style={{ padding: '3px 9px', borderRadius: 99, border: '1px solid rgba(37,99,235,0.2)', background: TK.sunken, color: TK.brandDeep, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
+                style={{ padding: '3px 9px', borderRadius: 99, border: `1px solid ${TK.brandEdge}`, background: TK.sunken, color: TK.brandDeep, fontSize: 11, cursor: 'pointer', fontFamily: 'inherit' }}>
                 + {tg}
               </button>
             ))}

@@ -933,7 +933,7 @@ export function AuditTrailViewer({ candidateId }: { candidateId: string }) {
       {logs.map((log, i) => {
         const [icon, label] = actionLabel[log.action_type] || ['', log.action_type]
         return (
-          <div key={log.id} style={{ display:'flex', gap:10, paddingBottom:12, borderBottom: i<logs.length-1 ? '1px solid #F3F0FF' : 'none', marginBottom:i<logs.length-1?12:0 }}>
+          <div key={log.id} style={{ display:'flex', gap:10, paddingBottom:12, borderBottom: i<logs.length-1 ? `1px solid ${TK.line}` : 'none', marginBottom:i<logs.length-1?12:0 }}>
             <div style={{ width:28, height:28, borderRadius:99, background:TK.brandTint, display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, flexShrink:0 }}>{icon}</div>
             <div>
               <div style={{ fontSize:12, fontWeight:500, color:TK.ink }}>{label}</div>
