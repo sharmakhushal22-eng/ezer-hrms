@@ -410,7 +410,7 @@ export default function RecruitmentPage() {
   // own header, rail and page frame; the rest keep the old chrome untouched.
   // Grows by one entry per phase until every tab is in, then the old header,
   // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'offerapproval', 'jobstatus'])
+  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'offerapproval', 'offers', 'jobstatus'])
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -545,12 +545,15 @@ export default function RecruitmentPage() {
             return for the selected candidate. Both are wrapped, or the screen
             loses its chrome the moment a request is created. */}
         {tab==='offerapproval' && <OfferApprovalTab {...props} rail={rail} />}
+        {/* Offers: the letter body and the Send flow are deliberately not
+            restyled -- that text reaches a real candidate. Only the frame,
+            the list and the panel container change. */}
+        {tab==='offers' && <OffersTab {...props} rail={rail} />}
         </>
       ) : (
         <div style={{ padding:'18px 24px', maxWidth:1300 }}>
           {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
           {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
-          {tab==='offers' && <OffersTab {...props} />}
           {tab==='preonboarding' && <PreOnboardTab {...props} />}
         </div>
       )}
@@ -4404,7 +4407,7 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
   )
 }
 
-function OffersTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify }:any) {
+function OffersTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, rail }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [letter, setLetter] = useState('')
@@ -4504,13 +4507,49 @@ HR Team`
   }
 
   return (
-    <div style={T.g2}>
-      <div>
-        <div style={{ fontSize:13, fontWeight:600, color:C.ink, marginBottom:10 }}>Shortlisted / Offer Stage ({shownOffered.length})</div>
-        <SearchBar placeholder="Search candidate…" onApply={setOffQ} width={240} />
-        <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Offer letters"
+        subtitle="Draft and send the letter once HR Head has approved the offer, then record how the candidate replied."
+        help={<Help label="Who appears here">
+          <p>A candidate reaches this list only after <b>HR Head approval</b>, or once an offer has already been sent. There is no bypass.</p>
+          <p>Picking someone builds their letter from the saved CTC negotiation. Nothing is sent until you press Send.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s4" style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <div className="rx-label">Shortlisted / offer stage ({shownOffered.length})</div>
+          <SearchBox value={offQ} onChange={setOffQ} placeholder="Search candidate…" label="Search candidates" />
+          {/* RecFilterBar is not reused inside this frame: inline
+              position:sticky; zIndex:30 on its root would scroll over the rail
+              (--ez-z-rail, 20), and inline sticky cannot be unset by a parent.
+              Same four controls, same `f` state, same setF. */}
+          <div className="rx-bar" style={{ gap:8 }}>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.company}
+              onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+              <option value="">All companies</option>
+              {companies.map((co:Company)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+            </select>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.department}
+              onChange={e=>setF({ ...f, department:e.target.value })}>
+              <option value="">All departments</option>
+              {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+            </select>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.location}
+              onChange={e=>setF({ ...f, location:e.target.value })}>
+              <option value="">All locations</option>
+              {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+            </select>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.position}
+              onChange={e=>setF({ ...f, position:e.target.value })}>
+              <option value="">All positions</option>
+              {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
         {shownOffered.map((c:Candidate)=>(
-          <div key={c.id} style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?`2px solid ${C.brand}`:'1px solid var(--ez-line)', background:sel?.id===c.id?C.brandTint: C.surface }}
+          <div key={c.id} className="rx-card" style={{ cursor:'pointer',
+              borderColor: sel?.id===c.id ? 'var(--ez-brand)' : undefined,
+              background:  sel?.id===c.id ? 'var(--ez-brand-tint)' : undefined }}
             onClick={()=>generateLetter(c)}>
             <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
             <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L':' — '}</div>
@@ -4527,12 +4566,16 @@ HR Team`
             )}
           </div>
         ))}
-        {offeredCands.length===0&&<div style={{ ...T.card, color:C.faint, textAlign:'center' as const, padding:24 }}>No candidates</div>}
-      </div>
+        {offeredCands.length===0&&(
+          <div className="rx-mod" style={{ textAlign:'center' as const, padding:24 }}>
+            <span className="rx-meta">No candidates have reached the offer stage yet.</span>
+          </div>
+        )}
+        </div>
       {sel&&letter&&(
-        <div>
-          <div style={T.card}>
-            <div style={T.section}>Offer Letter</div>
+        <div className="s8">
+          <div className="rx-mod">
+            <div className="rx-mod-h"><div className="rx-mod-t">Offer letter</div></div>
             <div style={{ marginBottom:8 }}><label style={T.label}>To Email</label><input style={T.input} value={toEmail} onChange={e=>setToEmail(e.target.value)} /></div>
             <div style={{ marginBottom:8 }}><label style={T.label}>CC (comma separated)</label><input style={T.input} value={cc} onChange={e=>setCc(e.target.value)} placeholder="hr@co.com, md@co.com" /></div>
             <div style={{ marginBottom:10 }}><label style={T.label}>Date of Joining</label><input style={T.input} type="date" value={doj} onChange={e=>setDoj(e.target.value)} /></div>
@@ -4541,7 +4584,8 @@ HR Team`
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </RxPage>
   )
 }
 
