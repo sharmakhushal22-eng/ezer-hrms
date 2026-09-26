@@ -230,17 +230,17 @@ This document is confidential and for internal approval only.`
           This section is confidential — NOT shown to candidate. Only visible in HR approval request.
         </div>
         <div style={{ ...S.g2, marginBottom:10 }}>
-          <div><label style={S.label}>Previous Company Name *</label><input style={S.input} value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></div>
-          <div><label style={S.label}>Previous Company Address</label><input style={S.input} value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Previous Company Name *</label><input className="rx-input" value={prevForm.prev_company_name} onChange={e=>P('prev_company_name',e.target.value)} placeholder="e.g. Amazon India Pvt Ltd" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Previous Company Address</label><input className="rx-input" value={prevForm.prev_company_address} onChange={e=>P('prev_company_address',e.target.value)} placeholder="City, State" /></div>
         </div>
         <div style={{ ...S.g3, marginBottom:10 }}>
-          <div><label style={S.label}>Previous Total CTC (₹) *</label><input style={S.input} type="number" value={prevForm.prev_total_ctc} onChange={e=>P('prev_total_ctc',e.target.value)} placeholder="Annual" /></div>
-          <div><label style={S.label}>Fixed CTC (₹)</label><input style={S.input} type="number" value={prevForm.prev_fixed_ctc} onChange={e=>P('prev_fixed_ctc',e.target.value)} /></div>
-          <div><label style={S.label}>Variable (₹ Annual)</label><input style={S.input} type="number" value={prevForm.prev_variable} onChange={e=>P('prev_variable',e.target.value)} /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Previous Total CTC (₹) *</label><input className="rx-input" type="number" value={prevForm.prev_total_ctc} onChange={e=>P('prev_total_ctc',e.target.value)} placeholder="Annual" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Fixed CTC (₹)</label><input className="rx-input" type="number" value={prevForm.prev_fixed_ctc} onChange={e=>P('prev_fixed_ctc',e.target.value)} /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Variable (₹ Annual)</label><input className="rx-input" type="number" value={prevForm.prev_variable} onChange={e=>P('prev_variable',e.target.value)} /></div>
         </div>
         <div style={{ ...S.g2, marginBottom:10 }}>
-          <div><label style={S.label}>TA / DA (₹ Monthly)</label><input style={S.input} type="number" value={prevForm.prev_ta_da} onChange={e=>P('prev_ta_da',e.target.value)} placeholder="0 if not applicable" /></div>
-          <div><label style={S.label}>Any Additional Payment</label><input style={S.input} value={prevForm.prev_additional} onChange={e=>P('prev_additional',e.target.value)} placeholder="e.g. Car allowance, Retention" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>TA / DA (₹ Monthly)</label><input className="rx-input" type="number" value={prevForm.prev_ta_da} onChange={e=>P('prev_ta_da',e.target.value)} placeholder="0 if not applicable" /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Any Additional Payment</label><input className="rx-input" value={prevForm.prev_additional} onChange={e=>P('prev_additional',e.target.value)} placeholder="e.g. Car allowance, Retention" /></div>
         </div>
       </div>
 
@@ -248,10 +248,10 @@ This document is confidential and for internal approval only.`
       <div style={S.card}>
         <SecLine title="Joining Details" />
         <div style={{ ...S.g3, marginBottom:10 }}>
-          <div><label style={S.label}>Proposed Date of Joining *</label><input style={S.input} type="date" value={joining.proposed_doj} onChange={e=>J('proposed_doj',e.target.value)} /></div>
-          <div><label style={S.label}>Notice Period (Days)</label><input style={S.input} type="number" value={joining.notice_period_days} onChange={e=>J('notice_period_days',e.target.value)} /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Proposed Date of Joining *</label><input className="rx-input" type="date" value={joining.proposed_doj} onChange={e=>J('proposed_doj',e.target.value)} /></div>
+          <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Notice Period (Days)</label><input className="rx-input" type="number" value={joining.notice_period_days} onChange={e=>J('notice_period_days',e.target.value)} /></div>
           <div style={{ display:'flex', flexDirection:'column', justifyContent:'flex-end' }}>
-            <label style={{ ...S.label, marginBottom:8 }}>Notice Period Buyout</label>
+            <label className="rx-label" style={{ marginBottom:8 }}>Notice Period Buyout</label>
             <div style={{ display:'flex', gap:12, alignItems:'center' }}>
               {['Yes','No'].map(opt => (
                 <label key={opt} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:13 }}>
@@ -294,13 +294,13 @@ This document is confidential and for internal approval only.`
       {/* HIRING MANAGER REMARK / ADDITIONAL */}
       <div style={S.card}>
         <SecLine title="Hiring Manager — Remark / Additional (e.g. Target)" />
-        <input style={S.input} value={hiringRemark} onChange={e=>setHiringRemark(e.target.value)} placeholder="e.g. Target for the role, special note for HR Head…" />
+        <input className="rx-input" value={hiringRemark} onChange={e=>setHiringRemark(e.target.value)} placeholder="e.g. Target for the role, special note for HR Head…" />
       </div>
 
       {/* RECRUITER COMMENTS */}
       <div style={S.card}>
         <SecLine title="Recruiter Comments (Optional)" />
-        <textarea style={{ ...S.textarea, minHeight:80 }} value={recruiterComments} onChange={e=>setRecruiterComments(e.target.value)} placeholder="Any additional context for HR Head..." />
+        <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:80 }} value={recruiterComments} onChange={e=>setRecruiterComments(e.target.value)} placeholder="Any additional context for HR Head..." />
       </div>
 
       {/* ACTIONS */}
@@ -864,20 +864,20 @@ ${company} — Human Resources`)
           <div className="s8" style={S.cardP}>
             <div style={{ fontSize:13, fontWeight:500, color:TK.brandDeep, marginBottom:12 }}>Send Offer Letter — {selected.candidates?.full_name}</div>
             <div style={{ marginBottom:8 }}>
-              <label style={S.label}>To *</label>
-              <input style={S.input} value={toEmail} onChange={e=>setToEmail(e.target.value)} />
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>To *</label>
+              <input className="rx-input" value={toEmail} onChange={e=>setToEmail(e.target.value)} />
             </div>
             <div style={{ marginBottom:8 }}>
-              <label style={S.label}>CC (comma separated)</label>
-              <input style={S.input} value={ccEmails} onChange={e=>setCcEmails(e.target.value)} placeholder="hr@company.com, md@company.com" />
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>CC (comma separated)</label>
+              <input className="rx-input" value={ccEmails} onChange={e=>setCcEmails(e.target.value)} placeholder="hr@company.com, md@company.com" />
             </div>
             <div style={{ marginBottom:8 }}>
-              <label style={S.label}>Subject</label>
-              <input style={S.input} value={subject} onChange={e=>setSubject(e.target.value)} />
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Subject</label>
+              <input className="rx-input" value={subject} onChange={e=>setSubject(e.target.value)} />
             </div>
             <div style={{ marginBottom:12 }}>
-              <label style={S.label}>Email Body</label>
-              <textarea style={{ ...S.textarea, minHeight:280 }} value={body} onChange={e=>setBody(e.target.value)} />
+              <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Email Body</label>
+              <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:280 }} value={body} onChange={e=>setBody(e.target.value)} />
             </div>
             <div style={{ background:TK.brandTint, borderRadius:7, padding:'8px 12px', marginBottom:12, fontSize:11, color:TK.brandDeep }}>
               This emails the offer letter to the candidate via Gmail, records it, and marks the candidate <b>Offer Sent</b> in the pipeline.
