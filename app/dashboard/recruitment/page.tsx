@@ -3964,8 +3964,8 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
             )}
             {!autoCompany && (
               <div style={{ marginBottom:12, padding:'8px 12px', background:C.warningTint, border: `1px solid ${C.warningTint}`, borderRadius:10 }}>
-                <label style={T.label}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
-                <select style={T.select} value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
+                <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Company * <span style={{ color:C.warning, fontWeight:400 }}>— not set on this candidate, please choose</span></label>
+                <select className="rx-input" value={companyOverride} onChange={e=>setCompanyOverride(e.target.value)}>
                   <option value="">Select company…</option>
                   {(companies||[]).map((co:any)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
                 </select>
@@ -3973,34 +3973,34 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
             )}
             <SectionLine title="Input" />
             <div style={{ ...T.g3, marginBottom:10 }}>
-              <div><label style={T.label}>Annual CTC (₹) *</label><input style={T.input} type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder="2400000" /></div>
-              <div><label style={T.label}>Variable % (default 10)</label><input style={T.input} type="number" value={form.varPct} onChange={e=>F('varPct',e.target.value)} /></div>
-              <div><label style={T.label}>Employee State (PT)</label>
-                <select style={T.select} value={form.state} onChange={e=>F('state',e.target.value)}>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Annual CTC (₹) *</label><input className="rx-input" type="number" value={form.ctc} onChange={e=>F('ctc',e.target.value)} placeholder="2400000" /></div>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Variable % (default 10)</label><input className="rx-input" type="number" value={form.varPct} onChange={e=>F('varPct',e.target.value)} /></div>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Employee State (PT)</label>
+                <select className="rx-input" value={form.state} onChange={e=>F('state',e.target.value)}>
                   {[['HR','Haryana'],['DL','Delhi'],['KA','Karnataka'],['MH','Maharashtra'],['UP','UP'],['TS','Telangana'],['AP','Andhra Pradesh'],['WB','West Bengal'],['GJ','Gujarat'],['MP','MP'],['TN','Tamil Nadu']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
                 </select>
               </div>
             </div>
             <SectionLine title="One-time Payments" />
             <div style={{ ...T.g2, marginBottom:10 }}>
-              <div><label style={T.label}>Joining Bonus (₹)</label><input style={T.input} type="number" value={form.joining_bonus} onChange={e=>F('joining_bonus',e.target.value)} placeholder="100000" /></div>
-              <div><label style={T.label}>Payment Frequency</label>
-                <select style={T.select} value={form.joining_freq} onChange={e=>F('joining_freq',e.target.value)}>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Joining Bonus (₹)</label><input className="rx-input" type="number" value={form.joining_bonus} onChange={e=>F('joining_bonus',e.target.value)} placeholder="100000" /></div>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Payment Frequency</label>
+                <select className="rx-input" value={form.joining_freq} onChange={e=>F('joining_freq',e.target.value)}>
                   <option>With Salary</option><option>After 3 Months</option><option>After 6 Months</option><option>As per Policy</option>
                 </select>
               </div>
             </div>
             <div style={{ ...T.g2, marginBottom:10 }}>
-              <div><label style={T.label}>Retention Bonus (₹)</label><input style={T.input} type="number" value={form.retention_bonus} onChange={e=>F('retention_bonus',e.target.value)} placeholder="200000" /></div>
-              <div><label style={T.label}>Payment Frequency</label>
-                <select style={T.select} value={form.retention_freq} onChange={e=>F('retention_freq',e.target.value)}>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Retention Bonus (₹)</label><input className="rx-input" type="number" value={form.retention_bonus} onChange={e=>F('retention_bonus',e.target.value)} placeholder="200000" /></div>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>Payment Frequency</label>
+                <select className="rx-input" value={form.retention_freq} onChange={e=>F('retention_freq',e.target.value)}>
                   <option>After 3 Months</option><option>After 6 Months</option><option>After 1 Year</option><option>As per Policy</option>
                 </select>
               </div>
             </div>
             <div style={{ ...T.g2, marginBottom:14 }}>
-              <div><label style={T.label}>ESOP (₹ Grant Value)</label><input style={T.input} type="number" value={form.esop} onChange={e=>F('esop',e.target.value)} placeholder="2000000" /></div>
-              <div><label style={T.label}>ESOP Plan / Vesting</label><input style={T.input} value={form.esop_plan} onChange={e=>F('esop_plan',e.target.value)} placeholder="4 yr vesting, 1 yr cliff" /></div>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>ESOP (₹ Grant Value)</label><input className="rx-input" type="number" value={form.esop} onChange={e=>F('esop',e.target.value)} placeholder="2000000" /></div>
+              <div><label className="rx-label" style={{ display:'block', marginBottom:6 }}>ESOP Plan / Vesting</label><input className="rx-input" value={form.esop_plan} onChange={e=>F('esop_plan',e.target.value)} placeholder="4 yr vesting, 1 yr cliff" /></div>
             </div>
             <button onClick={calculate} style={{ ...T.btnPrimary, width:'100%', padding:'10px', fontSize:13 }}>Calculate CTC Structure →</button>
           </div>
@@ -4130,7 +4130,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
                 <div style={{ marginTop:12, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius:10, padding:'12px 14px' }}>
                   <div style={{ fontSize:11, fontWeight:600, color: C.brand, marginBottom:6 }}>CANDIDATE SALARY LINK</div>
                   <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-                    <input readOnly value={savedLink} onFocus={e=>e.target.select()} style={{ ...T.input, fontSize:11, fontFamily:'monospace' }} />
+                    <input readOnly value={savedLink} onFocus={e=>e.target.select()} className="rx-input" style={{ fontSize:11, fontFamily:'monospace' }} />
                     <button onClick={()=>{ navigator.clipboard?.writeText(savedLink); showNotify('Link copied!') }} style={{ ...T.btn, background:C.brand, color:C.onAccent, whiteSpace:'nowrap' as const }}>Copy</button>
                     <a href={savedLink} target="_blank" rel="noopener noreferrer" style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, textDecoration:'none', whiteSpace:'nowrap' as const }}>Open ↗</a>
                   </div>
