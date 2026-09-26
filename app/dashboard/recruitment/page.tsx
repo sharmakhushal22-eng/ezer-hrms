@@ -410,7 +410,7 @@ export default function RecruitmentPage() {
   // own header, rail and page frame; the rest keep the old chrome untouched.
   // Grows by one entry per phase until every tab is in, then the old header,
   // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'jobstatus'])
+  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'offerapproval', 'jobstatus'])
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -541,10 +541,13 @@ export default function RecruitmentPage() {
             risks real numbers for cosmetic gain. Only the frame, the list and
             the panel containers change. */}
         {tab==='negotiation' && <NegotiationTab {...props} rail={rail} />}
+        {/* Offer Approval has TWO component returns -- the list, and an early
+            return for the selected candidate. Both are wrapped, or the screen
+            loses its chrome the moment a request is created. */}
+        {tab==='offerapproval' && <OfferApprovalTab {...props} rail={rail} />}
         </>
       ) : (
         <div style={{ padding:'18px 24px', maxWidth:1300 }}>
-          {tab==='offerapproval' && <OfferApprovalTab {...props} />}
           {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
           {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
           {tab==='offers' && <OffersTab {...props} />}
@@ -4250,7 +4253,7 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
 
 // ── OFFERS TAB ────────────────────────────────────────────────────
 // ── OFFER APPROVAL TAB (Recruiter → HR Head) ──────────────────────
-function OfferApprovalTab({ supabase, companies, departments, locations, candidates, mrfs, onRefresh }:any) {
+function OfferApprovalTab({ supabase, companies, departments, locations, candidates, mrfs, onRefresh, rail }:any) {
   const [sel, setSel] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [neg, setNeg] = useState<any>(null)
@@ -4298,51 +4301,106 @@ function OfferApprovalTab({ supabase, companies, departments, locations, candida
 
   if (sel) {
     return (
-      <div>
-        <button style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, marginBottom:12 }} onClick={()=>{setSel(null);setNeg(null)}}>Back to candidates</button>
-        {loading ? <div style={{ ...T.card, textAlign:'center' as const, color:C.brand }}>Loading negotiation…</div>
-          : neg ? (
-            <>
-              <CreateOfferApproval candidate={sel} negotiation={neg} mrf={mrf} onSubmitted={()=>{ onRefresh?.(); setSel(null); setNeg(null) }} />
-              <div style={{ maxWidth:700, margin:'16px auto 0' }}><AuditTrailViewer candidateId={sel.id} /></div>
-            </>
-          ) : (
-            <div style={{ ...T.card, color:C.warning, background:C.warningTint, border: `1px solid ${C.warningTint}` }}>
-              No CTC negotiation found for <b>{sel.full_name}</b>. Create one in the Negotiation tab first.
-            </div>
-          )}
-      </div>
+      <RxPage rail={rail} header={
+        <RecruitmentHeader
+          title="Offer approval"
+          subtitle="Send an offer to the HR Head for sign-off once the candidate has accepted their salary."
+          help={<Help label="Who appears here">
+            <p>A candidate reaches this list only after <b>accepting</b> the salary link sent from Negotiation.</p>
+            <p>One request per candidate: once sent, the row shows its status instead of the button. A rejected request can be re-created.</p>
+          </Help>}
+          actions={<button type="button" className="rx-btn" onClick={()=>{setSel(null);setNeg(null)}}>Back to candidates</button>}
+        />}>
+        <div className="rx-grid rx-stag">
+          <div className="s12">
+            {loading ? <div className="rx-mod" style={{ textAlign:'center' as const, padding:24 }}><span className="rx-meta">Loading negotiation…</span></div>
+              : neg ? (
+                <>
+                  <CreateOfferApproval candidate={sel} negotiation={neg} mrf={mrf} onSubmitted={()=>{ onRefresh?.(); setSel(null); setNeg(null) }} />
+                  <div style={{ maxWidth:700, margin:'16px auto 0' }}><AuditTrailViewer candidateId={sel.id} /></div>
+                </>
+              ) : (
+                <div className="rx-mod" style={{ borderColor:'var(--ez-warning-edge)' }}>
+                  <span className="rx-meta">No CTC negotiation found for <b>{sel.full_name}</b>. Create one in the Negotiation tab first.</span>
+                </div>
+              )}
+          </div>
+        </div>
+      </RxPage>
     )
   }
 
   return (
-    <div>
-      <div style={{ fontSize:13, color:C.muted, marginBottom:12 }}>Select a candidate to create an offer approval request for HR Head review.</div>
-      <SearchBar placeholder="Search candidate…" onApply={setOaQ} width={240} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
-      {shownEligible.length===0 ? (
-        <div style={{ ...T.card, textAlign:'center' as const, color:C.faint }}>{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</div>
-      ) : shownEligible.map((c:Candidate)=>{
-        const ar = activeReq(c.id)
-        return (
-        <div key={c.id} style={{ ...T.card, display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
-          <div>
-            <div style={{ fontSize:14, fontWeight:600, display:'flex', gap:6, alignItems:'center' }}>{c.full_name}{c.offer_revised&&<Badge text="Revised Offer" />}</div>
-            <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.designation||'—'} · {c.stage}</div>
-          </div>
-          {ar ? (
-            <div style={{ textAlign:'right' as const, flexShrink:0 }}>
-              <div style={{ fontSize:12, fontWeight:600, color: ar.status==='HR_HEAD_REJECTED' ? C.critical : C.positive }}>
-                {STATUS_LABEL[ar.status] || ar.status}
-              </div>
-              {ar.submitted_at && <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>on {new Date(ar.submitted_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>}
-            </div>
-          ) : (
-            <button style={{ ...T.btn, background:C.brand, color:C.onAccent, flexShrink:0 }} onClick={()=>pick(c)}>Create Request →</button>
-          )}
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Offer approval"
+        subtitle="Send an offer to the HR Head for sign-off once the candidate has accepted their salary."
+        help={<Help label="Who appears here">
+          <p>A candidate reaches this list only after <b>accepting</b> the salary link sent from Negotiation.</p>
+          <p>One request per candidate: once sent, the row shows its status instead of the button. A rejected request can be re-created.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s12 rx-bar" style={{ gap:10 }}>
+          {/* SearchBox filters as you type; SearchBar needed an Apply click. */}
+          <SearchBox value={oaQ} onChange={setOaQ} placeholder="Search candidate…" label="Search candidates" />
+          {/* RecFilterBar is not reused inside this frame: its root carries
+              inline position:sticky; zIndex:30 and would scroll over the rail
+              (--ez-z-rail, 20); inline sticky cannot be unset by a parent. Same
+              four controls, same `f` state, same setF. */}
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.company}
+            onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+            <option value="">All companies</option>
+            {companies.map((co:Company)=><option key={co.id} value={co.id}>{co.company_name||co.company_code}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.department}
+            onChange={e=>setF({ ...f, department:e.target.value })}>
+            <option value="">All departments</option>
+            {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.location}
+            onChange={e=>setF({ ...f, location:e.target.value })}>
+            <option value="">All locations</option>
+            {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+          </select>
+          <select className="rx-input" style={{ height:34, fontSize:13, maxWidth:170 }} value={f.position}
+            onChange={e=>setF({ ...f, position:e.target.value })}>
+            <option value="">All positions</option>
+            {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+          </select>
         </div>
-      )})}
-    </div>
+
+        {shownEligible.length===0 ? (
+          <div className="s12 rx-mod" style={{ textAlign:'center' as const, padding:28 }}>
+            <span className="rx-meta">{oaQ?'No matching candidate':'No candidates have accepted their CTC offer yet. They appear here once a candidate Accepts the salary link.'}</span>
+          </div>
+        ) : shownEligible.map((c:Candidate)=>{
+          const ar = activeReq(c.id)
+          return (
+          <div className="s12" key={c.id}>
+            <div className="rx-mod" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12 }}>
+              <div style={{ minWidth:0 }}>
+                <div className="rx-row" style={{ gap:6 }}>
+                  <span className="rx-name">{c.full_name}</span>
+                  {c.offer_revised&&<Badge text="Revised Offer" />}
+                </div>
+                <div className="rx-meta" style={{ marginTop:2 }}>{c.designation||'—'} · {c.stage}</div>
+              </div>
+              {ar ? (
+                <div style={{ textAlign:'right' as const, flexShrink:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color: ar.status==='HR_HEAD_REJECTED' ? C.critical : C.positive }}>
+                    {STATUS_LABEL[ar.status] || ar.status}
+                  </div>
+                  {ar.submitted_at && <div className="rx-meta" style={{ marginTop:2 }}>on {new Date(ar.submitted_at).toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'})}</div>}
+                </div>
+              ) : (
+                <button type="button" className="rx-btn p" style={{ flexShrink:0 }} onClick={()=>pick(c)}>Create request</button>
+              )}
+            </div>
+          </div>
+        )})}
+      </div>
+    </RxPage>
   )
 }
 
