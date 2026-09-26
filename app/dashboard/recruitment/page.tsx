@@ -21,8 +21,8 @@ import {
 // docs/recruitment-redesign/01-WHAT-STAYS-THE-SAME.md for the contract.
 import {
   TabRail, TAB_META, type RailTab,
-  toMrfVM, toCandidateVM, dashboardTodos,
-  DashboardView, MrfListView, RxPage, RecruitmentHeader,
+  toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
+  DashboardView, MrfListView, PipelineView, CandidateCard, RxPage, RecruitmentHeader,
 } from '@/components/recruitment/rx'
 
 /**
@@ -408,7 +408,7 @@ export default function RecruitmentPage() {
   // own header, rail and page frame; the rest keep the old chrome untouched.
   // Grows by one entry per phase until every tab is in, then the old header,
   // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'jobstatus'])
+  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'pipeline', 'jobstatus'])
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -526,11 +526,14 @@ export default function RecruitmentPage() {
             The tab keeps its create/edit form, its detail drawer, its approval
             modal and its delete dialog. */}
         {tab==='mrf' && <MRFTab {...props} rail={rail} />}
+        {/* Pipeline renders PipelineView. No drag-and-drop by design: every
+            stage move still goes through the modal, so moveStage's forward-only
+            rule and the modal's own feedback gate cannot be bypassed. */}
+        {tab==='pipeline' && <PipelineTab {...props} rail={rail} />}
         </>
       ) : (
         <div style={{ padding:'18px 24px', maxWidth:1300 }}>
           {tab==='screening' && <ScreeningTab {...props} />}
-          {tab==='pipeline' && <PipelineTab {...props} />}
           {tab==='negotiation' && <NegotiationTab {...props} />}
           {tab==='offerapproval' && <OfferApprovalTab {...props} />}
           {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
@@ -3099,15 +3102,12 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify }:any)
 }
 
 // ── PIPELINE ──────────────────────────────────────────────────────
-function PipelineTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId }:any) {
+function PipelineTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, employeeId, rail }:any) {
   const [interviewCand, setInterviewCand] = useState<Candidate|null>(null)
   const [f, setF] = useState({ company:'', department:'', position:'', location:'' })
   const [selMRF, setSelMRF] = useState('all')
   const [showAdd, setShowAdd] = useState(false)
   const [selCand, setSelCand] = useState<Candidate|null>(null)
-  const [aiQs, setAiQs] = useState<string[]>([])
-  const [aiQLoading, setAiQLoading] = useState(false)
-  const [aiFbLoading, setAiFbLoading] = useState(false)
   // Full Add-candidate form. Core identity fields map to their own candidates
   // columns; everything else rides along in application_details (migration 121).
   const EMPTY_C = {
@@ -3262,161 +3262,93 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     setSelCand(c=>c?{...c,stage}:null); onRefresh()
   }
 
-  async function saveNotes(id:string, notes:string) {
-    const { error } = await supabase.from('candidates').update({ interview_notes:notes }).eq('id',id)
-    if (error) { showNotify('Save failed','error'); return }
-    showNotify('Notes saved!')
-    onRefresh()
+  const [showRejected, setShowRejected] = useState(false)
+
+  // What this tab can HONESTLY say about a next step. interview_rounds is not
+  // loaded here at all -- the rounds live in interview_invites and
+  // CandidateInterviewModal fetches them per candidate when it opens. So
+  // candidateNextStep(c, []) would print "Schedule the next round" over people
+  // who already have one booked: a NEW claim, and a false one. The cards say
+  // nothing about next steps today, so inventing one would be a regression in
+  // truthfulness, not a restyle. These branches are what the stage alone proves.
+  const nextStepFor = (c:any) => {
+    if (c.stage === 'Joined')      return { text:'Joined', tone:'pos' as const, icon:'check' as const }
+    if (c.stage === 'Offer Sent')  return { text:'Waiting for the candidate to reply', tone:'mute' as const, icon:'clock' as const }
+    if (c.stage === 'Shortlisted') return { text:'Start salary negotiation', tone:'' as const, icon:'coin' as const }
+    return { text:`At ${c.stage}`, tone:'' as const, icon:'flow' as const }
   }
 
-  async function getAIQuestions(c:Candidate) {
-    setAiQLoading(true); setAiQs([])
-    const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
-    try {
-      const res = await fetch('/api/recruitment/interview-ai', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ type:'questions', designation:mrf?.designation||c.designation||'Role', round:c.stage, candidate_summary:`${c.experience_years}yr, ${c.current_company}, ${c.designation}` })
-      })
-      const { result } = await res.json()
-      const parsed = JSON.parse(result.replace(/```json|```/g,'').trim())
-      const qs = parsed.map((q:any)=>q.question||q)
-      setAiQs(qs)
-      await supabase.from('candidates').update({ ai_questions:qs }).eq('id',c.id)
-      onRefresh()
-    } catch { showNotify('Could not generate questions','error') }
-    setAiQLoading(false)
-  }
+  const candVMs = filtered.map((c:Candidate) => toCandidateVM(c as unknown as Record<string, unknown>))
+  const rejectedVMs = baseList.filter((c:Candidate)=>c.stage===REJECTED)
+    .map((c:Candidate) => toCandidateVM(c as unknown as Record<string, unknown>))
 
-  async function getAIFeedback(c:Candidate, notes:string) {
-    if (!notes.trim()) { showNotify('Please write notes first','error'); return }
-    setAiFbLoading(true)
-    const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
-    try {
-      const res = await fetch('/api/recruitment/interview-ai', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({ type:'feedback', designation:mrf?.designation||c.designation||'Role', round:c.stage, existing_notes:notes })
-      })
-      const { result } = await res.json()
-      const newNotes = notes+'\n\n--- AI FEEDBACK ---\n'+result
-      await saveNotes(c.id, newNotes)
-      setSelCand(c2=>c2?{...c2,interview_notes:newNotes}:null)
-    } catch { showNotify('Could not generate feedback','error') }
-    setAiFbLoading(false)
-  }
+  const openingSelect = (
+    <select style={{ ...T.select, width:280 }} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
+      <option value="all">All Openings ({candidates.length} candidates)</option>
+      {approvedMRFs.map((m:MRF)=>(
+        <option key={m.id} value={m.id}>{m.designation||m.position} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
+      ))}
+    </select>
+  )
+
+  // RecFilterBar is deliberately NOT reused inside this frame. Its root carries
+  // inline position:sticky; top:0; zIndex:30, and the redesign's tab rail is
+  // sticky at --ez-z-rail (20) -- that token's own comment says the rail sits
+  // "below Z.sticky(30)". Dropped in here it would scroll up and cover the rail,
+  // and inline sticky cannot be unset by a parent. These are the same four
+  // controls driving the same `f` state through setF, so behaviour is identical;
+  // RecFilterBar stays untouched for its four other callers.
+  const filterBar = (
+    <>
+      <select style={{ ...T.select, maxWidth:170 }} value={f.company} onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+        <option value="">All Companies</option>
+        {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+      </select>
+      <select style={{ ...T.select, maxWidth:170 }} value={f.department} onChange={e=>setF({ ...f, department:e.target.value })}>
+        <option value="">All Departments</option>
+        {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+      </select>
+      <select style={{ ...T.select, maxWidth:170 }} value={f.location} onChange={e=>setF({ ...f, location:e.target.value })}>
+        <option value="">All Locations</option>
+        {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+      </select>
+      <select style={{ ...T.select, maxWidth:170 }} value={f.position} onChange={e=>setF({ ...f, position:e.target.value })}>
+        <option value="">All Positions</option>
+        {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+      </select>
+      {/* Stage filter, minus Rejected. The board already shows every flow stage
+          as its own column, but this still filters the List view. Rejected is
+          excluded because PipelineView drops it unconditionally -- leaving it
+          selectable would hand the view a list it then empties completely. */}
+      <select style={{ ...T.select, maxWidth:170 }} value={stageF} onChange={e=>setStageF(e.target.value)}>
+        <option value="">All stages</option>
+        {STAGES.filter((s:string)=>s!==REJECTED).map((s:string)=>(
+          <option key={s} value={s}>{s} ({baseList.filter((c:Candidate)=>c.stage===s).length})</option>
+        ))}
+      </select>
+    </>
+  )
 
   return (
-    <div>
-      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
-        <select style={{ ...T.select, width:280 }} value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
-          <option value="all">All Openings ({candidates.length} candidates)</option>
-          {approvedMRFs.map((m:MRF)=>(
-            <option key={m.id} value={m.id}>{m.designation||m.position} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
-          ))}
-        </select>
-        <button onClick={()=>{ setCForm({...EMPTY_C, hr_email:myEmail}); setShowAdd(true) }} style={T.btnPrimary}>+ Add Candidate</button>
-      </div>
-      <SearchBar placeholder="Filter pipeline by candidate name…" onApply={setPipeQ} />
-      <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
+    <>
+      <PipelineView
+        rail={rail}
+        candidates={candVMs}
+        stages={STAGES}
+        nextStepFor={nextStepFor}
+        openingSelect={openingSelect}
+        filterBar={filterBar}
+        onOpen={(id:string)=>{ const c = candidates.find((x:Candidate)=>x.id===id); if (c) setSelCand(c) }}
+        onAddCandidate={()=>{ setCForm({...EMPTY_C, hr_email:myEmail}); setShowAdd(true) }}
+        onShowRejected={()=>setShowRejected(true)}
+      />
 
       {approvedMRFs.length===0&&(
-        <div style={{ ...T.card, textAlign:'center' as const, color:C.faint, padding:32 }}>
+        <div style={{ ...T.card, textAlign:'center' as const, color:C.faint, padding:32, margin:'0 24px 18px' }}>
           No approved MRF yet. Approve one in the MRF tab first.
         </div>
       )}
 
-      {/* Stage filter pills */}
-      <div style={{ display:'flex', gap:6, flexWrap:'wrap' as const, marginBottom:14 }}>
-        {/* C.onAccent, not C.surface: surface is a BACKGROUND token, and using
-            it as ink on a brand fill only looked right in light by accident —
-            in dark, surface is near-black and the accent lightens. */}
-        <button onClick={()=>setStageF('')} style={{ ...T.btn, height:32, fontSize:F.tiny, padding:'0 13px', borderRadius:R.pill,
-          background: stageF===''?C.brand: C.surface, color: stageF===''?C.onAccent:C.muted, border:`1px solid ${stageF===''?C.brandDeep:C.line}` }}>
-          All <span style={{ opacity:.8, ...numeric }}>({baseList.length})</span>
-        </button>
-        {STAGES.map(stage=>{
-          const n = baseList.filter((c:Candidate)=>c.stage===stage).length
-          const on = stageF===stage
-          return (
-            <button key={stage} onClick={()=>setStageF(on?'':stage)} style={{ ...T.btn, height:32, fontSize:F.tiny, padding:'0 13px', borderRadius:R.pill,
-              background: on?STAGE_COLOR[stage]:C.sunken, color: on?C.onAccent:STAGE_TEXT[stage],
-              border:`1px solid ${on?STAGE_COLOR[stage]:C.line}` }}>
-              {stage} <span style={{ opacity:.85, ...numeric }}>({n})</span>
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Candidate cards */}
-      {filtered.length===0 ? (
-        <div style={{ ...T.card, textAlign:'center' as const, color:C.faint, padding:36 }}>No candidates match your search / filters.</div>
-      ) : (
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:12 }}>
-          {filtered.map((c:Candidate)=>{
-            const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
-            const tag = c.ai_tag||c.ai_match_tag
-            const tagCol = tag==='STRONG'?C.positive:tag==='PARTIAL'?C.warning:C.critical
-            const initials = c.full_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
-            // ez-lift replaces two hand-written mouse handlers that set a
-            // frozen 'rgba(37,99,235,0.14)' shadow — a hardcoded brand blue
-            // that could not follow the theme and stayed light-mode blue on a
-            // near-black card. The class already does the lift, respects
-            // prefers-reduced-motion, and costs no JS per card.
-            //
-            // NOTE THE COMMENT STYLE. These are // line comments ABOVE the
-            // return. A JSX comment container placed after "return (" is not
-            // a comment at all: that is an EXPRESSION slot, so the container
-            // reads as an object literal sitting beside the element, two
-            // expressions where one belongs, and the whole file stops
-            // parsing. tsc then reports FEWER errors, not more, because it
-            // bails early — which looks like progress and is not. Second
-            // time I have made this exact mistake in this file.
-            return (
-              <div key={c.id} onClick={()=>{setSelCand(c);setAiQs([])}} className="ez-lift"
-                style={{ background:C.surface, borderRadius:R.lg, padding:S.lg, cursor:'pointer', border: `1px solid ${C.line}`, boxShadow:E.flat }}>
-                {/* header */}
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-                  <div style={{ width:40, height:40, borderRadius:'50%', background:C.brandTint, color:C.brand, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:700, flexShrink:0 }}>{initials}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    {/* The offer_revised marker was an EMPTY span at 9px — a
-                        stripped glyph leaving an invisible element, below even
-                        the sizes the audit was counting. It says the word now. */}
-                    <div style={{ fontSize:F.body, fontWeight:W.bold, color:C.ink, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.full_name}{c.offer_revised&&<span style={{ fontSize:F.micro, color:C.warning, fontWeight:W.semi, marginLeft:6 }}>revised</span>}</div>
-                    <div style={{ fontSize:F.micro, color:C.muted, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.designation||mrf?.designation||'—'}</div>
-                  </div>
-                  <span style={{ fontSize:F.micro, fontWeight:W.semi, padding:'3px 10px', borderRadius:R.pill, background:C.sunken, border:`1px solid ${C.line}`, color:STAGE_TEXT[c.stage], whiteSpace:'nowrap', lineHeight:1.45 }}>{c.stage}</span>
-                </div>
-                {/* role / opening */}
-                {mrf && <div style={{ fontSize:F.micro, color:C.brand, fontWeight:W.medium, marginBottom:S.sm }}>{mrf.designation||mrf.position}</div>}
-                {/* detail rows */}
-                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px 10px', fontSize:12, color:C.inkSoft }}>
-                  {/* Labels were C.faint — the quietest ink in the system — on
-                      the four facts a recruiter actually scans this card for. */}
-                  <div><span style={{ color:C.muted }}>Company</span><div style={{ fontWeight:W.semi, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.current_company||'—'}</div></div>
-                  <div><span style={{ color:C.muted }}>Experience</span><div style={{ fontWeight:W.semi, ...numeric }}>{c.experience_years||0} yr</div></div>
-                  <div><span style={{ color:C.muted }}>Expected CTC</span><div style={{ fontWeight:W.semi, color:C.positive, ...numeric }}>{c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—'}</div></div>
-                  <div><span style={{ color:C.muted }}>Notice</span><div style={{ fontWeight:W.semi, ...numeric }}>{c.notice_period?`${c.notice_period}d`:'—'}</div></div>
-                </div>
-                {/* footer chips */}
-                <div style={{ display:'flex', alignItems:'center', gap:6, marginTop:10, flexWrap:'wrap' as const }}>
-                  {/* background was `tagCol+'14'` — an alpha suffix concatenated
-                      onto a token, giving "var(--ez-positive)14", which is not
-                      a colour, so this chip has had NO background at all. Same
-                      bug as the approval-chain borders, written with + instead
-                      of ${}, which is why the first sweep missed it. The tint
-                      tokens are the real thing. The trailing ternary had three
-                      empty branches — more stripped glyphs — and is gone. */}
-                  {c.ai_score!=null&&<span style={{ fontSize:F.micro, fontWeight:W.semi, padding:'3px 9px', borderRadius:R.pill, lineHeight:1.45,
-                    background: tag==='STRONG'?C.positiveTint:tag==='PARTIAL'?C.warningTint:C.criticalTint,
-                    border:`1px solid ${tag==='STRONG'?C.positiveEdge:tag==='PARTIAL'?C.warningEdge:C.criticalEdge}`,
-                    color:tagCol }}>AI {c.ai_score}%</span>}
-                  {c.source&&<span style={{ fontSize:F.micro, color:C.muted, background:C.sunken, border: `1px solid ${C.line}`, borderRadius:R.pill, padding:'3px 9px', lineHeight:1.45 }}>{c.source}</span>}
-                  <span style={{ marginLeft:'auto', fontSize:F.micro, color:C.brand, fontWeight:W.semi }}>View →</span>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
 
       {/* Add Candidate — full form */}
       {showAdd&&(
@@ -3696,89 +3628,33 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
           }} />
         </div>
       )}
-    </div>
-  )
-}
 
-function CandidateDrawer({ candidate:c, mrfs, onClose, onStageChange, onSaveNotes, aiQs, aiQLoading, onGetQuestions, aiFbLoading, onGetFeedback, onOpenInterviews }:any) {
-  const [notes, setNotes] = useState(c.interview_notes||'')
-  const mrf = mrfs.find((m:MRF)=>m.id===c.mrf_id)
-
-  return (
-    <div style={{ position:'fixed', right:0, top:0, bottom:0, width:460, background:C.surface, borderLeft: `1px solid ${C.brandEdge}`, zIndex:200, overflowY:'auto', padding:20, boxShadow:'-4px 0 20px rgba(37,99,235,0.1)' }}>
-      <div style={{ display:'flex', justifyContent:'space-between', marginBottom:16 }}>
-        <div>
-          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' as const }}>
-            <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{c.full_name}</div>
-            <span style={{ fontSize:F.micro, fontWeight:W.semi, padding:'3px 10px', borderRadius:R.pill, background:C.sunken, border:`1px solid ${C.line}`, lineHeight:1.45, color:STAGE_TEXT[c.stage] }}>{c.stage}</span>
+      {/* Rejected candidates. PipelineView filters REJECTED out of the board
+          unconditionally, so they need their own surface -- this keeps them
+          reachable exactly as the old "Rejected" stage pill did. Fixed overlay,
+          the same pattern the add form and the interview modal already use. */}
+      {showRejected && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px' }}
+          onMouseDown={e=>{ if(e.target===e.currentTarget) setShowRejected(false) }}>
+          <div style={{ background:C.surface, borderRadius:16, width:'min(900px, 100%)', boxShadow:'0 24px 70px rgba(0,0,0,0.28)', padding:20 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14 }}>
+              <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>Rejected candidates ({rejectedVMs.length})</div>
+              <button onClick={()=>setShowRejected(false)} style={{ ...T.btnOutline, marginLeft:'auto' }}>Close</button>
+            </div>
+            {rejectedVMs.length===0 ? (
+              <div style={{ textAlign:'center' as const, color:C.faint, padding:28 }}>No rejected candidates.</div>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(260px, 1fr))', gap:12 }}>
+                {rejectedVMs.map((c:any)=>(
+                  <CandidateCard key={c.id} c={c} next={nextStepFor(c)}
+                    onOpen={()=>{ const full = candidates.find((x:Candidate)=>x.id===c.id); if (full) { setShowRejected(false); setSelCand(full) } }} />
+                ))}
+              </div>
+            )}
           </div>
-          <div style={{ fontSize:F.tiny, color:C.muted, marginTop:3 }}>{c.current_company} · {c.experience_years}yr · {c.phone||c.mobile}</div>
-          {c.email&&<div style={{ fontSize:F.micro, color:C.muted, marginTop:1 }}>{c.email}</div>}
-          {mrf&&<div style={{ fontSize:F.micro, color:C.brand, marginTop:3, fontWeight:W.semi }}>{mrf.designation||mrf.position}{c.source?` · Source: ${c.source}`:''}</div>}
         </div>
-        {/* Another contentless button — this one closes the drawer. */}
-        <button onClick={onClose} style={{ ...T.btn, height:32, background:C.brandTint, color:C.brandDeep, border:`1px solid ${C.brandEdge}`, padding:'0 12px', fontSize:F.tiny }}>Close</button>
-      </div>
-
-      {/* Stats */}
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:14 }}>
-        {[['Current CTC',c.current_ctc?`₹${(c.current_ctc/100000).toFixed(1)}L`:'—',C.brand],['Expected CTC',c.expected_ctc?`₹${(c.expected_ctc/100000).toFixed(1)}L`:'—',C.positive],['Notice Period',c.notice_period?c.notice_period+' days':'—',C.warning],['AI Score',c.ai_score?c.ai_score+'%':'—',(c.ai_tag||c.ai_match_tag)==='STRONG'?C.positive:C.warning]].map(([l,v,col])=>(
-          <div key={l as string} style={{ background:C.sunken, borderRadius:7, padding:10, border: `1px solid ${C.brandEdge}` }}>
-            <div style={{ ...eyebrow }}>{l}</div>
-            <div style={{ fontSize:14, fontWeight:600, color:col as string, marginTop:2 }}>{v}</div>
-          </div>
-        ))}
-      </div>
-
-      {/* Stage Move */}
-      <SectionLine title="Stage Move" />
-      <div style={{ display:'flex', flexWrap:'wrap' as const, gap:5, marginBottom:14 }}>
-        {STAGES.map(s=>{
-          const isBack = STAGES.indexOf(s) < STAGES.indexOf(c.stage)
-          return (
-            <button key={s} onClick={()=>{ if(!isBack) onStageChange(c.id,s) }} disabled={isBack}
-              title={isBack?'Pipeline moves forward only — cannot return to an earlier round':''}
-              style={{ ...T.btn, fontSize:F.micro, height:28, padding:'0 10px',
-                background:c.stage===s?STAGE_COLOR[s]:C.sunken,
-                color:c.stage===s?C.onAccent:STAGE_TEXT[s],
-                border:c.stage===s?'none':`1px solid ${C.line}`,
-                opacity:isBack?0.35:1, cursor:isBack?'not-allowed':'pointer',
-                textDecoration:isBack?'line-through':'none' }}>
-              {s}
-            </button>
-          )
-        })}
-      </div>
-
-      {/* Interview Pipeline */}
-      <SectionLine title="Interview Rounds" />
-      <button onClick={()=>onOpenInterviews && onOpenInterviews(c)}
-        style={{ ...T.btnPrimary, width:'100%', marginBottom:14, padding:10, fontSize:13, display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>Manage Interview Rounds →
-      </button>
-
-      {/* AI Questions */}
-      <SectionLine title="Interview Questions" />
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:7 }}>
-        <button onClick={()=>onGetQuestions(c)} disabled={aiQLoading} style={{ ...T.btn, background:C.brandTint, color:C.brandDeep, border: `1px solid ${C.brandEdge}`, fontSize:11 }}>
-          {aiQLoading?'⏳...':'AI Questions Generate'}
-        </button>
-      </div>
-      {(aiQs.length?aiQs:(c.ai_questions||[])).map((q:string,i:number)=>(
-        <div key={i} style={{ background:C.sunken, borderRadius:7, padding:'7px 10px', marginBottom:5, fontSize:11, color:C.ink, border: `1px solid ${C.brandEdge}` }}>
-          <span style={{ color:C.brand, marginRight:5, fontWeight:600 }}>{i+1}.</span>{q}
-        </div>
-      ))}
-
-      {/* Interview Notes & Feedback */}
-      <SectionLine title="Interview Notes & Feedback" />
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:6 }}>
-        <button onClick={()=>onGetFeedback(c,notes)} disabled={aiFbLoading} style={{ ...T.btn, background:C.positiveTint, color:C.positive, border: `1px solid ${C.positiveTint}`, fontSize:11 }}>
-          {aiFbLoading?'⏳...':'AI Feedback Generate'}
-        </button>
-      </div>
-      <textarea style={{ ...T.textarea, minHeight:140 }} value={notes} onChange={e=>setNotes(e.target.value)} placeholder="Write interview notes..." />
-      <button onClick={()=>onSaveNotes(c.id,notes)} style={{ ...T.btnPrimary, marginTop:6 }}>Save Notes</button>
-    </div>
+      )}
+    </>
   )
 }
 
