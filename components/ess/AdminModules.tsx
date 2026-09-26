@@ -30,7 +30,11 @@ const lazy = (load: () => Promise<{ default: ComponentType<Record<string, never>
 /** ESS nav key (lib/rms/nav.ts) → the dashboard page that key opens. */
 export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string, never>>> = {
   // People
-  recruitment:          lazy(() => import('@/app/dashboard/recruitment/page')),
+  // NOT the raw page, unlike every other entry here: the recruitment redesign
+  // lives in a stylesheet that app/dashboard/recruitment/layout.tsx loads, and
+  // a route layout does not run when the page is mounted from inside ESS. The
+  // wrapper loads that sheet and the display font. See RecruitmentModule.tsx.
+  recruitment:          lazy(() => import('@/components/ess/RecruitmentModule')),
   onboarding:           lazy(() => import('@/app/dashboard/onboarding/page')),
   pms:                  lazy(() => import('@/app/dashboard/pms/page')),
   employees:            lazy(() => import('@/app/dashboard/employees/page')),
