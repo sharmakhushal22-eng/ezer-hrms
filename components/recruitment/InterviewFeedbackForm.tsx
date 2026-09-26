@@ -13,13 +13,31 @@
 // numbers are only comparable if everyone answers the same questions.
 
 import { useMemo, useState } from 'react'
+// Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
+import { C as TK, F } from '@/lib/ui'
 
+// ── Palette ──────────────────────────────────────────────────────────────────
+//
+// THESE WERE HEX LITERALS, AND THAT WAS THE BUG — the same one the candidate
+// modal had, one level down. This form renders INSIDE that modal ("View
+// feedback"), so a reader in dark mode went from a correctly themed popup
+// straight into a frozen white one. It was also still the old purple brand.
+//
+// The ratchet scored this file 5 and could not see any of it: it counts hex on
+// colour-bearing PROPERTIES, and these are plain values in a const.
+//
+// `bg` maps to sunken, NOT canvas. Despite the name it is used as a well/track
+// fill sitting ON a card here (the "n of 8 rated" chip, the score bar), which
+// is what sunken is for — canvas would be the page behind the card.
+//
+// NOTE: these are `var(...)` strings. Never concatenate an alpha suffix onto
+// one — `C.dang + '33'` produces nothing. Use the paired edge/tint tokens.
 const C = {
-  navy:'#1E1B4B', purple:'#7C3AED', pdark:'#3C3489', card:'#FFFFFF', bg:'#F5F3FF',
-  line:'#E9E7F5', muted:'#6B6890', faint:'#9C99B8', ok:'#059669', okbg:'#ECFDF5',
-  warn:'#D97706', warnbg:'#FFFBEB', dang:'#DC2626', dangbg:'#FEF2F2', info:'#2563EB', infobg:'#EFF6FF',
+  navy:TK.ink, purple:TK.brand, pdark:TK.brandDeep, card:TK.surface, bg:TK.sunken,
+  line:TK.line, muted:TK.muted, faint:TK.faint, ok:TK.positive, okbg:TK.positiveTint,
+  warn:TK.warning, warnbg:TK.warningTint, dang:TK.critical, dangbg:TK.criticalTint, info:TK.info, infobg:TK.infoTint,
 }
-const font = '"DM Sans","Segoe UI",sans-serif'
+const font = F.family
 
 export const FEEDBACK_PARAMS = [
   { k:'TECH',  n:'Technical / Functional Knowledge',    d:'Depth in the skills this role actually needs' },
@@ -44,13 +62,21 @@ export interface Feedback {
   band: string
 }
 
-export function bandOf(pct: number): [string, string] {
-  if (pct >= 80) return ['Strong Hire', C.ok]
-  if (pct >= 65) return ['Hire', C.info]
-  if (pct >= 50) return ['Borderline', C.warn]
-  return ['No Hire', C.dang]
+// Third element is the TINT, added because the band chip used to fill itself
+// with `bandColor + '18'`. That worked only while bandColor was a hex literal;
+// against a var() it yields `var(--ez-positive)18`, invalid CSS, and the chip
+// loses its background silently. Appending is safe: every caller takes a
+// prefix — CandidateInterviewModal indexes [1], scoreFeedback indexes [0] —
+// but the annotation is a fixed-length tuple, so it has to widen with it.
+export function bandOf(pct: number): [string, string, string] {
+  if (pct >= 80) return ['Strong Hire', C.ok, C.okbg]
+  if (pct >= 65) return ['Hire', C.info, C.infobg]
+  if (pct >= 50) return ['Borderline', C.warn, C.warnbg]
+  return ['No Hire', C.dang, C.dangbg]
 }
 const tone = (v: number) => (v >= 8 ? C.ok : v >= 5 ? C.warn : C.dang)
+// Companion edge for tone(), replacing `tone(v) + '55'` on the card border.
+const toneEdge = (v: number) => (v >= 8 ? TK.positiveEdge : v >= 5 ? TK.warningEdge : TK.criticalEdge)
 
 export function scoreFeedback(params: Record<string, number>) {
   const total = FEEDBACK_PARAMS.reduce((a, p) => a + (params[p.k] || 0), 0)
@@ -78,7 +104,7 @@ export default function InterviewFeedbackForm({
 
   const { total, pct, band } = useMemo(() => scoreFeedback(params), [params])
   const done = FEEDBACK_PARAMS.filter(p => params[p.k]).length
-  const [bandLabel, bandColor] = bandOf(pct)
+  const [bandLabel, bandColor, bandTint] = bandOf(pct)
 
   const set = (k: string, v: number) => !readOnly && setParams(p => ({ ...p, [k]: v }))
   const setRem = (k: string, v: string) => !readOnly && setRemarks(r => ({ ...r, [k]: v }))
@@ -100,7 +126,7 @@ export default function InterviewFeedbackForm({
       <div style={{ minWidth:0 }}>
         {/* candidate strip */}
         <div style={{ display:'flex', gap:12, alignItems:'center', background:C.card, border:`1px solid ${C.line}`, borderRadius:12, padding:12, marginBottom:12 }}>
-          <div style={{ width:40, height:40, borderRadius:11, background:C.purple, color:'#fff', display:'grid', placeItems:'center', fontWeight:800, fontSize:14, flexShrink:0 }}>
+          <div style={{ width:40, height:40, borderRadius:11, background:C.purple, color:TK.onAccent, display:'grid', placeItems:'center', fontWeight:800, fontSize:14, flexShrink:0 }}>
             {candidate.name.split(' ').filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase()}
           </div>
           <div style={{ flex:1, minWidth:0 }}>
@@ -124,9 +150,9 @@ export default function InterviewFeedbackForm({
           {FEEDBACK_PARAMS.map((p, i) => {
             const v = params[p.k]
             return (
-              <div key={p.k} style={{ border:`1px solid ${v?tone(v)+'55':C.line}`, borderRadius:11, padding:13, marginBottom:10, background: v?'#FCFBFF':C.card }}>
+              <div key={p.k} style={{ border:`1px solid ${v?toneEdge(v):C.line}`, borderRadius:11, padding:13, marginBottom:10, background: v?C.bg:C.card }}>
                 <div style={{ display:'flex', gap:10, alignItems:'flex-start' }}>
-                  <div style={{ width:24, height:24, borderRadius:7, background: v?C.ok:C.bg, color: v?'#fff':C.muted, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>{v?'✓':i+1}</div>
+                  <div style={{ width:24, height:24, borderRadius:7, background: v?C.ok:C.bg, color: v?TK.onAccent:C.muted, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>{v?'✓':i+1}</div>
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontWeight:700, fontSize:13 }}>{p.n}</div>
                     <div style={{ fontSize:11, color:C.muted }}>{p.d}</div>
@@ -137,7 +163,7 @@ export default function InterviewFeedbackForm({
                   {Array.from({length:10},(_,n)=>n+1).map(n=>(
                     <button key={n} type="button" disabled={readOnly} onClick={()=>set(p.k,n)}
                       style={{ flex:1, minWidth:28, height:32, borderRadius:7, fontFamily:font, fontSize:12, fontWeight:700, cursor:readOnly?'default':'pointer',
-                        border: v===n?'1px solid transparent':`1px solid ${C.line}`, background: v===n?tone(n):C.card, color: v===n?'#fff':C.muted }}>{n}</button>
+                        border: v===n?'1px solid transparent':`1px solid ${C.line}`, background: v===n?tone(n):C.card, color: v===n?TK.onAccent:C.muted }}>{n}</button>
                   ))}
                 </div>
                 {!readOnly ? (
@@ -174,12 +200,12 @@ export default function InterviewFeedbackForm({
             )}
           </div>
 
-          {err && <div style={{ marginTop:12, fontSize:12.5, color:C.dang, background:C.dangbg, border:`1px solid ${C.dang}33`, borderRadius:8, padding:'9px 12px', fontWeight:600 }}>{err}</div>}
+          {err && <div style={{ marginTop:12, fontSize:12.5, color:C.dang, background:C.dangbg, border:`1px solid ${TK.criticalEdge}`, borderRadius:8, padding:'9px 12px', fontWeight:600 }}>{err}</div>}
 
           {!readOnly && (
             <div style={{ display:'flex', gap:9, marginTop:16, flexWrap:'wrap' }}>
               <button type="button" onClick={submit} disabled={submitting}
-                style={{ padding:'11px 22px', borderRadius:9, border:'none', background:C.purple, color:'#fff', fontFamily:font, fontSize:14, fontWeight:700, cursor:submitting?'default':'pointer', opacity:submitting?.6:1 }}>
+                style={{ padding:'11px 22px', borderRadius:9, border:'none', background:C.purple, color:TK.onAccent, fontFamily:font, fontSize:14, fontWeight:700, cursor:submitting?'default':'pointer', opacity:submitting?.6:1 }}>
                 {submitting?'Submitting…':'Submit feedback'}
               </button>
               {onClose && <button type="button" onClick={onClose} style={{ padding:'11px 18px', borderRadius:9, border:`1px solid ${C.line}`, background:C.card, color:C.navy, fontFamily:font, fontSize:14, fontWeight:700, cursor:'pointer' }}>Cancel</button>}
@@ -194,7 +220,7 @@ export default function InterviewFeedbackForm({
         <div style={{ textAlign:'center', padding:'6px 0 10px' }}>
           <div style={{ fontSize:42, fontWeight:800, lineHeight:1, color: done?bandColor:C.faint }}>{done?total:'—'}</div>
           <div style={{ fontSize:13, color:C.faint, fontWeight:600 }}>out of 80</div>
-          {done>0 && <div style={{ marginTop:9 }}><span style={{ fontSize:11, fontWeight:800, padding:'3px 11px', borderRadius:20, color:bandColor, background:bandColor+'18' }}>{bandLabel}</span></div>}
+          {done>0 && <div style={{ marginTop:9 }}><span style={{ fontSize:11, fontWeight:800, padding:'3px 11px', borderRadius:20, color:bandColor, background:bandTint }}>{bandLabel}</span></div>}
         </div>
         <div style={{ height:8, background:C.bg, borderRadius:5, overflow:'hidden', margin:'8px 0 6px' }}>
           <div style={{ height:'100%', width:`${(total/80)*100}%`, background: done?bandColor:C.faint, borderRadius:5, transition:'width .25s' }} />
