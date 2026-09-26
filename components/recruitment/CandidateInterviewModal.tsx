@@ -18,13 +18,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import InterviewFeedbackForm, { type Feedback, bandOf } from './InterviewFeedbackForm'
+// Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
+import { C as TK, E, F, Z } from '@/lib/ui'
 
+// ── Palette ──────────────────────────────────────────────────────────────────
+//
+// THESE WERE HEX LITERALS, AND THAT WAS THE BUG. Opening this modal with the
+// product in dark mode gave a white card with near-black ink floating on a
+// dark app — measured: page canvas rgb(15,18,22), modal card rgb(255,255,255),
+// ink rgb(30,27,75). They were also the OLD purple brand (#7C3AED, #1E1B4B),
+// which the product stopped using at the rebrand.
+//
+// THE RATCHET NEVER SAW ANY OF THIS. theme-audit counts hex on colour-bearing
+// PROPERTIES; these were plain values in a const, so the scanner scored this
+// file 6 (six `color:'#fff'`) while every surface in it was frozen. Fixing
+// only what the tool counts would have taken it to zero and left the bug.
+//
+// The KEY NAMES are unchanged, so the call sites below did not have to move.
+// NOTE: these are `var(...)` strings now. Never concatenate an alpha suffix
+// onto one — `C.purple + '18'` produces nothing at all. Use a tint token.
 const C = {
-  navy:'#1E1B4B', ink:'#1E1B4B', purple:'#7C3AED', pdark:'#3C3489', brandTint:'#EDE9FE',
-  card:'#FFFFFF', bg:'#F5F3FF', sunken:'#F7F6FD', line:'#E9E7F5', muted:'#6B6890', faint:'#9C99B8',
-  ok:'#059669', okbg:'#ECFDF5', warn:'#D97706', warnbg:'#FFFBEB', info:'#2563EB', infobg:'#EFF6FF', dang:'#DC2626',
+  navy:TK.ink, ink:TK.ink, purple:TK.brand, pdark:TK.brandDeep, brandTint:TK.brandTint,
+  card:TK.surface, bg:TK.canvas, sunken:TK.sunken, line:TK.line, muted:TK.muted, faint:TK.faint,
+  ok:TK.positive, okbg:TK.positiveTint, warn:TK.warning, warnbg:TK.warningTint, info:TK.info, infobg:TK.infoTint, dang:TK.critical,
 }
-const font = '"DM Sans","Segoe UI",sans-serif'
+const font = F.family
 
 // Rounds are dynamic now: Telephonic is the default first round; the hiring manager adds
 // any further rounds (with their own names) via "+ Add round". Rounds already scheduled on
@@ -195,7 +213,7 @@ export default function CandidateInterviewModal({
     <Shell onClose={onClose}>
       {/* header */}
       <div style={{ display:'flex', gap:12, alignItems:'center', marginBottom:14 }}>
-        <div style={{ width:46, height:46, borderRadius:13, background:C.purple, color:'#fff', display:'grid', placeItems:'center', fontWeight:800, fontSize:15, flexShrink:0 }}>{initials}</div>
+        <div style={{ width:46, height:46, borderRadius:13, background:C.purple, color:TK.onAccent, display:'grid', placeItems:'center', fontWeight:800, fontSize:15, flexShrink:0 }}>{initials}</div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
             <div style={{ fontSize:17, fontWeight:800 }}>{candidate.full_name}</div>
@@ -219,27 +237,31 @@ export default function CandidateInterviewModal({
       {/* rounds */}
       <div style={{ display:'flex', alignItems:'center', gap:10, margin:'2px 0 9px' }}>
         <SectionTitle>Interview rounds</SectionTitle>
-        <button onClick={() => { setNewRound(''); setShowAddRound(true) }} style={{ ...btn.small, marginLeft:'auto', background:C.brandTint, color:C.pdark, border:`1px solid ${C.purple}44` }}>+ Add round</button>
+        <button onClick={() => { setNewRound(''); setShowAddRound(true) }} style={{ ...btn.small, marginLeft:'auto', background:C.brandTint, color:C.pdark, border:`1px solid ${TK.brandEdge}` }}>+ Add round</button>
       </div>
       <div style={{ display:'grid', gap:10, marginBottom:18 }}>
         {rounds.map(r => {
           const rows = invitesByRound[r] || []
           const complete = rows.some(i => i.status === 'submitted')
           const scheduled = rows.length > 0
-          const [statLabel, statColor] = complete ? ['Feedback in', C.ok] : scheduled ? ['Scheduled', C.info] : ['Not scheduled', C.faint]
+          // Carries its own tint. The fill used to be `statColor + '18'`, which
+          // worked only because statColor was a hex literal — against a var()
+          // it yields `var(--ez-positive)18`, invalid CSS, and the pill loses
+          // its background silently.
+          const [statLabel, statColor, statBg] = complete ? ['Feedback in', C.ok, C.okbg] : scheduled ? ['Scheduled', C.info, C.infobg] : ['Not scheduled', C.faint, C.sunken]
           const isOpen = openRound === r
           return (
             <div key={r} style={{ border:`1px solid ${isOpen ? C.purple : C.line}`, borderRadius:12, overflow:'hidden' }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, padding:'11px 13px', background: complete ? C.okbg : C.card }}>
-                <div style={{ width:30, height:30, borderRadius:8, background: complete ? C.ok : scheduled ? C.info : C.sunken, color: scheduled || complete ? '#fff' : C.muted, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>{complete ? '✓' : '○'}</div>
+                <div style={{ width:30, height:30, borderRadius:8, background: complete ? C.ok : scheduled ? C.info : C.sunken, color: scheduled || complete ? TK.onAccent : C.muted, display:'grid', placeItems:'center', fontSize:11, fontWeight:800, flexShrink:0 }}>{complete ? '✓' : '○'}</div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:13.5, fontWeight:700 }}>{r}</div>
                   <div style={{ fontSize:11, color:C.muted }}>
                     {scheduled ? `${rows.length} interviewer${rows.length > 1 ? 's' : ''} · ${rows.filter(i => i.status === 'submitted').length} feedback in` : 'No interview scheduled yet'}
                   </div>
                 </div>
-                <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: statColor + '18', color: statColor }}>{statLabel}</span>
-                <button onClick={() => (isOpen ? setOpenRound(null) : openScheduleFor(r))} style={{ ...btn.small, background: isOpen ? C.sunken : C.purple, color: isOpen ? C.ink : '#fff', border: isOpen ? `1px solid ${C.line}` : 'none' }}>
+                <span style={{ fontSize:10, fontWeight:800, padding:'3px 10px', borderRadius:99, background: statBg, color: statColor }}>{statLabel}</span>
+                <button onClick={() => (isOpen ? setOpenRound(null) : openScheduleFor(r))} style={{ ...btn.small, background: isOpen ? C.sunken : C.purple, color: isOpen ? C.ink : TK.onAccent, border: isOpen ? `1px solid ${C.line}` : 'none' }}>
                   {isOpen ? 'Close' : scheduled ? '+ Add interview' : 'Schedule'}
                 </button>
               </div>
@@ -256,7 +278,7 @@ export default function CandidateInterviewModal({
                       {i.status === 'submitted' && i.feedback ? (
                         <>
                           <span style={{ fontSize:10, fontWeight:800, color: bandOf(i.feedback.pct)[1] }}>{i.feedback.total}/80</span>
-                          <button onClick={() => setViewing(i)} style={{ ...btn.small, background:C.info, color:'#fff', border:'none' }}>View feedback</button>
+                          <button onClick={() => setViewing(i)} style={{ ...btn.small, background:C.info, color:TK.onAccent, border:'none' }}>View feedback</button>
                         </>
                       ) : (
                         <span style={{ fontSize:10, fontWeight:700, padding:'3px 9px', borderRadius:99, background:C.sunken, color: i.status === 'acknowledged' ? C.info : C.warn }}>
@@ -284,8 +306,15 @@ export default function CandidateInterviewModal({
                   )}
                   <div style={{ position:'relative' }}>
                     <input value={q} onChange={e => setQ(e.target.value)} placeholder="Type a name or emp code…" style={inp} />
+                    {/* zIndex 5 stays raw: local layering inside this one
+                        dropdown, which the ratchet's own notes call fine. The
+                        Z scale has nothing between raised:1 and sticky:30.
+                        This note sits ABOVE the && expression deliberately.
+                        After && the parenthesis takes exactly one element, so
+                        a JSX comment placed inside it parses as an empty
+                        object literal and breaks the file. */}
                     {searchHits.length > 0 && (
-                      <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:C.card, border:`1px solid ${C.line}`, borderRadius:8, marginTop:3, boxShadow:'0 8px 24px rgba(30,27,75,0.14)', maxHeight:220, overflowY:'auto' }}>
+                      <div style={{ position:'absolute', top:'100%', left:0, right:0, zIndex:5, background:C.card, border:`1px solid ${C.line}`, borderRadius:8, marginTop:3, boxShadow:E.floating, maxHeight:220, overflowY:'auto' }}>
                         {searchHits.map(e => {
                           const on = picked.some(x => x.id === e.id)
                           return (
@@ -333,7 +362,7 @@ export default function CandidateInterviewModal({
               title={isBack ? 'Pipeline moves forward only' : reason ? `Complete the ${reason} round first` : ''}
               style={{ fontFamily:font, fontSize:11, fontWeight:600, padding:'5px 11px', borderRadius:8, cursor: disabled ? 'not-allowed' : 'pointer',
                 background: current ? (stageColor[s] || C.purple) : C.sunken,
-                color: current ? '#fff' : (stageText[s] || C.muted),
+                color: current ? TK.onAccent : (stageText[s] || C.muted),
                 border: current ? 'none' : `1px solid ${C.line}`,
                 opacity: disabled && !current ? .4 : 1, textDecoration: isBack ? 'line-through' : 'none' }}>
               {s}{reason && !isBack && !current ? ' 🔒' : ''}
@@ -346,8 +375,8 @@ export default function CandidateInterviewModal({
       {/* Add-round popup — name the round, then it opens straight into scheduling */}
       {showAddRound && (
         <div onMouseDown={e => { if (e.target === e.currentTarget) setShowAddRound(false) }}
-          style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
-          <div style={{ background:C.card, borderRadius:14, width:'min(420px, 100%)', padding:'18px 20px', boxShadow:'0 24px 70px rgba(30,27,75,0.35)' }}>
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:Z.overlay, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+          <div style={{ background:C.card, borderRadius:14, width:'min(420px, 100%)', padding:'18px 20px', boxShadow:E.overlay }}>
             <div style={{ fontSize:15, fontWeight:800, marginBottom:4 }}>Add an interview round</div>
             <div style={{ fontSize:12, color:C.muted, marginBottom:12 }}>Name the round (e.g. “Technical L1”, “HR Round”, “Panel”). You’ll schedule the interviewers next.</div>
             <label style={lbl}>Round name</label>
@@ -369,7 +398,7 @@ export default function CandidateInterviewModal({
 const lbl: React.CSSProperties = { fontSize:11, fontWeight:700, color:C.muted, marginBottom:4, display:'block' }
 const inp: React.CSSProperties = { width:'100%', padding:'9px 11px', fontFamily:font, fontSize:13, border:`1px solid ${C.line}`, borderRadius:8, outline:'none', color:C.ink, background:C.card, boxSizing:'border-box' }
 const btn = {
-  pri: { padding:'9px 18px', borderRadius:9, border:'none', background:C.purple, color:'#fff', fontFamily:font, fontSize:13, fontWeight:700, cursor:'pointer' } as React.CSSProperties,
+  pri: { padding:'9px 18px', borderRadius:9, border:'none', background:C.purple, color:TK.onAccent, fontFamily:font, fontSize:13, fontWeight:700, cursor:'pointer' } as React.CSSProperties,
   ghost: { padding:'7px 13px', borderRadius:8, border:`1px solid ${C.line}`, background:C.card, color:C.ink, fontFamily:font, fontSize:12.5, fontWeight:600, cursor:'pointer' } as React.CSSProperties,
   small: { padding:'6px 12px', borderRadius:8, fontFamily:font, fontSize:11.5, fontWeight:700, cursor:'pointer' } as React.CSSProperties,
 }
@@ -379,8 +408,8 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 function Shell({ children, onClose, wide }: { children: React.ReactNode; onClose: () => void; wide?: boolean }) {
   return (
     <div onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:200, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px', fontFamily:font, color:C.ink }}>
-      <div style={{ background:C.card, borderRadius:16, width: wide ? 'min(1000px, 100%)' : 'min(720px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.3)', padding:'18px 20px', margin:'0 auto' }}>
+      style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:Z.drawer, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'24px 16px', fontFamily:font, color:C.ink }}>
+      <div style={{ background:C.card, borderRadius:16, width: wide ? 'min(1000px, 100%)' : 'min(720px, 100%)', boxShadow:E.overlay, padding:'18px 20px', margin:'0 auto' }}>
         {children}
       </div>
     </div>

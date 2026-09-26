@@ -98,7 +98,7 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'components/profile/IdCard.tsx': 2,
   'components/profile/PhotoUploader.tsx': 1,
   'components/profile/ProfileShell.tsx': 4,
-  'components/recruitment/CandidateInterviewModal.tsx': 6,
+  'components/recruitment/CandidateInterviewModal.tsx': 0,
   'components/recruitment/InterviewFeedbackForm.tsx': 5,
   'components/recruitment/InterviewPipeline.tsx': 1,
   'components/rms/EmployeeOrgFlow.tsx': 4,

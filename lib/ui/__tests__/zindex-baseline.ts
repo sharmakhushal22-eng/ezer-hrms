@@ -80,7 +80,7 @@ export const ZINDEX_BASELINE: Record<string, number> = {
   'components/pms/CycleStepper.tsx': 3,
   'components/pms/pms.css': 2,
   'components/profile/profile.css': 2,
-  'components/recruitment/CandidateInterviewModal.tsx': 3,
+  'components/recruitment/CandidateInterviewModal.tsx': 1,
   'components/wall/PersonPicker.tsx': 1,
   'components/wall/ui.tsx': 2,
   'lib/ui/EyeComfort.tsx': 1,
