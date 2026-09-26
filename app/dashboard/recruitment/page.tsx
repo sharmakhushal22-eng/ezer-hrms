@@ -23,6 +23,7 @@ import {
   TabRail, TAB_META, type RailTab,
   toMrfVM, toCandidateVM, dashboardTodos, REJECTED,
   DashboardView, MrfListView, PipelineView, CandidateCard, ScreeningResultCard, RxPage, RecruitmentHeader,
+  Segmented, SearchBox, Help,
   type ScreenResult,
 } from '@/components/recruitment/rx'
 
@@ -409,7 +410,7 @@ export default function RecruitmentPage() {
   // own header, rail and page frame; the rest keep the old chrome untouched.
   // Grows by one entry per phase until every tab is in, then the old header,
   // tab bar and width wrapper come out for good.
-  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'jobstatus'])
+  const RX_TABS = new Set<typeof tab>(['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation', 'jobstatus'])
 
   if (loading) return (
     <div style={{ ...T.page, display:'flex', alignItems:'center', justifyContent:'center', height:'100vh' }}>
@@ -535,10 +536,14 @@ export default function RecruitmentPage() {
             The tab keeps its upload flow and handlers; only the result rows
             move to ScreeningResultCard, with the API's field names mapped. */}
         {tab==='screening' && <ScreeningTab {...props} rail={rail} />}
+        {/* Negotiation is a WRAP. The payroll calculator's table and maths are
+            untouched on purpose: restyling statutory EPF/ESIC/PT presentation
+            risks real numbers for cosmetic gain. Only the frame, the list and
+            the panel containers change. */}
+        {tab==='negotiation' && <NegotiationTab {...props} rail={rail} />}
         </>
       ) : (
         <div style={{ padding:'18px 24px', maxWidth:1300 }}>
-          {tab==='negotiation' && <NegotiationTab {...props} />}
           {tab==='offerapproval' && <OfferApprovalTab {...props} />}
           {tab==='hrhead' && isHrHead && <HRHeadApprovalDashboard companies={companies} departments={departments} locations={locations} mrfs={mrfs} />}
           {tab==='sendoffer' && <HRManagerSendOffer companies={companies} departments={departments} locations={locations} mrfs={mrfs} allowedMrfIds={sendOfferAllowed} />}
@@ -3792,7 +3797,7 @@ function PreNegoChecks({ candidate, supabase, showNotify, onDone }:any) {
   )
 }
 
-function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify }:any) {
+function NegotiationTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, rail }:any) {
   // Offer Sent is intentionally excluded — once an offer goes out there's no more negotiation.
   // A revised offer moves the candidate back to 'Shortlisted', so they reappear here with the calculator.
   const finalCands = candidates.filter((c:Candidate)=>['Shortlisted'].includes(c.stage))
@@ -3948,36 +3953,95 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   }
 
   return (
-    <div style={T.g2}>
-      <div>
-        <div style={{ display:'flex', gap:6, marginBottom:12, flexWrap:'wrap' as const }}>
-          <button onClick={()=>{ setSubTab('checks'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='checks'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>Pre-negotiation Checks ({checksCands.length})</button>
-          <button onClick={()=>{ setSubTab('ctc'); setSel(null) }} style={{ ...T.btnOutline, ...(subTab==='ctc'?{ background:C.brand, color:C.onAccent, borderColor:C.brand }:{}) }}>CTC Negotiations ({ctcCands.length})</button>
-        </div>
-        <SearchBar placeholder="Search candidate…" onApply={setNegQ} width={240} />
-        <RecFilterBar companies={companies} departments={departments} locations={locations} positions={distinctPositions(candidates)} f={f} setF={setF} />
-        {shownCands.map((c:Candidate)=>(
-          <div key={c.id} onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
-            style={{ ...T.card, cursor:'pointer', border:sel?.id===c.id?`2px solid ${C.brand}`:'1px solid var(--ez-line)', background:sel?.id===c.id?C.brandTint: C.surface }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
-              <div style={{ minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:C.ink }}>{c.full_name}</div>
-                <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>{c.current_company} · ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1)+'L exp':'—'}</div>
-              </div>
-              {subTab==='ctc' && (
-                <button onClick={(e)=>rejectCand(c,e)} style={{ padding:'4px 10px', borderRadius:7, border: `1px solid ${C.criticalTint}`, cursor:'pointer', fontSize:11, fontWeight:600, fontFamily:'inherit', background:C.criticalTint, color:C.critical, flexShrink:0 }}>Reject</button>
-              )}
-            </div>
-            <div style={{ marginTop:6, display:'flex', gap:6, flexWrap:'wrap' as const }}>
-              <Badge text={c.stage} />
-              {subTab==='ctc' && respMap[c.id]==='ACCEPTED' && <Badge text="Offer Accepted" />}
-              {subTab==='ctc' && respMap[c.id]==='REJECTED' && <Badge text="Offer Rejected" />}
-              {c.offer_revised&&<Badge text="Revised Offer" />}{c.blacklisted&&<Badge text="Blacklisted" />}
-            </div>
+    <RxPage rail={rail} header={
+      <RecruitmentHeader
+        title="Salary negotiation"
+        subtitle="Clear the pre-negotiation checks first, then build the offer and share the breakdown with the candidate."
+        help={<Help label="How this screen works">
+          <p><b>Checks</b> holds shortlisted candidates whose documents have not been verified yet.</p>
+          <p><b>CTC</b> holds the ones that have. Picking someone there opens the calculator, or the stipend form for interns, apprentices, contractors and consultants.</p>
+          <p>Saving a negotiation produces a candidate-facing link that shows the salary breakdown only.</p>
+        </Help>}
+      />}>
+      <div className="rx-grid rx-stag">
+        <div className="s4" style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          {/* Two lists, one control. Counts stay on the labels so the split is
+              visible without switching. Changing list clears the selection, as
+              the old pair of buttons did. */}
+          <Segmented
+            label="Negotiation stage"
+            value={subTab}
+            onChange={(v:'checks'|'ctc')=>{ setSubTab(v); setSel(null) }}
+            options={[
+              { value:'checks' as const, label:`Checks (${checksCands.length})` },
+              { value:'ctc' as const,    label:`CTC (${ctcCands.length})` },
+            ]}
+          />
+          {/* SearchBox filters as you type; the old SearchBar needed an Apply
+              click. Same field, same state, sooner. */}
+          <SearchBox value={negQ} onChange={setNegQ} placeholder="Search candidate…" label="Search candidates" />
+          {/* RecFilterBar is not reused here for the same reason as Pipeline:
+              its root carries inline position:sticky; zIndex:30, which would
+              scroll up over the rail (--ez-z-rail, 20), and inline sticky cannot
+              be unset by a parent. Same four controls, same `f` state, same
+              setF — RecFilterBar itself is untouched for its other callers. */}
+          <div className="rx-bar" style={{ gap:8 }}>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.company}
+              onChange={e=>setF({ ...f, company:e.target.value, department:'', location:'' })}>
+              <option value="">All companies</option>
+              {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
+            </select>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.department}
+              onChange={e=>setF({ ...f, department:e.target.value })}>
+              <option value="">All departments</option>
+              {departments.filter((d:Department)=>!f.company||d.company_id===f.company).map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+            </select>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.location}
+              onChange={e=>setF({ ...f, location:e.target.value })}>
+              <option value="">All locations</option>
+              {locations.filter((l:Location)=>!f.company||l.company_id===f.company).map((l:Location)=><option key={l.id} value={l.id}>{l.location_name}</option>)}
+            </select>
+            <select className="rx-input" style={{ height:34, fontSize:13 }} value={f.position}
+              onChange={e=>setF({ ...f, position:e.target.value })}>
+              <option value="">All positions</option>
+              {distinctPositions(candidates).map((p:string)=><option key={p} value={p}>{p}</option>)}
+            </select>
           </div>
-        ))}
-        {shownCands.length===0&&<div style={{ ...T.card, color:C.faint, fontSize:13, textAlign:'center' as const, padding:24 }}>{negQ?'No matching candidate':(subTab==='checks'?'No candidates awaiting pre-negotiation checks':'No candidates ready for CTC negotiation')}</div>}
-      </div>
+
+          {/* Kept as a div, not a button: each row contains a Reject button and
+              a button inside a button is invalid HTML. Same structure as before. */}
+          {shownCands.map((c:Candidate)=>(
+            <div key={c.id} className="rx-card" onClick={()=>{ if(subTab==='ctc'){ selectCtcCandidate(c) } else { setSel(c) } }}
+              style={{ cursor:'pointer', borderColor: sel?.id===c.id ? 'var(--ez-brand)' : undefined,
+                       boxShadow: sel?.id===c.id ? '0 0 0 1px var(--ez-brand)' : undefined }}>
+              <div className="rx-row" style={{ justifyContent:'space-between', alignItems:'flex-start', gap:8 }}>
+                <div style={{ minWidth:0 }}>
+                  <div className="rx-name">{c.full_name}</div>
+                  <div className="rx-meta" style={{ marginTop:2 }}>
+                    {c.current_company||'—'} · expects ₹{c.expected_ctc?(c.expected_ctc/100000).toFixed(1):'0.0'}L
+                  </div>
+                </div>
+                {subTab==='ctc' && (
+                  <button type="button" className="rx-btn sm d" onClick={(e)=>rejectCand(c,e)}>Reject</button>
+                )}
+              </div>
+              <div className="rx-row" style={{ gap:6, flexWrap:'wrap' }}>
+                <Badge text={c.stage} />
+                {subTab==='ctc' && respMap[c.id]==='ACCEPTED' && <Badge text="Offer Accepted" />}
+                {subTab==='ctc' && respMap[c.id]==='REJECTED' && <Badge text="Offer Rejected" />}
+                {c.offer_revised&&<Badge text="Revised Offer" />}
+                {c.blacklisted&&<Badge text="Blacklisted" />}
+              </div>
+            </div>
+          ))}
+          {shownCands.length===0&&(
+            <div className="rx-mod" style={{ textAlign:'center' as const, padding:24 }}>
+              <span className="rx-meta">No candidates in this list.</span>
+            </div>
+          )}
+        </div>
+
+        <div className="s8">
 
       {subTab==='checks'&&sel&&(
         <PreNegoChecks candidate={sel} supabase={supabase} showNotify={showNotify}
@@ -4178,7 +4242,9 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
           )}
         </div>
       )}
-    </div>
+      </div>
+      </div>
+    </RxPage>
   )
 }
 
