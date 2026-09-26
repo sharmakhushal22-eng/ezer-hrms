@@ -526,7 +526,7 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
               <div style={{ fontSize:12, color:TK.faint, marginTop:2 }}>{c.designation || '—'}</div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center', flexShrink:0 }}>
-              <select value={rehireStage[c.id] || ''} onChange={e=>setRehireStage(m=>({ ...m, [c.id]: e.target.value }))} style={{ ...S.input, width:160 }}>
+              <select value={rehireStage[c.id] || ''} onChange={e=>setRehireStage(m=>({ ...m, [c.id]: e.target.value }))} className="rx-input" style={{ width:160 }}>
                 <option value="">Place at stage…</option>
                 {REHIRE_STAGES.map(st => <option key={st} value={st}>{st}</option>)}
               </select>
@@ -622,8 +622,8 @@ export function HRHeadApprovalDashboard({ companies, departments, locations, mrf
                   </button>
                 </div>
                 <div style={{ marginBottom:12 }}>
-                  <label style={S.label}>{action === 'reject' ? 'Rejection Reason *' : 'Comments (Optional)'}</label>
-                  <textarea style={{ ...S.textarea, minHeight:80 }} value={comment} onChange={e=>setComment(e.target.value)}
+                  <label className="rx-label" style={{ display:'block', marginBottom:6 }}>{action === 'reject' ? 'Rejection Reason *' : 'Comments (Optional)'}</label>
+                  <textarea className="rx-input" style={{ height:'auto', resize:'vertical', padding:'10px 13px', minHeight:80 }} value={comment} onChange={e=>setComment(e.target.value)}
                     placeholder={action === 'reject' ? 'Reason clearly batao...' : 'Optional comments for HR Manager...'} />
                 </div>
                 <button onClick={processApproval} disabled={processing}
