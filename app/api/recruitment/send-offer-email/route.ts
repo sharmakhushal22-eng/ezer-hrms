@@ -7,12 +7,17 @@
 //                         Create at: Google Account -> Security -> 2-Step Verification -> App passwords
 //   GMAIL_FROM_NAME     - (optional) display name on the From header, e.g. "EZER HR Team"
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import nodemailer from 'nodemailer'
 import { renderOfferLetterPng, pngToPdf } from '@/lib/offer-letter-image'
 
 export const runtime = 'nodejs' // nodemailer needs the Node.js runtime, not Edge
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment', 'EDIT')
+  if (gate.error) return gate.error
+
   try {
     const { to, cc, subject, body, offer } = await req.json()
 

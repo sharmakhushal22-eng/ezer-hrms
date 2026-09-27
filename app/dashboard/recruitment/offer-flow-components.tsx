@@ -1,6 +1,10 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
+// send-offer-email runs on the server with no session of its own, so the browser
+// hands its own over. authHeaders() reads whichever session exists — ESS or the
+// dashboard — which matters because this file also renders inside ESS.
+import { authHeaders } from '@/lib/auth-headers'
 
 // The design system, aliased around this file's own S.
 import {
@@ -735,7 +739,7 @@ ${company} — Human Resources`)
       }
       const r = await fetch('/api/recruitment/send-offer-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: await authHeaders(),
         body: JSON.stringify({ to: toEmail, cc: ccEmails, subject, body, offer }),
       })
       const d = await r.json().catch(() => ({}))

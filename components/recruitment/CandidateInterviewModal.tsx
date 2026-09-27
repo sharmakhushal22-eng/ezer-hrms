@@ -20,6 +20,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+// interview-invite reads and WRITES the candidate's stage, so it is guarded
+// server-side. authHeaders() reads whichever session exists — this modal opens
+// from the dashboard and from the recruitment page embedded in ESS.
+import { authHeaders } from '@/lib/auth-headers'
 import InterviewFeedbackForm, { type Feedback, bandOf } from './InterviewFeedbackForm'
 import { type Decision, DECISION_LABEL, ROUNDS_BEFORE_SHORTLIST } from '@/lib/recruitment/interview-decision'
 // Aliased as TK because this file already declares its own C. See lib/ui/tokens.ts.
@@ -108,7 +112,7 @@ export default function CandidateInterviewModal({
 
   const loadInvites = useCallback(async () => {
     try {
-      const r = await fetch(`/api/recruitment/interview-invite?candidate_id=${candidate.id}`, { cache: 'no-store' })
+      const r = await fetch(`/api/recruitment/interview-invite?candidate_id=${candidate.id}`, { cache: 'no-store', headers: await authHeaders() })
       const j = await r.json().catch(() => ({}))
       setInvites(Array.isArray(j.invites) ? j.invites : [])
     } catch { /* leave as-is */ }
@@ -189,7 +193,7 @@ export default function CandidateInterviewModal({
     try {
       const scheduled_at = new Date(`${date}T${time || '10:00'}`).toISOString()
       const r = await fetch('/api/recruitment/interview-invite', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({
           action: 'schedule', candidate_id: candidate.id, mrf_id: candidate.mrf_id || null,
           company_id: candidate.company_id || mrf?.company_id || null, round: openRound,
@@ -215,7 +219,7 @@ export default function CandidateInterviewModal({
     setFbSaving(true)
     try {
       const r = await fetch('/api/recruitment/interview-invite', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({
           action: 'direct_feedback', candidate_id: candidate.id, mrf_id: candidate.mrf_id || null,
           company_id: candidate.company_id || mrf?.company_id || null, round: fbRound,
@@ -238,7 +242,7 @@ export default function CandidateInterviewModal({
     setShortlisting(true)
     try {
       const r = await fetch('/api/recruitment/interview-invite', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: await authHeaders(),
         body: JSON.stringify({ action: 'shortlist', candidate_id: candidate.id }),
       })
       const j = await r.json().catch(() => ({}))

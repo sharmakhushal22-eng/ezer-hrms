@@ -14,6 +14,11 @@ import { computeCtc, inr, EPF_WAGE_CEILING, hraMaxFor } from '@/lib/recruitment/
 import { ctcStatementRows, type StmtRow } from '@/lib/recruitment/ctc-statement'
 import { jobCodePrefix, nextJobCode, newMrfNumber } from '@/lib/recruitment/job-code'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+// Every recruitment API route is guarded (docs/security/open-endpoints.md), so the
+// browser hands over whichever session it holds. uploadAuthHeaders() is the same
+// credentials WITHOUT Content-Type — mandatory for FormData, because setting it by
+// hand suppresses the multipart boundary and the server cannot parse the parts.
+import { authHeaders, uploadAuthHeaders } from '@/lib/auth-headers'
 
 // The design system. This file declares its own Badge and Field, so those are
 // deliberately not imported.
@@ -766,13 +771,11 @@ function PersonSearchSelect({ people, value, onChange, placeholder }:{ people:an
   )
 }
 
-// The recruitment upload/share routes run on the service-role key, so they check for a
-// dashboard session of their own. The browser already holds one — this hands it over.
-async function authHeaders(supabase:any): Promise<Record<string,string>> {
-  const { data } = await supabase.auth.getSession()
-  const t = data?.session?.access_token
-  return t ? { Authorization: `Bearer ${t}` } : {}
-}
+// The private authHeaders(supabase) that used to live here read ONLY the Supabase
+// session, so it handed back {} for an employee signed in through ESS — and this
+// page renders inside ESS via components/ess/RecruitmentModule. Against the two
+// routes that were already guarded that meant a silent 401 for ESS users.
+// lib/auth-headers.ts checks both sessions and is imported at the top instead.
 
 // ── §7 CTQ QUESTION EDITOR ────────────────────────────────────────
 function CtqEditor({ items, onChange }:{ items:any[]; onChange:(v:any[])=>void }) {
@@ -893,7 +896,7 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase 
     const fd = new FormData()
     fd.append('mrf_id', mrfId); fd.append('kind', kind); fd.append('file', file)
     try {
-      const r = await fetch('/api/recruitment/upload-mrf-doc', { method:'POST', body:fd, headers: await authHeaders(supabase) })
+      const r = await fetch('/api/recruitment/upload-mrf-doc', { method:'POST', body:fd, headers: await uploadAuthHeaders() })
       const j = await r.json()
       if (!r.ok) throw new Error(j.error||'Upload failed')
       showNotify('File uploaded'); onChanged()
@@ -903,13 +906,13 @@ function AttachmentsPanel({ mrfId, attachments, onChanged, showNotify, supabase 
   }
 
   async function open(path:string) {
-    const r = await fetch('/api/recruitment/upload-mrf-doc?path='+encodeURIComponent(path), { headers: await authHeaders(supabase) })
+    const r = await fetch('/api/recruitment/upload-mrf-doc?path='+encodeURIComponent(path), { headers: await authHeaders() })
     const j = await r.json()
     if (j.url) window.open(j.url,'_blank'); else showNotify(j.error||'Could not open file','error')
   }
 
   async function remove(path:string) {
-    const r = await fetch(`/api/recruitment/upload-mrf-doc?mrf_id=${mrfId}&path=${encodeURIComponent(path)}`, { method:'DELETE', headers: await authHeaders(supabase) })
+    const r = await fetch(`/api/recruitment/upload-mrf-doc?mrf_id=${mrfId}&path=${encodeURIComponent(path)}`, { method:'DELETE', headers: await authHeaders() })
     if (r.ok) { showNotify('File removed'); onChanged() } else showNotify('Could not remove file','error')
   }
 
@@ -1474,7 +1477,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
     const dept = departments.find((d:Department)=>d.id===form.department_id)
     try {
       const res = await fetch('/api/recruitment/generate-jd', {
-        method:'POST', headers:{'Content-Type':'application/json'},
+        method:'POST', headers: await authHeaders(),
         body:JSON.stringify({ designation:form.designation||form.job_title, department:dept?.dept_name||'', experience:[form.experience_min,form.experience_max].filter(Boolean).join('-')+(form.experience_min||form.experience_max?' years':''), employee_type:form.employment_type, education:[form.education_min,form.education_max].filter(Boolean).join(' to '), skills:form.skills_required })
       })
       const data = await res.json()
@@ -2803,7 +2806,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
     try {
       const { blob, name } = buildReport(exportFmt)
       const fd = new FormData(); fd.append('file', new File([blob], name, { type:blob.type }))
-      const r = await fetch('/api/recruitment/share-report', { method:'POST', body:fd, headers: await authHeaders(supabase) })
+      const r = await fetch('/api/recruitment/share-report', { method:'POST', body:fd, headers: await uploadAuthHeaders() })
       const j = await r.json()
       if (!r.ok || !j.url) throw new Error(j.error || 'Could not create a share link')
       setShareUrl(j.url)
@@ -3014,7 +3017,7 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
       fd.append('previous_company_preference', mrf.previous_company_preference || '')
       fd.append('candidate_name', file.name.replace(/\.[^.]+$/,''))
       try {
-        const r = await fetch('/api/recruitment/screen-resumes', { method:'POST', body:fd }) // no Content-Type → browser sets multipart boundary
+        const r = await fetch('/api/recruitment/screen-resumes', { method:'POST', body:fd, headers: await uploadAuthHeaders() }) // uploadAuthHeaders omits Content-Type → browser sets the multipart boundary
         const d = await r.json()
         res.push({ ...d, file_name:file.name, added:false })
       } catch {
@@ -3215,7 +3218,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     if (!/^\d{6}$/.test(pin)) { setPinLookup(null); return }
     let alive = true
     setPinLookup({ pin, status:'loading' })
-    fetch(`/api/recruitment/pincode?pin=${pin}`).then(r=>r.json()).then((j:any)=>{
+    // Not awaited — this runs in a useEffect body, so the headers are fetched as
+    // the first link of the same promise chain rather than by making it async.
+    authHeaders().then(h => fetch(`/api/recruitment/pincode?pin=${pin}`, { headers: h })).then(r=>r.json()).then((j:any)=>{
       if (!alive) return
       if (!j?.ok) { setPinLookup({ pin, status:'fail' }); return }
       setCForm((f:any)=>({ ...f, perm_city: j.city||f.perm_city, perm_state: j.state||f.perm_state, perm_country: j.country||f.perm_country||'India' }))
@@ -3234,7 +3239,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     setParsing(true); setParseNote(null)
     try {
       const fd = new FormData(); fd.append('file', file)
-      const r = await fetch('/api/recruitment/parse-resume', { method:'POST', body: fd })
+      const r = await fetch('/api/recruitment/parse-resume', { method:'POST', body: fd, headers: await uploadAuthHeaders() })
       const j = await r.json().catch(()=>({}))
       if (!r.ok || !j.ok) { setParseNote({ ok:false, text: j.error || 'Could not parse this resume' }); setParsing(false); return }
       const f = j.fields || {}
@@ -4169,7 +4174,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   const [rejecting, setRejecting] = useState<any|null>(null)  // doc pending reject confirm
 
   const signDoc = async (docId:string, mode:'view'|'download') => {
-    const r = await fetch(`/api/recruitment/doc-collection/file?doc_id=${docId}&mode=${mode}`, { cache:'no-store' })
+    const r = await fetch(`/api/recruitment/doc-collection/file?doc_id=${docId}&mode=${mode}`, { cache:'no-store', headers: await authHeaders() })
     const j = await r.json().catch(()=>({}))
     if (!r.ok || !j.url) throw new Error(j.error||'Could not open file')
     return j as { url:string; file_name?:string }
@@ -4189,7 +4194,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
   async function onReject(d:any) {
     setBusyDoc(d.id)
     try {
-      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'reject', doc_id:d.id }) })
+      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers: await authHeaders(), body: JSON.stringify({ action:'reject', doc_id:d.id }) })
       const j = await r.json().catch(()=>({}))
       if (!r.ok) { showNotify(j.error||'Could not reject','error'); setBusyDoc(''); setRejecting(null); return }
       showNotify(`${d.doc_label||d.doc_type} rejected — resend the link so the candidate re-uploads it.`)
@@ -4201,7 +4206,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
     setZipping(true)
     try {
       const qs = ids && ids.length ? `&ids=${ids.join(',')}` : ''
-      const r = await fetch(`/api/recruitment/doc-collection/zip?candidate_id=${candidate.id}${qs}`, { cache:'no-store' })
+      const r = await fetch(`/api/recruitment/doc-collection/zip?candidate_id=${candidate.id}${qs}`, { cache:'no-store', headers: await authHeaders() })
       if (!r.ok) { const j = await r.json().catch(()=>({})); showNotify(j.error||'Could not build zip','error'); setZipping(false); return }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
@@ -4214,7 +4219,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
 
   const loadStatus = async () => {
     try {
-      const r = await fetch(`/api/recruitment/doc-collection?candidate_id=${candidate.id}`, { cache:'no-store' })
+      const r = await fetch(`/api/recruitment/doc-collection?candidate_id=${candidate.id}`, { cache:'no-store', headers: await authHeaders() })
       const j = await r.json().catch(()=>({}))
       setLink(j.link||null); setDocs(j.docs||[])
     } catch {} finally { setLoading(false) }
@@ -4235,7 +4240,7 @@ function CtcDocLink({ candidate, mrf, companyId, supabase, showNotify, onClose, 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email.trim())) { showNotify('Enter a valid candidate email','error'); return }
     setSending(true)
     try {
-      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers:{'Content-Type':'application/json'},
+      const r = await fetch('/api/recruitment/doc-collection', { method:'POST', headers: await authHeaders(),
         body: JSON.stringify({ action:'send', candidate_id:candidate.id, mrf_id:candidate.mrf_id||mrf?.id||null, company_id:companyId||candidate.company_id||mrf?.company_id||null, email:email.trim(), cc:cc.map(c=>c.email), created_by:meEmail||null }) })
       const j = await r.json().catch(()=>({}))
       if (!r.ok) { showNotify(j.error||'Could not send','error'); setSending(false); return }
@@ -5453,7 +5458,7 @@ function PreOnboardTab({ supabase, candidates, companies, departments, locations
     const letter = { company_name:company, title, recipient:c.full_name, paragraphs,
       highlights:[ { label:'Position', value:role }, { label:'Date of Joining', value:String(doj) } ] }
     try {
-      const r = await fetch('/api/recruitment/send-letter', { method:'POST', headers:{'Content-Type':'application/json'},
+      const r = await fetch('/api/recruitment/send-letter', { method:'POST', headers: await authHeaders(),
         body:JSON.stringify({ to:c.email, cc:'', subject,
           body:`Dear ${c.full_name},\n\n${paragraphs.join('\n\n')}\n\nWarm regards,\n${company} — Human Resources`, letter }) })
       const d = await r.json().catch(()=>({}))

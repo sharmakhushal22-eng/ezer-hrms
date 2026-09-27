@@ -1,7 +1,12 @@
 // app/api/recruitment/generate-jd/route.ts
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   const { designation, department, company_type, experience, employee_type } = await req.json()
 
   const prompt = `Generate a professional Job Description for the following role:

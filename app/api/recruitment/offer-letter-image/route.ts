@@ -2,6 +2,8 @@
 // Returns the offer letter as a PNG. Used for in-app preview and by the
 // send-offer-email route (which attaches the same image to the email).
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import { renderOfferLetterPng, type OfferImageData } from '@/lib/offer-letter-image'
 
 export const runtime = 'nodejs'
@@ -26,6 +28,9 @@ function dataFromParams(sp: URLSearchParams): OfferImageData {
 }
 
 export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   try {
     const png = await renderOfferLetterPng(dataFromParams(new URL(req.url).searchParams))
     return new Response(new Uint8Array(png), {

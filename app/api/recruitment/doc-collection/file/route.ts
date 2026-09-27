@@ -7,11 +7,16 @@
 // session needed, which is what the old upload-mrf-doc endpoint required).
 
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   const docId = req.nextUrl.searchParams.get('doc_id')
   const mode = req.nextUrl.searchParams.get('mode') === 'download' ? 'download' : 'view'
   if (!docId) return NextResponse.json({ error: 'doc_id is required' }, { status: 400 })

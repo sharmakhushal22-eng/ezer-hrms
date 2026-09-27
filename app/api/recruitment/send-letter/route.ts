@@ -2,6 +2,8 @@
 // Generic letter emailer — renders a professional A4 letter PDF and emails it
 // via Gmail. Used for Resignation-Acceptance / Joining-Confirmation / etc.
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import nodemailer from 'nodemailer'
 import { renderLetterPng, type LetterData } from '@/lib/letters'
 import { pngToPdf } from '@/lib/offer-letter-image'
@@ -10,6 +12,9 @@ export const runtime = 'nodejs'
 
 // GET ?preview=1 — returns a sample letter PNG for visual verification.
 export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   const sp = new URL(req.url).searchParams
   if (sp.get('preview') !== '1') return NextResponse.json({ error: 'add ?preview=1' }, { status: 400 })
   const png = await renderLetterPng({
@@ -30,6 +35,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment', 'EDIT')
+  if (gate.error) return gate.error
+
   try {
     const { to, cc, subject, body, letter } = (await req.json()) as {
       to: string

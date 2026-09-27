@@ -5,6 +5,8 @@
 // `ids` to zip only a selection; omit to zip everything on the latest link.
 
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import JSZip from 'jszip'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 
@@ -12,6 +14,9 @@ export const runtime = 'nodejs'
 export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   const candidateId = req.nextUrl.searchParams.get('candidate_id')
   const idsParam = req.nextUrl.searchParams.get('ids')
   if (!candidateId) return NextResponse.json({ error: 'candidate_id is required' }, { status: 400 })

@@ -25,18 +25,22 @@ import {
   ESIC_WAGE_CEILING, ESIC_EMPLOYER_RATE, ESIC_EMPLOYEE_RATE,
   GRATUITY_RATE, BONUS_ELIGIBILITY_WAGE, BONUS_CALC_FLOOR,
   CONVEYANCE_STD, HRA_MAX_METRO, HRA_MAX_NON_METRO, BASIC_OF_FIXED,
-  type CtcResult,
+  type CtcResult, type CtcInput,
 } from '../ctc-model.ts'
 
 const near = (a: number, b: number, why: string, tol = 0.02) =>
   assert.ok(Math.abs(a - b) <= tol, `${why}: ${a} vs ${b}`)
 
 /** A comfortable package: ₹12L fixed, Karnataka, gratuity in CTC, bonus with salary. */
-const base = {
+// Typed as CtcInput, not inferred. With `as const` the inferred type pinned
+// gratuity to 'yes' and bonusMode to 'salary', so Partial<typeof base> rejected
+// the opposite value and the cases below would not type-check — invisible to
+// `node --test`, which strips types and runs happily.
+const base: CtcInput = {
   ctcAnnual: 1_200_000, variableAnnual: 0, minWage: 15_000,
-  state: 'Karnataka', gratuity: 'yes' as const, bonusPct: 8.33, bonusMode: 'salary' as const,
+  state: 'Karnataka', gratuity: 'yes', bonusPct: 8.33, bonusMode: 'salary',
 }
-const ok = (i: Partial<typeof base> & Record<string, unknown> = {}): CtcResult => {
+const ok = (i: Partial<CtcInput> = {}): CtcResult => {
   const r = computeCtc({ ...base, ...i })
   assert.ok(r.ok, 'expected a computable package')
   return r

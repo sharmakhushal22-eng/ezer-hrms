@@ -9,6 +9,8 @@
 // normalised to the spelling the State dropdown uses (lib/recruitment/min-wages).
 
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import { normalizeStateName } from '@/lib/recruitment/min-wages'
 
 export const runtime = 'nodejs'
@@ -17,6 +19,9 @@ type Hit = { ok: true; pin: string; city: string; state: string; country: string
 const cache = new Map<string, Hit | { ok: false }>()
 
 export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   const pin = (req.nextUrl.searchParams.get('pin') || '').replace(/\D/g, '')
   if (!/^\d{6}$/.test(pin)) return NextResponse.json({ ok: false, error: 'A 6-digit PIN code is required' }, { status: 400 })
   const hit = cache.get(pin)

@@ -7,6 +7,8 @@
 // half is the public /collect-docs/[token] page + /api/collect-docs/*.
 
 import { NextRequest, NextResponse } from 'next/server'
+// Guarded: an unauthenticated caller must not reach this. See docs/security/open-endpoints.md.
+import { requireModule } from '@/lib/api-auth'
 import nodemailer from 'nodemailer'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { inviteEmail, reuploadEmail, LINK_TTL_HOURS, COLLECT_DOCS } from '@/lib/recruitment/collect-docs'
@@ -14,6 +16,9 @@ import { inviteEmail, reuploadEmail, LINK_TTL_HOURS, COLLECT_DOCS } from '@/lib/
 export const runtime = 'nodejs'
 
 export async function GET(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment')
+  if (gate.error) return gate.error
+
   const candidateId = req.nextUrl.searchParams.get('candidate_id')
   if (!candidateId) return NextResponse.json({ error: 'candidate_id is required' }, { status: 400 })
   const { data: link } = await sb.from('document_collection_links')
@@ -27,6 +32,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const gate = await requireModule(req, 'Recruitment', 'EDIT')
+  if (gate.error) return gate.error
+
   const body = await req.json().catch(() => null) as any
   if (!body) return NextResponse.json({ error: 'Bad request' }, { status: 400 })
 
