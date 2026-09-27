@@ -292,7 +292,9 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
   // Conveyance + Special Allowance are the salary slip's own heads; fall back to
   // splitting the old flat "otherAllow" for negotiations saved before this existed.
   const conveyance = Math.round(calc.conveyance != null ? calc.conveyance : Math.min(otherAllow, 1600))
-  const specialAllow = Math.round(calc.specialAllow != null ? calc.specialAllow : Math.max(0, otherAllow - conveyance))
+  const specialAllow = Math.round(link ? link.special : (calc.specialAllow != null ? calc.specialAllow : Math.max(0, otherAllow - conveyance)))
+  // FBP can only be carved out of the Special Allowance — that balance (annual) caps what can be opted.
+  const fbpBalance = specialAllow * 12
   const lwfMonthly = Math.round(calc.lwfMonthly || 0)
   const statBonus = Math.round(calc.statBonus || 0)
   const totalDed = epfEmp + esicEmp + ptMonthly + lwfMonthly
@@ -380,14 +382,25 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
     return { taxableNoFBP, taxNoFBP, taxableWithFBP, taxWithFBP, fbpSaving }
   }, [regime, dec80C, dec80D, decHomeLoan, decNPS, grossAnnual, epfEmp, fbpSummary])
 
+  const fbpRemaining = Math.max(0, fbpBalance - fbpSummary.totalNonTaxable)
+  const fbpCostOf = (code: string, paired?: string) => {
+    const own = availableFBP.find(c => c.code === code)?.limit || 0
+    const pair = paired ? (availableFBP.find(c => c.code === paired)?.limit || 0) : 0
+    return own + pair
+  }
+  const [fbpMsg, setFbpMsg] = useState('')
   function toggleFBP(code: string, paired?: string) {
     const next = new Set(selectedFBP)
     if (next.has(code)) {
       next.delete(code)
       if (paired) next.delete(paired) // Car+Driver always together
+      setFbpMsg('')
     } else {
+      const cost = fbpCostOf(code, paired)
+      if (cost > fbpRemaining) { setFbpMsg(`Not enough Special Allowance left: this needs ₹${fmt(cost)}/yr, only ₹${fmt(fbpRemaining)}/yr remains.`); return }
       next.add(code)
       if (paired) next.add(paired)
+      setFbpMsg('')
     }
     setSelectedFBP(next)
   }
@@ -500,8 +513,7 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
             {statBonus > 0 && <R2 l={`Statutory Bonus${bonusPctVal > 0 ? ` (${bonusPctVal}% · with salary)` : ''}`} m={rsm(statBonus)} a={rsa(statBonus)} />}
             <R2 l="Gross Earnings" m={rsm(grossMonthly)} a={rsa(grossMonthly)} bold bg={TK.brandTint} />
             {epfEmp > 0 && <R2 l="(−) EPF Employee" m={rsm(epfEmp)} a={rsa(epfEmp)} red />}
-            <R2 l="(−) ESIC Employee" m={esicEmp > 0 ? rsm(esicEmp) : 'Nil'} a={esicEmp > 0 ? rsa(esicEmp) : 'Nil'} red={esicEmp > 0} bg={TK.criticalTint}
-              sub={esicEmp > 0 ? `Gross/mo ₹${fmt(grossMonthly)} ≤ ₹21,000 → 0.75%` : `Gross/mo ₹${fmt(grossMonthly)} > ₹21,000 → Not applicable`} />
+            {esicEmp > 0 && <R2 l="(−) ESIC Employee" m={rsm(esicEmp)} a={rsa(esicEmp)} red bg={TK.criticalTint} sub={`Gross/mo ₹${fmt(grossMonthly)} ≤ ₹21,000 → 0.75%`} />}
             {ptMonthly > 0 && <R2 l="(−) Professional Tax" m={rsm(ptMonthly)} a={rsa(ptMonthly)} red />}
             {lwfMonthly > 0 && <R2 l="(−) LWF" m={rsm(lwfMonthly)} a={rsa(lwfMonthly)} red />}
             <R2 l="Total Deductions" m={rsm(totalDed)} a={rsa(totalDed)} red bold bg={TK.criticalTint} />
@@ -649,15 +661,22 @@ function SalaryViewBody({ data, meta, token, access }: { data: any; meta?: Meta;
               <div style={S.sec()}>Select Flexi Benefit Plan (FBP)</div>
               <div style={{ background:TK.brandTint, borderRadius:10, padding:'8px 12px', marginBottom:12, display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12 }}>
                 <span style={{ color:TK.brandDeep }}>Slab {slab} — {SLAB_NAMES[slab]} &nbsp;|&nbsp; {regime === 'old' ? 'Old' : 'New'} Regime</span>
-                <span style={{ fontWeight:600, color:TK.brandDeep }}>Pool: ₹{fmt(availableFBP.filter(c => !c.paired || c.code < c.paired).reduce((s,c) => s + c.limit, 0))}/yr</span>
+                <span style={{ fontWeight:600, color:TK.brandDeep }}>Pool: ₹{fmt(Math.min(fbpBalance, availableFBP.filter(c => !c.paired || c.code < c.paired).reduce((s,c) => s + c.limit, 0)))}/yr</span>
               </div>
+              {/* FBP is carved out of the Special Allowance — you can opt only as much as that balance. */}
+              <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap' as const, fontSize:12, marginBottom:10, padding:'8px 12px', borderRadius:10, background: fbpRemaining > 0 ? TK.sunken : TK.warningTint, border:`1px solid ${TK.brandEdge}` }}>
+                <span style={{ color:TK.inkSoft }}>Special Allowance balance: <b style={{ color:TK.ink }}>₹{fmt(fbpBalance)}/yr</b> (₹{fmt(specialAllow)}/mo)</span>
+                <span style={{ color: fbpRemaining > 0 ? TK.positive : TK.warning, fontWeight:600 }}>Used ₹{fmt(fbpSummary.totalNonTaxable)} · Remaining ₹{fmt(fbpRemaining)}/yr</span>
+              </div>
+              {fbpMsg && <div style={{ fontSize:12, color:TK.warning, background:TK.warningTint, borderRadius:8, padding:'8px 12px', marginBottom:10, fontWeight:600 }}>{fbpMsg}</div>}
 
               {availableFBP.map(c => {
                 const isSelected = selectedFBP.has(c.code)
                 const isLinked = c.paired && (selectedFBP.has(c.paired) || selectedFBP.has(c.code))
+                const unaffordable = !isSelected && fbpCostOf(c.code, c.paired) > fbpRemaining
                 return (
-                  <div key={c.code} onClick={() => toggleFBP(c.code, c.paired)}
-                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:10, marginBottom:6, cursor:'pointer', background:isSelected?TK.brandTint:TK.sunken, border:isSelected?'2px solid #2563EB':'1px solid #E5E7EB', transition:'all .15s' }}>
+                  <div key={c.code} onClick={() => toggleFBP(c.code, c.paired)} title={unaffordable ? 'Exceeds the Special Allowance balance' : undefined}
+                    style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'10px 12px', borderRadius:10, marginBottom:6, cursor: unaffordable ? 'not-allowed' : 'pointer', opacity: unaffordable ? .45 : 1, background:isSelected?TK.brandTint:TK.sunken, border:isSelected?'2px solid #2563EB':'1px solid #E5E7EB', transition:'all .15s' }}>
                     <div style={{ width:18, height:18, borderRadius:7, border:isSelected?'none':'2px solid #DDD6FE', background:isSelected?TK.brand: TK.surface, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:1 }}>
                       {isSelected && <span style={{ color:TK.onAccent, fontSize:12, fontWeight:700 }}></span>}
                     </div>
