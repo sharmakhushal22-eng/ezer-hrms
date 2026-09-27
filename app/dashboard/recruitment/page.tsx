@@ -948,10 +948,22 @@ function MrfDetail({ supabase, mrf:m, org, cands, people, onClose, onEdit, onRev
   const channels = asArray(m.sourcing_channels), files = asArray(m.attachments)
   const comp = compOf(m.employment_type)
 
+  // Neutral scrim, not rgba(30,27,75,…): that was the pre-rebrand navy, frozen.
+  // It is rgba rather than hex, so the colour ratchet never saw it — found by
+  // walking the UI, not by a tool. CandidateInterviewModal was converted in
+  // 5cdc45a; these two lived in page.tsx and were missed.
+  //
+  // The drawer shadow keeps its -8px geometry deliberately: this panel slides in
+  // from the right, so the offset is directional and an elevation token would
+  // flatten it. Only the colour changes.
+  //
+  // This comment sits ABOVE the return, not inside it: after `return (` the
+  // parenthesis takes exactly one element, so a JSX comment there parses as an
+  // empty object literal and breaks the file.
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:200, display:'flex', justifyContent:'flex-end' }}
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200, display:'flex', justifyContent:'flex-end' }}
       onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:C.canvas, width:'100%', maxWidth:760, height:'100%', overflowY:'auto', boxShadow:'-8px 0 30px rgba(30,27,75,0.25)' }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:C.canvas, width:'100%', maxWidth:760, height:'100%', overflowY:'auto', boxShadow:'-8px 0 30px rgba(0,0,0,0.25)' }}>
         {/* Header */}
         <div style={{ background: `linear-gradient(135deg,${C.brand},${C.brand})`, padding:'16px 20px', position:'sticky', top:0, zIndex:2 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10 }}>
@@ -2109,8 +2121,12 @@ function ApprovalModal({ mrf, org, onApprove, onReject, onHold, onClose }:any) {
 
   async function go(fn:()=>Promise<void>|void) { setBusy(true); await fn(); setBusy(false) }
 
+  // Neutral scrim — the panel inside this very modal already used a neutral
+  // rgba(0,0,0,0.2) shadow, so the frozen navy here was inconsistent with its
+  // own child as well as with the sibling modal. Comment above the return, not
+  // inside it, for the same reason as MrfDetail.
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.45)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
       <div style={{ background:C.surface, borderRadius:14, padding:24, width:'100%', maxWidth:480, maxHeight:'88vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ fontSize:16, fontWeight:700, color:C.ink }}>{mrf.job_title||mrf.designation||mrf.position}</div>
         <div style={{ fontSize:12, color:C.faint, marginTop:3 }}>
